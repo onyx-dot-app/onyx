@@ -1,56 +1,49 @@
 import json
-from typing import Annotated
-from typing import Final
+from typing import Annotated, Final
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import File
-from fastapi import Form
-from fastapi import UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import Field
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import Permission
-from onyx.auth.permissions import require_permission
+from onyx.auth.permissions import Permission, require_permission
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import MAX_PERSONAL_SKILLS_PER_USER
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.skill import count_personal_skills_for_user
-from onyx.db.skill import create_skill__no_commit
-from onyx.db.skill import delete_skill
-from onyx.db.skill import fetch_skill_by_id
-from onyx.db.skill import fetch_skill_for_user
-from onyx.db.skill import fetch_skill_for_user_by_slug
-from onyx.db.skill import get_group_ids_for_skill
-from onyx.db.skill import list_skills_for_admin
-from onyx.db.skill import list_skills_for_user
-from onyx.db.skill import lock_personal_skills_for_user
-from onyx.db.skill import patch_skill
-from onyx.db.skill import replace_skill_bundle
-from onyx.db.skill import replace_skill_grants
-from onyx.db.skill import skill_ids_with_grants
-from onyx.db.skill import SkillPatch
+from onyx.db.models import Skill, User
+from onyx.db.skill import (
+    affected_user_ids_for_skill,
+    count_personal_skills_for_user,
+    create_skill__no_commit,
+    delete_skill,
+    fetch_skill_by_id,
+    fetch_skill_for_user,
+    fetch_skill_for_user_by_slug,
+    get_group_ids_for_skill,
+    list_skills_for_admin,
+    list_skills_for_user,
+    lock_personal_skills_for_user,
+    patch_skill,
+    replace_skill_bundle,
+    replace_skill_grants,
+    skill_ids_with_grants,
+    SkillPatch,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.skill.models import BuiltinSkillResponse
-from onyx.server.features.skill.models import CustomSkillResponse
-from onyx.server.features.skill.models import GrantsReplace
-from onyx.server.features.skill.models import PersonalSkillPatchRequest
-from onyx.server.features.skill.models import SkillPatchRequest
-from onyx.server.features.skill.models import SkillsList
-from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
-from onyx.skills.bundle import DEFAULT_TOTAL_MAX_BYTES
-from onyx.skills.bundle import slug_from_filename
-from onyx.skills.ingest import delete_bundle_blob
-from onyx.skills.ingest import ingest_skill_bundle
-from onyx.skills.push import push_skill_to_affected_sandboxes
-from onyx.skills.push import push_skills_for_users
+from onyx.server.features.skill.models import (
+    BuiltinSkillResponse,
+    CustomSkillResponse,
+    GrantsReplace,
+    PersonalSkillPatchRequest,
+    SkillPatchRequest,
+    SkillsList,
+)
+from onyx.skills.built_in import BUILT_IN_SKILLS, EXTERNAL_APP_BUILT_IN_SKILL_IDS
+from onyx.skills.bundle import DEFAULT_TOTAL_MAX_BYTES, slug_from_filename
+from onyx.skills.ingest import delete_bundle_blob, ingest_skill_bundle
+from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

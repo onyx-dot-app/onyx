@@ -1,25 +1,25 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.server.features.build.interactive_turns import executor
-from onyx.server.features.build.interactive_turns.state import claim_turn_for_runner
-from onyx.server.features.build.interactive_turns.state import create_interactive_turn
-from onyx.server.features.build.interactive_turns.state import get_active_turn
-from onyx.server.features.build.interactive_turns.state import get_turn
-from onyx.server.features.build.interactive_turns.state import InteractiveTurn
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_CANCELLED
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_RUNNING
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_SUCCEEDED
+from onyx.server.features.build.interactive_turns.state import (
+    claim_turn_for_runner,
+    create_interactive_turn,
+    get_active_turn,
+    get_turn,
+    InteractiveTurn,
+    TURN_STATUS_CANCELLED,
+    TURN_STATUS_FAILED,
+    TURN_STATUS_RUNNING,
+    TURN_STATUS_SUCCEEDED,
+)
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -12,10 +10,7 @@ import httpx
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import Document
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import BasicExpertInfo, Document, ImageSection, TextSection
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.retry_wrapper import retry_builder

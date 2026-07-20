@@ -2,36 +2,35 @@ import json
 import re
 import time
 from datetime import datetime
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
-from onyx.configs.app_configs import MAX_SLACK_THREAD_CONTEXT_MESSAGES
-from onyx.configs.app_configs import SLACK_THREAD_CONTEXT_BATCH_SIZE
-from onyx.configs.chat_configs import DOC_TIME_DECAY
-from onyx.connectors.models import IndexingDocument
-from onyx.connectors.models import TextSection
-from onyx.context.search.federated.models import ChannelMetadata
-from onyx.context.search.federated.models import DirectThreadFetch
-from onyx.context.search.federated.models import SlackMessage
-from onyx.context.search.federated.slack_search_utils import ALL_CHANNEL_TYPES
-from onyx.context.search.federated.slack_search_utils import build_channel_query_filter
-from onyx.context.search.federated.slack_search_utils import build_slack_queries
-from onyx.context.search.federated.slack_search_utils import get_channel_type
-from onyx.context.search.federated.slack_search_utils import (
-    get_channel_type_for_missing_scope,
+from onyx.configs.app_configs import (
+    ENABLE_CONTEXTUAL_RAG,
+    MAX_SLACK_THREAD_CONTEXT_MESSAGES,
+    SLACK_THREAD_CONTEXT_BATCH_SIZE,
 )
-from onyx.context.search.federated.slack_search_utils import is_recency_query
-from onyx.context.search.federated.slack_search_utils import should_include_message
-from onyx.context.search.models import ChunkIndexRequest
-from onyx.context.search.models import InferenceChunk
+from onyx.configs.chat_configs import DOC_TIME_DECAY
+from onyx.connectors.models import IndexingDocument, TextSection
+from onyx.context.search.federated.models import (
+    ChannelMetadata,
+    DirectThreadFetch,
+    SlackMessage,
+)
+from onyx.context.search.federated.slack_search_utils import (
+    ALL_CHANNEL_TYPES,
+    build_channel_query_filter,
+    build_slack_queries,
+    get_channel_type,
+    get_channel_type_for_missing_scope,
+    is_recency_query,
+    should_include_message,
+)
+from onyx.context.search.models import ChunkIndexRequest, InferenceChunk
 from onyx.db.document import DocumentSource
 from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
@@ -41,8 +40,7 @@ from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
 from onyx.llm.factory import get_default_llm
-from onyx.onyxbot.slack.models import ChannelType
-from onyx.onyxbot.slack.models import SlackContext
+from onyx.onyxbot.slack.models import ChannelType, SlackContext
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.federated.models import FederatedConnectorDetail
 from onyx.utils.logger import setup_logger

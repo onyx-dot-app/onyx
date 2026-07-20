@@ -1,26 +1,31 @@
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import KV_CRED_KEY
-from onyx.configs.constants import KV_GOOGLE_DRIVE_CRED_KEY
-from onyx.configs.constants import KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY
-from onyx.connectors.google_utils.google_kv import get_auth_url
-from onyx.connectors.google_utils.google_kv import get_google_app_cred
-from onyx.connectors.google_utils.google_kv import get_service_account_key
-from onyx.connectors.google_utils.google_kv import update_credential_access_tokens
-from onyx.connectors.google_utils.google_kv import upsert_google_app_cred
-from onyx.connectors.google_utils.google_kv import upsert_service_account_key
+from onyx.configs.constants import (
+    DocumentSource,
+    KV_CRED_KEY,
+    KV_GOOGLE_DRIVE_CRED_KEY,
+    KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY,
+)
+from onyx.connectors.google_utils.google_kv import (
+    get_auth_url,
+    get_google_app_cred,
+    get_service_account_key,
+    update_credential_access_tokens,
+    upsert_google_app_cred,
+    upsert_service_account_key,
+)
 from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
 from onyx.db.models import User
-from onyx.server.documents.models import GoogleAppCredentials
-from onyx.server.documents.models import GoogleAppWebCredentials
-from onyx.server.documents.models import GoogleServiceAccountKey
+from onyx.server.documents.models import (
+    GoogleAppCredentials,
+    GoogleAppWebCredentials,
+    GoogleServiceAccountKey,
+)
 
 
 def _make_app_creds() -> GoogleAppCredentials:

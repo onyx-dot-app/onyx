@@ -72,10 +72,11 @@ repos:
         # sandbox_daemon ships in the sandbox image (own runtime); skills/builtin
         # are sandbox-only scripts importing deps absent from the backend venv
         # (lxml, PIL, office.*). loadtest/ is a standalone uv project with its
-        # own venv (locust). All are excluded from the full ty run via
+        # own venv (locust). examples/ scripts are standalone demos not covered
+        # by the backend venv either. All are excluded from the full ty run via
         # [tool.ty.src] in pyproject; repeat here because pre-commit passes
         # explicit filenames, which bypass that discovery-time exclude.
-        exclude: ^(backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)|loadtest/)
+        exclude: ^(backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)|loadtest/|examples/)
       - id: uv-run
         alias: ruff
         name: ruff

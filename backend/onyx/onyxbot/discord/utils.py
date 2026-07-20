@@ -1,5 +1,4 @@
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import DISCORD_BOT_TOKEN
+from onyx.configs.app_configs import AUTH_TYPE, DISCORD_BOT_TOKEN
 from onyx.configs.constants import AuthType
 from onyx.db.discord_bot import get_discord_bot_config
 from onyx.db.engine.sql_engine import get_session_with_tenant

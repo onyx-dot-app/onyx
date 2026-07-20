@@ -1,9 +1,10 @@
 from uuid import uuid4
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
-from onyx.sandbox_proxy.approval_cache import cache_session_grant_actions
-from onyx.sandbox_proxy.approval_cache import cached_session_grants_cover
+from onyx.cache.interface import CacheBackend, CacheLock
+from onyx.sandbox_proxy.approval_cache import (
+    cache_session_grant_actions,
+    cached_session_grants_cover,
+)
 
 
 class _MemoryCache(CacheBackend):

@@ -9,12 +9,13 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
-from onyx.federated_connectors.oauth_utils import generate_oauth_state
-from onyx.federated_connectors.oauth_utils import OAUTH_STATE_TTL
-from onyx.federated_connectors.oauth_utils import OAuthSession
-from onyx.federated_connectors.oauth_utils import verify_oauth_state
+from onyx.cache.interface import CacheBackend, CacheLock
+from onyx.federated_connectors.oauth_utils import (
+    generate_oauth_state,
+    OAUTH_STATE_TTL,
+    OAuthSession,
+    verify_oauth_state,
+)
 
 
 class _MemoryCacheBackend(CacheBackend):

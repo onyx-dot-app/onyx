@@ -3,51 +3,58 @@ import time
 from uuid import UUID
 
 import sqlalchemy as sa
-from celery import Celery
-from celery import shared_task
-from celery import Task
+from celery import Celery, shared_task, Task
 from redis.lock import Lock as RedisLock
 from sqlalchemy import select
 
 from onyx.access.access import build_access_for_user_files
 from onyx.access.models import DocumentAccess
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_redis import celery_get_broker_client
-from onyx.background.celery.celery_redis import celery_get_queue_length
+from onyx.background.celery.celery_redis import (
+    celery_get_broker_client,
+    celery_get_queue_length,
+)
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
-from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import MANAGED_VESPA
-from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
-from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_USER_FILE_DELETE_TASK_EXPIRES
-from onyx.configs.constants import CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_USER_FILE_PROCESSING_TASK_EXPIRES
-from onyx.configs.constants import CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_USER_FILE_PROJECT_SYNC_TASK_EXPIRES
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import USER_FILE_DELETE_MAX_QUEUE_DEPTH
-from onyx.configs.constants import USER_FILE_PROCESSING_MAX_QUEUE_DEPTH
-from onyx.configs.constants import USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH
+from onyx.configs.app_configs import (
+    DISABLE_VECTOR_DB,
+    MANAGED_VESPA,
+    VESPA_CLOUD_CERT_PATH,
+    VESPA_CLOUD_KEY_PATH,
+)
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_USER_FILE_DELETE_TASK_EXPIRES,
+    CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT,
+    CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
+    CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT,
+    CELERY_USER_FILE_PROJECT_SYNC_TASK_EXPIRES,
+    DocumentSource,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisLocks,
+    USER_FILE_DELETE_MAX_QUEUE_DEPTH,
+    USER_FILE_PROCESSING_MAX_QUEUE_DEPTH,
+    USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
+)
 from onyx.connectors.file.connector import LocalFileConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import Document, HierarchyNode
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
-from onyx.db.search_settings import get_active_search_settings
-from onyx.db.search_settings import get_active_search_settings_list
+from onyx.db.search_settings import (
+    get_active_search_settings,
+    get_active_search_settings_list,
+)
 from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.utils import store_user_file_plaintext
-from onyx.file_store.utils import user_file_id_to_plaintext_file_name
+from onyx.file_store.utils import (
+    store_user_file_plaintext,
+    user_file_id_to_plaintext_file_name,
+)
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAdapter
 from onyx.indexing.embedder import DefaultIndexingEmbedder
@@ -266,8 +273,7 @@ def _process_user_file_without_vector_db(
     Opens its own short DB session only for the final status write, so the
     caller does not need to hold a session open during the text/token work.
     """
-    from onyx.llm.factory import get_default_llm
-    from onyx.llm.factory import get_llm_tokenizer_encode_func
+    from onyx.llm.factory import get_default_llm, get_llm_tokenizer_encode_func
 
     user_file_uuid = _as_uuid(user_file_id)
 

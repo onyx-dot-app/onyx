@@ -18,8 +18,7 @@ from scripts.debugging.opensearch.embedding_io import load_query_embedding_from_
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
@@ -27,8 +26,10 @@ from onyx.document_index.opensearch.opensearch_document_index import (
 )
 from onyx.indexing.models import IndexingSetting
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 DEFAULT_N = 50
 

@@ -1,42 +1,31 @@
 from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import func
-from sqlalchemy import nullsfirst
-from sqlalchemy import or_
-from sqlalchemy import Row
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import delete, desc, func, nullsfirst, or_, Row, select, update
 from sqlalchemy.exc import MultipleResultsFound
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import joinedload, selectinload, Session
 
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatMessage__SearchDoc
-from onyx.db.models import ChatSession
-from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import Persona
+from onyx.db.models import (
+    ChatMessage,
+    ChatMessage__SearchDoc,
+    ChatSession,
+    ChatSessionSharedStatus,
+    Persona,
+    ToolCall,
+    User,
+)
 from onyx.db.models import SearchDoc as DBSearchDoc
-from onyx.db.models import ToolCall
-from onyx.db.models import User
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
-from onyx.llm.override_models import LLMOverride
-from onyx.llm.override_models import PromptOverride
+from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string

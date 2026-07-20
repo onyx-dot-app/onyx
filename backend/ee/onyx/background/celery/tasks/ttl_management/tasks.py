@@ -1,13 +1,11 @@
 from uuid import UUID
 
-from celery import shared_task
-from celery import Task
+from celery import shared_task, Task
 
 from ee.onyx.background.celery_utils import should_perform_chat_ttl_check
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.db.chat import delete_chat_session
-from onyx.db.chat import get_chat_sessions_older_than
+from onyx.db.chat import delete_chat_session, get_chat_sessions_older_than
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger

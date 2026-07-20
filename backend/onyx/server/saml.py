@@ -5,28 +5,20 @@ import uuid
 from typing import Any
 from urllib.parse import urlparse
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Request
-from fastapi import Response
-from fastapi import status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi_users import exceptions
 from fastapi_users.authentication import Strategy
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from pydantic import BaseModel
 
-from onyx.auth.schemas import UserCreate
-from onyx.auth.schemas import UserRole
-from onyx.auth.users import auth_backend
-from onyx.auth.users import fastapi_users
-from onyx.auth.users import get_user_manager
-from onyx.auth.users import UserManager
-from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
-from onyx.configs.app_configs import SAML_CONF_DIR
-from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.db.auth import get_user_count
-from onyx.db.auth import get_user_db
+from onyx.auth.schemas import UserCreate, UserRole
+from onyx.auth.users import auth_backend, fastapi_users, get_user_manager, UserManager
+from onyx.configs.app_configs import (
+    REQUIRE_EMAIL_VERIFICATION,
+    SAML_CONF_DIR,
+    WEB_DOMAIN,
+)
+from onyx.db.auth import get_user_count, get_user_db
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger

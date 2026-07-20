@@ -2,11 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
-from pydantic import computed_field
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, computed_field, ConfigDict, Field, field_validator
 
 from onyx.auth.permissions import resolve_effective_permissions
 from onyx.db.enums import Permission

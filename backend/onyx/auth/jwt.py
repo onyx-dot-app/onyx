@@ -1,15 +1,13 @@
 import json
 from enum import Enum
 from functools import lru_cache
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import jwt
 import requests
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from jwt import decode as jwt_decode
-from jwt import InvalidTokenError
-from jwt import PyJWTError
+from jwt import InvalidTokenError, PyJWTError
 from jwt.algorithms import RSAAlgorithm  # ty: ignore[possibly-missing-import]
 
 from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL

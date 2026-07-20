@@ -17,8 +17,7 @@ reindex isn't supported yet for that source.
 
 import datetime
 from collections import defaultdict
-from collections.abc import Iterable
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 from more_itertools import chunked
 from sqlalchemy.orm import Session
@@ -26,17 +25,23 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import Resolver
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import IndexAttemptMetadata
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    HierarchyNode,
+    IndexAttemptMetadata,
+)
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
-from onyx.db.hierarchy import upsert_hierarchy_node_cc_pair_entries
-from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import TargetedReindexJobTarget
+from onyx.db.hierarchy import (
+    upsert_hierarchy_node_cc_pair_entries,
+    upsert_hierarchy_nodes_batch,
+)
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    TargetedReindexJobTarget,
+)
 from onyx.db.targeted_reindex import targets_to_connector_failures
 from onyx.document_index.factory import get_all_document_indices
 from onyx.httpx.httpx_pool import HttpxPool
@@ -45,8 +50,10 @@ from onyx.indexing.adapters.document_indexing_adapter import (
 )
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
-from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
-from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
+from onyx.redis.redis_hierarchy import (
+    cache_hierarchy_nodes_batch,
+    HierarchyNodeCacheEntry,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id

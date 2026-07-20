@@ -10,8 +10,10 @@ from typing import cast
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.canvas.client import CanvasApiClient
-from onyx.utils.variable_functionality import fetch_versioned_implementation
-from onyx.utils.variable_functionality import global_version
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation,
+    global_version,
+)
 
 
 def get_course_permissions(

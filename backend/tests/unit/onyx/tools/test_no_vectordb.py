@@ -4,8 +4,7 @@ Verifies that SearchTool and OpenURLTool report themselves as unavailable
 when the vector DB is disabled, and that FileReaderTool remains available.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import Session

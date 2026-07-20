@@ -14,26 +14,26 @@ Three entry points are gated:
 
 import hmac
 
-from fastapi import APIRouter
-from fastapi import Request
-from fastapi import Response
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.middleware.base import RequestResponseEndpoint
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-from onyx.auth.captcha import CAPTCHA_COOKIE_NAME
-from onyx.auth.captcha import CaptchaAction
-from onyx.auth.captcha import CaptchaVerificationError
-from onyx.auth.captcha import is_captcha_enabled
-from onyx.auth.captcha import issue_captcha_cookie_value
-from onyx.auth.captcha import validate_captcha_cookie_value
-from onyx.auth.captcha import verify_captcha_token
-from onyx.configs.app_configs import CAPTCHA_COOKIE_TTL_SECONDS
-from onyx.configs.app_configs import HEALTH_CHECK_BYPASS_TOKEN
+from onyx.auth.captcha import (
+    CAPTCHA_COOKIE_NAME,
+    CaptchaAction,
+    CaptchaVerificationError,
+    is_captcha_enabled,
+    issue_captcha_cookie_value,
+    validate_captcha_cookie_value,
+    verify_captcha_token,
+)
+from onyx.configs.app_configs import (
+    CAPTCHA_COOKIE_TTL_SECONDS,
+    HEALTH_CHECK_BYPASS_TOKEN,
+)
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import onyx_error_to_json_response
-from onyx.error_handling.exceptions import OnyxError
+from onyx.error_handling.exceptions import onyx_error_to_json_response, OnyxError
 from onyx.utils.client_ip import get_client_ip
 from onyx.utils.logger import setup_logger
 

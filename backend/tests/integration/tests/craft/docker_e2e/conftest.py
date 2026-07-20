@@ -41,10 +41,8 @@ import httpx
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.external_app import create_external_app
-from onyx.db.external_app import get_built_in_external_app
+from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.external_app import create_external_app, get_built_in_external_app
 from tests.integration.common_utils import http_client
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.managers.build_session import BuildSessionManager

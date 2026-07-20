@@ -3,17 +3,13 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi import Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastmcp import FastMCP
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.base import RequestResponseEndpoint
-from starlette.types import Receive
-from starlette.types import Scope
-from starlette.types import Send
+from starlette.types import Receive, Scope, Send
 
 from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
 from onyx.mcp_server.auth import OnyxTokenVerifier

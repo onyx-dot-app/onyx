@@ -1,17 +1,18 @@
 import contextvars
 import threading
 import time
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from onyx.utils.threadpool_concurrency import parallel_yield
-from onyx.utils.threadpool_concurrency import run_in_background
-from onyx.utils.threadpool_concurrency import run_with_timeout
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
-from onyx.utils.threadpool_concurrency import wait_on_background
+from onyx.utils.threadpool_concurrency import (
+    parallel_yield,
+    run_in_background,
+    run_with_timeout,
+    ThreadSafeDict,
+    wait_on_background,
+)
 
 # Create a context variable for testing
 test_context_var = contextvars.ContextVar("test_var", default="default")

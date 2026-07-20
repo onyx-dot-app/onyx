@@ -8,8 +8,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
 from onyx.server.features.build.db.user_library import list_user_files
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import PushResult
+from onyx.server.features.build.sandbox.models import FileSet, PushResult
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

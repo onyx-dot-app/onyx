@@ -1,15 +1,15 @@
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
 
-from ee.onyx.utils.license_expiry import ExpiryWarningStage
-from ee.onyx.utils.license_expiry import get_expiry_warning_stage
-from ee.onyx.utils.license_expiry import get_grace_days_remaining
-from ee.onyx.utils.license_expiry import get_grace_period_end
-from ee.onyx.utils.license_expiry import LICENSE_GRACE_PERIOD_DAYS
+from ee.onyx.utils.license_expiry import (
+    ExpiryWarningStage,
+    get_expiry_warning_stage,
+    get_grace_days_remaining,
+    get_grace_period_end,
+    LICENSE_GRACE_PERIOD_DAYS,
+)
 
 NOW = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
 

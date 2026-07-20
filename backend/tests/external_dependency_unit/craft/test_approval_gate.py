@@ -17,54 +17,51 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Generator
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from kubernetes import client
-from sqlalchemy import select
-from sqlalchemy import text
-from sqlalchemy import update
+from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import NotificationType
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.external_app import create_external_app
-from onyx.db.external_app import get_built_in_external_app
-from onyx.db.models import ActionApproval
-from onyx.db.models import BuildSession
-from onyx.db.models import Notification
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+from onyx.db.enums import (
+    ApprovalDecision,
+    BuildSessionStatus,
+    EndpointPolicy,
+    ExternalAppType,
+)
+from onyx.db.external_app import create_external_app, get_built_in_external_app
+from onyx.db.models import ActionApproval, BuildSession, Notification, Sandbox, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.sandbox_proxy import approval_cache
-from onyx.server.features.build.approvals.api import DecisionBody
-from onyx.server.features.build.approvals.api import list_live_approvals
-from onyx.server.features.build.approvals.api import submit_decision
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.approvals.api import (
+    DecisionBody,
+    list_live_approvals,
+    submit_decision,
+)
+from onyx.server.features.build.configs import (
+    SANDBOX_BACKEND,
+    SANDBOX_NAMESPACE,
+    SANDBOX_PROXY_NAMESPACE,
+    SANDBOX_PROXY_PORT,
+    SandboxBackend,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.common.craft.payloads import action_entry
-from tests.external_dependency_unit.craft.conftest import pod_exec
-from tests.external_dependency_unit.craft.conftest import pod_exec_async
-from tests.external_dependency_unit.craft.conftest import wait_for_pod_exec_output
-from tests.external_dependency_unit.craft.conftest import wait_for_proxy_redeploy
+from tests.external_dependency_unit.craft.conftest import (
+    pod_exec,
+    pod_exec_async,
+    wait_for_pod_exec_output,
+    wait_for_proxy_redeploy,
+)
 
 logger = setup_logger()
 

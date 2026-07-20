@@ -1,6 +1,5 @@
 from onyx.db.enums import EndpointPolicy
-from onyx.external_apps.matching.engine import actions_requiring_approval
-from onyx.external_apps.matching.engine import MatchedAction
+from onyx.external_apps.matching.engine import actions_requiring_approval, MatchedAction
 
 
 def _action(action_type: str, policy: EndpointPolicy) -> MatchedAction:

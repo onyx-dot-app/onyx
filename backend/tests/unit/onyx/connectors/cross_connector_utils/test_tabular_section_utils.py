@@ -1,13 +1,12 @@
 import io
-from typing import cast
-from typing import IO
+from typing import cast, IO
 
 import openpyxl
 import pytest
 from openpyxl.worksheet.worksheet import Worksheet
 
-from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    is_tabular_file,
     tabular_file_to_sections,
 )
 

@@ -14,8 +14,10 @@ from uuid import UUID
 import pytest
 
 from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
-from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
-from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
+from onyx.server.features.build.sandbox.serve_transport import (
+    _ServeMixin,
+    ServeConnectionInfo,
+)
 
 _SBX = UUID("12345678-1234-1234-1234-1234567890ab")
 _POD_IP_URL = "http://10.244.0.97:4096"

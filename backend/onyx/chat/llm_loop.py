@@ -1,63 +1,68 @@
 import json
 import time
 from collections.abc import Callable
-from typing import Any
-from typing import Literal
+from typing import Any, Literal
 
 from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.chat_utils import build_python_chat_files_from_search_docs
-from onyx.chat.chat_utils import create_tool_call_failure_messages
-from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.citation_processor import CitationMode
-from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.chat_utils import (
+    build_python_chat_files_from_search_docs,
+    create_tool_call_failure_messages,
+)
+from onyx.chat.citation_processor import (
+    CitationMapping,
+    CitationMode,
+    DynamicCitationProcessor,
+)
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
-from onyx.chat.llm_step import _looks_like_xml_tool_call_payload
-from onyx.chat.llm_step import extract_tool_calls_from_response_text
-from onyx.chat.llm_step import run_llm_step
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import ContextFileMetadata
-from onyx.chat.models import ExtractedContextFiles
-from onyx.chat.models import FileToolMetadata
-from onyx.chat.models import LlmStepResult
-from onyx.chat.models import ToolCallSimple
-from onyx.chat.prompt_utils import build_reminder_message
-from onyx.chat.prompt_utils import build_system_prompt
-from onyx.chat.prompt_utils import get_default_base_system_prompt
+from onyx.chat.llm_step import (
+    _looks_like_xml_tool_call_payload,
+    extract_tool_calls_from_response_text,
+    run_llm_step,
+)
+from onyx.chat.models import (
+    ChatMessageSimple,
+    ContextFileMetadata,
+    ExtractedContextFiles,
+    FileToolMetadata,
+    LlmStepResult,
+    ToolCallSimple,
+)
+from onyx.chat.prompt_utils import (
+    build_reminder_message,
+    build_system_prompt,
+    get_default_base_system_prompt,
+)
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import DocumentSource, MessageType
 from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
-from onyx.context.search.models import SearchDoc
-from onyx.context.search.models import SearchDocsResponse
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.memory import add_memory
-from onyx.db.memory import update_memory_at_index
-from onyx.db.memory import UserMemoryContext
+from onyx.db.memory import add_memory, update_memory_at_index, UserMemoryContext
 from onyx.db.models import Persona
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
 from onyx.llm.utils import is_true_openai_model
-from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
-from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
+from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import OverallStop
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ToolCallDebug
-from onyx.server.query_and_chat.streaming_models import TopLevelBranching
-from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
-from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
+from onyx.server.query_and_chat.streaming_models import (
+    OverallStop,
+    Packet,
+    ToolCallDebug,
+    TopLevelBranching,
+)
+from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES, STOPPING_TOOLS_NAMES
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatFile
-from onyx.tools.models import CustomToolCallSummary
-from onyx.tools.models import MemoryToolResponseSnapshot
-from onyx.tools.models import PythonToolRichResponse
-from onyx.tools.models import ToolCallInfo
-from onyx.tools.models import ToolCallKickoff
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import (
+    ChatFile,
+    CustomToolCallSummary,
+    MemoryToolResponseSnapshot,
+    PythonToolRichResponse,
+    ToolCallInfo,
+    ToolCallKickoff,
+    ToolResponse,
+)
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool

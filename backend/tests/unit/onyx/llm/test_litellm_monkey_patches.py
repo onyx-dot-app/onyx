@@ -6,13 +6,14 @@ from litellm.completion_extras.litellm_responses_transformation.transformation i
 )
 from litellm.litellm_core_utils.litellm_logging import Logging
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
-from litellm.types.llms.openai import ResponseAPIUsage
-from litellm.types.llms.openai import ResponsesAPIResponse
+from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
 from litellm.types.utils import ModelResponse
 from openai.types.responses.response_output_message import ResponseOutputMessage
 from openai.types.responses.response_output_text import ResponseOutputText
-from openai.types.responses.response_reasoning_item import ResponseReasoningItem
-from openai.types.responses.response_reasoning_item import Summary
+from openai.types.responses.response_reasoning_item import (
+    ResponseReasoningItem,
+    Summary,
+)
 
 from onyx.llm.litellm_singleton.monkey_patches import apply_monkey_patches
 

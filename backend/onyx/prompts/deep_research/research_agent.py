@@ -1,5 +1,7 @@
-from onyx.prompts.deep_research.dr_tool_prompts import GENERATE_REPORT_TOOL_NAME
-from onyx.prompts.deep_research.dr_tool_prompts import THINK_TOOL_NAME
+from onyx.prompts.deep_research.dr_tool_prompts import (
+    GENERATE_REPORT_TOOL_NAME,
+    THINK_TOOL_NAME,
+)
 
 MAX_RESEARCH_CYCLES = 8
 

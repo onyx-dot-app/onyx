@@ -7,10 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.external_apps.providers.actions import path_matches
-from onyx.external_apps.providers.actions import RestRoute
+from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.external_apps.providers.actions import path_matches, RestRoute
 from onyx.external_apps.providers.gmail import GmailAction
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 

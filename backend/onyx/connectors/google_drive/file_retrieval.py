@@ -1,12 +1,8 @@
-from collections.abc import Callable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
-from typing import cast
-from urllib.parse import parse_qs
-from urllib.parse import urlparse
+from typing import Any, cast
+from urllib.parse import parse_qs, urlparse
 
 from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import Resource
@@ -14,25 +10,29 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import BatchHttpRequest
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
-from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
-from onyx.connectors.google_drive.models import DriveRetrievalStage
-from onyx.connectors.google_drive.models import GoogleDriveFileType
-from onyx.connectors.google_drive.models import RetrievedDriveFile
-from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
-from onyx.connectors.google_utils.google_utils import (
-    execute_paginated_retrieval_with_max_pages,
+from onyx.connectors.google_drive.constants import (
+    DRIVE_FOLDER_TYPE,
+    DRIVE_SHORTCUT_TYPE,
 )
-from onyx.connectors.google_utils.google_utils import GoogleFields
-from onyx.connectors.google_utils.google_utils import ORDER_BY_KEY
-from onyx.connectors.google_utils.google_utils import PAGE_TOKEN_KEY
+from onyx.connectors.google_drive.models import (
+    DriveRetrievalStage,
+    GoogleDriveFileType,
+    RetrievedDriveFile,
+)
+from onyx.connectors.google_utils.google_utils import (
+    execute_paginated_retrieval,
+    execute_paginated_retrieval_with_max_pages,
+    GoogleFields,
+    ORDER_BY_KEY,
+    PAGE_TOKEN_KEY,
+)
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
+    noop_fallback,
 )
-from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()
 

@@ -10,8 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from prometheus_client.core import CounterMetricFamily
-from prometheus_client.core import GaugeMetricFamily
+from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
 
 _LABELS = ["name", "method"]
 

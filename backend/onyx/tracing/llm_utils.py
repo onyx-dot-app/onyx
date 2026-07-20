@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
-from collections.abc import Mapping
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import ModelResponse

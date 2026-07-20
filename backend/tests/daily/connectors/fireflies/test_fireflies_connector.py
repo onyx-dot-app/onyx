@@ -7,8 +7,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.fireflies.connector import FirefliesConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import Document, HierarchyNode
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.FIREFLIES_API_KEY)

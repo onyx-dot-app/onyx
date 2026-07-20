@@ -10,8 +10,10 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.exc import SQLAlchemyError
 
 from onyx.external_apps import token_refresh as tr
-from onyx.external_apps.providers.base import TokenRefreshTerminalError
-from onyx.external_apps.providers.base import TokenRefreshTransientError
+from onyx.external_apps.providers.base import (
+    TokenRefreshTerminalError,
+    TokenRefreshTransientError,
+)
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
 
 # ---------------------------------------------------------------------------

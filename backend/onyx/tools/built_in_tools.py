@@ -1,5 +1,4 @@
-from typing import Type
-from typing import Union
+from typing import Type, Union
 
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,

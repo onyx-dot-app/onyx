@@ -1,8 +1,7 @@
 """EE Usage limits - trial detection via billing information."""
 
 from ee.onyx.server.tenants.billing import fetch_billing_information
-from ee.onyx.server.tenants.models import BillingInformation
-from ee.onyx.server.tenants.models import SubscriptionStatusResponse
+from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 

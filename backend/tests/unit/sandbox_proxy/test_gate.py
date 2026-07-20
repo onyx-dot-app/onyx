@@ -18,37 +18,34 @@ import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import AbstractSet
-from typing import Any
+from typing import AbstractSet, Any
 from unittest.mock import MagicMock
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from mitmproxy import http
 from redis.exceptions import RedisError
 
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
-from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.external_apps.matching.engine import MatchedAction
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
+from onyx.external_apps.matching.engine import AllMatchedActions, MatchedAction
 from onyx.sandbox_proxy.addons import gate
-from onyx.sandbox_proxy.addons.gate import GateAddon
-from onyx.sandbox_proxy.addons.gate import ParkedApprovals
-from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
-from onyx.sandbox_proxy.credential_injection import CredentialResolver
-from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
-from onyx.sandbox_proxy.credential_injection import InjectionOutcome
+from onyx.sandbox_proxy.addons.gate import GateAddon, ParkedApprovals
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialInjectionDispatcher,
+    CredentialResolver,
+    CredentialUnavailableError,
+    InjectionOutcome,
+)
 from onyx.sandbox_proxy.errors import SandboxProxyError
-from onyx.sandbox_proxy.identity import ResolvedSandbox
-from onyx.sandbox_proxy.identity import SessionContext
+from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
-from tests.unit.sandbox_proxy.conftest import make_flow
-from tests.unit.sandbox_proxy.conftest import make_matched_actions
-from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox
-from tests.unit.sandbox_proxy.conftest import RecordingCredentialResolver
-from tests.unit.sandbox_proxy.conftest import StubResolver
+from tests.unit.sandbox_proxy.conftest import (
+    make_flow,
+    make_matched_actions,
+    make_resolved_sandbox,
+    RecordingCredentialResolver,
+    StubResolver,
+)
 
 # ---------------------------------------------------------------------------
 # Stubs

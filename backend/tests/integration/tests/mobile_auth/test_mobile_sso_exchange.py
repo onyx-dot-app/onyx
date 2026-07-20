@@ -14,12 +14,10 @@ import httpx
 
 from onyx.auth.mobile_sso.code_store import store_sso_code
 from onyx.auth.users import generate_pkce_pair
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.mobile_auth._helpers import bearer
-from tests.integration.tests.mobile_auth._helpers import mobile_login
+from tests.integration.tests.mobile_auth._helpers import bearer, mobile_login
 
 
 def _exchange(code: str, code_verifier: str) -> httpx.Response:

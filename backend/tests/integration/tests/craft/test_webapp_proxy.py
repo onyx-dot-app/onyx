@@ -18,8 +18,7 @@ purely via the HTTP API in this layer.
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 

@@ -22,19 +22,17 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPTransport
+from onyx.db.enums import (
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPTransport,
+)
 from onyx.db.mcp import create_mcp_server__no_commit
-from onyx.db.models import OAuthAccount
-from onyx.db.models import Persona
-from onyx.db.models import Tool
-from onyx.db.models import User
+from onyx.db.models import OAuthAccount, Persona, Tool, User
 from onyx.llm.factory import get_default_llm
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import CustomToolCallSummary
-from onyx.tools.tool_constructor import construct_tools
-from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.tool_constructor import construct_tools, SearchToolConfig
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.conftest import create_test_user

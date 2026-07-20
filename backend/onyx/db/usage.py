@@ -1,7 +1,6 @@
 """Database interactions for tenant usage tracking (cloud usage limits)."""
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel

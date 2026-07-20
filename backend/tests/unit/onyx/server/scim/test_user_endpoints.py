@@ -2,38 +2,43 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from fastapi import Response
 from sqlalchemy.exc import IntegrityError
 
 from ee.onyx.db.license import seat_lock_id_for_tenant
-from ee.onyx.server.scim.api import _check_seat_availability
-from ee.onyx.server.scim.api import _scim_name_to_str
-from ee.onyx.server.scim.api import create_user
-from ee.onyx.server.scim.api import delete_user
-from ee.onyx.server.scim.api import get_user
-from ee.onyx.server.scim.api import list_users
-from ee.onyx.server.scim.api import patch_user
-from ee.onyx.server.scim.api import replace_user
-from ee.onyx.server.scim.models import ScimMappingFields
-from ee.onyx.server.scim.models import ScimName
-from ee.onyx.server.scim.models import ScimPatchOperation
-from ee.onyx.server.scim.models import ScimPatchOperationType
-from ee.onyx.server.scim.models import ScimPatchRequest
-from ee.onyx.server.scim.models import ScimUserResource
+from ee.onyx.server.scim.api import (
+    _check_seat_availability,
+    _scim_name_to_str,
+    create_user,
+    delete_user,
+    get_user,
+    list_users,
+    patch_user,
+    replace_user,
+)
+from ee.onyx.server.scim.models import (
+    ScimMappingFields,
+    ScimName,
+    ScimPatchOperation,
+    ScimPatchOperationType,
+    ScimPatchRequest,
+    ScimUserResource,
+)
 from ee.onyx.server.scim.patch import ScimPatchError
 from ee.onyx.server.scim.providers.base import ScimProvider
 from onyx.db.enums import AccountType
 from onyx.db.models import UserRole
-from tests.unit.onyx.server.scim.conftest import assert_scim_error
-from tests.unit.onyx.server.scim.conftest import make_db_user
-from tests.unit.onyx.server.scim.conftest import make_scim_user
-from tests.unit.onyx.server.scim.conftest import make_user_mapping
-from tests.unit.onyx.server.scim.conftest import parse_scim_list
-from tests.unit.onyx.server.scim.conftest import parse_scim_user
+from tests.unit.onyx.server.scim.conftest import (
+    assert_scim_error,
+    make_db_user,
+    make_scim_user,
+    make_user_mapping,
+    parse_scim_list,
+    parse_scim_user,
+)
 
 
 class TestListUsers:

@@ -11,11 +11,8 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
-from dataclasses import field
-from queue import Empty
-from queue import Full
-from queue import Queue
+from dataclasses import dataclass, field
+from queue import Empty, Full, Queue
 from typing import Any
 
 import httpx

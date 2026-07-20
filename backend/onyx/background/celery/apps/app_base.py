@@ -3,16 +3,15 @@ import multiprocessing
 import os
 import sys
 import time
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from celery import bootsteps  # ty: ignore[unresolved-import]
-from celery import Task
+from celery import (
+    bootsteps,  # ty: ignore[unresolved-import]
+    Task,
+)
 from celery.app import trace  # ty: ignore[unresolved-import]
 from celery.exceptions import WorkerShutdown
-from celery.signals import before_task_publish
-from celery.signals import task_postrun
-from celery.signals import task_prerun
+from celery.signals import before_task_publish, task_postrun, task_prerun
 from celery.states import READY_STATES
 from celery.utils.log import get_task_logger
 from celery.worker import strategy  # ty: ignore[unresolved-import]
@@ -21,18 +20,25 @@ from sentry_sdk.integrations.celery import CeleryIntegration
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatter
-from onyx.background.celery.apps.task_formatters import CeleryTaskJsonFormatter
-from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
-from onyx.background.celery.celery_utils import celery_is_worker_primary
-from onyx.background.celery.celery_utils import make_probe_path
-from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_PREFIX
-from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_TASKSET_KEY
-from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
-from onyx.configs.app_configs import ONYX_DISABLE_VESPA
-from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.background.celery.apps.task_formatters import (
+    CeleryTaskColoredFormatter,
+    CeleryTaskJsonFormatter,
+    CeleryTaskPlainFormatter,
+)
+from onyx.background.celery.celery_utils import (
+    celery_is_worker_primary,
+    make_probe_path,
+)
+from onyx.background.celery.tasks.vespa.document_sync import (
+    DOCUMENT_SYNC_PREFIX,
+    DOCUMENT_SYNC_TASKSET_KEY,
+)
+from onyx.configs.app_configs import (
+    DISABLE_VECTOR_DB,
+    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX,
+    ONYX_DISABLE_VESPA,
+)
+from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
@@ -46,19 +52,23 @@ from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.tracing.setup import setup_tracing
-from onyx.utils.logger import ColoredFormatter
-from onyx.utils.logger import get_json_formatter
-from onyx.utils.logger import get_log_level_from_str
-from onyx.utils.logger import LoggerContextVars
-from onyx.utils.logger import PlainFormatter
-from onyx.utils.logger import setup_logger
-from shared_configs.configs import DEV_LOGGING_ENABLED
-from shared_configs.configs import JSON_LOGGING
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import SENTRY_CELERY_TRACES_SAMPLE_RATE
-from shared_configs.configs import SENTRY_DSN
-from shared_configs.configs import TENANT_ID_PREFIX
+from onyx.utils.logger import (
+    ColoredFormatter,
+    get_json_formatter,
+    get_log_level_from_str,
+    LoggerContextVars,
+    PlainFormatter,
+    setup_logger,
+)
+from shared_configs.configs import (
+    DEV_LOGGING_ENABLED,
+    JSON_LOGGING,
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    SENTRY_CELERY_TRACES_SAMPLE_RATE,
+    SENTRY_DSN,
+    TENANT_ID_PREFIX,
+)
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()

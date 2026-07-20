@@ -1,22 +1,18 @@
 import datetime
 import re
 from enum import Enum
-from typing import Any
-from typing import List
-from typing import NotRequired
-from typing import Optional
-from typing import TypedDict
+from typing import Any, List, NotRequired, Optional, TypedDict
 
 from mcp.types import Tool as MCPLibTool
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import BaseModel, Field, model_validator
 
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPOAuthProviderMode
-from onyx.db.enums import MCPServerStatus
-from onyx.db.enums import MCPTransport
+from onyx.db.enums import (
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPOAuthProviderMode,
+    MCPServerStatus,
+    MCPTransport,
+)
 
 # Matches `{placeholder_name}` inside header value templates.
 _PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")

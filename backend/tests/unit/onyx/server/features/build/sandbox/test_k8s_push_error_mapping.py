@@ -14,50 +14,43 @@ import hashlib
 import io
 from collections.abc import Callable
 from types import SimpleNamespace
-from typing import Any
-from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from uuid import UUID
-from uuid import uuid4
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from cryptography.hazmat.primitives.serialization import Encoding
-from cryptography.hazmat.primitives.serialization import NoEncryption
-from cryptography.hazmat.primitives.serialization import PrivateFormat
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+)
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_PUSH_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_SNAPSHOT_CREATE_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     sidecar_snapshot_restore_path,
 )
 from onyx.server.features.build.sandbox.kubernetes import sidecar_client
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     _build_targz,
-)
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.kubernetes.sidecar_client import SidecarClient
-from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import RetriableWriteError
+from onyx.server.features.build.sandbox.models import (
+    FatalWriteError,
+    FileSet,
+    LLMProviderConfig,
+    RetriableWriteError,
+)
 
 # Path to httpx.Client as imported inside the sidecar transport module.
 _HTTPX_CLIENT_PATH = (

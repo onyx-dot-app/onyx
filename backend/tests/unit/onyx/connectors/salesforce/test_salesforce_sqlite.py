@@ -5,8 +5,7 @@ import shutil
 import tempfile
 import time
 from collections import defaultdict
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
@@ -14,21 +13,21 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import Document
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
-from onyx.connectors.salesforce.doc_conversion import _extract_section
-from onyx.connectors.salesforce.doc_conversion import ID_PREFIX
+from onyx.connectors.models import BasicExpertInfo, Document, ImageSection, TextSection
+from onyx.connectors.salesforce.doc_conversion import _extract_section, ID_PREFIX
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
-from onyx.connectors.salesforce.salesforce_calls import _bulk_retrieve_from_salesforce
-from onyx.connectors.salesforce.salesforce_calls import _make_time_filter_for_sf_type
-from onyx.connectors.salesforce.salesforce_calls import _make_time_filtered_query
-from onyx.connectors.salesforce.salesforce_calls import get_object_by_id_query
+from onyx.connectors.salesforce.salesforce_calls import (
+    _bulk_retrieve_from_salesforce,
+    _make_time_filter_for_sf_type,
+    _make_time_filtered_query,
+    get_object_by_id_query,
+)
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
-from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
-from onyx.connectors.salesforce.utils import MODIFIED_FIELD
-from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
+from onyx.connectors.salesforce.utils import (
+    ACCOUNT_OBJECT_TYPE,
+    MODIFIED_FIELD,
+    USER_OBJECT_TYPE,
+)
 from onyx.utils.logger import setup_logger
 
 # from onyx.connectors.salesforce.onyx_salesforce_type import OnyxSalesforceType

@@ -2,8 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.external_apps.models import ActionPolicyView
 
 
