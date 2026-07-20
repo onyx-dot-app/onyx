@@ -465,23 +465,6 @@ def sleep_sandbox(
     """
     sandbox_id = sandbox.id
 
-    if not session_creation_lock.acquire(blocking=False):
-        logger.info(
-            "Skipping idle sandbox %s while a session is being created",
-            sandbox_id,
-        )
-        return
-    try:
-        session_ids = list_snapshotable_session_workspaces(
-            db_session,
-            sandbox_manager,
-            sandbox,
-            session_creation_lock,
-        )
-    finally:
-        if session_creation_lock.owned():
-            session_creation_lock.release()
-
     # Chat history lives outside session workspaces; capture it before the
     # pod dies.
     if sandbox_manager.supports_opencode_history_persistence:
@@ -504,6 +487,23 @@ def sleep_sandbox(
                 sandbox_id,
                 e,
             )
+
+    if not session_creation_lock.acquire(blocking=False):
+        logger.info(
+            "Skipping idle sandbox %s while a session is being created",
+            sandbox_id,
+        )
+        return
+    try:
+        session_ids = list_snapshotable_session_workspaces(
+            db_session,
+            sandbox_manager,
+            sandbox,
+            session_creation_lock,
+        )
+    finally:
+        if session_creation_lock.owned():
+            session_creation_lock.release()
 
     snapshot_failed = False
     for session_id in session_ids:
