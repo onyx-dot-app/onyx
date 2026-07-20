@@ -603,13 +603,29 @@ POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
 AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
-# Comma-separated replica / multi-host list. If unset, defaults to POSTGRES_HOST
-# only.
-_POSTGRES_HOSTS_STR = os.environ.get("POSTGRES_HOSTS", "").strip()
-POSTGRES_HOSTS: list[str] = (
-    [h.strip() for h in _POSTGRES_HOSTS_STR.split(",") if h.strip()]
-    if _POSTGRES_HOSTS_STR
-    else [POSTGRES_HOST]
+
+# --- Tenant sharding (multi-database) ---------------------------------------
+# Onyx addresses a tenant by schema (`schema_translate_map`). These settings let
+# tenants additionally be spread across separate physical databases ("shards").
+#
+# ONYX_DB_SHARDS is a JSON object of shard name -> connection overrides, e.g.
+#   {"shard-b": {"host": "other.rds.amazonaws.com", "db": "danswer"}}
+# Keys not supplied for a shard fall back to the POSTGRES_* values above.
+#
+# When unset, exactly one shard exists (named by ONYX_DB_DEFAULT_SHARD, built
+# from POSTGRES_*), which is the single-database behavior Onyx has always had.
+ONYX_DB_SHARDS_JSON = os.environ.get("ONYX_DB_SHARDS", "").strip()
+# Shard that hosts tenants with no explicit mapping.
+ONYX_DB_DEFAULT_SHARD = os.environ.get("ONYX_DB_DEFAULT_SHARD") or "default"
+# Shard that holds the shared `public` catalog tables (user_tenant_mapping etc.)
+# and the tenant -> shard map itself. Must be resolvable without a lookup.
+ONYX_DB_CATALOG_SHARD = os.environ.get("ONYX_DB_CATALOG_SHARD") or ONYX_DB_DEFAULT_SHARD
+# Operator escape hatch: JSON object of tenant_id -> shard name, consulted
+# before the catalog table. Intended for incident response, not routine use.
+ONYX_DB_SHARD_OVERRIDES_JSON = os.environ.get("ONYX_DB_SHARD_OVERRIDES", "").strip()
+# How long a resolved tenant -> shard mapping is cached in-process.
+ONYX_DB_SHARD_MAP_TTL_SECONDS = int(
+    os.environ.get("ONYX_DB_SHARD_MAP_TTL_SECONDS") or 60
 )
 
 POSTGRES_API_SERVER_POOL_SIZE = int(

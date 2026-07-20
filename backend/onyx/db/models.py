@@ -5194,11 +5194,26 @@ Multi-tenancy related tables
 
 
 class PublicBase(DeclarativeBase):
+    """Base for globally-shared tables living in the `public` schema.
+
+    These are *not* per-tenant: there is exactly one copy of each, in the catalog
+    database. They are deliberately kept off `Base` so that:
+
+      - the per-tenant Alembic tree (whose target_metadata is `Base.metadata`) never
+        considers creating them inside a tenant schema, and
+      - the `alembic_tenants` tree (target_metadata `PublicBase.metadata`) can actually
+        autogenerate against them.
+
+    Access these only through `get_catalog_session()`. Reading them from a
+    tenant-scoped session resolves against whichever database that tenant lives on,
+    which is the wrong database once tenants are sharded.
+    """
+
     __abstract__ = True
 
 
 # Strictly keeps track of the tenant that a given user will authenticate to.
-class UserTenantMapping(Base):
+class UserTenantMapping(PublicBase):
     __tablename__ = "user_tenant_mapping"
     __table_args__ = ({"schema": "public"},)
 
@@ -5211,8 +5226,9 @@ class UserTenantMapping(Base):
         return value.lower() if value else value
 
 
-class AvailableTenant(Base):
+class AvailableTenant(PublicBase):
     __tablename__ = "available_tenant"
+    __table_args__ = ({"schema": "public"},)
     """
     These entries will only exist ephemerally and are meant to be picked up by new users on registration.
     """
@@ -5220,11 +5236,16 @@ class AvailableTenant(Base):
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
     alembic_version: Mapped[str] = mapped_column(String, nullable=False)
     date_created: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    # Which physical database this pre-provisioned schema was actually created on.
+    # A pooled tenant is bound to the shard it was built on and cannot be handed out
+    # as living anywhere else.
+    shard_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 # This is a mapping from tenant IDs to anonymous user paths
-class TenantAnonymousUserPath(Base):
+class TenantAnonymousUserPath(PublicBase):
     __tablename__ = "tenant_anonymous_user_path"
+    __table_args__ = ({"schema": "public"},)
 
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
     anonymous_user_path: Mapped[str] = mapped_column(
@@ -5235,7 +5256,7 @@ class TenantAnonymousUserPath(Base):
 # Lifetime invite counter per tenant. Incremented atomically on every
 # invite reservation; never decremented — removals do not free quota, so
 # loops of invite → remove → invite cannot bypass the trial cap.
-class TenantInviteCounter(Base):
+class TenantInviteCounter(PublicBase):
     __tablename__ = "tenant_invite_counter"
     __table_args__ = {"schema": "public"}
 
@@ -5243,6 +5264,23 @@ class TenantInviteCounter(Base):
     total_invites_sent: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+# Maps a tenant to the physical database ("shard") holding its schema.
+# A tenant with no row here lives on the default shard, so this table stays empty
+# until tenants are actually migrated — no backfill is required.
+class TenantShard(PublicBase):
+    __tablename__ = "tenant_shard"
+    __table_args__ = ({"schema": "public"},)
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True)
+    shard_name: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

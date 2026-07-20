@@ -4,6 +4,7 @@ import threading
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import HTTPException
@@ -33,6 +34,12 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
 from onyx.db.engine.iam_auth import provide_iam_token
 from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
+from onyx.db.engine.shard_registry import (
+    ShardRegistry,
+    get_catalog_engine,
+    shard_pool_divisor,
+)
+from onyx.db.engine.shard_routing import get_engine_for_tenant
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import (
@@ -192,12 +199,26 @@ if LOG_POSTGRES_CONN_COUNTS:
         logger.debug("Total connection checkins: %s", checkin_count)
 
 
+@dataclass(frozen=True)
+class EngineProfile:
+    """How the default engine was built, so shard engines can mirror it.
+
+    Recorded at ``init_engine`` time because pool sizing, keepalives and SSL settings
+    are assembled from several sources and a shard engine that diverged from the
+    default would be a subtle production hazard.
+    """
+
+    use_iam: bool
+    engine_kwargs: dict[str, Any]
+
+
 class SqlEngine:
     _engine: Engine | None = None
     _readonly_engine: Engine | None = None
     _lock: threading.Lock = threading.Lock()
     _readonly_lock: threading.Lock = threading.Lock()
     _app_name: str = POSTGRES_UNKNOWN_APP_NAME
+    _engine_profile: EngineProfile | None = None
 
     @classmethod
     def init_engine(
@@ -257,8 +278,12 @@ class SqlEngine:
                 if "max_overflow" in final_engine_kwargs:
                     del final_engine_kwargs["max_overflow"]
             else:
-                final_engine_kwargs["pool_size"] = pool_size
-                final_engine_kwargs["max_overflow"] = max_overflow
+                # Split the connection budget across shards rather than letting each
+                # shard add a full pool. With one shard the divisor is 1, i.e. sizing
+                # is unchanged from single-database deployments.
+                divisor = shard_pool_divisor()
+                final_engine_kwargs["pool_size"] = max(1, pool_size // divisor)
+                final_engine_kwargs["max_overflow"] = max(1, max_overflow // divisor)
                 final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
                 final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
 
@@ -273,6 +298,9 @@ class SqlEngine:
                 event.listen(engine, "do_connect", provide_iam_token)
 
             cls._engine = engine
+            cls._engine_profile = EngineProfile(
+                use_iam=use_iam, engine_kwargs=dict(final_engine_kwargs)
+            )
 
     @classmethod
     def init_readonly_engine(
@@ -355,6 +383,17 @@ class SqlEngine:
         return cls._readonly_engine
 
     @classmethod
+    def get_engine_profile(cls) -> EngineProfile:
+        """Pool/auth configuration the default engine was built with.
+
+        Used by the shard registry so additional shard engines are configured
+        identically to the default one.
+        """
+        if not cls._engine_profile:
+            raise RuntimeError("Engine not initialized. Must call init_engine first.")
+        return cls._engine_profile
+
+    @classmethod
     def set_app_name(cls, app_name: str) -> None:
         cls._app_name = app_name
 
@@ -366,10 +405,15 @@ class SqlEngine:
 
     @classmethod
     def reset_engine(cls) -> None:
+        # Shard engines are torn down alongside the default one — a forked child
+        # inheriting a parent's shard connections is the same hazard as inheriting
+        # the parent's default connection.
+        ShardRegistry.reset()
         with cls._lock:
             if cls._engine:
                 cls._engine.dispose()
                 cls._engine = None
+            cls._engine_profile = None
 
     @classmethod
     def reset_readonly_engine(cls) -> None:
@@ -417,13 +461,41 @@ def get_session_with_current_tenant_if_none(
         yield session
 
 
-# Used in multi tenant mode when need to refer to the shared `public` schema
 @contextmanager
-def get_session_with_shared_schema() -> Generator[Session, None, None]:
+def get_catalog_session() -> Generator[Session, None, None]:
+    """Session against the shared `public` catalog tables.
+
+    Always bound to the catalog database, never to the current tenant's shard —
+    `user_tenant_mapping`, `tenant_shard` and friends exist in exactly one place.
+    """
+    engine = get_catalog_engine()
+
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
-    with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as session:
-        yield session
-    CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    try:
+        if not MULTI_TENANT:
+            session = Session(bind=engine, expire_on_commit=False)
+            try:
+                yield session
+            finally:
+                _safe_close_session(session)
+            return
+
+        with engine.connect().execution_options(
+            schema_translate_map={None: POSTGRES_DEFAULT_SCHEMA}
+        ) as connection:
+            session = Session(bind=connection, expire_on_commit=False)
+            try:
+                yield session
+            finally:
+                _safe_close_session(session)
+    finally:
+        # Must be in a finally: an exception inside the block previously leaked the
+        # token, leaving the contextvar pinned to `public` for the rest of the task.
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+
+# Deprecated alias. Prefer `get_catalog_session`, which names what it actually does.
+get_session_with_shared_schema = get_catalog_session
 
 
 def _safe_close_session(session: Session) -> None:
@@ -449,11 +521,15 @@ def _safe_close_session(session: Session) -> None:
 def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]:
     """
     Generate a database session for a specific tenant.
-    """
-    engine = get_sqlalchemy_engine()
 
+    The tenant selects both the schema (via `schema_translate_map`, below) and the
+    physical database (via the shard registry). With one shard configured the latter
+    resolves to the single default engine.
+    """
     if not is_valid_schema_name(tenant_id):
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
+
+    engine = get_engine_for_tenant(tenant_id)
 
     # no need to use the schema translation map for self-hosted + default schema
     if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
