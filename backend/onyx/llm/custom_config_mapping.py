@@ -69,6 +69,9 @@ _PROVIDER_CUSTOM_CONFIG_KWARGS: dict[str, dict[str, str]] = {
     },
 }
 
+# UI form state stored in custom_config; never read at call time, only exempt from validation.
+_UI_ONLY_CONFIG_KEYS = frozenset({"BEDROCK_AUTH_METHOD"})
+
 
 class CustomConfigMapping(BaseModel):
     """Result of mapping a custom_config to LiteLLM kwargs.
@@ -177,4 +180,4 @@ def get_unsupported_custom_config_keys(
         api_key=None,
         api_base=None,
     )
-    return set(custom_config) - set(mapping.consumed_keys)
+    return set(custom_config) - set(mapping.consumed_keys) - _UI_ONLY_CONFIG_KEYS

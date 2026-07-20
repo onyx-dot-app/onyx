@@ -173,3 +173,68 @@ def test_unsupported_keys_reported() -> None:
 def test_empty_config_has_no_unsupported_keys() -> None:
     assert get_unsupported_custom_config_keys("openai", None) == set()
     assert get_unsupported_custom_config_keys("openai", {}) == set()
+
+
+def test_bedrock_auth_method_ignored_but_not_rejected() -> None:
+    """UI form state must never become a kwarg but must pass validation."""
+    for provider in (LlmProviderNames.BEDROCK, LlmProviderNames.BEDROCK_CONVERSE):
+        config = {
+            "BEDROCK_AUTH_METHOD": "long_term_api_key",
+            "AWS_REGION_NAME": "us-east-1",
+            "AWS_BEARER_TOKEN_BEDROCK": "bearer",
+        }
+        mapping = map_custom_config_to_model_kwargs(
+            model_provider=provider,
+            custom_config=config,
+            api_key=None,
+            api_base=None,
+        )
+        assert mapping.model_kwargs == {
+            "aws_region_name": "us-east-1",
+            "api_key": "bearer",
+        }
+        assert get_unsupported_custom_config_keys(provider, config) == set()
+
+
+def test_production_observed_key_sets_are_fully_supported() -> None:
+    """Key sets observed in cloud env-injection logs must validate cleanly."""
+    observed: list[tuple[str, dict[str, str]]] = [
+        (LlmProviderNames.OLLAMA_CHAT, {"OLLAMA_API_KEY": "k"}),
+        (
+            LlmProviderNames.BEDROCK,
+            {
+                "AWS_REGION_NAME": "us-east-1",
+                "BEDROCK_AUTH_METHOD": "long_term_api_key",
+                "AWS_BEARER_TOKEN_BEDROCK": "bearer",
+            },
+        ),
+        (
+            LlmProviderNames.BEDROCK,
+            {
+                "AWS_REGION_NAME": "us-east-1",
+                "BEDROCK_AUTH_METHOD": "access_key",
+                "AWS_ACCESS_KEY_ID": "akid",
+                "AWS_SECRET_ACCESS_KEY": "secret",
+            },
+        ),
+        (
+            LlmProviderNames.VERTEX_AI,
+            {"vertex_location": "us-central1", "vertex_credentials": "{}"},
+        ),
+        (
+            LlmProviderNames.VERTEX_AI,
+            {
+                "vertex_auth_method": "service_account_json",
+                "vertex_credentials": "{}",
+                "vertex_location": "us-central1",
+            },
+        ),
+        (
+            LlmProviderNames.VERTEX_AI,
+            {"vertex_auth_method": "workload_identity", "vertex_credentials": "{}"},
+        ),
+    ]
+    for provider, config in observed:
+        assert get_unsupported_custom_config_keys(provider, config) == set(), (
+            f"{provider}: {sorted(config)} should be fully supported"
+        )
