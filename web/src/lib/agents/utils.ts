@@ -39,6 +39,22 @@ export function checkUserCanEditAgent(
   return agent.owner?.id === user.id;
 }
 
+/**
+ * Returns true if the user owns the agent or holds a direct user/group edit
+ * share, the basis for the "Your Agents" tab. Org-wide edit grants everyone
+ * holds (admin role, public-editor) are excluded via the server-computed
+ * `user_is_owner_or_editor` flag. Builtin agents are never "yours". The no-auth
+ * user owns everything.
+ */
+export function checkUserOwnsOrEditsAgent(
+  user: User | null,
+  agent: MinimalAgent | Agent
+): boolean {
+  if (!user || agent.builtin_persona) return false;
+  if (checkUserIsNoAuthUser(user.id)) return true;
+  return agent.user_is_owner_or_editor ?? false;
+}
+
 // TODO(ENG-3766): rename to agent
 /** Returns the URL for an agent's avatar image. */
 export function buildAgentAvatarUrl(agentId: number) {

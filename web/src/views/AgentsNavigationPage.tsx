@@ -3,7 +3,7 @@
 import { useMemo, useState, useRef } from "react";
 import AgentCard from "@/sections/agents/AgentCard";
 import { useUser } from "@/providers/UserProvider";
-import { checkUserOwnsAgent } from "@/lib/agents/utils";
+import { checkUserOwnsOrEditsAgent } from "@/lib/agents/utils";
 import { useAgents } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
@@ -73,7 +73,7 @@ export default function AgentsNavigationPage() {
       );
 
       const mineFilter =
-        activeTab === "your" ? checkUserOwnsAgent(user, agent) : true;
+        activeTab === "your" ? checkUserOwnsOrEditsAgent(user, agent) : true;
 
       return (nameMatches || labelMatches) && mineFilter;
     });
@@ -82,11 +82,11 @@ export default function AgentsNavigationPage() {
   const featuredAgents = memoizedCurrentlyVisibleAgents.filter(
     (agent) => agent.is_featured
   );
-  const allAgents = memoizedCurrentlyVisibleAgents.filter(
+  const nonFeaturedAgents = memoizedCurrentlyVisibleAgents.filter(
     (agent) => !agent.is_featured
   );
 
-  const agentCount = featuredAgents.length + allAgents.length;
+  const agentCount = featuredAgents.length + nonFeaturedAgents.length;
 
   return (
     <SettingsLayouts.Root
@@ -151,7 +151,10 @@ export default function AgentsNavigationPage() {
               description="Curated by your team"
               agents={featuredAgents}
             />
-            <AgentsSection title="All Agents" agents={allAgents} />
+            <AgentsSection
+              title={activeTab === "your" ? "Your Agents" : "All Agents"}
+              agents={nonFeaturedAgents}
+            />
             <TextSeparator
               count={agentCount}
               text={agentCount === 1 ? "Agent" : "Agents"}
