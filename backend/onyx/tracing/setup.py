@@ -3,8 +3,7 @@ provider config at runtime so config changes apply without a restart."""
 
 from onyx.configs.app_configs import USER_USAGE_TRACKING_ENABLED
 from onyx.tracing.dynamic_processor import DynamicTracingProcessor
-from onyx.tracing.framework import add_trace_processor
-from onyx.tracing.framework import set_trace_processors
+from onyx.tracing.framework import add_trace_processor, set_trace_processors
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

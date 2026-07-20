@@ -4,14 +4,12 @@ from collections.abc import Generator
 from typing import cast
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy import Table
+from sqlalchemy import Table, create_engine
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from onyx.db.models import ModelCostOverride
 from onyx.llm import cost as cost_mod

@@ -18,8 +18,7 @@ from onyx.configs.onyxbot_configs import (
 from onyx.context.search.models import BaseFilters, Tag
 from onyx.db.models import SlackChannelConfig, User
 from onyx.db.persona import get_persona_by_id
-from onyx.db.users import get_or_create_slack_service_account
-from onyx.db.users import get_user_by_email
+from onyx.db.users import get_or_create_slack_service_account, get_user_by_email
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
 from onyx.onyxbot.slack.models import SlackMessageInfo, ThreadMessage

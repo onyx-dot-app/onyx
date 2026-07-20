@@ -7,14 +7,11 @@ from collections import defaultdict
 from datetime import datetime
 
 from pydantic import BaseModel
-from sqlalchemy import func
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserUsage
+from onyx.db.models import User, User__UserGroup, UserUsage
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 

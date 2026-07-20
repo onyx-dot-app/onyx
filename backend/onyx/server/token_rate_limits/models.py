@@ -1,5 +1,4 @@
-from pydantic import BaseModel, model_validator
-from pydantic import Field
+from pydantic import BaseModel, Field, model_validator
 
 from onyx.db.models import TokenRateLimit
 

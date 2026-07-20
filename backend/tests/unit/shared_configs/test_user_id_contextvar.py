@@ -1,23 +1,21 @@
 from collections.abc import Generator
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
-from fastapi import Depends
-from fastapi import FastAPI
-from fastapi import WebSocket
+from fastapi import Depends, FastAPI, WebSocket
 from fastapi.responses import StreamingResponse
 from fastapi.testclient import TestClient
 
 from onyx.auth import users
-from onyx.auth.users import current_user_from_websocket
-from onyx.auth.users import get_user_manager
-from onyx.auth.users import optional_fastapi_current_user
-from onyx.auth.users import optional_user
+from onyx.auth.users import (
+    current_user_from_websocket,
+    get_user_manager,
+    optional_fastapi_current_user,
+    optional_user,
+)
 from onyx.db.engine.async_sql_engine import get_async_session
-from shared_configs.contextvars import CURRENT_USER_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_user_id
+from shared_configs.contextvars import CURRENT_USER_ID_CONTEXTVAR, get_current_user_id
 
 
 def test_get_current_user_id_returns_set_value() -> None:

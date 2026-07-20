@@ -1,7 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.db.models import ModelCostOverride
 from onyx.db.user_usage import UserUsageByDay as UsageDayModel

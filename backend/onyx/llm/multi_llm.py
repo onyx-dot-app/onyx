@@ -18,6 +18,7 @@ from onyx.configs.chat_configs import (
 )
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.cost import compute_cost_cents
 from onyx.llm.interfaces import (
     LLM,
     LanguageModelInput,
@@ -33,7 +34,6 @@ from onyx.llm.models import (
     ANTHROPIC_REASONING_EFFORT_BUDGET,
     OPENAI_REASONING_EFFORT,
 )
-from onyx.llm.cost import compute_cost_cents
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.well_known_providers.constants import (

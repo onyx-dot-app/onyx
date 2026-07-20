@@ -12,27 +12,25 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy import event
-from sqlalchemy import Table
+from sqlalchemy import Table, create_engine, event
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserUsage
-from onyx.db.user_usage import get_group_cost_cents_since
-from onyx.db.user_usage import get_total_cost_cents_buckets_since
-from onyx.db.user_usage import get_total_cost_cents_since
-from onyx.db.user_usage import get_user_cost_cents_buckets_since
-from onyx.db.user_usage import get_user_cost_cents_in_window
-from onyx.db.user_usage import get_user_cost_cents_since
-from onyx.db.user_usage import get_user_usage_by_day_and_model
-from onyx.db.user_usage import record_user_usage
-from onyx.db.user_usage import UserUsageByDay
+from onyx.db.models import User__UserGroup, UserUsage
+from onyx.db.user_usage import (
+    UserUsageByDay,
+    get_group_cost_cents_since,
+    get_total_cost_cents_buckets_since,
+    get_total_cost_cents_since,
+    get_user_cost_cents_buckets_since,
+    get_user_cost_cents_in_window,
+    get_user_cost_cents_since,
+    get_user_usage_by_day_and_model,
+    record_user_usage,
+)
 
 
 @compiles(PGUUID, "sqlite")

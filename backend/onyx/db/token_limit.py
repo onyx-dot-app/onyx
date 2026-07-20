@@ -6,8 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import TokenRateLimitScope
-from onyx.db.models import TokenRateLimit, TokenRateLimit__UserGroup
-from onyx.db.models import User__UserGroup
+from onyx.db.models import TokenRateLimit, TokenRateLimit__UserGroup, User__UserGroup
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 
 

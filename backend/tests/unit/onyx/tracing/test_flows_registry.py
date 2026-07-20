@@ -2,8 +2,7 @@
 
 import pytest
 
-from onyx.tracing.flows import IMAGE_FLOWS
-from onyx.tracing.flows import LLMFlow
+from onyx.tracing.flows import IMAGE_FLOWS, LLMFlow
 from onyx.tracing.framework.create import trace
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.llm_utils import traced_llm_call

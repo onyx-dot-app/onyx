@@ -9,24 +9,19 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy import event
-from sqlalchemy import Table
-from sqlalchemy import text
+from sqlalchemy import Table, create_engine, event, text
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import UserUsage
-from onyx.db.user_usage import get_usage_export
-from onyx.db.user_usage import UsageExportRow
+from onyx.db.user_usage import UsageExportRow, get_usage_export
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.server.features.usage.api import admin_usage_router
 

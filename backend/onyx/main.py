@@ -103,9 +103,8 @@ from onyx.server.features.search.api import router as search_api_router
 from onyx.server.features.skill.api import user_router as skill_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
-from onyx.server.features.usage.api import admin_usage_router
+from onyx.server.features.usage.api import admin_usage_router, user_usage_router
 from onyx.server.features.usage.api import router as cost_override_router
-from onyx.server.features.usage.api import user_usage_router
 from onyx.server.features.user_oauth_token.api import router as user_oauth_token_router
 from onyx.server.features.web_search.api import router as web_search_router
 from onyx.server.federated.api import router as federated_router

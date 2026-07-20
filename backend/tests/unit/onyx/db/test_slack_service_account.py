@@ -1,5 +1,4 @@
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import SLACK_SERVICE_ACCOUNT_EMAIL

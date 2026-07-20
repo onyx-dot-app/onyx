@@ -7,17 +7,18 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.span_data import FunctionSpanData
-from onyx.tracing.framework.span_data import GenerationSpanData
-from onyx.tracing.framework.span_data import SpanData
+from onyx.tracing.framework.span_data import (
+    FunctionSpanData,
+    GenerationSpanData,
+    SpanData,
+)
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.processors import user_usage_processor as proc_mod
 from onyx.tracing.processors.user_usage_processor import UserUsageTracingProcessor

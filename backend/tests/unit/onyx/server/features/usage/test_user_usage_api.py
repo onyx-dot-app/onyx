@@ -9,24 +9,23 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy import event
-from sqlalchemy import Table
+from sqlalchemy import Table, create_engine, event
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.models import ModelCostOverride
-from onyx.db.models import TokenRateLimit
-from onyx.db.models import TokenRateLimit__UserGroup
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserUsage
+from onyx.db.models import (
+    ModelCostOverride,
+    TokenRateLimit,
+    TokenRateLimit__UserGroup,
+    User__UserGroup,
+    UserUsage,
+)
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.llm import cost_overrides
 from onyx.llm.cost import get_model_price_per_million

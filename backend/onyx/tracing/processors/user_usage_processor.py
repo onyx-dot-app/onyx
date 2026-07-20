@@ -6,10 +6,8 @@ from __future__ import annotations
 import queue
 import threading
 from collections import defaultdict
-from dataclasses import dataclass
-from dataclasses import replace
-from datetime import datetime
-from datetime import timezone
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -25,9 +23,11 @@ from onyx.tracing.framework.traces import Trace
 from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
-from shared_configs.contextvars import get_current_user_id
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+    get_current_user_id,
+)
 
 logger = setup_logger()
 
