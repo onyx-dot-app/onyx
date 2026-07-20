@@ -151,8 +151,9 @@ def _collect_available_file_ids(
     """Collect all file IDs the FileReaderTool should be allowed to access.
 
     Returns *separate* lists for chat-attached files (``file_record`` IDs) and
-    project/user files (``user_file`` IDs) so the tool can pick the right
-    loader without a try/except fallback."""
+    user/project files (``user_file`` IDs) so the tool can pick the right
+    loader without a try/except fallback. Chat uploads store both ``id`` and
+    ``user_file_id`` on the descriptor; the tool accepts ``UserFile.id``."""
     chat_file_ids: set[UUID] = set()
     user_file_ids: set[UUID] = set()
 
@@ -160,6 +161,13 @@ def _collect_available_file_ids(
         if not msg.files:
             continue
         for fd in msg.files:
+            user_file_id_raw = fd.get("user_file_id")
+            if user_file_id_raw:
+                try:
+                    user_file_ids.add(UUID(user_file_id_raw))
+                except (ValueError, TypeError):
+                    pass
+                continue
             try:
                 chat_file_ids.add(UUID(fd["id"]))
             except (ValueError, KeyError):

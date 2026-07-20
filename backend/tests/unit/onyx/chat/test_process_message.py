@@ -1,5 +1,8 @@
 import pytest
+from types import SimpleNamespace
+from uuid import uuid4
 
+from onyx.chat.process_message import _collect_available_file_ids
 from onyx.chat.process_message import _resolve_query_processing_hook_result
 from onyx.chat.process_message import remove_answer_citations
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -118,3 +121,44 @@ def test_nonempty_query_rewrites_message_text() -> None:
         QueryProcessingResponse(query="rewritten query"), "original query"
     )
     assert result == "rewritten query"
+
+
+def test_collect_available_file_ids_uses_user_file_id_for_chat_uploads() -> None:
+    user_file_id = uuid4()
+    file_store_id = uuid4()
+    chat_history = [
+        SimpleNamespace(
+            files=[
+                {
+                    "id": str(file_store_id),
+                    "user_file_id": str(user_file_id),
+                }
+            ]
+        )
+    ]
+
+    available = _collect_available_file_ids(
+        chat_history=chat_history,  # type: ignore[arg-type]
+        project_id=None,
+        user_id=None,
+        db_session=None,  # type: ignore[arg-type]
+    )
+
+    assert user_file_id in available.user_file_ids
+    assert len(available.user_file_ids) == 1
+    assert available.chat_file_ids == []
+
+
+def test_collect_available_file_ids_uses_chat_id_without_user_file_id() -> None:
+    file_store_id = uuid4()
+    chat_history = [SimpleNamespace(files=[{"id": str(file_store_id)}])]
+
+    available = _collect_available_file_ids(
+        chat_history=chat_history,  # type: ignore[arg-type]
+        project_id=None,
+        user_id=None,
+        db_session=None,  # type: ignore[arg-type]
+    )
+
+    assert available.user_file_ids == []
+    assert available.chat_file_ids == [file_store_id]
