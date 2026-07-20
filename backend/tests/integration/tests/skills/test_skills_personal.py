@@ -17,8 +17,10 @@ import pytest
 from onyx.server.features.skill.api import MAX_PERSONAL_SKILLS_PER_USER
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.managers.skill import build_minimal_bundle
-from tests.integration.common_utils.managers.skill import SkillManager
+from tests.integration.common_utils.managers.skill import (
+    build_minimal_bundle,
+    SkillManager,
+)
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 

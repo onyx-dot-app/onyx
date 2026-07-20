@@ -38,9 +38,7 @@ import json
 import re
 import sys
 from collections import defaultdict
-from dataclasses import asdict
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 # --- repo layout --------------------------------------------------------------

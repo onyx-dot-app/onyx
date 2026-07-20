@@ -1,10 +1,8 @@
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.external_apps.models import ActionPolicyView
 from onyx.server.features.build.connect_app import ConnectAppDecision
 

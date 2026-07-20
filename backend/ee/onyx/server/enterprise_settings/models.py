@@ -1,11 +1,8 @@
 from enum import Enum
-from typing import Any
-from typing import List
+from typing import Any, List
 from urllib.parse import urlparse
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class NavigationItem(BaseModel):

@@ -10,32 +10,19 @@ from __future__ import annotations
 
 import time
 from collections.abc import Generator
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.tools.tool_implementations.python import code_interpreter_client as cic
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     BashExecResponse,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterVersionError,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CreateSessionResponse,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import FileInput
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    FileInput,
     HealthResponse,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamOutputEvent,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
 

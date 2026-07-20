@@ -3,27 +3,27 @@
 import datetime
 import time
 
-from celery import shared_task
-from celery import Task
+from celery import shared_task, Task
 from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.constants import OnyxCeleryTask, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
-from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
+    clear_nextjs_ports_for_user,
     mark_user_sessions_idle__no_commit,
 )
-from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
-from onyx.server.features.build.db.sandbox import get_running_sandboxes
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
-from onyx.server.features.build.db.sandbox import user_has_stale_active_session
+from onyx.server.features.build.db.sandbox import (
+    get_latest_snapshot_for_session,
+    get_running_sandboxes,
+    update_sandbox_status__no_commit,
+    user_has_stale_active_session,
+)
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,

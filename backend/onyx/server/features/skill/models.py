@@ -1,12 +1,10 @@
 """Pydantic request and response models for the skills API."""
 
 import datetime
-from typing import Any
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import model_validator
+from pydantic import BaseModel, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill

@@ -12,20 +12,19 @@ from __future__ import annotations
 
 from typing import Any
 from unittest.mock import MagicMock
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from mitmproxy import http
 
 from onyx.db.enums import EndpointPolicy
-from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.external_apps.matching.engine import MatchedAction
+from onyx.external_apps.matching.engine import AllMatchedActions, MatchedAction
 from onyx.sandbox_proxy.addons.gate import _IdentityResolver
-from onyx.sandbox_proxy.credential_injection import CredentialResolver
-from onyx.sandbox_proxy.credential_injection import InjectionContext
-from onyx.sandbox_proxy.identity import ResolvedSandbox
-from onyx.sandbox_proxy.identity import SandboxIdentity
-from onyx.sandbox_proxy.identity import SandboxIPLookup
+from onyx.sandbox_proxy.credential_injection import CredentialResolver, InjectionContext
+from onyx.sandbox_proxy.identity import (
+    ResolvedSandbox,
+    SandboxIdentity,
+    SandboxIPLookup,
+)
 
 _SANDBOX_ID = UUID("11111111-1111-1111-1111-111111111111")
 

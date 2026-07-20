@@ -20,18 +20,18 @@ from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
 from onyx.db.enums import ExternalAppType
-from onyx.db.external_app import create_external_app
-from onyx.db.external_app import get_built_in_external_app
-from onyx.db.models import Skill
-from onyx.db.models import User
+from onyx.db.external_app import create_external_app, get_built_in_external_app
+from onyx.db.models import Skill, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.registry import fetch_onyx_managed_built_in_apps
-from onyx.external_apps.providers.registry import PROVIDERS
+from onyx.external_apps.providers.registry import (
+    fetch_onyx_managed_built_in_apps,
+    PROVIDERS,
+)
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
+    UpdateExternalAppRequest,
 )
-from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 
 _BUILT_IN_SLUGS = list(EXTERNAL_APP_BUILT_IN_SKILL_IDS.values())

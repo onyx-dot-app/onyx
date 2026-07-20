@@ -3,52 +3,57 @@ from operator import and_
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete
-from sqlalchemy import func
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import delete, func, Select, select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import selectinload, Session
 
-from ee.onyx.server.user_group.models import SetCuratorRequest
-from ee.onyx.server.user_group.models import UserGroupCreate
-from ee.onyx.server.user_group.models import UserGroupUpdate
+from ee.onyx.server.user_group.models import (
+    SetCuratorRequest,
+    UserGroupCreate,
+    UserGroupUpdate,
+)
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import GrantSource
-from onyx.db.enums import Permission
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import Credential__UserGroup
-from onyx.db.models import Document
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import DocumentSet
-from onyx.db.models import DocumentSet__UserGroup
-from onyx.db.models import FederatedConnector__DocumentSet
-from onyx.db.models import LLMProvider__UserGroup
-from onyx.db.models import PermissionGrant
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import Persona__UserGroup
-from onyx.db.models import TokenRateLimit__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.models import UserRole
-from onyx.db.permissions import recompute_permissions_for_group__no_commit
-from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    GrantSource,
+    Permission,
+)
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Credential,
+    Credential__UserGroup,
+    Document,
+    DocumentByConnectorCredentialPair,
+    DocumentSet,
+    DocumentSet__UserGroup,
+    FederatedConnector__DocumentSet,
+    LLMProvider__UserGroup,
+    PermissionGrant,
+    Persona,
+    Persona__User,
+    Persona__UserGroup,
+    TokenRateLimit__UserGroup,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserGroup__ConnectorCredentialPair,
+    UserRole,
+)
+from onyx.db.permissions import (
+    recompute_permissions_for_group__no_commit,
+    recompute_user_permissions__no_commit,
+)
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.utils.audit import actor_from_user
-from onyx.utils.audit import AuditAction
-from onyx.utils.audit import AuditOutcome
-from onyx.utils.audit import emit_audit_event
+from onyx.utils.audit import (
+    actor_from_user,
+    AuditAction,
+    AuditOutcome,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

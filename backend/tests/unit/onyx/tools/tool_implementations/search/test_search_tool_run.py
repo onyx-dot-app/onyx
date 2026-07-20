@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
-from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import BaseFilters
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
-from onyx.tools.models import ChatMinimalTextMessage
-from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 MODULE = "onyx.tools.tool_implementations.search.search_tool"

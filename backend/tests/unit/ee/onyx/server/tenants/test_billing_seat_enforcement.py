@@ -7,16 +7,17 @@ surfacing as ``OnyxError(SEAT_LIMIT_EXCEEDED)``).
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import stripe
 
-from ee.onyx.server.tenants.billing import _seat_billing_idempotency_key
-from ee.onyx.server.tenants.billing import attempt_seat_billing_increase
-from ee.onyx.server.tenants.billing import enforce_cloud_seat_limit
-from ee.onyx.server.tenants.billing import SeatBillingDeclineReason
+from ee.onyx.server.tenants.billing import (
+    _seat_billing_idempotency_key,
+    attempt_seat_billing_increase,
+    enforce_cloud_seat_limit,
+    SeatBillingDeclineReason,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 

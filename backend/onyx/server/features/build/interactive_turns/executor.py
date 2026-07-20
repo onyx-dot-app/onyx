@@ -7,28 +7,33 @@ import time
 from uuid import UUID
 
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
-from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.features.build.db.build_session import update_session_activity
-from onyx.server.features.build.interactive_turns.state import claim_turn_for_runner
-from onyx.server.features.build.interactive_turns.state import finish_turn
-from onyx.server.features.build.interactive_turns.state import get_active_turn
-from onyx.server.features.build.interactive_turns.state import InteractiveTurn
-from onyx.server.features.build.interactive_turns.state import touch_turn
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_CANCELLED
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_SUCCEEDED
+from onyx.server.features.build.interactive_turns.state import (
+    claim_turn_for_runner,
+    finish_turn,
+    get_active_turn,
+    InteractiveTurn,
+    touch_turn,
+    TURN_STATUS_CANCELLED,
+    TURN_STATUS_FAILED,
+    TURN_STATUS_SUCCEEDED,
+)
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
-from onyx.server.features.build.session.interrupt_signal import clear_interrupt
-from onyx.server.features.build.session.interrupt_signal import is_interrupt_requested
+from onyx.server.features.build.session.interrupt_signal import (
+    clear_interrupt,
+    is_interrupt_requested,
+)
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 logger = setup_logger()
 

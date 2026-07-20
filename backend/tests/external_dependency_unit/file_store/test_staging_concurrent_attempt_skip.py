@@ -17,13 +17,13 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IndexingStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.file_store.staging import reap_prior_attempt_staged_files
-from onyx.file_store.staging import stage_raw_file
+from onyx.db.models import ConnectorCredentialPair, IndexAttempt
+from onyx.file_store.staging import reap_prior_attempt_staged_files, stage_raw_file
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+)
 
 
 @pytest.fixture

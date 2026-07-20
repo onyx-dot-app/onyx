@@ -8,23 +8,21 @@ from collections.abc import MutableMapping
 from typing import Any
 
 import numpy as np
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import WebSocket
-from fastapi import WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user_from_websocket
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.models import User
-from onyx.db.voice import fetch_default_stt_provider
-from onyx.db.voice import fetch_default_tts_provider
+from onyx.db.voice import fetch_default_stt_provider, fetch_default_tts_provider
 from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
-from onyx.voice.interface import StreamingSynthesizerProtocol
-from onyx.voice.interface import StreamingTranscriberProtocol
-from onyx.voice.interface import TranscriptResult
+from onyx.voice.interface import (
+    StreamingSynthesizerProtocol,
+    StreamingTranscriberProtocol,
+    TranscriptResult,
+)
 
 logger = setup_logger()
 

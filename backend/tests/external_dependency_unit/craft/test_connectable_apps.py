@@ -6,10 +6,12 @@ from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
-from tests.external_dependency_unit.craft.db_helpers import make_external_app
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
-from tests.external_dependency_unit.craft.db_helpers import make_user_credential
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_external_app,
+    make_skill,
+    make_user,
+    make_user_credential,
+)
 
 # auth_template value carrying a user-supplied placeholder.
 _USER_TOKEN_TEMPLATE = {"Authorization": "Bearer {token}"}

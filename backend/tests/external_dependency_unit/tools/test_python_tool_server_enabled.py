@@ -8,8 +8,10 @@ from unittest.mock import patch
 
 from sqlalchemy.orm import Session
 
-from onyx.db.code_interpreter import fetch_code_interpreter_server
-from onyx.db.code_interpreter import update_code_interpreter_server_enabled
+from onyx.db.code_interpreter import (
+    fetch_code_interpreter_server,
+    update_code_interpreter_server_enabled,
+)
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 
 

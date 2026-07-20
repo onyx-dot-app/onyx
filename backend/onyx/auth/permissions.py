@@ -6,15 +6,12 @@ loaded for free with every auth query. Implied permissions are expanded
 at read time — only directly granted permissions are persisted.
 """
 
-from collections.abc import Callable
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from typing import Any
 
-from fastapi import Depends
-from fastapi import Request
+from fastapi import Depends, Request
 
-from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_user
+from onyx.auth.users import current_chat_accessible_user, current_user
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.permissions import parse_permission_values

@@ -7,35 +7,37 @@ from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SearchDocsResponse
+from onyx.context.search.models import (
+    IndexFilters,
+    InferenceSection,
+    SearchDocsResponse,
+)
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
-from onyx.context.search.utils import convert_inference_sections_to_search_docs
-from onyx.context.search.utils import inference_section_from_chunks
-from onyx.db.document import fetch_document_ids_by_links
-from onyx.db.document import filter_existing_document_ids
+from onyx.context.search.utils import (
+    convert_inference_sections_to_search_docs,
+    inference_section_from_chunks,
+)
+from onyx.db.document import fetch_document_ids_by_links, filter_existing_document_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentSectionRequest
+from onyx.document_index.interfaces_new import DocumentIndex, DocumentSectionRequest
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
-from onyx.server.query_and_chat.streaming_models import OpenUrlStart
-from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import (
+    OpenUrlDocuments,
+    OpenUrlStart,
+    OpenUrlUrls,
+    Packet,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import OpenURLToolOverrideKwargs
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.open_url.models import FailedFetch
-from onyx.tools.tool_implementations.open_url.models import WebContentProvider
-from onyx.tools.tool_implementations.open_url.url_normalization import (
-    _default_url_normalizer,
+from onyx.tools.models import OpenURLToolOverrideKwargs, ToolCallException, ToolResponse
+from onyx.tools.tool_implementations.open_url.models import (
+    FailedFetch,
+    WebContentProvider,
 )
 from onyx.tools.tool_implementations.open_url.url_normalization import (
+    _default_url_normalizer,
     normalize_url_candidates,
 )
 from onyx.tools.tool_implementations.open_url.utils import (
@@ -46,8 +48,8 @@ from onyx.tools.tool_implementations.web_search.providers import (
 )
 from onyx.tools.tool_implementations.web_search.utils import (
     inference_section_from_internet_page_scrape,
+    MAX_CHARS_PER_URL,
 )
-from onyx.tools.tool_implementations.web_search.utils import MAX_CHARS_PER_URL
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.url import normalize_url as normalize_web_content_url

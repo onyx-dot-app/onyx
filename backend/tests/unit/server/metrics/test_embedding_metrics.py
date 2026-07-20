@@ -2,19 +2,20 @@
 
 from unittest.mock import patch
 
-from onyx.server.metrics.embedding import _client_duration
-from onyx.server.metrics.embedding import _embedding_input_chars_total
-from onyx.server.metrics.embedding import _embedding_requests_total
-from onyx.server.metrics.embedding import _embedding_texts_total
-from onyx.server.metrics.embedding import _embeddings_in_progress
-from onyx.server.metrics.embedding import LOCAL_PROVIDER_LABEL
-from onyx.server.metrics.embedding import observe_embedding_client
-from onyx.server.metrics.embedding import provider_label
-from onyx.server.metrics.embedding import PROVIDER_LABEL_NAME
-from onyx.server.metrics.embedding import TEXT_TYPE_LABEL_NAME
-from onyx.server.metrics.embedding import track_embedding_in_progress
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import EmbedTextType
+from onyx.server.metrics.embedding import (
+    _client_duration,
+    _embedding_input_chars_total,
+    _embedding_requests_total,
+    _embedding_texts_total,
+    _embeddings_in_progress,
+    LOCAL_PROVIDER_LABEL,
+    observe_embedding_client,
+    provider_label,
+    PROVIDER_LABEL_NAME,
+    TEXT_TYPE_LABEL_NAME,
+    track_embedding_in_progress,
+)
+from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
 
 class TestProviderLabel:

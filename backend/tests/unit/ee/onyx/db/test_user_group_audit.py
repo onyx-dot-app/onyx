@@ -7,8 +7,7 @@ must emit nothing while an add/remove of users must emit exactly one event.
 import json
 import logging
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest

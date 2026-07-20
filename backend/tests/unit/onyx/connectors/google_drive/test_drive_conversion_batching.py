@@ -2,20 +2,18 @@
 documents materialize at most one DRIVE_CONVERSION_BATCH_SIZE chunk at a time,
 and hierarchy-deferred files wait for their ancestor node before converting."""
 
-from collections.abc import Callable
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.google_drive.models import DriveRetrievalStage
-from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
-from onyx.connectors.google_drive.models import RetrievedDriveFile
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
-from onyx.utils.threadpool_concurrency import ThreadSafeSet
+from onyx.connectors.google_drive.models import (
+    DriveRetrievalStage,
+    GoogleDriveCheckpoint,
+    RetrievedDriveFile,
+)
+from onyx.connectors.models import Document, HierarchyNode
+from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
 
 _BATCH = 10
 _CONN_MODULE = "onyx.connectors.google_drive.connector"

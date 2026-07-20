@@ -1,5 +1,4 @@
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -7,18 +6,17 @@ from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
-from onyx.coding_agent.mock_tools import CODING_AGENT_QUERY_KEY
-from onyx.coding_agent.mock_tools import CODING_AGENT_REPO_KEY
-from onyx.coding_agent.mock_tools import CODING_AGENT_TOOL_NAME
+from onyx.coding_agent.mock_tools import (
+    CODING_AGENT_QUERY_KEY,
+    CODING_AGENT_REPO_KEY,
+    CODING_AGENT_TOOL_NAME,
+)
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import CodingAgentStart
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import CodingAgentStart, Packet
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolCallKickoff
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import ToolCallException, ToolCallKickoff, ToolResponse
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.utils.logger import setup_logger
 

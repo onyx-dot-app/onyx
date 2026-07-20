@@ -12,18 +12,23 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPTransport
-from onyx.db.mcp import extract_connection_data
-from onyx.db.mcp import get_user_connection_config
+from onyx.db.enums import (
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPTransport,
+)
+from onyx.db.mcp import extract_connection_data, get_user_connection_config
 from onyx.db.models import User
-from onyx.server.features.mcp.api import _upsert_mcp_server
-from onyx.server.features.mcp.api import HEADER_SUBSTITUTIONS
-from onyx.server.features.mcp.api import save_user_credentials
-from onyx.server.features.mcp.models import MCPAuthTemplate
-from onyx.server.features.mcp.models import MCPToolCreateRequest
-from onyx.server.features.mcp.models import MCPUserCredentialsRequest
+from onyx.server.features.mcp.api import (
+    _upsert_mcp_server,
+    HEADER_SUBSTITUTIONS,
+    save_user_credentials,
+)
+from onyx.server.features.mcp.models import (
+    MCPAuthTemplate,
+    MCPToolCreateRequest,
+    MCPUserCredentialsRequest,
+)
 from onyx.utils.encryption import mask_string
 from tests.external_dependency_unit.conftest import create_test_user
 

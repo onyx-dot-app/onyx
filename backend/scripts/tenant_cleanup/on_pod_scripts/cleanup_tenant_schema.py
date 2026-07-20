@@ -12,8 +12,7 @@ import sys
 
 from sqlalchemy import text
 
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
-from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.engine.sql_engine import get_session_with_shared_schema, SqlEngine
 
 
 def drop_data_plane_schema(tenant_id: str) -> dict[str, str]:

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
@@ -13,11 +12,9 @@ from onyx.server.security.models import SSRFProtectionLevel
 from onyx.server.security.store import _build_env_defaults
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_CONNECT_TIMEOUT_SECONDS,
-)
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_READ_TIMEOUT_SECONDS,
+    OnyxWebCrawler,
 )
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
 
 
 class FakeResponse(BaseModel):

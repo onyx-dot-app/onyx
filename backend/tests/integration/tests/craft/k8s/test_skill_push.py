@@ -4,43 +4,43 @@ from __future__ import annotations
 
 import io
 import zipfile
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from pathlib import Path
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import Sandbox
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, SandboxStatus
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    Sandbox,
+    Skill,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserGroup__ConnectorCredentialPair,
+)
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.push import build_skills_fileset_for_user
-from onyx.skills.push import push_skill_to_affected_sandboxes
+from onyx.skills.push import (
+    build_skills_fileset_for_user,
+    push_skill_to_affected_sandboxes,
+)
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestSkill
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import DATestUserGroup
-from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
-from tests.integration.tests.craft.k8s.k8s_fixtures import WorkspaceProxy
+from tests.integration.common_utils.test_models import (
+    DATestSkill,
+    DATestUser,
+    DATestUserGroup,
+)
+from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle, WorkspaceProxy
 
 pytestmark = [
     pytest.mark.skipif(

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import io
 import zipfile
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -12,13 +11,14 @@ from sqlalchemy import select
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import FileRecord
-from onyx.db.models import Skill
+from onyx.db.models import FileRecord, Skill
 from onyx.file_store.file_store import get_default_file_store
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.managers.skill import build_minimal_bundle
-from tests.integration.common_utils.managers.skill import SkillManager
+from tests.integration.common_utils.managers.skill import (
+    build_minimal_bundle,
+    SkillManager,
+)
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser

@@ -1,8 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -12,24 +10,25 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import Tool
-from onyx.db.models import User
-from onyx.db.tools import create_tool__no_commit
-from onyx.db.tools import delete_tool__no_commit
-from onyx.db.tools import get_tool_by_id
-from onyx.db.tools import get_tools
-from onyx.db.tools import get_tools_by_ids
-from onyx.db.tools import update_tool
-from onyx.server.features.tool.models import CustomToolCreate
-from onyx.server.features.tool.models import CustomToolUpdate
-from onyx.server.features.tool.models import ToolSnapshot
+from onyx.db.models import Tool, User
+from onyx.db.tools import (
+    create_tool__no_commit,
+    delete_tool__no_commit,
+    get_tool_by_id,
+    get_tools,
+    get_tools_by_ids,
+    update_tool,
+)
+from onyx.server.features.tool.models import (
+    CustomToolCreate,
+    CustomToolUpdate,
+    ToolSnapshot,
+)
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
-from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    MethodSpec,
     openapi_to_method_specs,
-)
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
     validate_openapi_schema,
 )
 

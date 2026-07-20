@@ -2,11 +2,8 @@ import csv
 import json
 import queue
 import uuid
-from io import BytesIO
-from io import StringIO
-from typing import Any
-from typing import Dict
-from typing import List
+from io import BytesIO, StringIO
+from typing import Any, Dict, List
 
 import requests
 from requests import JSONDecodeError
@@ -15,32 +12,33 @@ from onyx.chat.emitter import Emitter
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import CustomToolArgs
-from onyx.server.query_and_chat.streaming_models import CustomToolDelta
-from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
-from onyx.server.query_and_chat.streaming_models import CustomToolStart
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.interface import Tool
-from onyx.tools.models import CHAT_SESSION_ID_PLACEHOLDER
-from onyx.tools.models import CustomToolCallSummary
-from onyx.tools.models import CustomToolUserFileSnapshot
-from onyx.tools.models import DynamicSchemaInfo
-from onyx.tools.models import MESSAGE_ID_PLACEHOLDER
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolResponse
-from onyx.tools.models import USER_EMAIL_PLACEHOLDER
-from onyx.tools.models import USER_ID_PLACEHOLDER
-from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
-    openapi_to_method_specs,
+from onyx.server.query_and_chat.streaming_models import (
+    CustomToolArgs,
+    CustomToolDelta,
+    CustomToolErrorInfo,
+    CustomToolStart,
+    Packet,
 )
-from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
-from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
+from onyx.tools.interface import Tool
+from onyx.tools.models import (
+    CHAT_SESSION_ID_PLACEHOLDER,
+    CustomToolCallSummary,
+    CustomToolUserFileSnapshot,
+    DynamicSchemaInfo,
+    MESSAGE_ID_PLACEHOLDER,
+    ToolCallException,
+    ToolResponse,
+    USER_EMAIL_PLACEHOLDER,
+    USER_ID_PLACEHOLDER,
+)
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    MethodSpec,
+    openapi_to_method_specs,
+    openapi_to_url,
+    REQUEST_BODY,
     validate_openapi_schema,
 )
-from onyx.utils.headers import header_list_to_header_dict
-from onyx.utils.headers import HeaderItemDict
+from onyx.utils.headers import header_list_to_header_dict, HeaderItemDict
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -18,11 +18,13 @@ from office365.runtime.client_request_exception import ClientRequestException
 from requests import Response
 from requests.exceptions import HTTPError
 
-from onyx.connectors.sharepoint.connector import _is_per_site_graph_failure
-from onyx.connectors.sharepoint.connector import GRAPH_INVALID_REQUEST_CODE
-from onyx.connectors.sharepoint.connector import PER_SITE_GRAPH_FAILURE_STATUSES
-from onyx.connectors.sharepoint.connector import SharepointConnector
-from onyx.connectors.sharepoint.connector import SiteDescriptor
+from onyx.connectors.sharepoint.connector import (
+    _is_per_site_graph_failure,
+    GRAPH_INVALID_REQUEST_CODE,
+    PER_SITE_GRAPH_FAILURE_STATUSES,
+    SharepointConnector,
+    SiteDescriptor,
+)
 
 SITE_URL = "https://tenant.sharepoint.com/sites/ClassicSite"
 FAKE_SITE_ID = "tenant.sharepoint.com,abc123,def456"

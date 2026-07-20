@@ -2,31 +2,30 @@ import asyncio
 import time
 from contextlib import contextmanager
 from types import SimpleNamespace
-from typing import cast
-from typing import Iterator
-from urllib.parse import parse_qs
-from urllib.parse import urlparse
+from typing import cast, Iterator
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
 from mcp.client.auth import OAuthClientProvider
-from mcp.shared.auth import OAuthClientInformationFull
-from mcp.shared.auth import OAuthMetadata
-from mcp.shared.auth import OAuthToken
-from pydantic import AnyHttpUrl
-from pydantic import AnyUrl
+from mcp.shared.auth import OAuthClientInformationFull, OAuthMetadata, OAuthToken
+from pydantic import AnyHttpUrl, AnyUrl
 
 import onyx.server.features.mcp.api as mcp_api
-from onyx.auth.oauth_token_manager import build_oauth_authorization_url
-from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
+from onyx.auth.oauth_token_manager import (
+    build_oauth_authorization_url,
+    exchange_oauth_code_for_token,
+)
 from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.mcp.api import _absolute_token_expiry
-from onyx.server.features.mcp.api import _known_provider_oauth_metadata
-from onyx.server.features.mcp.api import _mcp_known_provider_flow_params
-from onyx.server.features.mcp.api import _token_dict_with_preserved_refresh
-from onyx.server.features.mcp.api import make_oauth_provider
+from onyx.server.features.mcp.api import (
+    _absolute_token_expiry,
+    _known_provider_oauth_metadata,
+    _mcp_known_provider_flow_params,
+    _token_dict_with_preserved_refresh,
+    make_oauth_provider,
+)
 from onyx.server.features.mcp.models import MCPOAuthKeys
 
 

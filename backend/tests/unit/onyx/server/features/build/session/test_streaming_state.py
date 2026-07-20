@@ -5,10 +5,8 @@ Tests for chunk accumulation and finalize semantics — no DB required.
 
 from __future__ import annotations
 
-from typing import Any
-from typing import cast
-from uuid import UUID
-from uuid import uuid4
+from typing import Any, cast
+from uuid import UUID, uuid4
 
 import pytest
 

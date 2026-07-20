@@ -7,20 +7,22 @@ Unit tests for federated connector lazy loading factory to validate:
 """
 
 import importlib
-from unittest.mock import MagicMock
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from onyx.configs.constants import FederatedConnectorSource
-from onyx.federated_connectors.factory import _federated_connector_cache
-from onyx.federated_connectors.factory import _load_federated_connector_class
-from onyx.federated_connectors.factory import FederatedConnectorMissingException
-from onyx.federated_connectors.factory import get_federated_connector_cls
+from onyx.federated_connectors.factory import (
+    _federated_connector_cache,
+    _load_federated_connector_class,
+    FederatedConnectorMissingException,
+    get_federated_connector_cls,
+)
 from onyx.federated_connectors.interfaces import FederatedConnector
-from onyx.federated_connectors.registry import FEDERATED_CONNECTOR_CLASS_MAP
-from onyx.federated_connectors.registry import FederatedConnectorMapping
+from onyx.federated_connectors.registry import (
+    FEDERATED_CONNECTOR_CLASS_MAP,
+    FederatedConnectorMapping,
+)
 
 
 class TestFederatedConnectorMappingValidation:

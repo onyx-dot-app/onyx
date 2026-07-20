@@ -1,6 +1,5 @@
 import json
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from slack_sdk import WebClient
 from slack_sdk.models.blocks import SectionBlock
@@ -10,43 +9,45 @@ from slack_sdk.webhook import WebhookClient
 
 from onyx.chat.models import ChatBasicResponse
 from onyx.chat.process_message import remove_answer_citations
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import SearchFeedbackType
+from onyx.configs.constants import MessageType, SearchFeedbackType
 from onyx.configs.onyxbot_configs import ONYX_BOT_FOLLOWUP_EMOJI
 from onyx.connectors.slack.utils import expert_info_from_slack_id
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SearchDoc
-from onyx.db.chat import get_chat_message
-from onyx.db.chat import translate_db_message_to_chat_message_detail
+from onyx.context.search.models import SavedSearchDoc, SearchDoc
+from onyx.db.chat import get_chat_message, translate_db_message_to_chat_message_detail
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.feedback import create_chat_message_feedback
-from onyx.db.feedback import create_doc_retrieval_feedback
+from onyx.db.feedback import create_chat_message_feedback, create_doc_retrieval_feedback
 from onyx.db.users import get_user_by_email
-from onyx.onyxbot.slack.blocks import build_follow_up_resolved_blocks
-from onyx.onyxbot.slack.blocks import build_slack_response_blocks
-from onyx.onyxbot.slack.blocks import get_document_feedback_blocks
+from onyx.onyxbot.slack.blocks import (
+    build_follow_up_resolved_blocks,
+    build_slack_response_blocks,
+    get_document_feedback_blocks,
+)
 from onyx.onyxbot.slack.config import get_slack_channel_config_for_bot_and_channel
-from onyx.onyxbot.slack.constants import DISLIKE_BLOCK_ACTION_ID
-from onyx.onyxbot.slack.constants import FeedbackVisibility
-from onyx.onyxbot.slack.constants import KEEP_TO_YOURSELF_ACTION_ID
-from onyx.onyxbot.slack.constants import LIKE_BLOCK_ACTION_ID
-from onyx.onyxbot.slack.constants import SHOW_EVERYONE_ACTION_ID
-from onyx.onyxbot.slack.constants import VIEW_DOC_FEEDBACK_ID
+from onyx.onyxbot.slack.constants import (
+    DISLIKE_BLOCK_ACTION_ID,
+    FeedbackVisibility,
+    KEEP_TO_YOURSELF_ACTION_ID,
+    LIKE_BLOCK_ACTION_ID,
+    SHOW_EVERYONE_ACTION_ID,
+    VIEW_DOC_FEEDBACK_ID,
+)
 from onyx.onyxbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
 )
 from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
 from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.onyxbot.slack.utils import build_feedback_id
-from onyx.onyxbot.slack.utils import decompose_action_id
-from onyx.onyxbot.slack.utils import fetch_group_ids_from_names
-from onyx.onyxbot.slack.utils import fetch_slack_user_ids_from_emails
-from onyx.onyxbot.slack.utils import get_channel_name_from_id
-from onyx.onyxbot.slack.utils import get_feedback_visibility
-from onyx.onyxbot.slack.utils import read_slack_thread
-from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
-from onyx.onyxbot.slack.utils import TenantSocketModeClient
-from onyx.onyxbot.slack.utils import update_emote_react
+from onyx.onyxbot.slack.utils import (
+    build_feedback_id,
+    decompose_action_id,
+    fetch_group_ids_from_names,
+    fetch_slack_user_ids_from_emails,
+    get_channel_name_from_id,
+    get_feedback_visibility,
+    read_slack_thread,
+    respond_in_thread_or_channel,
+    TenantSocketModeClient,
+    update_emote_react,
+)
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger

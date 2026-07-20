@@ -14,10 +14,12 @@ import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.web import connector as web_connector
-from onyx.connectors.web.connector import check_internet_connection
-from onyx.connectors.web.connector import extract_urls_from_sitemap
-from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
-from onyx.connectors.web.connector import WebConnector
+from onyx.connectors.web.connector import (
+    check_internet_connection,
+    extract_urls_from_sitemap,
+    WEB_CONNECTOR_VALID_SETTINGS,
+    WebConnector,
+)
 from onyx.server.security.models import SSRFProtectionLevel
 
 LOOPBACK_URL = "http://127.0.0.1:9999/ssrf-poc"

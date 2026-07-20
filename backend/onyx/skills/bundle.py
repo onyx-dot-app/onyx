@@ -10,15 +10,13 @@ import shutil
 import stat
 import zipfile
 from pathlib import Path
-from typing import BinaryIO
-from typing import Final
+from typing import BinaryIO, Final
 
 import yaml
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.built_in import SLUG_REGEX
+from onyx.skills.built_in import BUILT_IN_SKILLS, SLUG_REGEX
 
 DEFAULT_PER_FILE_MAX_BYTES: Final[int] = int(
     os.environ.get("SKILL_BUNDLE_PER_FILE_MAX_BYTES") or 25 * 1024 * 1024

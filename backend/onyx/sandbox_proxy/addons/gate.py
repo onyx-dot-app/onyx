@@ -17,49 +17,50 @@ from typing import Protocol
 from urllib.parse import urlparse
 from uuid import UUID
 
-from cachetools import cachedmethod
-from cachetools import TTLCache
+from cachetools import cachedmethod, TTLCache
 from mitmproxy import http
 from mitmproxy.proxy import server_hooks
 from sqlalchemy.orm import Session
 
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
-from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
 from onyx.db.notification import create_notification
-from onyx.db.scheduled_task import get_live_scheduled_run_grants
-from onyx.db.scheduled_task import ScheduledRunGrants
-from onyx.external_apps.matching.engine import actions_requiring_approval
-from onyx.external_apps.matching.engine import AllMatchedActions
+from onyx.db.scheduled_task import get_live_scheduled_run_grants, ScheduledRunGrants
+from onyx.external_apps.matching.engine import (
+    actions_requiring_approval,
+    AllMatchedActions,
+)
 from onyx.sandbox_proxy import approval_cache
-from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
-from onyx.sandbox_proxy.credential_injection import InjectionContext
-from onyx.sandbox_proxy.credential_injection import InjectionOutcome
-from onyx.sandbox_proxy.errors import http_403
-from onyx.sandbox_proxy.errors import SandboxProxyError
-from onyx.sandbox_proxy.identity import ResolvedSandbox
-from onyx.sandbox_proxy.identity import SessionContext
-from onyx.sandbox_proxy.logging_utils import approval_decided_args
-from onyx.sandbox_proxy.logging_utils import APPROVAL_DECIDED_FIELDS
-from onyx.sandbox_proxy.logging_utils import credential_outcome_label
-from onyx.sandbox_proxy.logging_utils import egress_approval_matched_args
-from onyx.sandbox_proxy.logging_utils import EGRESS_APPROVAL_MATCHED_FIELDS
-from onyx.sandbox_proxy.logging_utils import egress_matched_args
-from onyx.sandbox_proxy.logging_utils import EGRESS_MATCHED_FIELDS
-from onyx.sandbox_proxy.logging_utils import egress_session_matched_args
-from onyx.sandbox_proxy.logging_utils import EGRESS_SESSION_MATCHED_FIELDS
-from onyx.sandbox_proxy.logging_utils import egress_target_args
-from onyx.sandbox_proxy.logging_utils import EGRESS_TARGET_FIELDS
-from onyx.sandbox_proxy.logging_utils import full_log_id
-from onyx.sandbox_proxy.logging_utils import sandbox_log_label
-from onyx.sandbox_proxy.logging_utils import short_log_id
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialInjectionDispatcher,
+    InjectionContext,
+    InjectionOutcome,
+)
+from onyx.sandbox_proxy.errors import http_403, SandboxProxyError
+from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
+from onyx.sandbox_proxy.logging_utils import (
+    approval_decided_args,
+    APPROVAL_DECIDED_FIELDS,
+    credential_outcome_label,
+    egress_approval_matched_args,
+    EGRESS_APPROVAL_MATCHED_FIELDS,
+    egress_matched_args,
+    EGRESS_MATCHED_FIELDS,
+    egress_session_matched_args,
+    EGRESS_SESSION_MATCHED_FIELDS,
+    egress_target_args,
+    EGRESS_TARGET_FIELDS,
+    full_log_id,
+    sandbox_log_label,
+    short_log_id,
+)
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
-from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
-from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import (
+    SANDBOX_API_SERVER_URL,
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+)
 from onyx.server.features.build.db import action_approval
 from onyx.utils.logger import setup_logger
 

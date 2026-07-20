@@ -1,7 +1,6 @@
 from redis.lock import Lock as RedisLock
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
+from onyx.cache.interface import CacheBackend, CacheLock
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 

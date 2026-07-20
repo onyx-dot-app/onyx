@@ -1,10 +1,7 @@
 from collections.abc import AsyncGenerator
 from threading import Lock
-from typing import Any
-from typing import cast
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -12,12 +9,12 @@ from litellm.exceptions import RateLimitError
 from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
-from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import EmbedTextType
-from shared_configs.model_server_models import EmbedRequest
-from shared_configs.model_server_models import EmbedResponse
+from onyx.natural_language_processing.search_nlp_models import (
+    CloudEmbedding,
+    EmbeddingModel,
+)
+from shared_configs.enums import EmbeddingProvider, EmbedTextType
+from shared_configs.model_server_models import EmbedRequest, EmbedResponse
 
 
 @pytest.fixture

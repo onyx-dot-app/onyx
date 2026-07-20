@@ -4,34 +4,39 @@ from datetime import datetime
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.utils import formatdate
-from email.utils import make_msgid
+from email.utils import formatdate, make_msgid
 
 import sendgrid
-from sendgrid.helpers.mail import Attachment
-from sendgrid.helpers.mail import Content
-from sendgrid.helpers.mail import ContentId
-from sendgrid.helpers.mail import Disposition
-from sendgrid.helpers.mail import Email
-from sendgrid.helpers.mail import FileContent
-from sendgrid.helpers.mail import FileName
-from sendgrid.helpers.mail import FileType
-from sendgrid.helpers.mail import Mail
-from sendgrid.helpers.mail import To
+from sendgrid.helpers.mail import (
+    Attachment,
+    Content,
+    ContentId,
+    Disposition,
+    Email,
+    FileContent,
+    FileName,
+    FileType,
+    Mail,
+    To,
+)
 
-from onyx.configs.app_configs import EMAIL_ARCHIVE_BCC_ADDRESSES
-from onyx.configs.app_configs import EMAIL_CONFIGURED
-from onyx.configs.app_configs import EMAIL_FROM
-from onyx.configs.app_configs import SENDGRID_API_KEY
-from onyx.configs.app_configs import SMTP_PASS
-from onyx.configs.app_configs import SMTP_PORT
-from onyx.configs.app_configs import SMTP_SERVER
-from onyx.configs.app_configs import SMTP_STARTTLS
-from onyx.configs.app_configs import SMTP_USER
-from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import AuthType
-from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
-from onyx.configs.constants import ONYX_DISCORD_URL
+from onyx.configs.app_configs import (
+    EMAIL_ARCHIVE_BCC_ADDRESSES,
+    EMAIL_CONFIGURED,
+    EMAIL_FROM,
+    SENDGRID_API_KEY,
+    SMTP_PASS,
+    SMTP_PORT,
+    SMTP_SERVER,
+    SMTP_STARTTLS,
+    SMTP_USER,
+    WEB_DOMAIN,
+)
+from onyx.configs.constants import (
+    AuthType,
+    ONYX_DEFAULT_APPLICATION_NAME,
+    ONYX_DISCORD_URL,
+)
 from onyx.db.models import User
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger

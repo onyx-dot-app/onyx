@@ -14,13 +14,15 @@ import zipfile
 import pytest
 
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM
-from onyx.skills.bundle import compute_bundle_sha256
-from onyx.skills.bundle import parse_skill_md_metadata
-from onyx.skills.bundle import read_custom_bundle_instructions
-from onyx.skills.bundle import slug_from_filename
-from onyx.skills.bundle import strip_skill_md_frontmatter
-from onyx.skills.bundle import validate_custom_bundle
+from onyx.skills.bundle import (
+    _ZIP_UNIX_CREATE_SYSTEM,
+    compute_bundle_sha256,
+    parse_skill_md_metadata,
+    read_custom_bundle_instructions,
+    slug_from_filename,
+    strip_skill_md_frontmatter,
+    validate_custom_bundle,
+)
 
 
 def _build_zip(

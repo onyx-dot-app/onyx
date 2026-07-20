@@ -23,8 +23,7 @@ import os
 import sys
 from pathlib import Path
 
-from watchfiles import DefaultFilter
-from watchfiles import run_process
+from watchfiles import DefaultFilter, run_process
 
 # Built-in ext-app + craft skill bundles are content shipped to the sandbox,
 # not imported by the worker, so editing them shouldn't trigger a restart.

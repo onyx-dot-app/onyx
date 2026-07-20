@@ -24,31 +24,22 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import and_
-from sqlalchemy import ColumnElement
-from sqlalchemy import delete
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import text
+from sqlalchemy import and_, ColumnElement, delete, func, or_, Select, select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import selectinload, Session
 
 from onyx.db.enums import SandboxStatus
 from onyx.db.external_app import is_user_authenticated_for_app
-from onyx.db.models import ExternalApp
-from onyx.db.models import ExternalAppUserCredential
-from onyx.db.models import Sandbox
-from onyx.db.models import Skill
-from onyx.db.models import Skill__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.utils import is_fk_violation
-from onyx.db.utils import is_unique_violation
-from onyx.db.utils import UNSET
-from onyx.db.utils import UnsetType
+from onyx.db.models import (
+    ExternalApp,
+    ExternalAppUserCredential,
+    Sandbox,
+    Skill,
+    Skill__UserGroup,
+    User,
+    User__UserGroup,
+)
+from onyx.db.utils import is_fk_violation, is_unique_violation, UNSET, UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS

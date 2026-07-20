@@ -1,24 +1,19 @@
 import re
-from typing import Any
-from typing import cast
-from uuid import UUID
-from uuid import uuid4
+from typing import Any, cast
+from uuid import UUID, uuid4
 
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import selectinload, Session
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.models import ExternalApp
-from onyx.db.models import ExternalAppPolicy
-from onyx.db.models import ExternalAppUserCredential
-from onyx.db.models import User
-from onyx.db.utils import is_set
-from onyx.db.utils import UNSET
-from onyx.db.utils import UnsetType
+from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.models import (
+    ExternalApp,
+    ExternalAppPolicy,
+    ExternalAppUserCredential,
+    User,
+)
+from onyx.db.utils import is_set, UNSET, UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
@@ -267,8 +262,10 @@ def create_external_app(
     CUSTOM apps get a bundle-backed skill using ``slug``, or a generated
     ``custom-<uuid>`` slug when omitted.
     """
-    from onyx.db.skill import create_built_in_skill_row__no_commit
-    from onyx.db.skill import create_skill__no_commit
+    from onyx.db.skill import (
+        create_built_in_skill_row__no_commit,
+        create_skill__no_commit,
+    )
 
     # No existing app to restore from on create, so a masked value is rejected.
     organization_credentials = resolve_masked_credentials(

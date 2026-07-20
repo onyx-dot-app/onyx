@@ -21,54 +21,28 @@ import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     OPENCODE_SERVE_CONTAINER_PORT,
-)
-from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     OPENCODE_SERVE_HOST_BIND_IP,
 )
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     _sandbox_container_name,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     _sandbox_volume_name,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     _sanitize_relative_path,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     _validate_strict_path,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     build_container_create_kwargs,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     build_sandbox_labels,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     ContainerCreateKwargs,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_COMPONENT,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_COMPONENT_VALUE,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_SANDBOX_ID,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_TENANT_ID,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_USER_ID,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     SANDBOX_TMP_PATH,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     SANDBOX_TMPFS_OPTIONS,
 )
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
+from onyx.server.features.build.sandbox.labels import (
+    LABEL_K8S_MANAGED_BY,
+    LABEL_K8S_MANAGED_BY_ONYX,
+)
 
 SANDBOX_ID = UUID("12345678-1234-1234-1234-1234567890ab")
 USER_ID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")

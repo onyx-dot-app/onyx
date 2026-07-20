@@ -8,30 +8,27 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.external_app import get_connectable_apps_for_user
-from onyx.db.external_app import get_external_app_by_skill_id
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.skill import list_skills_for_sandbox_injection
-from onyx.file_store.file_store import FileStore
-from onyx.file_store.file_store import get_default_file_store
+from onyx.db.external_app import (
+    get_connectable_apps_for_user,
+    get_external_app_by_skill_id,
+)
+from onyx.db.models import Skill, User
+from onyx.db.skill import affected_user_ids_for_skill, list_skills_for_sandbox_injection
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import PushResult
+from onyx.server.features.build.sandbox.models import FileSet, PushResult
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
-)
-from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_skills_section_from_data,
 )
-from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.built_in import COMPANY_SEARCH
-from onyx.skills.built_in import EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
-from onyx.skills.rendering import render_company_search_skill
-from onyx.skills.rendering import render_external_app_skill
+from onyx.skills.built_in import (
+    BUILT_IN_SKILLS,
+    BuiltInSkillDefinition,
+    COMPANY_SEARCH,
+    EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
+)
+from onyx.skills.rendering import render_company_search_skill, render_external_app_skill
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

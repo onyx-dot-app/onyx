@@ -11,8 +11,7 @@ workers can be different processes.
 
 from enum import Enum
 
-from pydantic import BaseModel
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from onyx.cache.interface import CacheBackend
 from onyx.utils.logger import setup_logger

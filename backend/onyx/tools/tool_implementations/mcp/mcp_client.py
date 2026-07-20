@@ -5,21 +5,20 @@ This module provides a proper MCP client that follows the JSON-RPC 2.0 specifica
 and handles connection initialization, session management, and protocol communication.
 """
 
-from collections.abc import Callable
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from enum import Enum
-from typing import Any
-from typing import Dict
-from typing import TypeVar
+from typing import Any, Dict, TypeVar
 
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client  # or use stdio_client
-from mcp.types import CallToolResult
-from mcp.types import InitializeResult
-from mcp.types import ListResourcesResult
-from mcp.types import TextResourceContents
+from mcp.types import (
+    CallToolResult,
+    InitializeResult,
+    ListResourcesResult,
+    TextResourceContents,
+)
 from mcp.types import Tool as MCPLibTool
 from pydantic import BaseModel
 

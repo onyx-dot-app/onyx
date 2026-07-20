@@ -3,25 +3,15 @@ from collections.abc import Generator
 from contextlib import nullcontext
 from io import BytesIO
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy import DateTime
-from sqlalchemy import Enum
-from sqlalchemy import String
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, DateTime, Enum, String
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session, sessionmaker
 from sqlalchemy.sql import func
 
 from onyx.configs.constants import FileOrigin
-from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.file_store import S3BackedFileStore
+from onyx.file_store.file_store import get_default_file_store, S3BackedFileStore
 from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
 

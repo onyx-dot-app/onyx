@@ -7,13 +7,14 @@ These tests verify the flow plumbing:
   from the stored flow.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.db.enums import LLMModelFlowType
-from onyx.server.manage.llm.models import LLMProviderDescriptor
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationView
+from onyx.server.manage.llm.models import (
+    LLMProviderDescriptor,
+    ModelConfigurationUpsertRequest,
+    ModelConfigurationView,
+)
 
 # ModelConfigurationView.from_model — dynamic provider branch
 

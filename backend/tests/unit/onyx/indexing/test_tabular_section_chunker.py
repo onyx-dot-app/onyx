@@ -16,8 +16,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from onyx.connectors.models import Section
-from onyx.connectors.models import TabularSection
+from onyx.connectors.models import Section, TabularSection
 from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.tabular_section_chunker import TabularChunker
 from onyx.indexing.chunking.tabular_section_chunker.analysis import analyze_sheet
@@ -26,13 +25,10 @@ from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
 )
 from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
     build_total_descriptor_chunks,
-)
-from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
     TOTALS_HEADER,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.utils.csv_utils import parse_csv_string
-from onyx.utils.csv_utils import read_csv_header
+from onyx.utils.csv_utils import parse_csv_string, read_csv_header
 
 
 class CharTokenizer(BaseTokenizer):

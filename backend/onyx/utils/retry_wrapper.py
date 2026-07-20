@@ -2,18 +2,18 @@ import functools
 import logging
 from collections.abc import Callable
 from logging import Logger
-from typing import Any
-from typing import cast
-from typing import TypeVar
+from typing import Any, cast, TypeVar
 
 import requests
-from tenacity import before_sleep_log
+from tenacity import (
+    before_sleep_log,
+    retry_if_exception_type,
+    stop_after_attempt,
+    stop_never,
+    wait_exponential,
+    wait_random,
+)
 from tenacity import retry as tenacity_retry
-from tenacity import retry_if_exception_type
-from tenacity import stop_after_attempt
-from tenacity import stop_never
-from tenacity import wait_exponential
-from tenacity import wait_random
 from tenacity.stop import stop_base
 from tenacity.wait import wait_base
 
