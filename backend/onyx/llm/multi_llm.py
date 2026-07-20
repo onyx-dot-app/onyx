@@ -42,7 +42,6 @@ from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -301,17 +300,9 @@ def _env_injection_enabled() -> bool:
     return llm_custom_config_env_injection_enabled()
 
 
-_warned_dropped_keys: set[tuple[str, tuple[str, ...]]] = set()
-
-
 def _warn_dropped_env_only_keys(
     model_provider: str, dropped_keys: tuple[str, ...]
 ) -> None:
-    """Warn once per (provider, key-set); best-effort under concurrency."""
-    warned_key = (model_provider, dropped_keys)
-    if warned_key in _warned_dropped_keys:
-        return
-    _warned_dropped_keys.add(warned_key)
     logger.warning(
         "Dropping custom_config key(s) with no LiteLLM kwarg equivalent for "
         "provider %s (env injection is disabled on this deployment): %s",
@@ -1041,17 +1032,6 @@ def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
             yield
         return
 
-    if MULTI_TENANT:
-        # Unreachable via the llm_custom_config_env_injection security-setting
-        # gate; process-global env vars are a cross-tenant risk, so refuse
-        # rather than inject if a future caller bypasses it.
-        logger.error(
-            "Refusing LLM custom_config env injection in a multi-tenant "
-            "deployment; proceeding without the env var(s)."
-        )
-        with _env_rwlock.gen_rlock():
-            yield
-        return
     masked_env = {
         key: mask_env_value_for_logging(key, value)
         for key, value in env_variables.items()
