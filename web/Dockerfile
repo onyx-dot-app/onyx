@@ -21,8 +21,8 @@ WORKDIR /app
 # time for the DTS build to succeed. (`lib/shared` uses a standalone tsconfig and
 # builds its design tokens + types via Style Dictionary + tsc in its own `prepare`.)
 COPY package.json bun.lock tsconfig.json ./
-COPY lib/opal/ ./lib/opal/
-COPY lib/shared/ ./lib/shared/
+COPY web/lib/opal/ ./lib/opal/
+COPY web/lib/shared/ ./lib/shared/
 
 # Install dependencies. opal's `prepare` script builds dist/ as part of install.
 RUN bun install --frozen-lockfile
