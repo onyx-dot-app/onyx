@@ -21,14 +21,7 @@ from onyx.onyxbot.slack.models import (
     SlackMessageInfo,
     ThreadMessage,
 )
-<<<<<<< HEAD
-=======
-from onyx.onyxbot.slack.models import ChannelType
-from onyx.onyxbot.slack.models import SlackContext
-from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.onyxbot.slack.models import ThreadMessage
 from shared_configs.contextvars import get_current_user_id
->>>>>>> 1a5e6138fa (slackbot and refactor)
 
 _HANDLE_REGULAR_ANSWER = "onyx.onyxbot.slack.handlers.handle_regular_answer"
 
