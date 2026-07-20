@@ -1252,6 +1252,20 @@ def _maybe_push_documents(
                 )
 
 
+def _dedupe_documents_by_id(documents: list[Document]) -> list[Document]:
+    seen_doc_ids: set[str] = set()
+    deduped: list[Document] = []
+    for document in documents:
+        if document.id in seen_doc_ids:
+            logger.warning(
+                "Dropping duplicate document %s within indexing batch", document.id
+            )
+            continue
+        seen_doc_ids.add(document.id)
+        deduped.append(document)
+    return deduped
+
+
 @log_function_time(debug_only=True)
 def index_doc_batch(
     *,
@@ -1299,6 +1313,8 @@ def index_doc_batch(
     attempt_id: int | None = (
         _attempt_metadata.attempt_id if _attempt_metadata is not None else None
     )
+
+    document_batch = _dedupe_documents_by_id(document_batch)
 
     filtered_documents, filter_failures = filter_fnc(document_batch)
     filtered_documents = _apply_document_ingestion_hook(filtered_documents)
