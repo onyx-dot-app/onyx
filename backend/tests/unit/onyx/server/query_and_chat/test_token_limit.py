@@ -9,24 +9,21 @@ from collections.abc import Generator
 from typing import cast
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy import Table
+from sqlalchemy import Table, create_engine
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 import onyx.server.query_and_chat.token_limit as token_limit
-from onyx.db.models import TokenRateLimit
-from onyx.db.models import TokenRateLimitScope
-from onyx.db.models import UserUsage
-from onyx.db.user_usage import get_window_start
+from onyx.db.models import TokenRateLimit, TokenRateLimitScope, UserUsage
 from onyx.db.user_usage import record_user_usage
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat.token_limit import _worst_triggered_limit
+from onyx.utils.datetime import get_window_start
+from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 
 def _is_rate_limited(
@@ -401,7 +398,7 @@ class TestCostEnforcementRealLedgerPath:
         import uuid
 
         now = datetime.datetime.now(tz=datetime.timezone.utc)
-        ledger_window = get_window_start(now, period_hours=168)
+        ledger_window = get_window_start(now, USAGE_LIMIT_WINDOW_SECONDS)
         record_user_usage(
             ledger_session,
             str(uuid.uuid4()),
@@ -436,7 +433,7 @@ class TestCostEnforcementRealLedgerPath:
         import uuid
 
         now = datetime.datetime.now(tz=datetime.timezone.utc)
-        current = get_window_start(now, period_hours=168)
+        current = get_window_start(now, USAGE_LIMIT_WINDOW_SECONDS)
         # Two grids back: always before the (period + one-grid) relaxed cutoff,
         # regardless of weekday. A 24h budget must not see last-period spend.
         prior = current - datetime.timedelta(days=14)

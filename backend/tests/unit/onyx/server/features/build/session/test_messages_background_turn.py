@@ -168,6 +168,7 @@ def test_send_message_reloads_stale_skills(
     monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
     monkeypatch.setattr(messages_api, "SessionManager", lambda _: session_manager)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
     monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
     user = cast(User, SimpleNamespace(id=user_id))
@@ -295,6 +296,7 @@ def test_send_message_blocked_when_over_token_budget(
     start_runner = MagicMock()
 
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", lambda *_, **__: session)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
