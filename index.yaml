@@ -7,6 +7,73 @@ entries:
           description: Add the Box connector with permission sync, and expose its configuration env
             vars (BOX_CONNECTOR_SIZE_THRESHOLD, BOX_PERMISSION_DOC_SYNC_FREQUENCY,
             BOX_PERMISSION_GROUP_SYNC_FREQUENCY) in the background config map values.
+        - kind: added
+          description: Add configurable per-user LLM usage accounting and fallback pricing.
+        - kind: added
+          description: Add authenticated Prometheus scraping for the MCP server.
+        - kind: fixed
+          description: Scope metrics credentials and ServiceMonitor selectors to the intended workloads.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-07-20T21:47:51.929874913Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresqlOperator.enabled,postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
+      name: onyx-cnpg-crds
+      repository: file://../onyx-cnpg-crds
+      version: 0.1.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.3
+    description: Onyx application and Craft sandbox deployment chart
+    digest: 1417ea39f7c8a2f0af443f40ae927a818162949f662ad81238f656b4203fbb3e
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://onyx-dot-app.github.io/onyx/onyx-0.6.17.tgz
+    version: 0.6.17
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Add the Box connector with permission sync, and expose its configuration env
+            vars (BOX_CONNECTOR_SIZE_THRESHOLD, BOX_PERMISSION_DOC_SYNC_FREQUENCY,
+            BOX_PERMISSION_GROUP_SYNC_FREQUENCY) in the background config map values.
       category: Productivity
       images: |
         - name: webserver
@@ -5435,7 +5502,7 @@ entries:
     version: 0.3.1
   onyx-cnpg-crds:
   - apiVersion: v2
-    created: "2026-07-20T21:25:51.904334242Z"
+    created: "2026-07-20T21:47:51.933726252Z"
     description: 'CloudNativePG CRDs for the Onyx chart, isolated in a CRDs-only subchart
       so they can be toggled via the parent''s postgresql.installCRDs value. Helm
       still gives crds/ its special pre-install treatment (applied before the main
@@ -5443,7 +5510,7 @@ entries:
       validation on a fresh install. Keep crds/cnpg-crds.yaml in byte-for-byte sync
       with the cloudnative-pg subchart pinned in the parent Chart.yaml (verified by
       onyx/scripts/check-cnpg-crds.sh). '
-    digest: 0f08452b8bb793b753ad41d379eb85be151ba1091c53f8ce95402cb2c4147c72
+    digest: 271b7874094489b1dc3ee9eaa236172a2fe42dd95bc59291d8188a4b7b8825ce
     name: onyx-cnpg-crds
     type: application
     urls:
@@ -5937,4 +6004,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-07-20T21:25:51.869685662Z"
+generated: "2026-07-20T21:47:51.902063066Z"
