@@ -8,7 +8,7 @@ dependencies = [
     "cohere==7.0.5",
     "fastapi==0.133.1",
     "google-genai==1.52.0",
-    "litellm[google]==1.89.4",
+    "litellm[google]==1.93.0",
     "openai==2.38.0",
     "pydantic==2.11.7",
     # Shared so structured JSON logging (LOG_FORMAT=json) works in the
