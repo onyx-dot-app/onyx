@@ -5,9 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import jwt
 import pytest
 
-import onyx.auth.oauth_claims_capture as claims_capture
-from onyx.auth.oauth_claims_capture import (
+import onyx.auth.login_claims_capture as claims_capture
+from onyx.auth.login_claims_capture import (
     capture_oauth_login_claims,
+    capture_saml_login_claims,
     get_captured_oauth_claims,
     get_idp_profile_fields,
     get_idp_profile_placeholder_values,
@@ -49,7 +50,7 @@ async def test_capture_stores_id_token_claims_and_token_meta() -> None:
     redis = AsyncMock()
 
     with patch(
-        "onyx.auth.oauth_claims_capture.get_async_redis_connection",
+        "onyx.auth.login_claims_capture.get_async_redis_connection",
         return_value=redis,
     ):
         await capture_oauth_login_claims(
@@ -80,11 +81,11 @@ async def test_capture_fetches_userinfo_when_endpoint_available() -> None:
 
     with (
         patch(
-            "onyx.auth.oauth_claims_capture.get_async_redis_connection",
+            "onyx.auth.login_claims_capture.get_async_redis_connection",
             return_value=redis,
         ),
         patch(
-            "onyx.auth.oauth_claims_capture._fetch_userinfo",
+            "onyx.auth.login_claims_capture._fetch_userinfo",
             new=AsyncMock(return_value=userinfo),
         ) as fetch_mock,
     ):
@@ -110,15 +111,15 @@ async def test_capture_fetches_directory_profile_for_entra() -> None:
 
     with (
         patch(
-            "onyx.auth.oauth_claims_capture.get_async_redis_connection",
+            "onyx.auth.login_claims_capture.get_async_redis_connection",
             return_value=redis,
         ),
         patch(
-            "onyx.auth.oauth_claims_capture._fetch_userinfo",
+            "onyx.auth.login_claims_capture._fetch_userinfo",
             new=AsyncMock(return_value={"sub": "abc"}),
         ),
         patch(
-            "onyx.auth.oauth_claims_capture._fetch_ms_graph_profile",
+            "onyx.auth.login_claims_capture._fetch_ms_graph_profile",
             new=AsyncMock(return_value=directory_profile),
         ) as graph_mock,
     ):
@@ -140,10 +141,10 @@ async def test_capture_never_raises_when_redis_is_down() -> None:
     redis.set.side_effect = ConnectionError("redis down")
 
     with patch(
-        "onyx.auth.oauth_claims_capture.get_async_redis_connection",
+        "onyx.auth.login_claims_capture.get_async_redis_connection",
         return_value=redis,
     ):
-        # Must not raise — login flow depends on it
+        # Must not raise, login flow depends on it
         await capture_oauth_login_claims(
             _FakeOAuthClient(), "user@example.com", _make_token({"sub": "abc"})
         )
@@ -156,14 +157,14 @@ async def test_get_captured_oauth_claims_roundtrip() -> None:
     redis.get.return_value = json.dumps(stored)
 
     with patch(
-        "onyx.auth.oauth_claims_capture.get_async_redis_connection",
+        "onyx.auth.login_claims_capture.get_async_redis_connection",
         return_value=redis,
     ):
         assert await get_captured_oauth_claims("user@example.com") == stored
 
     redis.get.return_value = None
     with patch(
-        "onyx.auth.oauth_claims_capture.get_async_redis_connection",
+        "onyx.auth.login_claims_capture.get_async_redis_connection",
         return_value=redis,
     ):
         assert await get_captured_oauth_claims("user@example.com") is None
@@ -230,7 +231,7 @@ def test_get_idp_profile_placeholder_values_maps_directory_profile() -> None:
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
         values = get_idp_profile_placeholder_values("user@example.com")
 
-    # Snake_case placeholder keys; empty/absent fields dropped.
+    # Snake_case placeholder keys. Empty/absent fields dropped.
     assert values == {
         "country": "Germany",
         "usage_location": "DE",
@@ -263,7 +264,7 @@ async def test_capture_noop_when_enrichment_disabled(
     monkeypatch.setattr(claims_capture, "IDP_PROFILE_ENRICHMENT_ENABLED", False)
     redis = AsyncMock()
     with patch(
-        "onyx.auth.oauth_claims_capture.get_async_redis_connection",
+        "onyx.auth.login_claims_capture.get_async_redis_connection",
         return_value=redis,
     ):
         await capture_oauth_login_claims(
@@ -360,7 +361,7 @@ def test_claim_map_override_takes_precedence(
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
         values = get_idp_profile_placeholder_values("user@example.com")
 
-    # Configured alias wins; built-in aliases remain as fallback.
+    # Configured alias wins. Built-in aliases remain as fallback.
     assert values["department"] == "Platform"
 
 
@@ -379,3 +380,56 @@ def test_source_precedence_holds_across_aliases() -> None:
         values = get_idp_profile_placeholder_values("user@example.com")
 
     assert values["department"] == "Directory Division"
+
+
+@pytest.mark.asyncio
+async def test_capture_saml_stores_flattened_attributes() -> None:
+    """SAML attributes arrive as {name: [values]}. Capture keeps the first value
+    so the shared claim-map resolver can treat them like any other source."""
+    redis = AsyncMock()
+    with patch(
+        "onyx.auth.login_claims_capture.get_async_redis_connection",
+        return_value=redis,
+    ):
+        await capture_saml_login_claims(
+            "user@example.com",
+            {"department": ["Legal"], "jobTitle": ["Counsel"], "empty": []},
+            "okta-saml",
+        )
+
+    redis.set.assert_awaited_once()
+    snapshot = json.loads(redis.set.await_args.args[1])
+    assert snapshot["saml_attributes"] == {"department": "Legal", "jobTitle": "Counsel"}
+    assert snapshot["oauth_name"] == "okta-saml"
+
+
+def test_profile_resolves_from_saml_attributes() -> None:
+    snapshot = {
+        "saml_attributes": {"department": "Legal", "jobTitle": "Counsel", "ctry": "US"},
+        "directory_profile": None,
+        "userinfo": {},
+        "id_token_claims": {},
+    }
+    redis = MagicMock()
+    redis.get.return_value = json.dumps(snapshot)
+
+    with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
+        values = get_idp_profile_placeholder_values("user@example.com")
+
+    assert values == {"department": "Legal", "job_title": "Counsel", "country": "US"}
+
+
+@pytest.mark.asyncio
+async def test_capture_saml_noop_when_enrichment_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(claims_capture, "IDP_PROFILE_ENRICHMENT_ENABLED", False)
+    redis = AsyncMock()
+    with patch(
+        "onyx.auth.login_claims_capture.get_async_redis_connection",
+        return_value=redis,
+    ):
+        await capture_saml_login_claims(
+            "user@example.com", {"department": ["Legal"]}, "okta-saml"
+        )
+    redis.set.assert_not_awaited()

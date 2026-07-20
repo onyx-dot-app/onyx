@@ -1,7 +1,7 @@
 """Admin "OAuth Test" API.
 
 Exposes the claims snapshot captured at OAuth/OIDC login time (see
-onyx/auth/oauth_claims_capture.py) so admins can inspect which user fields
+onyx/auth/login_claims_capture.py) so admins can inspect which user fields
 the IdP actually releases about a user, and debug the directory-profile
 enrichment. To refresh the snapshot the admin simply goes through the login
 flow again.
@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from onyx.auth.oauth_claims_capture import (
+from onyx.auth.login_claims_capture import (
     get_captured_oauth_claims,
     get_idp_profile_fields,
 )

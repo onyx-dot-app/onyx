@@ -1,20 +1,23 @@
-"""Capture the OIDC/OAuth claims received at login and derive a directory
-profile from them.
+"""Capture the identity attributes an IdP sends at login and derive a
+directory profile from them, independent of login protocol.
 
-The IdP sends user information in the id_token and on the userinfo endpoint,
-but the login flow only consumes ``sub`` and ``email`` — everything else is
-discarded. When ``IDP_PROFILE_ENRICHMENT_ENABLED`` is set, this module
-snapshots the full claim set into Redis at login time and derives a
-"directory profile" (country, department, job title, ...) from it, which is
-then used to (a) enrich the chat system prompt and (b) resolve
-author-controlled ``{{user.<key>}}`` placeholders in agent prompts.
+Both protocols feed this module: OAuth/OIDC logins contribute id_token and
+userinfo claims (plus the Microsoft Graph profile for Entra ID), and SAML
+logins contribute assertion attributes. The login flow itself only consumes
+``sub`` and ``email``, and everything else is discarded. When
+``IDP_PROFILE_ENRICHMENT_ENABLED`` is set, this module snapshots the full
+attribute set into Redis at login time and derives a "directory profile"
+(country, department, job title, ...) from it, which is then used to (a)
+enrich the chat system prompt and (b) resolve author-controlled
+``{{user.<key>}}`` placeholders in agent prompts.
 
 Profile fields are resolved through a provider-agnostic claim map: each field
-has an ordered list of claim aliases checked against three sources in
+has an ordered list of claim aliases checked against the captured sources in
 precedence order — the provider directory API (Microsoft Graph for Entra ID),
-the OIDC userinfo response, then the raw id_token claims. Okta/Keycloak/Google
-deployments therefore work out of the box for whatever claims they release,
-and the map can be extended per-deployment via ``IDP_PROFILE_CLAIM_MAP``.
+the OIDC userinfo response, the raw id_token claims, then SAML assertion
+attributes. Okta/Keycloak/Google deployments therefore work out of the box for
+whatever claims they release, and the map can be extended per-deployment via
+``IDP_PROFILE_CLAIM_MAP``.
 
 Capture is strictly best-effort: any failure is logged and swallowed so the
 login flow can never break because of it. No tokens are persisted — only
@@ -40,7 +43,7 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 _OAUTH_CLAIMS_KEY_PREFIX = "oauth_login_claims"
-# Long enough that an admin can log in and inspect at leisure; short enough
+# Long enough that an admin can log in and inspect at leisure, short enough
 # that stale directory data doesn't linger forever.
 _OAUTH_CLAIMS_TTL_SECONDS = 60 * 60 * 24 * 30
 
@@ -50,7 +53,7 @@ _OAUTH_CLAIMS_TTL_SECONDS = 60 * 60 * 24 * 30
 # dropping one is harmless.
 _OAUTH_CLAIMS_CAPTURE_TIMEOUT_SECONDS = 10
 
-# Entra ID hosts its OIDC userinfo endpoint on Microsoft Graph; when we see
+# Entra ID hosts its OIDC userinfo endpoint on Microsoft Graph. When we see
 # that host we can also query the Graph profile, which carries directory
 # fields the id_token/userinfo never include (country, usageLocation, ...).
 _MS_GRAPH_HOST = "graph.microsoft.com"
@@ -67,10 +70,19 @@ def _oauth_claims_key(tenant_id: str, email: str) -> str:
     return f"{_OAUTH_CLAIMS_KEY_PREFIX}:{tenant_id}:{email.lower()}"
 
 
+async def _store_claims_snapshot(email: str, snapshot: dict[str, Any]) -> None:
+    redis = await get_async_redis_connection()
+    await redis.set(
+        _oauth_claims_key(get_current_tenant_id(), email),
+        json.dumps(snapshot, default=str),
+        ex=_OAUTH_CLAIMS_TTL_SECONDS,
+    )
+
+
 def _decode_id_token_claims(raw_id_token: str) -> dict[str, Any]:
     # Display-only decode: the token was just received directly from the
     # IdP's token endpoint over TLS, so skipping signature verification is
-    # safe here — we never make authorization decisions from this data.
+    # safe here. We never make authorization decisions from this data.
     return jwt.decode(
         raw_id_token,
         options={"verify_signature": False, "verify_aud": False, "verify_exp": False},
@@ -175,7 +187,7 @@ async def _capture_oauth_login_claims(
             except Exception as e:
                 logger.warning("OAuth claims capture: userinfo fetch failed: %s", e)
 
-        # Entra ID: also pull the Graph directory profile — country and
+        # Entra ID: also pull the Graph directory profile. Country and
         # usageLocation live there, not in the id_token/userinfo (unless the
         # `ctry` optional claim is configured on the app registration). Other
         # providers release directory data directly in userinfo/id_token.
@@ -197,7 +209,7 @@ async def _capture_oauth_login_claims(
             "directory_profile": directory_profile,
             "directory_source": directory_source,
             "token_meta": {
-                # Which fields the token response contained — values omitted.
+                # Which fields the token response contained, values omitted.
                 "keys": sorted(token.keys()),
                 "scope": token.get("scope"),
                 "token_type": token.get("token_type"),
@@ -207,12 +219,7 @@ async def _capture_oauth_login_claims(
             },
         }
 
-        redis = await get_async_redis_connection()
-        await redis.set(
-            _oauth_claims_key(get_current_tenant_id(), email),
-            json.dumps(snapshot, default=str),
-            ex=_OAUTH_CLAIMS_TTL_SECONDS,
-        )
+        await _store_claims_snapshot(email, snapshot)
     except Exception:
         logger.warning(
             "OAuth claims capture failed for %s (login unaffected)",
@@ -221,9 +228,66 @@ async def _capture_oauth_login_claims(
         )
 
 
+async def capture_saml_login_claims(
+    email: str,
+    saml_attributes: dict[str, list[str]],
+    provider_name: str,
+) -> None:
+    """Snapshot the directory attributes a SAML IdP asserted at login.
+
+    SAML carries the same directory data (department, title, ...) as OIDC, just
+    as assertion attributes instead of token claims. Resolution reuses the same
+    claim map, so deployments map their attribute names via IDP_PROFILE_CLAIM_MAP.
+    No-op unless IDP_PROFILE_ENRICHMENT_ENABLED. Never raises, and never holds the
+    login open past _OAUTH_CLAIMS_CAPTURE_TIMEOUT_SECONDS.
+    """
+    if not IDP_PROFILE_ENRICHMENT_ENABLED:
+        return
+    try:
+        await asyncio.wait_for(
+            _capture_saml_login_claims(email, saml_attributes, provider_name),
+            timeout=_OAUTH_CLAIMS_CAPTURE_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("SAML claims capture timed out for %s (login unaffected)", email)
+
+
+async def _capture_saml_login_claims(
+    email: str,
+    saml_attributes: dict[str, list[str]],
+    provider_name: str,
+) -> None:
+    try:
+        # OneLogin returns each attribute as a list. Keep the first string value
+        # so the claim-map resolver can treat it like any other source.
+        flattened = {
+            name: values[0]
+            for name, values in saml_attributes.items()
+            if isinstance(values, list) and values and isinstance(values[0], str)
+        }
+        snapshot = {
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+            "oauth_name": provider_name,
+            "email": email,
+            "id_token_claims": {},
+            "userinfo": {},
+            "directory_profile": None,
+            "directory_source": None,
+            "saml_attributes": flattened,
+            "token_meta": {"source": "saml"},
+        }
+        await _store_claims_snapshot(email, snapshot)
+    except Exception:
+        logger.warning(
+            "SAML claims capture failed for %s (login unaffected)",
+            email,
+            exc_info=True,
+        )
+
+
 # Profile field definitions: (placeholder_key, human-readable label, ordered
 # claim aliases). Aliases are checked against each captured source in
-# precedence order (directory API -> userinfo -> id_token claims); the first
+# precedence order (directory API -> userinfo -> id_token claims). The first
 # non-empty string wins. Aliases cover Microsoft Graph names plus the common
 # OIDC/Okta/Keycloak claim names for the same concept, and can be extended
 # per-deployment via IDP_PROFILE_CLAIM_MAP. This is the single source of truth
@@ -284,6 +348,12 @@ def _load_profile_sources(email: str) -> list[dict[str, Any]]:
     id_token_claims = snapshot.get("id_token_claims")
     if isinstance(id_token_claims, dict):
         sources.append(id_token_claims)
+    # Lowest priority by convention. A snapshot is written whole per login, so
+    # today a SAML snapshot never carries the OIDC sources above and ordering
+    # only matters if a future path mixes them.
+    saml_attributes = snapshot.get("saml_attributes")
+    if isinstance(saml_attributes, dict):
+        sources.append(saml_attributes)
     return sources
 
 
