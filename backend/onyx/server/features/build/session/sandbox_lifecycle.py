@@ -19,7 +19,7 @@ from onyx.server.features.build.configs import (
 )
 from onyx.server.features.build.db.build_session import (
     clear_nextjs_ports_for_user,
-    get_build_session,
+    get_orphan_build_session_ids,
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.db.sandbox import (
@@ -408,9 +408,16 @@ def list_snapshotable_session_workspaces(
     sandbox: Sandbox,
 ) -> list[UUID]:
     """List session workspaces, removing any without an owning DB row."""
+    workspace_session_ids = sandbox_manager.list_session_workspaces(sandbox.id)
+    orphan_session_ids = get_orphan_build_session_ids(
+        workspace_session_ids,
+        sandbox.user_id,
+        db_session,
+    )
+
     existing_session_ids: list[UUID] = []
-    for session_id in sandbox_manager.list_session_workspaces(sandbox.id):
-        if get_build_session(session_id, sandbox.user_id, db_session) is not None:
+    for session_id in workspace_session_ids:
+        if session_id not in orphan_session_ids:
             existing_session_ids.append(session_id)
             continue
 

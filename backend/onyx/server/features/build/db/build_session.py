@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import desc, exists, select
+from sqlalchemy import column, desc, exists, select, values
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, selectinload
 
@@ -72,6 +73,35 @@ def get_build_session(
         BuildSession.user_id == user_id,
     )
     return db_session.scalar(stmt)
+
+
+def get_orphan_build_session_ids(
+    session_ids: list[UUID],
+    user_id: UUID,
+    db_session: Session,
+) -> set[UUID]:
+    """Return input session IDs without a matching row owned by the user."""
+    if not session_ids:
+        return set()
+
+    workspace_ids = (
+        values(
+            column("session_id", PGUUID(as_uuid=True)),
+            name="workspace_ids",
+        )
+        .data([(session_id,) for session_id in session_ids])
+        .cte()
+    )
+    stmt = (
+        select(workspace_ids.c.session_id)
+        .outerjoin(
+            BuildSession,
+            (BuildSession.id == workspace_ids.c.session_id)
+            & (BuildSession.user_id == user_id),
+        )
+        .where(BuildSession.id.is_(None))
+    )
+    return set(db_session.scalars(stmt).all())
 
 
 def skills_are_stale(session: BuildSession, sandbox: Sandbox | None) -> bool:
