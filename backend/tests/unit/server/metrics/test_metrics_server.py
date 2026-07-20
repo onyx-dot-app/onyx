@@ -23,14 +23,14 @@ class TestStartMetricsServer:
     def test_uses_default_port_for_known_worker(self, mock_start: MagicMock) -> None:
         port = start_metrics_server("monitoring")
         assert port == _DEFAULT_PORTS["monitoring"]
-        mock_start.assert_called_once_with(_DEFAULT_PORTS["monitoring"])
+        mock_start.assert_called_once_with(_DEFAULT_PORTS["monitoring"], addr="::")
 
     @patch("onyx.server.metrics.metrics_server.start_http_server")
     @patch.dict("os.environ", {"PROMETHEUS_METRICS_PORT": "9999"})
     def test_env_var_overrides_default(self, mock_start: MagicMock) -> None:
         port = start_metrics_server("monitoring")
         assert port == 9999
-        mock_start.assert_called_once_with(9999)
+        mock_start.assert_called_once_with(9999, addr="::")
 
     @patch("onyx.server.metrics.metrics_server.start_http_server")
     @patch.dict("os.environ", {"PROMETHEUS_METRICS_ENABLED": "false"})
