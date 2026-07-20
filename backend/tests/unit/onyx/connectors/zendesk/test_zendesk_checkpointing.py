@@ -1,7 +1,7 @@
 import time
 from collections.abc import Callable, Generator
 from typing import Any, cast
-from unittest.mock import call, MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from requests.exceptions import HTTPError

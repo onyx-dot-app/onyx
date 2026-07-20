@@ -5,7 +5,7 @@ from time import sleep
 from typing import Any, cast
 from uuid import uuid4
 
-from celery import Celery, shared_task, Task
+from celery import Celery, Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import ValidationError
 from redis import Redis
@@ -76,7 +76,7 @@ from onyx.db.permission_sync_attempt import (
 )
 from onyx.db.sync_record import insert_sync_record, update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
-from onyx.db.utils import DocumentRow, is_retryable_sqlalchemy_error, SortOrder
+from onyx.db.utils import DocumentRow, SortOrder, is_retryable_sqlalchemy_error
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_doc_perm_sync import (
@@ -98,12 +98,12 @@ from onyx.server.metrics.perm_sync_metrics import (
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import (
+    LoggerContextVars,
     doc_permission_sync_ctx,
     format_error_for_logging,
-    LoggerContextVars,
     setup_logger,
 )
-from onyx.utils.telemetry import optional_telemetry, RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()

@@ -37,13 +37,13 @@ from ee.onyx.server.scim.models import (
     ScimUserResource,
 )
 from ee.onyx.server.scim.patch import (
+    ScimPatchError,
     apply_group_patch,
     apply_user_patch,
-    ScimPatchError,
 )
 from ee.onyx.server.scim.providers.base import (
-    get_default_provider,
     ScimProvider,
+    get_default_provider,
     serialize_emails,
 )
 from ee.onyx.server.scim.schema_definitions import (

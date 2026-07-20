@@ -32,7 +32,7 @@ from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.constants import FeedbackVisibility
 from onyx.onyxbot.slack.models import ChannelType, ThreadMessage
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry, RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
 from onyx.utils.text_processing import replace_whitespaces_w_space
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 

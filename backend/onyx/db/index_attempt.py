@@ -2,8 +2,8 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import TypeVarTuple
 
-from sqlalchemy import and_, delete, desc, func, Select, select, update
-from sqlalchemy.orm import joinedload, Session
+from sqlalchemy import Select, and_, delete, desc, func, select, update
+from sqlalchemy.orm import Session, joinedload
 
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -22,7 +22,7 @@ from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry, RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
 
 logger = setup_logger()
 

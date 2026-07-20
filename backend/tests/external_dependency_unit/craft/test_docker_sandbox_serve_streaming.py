@@ -49,8 +49,8 @@ from onyx.server.features.build.configs import (
     SandboxBackend,
 )
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
-    _sandbox_container_name,
     DockerSandboxManager,
+    _sandbox_container_name,
 )
 from onyx.server.features.build.sandbox.event_schema import (
     AgentMessageChunk,

@@ -21,10 +21,10 @@ import struct
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.server.metrics.embedding import (
-    observe_query_embedding_cache_lookup,
-    observe_query_embedding_cache_write,
     QueryEmbeddingCacheLookupOutcome,
     QueryEmbeddingCacheWriteOutcome,
+    observe_query_embedding_cache_lookup,
+    observe_query_embedding_cache_write,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider

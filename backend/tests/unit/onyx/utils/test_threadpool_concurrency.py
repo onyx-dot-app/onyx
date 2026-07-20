@@ -7,10 +7,10 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from onyx.utils.threadpool_concurrency import (
+    ThreadSafeDict,
     parallel_yield,
     run_in_background,
     run_with_timeout,
-    ThreadSafeDict,
     wait_on_background,
 )
 

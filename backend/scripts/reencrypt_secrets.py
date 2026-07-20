@@ -25,8 +25,8 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 from onyx.db.engine.sql_engine import (  # noqa: E402
-    get_session_with_tenant,
     SqlEngine,
+    get_session_with_tenant,
 )
 from onyx.db.engine.tenant_utils import get_all_tenant_ids  # noqa: E402
 from onyx.db.rotate_encryption_key import rotate_encryption_key  # noqa: E402

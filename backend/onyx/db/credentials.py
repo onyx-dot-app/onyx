@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import exists, Select, select, update
+from sqlalchemy import Select, exists, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import and_, or_
 

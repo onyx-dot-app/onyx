@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, patch
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.gmail.connector import (
-    _build_time_range_query,
     GmailCheckpoint,
     GmailConnector,
+    _build_time_range_query,
     thread_to_document,
 )
 from onyx.connectors.models import Document, TextSection

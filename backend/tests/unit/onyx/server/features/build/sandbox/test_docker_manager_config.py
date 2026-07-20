@@ -22,18 +22,18 @@ from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     OPENCODE_SERVE_HOST_BIND_IP,
 )
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    LABEL_COMPONENT,
+    LABEL_COMPONENT_VALUE,
+    LABEL_SANDBOX_ID,
+    LABEL_TENANT_ID,
+    LABEL_USER_ID,
+    ContainerCreateKwargs,
     _sandbox_container_name,
     _sandbox_volume_name,
     _sanitize_relative_path,
     _validate_strict_path,
     build_container_create_kwargs,
     build_sandbox_labels,
-    ContainerCreateKwargs,
-    LABEL_COMPONENT,
-    LABEL_COMPONENT_VALUE,
-    LABEL_SANDBOX_ID,
-    LABEL_TENANT_ID,
-    LABEL_USER_ID,
 )
 from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_MANAGED_BY,

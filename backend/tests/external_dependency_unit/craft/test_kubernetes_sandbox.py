@@ -37,8 +37,8 @@ from onyx.server.features.build.configs import (
     SandboxBackend,
 )
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
     PUSH_DAEMON_PORT,
+    KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.utils.logger import setup_logger

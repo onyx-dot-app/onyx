@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from pydantic import BaseModel
 

@@ -17,8 +17,8 @@ import pytest
 
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.bundle import (
-    _safe_unzip,
     _ZIP_UNIX_CREATE_SYSTEM,
+    _safe_unzip,
     validate_custom_bundle,
 )
 

@@ -3,12 +3,12 @@
 import pytest
 
 from onyx.server.metrics.pruning_metrics import (
-    inc_pruning_rate_limit_error,
-    observe_pruning_diff_duration,
-    observe_pruning_enumeration_duration,
     PRUNING_DIFF_DURATION,
     PRUNING_ENUMERATION_DURATION,
     PRUNING_RATE_LIMIT_ERRORS,
+    inc_pruning_rate_limit_error,
+    observe_pruning_diff_duration,
+    observe_pruning_enumeration_duration,
 )
 
 

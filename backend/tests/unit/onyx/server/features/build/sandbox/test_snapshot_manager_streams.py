@@ -9,7 +9,7 @@ must stay stable, so we assert it here against a fake ``FileStore``.
 from __future__ import annotations
 
 import io
-from typing import Any, cast, IO
+from typing import IO, Any, cast
 
 import pytest
 

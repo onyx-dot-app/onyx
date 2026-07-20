@@ -4,10 +4,10 @@ from uuid import uuid4
 from google.oauth2.service_account import Credentials
 
 from onyx.connectors.google_utils.resources import (
-    get_drive_service,
-    get_google_docs_service,
     GoogleDocsService,
     GoogleDriveService,
+    get_drive_service,
+    get_google_docs_service,
 )
 
 GOOGLE_SCOPES = {

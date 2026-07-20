@@ -5,8 +5,8 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
     RateLimitTriedTooManyTimesError,
+    rate_limit_builder,
 )
 from onyx.utils.logger import setup_logger
 

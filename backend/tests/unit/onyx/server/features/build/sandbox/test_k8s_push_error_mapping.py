@@ -26,8 +26,8 @@ from cryptography.hazmat.primitives.serialization import (
 from kubernetes.client.rest import ApiException
 
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    _build_targz,
     KubernetesSandboxManager,
+    _build_targz,
 )
 from onyx.server.features.build.sandbox.models import (
     FatalWriteError,

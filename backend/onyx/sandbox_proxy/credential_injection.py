@@ -19,7 +19,7 @@ from typing import Protocol
 from mitmproxy import http
 
 from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.sandbox_proxy.errors import http_403, SandboxProxyError
+from onyx.sandbox_proxy.errors import SandboxProxyError, http_403
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.utils.logger import setup_logger
 

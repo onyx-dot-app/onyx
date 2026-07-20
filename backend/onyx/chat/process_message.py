@@ -84,7 +84,7 @@ from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import log_onyx_error, OnyxError
+from onyx.error_handling.exceptions import OnyxError, log_onyx_error
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.models import ChatFileType, InMemoryChatFile
 from onyx.file_store.utils import (
@@ -92,7 +92,7 @@ from onyx.file_store.utils import (
     load_in_memory_chat_files,
     verify_user_files,
 )
-from onyx.hooks.executor import execute_hook, HookSkipped, HookSoftFailed
+from onyx.hooks.executor import HookSkipped, HookSoftFailed, execute_hook
 from onyx.hooks.points.query_processing import (
     QueryProcessingPayload,
     QueryProcessingResponse,
@@ -124,10 +124,10 @@ from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
 from onyx.tools.models import ChatFile, SearchToolUsage
 from onyx.tools.tool_constructor import (
-    construct_tools,
     CustomToolConfig,
     FileReaderToolConfig,
     SearchToolConfig,
+    construct_tools,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry

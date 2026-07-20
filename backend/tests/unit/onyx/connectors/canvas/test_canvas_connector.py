@@ -10,12 +10,12 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.client import CanvasApiClient
 from onyx.connectors.canvas.connector import (
-    _in_time_window,
-    _parse_canvas_dt,
-    _unix_to_canvas_time,
     CanvasConnector,
     CanvasConnectorCheckpoint,
     CanvasStage,
+    _in_time_window,
+    _parse_canvas_dt,
+    _unix_to_canvas_time,
 )
 from onyx.connectors.exceptions import (
     CredentialExpiredError,

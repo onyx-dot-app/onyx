@@ -21,8 +21,8 @@ from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import (
-    LanguageModelInput,
     LLM,
+    LanguageModelInput,
     LLMConfig,
     LLMUserIdentity,
     ToolChoiceOptions,

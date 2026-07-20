@@ -19,9 +19,9 @@ from pydantic import AnyUrl, BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import (
+    OAuthFlowParams,
     build_oauth_authorization_url,
     exchange_oauth_code_for_token,
-    OAuthFlowParams,
     validate_oauth_endpoint_url,
 )
 from onyx.auth.permissions import require_permission
@@ -65,7 +65,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.mcp.models import (
-    apply_auto_substitutions,
     MCPApiKeyResponse,
     MCPAuthTemplate,
     MCPConnectionData,
@@ -83,6 +82,7 @@ from onyx.server.features.mcp.models import (
     MCPUserCredentialsRequest,
     MCPUserOAuthConnectRequest,
     MCPUserOAuthConnectResponse,
+    apply_auto_substitutions,
 )
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.tools.tool_implementations.mcp.mcp_client import (

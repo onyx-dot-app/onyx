@@ -11,13 +11,13 @@ import pytest
 from slack_sdk.errors import SlackApiError
 
 from onyx.connectors.slack.connector import (
+    SlackConnector,
     _channel_team_id,
     _channel_to_hierarchy_node,
     channel_team_ids,
     fetch_team_url,
     get_channels_across_teams,
     list_grid_team_ids,
-    SlackConnector,
 )
 from onyx.connectors.slack.models import ChannelType, MessageType
 from onyx.connectors.slack.utils import get_message_link

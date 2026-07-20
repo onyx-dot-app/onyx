@@ -19,7 +19,7 @@ from onyx.db.external_app import (
 )
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
 from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.utils import none_as_unset, UNSET
+from onyx.db.utils import UNSET, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import and_, exists, func, select
-from sqlalchemy.orm import aliased, Session
+from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
 from onyx.configs.constants import DocumentSource

@@ -1,6 +1,6 @@
 import os
 from io import BytesIO
-from typing import Any, cast, IO
+from typing import IO, Any, cast
 
 from fastapi import HTTPException, UploadFile
 
@@ -9,10 +9,10 @@ from ee.onyx.server.enterprise_settings.models import (
     EnterpriseSettings,
 )
 from onyx.configs.constants import (
-    FileOrigin,
     KV_CUSTOM_ANALYTICS_SCRIPT_KEY,
     KV_ENTERPRISE_SETTINGS_KEY,
     ONYX_DEFAULT_APPLICATION_NAME,
+    FileOrigin,
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store

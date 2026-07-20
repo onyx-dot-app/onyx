@@ -11,10 +11,10 @@ from onyx.db.pat import create_pat, list_user_pats, revoke_pat
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.pat.models import (
+    SELECTABLE_PAT_SCOPES,
     CreatedTokenResponse,
     CreateTokenRequest,
     PatScopeOption,
-    SELECTABLE_PAT_SCOPES,
     TokenResponse,
 )
 from onyx.utils.logger import setup_logger

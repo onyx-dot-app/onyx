@@ -1,7 +1,7 @@
 import time
 from collections.abc import Callable
 from functools import wraps
-from typing import Any, cast, TypeVar
+from typing import Any, TypeVar, cast
 
 import requests
 

@@ -5,7 +5,7 @@ calls. Reads are auto-approved (ALWAYS); mutations default to ASK."""
 from __future__ import annotations
 
 from onyx.db.enums import EndpointPolicy, ExternalAppType
-from onyx.external_apps.providers.actions import path_matches, RestRoute
+from onyx.external_apps.providers.actions import RestRoute, path_matches
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_drive import (
     GoogleDriveAction,

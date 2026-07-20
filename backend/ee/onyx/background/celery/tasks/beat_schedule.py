@@ -3,11 +3,11 @@ from typing import Any
 
 from ee.onyx.configs.app_configs import CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS
 from onyx.background.celery.tasks.beat_schedule import (
-    beat_cloud_tasks as base_beat_system_tasks,
-)
-from onyx.background.celery.tasks.beat_schedule import (
     BEAT_EXPIRES_DEFAULT,
     generate_cloud_tasks,
+)
+from onyx.background.celery.tasks.beat_schedule import (
+    beat_cloud_tasks as base_beat_system_tasks,
 )
 from onyx.background.celery.tasks.beat_schedule import (
     beat_task_templates as base_beat_task_templates,

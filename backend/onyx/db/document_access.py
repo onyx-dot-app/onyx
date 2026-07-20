@@ -10,7 +10,7 @@ This module provides reusable access filtering logic for documents based on:
 This is a standalone module to avoid circular imports between document.py and persona.py.
 """
 
-from sqlalchemy import and_, any_, cast, or_, Select, select, String
+from sqlalchemy import Select, String, and_, any_, cast, or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement

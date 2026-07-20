@@ -4,7 +4,7 @@ import os
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import as_completed, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import wraps
 from types import TracebackType
 from typing import Any, cast

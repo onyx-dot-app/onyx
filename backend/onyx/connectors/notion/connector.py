@@ -1,7 +1,7 @@
 import re
 from collections.abc import Generator
 from datetime import datetime, timezone
-from typing import Any, cast, Optional
+from typing import Any, Optional, cast
 from urllib.parse import parse_qs, urlparse
 
 import requests

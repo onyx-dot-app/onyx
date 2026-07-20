@@ -16,7 +16,7 @@ from sandbox_daemon.models import (
     SnapshotCreateResponse,
     SnapshotRestoreRequest,
 )
-from sandbox_daemon.snapshot import create_snapshot, restore_snapshot, SnapshotError
+from sandbox_daemon.snapshot import SnapshotError, create_snapshot, restore_snapshot
 
 app = FastAPI(title="sandbox-sidecar", docs_url=None, redoc_url=None)
 

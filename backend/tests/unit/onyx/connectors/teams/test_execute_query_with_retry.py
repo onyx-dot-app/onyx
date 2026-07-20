@@ -13,9 +13,9 @@ import pytest
 from office365.runtime.client_request_exception import ClientRequestException
 
 from onyx.connectors.teams.utils import (
+    GRAPH_API_RETRYABLE_STATUSES,
     _backoff_seconds,
     execute_query_with_retry,
-    GRAPH_API_RETRYABLE_STATUSES,
 )
 
 

@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterator, Sequence
 from email.parser import Parser as EmailParser
 from io import BytesIO
 from pathlib import Path
-from typing import Any, cast, IO, NamedTuple, Optional, TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, Any, NamedTuple, Optional, cast
 from zipfile import BadZipFile
 
 import chardet
@@ -24,10 +24,10 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import (
-    OnyxFileExtensions,
-    OnyxMimeTypes,
     PRESENTATION_MIME_TYPE,
     WORD_PROCESSING_MIME_TYPE,
+    OnyxFileExtensions,
+    OnyxMimeTypes,
 )
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import (

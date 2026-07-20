@@ -16,8 +16,8 @@ import pytest
 from ee.onyx.server.license.models import CustomerTier
 from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
 from ee.onyx.server.tenants.tier_management import (
-    get_cached_tier,
     TENANT_TIER_KEY,
+    get_cached_tier,
     update_tenant_tier,
 )
 from ee.onyx.utils import tier as tier_module

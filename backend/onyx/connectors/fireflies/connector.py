@@ -1,7 +1,7 @@
 import time
 from collections.abc import Iterator
 from datetime import datetime, timezone
-from typing import cast, List
+from typing import List, cast
 
 import requests
 

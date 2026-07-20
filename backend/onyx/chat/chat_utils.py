@@ -17,9 +17,9 @@ from onyx.chat.models import (
 )
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
+    TMP_DRALPHA_PERSONA_NAME,
     FileOrigin,
     MessageType,
-    TMP_DRALPHA_PERSONA_NAME,
 )
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.utils import sandbox_filename_for_document

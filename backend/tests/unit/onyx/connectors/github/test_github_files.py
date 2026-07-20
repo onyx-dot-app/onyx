@@ -9,7 +9,7 @@ from github.GithubException import UnknownObjectException
 from github.RateLimit import RateLimit
 from github.Requester import Requester
 
-from onyx.connectors.github.connector import _is_indexable_path, GithubConnector
+from onyx.connectors.github.connector import GithubConnector, _is_indexable_path
 from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.models import ConnectorFailure, Document
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector

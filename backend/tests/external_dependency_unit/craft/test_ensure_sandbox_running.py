@@ -28,7 +28,7 @@ from onyx.server.features.build.db.sandbox import (
     create_sandbox__no_commit,
     update_sandbox_status__no_commit,
 )
-from onyx.server.features.build.sandbox.base import get_sandbox_manager, SandboxManager
+from onyx.server.features.build.sandbox.base import SandboxManager, get_sandbox_manager
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.session.errors import SandboxProvisioningError
 from onyx.server.features.build.session.manager import SessionManager

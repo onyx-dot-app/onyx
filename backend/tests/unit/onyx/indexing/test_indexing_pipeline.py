@@ -2,7 +2,7 @@ import random
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, cast, List
+from typing import Any, List, cast
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest

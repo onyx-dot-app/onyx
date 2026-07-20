@@ -12,8 +12,8 @@ from sqlalchemy import select
 
 from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY
 from onyx.cache.postgres_backend import (
-    cleanup_expired_cache_entries,
     PostgresCacheBackend,
+    cleanup_expired_cache_entries,
 )
 from onyx.db.models import CacheStore
 

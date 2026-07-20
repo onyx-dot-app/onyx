@@ -3,7 +3,7 @@ import os
 import shutil
 import tarfile
 import threading
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 MAX_FILE_BYTES = 25 * 1024 * 1024  # 25 MiB per entry

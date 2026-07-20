@@ -25,12 +25,12 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import User
 from onyx.db.targeted_reindex import (
+    MAX_TARGETS_PER_REQUEST,
+    TargetSpec,
     count_targets_for_job,
     create_targeted_reindex_job,
     get_targeted_reindex_job,
-    MAX_TARGETS_PER_REQUEST,
     resolve_error_ids_to_targets,
-    TargetSpec,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError

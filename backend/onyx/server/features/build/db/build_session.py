@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import desc, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType

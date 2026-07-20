@@ -4,7 +4,7 @@ import json
 import tempfile
 import uuid
 from io import BytesIO
-from typing import Any, cast, IO, TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, Any, cast
 
 import puremagic
 from sqlalchemy.orm import Session

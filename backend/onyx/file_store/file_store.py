@@ -3,7 +3,7 @@ import tempfile
 import uuid
 from abc import ABC, abstractmethod
 from io import BytesIO
-from typing import Any, cast, IO, NotRequired, TYPE_CHECKING, TypedDict
+from typing import IO, TYPE_CHECKING, Any, NotRequired, TypedDict, cast
 
 import boto3
 import puremagic

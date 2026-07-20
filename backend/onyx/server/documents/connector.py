@@ -33,13 +33,13 @@ from onyx.configs.app_configs import (
     MOCK_CONNECTOR_FILE_PATH,
 )
 from onyx.configs.constants import (
+    ONYX_METADATA_FILENAME,
+    PUBLIC_API_TAGS,
     DocumentSource,
     FileOrigin,
     MilestoneRecordType,
-    ONYX_METADATA_FILENAME,
     OnyxCeleryPriority,
     OnyxCeleryTask,
-    PUBLIC_API_TAGS,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user

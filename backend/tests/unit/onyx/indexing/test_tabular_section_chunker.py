@@ -19,8 +19,8 @@ from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
     build_sheet_descriptor_chunks,
 )
 from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
-    build_total_descriptor_chunks,
     TOTALS_HEADER,
+    build_total_descriptor_chunks,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.csv_utils import parse_csv_string, read_csv_header
