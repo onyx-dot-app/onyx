@@ -5,7 +5,7 @@ from typing import Any, cast
 from celery import (
     Celery,
     Task,
-    bootsteps,  # ty: ignore[unresolved-import]
+    bootsteps,
     signals,
 )
 from celery.apps.worker import Worker
@@ -280,7 +280,7 @@ class HubPeriodicTask(bootsteps.StartStopStep):
         self.interval = CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 8  # Interval in seconds
         self.task_tref = None
 
-    def start(self, worker: Any) -> None:
+    def start(self, worker: Any) -> None:  # ty: ignore[invalid-method-override]
         if not celery_is_worker_primary(worker):
             return
 
@@ -331,7 +331,7 @@ class HubPeriodicTask(bootsteps.StartStopStep):
         except Exception:
             task_logger.exception("Periodic task failed.")
 
-    def stop(self, worker: Any) -> None:  # noqa: ARG002
+    def stop(self, worker: Any) -> None:  # noqa: ARG002  # ty: ignore[invalid-method-override]
         # Cancel the scheduled task when the worker stops
         if self.task_tref:
             self.task_tref.cancel()

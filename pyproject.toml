@@ -130,7 +130,7 @@ backend = [
 # Dev tools
 dev = [
     "boto3-stubs[s3]==1.39.11",
-    "celery-types==0.19.0",
+    "celery-types==0.26.0",
     "faker==40.1.2",
     "hatchling==1.28.0",
     "ipykernel==6.29.5",

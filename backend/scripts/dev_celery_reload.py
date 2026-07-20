@@ -37,7 +37,7 @@ _SANDBOX_IMAGE_DIR = str(
 
 
 def _run(argv: list[str]) -> None:
-    from celery.__main__ import main  # ty: ignore[unresolved-import]
+    from celery.__main__ import main
 
     sys.argv[:] = argv
     main()
