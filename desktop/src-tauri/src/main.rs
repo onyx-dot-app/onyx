@@ -440,8 +440,11 @@ fn trigger_new_chat(app: &AppHandle) {
 }
 
 fn trigger_new_window(app: &AppHandle) {
-    let state = app.state::<ConfigState>();
-    let server_url = state.config.read().unwrap().server_url.clone();
+    let (server_url, window_title) = {
+        let state = app.state::<ConfigState>();
+        let config = state.config.read().unwrap();
+        (config.server_url.clone(), config.window_title.clone())
+    };
     let handle = app.clone();
 
     tauri::async_runtime::spawn(async move {
@@ -451,7 +454,7 @@ fn trigger_new_window(app: &AppHandle) {
             &window_label,
             WebviewUrl::External(server_url.parse().unwrap()),
         )
-        .title("Onyx")
+        .title(window_title)
         .inner_size(1232.0, 800.0)
         .min_inner_size(800.0, 600.0);
 
@@ -809,7 +812,10 @@ fn go_forward(window: tauri::WebviewWindow) {
 /// Open a new window
 #[tauri::command]
 async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Result<(), String> {
-    let server_url = state.config.read().unwrap().server_url.clone();
+    let (server_url, window_title) = {
+        let config = state.config.read().unwrap();
+        (config.server_url.clone(), config.window_title.clone())
+    };
     let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
 
     let builder = WebviewWindowBuilder::new(
@@ -821,7 +827,7 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
                 .map_err(|e| format!("Invalid URL: {}", e))?,
         ),
     )
-    .title("Onyx")
+    .title(window_title)
     .inner_size(1232.0, 800.0)
     .min_inner_size(800.0, 600.0);
 
@@ -905,11 +911,15 @@ fn find_check_menu_item(
 }
 
 fn apply_settings_to_window(app: &AppHandle, window: &tauri::WebviewWindow) {
+    let state = app.state::<ConfigState>();
+    let config = state.config.read().unwrap();
+
+    let _ = window.set_title(&config.window_title);
+
+    // Menu-bar visibility and window decorations are only configurable off macOS.
     if cfg!(target_os = "macos") {
         return;
     }
-    let state = app.state::<ConfigState>();
-    let config = state.config.read().unwrap();
     if !config.show_menu_bar {
         let _ = window.hide_menu();
     }
