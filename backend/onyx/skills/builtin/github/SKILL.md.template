@@ -1,6 +1,6 @@
 ---
 name: github
-description: Read repositories, issues, and pull requests, open new issues, and add comments in GitHub on the user's behalf via the GitHub CLI (gh).
+description: Clone and read repositories, issues, and pull requests, open new issues, add comments, and push changes in GitHub on the user's behalf via git and the GitHub CLI (gh).
 ---
 
 # GitHub
@@ -25,6 +25,15 @@ gh api user
 ```
 gh repo view OWNER/REPO
 gh repo list [OWNER] [--limit N]
+```
+
+### Clone or fetch a repository
+
+Clone with the plain HTTPS URL — no token in the URL, auth is injected on the
+wire. `git fetch`/`pull` work the same way.
+
+```
+git clone https://github.com/OWNER/REPO
 ```
 
 ### Issues
@@ -86,9 +95,11 @@ the command failed — surface the error rather than retrying blindly.
 
 ## Notes
 
-- **HTTPS only.** SSH and `github.com` git remotes are unreachable from here, so
-  `git clone`/`push` against GitHub and `gh repo clone` over SSH will fail. Stay
-  on the API commands above (and `gh api`).
+- **HTTPS only.** SSH remotes (`git@github.com`) are unreachable from here —
+  always use `https://github.com/...` URLs for git. `git clone`/`fetch`/`pull`
+  run as the connected user; `git push` may pause for the user's approval, and
+  the proxy rejects pushes over ~1 MiB of pack data — report that limit to the
+  user instead of retrying.
 - **Scopes are fixed** by the admin (repo, read:org, read:user). An operation
   needing a scope you don't have returns `403 / Resource not accessible` — tell
   the user rather than retrying.

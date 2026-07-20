@@ -68,6 +68,10 @@ def _graphql(query: str) -> bytes:
         ("GET", "/repos/onyx/onyx/commits/abc123", {GitHubAction.GIT_DATA_READ}),
         ("GET", "/repos/onyx/onyx/releases", {GitHubAction.RELEASES_READ}),
         ("GET", "/repos/onyx/onyx/releases/latest", {GitHubAction.RELEASES_READ}),
+        # git smart-HTTP endpoints (on github.com; matching is host-blind).
+        ("GET", "/onyx/onyx/info/refs", {GitHubAction.GIT_READ}),
+        ("POST", "/onyx/onyx.git/git-upload-pack", {GitHubAction.GIT_READ}),
+        ("POST", "/onyx/onyx/git-receive-pack", {GitHubAction.GIT_PUSH}),
         # Writes.
         (
             "PUT",
@@ -164,12 +168,14 @@ def test_rest_request_does_not_trigger_graphql_match() -> None:
         (GitHubAction.CONTENTS_READ, EndpointPolicy.ALWAYS),
         (GitHubAction.GIT_DATA_READ, EndpointPolicy.ALWAYS),
         (GitHubAction.RELEASES_READ, EndpointPolicy.ALWAYS),
+        (GitHubAction.GIT_READ, EndpointPolicy.ALWAYS),
         # Writes require approval out of the box.
         (GitHubAction.ISSUES_CREATE, EndpointPolicy.ASK),
         (GitHubAction.COMMENTS_CREATE, EndpointPolicy.ASK),
         (GitHubAction.CONTENTS_WRITE, EndpointPolicy.ASK),
         (GitHubAction.REFS_WRITE, EndpointPolicy.ASK),
         (GitHubAction.PULLS_CREATE, EndpointPolicy.ASK),
+        (GitHubAction.GIT_PUSH, EndpointPolicy.ASK),
     ],
 )
 def test_default_policies(

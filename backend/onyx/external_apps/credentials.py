@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
@@ -8,6 +9,11 @@ from onyx.db.external_app import (
     get_external_app_user_credential,
 )
 from onyx.db.models import ExternalApp
+from onyx.external_apps.providers.registry import get_endpoint_catalog
+from onyx.external_apps.providers.registry import get_provider_for_app
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def build_auth_headers(
@@ -39,14 +45,19 @@ def resolve_injection_headers(
     db_session: Session,
     external_app_id: int,
     user_id: UUID,
+    action_types: Sequence[str] | None = None,
 ) -> dict[str, str]:
     """Auth headers the egress proxy should inject for a *verified* request to
     ``external_app_id`` on behalf of ``user_id``.
 
     Returns ``{}`` when the app is gone or disabled, or when no header's
     placeholders can be filled. Merges the app's organization credentials with
-    the user's stored credentials (the user's win on key conflicts), then
-    renders the ``auth_template`` via :func:`build_auth_headers`.
+    the user's stored credentials (the user's win on key conflicts), extends
+    them with the provider's ``derive_credentials``, then renders the
+    ``auth_template`` via :func:`build_auth_headers`. ``action_types`` is the
+    request's matched catalog actions; a matched ``EndpointSpec.auth_template``
+    overrides the app's stored template (co-matched overrides must agree —
+    conflicts are logged and the first wins).
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None or not app.enabled:
@@ -61,7 +72,30 @@ def resolve_injection_headers(
     if user_cred is not None:
         credentials.update(user_cred.user_credentials.get_value(apply_mask=False))
 
-    return build_auth_headers(app.auth_template, credentials)
+    provider = get_provider_for_app(app)
+    if provider is not None:
+        credentials = provider.derive_credentials(credentials)
+
+    auth_template = app.auth_template
+    if action_types:
+        overrides = {
+            endpoint.id.value: endpoint.auth_template
+            for endpoint in get_endpoint_catalog(app.app_type)
+            if endpoint.auth_template is not None
+        }
+        matched = [overrides[a] for a in action_types if a in overrides]
+        if matched:
+            auth_template = matched[0]
+            # Selection must not hinge on action ordering: co-matched overrides
+            # are expected to agree, so a conflict is a catalog bug — log it.
+            if any(override != auth_template for override in matched[1:]):
+                logger.warning(
+                    "conflicting_auth_template_overrides app_type=%s action_types=%s",
+                    app.app_type.value,
+                    ",".join(action_types),
+                )
+
+    return build_auth_headers(auth_template, credentials)
 
 
 def app_is_available(db_session: Session, app: ExternalApp, user_id: UUID) -> bool:

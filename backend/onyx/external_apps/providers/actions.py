@@ -116,3 +116,7 @@ class EndpointSpec(BaseModel):
     # The policy a freshly-created built-in app starts this action at, unless the
     # admin overrides it.
     default_policy: EndpointPolicy = EndpointPolicy.ASK
+    # Replaces the app's stored ``auth_template`` for this action, for endpoints
+    # whose auth scheme differs from the rest of the provider. Placeholders may
+    # reference ``derive_credentials`` values.
+    auth_template: dict[str, str] | None = None

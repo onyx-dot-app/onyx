@@ -1,3 +1,4 @@
+import base64
 from typing import Any
 
 import requests
@@ -25,6 +26,16 @@ from onyx.external_apps.providers.base import (
     token_response_error,
 )
 
+# git's smart-HTTP endpoints on github.com (not api.github.com): ref discovery
+# plus the fetch/push POSTs.
+_GIT_SMART_HTTP_URL_PATTERN = (
+    r"https://github\.com/[^/]+/[^/]+/"
+    r"(info/refs|git-upload-pack|git-receive-pack)(\?.*)?"
+)
+
+# git endpoints reject Bearer; `{access_token_basic}` comes from derive_credentials.
+_GIT_BASIC_AUTH_TEMPLATE = {"Authorization": "Basic {access_token_basic}"}
+
 
 class GitHubAction(ExternalAppAction):
     """Strongly-typed catalog ids for the GitHub provider."""
@@ -39,11 +50,13 @@ class GitHubAction(ExternalAppAction):
     CONTENTS_READ = "github.contents.read"
     GIT_DATA_READ = "github.git_data.read"
     RELEASES_READ = "github.releases.read"
+    GIT_READ = "github.git.read"
     ISSUES_CREATE = "github.issues.create"
     COMMENTS_CREATE = "github.comments.create"
     CONTENTS_WRITE = "github.contents.write"
     REFS_WRITE = "github.refs.write"
     PULLS_CREATE = "github.pulls.create"
+    GIT_PUSH = "github.git.push"
 
 
 # GitHub's REST API is a path-addressed JSON API rooted at
@@ -173,6 +186,23 @@ _ENDPOINTS: list[EndpointSpec] = [
         ),
         default_policy=EndpointPolicy.ALWAYS,
     ),
+    # These paths are on github.com (see _GIT_SMART_HTTP_URL_PATTERN), not
+    # api.github.com. Matching is host-blind, so same-shaped api.github.com
+    # paths also resolve here; no real API route collides (GitHub 404s them).
+    EndpointSpec(
+        id=GitHubAction.GIT_READ,
+        normalised_name="Clone or fetch a repository",
+        description=(
+            "Clone or fetch a repository's contents with git over HTTPS "
+            "(ref discovery and upload-pack)."
+        ),
+        matches=(
+            RestRoute(method="GET", path="/{owner}/{repo}/info/refs"),
+            RestRoute(method="POST", path="/{owner}/{repo}/git-upload-pack"),
+        ),
+        default_policy=EndpointPolicy.ALWAYS,
+        auth_template=_GIT_BASIC_AUTH_TEMPLATE,
+    ),
     EndpointSpec(
         id=GitHubAction.ISSUES_CREATE,
         normalised_name="Create an issue",
@@ -221,6 +251,15 @@ _ENDPOINTS: list[EndpointSpec] = [
             GraphQLOp(operation_type="mutation", field="createPullRequest"),
         ),
     ),
+    EndpointSpec(
+        id=GitHubAction.GIT_PUSH,
+        normalised_name="Push to a repository",
+        description=(
+            "Push commits and refs to a repository with git over HTTPS (receive-pack)."
+        ),
+        matches=(RestRoute(method="POST", path="/{owner}/{repo}/git-receive-pack"),),
+        auth_template=_GIT_BASIC_AUTH_TEMPLATE,
+    ),
 ]
 
 
@@ -236,10 +275,14 @@ class GitHubProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         ),
         descriptor=AdminDescriptorSpec(
             description=(
-                "Read repositories, issues, and pull requests, open new issues, "
-                "and add comments in GitHub on the user's behalf."
+                "Clone and read repositories, issues, and pull requests, open "
+                "new issues, add comments, and push changes in GitHub on the "
+                "user's behalf."
             ),
-            upstream_url_patterns=["https://api\\.github\\.com/.*"],
+            upstream_url_patterns=[
+                "https://api\\.github\\.com/.*",
+                _GIT_SMART_HTTP_URL_PATTERN,
+            ],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[
                 OrgCredentialField(
@@ -280,6 +323,14 @@ class GitHubProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
     # GitHub signals a dead refresh token with `bad_refresh_token` rather than
     # RFC-6749's `invalid_grant`; treat it as terminal so the user reconnects.
     terminal_refresh_errors = frozenset({"invalid_grant", "bad_refresh_token"})
+
+    def derive_credentials(self, credentials: dict[str, Any]) -> dict[str, Any]:
+        # Basic pair for _GIT_BASIC_AUTH_TEMPLATE: base64(x-access-token:<token>).
+        access_token = credentials.get("access_token")
+        if isinstance(access_token, str) and access_token:
+            basic = base64.b64encode(f"x-access-token:{access_token}".encode()).decode()
+            credentials = {**credentials, "access_token_basic": basic}
+        return credentials
 
     def classify_token_response(
         self, response: requests.Response, body: dict[str, Any]

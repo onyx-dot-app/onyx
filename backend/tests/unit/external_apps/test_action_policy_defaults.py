@@ -7,6 +7,8 @@ to ``ASK``). The write path persists only deviations from that default
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from onyx.db.enums import EndpointPolicy, ExternalAppType
@@ -26,7 +28,9 @@ class _TestAction(ExternalAppAction):
 def _spec(
     action: _TestAction, default_policy: EndpointPolicy | None = None
 ) -> EndpointSpec:
-    kwargs = {} if default_policy is None else {"default_policy": default_policy}
+    kwargs: dict[str, Any] = (
+        {} if default_policy is None else {"default_policy": default_policy}
+    )
     return EndpointSpec(
         id=action,
         normalised_name=action.value,
