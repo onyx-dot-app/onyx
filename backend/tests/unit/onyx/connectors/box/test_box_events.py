@@ -9,12 +9,15 @@ from datetime import datetime, timezone
 from typing import cast
 
 from box_sdk_gen import BoxClient
+from box_sdk_gen.managers.events import GetEventsEventType
+from box_sdk_gen.schemas.events import Events
 from box_sdk_gen.schemas.file import FilePathCollectionField
 from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder_full import FolderFull
 from box_sdk_gen.schemas.folder_mini import FolderMini
 from box_sdk_gen.schemas.items import Items
 from box_sdk_gen.schemas.user_mini import UserMini
+from box_sdk_gen.schemas.web_link import WebLink
 
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.box.models import BoxTraversalMode
@@ -27,6 +30,7 @@ from onyx.connectors.models import (
 from tests.unit.onyx.connectors.box.fake_box_client import (
     FakeBoxClient,
     make_events_page,
+    make_folder_event_page,
 )
 
 _OWNER = UserMini(id="u1", name="Alice", login="alice@example.com")
@@ -57,12 +61,34 @@ def _file_with_parent(file_id: str, name: str) -> FileFull:
     )
 
 
+def _file_with_nested_parent(file_id: str, name: str) -> FileFull:
+    return FileFull(
+        id=file_id,
+        name=name,
+        size=10,
+        modified_at=_MODIFIED,
+        created_at=_MODIFIED,
+        owned_by=_OWNER,
+        parent=FolderMini(id="300", name="Nested"),
+        path_collection=FilePathCollectionField(
+            total_count=3,
+            entries=[
+                FolderMini(id="0", name="All Files"),
+                FolderMini(id="200", name="Sub"),
+                FolderMini(id="300", name="Nested"),
+            ],
+        ),
+    )
+
+
 def _make_events_connector(
-    event_pages: list,
+    event_pages: list[Events],
     files_by_id: dict[str, FileFull],
     file_contents: dict[str, bytes],
     file_fetch_fail_status_by_id: dict[str, int] | None = None,
     events_fail_status: int | None = None,
+    events_fail_status_by_call: dict[int, int] | None = None,
+    full_crawl_subfolder_items: list[FileFull | FolderMini | WebLink] | None = None,
 ) -> tuple[BoxConnector, FakeBoxClient]:
     fake = FakeBoxClient(
         folders_by_id={
@@ -74,13 +100,16 @@ def _make_events_connector(
             ("0", None): Items(
                 entries=[FolderMini(id="200", name="Sub")], next_marker=None
             ),
-            ("200", None): Items(entries=[], next_marker=None),
+            ("200", None): Items(
+                entries=full_crawl_subfolder_items or [], next_marker=None
+            ),
         },
         file_contents=file_contents,
         files_by_id=files_by_id,
         file_fetch_fail_status_by_id=file_fetch_fail_status_by_id,
         event_pages=event_pages,
         events_fail_status=events_fail_status,
+        events_fail_status_by_call=events_fail_status_by_call,
     )
     connector = BoxConnector()  # whole-enterprise (root)
     connector._content_client = cast(BoxClient, fake)
@@ -133,16 +162,43 @@ def test_events_path_indexes_only_changed_files() -> None:
     # the connector listed no folders in events mode
     assert fake.folders.listing_calls == []
 
-    # the changed file's parent folder is still surfaced as a hierarchy node
+    # The complete root-to-parent hierarchy is emitted parent-first.
     node_ids = {n.raw_node_id for n in outputs if isinstance(n, HierarchyNode)}
-    assert node_ids == {"200"}
+    assert node_ids == {"0", "200"}
 
     doc1 = next(d for d in outputs if isinstance(d, Document) and d.id == "box-file-1")
-    assert doc1.metadata["path"] == "Sub"
+    assert doc1.metadata["path"] == "All Files/Sub"
     assert doc1.parent_hierarchy_raw_node_id == "200"
     section = doc1.sections[0]
     assert isinstance(section, TextSection)
     assert section.text == "alpha"
+
+    created_after, created_before = fake.events.created_windows[0]
+    assert created_after == datetime.fromtimestamp(
+        _HOUR_AGO - 24 * 60 * 60, tz=timezone.utc
+    )
+    assert created_before == datetime.fromtimestamp(
+        _NOW - 24 * 60 * 60, tz=timezone.utc
+    )
+    event_types = fake.events.event_types[0]
+    assert event_types is not None
+    assert GetEventsEventType.FILE_VERSION_RESTORE in event_types
+
+
+def test_events_path_emits_all_ancestors_parent_first() -> None:
+    connector, _ = _make_events_connector(
+        event_pages=[make_events_page(["1"], next_stream_position=None)],
+        files_by_id={"1": _file_with_nested_parent("1", "nested.txt")},
+        file_contents={"1": b"nested"},
+    )
+
+    outputs, _ = _run(connector, _HOUR_AGO, _NOW)
+
+    nodes = [output for output in outputs if isinstance(output, HierarchyNode)]
+    assert [node.raw_node_id for node in nodes] == ["0", "200", "300"]
+    assert [node.raw_parent_id for node in nodes] == [None, "0", "200"]
+    document = next(output for output in outputs if isinstance(output, Document))
+    assert document.metadata["path"] == "All Files/Sub/Nested"
 
 
 def test_events_path_paginates_and_dedups_repeated_files() -> None:
@@ -168,8 +224,9 @@ def test_events_path_paginates_and_dedups_repeated_files() -> None:
     assert sorted(docs) == ["box-file-1", "box-file-2", "box-file-3"]
     assert docs.count("box-file-1") == 1
     assert fake.files.fetch_calls.count("1") == 1
-    # parent node 200 yielded once across the whole run
+    # Each ancestor is yielded once across the whole run.
     node_ids = [n.raw_node_id for n in outputs if isinstance(n, HierarchyNode)]
+    assert node_ids.count("0") == 1
     assert node_ids.count("200") == 1
     # pagination advanced through the stream positions
     assert fake.events.calls == [None, "pos1", "pos2"]
@@ -220,6 +277,39 @@ def test_events_fetch_failure_falls_back_to_full_crawl() -> None:
     assert fake.folders.listing_calls != []
 
 
+def test_later_events_failure_resets_state_before_full_crawl() -> None:
+    connector, fake = _make_events_connector(
+        event_pages=[make_events_page(["1"], next_stream_position="pos1")],
+        files_by_id={"1": _file_with_parent("1", "changed.txt")},
+        file_contents={"1": b"changed"},
+        events_fail_status_by_call={2: 503},
+    )
+
+    _, mode = _run(connector, _HOUR_AGO, _NOW)
+
+    assert mode == BoxTraversalMode.FULL
+    assert ("0", None) in fake.folders.listing_calls
+    assert ("200", None) in fake.folders.listing_calls
+
+
+def test_folder_event_falls_back_to_full_crawl() -> None:
+    old_file = _file_with_parent("1", "old.txt")
+    connector, fake = _make_events_connector(
+        event_pages=[make_folder_event_page("200")],
+        files_by_id={"1": old_file},
+        file_contents={"1": b"old"},
+        full_crawl_subfolder_items=[old_file],
+    )
+
+    outputs, mode = _run(connector, _HOUR_AGO, _NOW)
+
+    assert mode == BoxTraversalMode.FULL
+    assert fake.folders.listing_calls != []
+    assert any(
+        isinstance(output, Document) and output.id == "box-file-1" for output in outputs
+    )
+
+
 def test_wide_window_uses_full_crawl_not_events() -> None:
     connector, fake = _make_events_connector(
         event_pages=[make_events_page(["1"], next_stream_position=None)],
@@ -241,6 +331,20 @@ def test_folder_scoped_connector_uses_full_crawl_not_events() -> None:
     )
     connector.entry_folder_ids = ["200"]  # scoped -> events can't scope to subtree
     _, mode = _run(connector, _HOUR_AGO, _NOW)
+    assert mode == BoxTraversalMode.FULL
+    assert fake.events.calls == []
+
+
+def test_web_link_connector_uses_full_crawl_not_events() -> None:
+    connector, fake = _make_events_connector(
+        event_pages=[make_events_page(["1"], next_stream_position=None)],
+        files_by_id={"1": _file_with_parent("1", "a.txt")},
+        file_contents={"1": b"a"},
+    )
+    connector.include_web_links = True
+
+    _, mode = _run(connector, _HOUR_AGO, _NOW)
+
     assert mode == BoxTraversalMode.FULL
     assert fake.events.calls == []
 

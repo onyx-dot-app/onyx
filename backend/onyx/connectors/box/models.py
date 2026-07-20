@@ -35,6 +35,9 @@ class BoxConnectorCheckpoint(ConnectorCheckpoint):
     # BFS frontier of folders left to process (empty until seeded; `mode` marks
     # whether the traversal has been decided/seeded yet).
     todo: list[BoxFolderFrontierEntry] = Field(default_factory=list)
+    # Events fallbacks must ignore the current poll window so folder changes and
+    # other missed events reconcile every document in the tree.
+    full_reconciliation: bool = False
     # Folder currently being paginated, with its opaque Box page marker.
     current: BoxFolderFrontierEntry | None = None
     current_marker: str | None = None

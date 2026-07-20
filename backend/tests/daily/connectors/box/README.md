@@ -18,12 +18,16 @@ run. The connector avoids that:
 - **Steady-state whole-enterprise polls** (poll window ≤ 7 days) instead consume
   the Box enterprise **events stream** (`GET /events?stream_type=admin_logs`,
   filtered to content-change event types) and re-index only the files that
-  actually changed — no full tree walk. This mirrors SharePoint's Graph-delta
-  approach.
+  actually changed. The queried window is delayed by 24 hours because Box warns
+  that historical admin-log events can arrive after a near-real-time filter
+  window has already been read.
 - A window wider than 7 days (e.g. a long outage) falls back to a full crawl,
   which doubles as periodic reconciliation. If the events API errors (e.g.
   missing admin scope) the run falls back to a full crawl rather than indexing
-  nothing.
+  nothing. Folder move/rename events also trigger a full crawl because they can
+  change the paths of every descendant.
+- Connectors that index Box web links always use full crawls because enterprise
+  event sources only identify files and folders.
 - Deletions are reconciled by the slim-based pruning job, not the events path
   (the events path only re-indexes changed/added files).
 
