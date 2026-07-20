@@ -11,7 +11,10 @@
 import { render, screen } from "@tests/setup/test-utils";
 import LLMStep from "@/sections/onboarding/steps/LLMStep";
 import { OnboardingStep } from "@/interfaces/onboarding";
-import type { OnboardingActions, OnboardingState } from "@/interfaces/onboarding";
+import type {
+  OnboardingActions,
+  OnboardingState,
+} from "@/interfaces/onboarding";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
 
@@ -43,7 +46,10 @@ function makeState(currentStep: OnboardingStep): OnboardingState {
   };
 }
 
-function renderLLMStep(props: { currentStep: OnboardingStep; disabled?: boolean }) {
+function renderLLMStep(props: {
+  currentStep: OnboardingStep;
+  disabled?: boolean;
+}) {
   return render(
     <LLMStep
       state={makeState(props.currentStep)}
@@ -62,7 +68,9 @@ describe("LLMStep", () => {
   test("provider cards and admin link are not disabled on the active LLM setup step", () => {
     renderLLMStep({ currentStep: OnboardingStep.LlmSetup, disabled: false });
 
-    const adminLink = screen.getByRole("link", { name: /view in admin panel/i });
+    const adminLink = screen.getByRole("link", {
+      name: /view in admin panel/i,
+    });
     expect(adminLink).not.toHaveAttribute("aria-disabled", "true");
 
     const openaiCard = screen.getByText("GPT").closest('[role="button"]');
@@ -84,11 +92,7 @@ describe("LLMStep", () => {
     // the disabled marker. Exactly one is expected — a second means the
     // opacity/pointer-events are compounding again.
     let disabledAncestors = 0;
-    for (
-      let el: Element | null = openaiCard;
-      el;
-      el = el.parentElement
-    ) {
+    for (let el: Element | null = openaiCard; el; el = el.parentElement) {
       if (el.hasAttribute("data-opal-disabled")) disabledAncestors++;
     }
     expect(disabledAncestors).toBe(1);
