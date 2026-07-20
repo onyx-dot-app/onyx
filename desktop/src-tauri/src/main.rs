@@ -452,7 +452,7 @@ fn trigger_new_window(app: &AppHandle) {
             WebviewUrl::External(server_url.parse().unwrap()),
         )
         .title("Onyx")
-        .inner_size(1200.0, 800.0)
+        .inner_size(1232.0, 800.0)
         .min_inner_size(800.0, 600.0);
 
         // Windows draws its own title bar in the system theme; a transparent
@@ -822,7 +822,7 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
         ),
     )
     .title("Onyx")
-    .inner_size(1200.0, 800.0)
+    .inner_size(1232.0, 800.0)
     .min_inner_size(800.0, 600.0);
 
     #[cfg(not(target_os = "windows"))]
