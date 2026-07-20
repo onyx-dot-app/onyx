@@ -1,6 +1,7 @@
 """Self-service /user/usage: isolation, aggregation, budget, model price."""
 
 import datetime
+import sqlite3
 from collections.abc import Generator
 from typing import cast
 from uuid import uuid4
@@ -9,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy import event
 from sqlalchemy import Table
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -51,6 +53,13 @@ def db_session() -> Generator[Session, None, None]:
     engine: Engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
     )
+
+    @event.listens_for(engine, "connect")
+    def _register_timezone(dbapi_connection: object, _: object) -> None:
+        cast(sqlite3.Connection, dbapi_connection).create_function(
+            "timezone", 2, lambda _tz, value: value
+        )
+
     for model in (
         UserUsage,
         ModelCostOverride,
@@ -116,11 +125,11 @@ def _seed_usage(
 
 
 def _seed_current_window(db_session: Session, user_id: str) -> datetime.datetime:
-    from onyx.db.usage import USAGE_PERIOD_HOURS
+    from onyx.db.usage import USAGE_PERIOD_SECONDS
     from onyx.utils.datetime import get_window_start
 
     now = datetime.datetime.now(datetime.timezone.utc)
-    window = get_window_start(now, USAGE_PERIOD_HOURS)
+    window = get_window_start(now, USAGE_PERIOD_SECONDS)
     _seed_usage(
         db_session, user_id, "gpt-4o", "CHAT", "openai", 100, 50, 0, 1.25, window
     )

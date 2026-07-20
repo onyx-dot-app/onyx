@@ -5,15 +5,20 @@ from __future__ import annotations
 
 import queue
 import threading
+from collections import defaultdict
 from dataclasses import dataclass
+from dataclasses import replace
 from datetime import datetime
 from datetime import timezone
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.usage import USAGE_PERIOD_HOURS
+from onyx.db.usage import USAGE_PERIOD_SECONDS
 from onyx.db.user_usage import record_user_usage
 from onyx.llm.cost import compute_cost_cents
+from onyx.tracing.flows import IMAGE_FLOWS
 from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span
@@ -50,6 +55,7 @@ class _UsageRecord:
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    image_count: int
     window_start: datetime
 
 
@@ -100,7 +106,12 @@ class UserUsageTracingProcessor(TracingProcessor):
 
     def _capture(self, span: Span[Any]) -> _UsageRecord | None:
         data = span.span_data
-        if not isinstance(data, GenerationSpanData) or not data.usage:
+        if not isinstance(data, GenerationSpanData):
+            return None
+
+        model_config = data.model_config or {}
+        flow = model_config.get("flow") or ""
+        if not data.usage and flow not in IMAGE_FLOWS:
             return None
 
         user_id = get_current_user_id()
@@ -113,17 +124,15 @@ class UserUsageTracingProcessor(TracingProcessor):
         if not model:
             return None
 
-        usage = data.usage
+        usage = data.usage or {}
         input_tokens = _usage_field(usage, "input_tokens", "prompt_tokens")
         output_tokens = _usage_field(usage, "output_tokens", "completion_tokens")
         cache_read_tokens = _usage_field(usage, "cache_read_input_tokens")
-
-        model_config = data.model_config or {}
-        flow = model_config.get("flow") or ""
         provider = model_config.get("model_provider")
+        image_count = int(model_config.get("image_count") or 1)
 
         window_start = get_window_start(
-            datetime.now(timezone.utc), period_hours=USAGE_PERIOD_HOURS
+            datetime.now(timezone.utc), period_seconds=USAGE_PERIOD_SECONDS
         )
 
         return _UsageRecord(
@@ -135,6 +144,7 @@ class UserUsageTracingProcessor(TracingProcessor):
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
+            image_count=image_count,
             window_start=window_start,
         )
 
@@ -168,54 +178,85 @@ class UserUsageTracingProcessor(TracingProcessor):
             self._flush_batch(batch)
 
     def _flush_batch(self, batch: list[_UsageRecord]) -> None:
-        for record in batch:
-            try:
-                self._write(record)
-            except Exception:
-                logger.exception(
-                    "Failed to record user usage (user=%s model=%s); dropping sample",
-                    record.user_id,
-                    record.model,
-                )
-            finally:
-                # task_done even on write failure so join() unblocks.
+        try:
+            records_by_tenant: dict[str, list[_UsageRecord]] = defaultdict(list)
+            for record in self._aggregate_batch(batch):
+                records_by_tenant[record.tenant_id].append(record)
+
+            for tenant_id, records in records_by_tenant.items():
+                try:
+                    self._write_tenant_batch(tenant_id, records)
+                except Exception:
+                    logger.exception(
+                        "Failed to record usage batch for tenant %s; dropping samples",
+                        tenant_id,
+                    )
+        finally:
+            for _ in batch:
                 self._queue.task_done()
 
-    def _write(self, record: _UsageRecord) -> None:
-        # The drain thread has no request contextvars; restore the captured
-        # tenant so the cost-override lookup resolves the right schema.
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(record.tenant_id)
+    @staticmethod
+    def _aggregate_batch(batch: list[_UsageRecord]) -> list[_UsageRecord]:
+        aggregated: dict[
+            tuple[str, str, str, str, str | None, datetime], _UsageRecord
+        ] = {}
+        for record in batch:
+            key = (
+                record.tenant_id,
+                record.user_id,
+                record.model,
+                record.flow,
+                record.provider,
+                record.window_start,
+            )
+            current = aggregated.get(key)
+            if current is None:
+                aggregated[key] = record
+                continue
+            aggregated[key] = replace(
+                current,
+                input_tokens=current.input_tokens + record.input_tokens,
+                output_tokens=current.output_tokens + record.output_tokens,
+                cache_read_tokens=current.cache_read_tokens + record.cache_read_tokens,
+                image_count=current.image_count + record.image_count,
+            )
+        return list(aggregated.values())
+
+    def _write_tenant_batch(self, tenant_id: str, records: list[_UsageRecord]) -> None:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
-            with get_session_with_tenant(tenant_id=record.tenant_id) as db_session:
-                # input_tokens is cache-inclusive; price (input - cache) + cache
-                # separately; ledger keeps full input_tokens.
-                non_cached_input = max(
-                    record.input_tokens - record.cache_read_tokens, 0
-                )
-                input_cost, output_cost = compute_cost_cents(
-                    record.model,
-                    record.provider,
-                    non_cached_input,
-                    record.output_tokens,
-                    cache_read_tokens=record.cache_read_tokens,
-                    flow=record.flow,
-                    db_session=db_session,
-                )
-                record_user_usage(
-                    db_session,
-                    user_id=record.user_id,
-                    model=record.model,
-                    flow=record.flow,
-                    provider=record.provider,
-                    input_tokens=record.input_tokens,
-                    output_tokens=record.output_tokens,
-                    cache_read_tokens=record.cache_read_tokens,
-                    cost_cents=input_cost + output_cost,
-                    window_start=record.window_start,
-                )
+            with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+                for record in records:
+                    self._write_record(db_session, record)
                 db_session.commit()
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    @staticmethod
+    def _write_record(db_session: Session, record: _UsageRecord) -> None:
+        non_cached_input = max(record.input_tokens - record.cache_read_tokens, 0)
+        input_cost, output_cost = compute_cost_cents(
+            record.model,
+            record.provider,
+            non_cached_input,
+            record.output_tokens,
+            cache_read_tokens=record.cache_read_tokens,
+            flow=record.flow,
+            image_count=record.image_count,
+            db_session=db_session,
+        )
+        record_user_usage(
+            db_session,
+            user_id=record.user_id,
+            model=record.model,
+            flow=record.flow,
+            provider=record.provider,
+            input_tokens=record.input_tokens,
+            output_tokens=record.output_tokens,
+            cache_read_tokens=record.cache_read_tokens,
+            cost_cents=input_cost + output_cost,
+            window_start=record.window_start,
+        )
 
     # --- TracingProcessor interface (non-generation events are no-ops) ---
 

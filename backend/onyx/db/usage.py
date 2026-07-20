@@ -15,8 +15,7 @@ from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 logger = setup_logger()
 
-# Floor 1h so a sub-hour USAGE_LIMIT_WINDOW_SECONDS can't truncate to 0.
-USAGE_PERIOD_HOURS = max(USAGE_LIMIT_WINDOW_SECONDS // 3600, 1)
+USAGE_PERIOD_SECONDS = USAGE_LIMIT_WINDOW_SECONDS
 
 
 class UsageType(str, Enum):
@@ -52,7 +51,7 @@ class UsageLimitExceededError(Exception):
 
 def get_current_window_start() -> datetime:
     """Start of the current usage window (USAGE_LIMIT_WINDOW_SECONDS grid)."""
-    return get_window_start(datetime.now(timezone.utc), USAGE_PERIOD_HOURS)
+    return get_window_start(datetime.now(timezone.utc), USAGE_PERIOD_SECONDS)
 
 
 def get_or_create_tenant_usage(

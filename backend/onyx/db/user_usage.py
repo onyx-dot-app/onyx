@@ -94,9 +94,10 @@ def get_user_usage_by_day_and_model(
     until: datetime,
 ) -> list[UserUsageByDay]:
     """Sum usage by UTC day and model over [since, until)."""
+    utc_day = func.date(func.timezone("UTC", UserUsage.window_start))
     rows = db_session.execute(
         select(
-            func.date(UserUsage.window_start).label("day"),
+            utc_day.label("day"),
             UserUsage.model,
             func.sum(UserUsage.input_tokens),
             func.sum(UserUsage.output_tokens),
@@ -108,8 +109,8 @@ def get_user_usage_by_day_and_model(
             UserUsage.window_start >= since,
             UserUsage.window_start < until,
         )
-        .group_by(func.date(UserUsage.window_start), UserUsage.model)
-        .order_by(func.date(UserUsage.window_start), UserUsage.model)
+        .group_by(utc_day, UserUsage.model)
+        .order_by(utc_day, UserUsage.model)
     ).all()
 
     return [
@@ -133,13 +134,14 @@ def get_usage_export(
 ) -> list[UsageExportRow]:
     """Tenant-wide usage by email/model/window-day.
     day = window start (weekly grid), not call calendar day."""
+    utc_day = func.date(func.timezone("UTC", UserUsage.window_start))
     query = (
         # User.email comes from the fastapi-users base; ty mis-resolves it as a
         # non-column role, so the multi-column select overload doesn't match.
         select(  # ty: ignore[no-matching-overload]
             User.email,
             UserUsage.model,
-            func.date(UserUsage.window_start).label("day"),
+            utc_day.label("day"),
             func.sum(UserUsage.input_tokens),
             func.sum(UserUsage.output_tokens),
             func.sum(UserUsage.cache_read_tokens),
@@ -150,8 +152,8 @@ def get_usage_export(
             UserUsage.window_start >= start,
             UserUsage.window_start < end,
         )
-        .group_by(User.email, UserUsage.model, func.date(UserUsage.window_start))
-        .order_by(User.email, func.date(UserUsage.window_start), UserUsage.model)
+        .group_by(User.email, UserUsage.model, utc_day)
+        .order_by(User.email, utc_day, UserUsage.model)
     )
     if model is not None:
         query = query.where(UserUsage.model == model)

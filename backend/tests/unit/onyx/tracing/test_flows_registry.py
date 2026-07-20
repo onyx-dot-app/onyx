@@ -1,5 +1,6 @@
 """Unit tests for ``onyx.tracing.flows`` and ``traced_llm_call``."""
 
+from onyx.tracing.flows import IMAGE_FLOWS
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import trace
 from onyx.tracing.llm_utils import traced_llm_call
@@ -21,6 +22,11 @@ def test_untagged_sentinels_present() -> None:
     """Sentinels are how the LLM auto-wrap fallback identifies untagged sites."""
     assert LLMFlow.UNTAGGED_INVOKE.value == "untagged_invoke"
     assert LLMFlow.UNTAGGED_STREAM.value == "untagged_stream"
+
+
+def test_image_flows_match_serialized_span_values() -> None:
+    assert LLMFlow.IMAGE_GENERATION.value in IMAGE_FLOWS
+    assert LLMFlow.IMAGE_EDIT.value in IMAGE_FLOWS
 
 
 def test_traced_llm_call_records_flow_and_provider_on_span() -> None:

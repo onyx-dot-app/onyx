@@ -31,11 +31,8 @@ def setup_tracing() -> list[str]:
     # Per-user usage recorder — independent of external tracing backends.
     # Registered after set_trace_processors so it isn't wiped by the replace.
     if USER_USAGE_TRACKING_ENABLED:
-        try:
-            _setup_user_usage_tracking()
-            initialized_providers.append("user_usage")
-        except Exception as e:
-            logger.error("Failed to initialize user usage tracking: %s", e)
+        _setup_user_usage_tracking()
+        initialized_providers.append("user_usage")
     else:
         logger.info("User usage tracking disabled, skipping")
 
@@ -64,6 +61,8 @@ def _setup_user_usage_tracking() -> None:
 def shutdown_tracing() -> None:
     """Flush buffered usage to the DB on shutdown. Call before disposing the DB
     engines (the drain thread writes through them) so queued records aren't lost."""
+    global _initialized, _dynamic_processor, _user_usage_processor
+
     from onyx.tracing.processors.user_usage_processor import UserUsageTracingProcessor
 
     if isinstance(_user_usage_processor, UserUsageTracingProcessor):
@@ -71,3 +70,13 @@ def shutdown_tracing() -> None:
             _user_usage_processor.shutdown()
         except Exception:
             logger.exception("Failed to flush user usage on shutdown")
+    if _dynamic_processor is not None:
+        try:
+            _dynamic_processor.shutdown()
+        except Exception:
+            logger.exception("Failed to shut down tracing providers")
+
+    set_trace_processors([])
+    _user_usage_processor = None
+    _dynamic_processor = None
+    _initialized = False

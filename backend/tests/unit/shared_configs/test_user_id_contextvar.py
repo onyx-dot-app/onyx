@@ -1,13 +1,21 @@
 from collections.abc import Generator
 from typing import Any
+from typing import cast
 from uuid import uuid4
 
+import pytest
 from fastapi import Depends
 from fastapi import FastAPI
+from fastapi import WebSocket
 from fastapi.responses import StreamingResponse
 from fastapi.testclient import TestClient
 
-from onyx.server.utils import set_current_user_id_dependency
+from onyx.auth import users
+from onyx.auth.users import current_user_from_websocket
+from onyx.auth.users import get_user_manager
+from onyx.auth.users import optional_fastapi_current_user
+from onyx.auth.users import optional_user
+from onyx.db.engine.async_sql_engine import get_async_session
 from shared_configs.contextvars import CURRENT_USER_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_user_id
 
@@ -31,27 +39,43 @@ def test_reset_restores_previous_value() -> None:
     assert get_current_user_id() is None
 
 
-def test_user_id_propagates_to_every_streamed_chunk() -> None:
-    """Drives the real StreamingResponse / iterate_in_threadpool path.
-
-    The user id must be readable on every iteration (not just the first), since
-    LLM calls and usage recording happen throughout the stream. Also asserts the
-    var resets to None after the request without raising.
-    """
-    user_id = uuid4()
-
+def _authenticated_app(user_id: Any) -> FastAPI:
     class _FakeUser:
         id = user_id
 
     async def fake_auth() -> _FakeUser:
         return _FakeUser()
 
+    async def skip_oauth_refresh(*_: Any) -> None:
+        return None
+
+    def fake_dependency() -> object:
+        return object()
+
     app = FastAPI()
+    app.dependency_overrides[optional_fastapi_current_user] = fake_auth
+    app.dependency_overrides[get_async_session] = fake_dependency
+    app.dependency_overrides[get_user_manager] = fake_dependency
+    app.state.skip_oauth_refresh = skip_oauth_refresh
+    return app
+
+
+def test_optional_user_context_propagates_to_streamed_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    app = _authenticated_app(user_id)
+    monkeypatch.setattr(
+        users,
+        "_maybe_refresh_oauth_tokens",
+        app.state.skip_oauth_refresh,
+    )
+
     reads: list[str | None] = []
 
     @app.post("/stream")
     def stream_ep(
-        _user_ctx: None = Depends(set_current_user_id_dependency(fake_auth)),
+        _user: Any = Depends(optional_user),
     ) -> StreamingResponse:
         def gen() -> Generator[str, None, None]:
             for i in range(3):
@@ -65,26 +89,23 @@ def test_user_id_propagates_to_every_streamed_chunk() -> None:
 
     assert resp.status_code == 200
     assert reads == [str(user_id)] * 3
-    # No leak / no different-context reset error after the request finishes.
     assert get_current_user_id() is None
 
 
-def test_user_id_set_for_non_streaming_endpoint_body() -> None:
-    """The dependency also covers the non-streaming / multi-model branches that
-    read the var synchronously in the endpoint body."""
+def test_optional_user_context_is_set_for_endpoint_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     user_id = uuid4()
-
-    class _FakeUser:
-        id = user_id
-
-    async def fake_auth() -> _FakeUser:
-        return _FakeUser()
-
-    app = FastAPI()
+    app = _authenticated_app(user_id)
+    monkeypatch.setattr(
+        users,
+        "_maybe_refresh_oauth_tokens",
+        app.state.skip_oauth_refresh,
+    )
 
     @app.get("/plain")
     def plain_ep(
-        _user_ctx: None = Depends(set_current_user_id_dependency(fake_auth)),
+        _user: Any = Depends(optional_user),
     ) -> dict[str, Any]:
         return {"user_id": get_current_user_id()}
 
@@ -94,3 +115,43 @@ def test_user_id_set_for_non_streaming_endpoint_body() -> None:
     assert resp.status_code == 200
     assert resp.json() == {"user_id": str(user_id)}
     assert get_current_user_id() is None
+
+
+@pytest.mark.asyncio
+async def test_websocket_user_context_is_set_and_reset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+
+    class _FakeUser:
+        id = user_id
+        email = "test@example.com"
+
+    async def retrieve_token(_: str) -> dict[str, str]:
+        return {"sub": str(user_id)}
+
+    async def get_user(_: dict[str, str]) -> _FakeUser:
+        return _FakeUser()
+
+    async def check_user(user: _FakeUser) -> _FakeUser:
+        return user
+
+    monkeypatch.setattr(users, "is_same_origin", lambda *_: True)
+    monkeypatch.setattr(users, "retrieve_ws_token_data", retrieve_token)
+    monkeypatch.setattr(users, "_get_user_from_token_data", get_user)
+    monkeypatch.setattr(users, "double_check_user", check_user)
+    monkeypatch.setattr(users, "is_limited_user", lambda _: False)
+
+    websocket = cast(WebSocket, type("_WebSocket", (), {"headers": {"origin": "x"}})())
+    outer_token = CURRENT_USER_ID_CONTEXTVAR.set("outer-user")
+    dependency = current_user_from_websocket(websocket, token="token")
+    try:
+        try:
+            resolved_user = await anext(dependency)
+            assert resolved_user.id == user_id
+            assert get_current_user_id() == str(user_id)
+        finally:
+            await dependency.aclose()
+        assert get_current_user_id() == "outer-user"
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(outer_token)

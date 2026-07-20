@@ -7,10 +7,12 @@ from datetime import datetime
 from datetime import time
 from datetime import timedelta
 from datetime import timezone
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -24,7 +26,7 @@ from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
 from onyx.db.token_limit import fetch_user_group_token_rate_limits
-from onyx.db.usage import USAGE_PERIOD_HOURS
+from onyx.db.usage import USAGE_PERIOD_SECONDS
 from onyx.db.user_usage import get_group_cost_cents_buckets_since
 from onyx.db.user_usage import get_total_cost_cents_buckets_since
 from onyx.db.user_usage import get_usage_export
@@ -180,13 +182,13 @@ admin_usage_router = APIRouter(prefix="/admin/usage", tags=PUBLIC_API_TAGS)
 
 @user_usage_router.get("")
 def get_my_usage(
-    days: int | None = None,
+    days: Annotated[int | None, Query(ge=1, le=3_650)] = None,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserUsageResponse:
     """Caller's token/cost usage for the Usage tab."""
     now = datetime.now(timezone.utc)
-    window_start = get_window_start(now, period_hours=USAGE_PERIOD_HOURS)
+    window_start = get_window_start(now, period_seconds=USAGE_PERIOD_SECONDS)
 
     since = now - timedelta(days=days) if days else window_start
     user_id = str(user.id)
@@ -236,6 +238,8 @@ def export_usage(
     """Company-wide usage export by email; day = window start, not call calendar day."""
     end_date = end or datetime.now(timezone.utc).date()
     start_date = start or (end_date - timedelta(days=_DEFAULT_EXPORT_DAYS))
+    if start_date > end_date:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "start must not be after end")
 
     # Half-open over the full end day so windows starting on `end` are included.
     start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)

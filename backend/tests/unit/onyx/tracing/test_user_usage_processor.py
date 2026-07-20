@@ -14,6 +14,7 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.span_data import FunctionSpanData
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.span_data import SpanData
@@ -132,6 +133,28 @@ def test_normalizes_prompt_completion_token_aliases(
     assert recorded_calls[0]["output_tokens"] == 3
 
 
+def test_batch_aggregates_matching_ledger_dimensions(
+    processor: UserUsageTracingProcessor,
+) -> None:
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
+    try:
+        first = processor._capture(
+            _generation_span(usage={"input_tokens": 10, "output_tokens": 2})
+        )
+        second = processor._capture(
+            _generation_span(usage={"input_tokens": 20, "output_tokens": 3})
+        )
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
+
+    assert first is not None
+    assert second is not None
+    aggregated = processor._aggregate_batch([first, second])
+    assert len(aggregated) == 1
+    assert aggregated[0].input_tokens == 30
+    assert aggregated[0].output_tokens == 5
+
+
 def test_no_record_when_user_id_unset(
     processor: UserUsageTracingProcessor, recorded_calls: list[dict[str, Any]]
 ) -> None:
@@ -166,6 +189,34 @@ def test_ignores_generation_span_without_usage(
         CURRENT_USER_ID_CONTEXTVAR.reset(token)
     processor.force_flush()
     assert recorded_calls == []
+
+
+def test_records_image_span_without_token_usage(
+    processor: UserUsageTracingProcessor,
+    recorded_calls: list[dict[str, Any]],
+) -> None:
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
+    try:
+        processor.on_span_end(
+            _fake_span(
+                GenerationSpanData(
+                    model="dall-e-3",
+                    model_config={
+                        "model_provider": "openai",
+                        "flow": LLMFlow.IMAGE_GENERATION.value,
+                        "image_count": "2",
+                    },
+                    usage=None,
+                )
+            )
+        )
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
+
+    processor.force_flush()
+    assert len(recorded_calls) == 1
+    assert recorded_calls[0]["input_tokens"] == 0
+    assert recorded_calls[0]["output_tokens"] == 0
 
 
 def test_on_span_end_never_raises_on_internal_error(

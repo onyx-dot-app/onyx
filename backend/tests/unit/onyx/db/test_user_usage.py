@@ -5,6 +5,7 @@ session like tenant usage. Read-path helpers still run against in-memory SQLite
 seeded with ORM inserts."""
 
 import datetime
+import sqlite3
 from collections.abc import Generator
 from typing import cast
 from unittest.mock import MagicMock
@@ -12,6 +13,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy import event
 from sqlalchemy import Table
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -75,6 +77,13 @@ def _seed_usage(
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
     engine: Engine = create_engine("sqlite://")
+
+    @event.listens_for(engine, "connect")
+    def _register_timezone(dbapi_connection: object, _: object) -> None:
+        cast(sqlite3.Connection, dbapi_connection).create_function(
+            "timezone", 2, lambda _tz, value: value
+        )
+
     cast(Table, UserUsage.__table__).create(bind=engine)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()

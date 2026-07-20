@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from onyx.tracing import setup as tracing_setup
 from onyx.tracing.dynamic_processor import DynamicTracingProcessor
 from onyx.tracing.provider_config import (
@@ -49,6 +51,25 @@ def test_setup_tracing_registers_user_usage_by_default() -> None:
         assert "user_usage" in result
 
     tracing_setup._initialized = False
+
+
+def test_setup_tracing_fails_when_usage_recorder_cannot_start() -> None:
+    tracing_setup._initialized = False
+    with (
+        patch.object(tracing_setup, "set_trace_processors"),
+        patch.object(
+            tracing_setup,
+            "_setup_user_usage_tracking",
+            side_effect=RuntimeError("recorder unavailable"),
+        ),
+        patch.object(tracing_setup, "USER_USAGE_TRACKING_ENABLED", True),
+        patch(RESOLVE, return_value=EffectiveTracingConfig()),
+        patch(BUILD, return_value=[]),
+        pytest.raises(RuntimeError, match="recorder unavailable"),
+    ):
+        tracing_setup.setup_tracing()
+
+    assert tracing_setup._initialized is False
 
 
 def test_setup_tracing_is_idempotent() -> None:

@@ -8,14 +8,8 @@ class TokenRateLimitArgs(BaseModel):
     enabled: bool
     # Null side exempt. ge/gt=0 — zero/NaN budgets silently disable or break the gate.
     token_budget: int | None = Field(default=None, ge=1)
-    period_hours: int
+    period_hours: int = Field(gt=0)
     cost_budget_cents: float | None = Field(default=None, gt=0, allow_inf_nan=False)
-
-    @model_validator(mode="after")
-    def _require_a_budget(self) -> "TokenRateLimitArgs":
-        if self.token_budget is None and self.cost_budget_cents is None:
-            raise ValueError("Set a token budget, a cost budget, or both.")
-        return self
 
     @model_validator(mode="after")
     def validate_budget_set(self) -> "TokenRateLimitArgs":

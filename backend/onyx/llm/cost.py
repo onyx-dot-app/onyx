@@ -6,12 +6,11 @@ from onyx.configs.app_configs import DEFAULT_IMAGE_COST_CENTS
 from onyx.configs.app_configs import DEFAULT_LLM_INPUT_COST_PER_MTOK
 from onyx.configs.app_configs import DEFAULT_LLM_OUTPUT_COST_PER_MTOK
 from onyx.llm import cost_overrides
+from onyx.tracing.flows import IMAGE_FLOWS
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-_IMAGE_FLOWS = {LLMFlow.IMAGE_GENERATION, LLMFlow.IMAGE_EDIT}
 
 
 def get_model_price_per_million(
@@ -93,12 +92,16 @@ def compute_cost_cents(
     output_tokens: int,
     cache_read_tokens: int = 0,
     flow: LLMFlow | str | None = None,
+    image_count: int = 1,
     db_session: Session | None = None,
 ) -> tuple[float, float]:
     """Return (input_cost_cents, output_cost_cents) for an LLM call.
 
-    Resolution order: admin override → image pricing → litellm → default
+    Resolution order: image pricing → admin override → litellm → default
     fallback rates (0 unless set). Never raises (usage hot path)."""
+    if flow in IMAGE_FLOWS:
+        return 0.0, _image_cost_cents(model, provider) * max(image_count, 1)
+
     if db_session is not None:
         try:
             rates = cost_overrides.get_override(db_session, model, provider or "")
@@ -109,10 +112,6 @@ def compute_cost_cents(
             return _override_cost_cents(
                 rates, input_tokens, output_tokens, cache_read_tokens
             )
-
-    if flow in _IMAGE_FLOWS:
-        # Per-image pricing — full cost on output side.
-        return 0.0, _image_cost_cents(model, provider)
 
     try:
         import litellm

@@ -5,6 +5,7 @@ import braintrust
 from braintrust import NOOP_SPAN
 
 from onyx.llm.cost import compute_cost_cents
+from onyx.tracing.flows import IMAGE_FLOWS
 
 from .framework.processor_interface import TracingProcessor
 from .framework.span_data import (
@@ -164,10 +165,14 @@ class BraintrustTracingProcessor(TracingProcessor):
             ]
 
         model_name = span.span_data.model
-        if model_name and (prompt_tokens is not None or completion_tokens is not None):
-            model_config = span.span_data.model_config or {}
-            provider = model_config.get("model_provider")
-            flow = model_config.get("flow")
+        model_config = span.span_data.model_config or {}
+        provider = model_config.get("model_provider")
+        flow = model_config.get("flow")
+        if model_name and (
+            prompt_tokens is not None
+            or completion_tokens is not None
+            or flow in IMAGE_FLOWS
+        ):
             cache_read = int(usage.get("cache_read_input_tokens") or 0)
             input_tokens = int(prompt_tokens or 0)
             output_tokens = int(completion_tokens or 0)
@@ -179,6 +184,7 @@ class BraintrustTracingProcessor(TracingProcessor):
                 output_tokens,
                 cache_read_tokens=cache_read,
                 flow=flow,
+                image_count=int(model_config.get("image_count") or 1),
             )
             cost_cents = input_cents + output_cents
             if cost_cents > 0:

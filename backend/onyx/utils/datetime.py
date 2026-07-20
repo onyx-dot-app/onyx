@@ -9,12 +9,13 @@ def datetime_to_utc(dt: datetime) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
-def get_window_start(dt: datetime, period_hours: int) -> datetime:
+def get_window_start(dt: datetime, period_seconds: int) -> datetime:
     """Fixed UTC window start; weekly → Monday 00:00, else epoch-aligned."""
     dt = datetime_to_utc(dt)
-    period_seconds = max(period_hours, 1) * 3600
+    if period_seconds <= 0:
+        raise ValueError("period_seconds must be positive")
 
-    if period_seconds == 604800:  # 1 week
+    if period_seconds == 604_800:
         midnight = dt.replace(hour=0, minute=0, second=0, microsecond=0)
         return midnight - timedelta(days=dt.weekday())
 

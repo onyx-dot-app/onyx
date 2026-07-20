@@ -1,6 +1,7 @@
 """Admin /admin/usage/export: grouping, filters, auth, and get_usage_export helper."""
 
 import datetime
+import sqlite3
 from collections.abc import Generator
 from typing import cast
 from uuid import uuid4
@@ -9,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy import event
 from sqlalchemy import Table
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
@@ -54,6 +56,13 @@ def db_session() -> Generator[Session, None, None]:
     engine: Engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
     )
+
+    @event.listens_for(engine, "connect")
+    def _register_timezone(dbapi_connection: object, _: object) -> None:
+        cast(sqlite3.Connection, dbapi_connection).create_function(
+            "timezone", 2, lambda _tz, value: value
+        )
+
     cast(Table, UserUsage.__table__).create(bind=engine)
     # Minimal `user` table: the export JOIN only touches id + email.
     with engine.begin() as conn:

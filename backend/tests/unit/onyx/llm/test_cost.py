@@ -140,6 +140,39 @@ class TestImageFlow:
 
         assert (in_cents + out_cents) == pytest.approx(DEFAULT_IMAGE_COST_CENTS)
 
+    def test_image_count_multiplies_per_image_price(self) -> None:
+        in_cents, out_cents = compute_cost_cents(
+            model="dall-e-3",
+            provider="openai",
+            input_tokens=0,
+            output_tokens=0,
+            flow=LLMFlow.IMAGE_GENERATION,
+            image_count=3,
+        )
+        assert (in_cents + out_cents) == pytest.approx(12.0)
+
+    def test_token_override_does_not_replace_image_price(
+        self, db_session: Session
+    ) -> None:
+        db_session.add(
+            ModelCostOverride(
+                model="dall-e-3",
+                input_cost_per_mtok=0.0,
+                output_cost_per_mtok=0.0,
+            )
+        )
+        db_session.commit()
+
+        in_cents, out_cents = compute_cost_cents(
+            model="dall-e-3",
+            provider="openai",
+            input_tokens=0,
+            output_tokens=0,
+            flow=LLMFlow.IMAGE_GENERATION,
+            db_session=db_session,
+        )
+        assert (in_cents + out_cents) == pytest.approx(4.0)
+
 
 class TestOverride:
     def test_override_wins_over_litellm(self, db_session: Session) -> None:
@@ -281,3 +314,21 @@ class TestGetOverride:
         assert cost_overrides.get_override(db_session, "late-model") is None
         cost_overrides.invalidate_override_cache()
         assert cost_overrides.get_override(db_session, "late-model") == (4.0, 8.0, None)
+
+    def test_invalidation_during_reload_discards_stale_snapshot(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        loads = 0
+
+        def _load(
+            _db_session: Session,
+        ) -> dict[tuple[str, str], tuple[float, float, float | None]]:
+            nonlocal loads
+            loads += 1
+            if loads == 1:
+                cost_overrides.invalidate_override_cache()
+                return {("", "model"): (1.0, 1.0, None)}
+            return {("", "model"): (2.0, 2.0, None)}
+
+        monkeypatch.setattr(cost_overrides, "_load_cache", _load)
+        assert cost_overrides.get_override(db_session, "model") == (2.0, 2.0, None)

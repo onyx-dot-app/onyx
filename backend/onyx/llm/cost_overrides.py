@@ -26,6 +26,7 @@ _cache_lock = threading.Lock()
 _OverrideKey = tuple[str, str]
 # tenant_id -> (loaded_at_monotonic, {(provider, model): rates})
 _cache: dict[str, tuple[float, dict[_OverrideKey, _OverrideRates]]] = {}
+_cache_generation = 0
 # Bound the per-tenant cache so a many-tenant process can't accumulate entries
 # unboundedly; evict the oldest (insertion order) when full.
 _MAX_CACHED_TENANTS = 10_000
@@ -56,6 +57,7 @@ def get_override(
     tenant_id = get_current_tenant_id()
     with _cache_lock:
         entry = _cache.get(tenant_id)
+        generation = _cache_generation
     if entry is not None and (time.monotonic() - entry[0]) < _CACHE_TTL_SECONDS:
         return _lookup(entry[1], model, provider)
 
@@ -69,16 +71,28 @@ def get_override(
 
     entry = (time.monotonic(), snapshot)
     with _cache_lock:
-        if tenant_id not in _cache and len(_cache) >= _MAX_CACHED_TENANTS:
-            _cache.pop(next(iter(_cache)), None)
-        _cache[tenant_id] = entry
+        stale = generation != _cache_generation
+        if stale:
+            current = _cache.get(tenant_id)
+        else:
+            current = None
+            if tenant_id not in _cache and len(_cache) >= _MAX_CACHED_TENANTS:
+                _cache.pop(next(iter(_cache)), None)
+            _cache[tenant_id] = entry
+    if stale:
+        if current is not None:
+            return _lookup(current[1], model, provider)
+        return get_override(db_session, model, provider)
     return _lookup(snapshot, model, provider)
 
 
 def invalidate_override_cache() -> None:
     """Drop the current tenant's cached snapshot so its next lookup reloads."""
+    global _cache_generation
+
     tenant_id = get_current_tenant_id()
     with _cache_lock:
+        _cache_generation += 1
         _cache.pop(tenant_id, None)
 
 
