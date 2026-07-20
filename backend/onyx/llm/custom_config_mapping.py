@@ -8,38 +8,29 @@ only, default on), dropped otherwise.
 
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.well_known_providers.constants import AWS_ACCESS_KEY_ID_KWARG
 from onyx.llm.well_known_providers.constants import (
+    AWS_ACCESS_KEY_ID_KWARG,
     AWS_ACCESS_KEY_ID_KWARG_ENV_VAR_FORMAT,
-)
-from onyx.llm.well_known_providers.constants import (
     AWS_BEARER_TOKEN_BEDROCK_KWARG_ENV_VAR_FORMAT,
-)
-from onyx.llm.well_known_providers.constants import AWS_REGION_NAME_KWARG
-from onyx.llm.well_known_providers.constants import AWS_REGION_NAME_KWARG_ENV_VAR_FORMAT
-from onyx.llm.well_known_providers.constants import AWS_SECRET_ACCESS_KEY_KWARG
-from onyx.llm.well_known_providers.constants import (
+    AWS_REGION_NAME_KWARG,
+    AWS_REGION_NAME_KWARG_ENV_VAR_FORMAT,
+    AWS_SECRET_ACCESS_KEY_KWARG,
     AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
-)
-from onyx.llm.well_known_providers.constants import AWS_SESSION_TOKEN_KWARG
-from onyx.llm.well_known_providers.constants import (
+    AWS_SESSION_TOKEN_KWARG,
     AWS_SESSION_TOKEN_KWARG_ENV_VAR_FORMAT,
-)
-from onyx.llm.well_known_providers.constants import AZURE_AD_TOKEN_KWARG
-from onyx.llm.well_known_providers.constants import AZURE_AD_TOKEN_KWARG_ENV_VAR_FORMAT
-from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
-from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
-from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
-from onyx.llm.well_known_providers.constants import (
+    AZURE_AD_TOKEN_KWARG,
+    AZURE_AD_TOKEN_KWARG_ENV_VAR_FORMAT,
+    LM_STUDIO_API_KEY_CONFIG_KEY,
+    VERTEX_AUTH_METHOD_KWARG,
+    VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY,
+    VERTEX_CREDENTIALS_FILE_KWARG,
     VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT,
+    VERTEX_LOCATION_KWARG,
+    VERTEX_PROJECT_KWARG,
 )
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
 
 # Shared by BEDROCK and BEDROCK_CONVERSE: both authenticate through LiteLLM's
 # BaseAWSLLM, which accepts these params and prefers `api_key` as the Bedrock
@@ -69,8 +60,8 @@ _PROVIDER_CUSTOM_CONFIG_KWARGS: dict[str, dict[str, str]] = {
     },
 }
 
-# UI form state stored in custom_config; never read at call time, only exempt from validation.
-_UI_ONLY_CONFIG_KEYS = frozenset({"BEDROCK_AUTH_METHOD"})
+# UI form state stored in custom_config; exempt from validation, env injection, and drop warnings.
+UI_ONLY_CONFIG_KEYS = frozenset({"BEDROCK_AUTH_METHOD"})
 
 
 class CustomConfigMapping(BaseModel):
@@ -180,4 +171,4 @@ def get_unsupported_custom_config_keys(
         api_key=None,
         api_base=None,
     )
-    return set(custom_config) - set(mapping.consumed_keys) - _UI_ONLY_CONFIG_KEYS
+    return set(custom_config) - set(mapping.consumed_keys) - UI_ONLY_CONFIG_KEYS

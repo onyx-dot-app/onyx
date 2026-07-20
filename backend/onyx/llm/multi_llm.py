@@ -3,44 +3,45 @@ import os
 import re
 import time
 from collections.abc import Iterator
-from contextlib import AbstractContextManager
-from contextlib import contextmanager
-from contextlib import nullcontext
-from typing import Any
-from typing import cast
-from typing import TYPE_CHECKING
-from typing import Union
+from contextlib import AbstractContextManager, contextmanager, nullcontext
+from typing import TYPE_CHECKING, Any, Union, cast
 
 from readerwriterlock import rwlock
 
-from onyx.configs.app_configs import MOCK_LLM_RESPONSE
-from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
-from onyx.configs.chat_configs import LLM_FIRST_CHUNK_MAX_RETRIES
-from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
-from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.configs.model_configs import LITELLM_EXTRA_BODY
+from onyx.configs.app_configs import (
+    MOCK_LLM_RESPONSE,
+    SEND_USER_METADATA_TO_LLM_PROVIDER,
+)
+from onyx.configs.chat_configs import (
+    LLM_FIRST_CHUNK_MAX_RETRIES,
+    LLM_SOCKET_READ_TIMEOUT,
+)
+from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.cost import compute_cost_cents
-from onyx.llm.custom_config_mapping import map_custom_config_to_model_kwargs
-from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.interfaces import ReasoningEffort
-from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.model_capabilities import is_true_openai_model
-from onyx.llm.model_capabilities import model_is_reasoning_model
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.model_response import Usage
-from onyx.llm.models import ANTHROPIC_ADAPTIVE_REASONING_EFFORT
-from onyx.llm.models import ANTHROPIC_REASONING_EFFORT_BUDGET
-from onyx.llm.models import OPENAI_REASONING_EFFORT
+from onyx.llm.custom_config_mapping import (
+    UI_ONLY_CONFIG_KEYS,
+    map_custom_config_to_model_kwargs,
+)
+from onyx.llm.interfaces import (
+    LLM,
+    LanguageModelInput,
+    LLMConfig,
+    LLMUserIdentity,
+    ReasoningEffort,
+    ToolChoiceOptions,
+)
+from onyx.llm.model_capabilities import is_true_openai_model, model_is_reasoning_model
+from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
+from onyx.llm.models import (
+    ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
+    ANTHROPIC_REASONING_EFFORT_BUDGET,
+    OPENAI_REASONING_EFFORT,
+)
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.utils.encryption import mask_env_value_for_logging
-from onyx.utils.encryption import mask_string
+from onyx.utils.encryption import mask_env_value_for_logging, mask_string
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -365,11 +366,13 @@ class LitellmLLM(LLM):
         model_kwargs.update(custom_config_mapping.model_kwargs)
         # Keys with no LiteLLM kwarg equivalent. Injected into os.environ during
         # the call on deployments that allow it; dropped (with a warning at call
-        # time) otherwise.
+        # time) otherwise. UI-only form-state keys are neither injected nor
+        # warned about.
         self._env_only_custom_config: dict[str, str] = {
             k: v
             for k, v in (custom_config or {}).items()
             if k not in custom_config_mapping.consumed_keys
+            and k not in UI_ONLY_CONFIG_KEYS
         }
 
         # LM Studio: LiteLLM defaults to "fake-api-key" when no key is provided,

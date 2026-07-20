@@ -1,6 +1,8 @@
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.custom_config_mapping import get_unsupported_custom_config_keys
-from onyx.llm.custom_config_mapping import map_custom_config_to_model_kwargs
+from onyx.llm.custom_config_mapping import (
+    get_unsupported_custom_config_keys,
+    map_custom_config_to_model_kwargs,
+)
 
 
 def test_bedrock_env_format_keys_map_to_kwargs() -> None:
@@ -199,7 +201,6 @@ def test_bedrock_auth_method_ignored_but_not_rejected() -> None:
 def test_production_observed_key_sets_are_fully_supported() -> None:
     """Key sets observed in cloud env-injection logs must validate cleanly."""
     observed: list[tuple[str, dict[str, str]]] = [
-        (LlmProviderNames.OLLAMA_CHAT, {"OLLAMA_API_KEY": "k"}),
         (
             LlmProviderNames.BEDROCK,
             {

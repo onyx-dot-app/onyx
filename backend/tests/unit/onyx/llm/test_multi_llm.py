@@ -2577,3 +2577,44 @@ def test_generic_custom_provider_api_key_reaches_litellm(
 
     assert mock_completion.call_args.kwargs["api_key"] == "groq-key"
     assert env_during_call["GROQ_API_KEY"] is None
+
+
+def test_ui_only_keys_never_injected_or_warned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """UI form-state keys are excluded from the env-only bucket: no injection
+    when enabled, no drop warning when disabled."""
+    monkeypatch.delenv("BEDROCK_AUTH_METHOD", raising=False)
+
+    llm = LitellmLLM(
+        api_key=None,
+        timeout=30,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
+        max_input_tokens=200000,
+        custom_config={
+            "BEDROCK_AUTH_METHOD": "long_term_api_key",
+            "AWS_REGION_NAME": "us-east-1",
+            "AWS_BEARER_TOKEN_BEDROCK": "bearer",
+        },
+    )
+    assert llm._env_only_custom_config == {}
+
+    env_during_call: dict[str, str | None] = {}
+
+    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
+        env_during_call["BEDROCK_AUTH_METHOD"] = os.environ.get("BEDROCK_AUTH_METHOD")
+        return _simple_stream_chunks("anthropic.claude-3-sonnet-20240229-v1:0")
+
+    for injection_enabled in (True, False):
+        with (
+            patch("litellm.completion", side_effect=fake_completion),
+            patch(
+                "onyx.llm.multi_llm._env_injection_enabled",
+                return_value=injection_enabled,
+            ),
+            patch("onyx.llm.multi_llm._warn_dropped_env_only_keys") as mock_warn,
+        ):
+            llm.invoke([UserMessage(content="Hi")])
+        assert env_during_call["BEDROCK_AUTH_METHOD"] is None
+        mock_warn.assert_not_called()
