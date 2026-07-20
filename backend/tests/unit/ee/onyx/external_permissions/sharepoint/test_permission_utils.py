@@ -9,6 +9,9 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
     _enumerate_ad_groups_paginated,
 )
 from ee.onyx.external_permissions.sharepoint.permission_utils import _get_azuread_groups
+from ee.onyx.external_permissions.sharepoint.permission_utils import (
+    _has_only_limited_access,
+)
 from ee.onyx.external_permissions.sharepoint.permission_utils import _is_public_item
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     _iter_graph_collection,
@@ -211,6 +214,33 @@ def test_azuread_group_owners_are_not_treated_as_members(
 
     assert user_emails == {"member@contoso.com"}
     group.owners.get_all.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("role_type_kind", "localized_name"),
+    [
+        (1, "Beschränkter Zugriff"),
+        (9, "Nur Web – beschränkter Zugriff"),
+    ],
+)
+def test_limited_access_detection_uses_numeric_role_type(
+    role_type_kind: int,
+    localized_name: str,
+) -> None:
+    binding = MagicMock()
+    binding.role_type_kind = role_type_kind
+    binding.name = localized_name
+
+    assert _has_only_limited_access([binding])
+
+
+def test_limited_access_detection_rejects_mixed_roles() -> None:
+    limited_access = MagicMock()
+    limited_access.role_type_kind = 1
+    read_access = MagicMock()
+    read_access.role_type_kind = 2
+
+    assert not _has_only_limited_access([limited_access, read_access])
 
 
 # ---------------------------------------------------------------------------
