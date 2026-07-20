@@ -152,6 +152,7 @@ def create_session(
         if sandbox is None:
             raise RuntimeError("Session creation completed without a sandbox")
         update_sandbox_heartbeat(db_session, sandbox.id)
+        db_session.commit()
 
         base_response = SessionResponse.from_model(build_session, sandbox)
         return DetailedSessionResponse.from_session_response(
@@ -416,6 +417,7 @@ def restore_session(
                     SessionManager(db_session).reload_session_skills(session_id, user)
                 else:
                     update_sandbox_heartbeat(db_session, sandbox.id)
+                    db_session.commit()
                 base_response = SessionResponse.from_model(session, sandbox)
                 return DetailedSessionResponse.from_session_response(
                     base_response, session_loaded_in_sandbox=True
@@ -546,6 +548,7 @@ def restore_session(
 
     # Update heartbeat to mark sandbox as active after successful restore
     update_sandbox_heartbeat(db_session, sandbox.id)
+    db_session.commit()
 
     base_response = SessionResponse.from_model(session, sandbox)
     return DetailedSessionResponse.from_session_response(

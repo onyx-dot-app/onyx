@@ -392,6 +392,7 @@ def _drive_agent(
                 session_id=session_id,
             )
             update_sandbox_heartbeat(db_session, sandbox_id)
+            db_session.commit()
         finally:
             if creation_lock.owned():
                 creation_lock.release()

@@ -263,6 +263,7 @@ class SessionManager:
             )
 
         update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
 
         prompt_slot = (
             self._sandbox_manager.prompt_slot(
@@ -1560,6 +1561,7 @@ class SessionManager:
 
         # Update heartbeat - file upload is user activity that keeps sandbox alive
         update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
 
         return relative_path, len(content)
 
@@ -1598,5 +1600,6 @@ class SessionManager:
             # SandboxManager already logs the deletion details
             # Update heartbeat - file deletion is user activity that keeps sandbox alive
             update_sandbox_heartbeat(self._db_session, sandbox.id)
+            self._db_session.commit()
 
         return deleted
