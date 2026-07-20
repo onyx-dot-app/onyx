@@ -82,6 +82,37 @@ def test_trial_business_resolves_to_enterprise() -> None:
     )
 
 
+def test_lapsed_business_with_future_trial_not_promoted() -> None:
+    """A lapsed subscription (subscribed=False) is never promoted, even if a
+    stale future trial_end lingers in the cache."""
+    future = datetime.now(timezone.utc) + timedelta(days=1)
+    update_tenant_tier(
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        CustomerTier.BUSINESS,
+        future,
+        subscribed=False,
+    )
+
+    assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.BUSINESS
+
+
+def test_lazy_refresh_terminal_status_not_promoted() -> None:
+    """A cold cache that pulls a terminal (canceled) subscription with a stale
+    future trial_end from CP must resolve to BUSINESS, not the trial promotion."""
+    future = datetime.now(timezone.utc) + timedelta(days=3)
+    billing = _billing_info(CustomerTier.BUSINESS, future)
+    billing.status = "canceled"
+
+    with patch.object(tier_module, "fetch_billing_information", return_value=billing):
+        result = tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+
+    assert result == Tier.BUSINESS
+
+    cached = get_cached_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    assert cached is not None
+    assert cached.subscribed is False
+
+
 def test_expired_trial_business_drops_back_to_business() -> None:
     """Once trial_end is in the past, the cached entry resolves to BUSINESS
     without waiting on the next webhook — this is the core defense against

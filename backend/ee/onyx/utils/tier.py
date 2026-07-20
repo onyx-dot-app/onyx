@@ -53,15 +53,19 @@ _CUSTOMER_TIER_TO_TIER: dict[CustomerTier, Tier] = {
 }
 
 
-def _effective_tier(customer_tier: CustomerTier, trial_end: datetime | None) -> Tier:
+def _effective_tier(
+    customer_tier: CustomerTier, trial_end: datetime | None, subscribed: bool
+) -> Tier:
     """Apply the cloud trial-business → enterprise promotion.
 
-    A BUSINESS tenant whose `trial_end` is still in the future is resolved
-    to ENTERPRISE for the duration of the trial. Once `trial_end` is in the
-    past (or absent), the unpromoted mapping is used.
+    A subscribed BUSINESS tenant whose `trial_end` is still in the future is
+    resolved to ENTERPRISE for the duration of the trial. Once `trial_end` is in
+    the past (or absent), or the subscription has lapsed, the unpromoted mapping
+    is used.
     """
     if (
-        customer_tier == CustomerTier.BUSINESS
+        subscribed
+        and customer_tier == CustomerTier.BUSINESS
         and trial_end is not None
         and trial_end > datetime.now(timezone.utc)
     ):
@@ -123,7 +127,7 @@ def _self_hosted_tier() -> Tier:
 
 def _extract_billing_state(
     billing: BillingInformation | SubscriptionStatusResponse,
-) -> tuple[CustomerTier, datetime | None] | None:
+) -> tuple[CustomerTier, datetime | None, bool] | None:
     customer_tier = getattr(billing, "customer_tier", None)
     if customer_tier is None:
         return None
@@ -136,12 +140,16 @@ def _extract_billing_state(
         # CP-side regression is visible.
         logger.warning("CP returned naive trial_end; dropping: %r", trial_end)
         trial_end = None
-    return customer_tier, trial_end
+    if isinstance(billing, SubscriptionStatusResponse):
+        subscribed = billing.subscribed
+    else:
+        subscribed = billing.status in ("active", "trialing")
+    return customer_tier, trial_end, subscribed
 
 
 def _lazy_refresh_from_cp(
     tenant_id: str,
-) -> tuple[CustomerTier, datetime | None] | None:
+) -> tuple[CustomerTier, datetime | None, bool] | None:
     try:
         billing = fetch_billing_information(tenant_id)
     except (requests.RequestException, ValueError) as e:
@@ -173,20 +181,22 @@ def get_tier(tenant_id: str | None = None) -> Tier:
         return Tier.BUSINESS
 
     if cached is not None:
-        return _effective_tier(cached.customer_tier, cached.trial_end)
+        return _effective_tier(
+            cached.customer_tier, cached.trial_end, cached.subscribed
+        )
 
     fresh = _lazy_refresh_from_cp(tid)
     if fresh is not None:
-        fresh_tier, fresh_trial_end = fresh
+        fresh_tier, fresh_trial_end, fresh_subscribed = fresh
         try:
-            update_tenant_tier(tid, fresh_tier, fresh_trial_end)
+            update_tenant_tier(tid, fresh_tier, fresh_trial_end, fresh_subscribed)
         except RedisError as e:
             logger.warning(
                 "Tier Redis write failed for tenant %s after CP refresh: %s",
                 tid,
                 e,
             )
-        return _effective_tier(fresh_tier, fresh_trial_end)
+        return _effective_tier(fresh_tier, fresh_trial_end, fresh_subscribed)
 
     # Don't cache the fallback — next call retries the refresh.
     return Tier.BUSINESS
