@@ -659,6 +659,73 @@ def fetch_document_ids_by_links(
     return {link: doc_id for link, doc_id in rows if link}
 
 
+# Backstop against a pathological id distribution keeping the walk going forever;
+# real deployments have one prefix per SharePoint/OneDrive drive (thousands at most).
+_MAX_ID_PREFIX_WALK_STEPS = 10000
+
+# Appended to a prefix to jump past every id sharing it. 'Z' is the max base32
+# char, and the pad is longer than any real id, so the result sorts after the
+# whole prefix range under both C and glibc collations ('~' would sort *before*
+# letters under glibc and stall the walk).
+_PREFIX_JUMP_PAD = "Z" * 64
+
+
+def fetch_document_id_prefixes(
+    db_session: Session,
+    prefix: str,
+    prefix_length: int,
+) -> list[str]:
+    """Distinct id prefixes of length `prefix_length` among documents whose id
+    starts with `prefix`.
+
+    Implemented as a loose (skip) scan over the primary-key index: start at the
+    first id in scope, then repeatedly jump to the first id past the current
+    prefix's range. Each step is one indexed lookup, so cost is
+    O(#distinct prefixes * log N) instead of a table scan.
+
+    Used to enumerate SharePoint/OneDrive drive-hash prefixes ("01" + 6 base32
+    chars) so a file's Document.id can be reconstructed from its unique-ID GUID.
+    """
+    first_id_in_scope = (
+        select(DbDocument.id)
+        .where(DbDocument.id >= prefix)
+        .order_by(DbDocument.id)
+        .limit(1)
+        .scalar_subquery()
+    )
+    walk = select(first_id_in_scope.label("id"), literal(1).label("steps")).cte(
+        "prefix_walk", recursive=True
+    )
+
+    first_id_past_current_prefix = (
+        select(DbDocument.id)
+        .where(DbDocument.id > func.left(walk.c.id, prefix_length) + _PREFIX_JUMP_PAD)
+        .order_by(DbDocument.id)
+        .limit(1)
+        .scalar_subquery()
+    )
+    still_in_scope = func.left(walk.c.id, len(prefix)) == prefix
+    walk = walk.union_all(
+        select(
+            first_id_past_current_prefix.label("id"),
+            (walk.c.steps + 1).label("steps"),
+        ).where(
+            walk.c.id.is_not(None),
+            still_in_scope,
+            walk.c.steps < _MAX_ID_PREFIX_WALK_STEPS,
+        )
+    )
+
+    # The walk's last row is the terminator (NULL or the first out-of-scope id),
+    # so the scope filter is applied once more when collecting.
+    stmt = (
+        select(func.left(walk.c.id, prefix_length))
+        .distinct()
+        .where(walk.c.id.is_not(None), func.left(walk.c.id, len(prefix)) == prefix)
+    )
+    return list(db_session.execute(stmt).scalars())
+
+
 def get_document_connector_count(
     db_session: Session,
     document_id: str,

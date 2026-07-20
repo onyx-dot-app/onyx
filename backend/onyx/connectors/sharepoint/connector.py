@@ -37,6 +37,7 @@ from office365.sharepoint.client_context import ClientContext
 from pydantic import BaseModel
 from pydantic import Field
 from requests.exceptions import HTTPError
+from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -53,6 +54,7 @@ from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import IndexingHeartbeatInterface
+from onyx.connectors.interfaces import NormalizationResult
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
@@ -72,6 +74,13 @@ from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
+from onyx.connectors.sharepoint.url_utils import DRIVE_ITEM_ID_PREFIX
+from onyx.connectors.sharepoint.url_utils import DRIVE_ITEM_ID_PREFIX_LENGTH
+from onyx.connectors.sharepoint.url_utils import extract_sharepoint_document_guid
+from onyx.connectors.sharepoint.url_utils import sharepoint_drive_item_id_candidates
+from onyx.connectors.sharepoint.url_utils import sharepoint_page_url_variants
+from onyx.db.document import fetch_document_id_prefixes
+from onyx.db.document import fetch_document_ids_by_links
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -1273,6 +1282,65 @@ class SharepointConnector(
                 raise ConnectorValidationError(
                     f"Invalid site URL '{site_url}': {e}"
                 ) from e
+
+    @classmethod
+    @override
+    def normalize_url(cls, url: str) -> NormalizationResult:
+        """Pure part of URL → Document.id resolution.
+
+        A site page's unique-ID GUID (carried by Doc.aspx URLs, sharing-link
+        tokens, and share= params) *is* its Document.id, so it's offered as a
+        speculative candidate that open_url keeps only if indexed. File ids and
+        plain page URLs need index state — see resolve_url_candidates.
+        """
+        split = urlsplit(url)
+
+        if "sharepoint" not in split.netloc.lower():
+            return NormalizationResult(normalized_url=None, use_default=False)
+
+        guid = extract_sharepoint_document_guid(split.query, split.path)
+        if guid:
+            return NormalizationResult(
+                normalized_url=None,
+                use_default=False,
+                candidate_document_ids=[guid.lower()],
+            )
+        # Plain page URL: keep default normalization so the generic link
+        # fallback still applies.
+        return NormalizationResult(normalized_url=None, use_default=True)
+
+    @classmethod
+    @override
+    def resolve_url_candidates(cls, url: str, db_session: Session) -> list[str]:
+        """Index-aware part of URL → Document.id resolution.
+
+        A file's drive-item Document.id embeds its unique-ID GUID next to a
+        4-byte drive hash that appears in no URL form, so candidate ids are
+        reconstructed from the drive-hash prefixes present in the index. Plain
+        page URLs (no GUID) match the stored page link directly, modulo
+        encoding. Candidates are validated against the index by the caller.
+        """
+        split = urlsplit(url)
+
+        if "sharepoint" not in split.netloc.lower():
+            return []
+
+        guid = extract_sharepoint_document_guid(split.query, split.path)
+        if guid:
+            drive_prefixes = fetch_document_id_prefixes(
+                db_session,
+                prefix=DRIVE_ITEM_ID_PREFIX,
+                prefix_length=DRIVE_ITEM_ID_PREFIX_LENGTH,
+            )
+            return sharepoint_drive_item_id_candidates(guid, drive_prefixes)
+
+        link_variants = sharepoint_page_url_variants(url)
+        link_to_doc_id = fetch_document_ids_by_links(db_session, link_variants)
+        # Earlier variants are closer to the pasted form; prefer their matches.
+        for variant in link_variants:
+            if variant in link_to_doc_id:
+                return [link_to_doc_id[variant]]
+        return []
 
     def probe_role_assignments_permission(self) -> None:
         """Verify the Azure AD app can read SharePoint RoleAssignments.

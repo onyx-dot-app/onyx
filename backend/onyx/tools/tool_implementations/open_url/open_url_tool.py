@@ -39,6 +39,9 @@ from onyx.tools.tool_implementations.open_url.url_normalization import (
 from onyx.tools.tool_implementations.open_url.url_normalization import (
     normalize_url_candidates,
 )
+from onyx.tools.tool_implementations.open_url.url_normalization import (
+    resolve_url_document_id_candidates,
+)
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
 )
@@ -237,8 +240,13 @@ def _resolve_urls_to_document_ids(
     normalized_map: dict[str, list[str]] = {}
 
     for url in urls:
-        # A single URL may map to several candidate document IDs; match whichever is indexed.
-        candidates = normalize_url_candidates(url)
+        # A single URL may map to several candidate document IDs; match whichever
+        # is indexed. Index-aware, connector-owned candidates come first (they
+        # are the most precise), then pure URL-derived candidates.
+        candidates = resolve_url_document_id_candidates(url, db_session)
+        for candidate in normalize_url_candidates(url):
+            if candidate not in candidates:
+                candidates.append(candidate)
 
         if candidates:
             variants: list[str] = []
