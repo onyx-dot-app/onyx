@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from datetime import datetime
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 

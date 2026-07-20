@@ -7,8 +7,8 @@ import pytest
 import requests
 
 from onyx.utils.github import (
-    download_github_repo,
     GITHUB_TARBALL_URL,
+    download_github_repo,
     parse_github_repo,
 )
 

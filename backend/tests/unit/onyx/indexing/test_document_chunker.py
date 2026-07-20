@@ -3,7 +3,7 @@ import io
 import pytest
 from chonkie import SentenceChunker
 
-from onyx.configs.constants import DocumentSource, SECTION_SEPARATOR
+from onyx.configs.constants import SECTION_SEPARATOR, DocumentSource
 from onyx.connectors.models import (
     IndexingDocument,
     Section,

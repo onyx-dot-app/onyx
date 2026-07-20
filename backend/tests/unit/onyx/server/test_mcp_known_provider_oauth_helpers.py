@@ -2,7 +2,7 @@ import asyncio
 import time
 from contextlib import contextmanager
 from types import SimpleNamespace
-from typing import cast, Iterator
+from typing import Iterator, cast
 from urllib.parse import parse_qs, urlparse
 
 import httpx

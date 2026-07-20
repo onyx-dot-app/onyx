@@ -14,9 +14,9 @@ from onyx.configs.app_configs import (
     POSTGRES_USER,
 )
 from onyx.db.engine.sql_engine import (
+    SYNC_DB_API,
     build_connection_string,
     get_session_with_current_tenant,
-    SYNC_DB_API,
 )
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.file_store.file_store import get_default_file_store

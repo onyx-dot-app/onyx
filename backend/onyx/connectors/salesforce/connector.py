@@ -29,9 +29,9 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.salesforce.doc_conversion import (
+    ID_PREFIX,
     convert_sf_object_to_doc,
     convert_sf_query_result_to_doc,
-    ID_PREFIX,
 )
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel

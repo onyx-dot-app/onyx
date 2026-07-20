@@ -4,7 +4,7 @@ import os
 import sys
 import time
 from collections import defaultdict
-from concurrent.futures import as_completed, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from threading import Event, Lock, Semaphore
@@ -44,7 +44,7 @@ from onyx.configs.app_configs import (
     POSTGRES_API_SERVER_POOL_SIZE,
 )
 from onyx.context.search.models import BaseFilters, SavedSearchDoc
-from onyx.db.engine.sql_engine import get_session_with_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.regression.search_quality.models import (
@@ -55,10 +55,10 @@ from tests.regression.search_quality.models import (
     TestQuery,
 )
 from tests.regression.search_quality.utils import (
+    LazyJsonWriter,
     compute_overall_scores,
     find_document_id,
     get_federated_sources,
-    LazyJsonWriter,
     ragas_evaluate,
     search_docs_to_doc_contexts,
 )

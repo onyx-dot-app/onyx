@@ -6,10 +6,10 @@ from unittest.mock import Mock
 import pytest
 
 from onyx.chat.llm_loop import (
+    EmptyLLMResponseError,
     _build_empty_llm_response_error,
     _try_fallback_tool_extraction,
     construct_message_history,
-    EmptyLLMResponseError,
     select_reminder_text,
 )
 from onyx.chat.models import (

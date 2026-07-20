@@ -40,8 +40,8 @@ from onyx.server.features.build.sandbox.opencode.event_bus import (
     PodEventBus,
 )
 from onyx.server.features.build.sandbox.opencode.serve_client import (
-    _TurnState,
     OpencodeServeClient,
+    _TurnState,
     translate_opencode_event,
 )
 from onyx.server.features.build.sandbox.sse import SSEKeepalive

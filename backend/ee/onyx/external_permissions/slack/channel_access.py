@@ -2,7 +2,7 @@ from slack_sdk import WebClient
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.slack.connector import channel_team_ids, ChannelType
+from onyx.connectors.slack.connector import ChannelType, channel_team_ids
 from onyx.connectors.slack.utils import (
     expert_info_from_slack_id,
     make_paginated_slack_api_call,

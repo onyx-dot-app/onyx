@@ -31,7 +31,6 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from fastapi.testclient import TestClient
 
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
-    FilesystemListRequest,
     SIDECAR_FILESYSTEM_LIST_PATH,
     SIDECAR_HEALTH_PATH,
     SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
@@ -39,6 +38,7 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
     SIDECAR_READY_PATH,
     SIDECAR_SNAPSHOT_CREATE_PATH,
+    FilesystemListRequest,
     sidecar_snapshot_restore_path,
 )
 

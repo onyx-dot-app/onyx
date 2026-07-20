@@ -2,10 +2,10 @@ import json
 import time
 from datetime import timedelta
 from itertools import islice
-from typing import Any, cast, Literal
+from typing import Any, Literal, cast
 
 import psutil
-from celery import shared_task, Task
+from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import BaseModel
 from redis import Redis
@@ -45,7 +45,7 @@ from onyx.db.search_settings import get_active_search_settings_list
 from onyx.redis.redis_pool import get_redis_client, redis_lock_dump
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.platform_utils import is_running_in_container, is_running_in_kubernetes
-from onyx.utils.telemetry import optional_telemetry, RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 

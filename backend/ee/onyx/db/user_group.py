@@ -3,9 +3,9 @@ from operator import and_
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete, func, Select, select, update
+from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 
 from ee.onyx.server.user_group.models import (
     SetCuratorRequest,

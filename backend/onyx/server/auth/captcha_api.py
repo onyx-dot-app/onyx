@@ -33,7 +33,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import onyx_error_to_json_response, OnyxError
+from onyx.error_handling.exceptions import OnyxError, onyx_error_to_json_response
 from onyx.utils.client_ip import get_client_ip
 from onyx.utils.logger import setup_logger
 

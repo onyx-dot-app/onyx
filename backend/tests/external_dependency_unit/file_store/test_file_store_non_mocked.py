@@ -2,9 +2,9 @@ import os
 import time
 import uuid
 from collections.abc import Generator
-from concurrent.futures import as_completed, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
-from typing import Any, cast, Dict, List, Tuple, TypedDict
+from typing import Any, Dict, List, Tuple, TypedDict, cast
 from unittest.mock import patch
 
 import pytest

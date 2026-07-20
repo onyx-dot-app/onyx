@@ -3,7 +3,7 @@
 import datetime
 import time
 
-from celery import shared_task, Task
+from celery import Task, shared_task
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 

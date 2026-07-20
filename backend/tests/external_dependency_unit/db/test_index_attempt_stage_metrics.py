@@ -22,7 +22,7 @@ import math
 import statistics
 import time
 from collections.abc import Generator
-from concurrent.futures import as_completed, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import uuid4
 
 import pytest
@@ -33,10 +33,10 @@ from onyx.db.document import prepare_to_modify_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt_metrics import (
+    StageEventBuffer,
     get_stage_metrics_for_attempt,
     record_single_event,
     record_stage_aggregate,
-    StageEventBuffer,
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.models import (

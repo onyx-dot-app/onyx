@@ -8,10 +8,10 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.credentials import (
+    CREDENTIAL_PERMISSIONS_TO_IGNORE,
     alter_credential,
     cleanup_gmail_credentials,
     create_credential,
-    CREDENTIAL_PERMISSIONS_TO_IGNORE,
     delete_credential,
     delete_credential_for_user,
     fetch_credential_by_id_for_user,

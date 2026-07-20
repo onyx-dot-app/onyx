@@ -11,14 +11,14 @@ from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.interactive_turns.state import (
-    claim_turn_for_runner,
-    finish_turn,
-    get_active_turn,
-    InteractiveTurn,
-    touch_turn,
     TURN_STATUS_CANCELLED,
     TURN_STATUS_FAILED,
     TURN_STATUS_SUCCEEDED,
+    InteractiveTurn,
+    claim_turn_for_runner,
+    finish_turn,
+    get_active_turn,
+    touch_turn,
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
 from onyx.server.features.build.sandbox.event_schema import PromptResponse

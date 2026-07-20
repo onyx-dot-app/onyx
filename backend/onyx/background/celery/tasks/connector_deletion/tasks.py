@@ -2,7 +2,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any, cast
 
-from celery import Celery, shared_task, Task
+from celery import Celery, Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import ValidationError
 from redis import Redis

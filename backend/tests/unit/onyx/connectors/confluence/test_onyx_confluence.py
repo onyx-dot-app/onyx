@@ -11,8 +11,8 @@ from onyx.connectors.confluence.onyx_confluence import (
     _DEFAULT_PAGINATION_LIMIT,
     _MINIMUM_PAGINATION_LIMIT,
     ConfluenceRestSpacePermissionsNotAvailableError,
-    get_user_email_from_userkey__server,
     OnyxConfluence,
+    get_user_email_from_userkey__server,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,

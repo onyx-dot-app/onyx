@@ -4,11 +4,11 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.db.models import ExternalApp, ExternalAppPolicy, ExternalAppUserCredential
-from onyx.db.utils import is_set, UNSET, UnsetType
+from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS

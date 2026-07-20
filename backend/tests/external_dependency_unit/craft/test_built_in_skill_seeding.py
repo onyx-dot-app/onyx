@@ -16,7 +16,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import CheckConstraint, delete, select, Table, text
+from sqlalchemy import CheckConstraint, Table, delete, select, text
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User

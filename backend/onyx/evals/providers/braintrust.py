@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Any, Union
 
-from braintrust import Eval, EvalCase, init_dataset, Score
+from braintrust import Eval, EvalCase, Score, init_dataset
 
 from onyx.configs.app_configs import BRAINTRUST_MAX_CONCURRENCY, BRAINTRUST_PROJECT
 from onyx.evals.models import (

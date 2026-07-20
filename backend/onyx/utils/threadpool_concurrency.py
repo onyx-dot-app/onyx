@@ -7,13 +7,13 @@ import threading
 import uuid
 from collections.abc import Callable, Coroutine, Iterator, MutableMapping, Sequence
 from concurrent.futures import (
-    as_completed,
     FIRST_COMPLETED,
     Future,
     ThreadPoolExecutor,
+    as_completed,
     wait,
 )
-from typing import Any, cast, Generic, overload, Protocol, TypeVar
+from typing import Any, Generic, Protocol, TypeVar, cast, overload
 
 from pydantic import GetCoreSchemaHandler
 from pydantic.types import T

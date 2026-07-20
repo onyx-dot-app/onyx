@@ -18,10 +18,10 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
     FILE_ID_FIELD,
-    FileReaderTool,
     MAX_NUM_CHARS,
     NUM_CHARS_FIELD,
     START_CHAR_FIELD,
+    FileReaderTool,
 )
 
 TOOL_MODULE = "onyx.tools.tool_implementations.file_reader.file_reader_tool"

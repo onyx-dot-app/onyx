@@ -16,10 +16,10 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.cache.interface import (
-    CacheBackend,
-    CacheLock,
     TTL_KEY_NOT_FOUND,
     TTL_NO_EXPIRY,
+    CacheBackend,
+    CacheLock,
 )
 from onyx.db.models import CacheStore
 

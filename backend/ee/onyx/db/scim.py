@@ -25,8 +25,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy import Select, SQLColumnExpression, func, select
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, Select, select, SQLColumnExpression
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ee.onyx.server.scim.filtering import ScimFilter, ScimFilterOperator

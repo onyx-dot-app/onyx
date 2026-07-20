@@ -4,7 +4,7 @@ from io import BytesIO
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import FileOrigin, NUM_DAYS_TO_KEEP_CHECKPOINTS
+from onyx.configs.constants import NUM_DAYS_TO_KEEP_CHECKPOINTS, FileOrigin
 from onyx.connectors.interfaces import BaseConnector, CheckpointedConnector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.db.engine.time_utils import get_db_current_time

@@ -12,7 +12,7 @@ import io
 import json
 from collections.abc import AsyncIterator
 from enum import StrEnum
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 

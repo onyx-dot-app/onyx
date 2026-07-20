@@ -15,7 +15,7 @@ from onyx.configs.app_configs import (
     REDIS_SSL_CERT_REQS,
     USE_REDIS_IAM_AUTH,
 )
-from onyx.configs.constants import OnyxCeleryPriority, REDIS_SOCKET_KEEPALIVE_OPTIONS
+from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS, OnyxCeleryPriority
 
 CELERY_SEPARATOR = ":"
 

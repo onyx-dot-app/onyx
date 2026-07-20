@@ -24,9 +24,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import and_, ColumnElement, delete, func, or_, Select, select, text
+from sqlalchemy import ColumnElement, Select, and_, delete, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.enums import SandboxStatus
 from onyx.db.external_app import is_user_authenticated_for_app
@@ -39,7 +39,7 @@ from onyx.db.models import (
     User,
     User__UserGroup,
 )
-from onyx.db.utils import is_fk_violation, is_unique_violation, UNSET, UnsetType
+from onyx.db.utils import UNSET, UnsetType, is_fk_violation, is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS

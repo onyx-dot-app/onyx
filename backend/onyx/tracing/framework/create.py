@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from onyx.utils.logger import setup_logger
 

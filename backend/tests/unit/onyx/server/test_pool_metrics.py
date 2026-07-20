@@ -7,8 +7,8 @@ from fastapi import FastAPI
 from sqlalchemy.pool import NullPool
 
 from onyx.server.metrics.postgres_connection_pool import (
-    _register_pool_events,
     PoolStateCollector,
+    _register_pool_events,
     setup_postgres_connection_pool_metrics,
 )
 from onyx.utils.middleware import _build_route_map, _match_route

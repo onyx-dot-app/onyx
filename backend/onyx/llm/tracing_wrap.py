@@ -18,7 +18,7 @@ from __future__ import annotations
 import functools
 import inspect
 from collections.abc import Callable, Iterator
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from onyx.llm.model_response import ChatCompletionDeltaToolCall, Usage
 from onyx.llm.model_response import FunctionCall as DeltaFunctionCall

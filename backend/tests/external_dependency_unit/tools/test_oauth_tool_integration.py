@@ -20,7 +20,7 @@ from onyx.chat.emitter import Emitter
 from onyx.db.models import OAuthAccount, OAuthConfig, Persona, Tool, User
 from onyx.db.oauth_config import create_oauth_config, upsert_user_oauth_token
 from onyx.llm.factory import get_default_llm
-from onyx.tools.tool_constructor import construct_tools, SearchToolConfig
+from onyx.tools.tool_constructor import SearchToolConfig, construct_tools
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.conftest import create_test_user

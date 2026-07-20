@@ -40,9 +40,9 @@ from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import (
-    LlmProviderNames,
     PROVIDER_DISPLAY_NAMES,
     WELL_KNOWN_PROVIDER_NAMES,
+    LlmProviderNames,
 )
 from onyx.llm.factory import (
     get_default_llm,
@@ -68,8 +68,8 @@ from onyx.llm.well_known_providers.constants import (
     VERTEX_PROJECT_KWARG,
 )
 from onyx.llm.well_known_providers.llm_provider_options import (
-    fetch_available_well_known_llms,
     WellKnownLLMProviderDescriptor,
+    fetch_available_well_known_llms,
 )
 from onyx.server.manage.llm.models import (
     BedrockFinalModelResponse,
@@ -107,13 +107,13 @@ from onyx.server.manage.llm.provider_cache import (
     invalidate_provider_listing_cache,
 )
 from onyx.server.manage.llm.utils import (
+    ModelMetadata,
     generate_bedrock_display_name,
     generate_ollama_display_name,
     infer_vision_support,
     is_embedding_model,
     is_reasoning_model,
     is_valid_bedrock_model,
-    ModelMetadata,
     strip_openrouter_vendor_prefix,
 )
 from onyx.utils.encryption import mask_string as mask_with_ellipsis

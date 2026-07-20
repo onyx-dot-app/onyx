@@ -30,8 +30,8 @@ from onyx.db.models import ScheduledTask, ScheduledTaskPreApprovedApp, Scheduled
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.scheduled_tasks.schedule import (
-    compute_next_run_at,
     EditorMode,
+    compute_next_run_at,
 )
 from onyx.utils.logger import setup_logger
 

@@ -2,7 +2,7 @@ import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import joinedload, selectinload, Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from onyx.db.models import Persona, Project__UserFile, UserFile
 

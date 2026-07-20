@@ -9,7 +9,7 @@ import requests
 from dateutil.parser import parse
 
 from onyx.configs.app_configs import CONNECTOR_LOCALHOST_OVERRIDE
-from onyx.configs.constants import DocumentSource, IGNORE_FOR_QA
+from onyx.configs.constants import IGNORE_FOR_QA, DocumentSource
 from onyx.connectors.models import BasicExpertInfo, OnyxMetadata
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import is_valid_email

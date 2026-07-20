@@ -2,7 +2,7 @@ import io
 import os
 from collections.abc import Generator
 from datetime import datetime, timezone
-from typing import Any, IO
+from typing import IO, Any
 from urllib.parse import quote
 
 from pydantic import Field

@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import event, pool
-from sqlalchemy.engine import create_engine, Engine
+from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 

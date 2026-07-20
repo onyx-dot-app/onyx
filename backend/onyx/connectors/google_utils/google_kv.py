@@ -1,6 +1,6 @@
 import json
 from typing import Any, cast
-from urllib.parse import parse_qs, ParseResult, urlparse
+from urllib.parse import ParseResult, parse_qs, urlparse
 
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import (
-    DocumentSource,
     KV_CRED_KEY,
     KV_GMAIL_CRED_KEY,
     KV_GMAIL_SERVICE_ACCOUNT_KEY,
     KV_GOOGLE_DRIVE_CRED_KEY,
     KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY,
+    DocumentSource,
 )
 from onyx.connectors.google_utils.resources import get_drive_service, get_gmail_service
 from onyx.connectors.google_utils.shared_constants import (
@@ -22,9 +22,9 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
     GOOGLE_SCOPES,
-    GoogleOAuthAuthenticationMethod,
     MISSING_SCOPES_ERROR_STR,
     ONYX_SCOPE_INSTRUCTIONS,
+    GoogleOAuthAuthenticationMethod,
 )
 from onyx.db.credentials import update_credential_json
 from onyx.db.models import User

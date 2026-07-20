@@ -14,11 +14,11 @@ import shlex
 import time
 import zipfile
 from collections.abc import Callable, Generator, Iterable, Sequence
-from concurrent.futures import as_completed, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -30,7 +30,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import AccountType, BuildSessionStatus, SandboxStatus
 from onyx.db.llm import (
     fetch_default_llm_model,

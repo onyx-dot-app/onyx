@@ -14,11 +14,11 @@ if True:  # noqa: E402
     from sqlalchemy import func
 
     from onyx.db.engine.sql_engine import (
-        build_connection_string,
-        get_session_with_tenant,
-        SqlEngine,
         SYNC_DB_API,
         USE_IAM_AUTH,
+        SqlEngine,
+        build_connection_string,
+        get_session_with_tenant,
     )
     from onyx.db.engine.tenant_utils import get_all_tenant_ids
     from onyx.db.models import Document, User

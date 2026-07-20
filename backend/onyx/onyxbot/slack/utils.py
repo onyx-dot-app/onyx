@@ -31,7 +31,7 @@ from onyx.onyxbot.slack.constants import FeedbackVisibility
 from onyx.onyxbot.slack.models import ChannelType, ThreadMessage
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
-from onyx.utils.telemetry import optional_telemetry, RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()

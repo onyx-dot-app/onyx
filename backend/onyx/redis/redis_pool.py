@@ -2,7 +2,7 @@ import asyncio
 import json
 import ssl
 import threading
-from typing import Any, cast, Optional
+from typing import Any, Optional, cast
 
 import redis
 from fastapi import Request

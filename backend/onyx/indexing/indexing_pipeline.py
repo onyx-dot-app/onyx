@@ -61,7 +61,7 @@ from onyx.document_index.interfaces_new import (
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import promote_staged_file
-from onyx.hooks.executor import execute_hook, HookSkipped, HookSoftFailed
+from onyx.hooks.executor import HookSkipped, HookSoftFailed, execute_hook
 from onyx.hooks.points.document_ingestion import (
     DocumentIngestionOwner,
     DocumentIngestionPayload,
@@ -71,7 +71,7 @@ from onyx.hooks.points.document_ingestion import (
 from onyx.hooks.points.document_push import DocumentPushPayload, DocumentPushResponse
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
-from onyx.indexing.embedder import embed_chunks_with_failure_handling, IndexingEmbedder
+from onyx.indexing.embedder import IndexingEmbedder, embed_chunks_with_failure_handling
 from onyx.indexing.models import (
     DocAwareChunk,
     DocMetadataAwareIndexChunk,
@@ -83,7 +83,7 @@ from onyx.llm.factory import get_default_llm_with_vision, get_llm_for_contextual
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LLMRateLimitError
-from onyx.llm.utils import llm_response_to_string, MAX_CONTEXT_TOKENS
+from onyx.llm.utils import MAX_CONTEXT_TOKENS, llm_response_to_string
 from onyx.natural_language_processing.utils import (
     BaseTokenizer,
     get_tokenizer,

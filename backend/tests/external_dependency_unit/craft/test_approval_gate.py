@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import NotificationType
-from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import (
     ApprovalDecision,
     BuildSessionStatus,

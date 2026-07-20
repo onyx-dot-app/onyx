@@ -8,10 +8,10 @@ from onyx import __version__
 from onyx.auth.users import anonymous_user_enabled, user_needs_to_be_verified
 from onyx.configs.app_configs import AUTH_TYPE, OAUTH_ENABLED
 from onyx.configs.constants import (
-    AuthType,
     DEV_VERSION_PATTERN,
     PUBLIC_API_TAGS,
     STABLE_VERSION_PATTERN,
+    AuthType,
 )
 from onyx.db.auth import get_user_count
 from onyx.server.manage.models import (
