@@ -28,6 +28,7 @@ from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Document as DBDocument
+from onyx.db.models import Document__Tag
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import FileRecord
 from onyx.db.models import IndexAttempt
@@ -194,6 +195,9 @@ def cleanup_cc_pair(db_session: Session, pair: ConnectorCredentialPair) -> None:
                 pass
 
         if orphan_doc_ids:
+            db_session.query(Document__Tag).filter(
+                Document__Tag.document_id.in_(orphan_doc_ids)
+            ).delete(synchronize_session="fetch")
             db_session.query(DBDocument).filter(
                 DBDocument.id.in_(orphan_doc_ids)
             ).delete(synchronize_session="fetch")

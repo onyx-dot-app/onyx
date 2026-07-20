@@ -196,6 +196,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.egnyte.connector",
         class_name="EgnyteConnector",
     ),
+    DocumentSource.SEAFILE: ConnectorMapping(
+        module_path="onyx.connectors.seafile.connector",
+        class_name="SeafileConnector",
+    ),
     DocumentSource.AIRTABLE: ConnectorMapping(
         module_path="onyx.connectors.airtable.airtable_connector",
         class_name="AirtableConnector",

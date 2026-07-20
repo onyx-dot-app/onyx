@@ -38,6 +38,8 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
 from onyx.connectors.google_utils.google_kv import build_service_account_creds
@@ -48,6 +50,10 @@ from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TO
 from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
+from onyx.connectors.seafile.connector import SEAFILE_API_TOKEN_KEY
+from onyx.connectors.seafile.libraries import list_libraries_from_seafile
+from onyx.connectors.seafile.libraries import SeafileLibrary
+from onyx.connectors.seafile.libraries import SeafileLibraryListingError
 from onyx.db.connector import create_connector
 from onyx.db.connector import delete_connector
 from onyx.db.connector import fetch_connector_by_id
@@ -88,6 +94,8 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
 from onyx.db.models import UserRole
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_client
@@ -145,6 +153,59 @@ router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 
 
 """Admin only API endpoints"""
+
+
+class SeafileLibrariesRequest(BaseModel):
+    base_url: str
+    credential_id: int
+
+
+@router.post("/admin/connector/seafile/libraries")
+def list_seafile_libraries(
+    request: SeafileLibrariesRequest,
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[SeafileLibrary]:
+    credential = fetch_credential_by_id_for_user(
+        credential_id=request.credential_id,
+        user=user,
+        db_session=db_session,
+        get_editable=False,
+    )
+    if credential is None or credential.source != DocumentSource.SEAFILE:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            "Seafile credential not found.",
+        )
+
+    credential_json = (
+        credential.credential_json.get_value(apply_mask=False)
+        if credential.credential_json
+        else {}
+    )
+    api_token = str(credential_json.get(SEAFILE_API_TOKEN_KEY, "")).strip()
+    if not api_token:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_INVALID,
+            "Seafile credential is missing an API token.",
+        )
+
+    try:
+        return list_libraries_from_seafile(request.base_url, api_token)
+    except CredentialExpiredError as exc:
+        raise OnyxError(OnyxErrorCode.CREDENTIAL_EXPIRED, str(exc)) from exc
+    except InsufficientPermissionsError as exc:
+        raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS, str(exc)) from exc
+    except ConnectorValidationError as exc:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
+    except SeafileLibraryListingError as exc:
+        if exc.status_code is not None:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                str(exc),
+                status_code_override=exc.status_code,
+            ) from exc
+        raise OnyxError(OnyxErrorCode.BAD_GATEWAY, str(exc)) from exc
 
 
 @router.put("/admin/connector/google-drive/service-account-credential")

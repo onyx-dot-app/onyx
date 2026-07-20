@@ -54,6 +54,7 @@ _SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
     DocumentSource.FRESHDESK: "Freshdesk.png",
     DocumentSource.FIREFLIES: "Fireflies.png",
     DocumentSource.EGNYTE: "Egnyte.png",
+    DocumentSource.SEAFILE: "Seafile.png",
     DocumentSource.AIRTABLE: "Airtable.png",
     DocumentSource.HIGHSPOT: "Highspot.png",
     DocumentSource.DRUPAL_WIKI: "Drupal.png",

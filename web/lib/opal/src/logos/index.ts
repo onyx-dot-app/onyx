@@ -79,6 +79,7 @@ export { default as SvgQwen } from "@opal/logos/qwen";
 export { default as SvgSalesforce } from "@opal/logos/salesforce";
 export { default as SvgSearxng } from "@opal/logos/searxng";
 export { default as SvgSerper } from "@opal/logos/serper";
+export { default as SvgSeafile } from "@opal/logos/seafile";
 export { default as SvgSharepoint } from "@opal/logos/sharepoint";
 export { default as SvgSlack } from "@opal/logos/slack";
 export { default as SvgSlab } from "@opal/logos/slab";
