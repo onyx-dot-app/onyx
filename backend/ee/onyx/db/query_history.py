@@ -1,11 +1,14 @@
 from collections.abc import Sequence
 from datetime import datetime
+from uuid import UUID
 
+from sqlalchemy import and_
 from sqlalchemy import asc
 from sqlalchemy import BinaryExpression
 from sqlalchemy import ColumnElement
 from sqlalchemy import desc
 from sqlalchemy import distinct
+from sqlalchemy import or_
 from sqlalchemy.orm import contains_eager
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
@@ -136,23 +139,50 @@ def fetch_chat_sessions_eagerly_by_time(
     db_session: Session,
     limit: int | None = 500,
     initial_time: datetime | None = None,
+    initial_id: UUID | None = None,
 ) -> list[ChatSession]:
-    """Sorted by oldest to newest, then by message id"""
+    """Sorted by oldest to newest, by (time_created, id), then by message id.
+
+    Pagination uses a composite ``(time_created, id)`` keyset cursor. Because
+    ``ChatSession.time_created`` is not unique (it defaults to the transaction
+    clock, so sessions created together share a timestamp), a cursor on
+    ``time_created`` alone would skip every session sharing the previous page's
+    final timestamp. Passing the previous page's last ``(initial_time,
+    initial_id)`` resumes strictly after that row without dropping ties.
+    """
 
     asc_time_order: UnaryExpression = asc(ChatSession.time_created)
+    id_order: UnaryExpression = asc(ChatSession.id)
     message_order: UnaryExpression = asc(ChatMessage.id)
 
     filters: list[ColumnElement | BinaryExpression] = [
         ChatSession.time_created.between(start, end)
     ]
 
-    if initial_time:
-        filters.append(ChatSession.time_created > initial_time)
+    if initial_time is not None or initial_id is not None:
+        # The two halves form a single composite (time_created, id) keyset
+        # cursor. Accepting only one would silently fall back to a cursor on the
+        # non-unique time_created alone and reintroduce the ONX-2293 row drop, so
+        # require them together.
+        if initial_time is None or initial_id is None:
+            raise ValueError(
+                "initial_time and initial_id are a composite keyset cursor and "
+                "must be provided together"
+            )
+        filters.append(
+            or_(
+                ChatSession.time_created > initial_time,
+                and_(
+                    ChatSession.time_created == initial_time,
+                    ChatSession.id > initial_id,
+                ),
+            )
+        )
 
     subquery = (
         db_session.query(ChatSession.id, ChatSession.time_created)
         .filter(*filters)
-        .order_by(asc_time_order)
+        .order_by(asc_time_order, id_order)
         .limit(limit)
         .subquery()
     )
@@ -168,7 +198,7 @@ def fetch_chat_sessions_eagerly_by_time(
                 ChatMessage.chat_message_feedbacks
             ),
         )
-        .order_by(asc_time_order, message_order)
+        .order_by(asc_time_order, id_order, message_order)
     )
 
     chat_sessions = query.all()

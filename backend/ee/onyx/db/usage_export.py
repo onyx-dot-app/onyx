@@ -25,21 +25,24 @@ def get_empty_chat_messages_entries__paginated(
     db_session: Session,
     period: tuple[datetime, datetime],
     limit: int | None = 500,
-    initial_time: datetime | None = None,
-) -> tuple[Optional[datetime], list[ChatMessageSkeleton]]:
+    initial_cursor: tuple[datetime, uuid.UUID] | None = None,
+) -> tuple[Optional[tuple[datetime, uuid.UUID]], list[ChatMessageSkeleton]]:
     """Returns a tuple where:
-    first element is the most recent timestamp out of the sessions iterated
-    - this timestamp can be used to paginate forward in time
+    first element is the ``(time_created, id)`` cursor of the last session
+    iterated, or ``None`` once the final page has been reached - pass it back in
+    as ``initial_cursor`` to fetch the next page
     second element is a list of messages belonging to all the sessions iterated
 
     Only messages of type USER are returned
     """
+    initial_time, initial_id = initial_cursor if initial_cursor else (None, None)
     chat_sessions = fetch_chat_sessions_eagerly_by_time(
         start=period[0],
         end=period[1],
         db_session=db_session,
         limit=limit,
         initial_time=initial_time,
+        initial_id=initial_id,
     )
 
     message_skeletons: list[ChatMessageSkeleton] = []
@@ -107,7 +110,17 @@ def get_empty_chat_messages_entries__paginated(
     if len(chat_sessions) == 0:
         return None, []
 
-    return chat_sessions[-1].time_created, message_skeletons
+    # A short page means there are no more sessions to fetch. Signalling this
+    # via the cursor (rather than the caller stopping on an empty skeleton list)
+    # ensures a full page that happens to contain no USER messages does not end
+    # iteration prematurely.
+    last_session = chat_sessions[-1]
+    next_cursor = (
+        (last_session.time_created, last_session.id)
+        if limit is not None and len(chat_sessions) >= limit
+        else None
+    )
+    return next_cursor, message_skeletons
 
 
 def get_all_empty_chat_message_entries(
@@ -115,22 +128,20 @@ def get_all_empty_chat_message_entries(
     period: tuple[datetime, datetime],
 ) -> Generator[list[ChatMessageSkeleton], None, None]:
     """period is the range of time over which to fetch messages."""
-    initial_time: Optional[datetime] = period[0]
+    cursor: tuple[datetime, uuid.UUID] | None = None
     while True:
         # iterate from oldest to newest
-        time_created, message_skeletons = get_empty_chat_messages_entries__paginated(
+        cursor, message_skeletons = get_empty_chat_messages_entries__paginated(
             db_session,
             period,
-            initial_time=initial_time,
+            initial_cursor=cursor,
         )
 
-        if not message_skeletons:
+        if message_skeletons:
+            yield message_skeletons
+
+        if cursor is None:
             return
-
-        yield message_skeletons
-
-        # Update initial_time for the next iteration
-        initial_time = time_created
 
 
 def get_all_usage_reports(db_session: Session) -> list[UsageReportMetadata]:
