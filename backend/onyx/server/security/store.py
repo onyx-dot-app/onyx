@@ -242,3 +242,21 @@ def get_security_settings() -> SecuritySettings:
             return _build_env_defaults()
         _CACHE[tenant_id] = effective
         return effective
+
+
+def llm_custom_config_env_injection_enabled() -> bool:
+    """Whether env-only LLM provider custom_config keys may be temporarily
+    injected into os.environ during a call. Hard-off on multi-tenant regardless
+    of stored overrides — process-wide env vars are only safe when the admin
+    owns the whole deployment."""
+    if MULTI_TENANT:
+        # merge_with_env forces this off on multi-tenant, so an effective True
+        # here means that invariant has been broken somewhere upstream.
+        if get_security_settings().llm_custom_config_env_injection:
+            logger.critical(
+                "Invariant violation: llm_custom_config_env_injection resolved "
+                "to enabled on a multi-tenant deployment; forcing it off for "
+                "this call."
+            )
+        return False
+    return get_security_settings().llm_custom_config_env_injection

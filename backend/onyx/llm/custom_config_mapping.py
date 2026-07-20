@@ -1,9 +1,9 @@
 """Maps LLM provider custom_config keys to LiteLLM completion kwargs.
 
 Recognized keys become explicit kwargs and never touch os.environ. Unrecognized
-keys are env-only: injected into os.environ for the duration of the call on
-self-hosted deployments, dropped on multi-tenant cloud (see
-LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED).
+keys are env-only: injected into os.environ for the duration of the call when
+the llm_custom_config_env_injection security setting allows it (self-hosted
+only, default on), dropped otherwise.
 """
 
 from typing import Any

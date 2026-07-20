@@ -4,6 +4,8 @@ No external deps: we monkeypatch the ``app_configs`` view (``store._cfg``) so th
 derivation reads controlled values instead of the process environment.
 """
 
+import logging
+
 import pytest
 
 from onyx.server.security import store
@@ -77,3 +79,58 @@ def test_llm_env_injection_defaults_on_for_single_tenant() -> None:
         ).llm_custom_config_env_injection
         is True
     )
+
+
+def test_llm_env_injection_hard_off_on_multi_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The MULTI_TENANT clamp wins even if a stored setting says enabled."""
+    monkeypatch.setattr(store, "MULTI_TENANT", True)
+    assert store.llm_custom_config_env_injection_enabled() is False
+
+
+def test_llm_env_injection_follows_setting_on_single_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(store, "MULTI_TENANT", False)
+    for enabled in (True, False):
+        monkeypatch.setattr(
+            store,
+            "get_security_settings",
+            lambda enabled=enabled: store._build_env_defaults().model_copy(
+                update={"llm_custom_config_env_injection": enabled}
+            ),
+        )
+        assert store.llm_custom_config_env_injection_enabled() is enabled
+
+
+def test_llm_env_injection_invariant_violation_logs_critical(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """If the effective settings ever claim injection is enabled on
+    multi-tenant, the accessor still returns False and screams about it."""
+    monkeypatch.setattr(store, "MULTI_TENANT", True)
+    monkeypatch.setattr(
+        store,
+        "get_security_settings",
+        lambda: store._build_env_defaults().model_copy(
+            update={"llm_custom_config_env_injection": True}
+        ),
+    )
+    with caplog.at_level(logging.CRITICAL):
+        assert store.llm_custom_config_env_injection_enabled() is False
+    assert any(
+        record.levelno == logging.CRITICAL and "Invariant violation" in record.message
+        for record in caplog.records
+    )
+
+
+def test_llm_env_injection_no_critical_log_when_invariant_holds(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(store, "MULTI_TENANT", True)
+    with caplog.at_level(logging.CRITICAL):
+        assert store.llm_custom_config_env_injection_enabled() is False
+    assert not caplog.records

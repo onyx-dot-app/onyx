@@ -52,13 +52,6 @@ SEND_USER_METADATA_TO_LLM_PROVIDER = (
     os.environ.get("SEND_USER_METADATA_TO_LLM_PROVIDER", "")
 ).lower() == "true"
 
-# Whether LLM provider custom_config keys with no LiteLLM kwarg equivalent may
-# be temporarily injected into os.environ during a call. Deliberately derived
-# from the deployment type rather than env-configurable: process-wide env vars
-# are only safe when the admin owns the whole deployment, never on
-# multi-tenant cloud.
-LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED = not MULTI_TENANT
-
 #####
 # User Facing Features Configs
 #####

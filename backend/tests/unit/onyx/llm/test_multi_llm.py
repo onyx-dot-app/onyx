@@ -2397,7 +2397,7 @@ def test_bifrost_claude_includes_allowed_openai_params() -> None:
         assert kwargs["allowed_openai_params"] == ["tool_choice"]
 
 
-# ---- Tests for env-injection gating (LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED) ----
+# ---- Tests for env-injection gating (llm_custom_config_env_injection) ----
 
 
 def _simple_stream_chunks(model_name: str) -> list[litellm.ModelResponse]:
@@ -2453,8 +2453,8 @@ def test_injection_disabled_maps_kwargs_and_never_touches_env(
     with (
         patch("litellm.completion", side_effect=fake_completion) as mock_completion,
         patch(
-            "onyx.llm.multi_llm.LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED",
-            False,
+            "onyx.llm.multi_llm._env_injection_enabled",
+            return_value=False,
         ),
         patch.object(
             multi_llm_module,
@@ -2510,8 +2510,8 @@ def test_injection_enabled_still_injects_env_only_keys(
     with (
         patch("litellm.completion", side_effect=fake_completion) as mock_completion,
         patch(
-            "onyx.llm.multi_llm.LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED",
-            True,
+            "onyx.llm.multi_llm._env_injection_enabled",
+            return_value=True,
         ),
     ):
         llm.invoke([UserMessage(content="Hi")])
@@ -2569,8 +2569,8 @@ def test_generic_custom_provider_api_key_reaches_litellm(
     with (
         patch("litellm.completion", side_effect=fake_completion) as mock_completion,
         patch(
-            "onyx.llm.multi_llm.LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED",
-            False,
+            "onyx.llm.multi_llm._env_injection_enabled",
+            return_value=False,
         ),
     ):
         llm.invoke([UserMessage(content="Hi")])
