@@ -1061,6 +1061,16 @@ WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
 # fall back to a one-shot Playwright (Chromium) render to bypass JS-based
 # bot detection. Disable to skip the fallback (e.g. on hosts that don't have
 # the Chromium binary installed).
+# Browser engine and binary used by start_playwright() (WebConnector crawl and
+# the OnyxWebCrawler fallback). Defaults match existing behavior; set these to
+# point at a different Playwright-managed browser build.
+WEB_CONNECTOR_PLAYWRIGHT_BROWSER_TYPE = os.environ.get(
+    "WEB_CONNECTOR_PLAYWRIGHT_BROWSER_TYPE", "chromium"
+)
+WEB_CONNECTOR_PLAYWRIGHT_EXECUTABLE_PATH = os.environ.get(
+    "WEB_CONNECTOR_PLAYWRIGHT_EXECUTABLE_PATH"
+)
+
 OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
 )
