@@ -32,7 +32,6 @@ from onyx.auth.users import (
 from onyx.configs.app_configs import (
     AUTH_BACKEND,
     AUTH_TYPE,
-    AuthBackend,
     DEV_MODE,
     EMAIL_CONFIGURED,
     ENABLE_EMAIL_INVITES,
@@ -40,6 +39,7 @@ from onyx.configs.app_configs import (
     REDIS_AUTH_KEY_PREFIX,
     SESSION_EXPIRE_TIME_SECONDS,
     USER_AUTH_SECRET,
+    AuthBackend,
 )
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, PUBLIC_API_TAGS
 from onyx.db.api_key import is_api_key_email_address
@@ -121,9 +121,9 @@ from onyx.server.security.store import get_security_settings
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.audit import (
-    actor_from_user,
     AuditAction,
     AuditOutcome,
+    actor_from_user,
     emit_audit_event,
 )
 from onyx.utils.csv_utils import sanitize_csv_cell

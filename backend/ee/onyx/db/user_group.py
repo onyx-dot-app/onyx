@@ -3,9 +3,9 @@ from operator import and_
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete, func, Select, select, update
+from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 
 from ee.onyx.server.user_group.models import (
     SetCuratorRequest,
@@ -49,9 +49,9 @@ from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.audit import (
-    actor_from_user,
     AuditAction,
     AuditOutcome,
+    actor_from_user,
     emit_audit_event,
 )
 from onyx.utils.logger import setup_logger

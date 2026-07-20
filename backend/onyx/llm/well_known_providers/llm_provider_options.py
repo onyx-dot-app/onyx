@@ -4,9 +4,9 @@ import threading
 import time
 
 from onyx.llm.constants import (
-    LlmProviderNames,
     PROVIDER_DISPLAY_NAMES,
     WELL_KNOWN_PROVIDER_NAMES,
+    LlmProviderNames,
 )
 from onyx.llm.utils import get_max_input_tokens, model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations

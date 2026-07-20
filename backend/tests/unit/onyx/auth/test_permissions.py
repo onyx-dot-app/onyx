@@ -11,9 +11,9 @@ from fastapi import Request
 
 from onyx.auth.permissions import (
     ALL_PERMISSIONS,
-    get_effective_permissions,
     IMPLIED_PERMISSIONS,
     NON_TOGGLEABLE_PERMISSIONS,
+    get_effective_permissions,
     require_permission,
     resolve_effective_permissions,
 )

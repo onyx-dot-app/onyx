@@ -16,7 +16,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from sandbox_daemon.contract import (
-    FilesystemListRequest,
     PUSH_DAEMON_PORT,
     SIDECAR_FILESYSTEM_LIST_PATH,
     SIDECAR_HEALTH_PATH,
@@ -27,9 +26,10 @@ from sandbox_daemon.contract import (
     SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
     SIDECAR_READY_PATH,
     SIDECAR_SNAPSHOT_CREATE_PATH,
-    sidecar_snapshot_restore_path,
     SIDECAR_SNAPSHOT_RESTORE_ROUTE,
+    FilesystemListRequest,
     SnapshotCreateRequest,
+    sidecar_snapshot_restore_path,
 )
 from sandbox_daemon.extract import MAX_BUNDLE_BYTES, safe_extract_then_atomic_swap
 from sandbox_daemon.filesystem import FilesystemPathError, list_session_directory
@@ -40,10 +40,10 @@ from sandbox_daemon.opencode_history import (
     restore_opencode_history_archive,
 )
 from sandbox_daemon.snapshot import (
+    SnapshotError,
     has_snapshot_content,
     iter_snapshot_archive,
     restore_snapshot,
-    SnapshotError,
 )
 
 app = FastAPI(title="sandbox-sidecar", docs_url=None, redoc_url=None)

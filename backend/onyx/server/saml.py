@@ -12,7 +12,7 @@ from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from pydantic import BaseModel
 
 from onyx.auth.schemas import UserCreate, UserRole
-from onyx.auth.users import auth_backend, fastapi_users, get_user_manager, UserManager
+from onyx.auth.users import UserManager, auth_backend, fastapi_users, get_user_manager
 from onyx.configs.app_configs import (
     REQUIRE_EMAIL_VERIFICATION,
     SAML_CONF_DIR,

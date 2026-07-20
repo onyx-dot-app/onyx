@@ -4,7 +4,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any, cast, TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 from urllib.parse import parse_qs, quote, urljoin, urlparse
 
 import requests

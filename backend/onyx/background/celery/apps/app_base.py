@@ -6,8 +6,8 @@ import time
 from typing import Any, cast
 
 from celery import (
-    bootsteps,  # ty: ignore[unresolved-import]
     Task,
+    bootsteps,  # ty: ignore[unresolved-import]
 )
 from celery.app import trace  # ty: ignore[unresolved-import]
 from celery.exceptions import WorkerShutdown
@@ -55,10 +55,10 @@ from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import (
     ColoredFormatter,
-    get_json_formatter,
-    get_log_level_from_str,
     LoggerContextVars,
     PlainFormatter,
+    get_json_formatter,
+    get_log_level_from_str,
     setup_logger,
 )
 from shared_configs.configs import (

@@ -10,9 +10,9 @@ import pytest
 
 from onyx.chat import stream_buffer
 from onyx.chat.stream_buffer import (
-    read_stream_chunks,
     StreamBufferMeta,
     StreamBufferWriter,
+    read_stream_chunks,
 )
 from tests.unit.fakes import FakeCache
 

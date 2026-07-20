@@ -9,8 +9,8 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import ToolCallException, WebSearchToolOverrideKwargs
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.tools.tool_implementations.web_search.web_search_tool import (
-    _normalize_queries_input,
     WebSearchTool,
+    _normalize_queries_input,
 )
 
 

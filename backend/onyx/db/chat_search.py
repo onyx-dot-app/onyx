@@ -2,7 +2,7 @@ from typing import List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy import column, desc, func, select
-from sqlalchemy.orm import joinedload, Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql.expression import ColumnClause
 
 from onyx.db.models import ChatMessage, ChatSession

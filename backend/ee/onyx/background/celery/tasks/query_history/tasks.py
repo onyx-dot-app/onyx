@@ -2,11 +2,11 @@ import csv
 import io
 from datetime import datetime
 
-from celery import shared_task, Task
+from celery import Task, shared_task
 
 from ee.onyx.server.query_history.api import (
-    fetch_and_process_chat_session_history,
     ONYX_ANONYMIZED_EMAIL,
+    fetch_and_process_chat_session_history,
 )
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
 from onyx.background.task_utils import construct_query_history_report_name

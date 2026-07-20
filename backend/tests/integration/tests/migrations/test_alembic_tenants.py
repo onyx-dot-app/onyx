@@ -30,7 +30,7 @@ from onyx.configs.app_configs import (
     POSTGRES_PORT,
     POSTGRES_USER,
 )
-from onyx.db.engine.sql_engine import build_connection_string, SYNC_DB_API
+from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 
 
 @pytest.fixture

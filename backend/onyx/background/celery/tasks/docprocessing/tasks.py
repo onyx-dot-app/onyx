@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from celery import Celery, current_app, shared_task, Task
+from celery import Celery, Task, current_app, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
@@ -55,9 +55,9 @@ from onyx.configs.app_configs import (
     VESPA_CLOUD_KEY_PATH,
 )
 from onyx.configs.constants import (
-    AuthType,
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_INDEXING_LOCK_TIMEOUT,
+    AuthType,
     DocumentSource,
     MilestoneRecordType,
     NotificationType,
@@ -85,11 +85,11 @@ from onyx.db.enums import (
     SwitchoverType,
 )
 from onyx.db.index_attempt import (
+    IndexAttemptError,
     create_index_attempt_error,
     get_index_attempt,
     get_index_attempt_errors_for_cc_pair,
     get_stale_not_started_index_attempts,
-    IndexAttemptError,
     mark_attempt_canceled,
     mark_attempt_failed,
     mark_attempt_partially_succeeded,
@@ -136,10 +136,10 @@ from onyx.natural_language_processing.search_nlp_models import (
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import (
+    SCAN_ITER_COUNT_DEFAULT,
     get_redis_client,
     get_redis_replica_client,
     redis_lock_dump,
-    SCAN_ITER_COUNT_DEFAULT,
 )
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.redis_utils import is_fence
@@ -152,7 +152,7 @@ from onyx.server.metrics.connector_health_metrics import (
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
-from onyx.utils.telemetry import mt_cloud_telemetry, optional_telemetry, RecordType
+from onyx.utils.telemetry import RecordType, mt_cloud_telemetry, optional_telemetry
 from shared_configs.configs import (
     INDEXING_MODEL_SERVER_HOST,
     INDEXING_MODEL_SERVER_PORT,
@@ -1869,7 +1869,7 @@ def _docprocessing_task(
         # Track chunk indexing usage for cloud usage limits
         if USAGE_LIMITS_ENABLED and index_pipeline_result.total_chunks > 0:
             try:
-                from onyx.db.usage import increment_usage, UsageType
+                from onyx.db.usage import UsageType, increment_usage
 
                 with get_session_with_current_tenant() as usage_db_session:
                     increment_usage(

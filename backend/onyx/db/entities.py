@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 from typing import List
 
 from sqlalchemy import func, literal, select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 import onyx.db.document as dbdocument

@@ -3,7 +3,7 @@ from fastapi_users.exceptions import InvalidPasswordException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import get_user_manager, User, UserManager
+from onyx.auth.users import User, UserManager, get_user_manager
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.users import get_user_by_email

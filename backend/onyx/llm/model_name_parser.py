@@ -23,10 +23,10 @@ from pydantic import BaseModel
 from onyx.llm.constants import (
     AGGREGATOR_PROVIDERS,
     HYPHENATED_MODEL_NAMES,
-    LlmProviderNames,
     MODEL_PREFIX_TO_VENDOR,
     PROVIDER_DISPLAY_NAMES,
     VENDOR_BRAND_NAMES,
+    LlmProviderNames,
 )
 
 

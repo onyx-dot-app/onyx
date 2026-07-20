@@ -8,8 +8,8 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.salesforce.connector import (
-    _convert_to_metadata_value,
     SalesforceConnector,
+    _convert_to_metadata_value,
 )
 from onyx.connectors.salesforce.utils import (
     ID_FIELD,

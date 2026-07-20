@@ -4,12 +4,12 @@ import sys
 from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
-from typing import Any, cast, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.constants import DocumentSource, INDEX_SEPARATOR, RETURN_SEPARATOR
+from onyx.configs.constants import INDEX_SEPARATOR, RETURN_SEPARATOR, DocumentSource
 from onyx.db.enums import HierarchyNodeType, IndexModelStatus
 from onyx.utils.text_processing import make_url_compatible
 

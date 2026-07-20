@@ -10,7 +10,7 @@ from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import NamedTuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 from uuid import UUID, uuid4
 
 import pytest
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
     from tests.integration.common_utils.test_models import DATestUser
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,

@@ -283,7 +283,6 @@ ignore = [
 select = ["ARG", "E", "F", "G004", "I", "S", "W"]
 
 [tool.ruff.lint.isort]
-order-by-type = false
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 
 [tool.ruff.lint.per-file-ignores]

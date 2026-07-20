@@ -54,8 +54,8 @@ from onyx.auth.schemas import UserRole  # noqa: E402
 from onyx.background.celery.apps.client import celery_app  # noqa: E402
 from onyx.configs.constants import DocumentSource  # noqa: E402
 from onyx.db.engine.sql_engine import (  # noqa: E402
-    get_session_with_current_tenant,
     SqlEngine,
+    get_session_with_current_tenant,
 )
 from onyx.db.search_settings import get_current_search_settings  # noqa: E402
 from onyx.utils.variable_functionality import (  # noqa: E402
@@ -78,9 +78,9 @@ from tests.integration.common_utils.managers.llm_provider import (  # noqa: E402
     LLMProviderManager,
 )
 from tests.integration.common_utils.managers.user import (  # noqa: E402
-    build_email,
     DEFAULT_PASSWORD,
     UserManager,
+    build_email,
 )
 from tests.integration.common_utils.reset import (  # noqa: E402
     _seed_dev_license_if_set,

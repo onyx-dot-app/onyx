@@ -29,12 +29,12 @@ import httpx
 import pytest
 
 from onyx.server.features.build.sandbox.event_schema import (
+    TURN_ERROR_CODE_TIMEOUT,
+    TURN_ERROR_CODE_TRANSPORT,
     AgentMessageChunk,
     AgentThoughtChunk,
     Error,
     PromptResponse,
-    TURN_ERROR_CODE_TIMEOUT,
-    TURN_ERROR_CODE_TRANSPORT,
 )
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
 from onyx.server.features.build.sandbox.opencode.serve_client import (

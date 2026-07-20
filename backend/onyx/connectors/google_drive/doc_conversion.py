@@ -21,18 +21,18 @@ from onyx.connectors.google_drive.constants import (
     DRIVE_SHORTCUT_TYPE,
 )
 from onyx.connectors.google_drive.file_retrieval import (
-    add_drive_resource_key_header,
     DRIVE_RESOURCE_KEY_FIELD,
+    add_drive_resource_key_header,
 )
 from onyx.connectors.google_drive.models import GDriveMimeType, GoogleDriveFileType
 from onyx.connectors.google_drive.section_extraction import (
-    get_document_sections,
     HEADING_DELIMITER,
+    get_document_sections,
 )
 from onyx.connectors.google_utils.resources import (
+    GoogleDriveService,
     get_drive_service,
     get_google_authorized_session,
-    GoogleDriveService,
 )
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -51,10 +51,10 @@ from onyx.file_processing.extract_file_text import (
     read_pptx_file,
 )
 from onyx.file_processing.file_types import (
-    OnyxFileExtensions,
-    OnyxMimeTypes,
     PRESENTATION_MIME_TYPE,
     SPREADSHEET_MIME_TYPE,
+    OnyxFileExtensions,
+    OnyxMimeTypes,
 )
 from onyx.file_processing.image_utils import (
     make_image_callback,

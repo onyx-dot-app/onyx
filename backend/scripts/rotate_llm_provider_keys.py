@@ -41,8 +41,8 @@ sys.path.append(parent_dir)
 from sqlalchemy import select  # noqa: E402
 
 from onyx.db.engine.sql_engine import (  # noqa: E402
-    get_session_with_tenant,
     SqlEngine,
+    get_session_with_tenant,
 )
 from onyx.db.engine.tenant_utils import get_all_tenant_ids  # noqa: E402
 from onyx.db.models import (  # noqa: E402

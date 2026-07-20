@@ -16,12 +16,12 @@ from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.slack.connector import (
+    SlackConnector,
     filter_channels,
     get_channels,
     get_channels_across_teams,
     list_grid_team_ids,
     make_paginated_slack_api_call,
-    SlackConnector,
 )
 from onyx.connectors.slack.models import ChannelType
 from onyx.db.models import ConnectorCredentialPair

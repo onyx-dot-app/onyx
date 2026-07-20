@@ -30,7 +30,7 @@ from __future__ import annotations
 import os
 import time
 
-from locust import constant_pacing, HttpUser, task
+from locust import HttpUser, constant_pacing, task
 from onyx_client.env import env_float, env_int
 
 

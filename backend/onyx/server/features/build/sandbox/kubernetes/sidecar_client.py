@@ -8,7 +8,7 @@ import hashlib
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import cast, IO
+from typing import IO, cast
 from uuid import UUID
 
 import httpx
@@ -17,12 +17,12 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from onyx.server.features.build.configs import SANDBOX_PUSH_PRIVATE_KEY
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
-    FilesystemListRequest,
-    FilesystemListResponse,
     PUSH_DAEMON_PORT,
     SIDECAR_FILESYSTEM_LIST_PATH,
     SIDECAR_HEALTH_PATH,
     SIDECAR_PUSH_PATH,
+    FilesystemListRequest,
+    FilesystemListResponse,
 )
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 
