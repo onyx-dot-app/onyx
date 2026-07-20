@@ -31,6 +31,7 @@ from typing import Any
 
 import httpx
 import jwt
+from fastapi_users import exceptions as fastapi_users_exceptions
 
 from onyx.configs.app_configs import (
     IDP_PROFILE_CLAIM_MAP,
@@ -38,6 +39,8 @@ from onyx.configs.app_configs import (
 )
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -70,10 +73,41 @@ def _oauth_claims_key(tenant_id: str, email: str) -> str:
     return f"{_OAUTH_CLAIMS_KEY_PREFIX}:{tenant_id}:{email.lower()}"
 
 
+async def _resolve_capture_tenant_id(email: str) -> str | None:
+    """Tenant to key the snapshot under. The login callbacks that run capture are
+    unauthenticated, so the tenant contextvar still holds the default schema
+    there. On multi-tenant the user's tenant must come from the email mapping.
+    Returns None when the mapping cannot resolve the email (brand-new user, or a
+    lookup failure surfaced as UserNotExists), in which case capture is skipped
+    and the next login picks it up. The mapping is a sync DB call, so it runs in
+    a thread to stay preemptible under the capture timeout.
+    """
+    if not MULTI_TENANT:
+        return get_current_tenant_id()
+    try:
+        tenant_id = await asyncio.to_thread(
+            fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+            ),
+            email,
+        )
+    except fastapi_users_exceptions.UserNotExists:
+        return None
+    return tenant_id if isinstance(tenant_id, str) else None
+
+
 async def _store_claims_snapshot(email: str, snapshot: dict[str, Any]) -> None:
+    tenant_id = await _resolve_capture_tenant_id(email)
+    if tenant_id is None:
+        logger.debug(
+            "Skipping claims capture for %s: tenant not yet resolved "
+            "(new user or lookup failed)",
+            email,
+        )
+        return
     redis = await get_async_redis_connection()
     await redis.set(
-        _oauth_claims_key(get_current_tenant_id(), email),
+        _oauth_claims_key(tenant_id, email),
         json.dumps(snapshot, default=str),
         ex=_OAUTH_CLAIMS_TTL_SECONDS,
     )

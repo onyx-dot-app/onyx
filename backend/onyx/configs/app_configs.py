@@ -266,13 +266,8 @@ OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
 # an "Organization Profile" block in the system prompt plus `{{user.<key>}}`
 # placeholders in agent prompts. Off by default: it sends directory data to
 # the configured LLM, which deployments must consciously opt into.
-# Forced off under multi-tenancy: claims are captured in the unauthenticated
-# OAuth callback, where the tenant is not yet resolved, so the snapshot would be
-# written under the default tenant id and never read back. Single-tenant only
-# until per-tenant capture lands.
 IDP_PROFILE_ENRICHMENT_ENABLED = (
     os.environ.get("IDP_PROFILE_ENRICHMENT_ENABLED", "").lower() == "true"
-    and not MULTI_TENANT
 )
 
 # Optional per-deployment claim-alias overrides for the directory profile,
