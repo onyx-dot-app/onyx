@@ -270,29 +270,45 @@ IDP_PROFILE_ENRICHMENT_ENABLED = (
     os.environ.get("IDP_PROFILE_ENRICHMENT_ENABLED", "").lower() == "true"
 )
 
+
+def parse_idp_claim_map(raw: str | None) -> dict[str, list[str]]:
+    """Parse the IDP_PROFILE_CLAIM_MAP env value, warning on every ignored
+    shape. A silently dropped map is invisible misconfiguration (placeholders
+    just stay empty), so anything not a dict-of-lists gets a log line."""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("IDP_PROFILE_CLAIM_MAP is not valid JSON, ignoring it")
+        return {}
+    if not isinstance(parsed, dict):
+        logger.warning(
+            "IDP_PROFILE_CLAIM_MAP must be a JSON object, got %s, ignoring it",
+            type(parsed).__name__,
+        )
+        return {}
+    claim_map: dict[str, list[str]] = {}
+    for key, aliases in parsed.items():
+        if not isinstance(aliases, list):
+            logger.warning(
+                "IDP_PROFILE_CLAIM_MAP entry %r must map to a list of claim "
+                "names, got %s, dropping it",
+                key,
+                type(aliases).__name__,
+            )
+            continue
+        claim_map[str(key)] = [str(alias) for alias in aliases]
+    return claim_map
+
+
 # Optional per-deployment claim-alias overrides for the directory profile,
 # as JSON mapping placeholder key -> ordered claim-name list, e.g.
 # '{"department": ["dept", "division"], "country": ["c"]}'. Configured
 # aliases are checked before the built-in ones.
-IDP_PROFILE_CLAIM_MAP: dict[str, list[str]] = {}
-_IDP_PROFILE_CLAIM_MAP_RAW = os.environ.get("IDP_PROFILE_CLAIM_MAP")
-if _IDP_PROFILE_CLAIM_MAP_RAW:
-    try:
-        _parsed_claim_map = json.loads(_IDP_PROFILE_CLAIM_MAP_RAW)
-        if isinstance(_parsed_claim_map, dict):
-            IDP_PROFILE_CLAIM_MAP = {
-                str(key): [str(alias) for alias in aliases]
-                for key, aliases in _parsed_claim_map.items()
-                if isinstance(aliases, list)
-            }
-    except json.JSONDecodeError:
-        # Import-time, so plain logging: a silently ignored map would make the
-        # misconfiguration invisible (placeholders just stay empty).
-        import logging
-
-        logging.getLogger(__name__).warning(
-            "IDP_PROFILE_CLAIM_MAP is not valid JSON — ignoring it"
-        )
+IDP_PROFILE_CLAIM_MAP: dict[str, list[str]] = parse_idp_claim_map(
+    os.environ.get("IDP_PROFILE_CLAIM_MAP")
+)
 
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
