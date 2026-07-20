@@ -48,6 +48,14 @@ class BookstackConnector(LoadConnector, PollConnector):
         return None
 
     @staticmethod
+    def _format_bookstack_datetime(timestamp: SecondsSinceUnixEpoch) -> str:
+        return (
+            datetime.fromtimestamp(timestamp, tz=timezone.utc)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z")
+        )
+
+    @staticmethod
     def _get_doc_batch(
         batch_size: int,
         bookstack_client: BookStackApiClient,
@@ -63,15 +71,15 @@ class BookstackConnector(LoadConnector, PollConnector):
             "sort": "+id",
         }
 
-        if start:
-            params["filter[updated_at:gte]"] = datetime.fromtimestamp(
-                start, tz=timezone.utc
-            ).strftime("%Y-%m-%d")
+        if start is not None:
+            params["filter[updated_at:gte]"] = (
+                BookstackConnector._format_bookstack_datetime(start)
+            )
 
-        if end:
-            params["filter[updated_at:lte]"] = datetime.fromtimestamp(
-                end, tz=timezone.utc
-            ).strftime("%Y-%m-%d")
+        if end is not None:
+            params["filter[updated_at:lte]"] = (
+                BookstackConnector._format_bookstack_datetime(end)
+            )
 
         batch = bookstack_client.get(endpoint, params=params).get("data", [])
         doc_batch: list[Document | HierarchyNode] = [
