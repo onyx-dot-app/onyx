@@ -758,7 +758,10 @@ class SessionManager:
                     # Log but don't fail - session can still be deleted even if
                     # workspace cleanup fails (e.g., if pod is already terminated)
                     logger.warning(
-                        "Failed to cleanup session workspace %s: %s", session_id, e
+                        "Failed to cleanup session workspace %s: %s",
+                        session_id,
+                        e,
+                        exc_info=True,
                     )
 
                 ensure_prompt_slot_owned()

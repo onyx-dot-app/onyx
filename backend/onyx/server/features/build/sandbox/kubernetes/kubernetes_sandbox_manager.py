@@ -1575,12 +1575,14 @@ echo "Session cleanup complete"
             if e.status == 404:
                 # Pod not found, nothing to clean up
                 logger.debug("Pod %s not found, skipping cleanup", pod_name)
-            else:
-                logger.warning(
-                    "Error cleaning up session workspace %s: %s", session_id, e
-                )
+                return
+            raise RuntimeError(
+                f"Failed to clean up session workspace {session_id}"
+            ) from e
         except Exception as e:
-            logger.warning("Error cleaning up session workspace %s: %s", session_id, e)
+            raise RuntimeError(
+                f"Failed to clean up session workspace {session_id}"
+            ) from e
 
     def create_snapshot(
         self,
