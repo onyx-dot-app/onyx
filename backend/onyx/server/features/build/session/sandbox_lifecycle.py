@@ -156,8 +156,11 @@ def hydrate_managed_content(
     soon as RUNNING is visible, and opencode scans the skills directory once
     per instance, so a turn started mid-push permanently misses managed
     skills. The persisted hash also covers the connectable-app guidance used
-    to regenerate ``AGENTS.md`` on reload. Each push is best-effort — failures
-    are logged, never raised.
+    to regenerate ``AGENTS.md`` on reload.
+
+    ``connectable_apps_section`` and ``skills_files`` must be supplied together
+    or both omitted; mismatched nullity is a programmer error and raises
+    ``ValueError`` eagerly. Runtime push failures are logged, never raised.
     """
     if (connectable_apps_section is None) != (skills_files is None):
         raise ValueError(

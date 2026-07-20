@@ -54,7 +54,7 @@ from tests.external_dependency_unit.craft.redis_helpers import (
 # =============================================================================
 
 
-def test_warm_skill_hydration_changes_only_live_session_staleness(
+def test_warm_content_hash_change_marks_only_live_session_stale(
     db_session: Session,
     test_user: User,
     sandbox: Callable[..., Sandbox],

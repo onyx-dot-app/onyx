@@ -178,7 +178,7 @@ interface ConfiguredAppCardProps {
   onEdit: (descriptor: BuiltInExternalAppDescriptor) => void;
   /** Edit a custom app (no descriptor — config is on the row itself). */
   onEditCustom: (app: ExternalAppAdminResponse) => void;
-  onChange: () => void;
+  onChange: () => Promise<unknown>;
 }
 
 function ConfiguredAppCard({
@@ -195,7 +195,7 @@ function ConfiguredAppCard({
     setIsMutating(true);
     try {
       await updateExternalApp(app.id, { enabled: !app.enabled });
-      onChange();
+      await onChange();
     } catch (e) {
       toast.error(
         e instanceof Error
@@ -211,7 +211,7 @@ function ConfiguredAppCard({
     setIsMutating(true);
     try {
       await deleteExternalApp(app.id);
-      onChange();
+      await onChange();
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : `Failed to delete "${app.name}"`
