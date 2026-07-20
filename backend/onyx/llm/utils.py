@@ -4,7 +4,7 @@ import threading
 import time
 from collections.abc import Callable, Iterable
 from functools import lru_cache
-from typing import Any, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import select
 

@@ -14,11 +14,11 @@ from onyx.connectors.google_drive.doc_conversion import (
     download_request,
 )
 from onyx.connectors.google_drive.file_retrieval import (
-    _get_files_in_parent,
-    crawl_folders_for_files,
     DRIVE_RESOURCE_KEY_FIELD,
     DRIVE_RESOURCE_KEY_HEADER,
     DriveFileFieldType,
+    _get_files_in_parent,
+    crawl_folders_for_files,
 )
 from onyx.connectors.google_drive.models import DriveRetrievalStage
 

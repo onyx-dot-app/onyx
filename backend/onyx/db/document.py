@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, delete, exists, func, or_, Select, select, tuple_, update
+from sqlalchemy import Select, and_, delete, exists, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
@@ -40,7 +40,7 @@ from onyx.db.relationships import (
     delete_from_kg_relationships_extraction_staging__no_commit,
 )
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
-from onyx.db.utils import DocumentRow, model_to_dict, SortOrder
+from onyx.db.utils import DocumentRow, SortOrder, model_to_dict
 from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage

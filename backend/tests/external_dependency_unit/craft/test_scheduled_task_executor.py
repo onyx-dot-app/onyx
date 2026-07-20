@@ -20,7 +20,7 @@ from __future__ import annotations
 import datetime
 import threading
 from typing import Any
-from unittest.mock import patch, PropertyMock
+from unittest.mock import PropertyMock, patch
 from uuid import UUID
 
 import pytest

@@ -38,13 +38,13 @@ from onyx.connectors.interfaces import (
 )
 from onyx.connectors.jira.access import get_project_permissions
 from onyx.connectors.jira.utils import (
+    JIRA_CLOUD_API_VERSION,
     best_effort_basic_expert_info,
     best_effort_get_field_from_issue,
     build_jira_client,
     build_jira_url,
     extract_text_from_adf,
     get_comment_strs,
-    JIRA_CLOUD_API_VERSION,
 )
 from onyx.connectors.models import (
     ConnectorCheckpoint,

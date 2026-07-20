@@ -10,11 +10,11 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
 from onyx.configs.constants import (
-    DocumentSource,
     KV_GEN_AI_KEY_CHECK_TIME,
+    PUBLIC_API_TAGS,
+    DocumentSource,
     OnyxCeleryPriority,
     OnyxCeleryTask,
-    PUBLIC_API_TAGS,
 )
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_for_user,

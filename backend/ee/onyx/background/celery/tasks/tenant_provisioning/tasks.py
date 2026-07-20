@@ -6,7 +6,7 @@ import asyncio
 import datetime
 import uuid
 
-from celery import shared_task, Task
+from celery import Task, shared_task
 from redis.lock import Lock as RedisLock
 
 from ee.onyx.server.tenants.provisioning import setup_tenant

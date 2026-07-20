@@ -13,8 +13,8 @@ from onyx.indexing.chunking.section_chunker import (
     SectionChunkerOutput,
 )
 from onyx.indexing.chunking.tabular_section_chunker.analysis import (
-    analyze_sheet,
     SheetAnalysis,
+    analyze_sheet,
 )
 from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
     build_sheet_descriptor_chunks,
@@ -28,9 +28,9 @@ from onyx.natural_language_processing.utils import (
     split_text_by_tokens,
 )
 from onyx.utils.csv_utils import (
+    ParsedRow,
     parse_csv_stream,
     parse_csv_string,
-    ParsedRow,
     read_csv_header,
 )
 from onyx.utils.logger import setup_logger

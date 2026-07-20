@@ -35,9 +35,9 @@ from tests.integration.common_utils.constants import ADMIN_USER_NAME, GENERAL_HE
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
 from tests.integration.common_utils.managers.user import (
-    build_email,
     DEFAULT_PASSWORD,
     UserManager,
+    build_email,
 )
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -69,9 +69,9 @@ def scim_token(idp_style: str) -> str:
         GENERAL_HEADERS,
     )
     from tests.integration.common_utils.managers.user import (
-        build_email,
         DEFAULT_PASSWORD,
         UserManager,
+        build_email,
     )
     from tests.integration.common_utils.test_models import DATestUser
 

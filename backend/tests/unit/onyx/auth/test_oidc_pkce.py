@@ -11,10 +11,10 @@ from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError
 from onyx.auth.users import (
     CSRF_TOKEN_COOKIE_NAME,
     CSRF_TOKEN_KEY,
-    get_oauth_router,
-    get_pkce_cookie_name,
     PKCE_COOKIE_NAME_PREFIX,
     STATE_TOKEN_AUDIENCE,
+    get_oauth_router,
+    get_pkce_cookie_name,
 )
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 

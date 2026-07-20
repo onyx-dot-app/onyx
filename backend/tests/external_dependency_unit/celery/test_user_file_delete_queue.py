@@ -25,7 +25,7 @@ on the task class so no real broker is needed.
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -38,9 +38,9 @@ from onyx.background.celery.tasks.user_file_processing.tasks import (
 )
 from onyx.configs.constants import (
     CELERY_USER_FILE_DELETE_TASK_EXPIRES,
+    USER_FILE_DELETE_MAX_QUEUE_DEPTH,
     OnyxCeleryQueues,
     OnyxCeleryTask,
-    USER_FILE_DELETE_MAX_QUEUE_DEPTH,
 )
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile

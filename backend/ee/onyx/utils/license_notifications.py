@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.utils.license_expiry import ExpiryWarningStage, get_grace_days_remaining
 from onyx.auth.email_utils import build_html_email, send_email
 from onyx.configs.app_configs import EMAIL_CONFIGURED
-from onyx.configs.constants import NotificationType, ONYX_DEFAULT_APPLICATION_NAME
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME, NotificationType
 from onyx.db.notification import batch_create_notifications
 from onyx.db.users import get_active_admin_users
 from onyx.utils.logger import setup_logger

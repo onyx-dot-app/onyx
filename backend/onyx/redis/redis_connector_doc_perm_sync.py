@@ -1,7 +1,7 @@
 import time
 from datetime import datetime
 from logging import Logger
-from typing import Any, cast, NamedTuple
+from typing import Any, NamedTuple, cast
 
 from pydantic import BaseModel
 from redis.lock import Lock as RedisLock

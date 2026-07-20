@@ -4,7 +4,7 @@ import datetime
 import itertools
 import tempfile
 from collections.abc import Iterator
-from typing import Any, cast, ClassVar
+from typing import Any, ClassVar, cast
 
 import pywikibot.config
 import pywikibot.time

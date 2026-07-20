@@ -23,10 +23,10 @@ from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
 from onyx.onyxbot.slack.models import SlackMessageInfo, ThreadMessage
 from onyx.onyxbot.slack.utils import (
+    SlackRateLimiter,
     get_channel_from_id,
     get_channel_name_from_id,
     respond_in_thread_or_channel,
-    SlackRateLimiter,
     update_emote_react,
 )
 from onyx.server.query_and_chat.models import (

@@ -8,9 +8,9 @@ from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEA
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.user import (
-    build_email,
     DEFAULT_PASSWORD,
     UserManager,
+    build_email,
 )
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestUser

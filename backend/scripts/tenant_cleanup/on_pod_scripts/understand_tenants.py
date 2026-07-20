@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_shared_schema, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_shared_schema
 
 
 def get_tenant_activity_summary(session: Session) -> list[dict[str, Any]]:

@@ -17,11 +17,11 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
+    PUBLIC_API_TAGS,
+    USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
-    PUBLIC_API_TAGS,
-    USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, UserFileStatus

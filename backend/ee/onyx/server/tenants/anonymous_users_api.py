@@ -10,7 +10,7 @@ from ee.onyx.server.tenants.anonymous_user_path import (
 )
 from ee.onyx.server.tenants.models import AnonymousUserPath
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import anonymous_user_enabled, User
+from onyx.auth.users import User, anonymous_user_enabled
 from onyx.configs.constants import (
     ANONYMOUS_USER_COOKIE_NAME,
     FASTAPI_USERS_AUTH_COOKIE_NAME,

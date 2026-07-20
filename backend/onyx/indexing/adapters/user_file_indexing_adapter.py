@@ -9,7 +9,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.access.access import get_access_for_user_files
 from onyx.access.models import DocumentAccess

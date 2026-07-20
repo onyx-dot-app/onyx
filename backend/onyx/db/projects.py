@@ -21,8 +21,8 @@ from onyx.db.enums import UserFileStatus
 from onyx.db.models import Project__UserFile, User, UserFile, UserProject
 from onyx.server.documents.connector import upload_files
 from onyx.server.features.projects.projects_file_utils import (
-    categorize_uploaded_files,
     RejectedFile,
+    categorize_uploaded_files,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id

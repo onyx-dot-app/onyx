@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from requests.exceptions import HTTPError
 
-from onyx.connectors.teams.utils import _retry, GRAPH_API_RETRYABLE_STATUSES
+from onyx.connectors.teams.utils import GRAPH_API_RETRYABLE_STATUSES, _retry
 
 
 def _response(

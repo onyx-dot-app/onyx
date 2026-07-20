@@ -714,7 +714,7 @@ class TestServiceApiKeyAPI:
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
     """Create database session for tests."""
-    from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+    from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
     from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
     SqlEngine.init_engine(pool_size=10, max_overflow=5)

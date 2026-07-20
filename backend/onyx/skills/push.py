@@ -20,9 +20,9 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 )
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
-    BuiltInSkillDefinition,
     COMPANY_SEARCH,
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
+    BuiltInSkillDefinition,
 )
 from onyx.skills.rendering import render_company_search_skill, render_external_app_skill
 from onyx.utils.logger import setup_logger

@@ -1,5 +1,5 @@
 import io
-from typing import cast, IO
+from typing import IO, cast
 
 import openpyxl
 import pytest

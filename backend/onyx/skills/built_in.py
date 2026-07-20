@@ -25,7 +25,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Final, Literal
 
-from pydantic import BaseModel, computed_field, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
