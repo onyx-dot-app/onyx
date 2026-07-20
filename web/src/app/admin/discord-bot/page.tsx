@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Section } from "@/layouts/general-layouts";
 import { SettingsLayouts, toast } from "@opal/layouts";

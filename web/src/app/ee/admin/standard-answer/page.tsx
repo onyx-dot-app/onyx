@@ -2,7 +2,7 @@
 
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Divider } from "@opal/components";
 import {

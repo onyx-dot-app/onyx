@@ -1,6 +1,6 @@
 "use client";
 
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SettingsLayouts } from "@opal/layouts";
 import { ErrorCallout } from "@/components/ErrorCallout";
