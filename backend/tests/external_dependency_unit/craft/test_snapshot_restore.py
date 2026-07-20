@@ -27,17 +27,21 @@ from botocore.config import Config
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import (
+    SANDBOX_BACKEND,
+    SANDBOX_NAMESPACE,
+    SANDBOX_S3_BUCKET,
+    SandboxBackend,
+)
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
-from tests.external_dependency_unit.craft.conftest import pod_exec
-from tests.external_dependency_unit.craft.conftest import wait_for_pod_deletion
+from tests.external_dependency_unit.craft.conftest import (
+    pod_exec,
+    wait_for_pod_deletion,
+)
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,

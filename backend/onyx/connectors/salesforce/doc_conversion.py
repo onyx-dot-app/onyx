@@ -1,19 +1,17 @@
 import re
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import Document
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import BasicExpertInfo, Document, ImageSection, TextSection
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
-from onyx.connectors.salesforce.utils import ID_FIELD
-from onyx.connectors.salesforce.utils import MODIFIED_FIELD
-from onyx.connectors.salesforce.utils import NAME_FIELD
-from onyx.connectors.salesforce.utils import SalesforceObject
+from onyx.connectors.salesforce.utils import (
+    ID_FIELD,
+    MODIFIED_FIELD,
+    NAME_FIELD,
+    SalesforceObject,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

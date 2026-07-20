@@ -5,24 +5,25 @@ from dynamic providers (Ollama, OpenRouter, Litellm), including the
 sync-to-DB behavior when provider_name is specified.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.manage.llm.models import BifrostFinalModelResponse
-from onyx.server.manage.llm.models import BifrostModelsRequest
-from onyx.server.manage.llm.models import LitellmFinalModelResponse
-from onyx.server.manage.llm.models import LitellmModelsRequest
-from onyx.server.manage.llm.models import LMStudioFinalModelResponse
-from onyx.server.manage.llm.models import LMStudioModelsRequest
-from onyx.server.manage.llm.models import OllamaFinalModelResponse
-from onyx.server.manage.llm.models import OllamaModelsRequest
-from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
-from onyx.server.manage.llm.models import OpenRouterModelsRequest
+from onyx.server.manage.llm.models import (
+    BifrostFinalModelResponse,
+    BifrostModelsRequest,
+    LitellmFinalModelResponse,
+    LitellmModelsRequest,
+    LMStudioFinalModelResponse,
+    LMStudioModelsRequest,
+    OllamaFinalModelResponse,
+    OllamaModelsRequest,
+    OpenRouterFinalModelResponse,
+    OpenRouterModelsRequest,
+)
 
 
 class TestGetOllamaAvailableModels:

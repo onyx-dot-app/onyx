@@ -2,17 +2,14 @@
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.manage.models import EmailInviteStatus
-from onyx.server.manage.models import UserByEmail
-from onyx.server.manage.users import bulk_invite_users
-from onyx.server.manage.users import remove_invited_user
+from onyx.server.manage.models import EmailInviteStatus, UserByEmail
+from onyx.server.manage.users import bulk_invite_users, remove_invited_user
 
 
 def _make_shared_session_mock(next_total: int) -> MagicMock:

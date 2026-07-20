@@ -6,8 +6,8 @@ from onyx.background.error_logging import emit_background_error
 from onyx.configs.app_configs import CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC
 from onyx.connectors.confluence.onyx_confluence import (
     get_user_email_from_username__server,
+    OnyxConfluence,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ConnectorCredentialPair

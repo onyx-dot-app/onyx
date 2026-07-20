@@ -4,14 +4,15 @@ import time
 import httpx
 import pytest
 
-from onyx.db.chat import delete_chat_session
-from onyx.db.chat import get_chat_sessions_older_than
+from onyx.db.chat import delete_chat_session, get_chat_sessions_older_than
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.settings import SettingsManager
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestSettings
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestLLMProvider,
+    DATestSettings,
+    DATestUser,
+)
 
 RETENTION_SECONDS = 10
 

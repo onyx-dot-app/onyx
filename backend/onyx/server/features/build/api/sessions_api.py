@@ -3,64 +3,62 @@
 import json
 import time
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import File
-from fastapi import HTTPException
-from fastapi import Response
-from fastapi import UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import Permission
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.models import BuildMessage
-from onyx.db.models import User
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
+from onyx.db.enums import (
+    BuildSessionStatus,
+    Permission,
+    SandboxStatus,
+    ScheduledTaskRunStatus,
+)
+from onyx.db.models import BuildMessage, User
 from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.api.models import ArtifactResponse
-from onyx.server.features.build.api.models import DetailedSessionResponse
-from onyx.server.features.build.api.models import DirectoryListing
-from onyx.server.features.build.api.models import PptxPreviewResponse
-from onyx.server.features.build.api.models import PreProvisionedCheckResponse
-from onyx.server.features.build.api.models import SessionCreateRequest
-from onyx.server.features.build.api.models import SessionListResponse
-from onyx.server.features.build.api.models import SessionNameGenerateResponse
-from onyx.server.features.build.api.models import SessionResponse
-from onyx.server.features.build.api.models import SessionUpdateRequest
-from onyx.server.features.build.api.models import SetSessionSharingRequest
-from onyx.server.features.build.api.models import SetSessionSharingResponse
-from onyx.server.features.build.api.models import UploadResponse
-from onyx.server.features.build.api.models import WebappInfo
-from onyx.server.features.build.db.build_session import allocate_nextjs_port
-from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
-from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
-from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.api.models import (
+    ArtifactResponse,
+    DetailedSessionResponse,
+    DirectoryListing,
+    PptxPreviewResponse,
+    PreProvisionedCheckResponse,
+    SessionCreateRequest,
+    SessionListResponse,
+    SessionNameGenerateResponse,
+    SessionResponse,
+    SessionUpdateRequest,
+    SetSessionSharingRequest,
+    SetSessionSharingResponse,
+    UploadResponse,
+    WebappInfo,
+)
+from onyx.server.features.build.db.build_session import (
+    allocate_nextjs_port,
+    get_build_session,
+    set_build_session_sharing_scope,
+)
+from onyx.server.features.build.db.sandbox import (
+    ensure_sandbox_pat,
+    get_latest_snapshot_for_session,
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+    update_sandbox_status__no_commit,
+)
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
-from onyx.server.features.build.utils import sanitize_filename
-from onyx.server.features.build.utils import validate_file
-from onyx.skills.push import build_user_skills_payload
-from onyx.skills.push import hydrate_sandbox_skills
+from onyx.server.features.build.utils import sanitize_filename, validate_file
+from onyx.skills.push import build_user_skills_payload, hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

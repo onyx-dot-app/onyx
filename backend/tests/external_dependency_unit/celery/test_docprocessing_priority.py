@@ -7,29 +7,30 @@ get the correct priority based on last_successful_index_time.
 Uses real database objects for CC pairs, search settings, and index attempts.
 """
 
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.background.indexing.run_docfetching import connector_document_extraction
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import OnyxCeleryPriority
+from onyx.configs.constants import DocumentSource, OnyxCeleryPriority
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import IndexAttempt
-from onyx.db.models import SearchSettings
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    EmbeddingPrecision,
+    IndexingStatus,
+    IndexModelStatus,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    IndexAttempt,
+    SearchSettings,
+)
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 

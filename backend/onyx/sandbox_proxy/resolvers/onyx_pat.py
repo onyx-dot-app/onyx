@@ -12,13 +12,17 @@ from urllib.parse import urlparse
 
 from mitmproxy import http
 
-from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME
-from onyx.auth.constants import API_KEY_HEADER_NAME
-from onyx.auth.constants import BEARER_PREFIX
+from onyx.auth.constants import (
+    API_KEY_HEADER_ALTERNATIVE_NAME,
+    API_KEY_HEADER_NAME,
+    BEARER_PREFIX,
+)
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.sandbox_proxy.credential_injection import CredentialResolver
-from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
-from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialResolver,
+    CredentialUnavailableError,
+    InjectionContext,
+)
 from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.utils.logger import setup_logger

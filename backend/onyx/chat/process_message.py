@@ -11,8 +11,7 @@ import re
 import threading
 import time
 import traceback
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import Token
 from enum import Enum
@@ -23,110 +22,113 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import set_processing_status
-from onyx.chat.chat_state import AvailableFiles
-from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.chat_state import ChatTurnSetup
-from onyx.chat.chat_utils import build_file_context
-from onyx.chat.chat_utils import convert_chat_history
-from onyx.chat.chat_utils import create_chat_history_chain
-from onyx.chat.chat_utils import create_chat_session_from_request
-from onyx.chat.chat_utils import get_custom_agent_prompt
-from onyx.chat.chat_utils import is_last_assistant_message_clarification
-from onyx.chat.chat_utils import load_all_chat_files
-from onyx.chat.compression import calculate_total_history_tokens
-from onyx.chat.compression import compress_chat_history
-from onyx.chat.compression import find_summary_for_branch
-from onyx.chat.compression import get_compression_params
+from onyx.chat.chat_state import AvailableFiles, ChatStateContainer, ChatTurnSetup
+from onyx.chat.chat_utils import (
+    build_file_context,
+    convert_chat_history,
+    create_chat_history_chain,
+    create_chat_session_from_request,
+    get_custom_agent_prompt,
+    is_last_assistant_message_clarification,
+    load_all_chat_files,
+)
+from onyx.chat.compression import (
+    calculate_total_history_tokens,
+    compress_chat_history,
+    find_summary_for_branch,
+    get_compression_params,
+)
 from onyx.chat.emitter import Emitter
-from onyx.chat.llm_loop import EmptyLLMResponseError
-from onyx.chat.llm_loop import run_llm_loop
-from onyx.chat.models import AnswerStream
-from onyx.chat.models import AnswerStreamPart
-from onyx.chat.models import ChatBasicResponse
-from onyx.chat.models import ChatFullResponse
-from onyx.chat.models import ChatLoadedFile
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import ContextFileMetadata
-from onyx.chat.models import CreateChatSessionID
-from onyx.chat.models import ExtractedContextFiles
-from onyx.chat.models import FileToolMetadata
-from onyx.chat.models import SearchParams
-from onyx.chat.models import StreamingError
-from onyx.chat.models import ToolCallResponse
+from onyx.chat.llm_loop import EmptyLLMResponseError, run_llm_loop
+from onyx.chat.models import (
+    AnswerStream,
+    AnswerStreamPart,
+    ChatBasicResponse,
+    ChatFullResponse,
+    ChatLoadedFile,
+    ChatMessageSimple,
+    ContextFileMetadata,
+    CreateChatSessionID,
+    ExtractedContextFiles,
+    FileToolMetadata,
+    SearchParams,
+    StreamingError,
+    ToolCallResponse,
+)
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
-from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
+from onyx.configs.app_configs import DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
-from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import MilestoneRecordType
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import SearchDoc
-from onyx.db.chat import create_new_chat_message
-from onyx.db.chat import get_chat_session_by_id
-from onyx.db.chat import get_or_create_root_message
-from onyx.db.chat import reserve_message_id
-from onyx.db.chat import reserve_multi_model_message_ids
+from onyx.configs.constants import (
+    DEFAULT_PERSONA_ID,
+    DocumentSource,
+    MessageType,
+    MilestoneRecordType,
+)
+from onyx.context.search.models import BaseFilters, SearchDoc
+from onyx.db.chat import (
+    create_new_chat_message,
+    get_chat_session_by_id,
+    get_or_create_root_message,
+    reserve_message_id,
+    reserve_multi_model_message_ids,
+)
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import HookPoint
 from onyx.db.memory import get_memories
-from onyx.db.models import ChatMessage
-from onyx.db.models import Persona
-from onyx.db.models import User
-from onyx.db.models import UserFile
+from onyx.db.models import ChatMessage, Persona, User, UserFile
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import log_onyx_error
-from onyx.error_handling.exceptions import OnyxError
+from onyx.error_handling.exceptions import log_onyx_error, OnyxError
 from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
-from onyx.file_store.utils import get_default_file_store
-from onyx.file_store.utils import load_in_memory_chat_files
-from onyx.file_store.utils import verify_user_files
-from onyx.hooks.executor import execute_hook
-from onyx.hooks.executor import HookSkipped
-from onyx.hooks.executor import HookSoftFailed
-from onyx.hooks.points.query_processing import QueryProcessingPayload
-from onyx.hooks.points.query_processing import QueryProcessingResponse
-from onyx.llm.factory import get_llm_for_persona
-from onyx.llm.factory import get_llm_token_counter
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMUserIdentity
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.file_store.utils import (
+    get_default_file_store,
+    load_in_memory_chat_files,
+    verify_user_files,
+)
+from onyx.hooks.executor import execute_hook, HookSkipped, HookSoftFailed
+from onyx.hooks.points.query_processing import (
+    QueryProcessingPayload,
+    QueryProcessingResponse,
+)
+from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
+from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.request_context import reset_llm_mock_response
-from onyx.llm.request_context import set_llm_mock_response
+from onyx.llm.request_context import reset_llm_mock_response, set_llm_mock_response
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
-from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
-from onyx.server.query_and_chat.models import MessageResponseIDInfo
-from onyx.server.query_and_chat.models import ModelResponseSlot
-from onyx.server.query_and_chat.models import MultiModelMessageResponseIDInfo
-from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.models import (
+    AUTO_PLACE_AFTER_LATEST_MESSAGE,
+    MessageResponseIDInfo,
+    ModelResponseSlot,
+    MultiModelMessageResponseIDInfo,
+    SendMessageRequest,
+)
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import ChatHeartbeat
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import OverallStop
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
+    ChatHeartbeat,
+    CitationInfo,
+    OverallStop,
+    Packet,
+)
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
-from onyx.tools.constants import FILE_READER_TOOL_ID
-from onyx.tools.constants import SEARCH_TOOL_ID
-from onyx.tools.models import ChatFile
-from onyx.tools.models import SearchToolUsage
-from onyx.tools.tool_constructor import construct_tools
-from onyx.tools.tool_constructor import CustomToolConfig
-from onyx.tools.tool_constructor import FileReaderToolConfig
-from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
+from onyx.tools.models import ChatFile, SearchToolUsage
+from onyx.tools.tool_constructor import (
+    construct_tools,
+    CustomToolConfig,
+    FileReaderToolConfig,
+    SearchToolConfig,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time

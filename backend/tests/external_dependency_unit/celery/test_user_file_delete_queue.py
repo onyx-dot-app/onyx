@@ -25,29 +25,23 @@ on the task class so no real broker is needed.
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from unittest.mock import PropertyMock
+from unittest.mock import MagicMock, patch, PropertyMock
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.user_file_processing.tasks import (
     _user_file_delete_lock_key,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     _user_file_delete_queued_key,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     check_for_user_file_delete,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     process_single_user_file_delete,
 )
-from onyx.configs.constants import CELERY_USER_FILE_DELETE_TASK_EXPIRES
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import USER_FILE_DELETE_MAX_QUEUE_DEPTH
+from onyx.configs.constants import (
+    CELERY_USER_FILE_DELETE_TASK_EXPIRES,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    USER_FILE_DELETE_MAX_QUEUE_DEPTH,
+)
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
 from onyx.redis.redis_pool import get_redis_client

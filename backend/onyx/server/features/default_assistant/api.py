@@ -1,19 +1,21 @@
 """API endpoints for default assistant configuration."""
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.db.persona import get_default_assistant
-from onyx.db.persona import update_default_assistant_configuration
+from onyx.db.persona import (
+    get_default_assistant,
+    update_default_assistant_configuration,
+)
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
-from onyx.server.features.default_assistant.models import DefaultAssistantConfiguration
-from onyx.server.features.default_assistant.models import DefaultAssistantUpdateRequest
+from onyx.server.features.default_assistant.models import (
+    DefaultAssistantConfiguration,
+    DefaultAssistantUpdateRequest,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

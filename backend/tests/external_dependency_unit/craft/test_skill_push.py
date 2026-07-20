@@ -23,41 +23,40 @@ import io
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
-from onyx.db.enums import AccessType
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.models import UserGroup
-from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.skill import delete_skill
-from onyx.db.skill import patch_skill
-from onyx.db.skill import replace_skill_bundle
-from onyx.db.skill import replace_skill_grants
-from onyx.db.skill import SkillPatch
+from onyx.configs.constants import DocumentSource, FileOrigin
+from onyx.db.enums import AccessType, SandboxStatus
+from onyx.db.models import Sandbox, Skill, User, UserGroup
+from onyx.db.skill import (
+    affected_user_ids_for_skill,
+    delete_skill,
+    patch_skill,
+    replace_skill_bundle,
+    replace_skill_grants,
+    SkillPatch,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.sandbox.models import FatalWriteError
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.push import hydrate_sandbox_skills
-from onyx.skills.push import push_skill_to_affected_sandboxes
-from onyx.skills.push import push_skills_for_users
-from tests.external_dependency_unit.craft._test_helpers import add_user_to_group
-from tests.external_dependency_unit.craft._test_helpers import make_built_in_skill_row
-from tests.external_dependency_unit.craft._test_helpers import make_cc_pair
-from tests.external_dependency_unit.craft._test_helpers import make_group
-from tests.external_dependency_unit.craft._test_helpers import make_user
-from tests.external_dependency_unit.craft._test_helpers import reset_built_in_skill_row
-from tests.external_dependency_unit.craft.conftest import SandboxHandle
-from tests.external_dependency_unit.craft.conftest import WorkspaceProxy
+from onyx.skills.push import (
+    hydrate_sandbox_skills,
+    push_skill_to_affected_sandboxes,
+    push_skills_for_users,
+)
+from tests.external_dependency_unit.craft._test_helpers import (
+    add_user_to_group,
+    make_built_in_skill_row,
+    make_cc_pair,
+    make_group,
+    make_user,
+    reset_built_in_skill_row,
+)
+from tests.external_dependency_unit.craft.conftest import SandboxHandle, WorkspaceProxy
 from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 
 

@@ -1,10 +1,7 @@
 from datetime import datetime
 from http import HTTPStatus
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -15,49 +12,48 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.configs.constants import (
+    DocumentSource,
+    OnyxCeleryPriority,
+    OnyxCeleryTask,
+    PUBLIC_API_TAGS,
+)
 from onyx.connectors.exceptions import ValidationError
-from onyx.connectors.factory import identify_connector_class
-from onyx.connectors.factory import validate_ccpair_for_user
+from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
 from onyx.db.connector import delete_connector
-from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.connector_credential_pair import (
+    add_credential_to_connector,
     get_connector_credential_pair_from_id_for_user,
+    remove_credential_from_connector,
+    update_connector_credential_pair_from_id,
+    verify_user_has_access_to_cc_pair,
 )
-from onyx.db.connector_credential_pair import remove_credential_from_connector
-from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
-from onyx.db.document import get_document_counts_for_cc_pairs
-from onyx.db.document import get_documents_for_cc_pair
+from onyx.db.document import get_document_counts_for_cc_pairs, get_documents_for_cc_pair
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import Permission
-from onyx.db.enums import PermissionSyncStatus
-from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
-from onyx.db.index_attempt import count_index_attempts_for_cc_pair
-from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
-from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
-from onyx.db.index_attempt import get_latest_successful_index_attempt_for_cc_pair_id
-from onyx.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    IndexingStatus,
+    Permission,
+    PermissionSyncStatus,
+)
+from onyx.db.index_attempt import (
+    count_index_attempt_errors_for_cc_pair,
+    count_index_attempts_for_cc_pair,
+    get_index_attempt,
+    get_index_attempt_errors_for_cc_pair,
+    get_latest_index_attempt_for_cc_pair_id,
+    get_latest_successful_index_attempt_for_cc_pair_id,
+    get_paginated_index_attempts_for_cc_pair_id,
+)
 from onyx.db.index_attempt_metrics import get_stage_metrics_for_attempt
 from onyx.db.indexing_coordination import IndexingCoordination
-from onyx.db.models import IndexAttempt
-from onyx.db.models import User
+from onyx.db.models import IndexAttempt, User
 from onyx.db.permission_sync_attempt import (
     get_latest_doc_permission_sync_attempt_for_cc_pair,
-)
-from onyx.db.permission_sync_attempt import (
     get_recent_doc_permission_sync_attempts_for_cc_pair,
-)
-from onyx.db.permission_sync_attempt import (
     get_relevant_external_group_sync_attempts_for_cc_pair,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -66,19 +62,21 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.server.documents.models import CCPairFullInfo
-from onyx.server.documents.models import CCPairSyncAttemptsResponse
-from onyx.server.documents.models import CCPropertyUpdateRequest
-from onyx.server.documents.models import CCStatusUpdateRequest
-from onyx.server.documents.models import ConnectorCredentialPairIdentifier
-from onyx.server.documents.models import ConnectorCredentialPairMetadata
-from onyx.server.documents.models import DocPermissionSyncAttemptSnapshot
-from onyx.server.documents.models import DocumentSyncStatus
-from onyx.server.documents.models import ExternalGroupSyncAttemptSnapshot
-from onyx.server.documents.models import IndexAttemptSnapshot
-from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
-from onyx.server.documents.models import IndexAttemptStageMetricsResponse
-from onyx.server.documents.models import PaginatedReturn
+from onyx.server.documents.models import (
+    CCPairFullInfo,
+    CCPairSyncAttemptsResponse,
+    CCPropertyUpdateRequest,
+    CCStatusUpdateRequest,
+    ConnectorCredentialPairIdentifier,
+    ConnectorCredentialPairMetadata,
+    DocPermissionSyncAttemptSnapshot,
+    DocumentSyncStatus,
+    ExternalGroupSyncAttemptSnapshot,
+    IndexAttemptSnapshot,
+    IndexAttemptStageMetricSnapshot,
+    IndexAttemptStageMetricsResponse,
+    PaginatedReturn,
+)
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger

@@ -11,14 +11,11 @@ from collections import defaultdict
 from collections.abc import Iterable
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import Permission
-from onyx.db.models import PermissionGrant
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
+from onyx.db.models import PermissionGrant, User, User__UserGroup
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

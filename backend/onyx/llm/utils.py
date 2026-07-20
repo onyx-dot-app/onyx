@@ -1,33 +1,34 @@
 import copy
 import re
-from collections.abc import Callable
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from functools import lru_cache
-from typing import Any
-from typing import cast
-from typing import TYPE_CHECKING
+from typing import Any, cast, TYPE_CHECKING
 
 from sqlalchemy import select
 
-from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
-from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
-from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
-from onyx.configs.app_configs import USE_CHUNK_SUMMARY
-from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
-from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
-from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
+from onyx.configs.app_configs import (
+    LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    MAX_TOKENS_FOR_FULL_INCLUSION,
+    SEND_USER_METADATA_TO_LLM_PROVIDER,
+    USE_CHUNK_SUMMARY,
+    USE_DOCUMENT_SUMMARY,
+)
+from onyx.configs.model_configs import (
+    GEN_AI_MAX_TOKENS,
+    GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+    GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
-from onyx.db.models import LLMProvider
-from onyx.db.models import ModelConfiguration
+from onyx.db.models import LLMProvider, ModelConfiguration
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.models import UserMessage
-from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
-from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
+from onyx.prompts.contextual_retrieval import (
+    CONTEXTUAL_RAG_TOKEN_ESTIMATE,
+    DOCUMENT_SUMMARY_TOKEN_ESTIMATE,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
@@ -147,19 +148,21 @@ def litellm_exception_to_error_msg(
             - error_code: Categorized error code for frontend display
             - is_retryable: Whether the user should try again
     """
-    from litellm.exceptions import APIConnectionError
-    from litellm.exceptions import APIError
-    from litellm.exceptions import AuthenticationError
-    from litellm.exceptions import BadRequestError
-    from litellm.exceptions import BudgetExceededError
-    from litellm.exceptions import ContentPolicyViolationError
-    from litellm.exceptions import ContextWindowExceededError
-    from litellm.exceptions import NotFoundError
-    from litellm.exceptions import PermissionDeniedError
-    from litellm.exceptions import RateLimitError
-    from litellm.exceptions import ServiceUnavailableError
-    from litellm.exceptions import Timeout
-    from litellm.exceptions import UnprocessableEntityError
+    from litellm.exceptions import (
+        APIConnectionError,
+        APIError,
+        AuthenticationError,
+        BadRequestError,
+        BudgetExceededError,
+        ContentPolicyViolationError,
+        ContextWindowExceededError,
+        NotFoundError,
+        PermissionDeniedError,
+        RateLimitError,
+        ServiceUnavailableError,
+        Timeout,
+        UnprocessableEntityError,
+    )
 
     core_exception = _unwrap_nested_exception(e)
     error_msg = str(core_exception)

@@ -10,22 +10,20 @@ the task runs, so long-running tasks don't hold connections.
 
 import time
 from collections.abc import Generator
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from concurrent.futures import as_completed, ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
-from onyx.background.periodic_poller import _PeriodicTaskDef
-from onyx.background.periodic_poller import _try_claim_task
-from onyx.background.periodic_poller import _try_run_periodic_task
-from onyx.background.periodic_poller import PERIODIC_TASK_KV_PREFIX
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
+from onyx.background.periodic_poller import (
+    _PeriodicTaskDef,
+    _try_claim_task,
+    _try_run_periodic_task,
+    PERIODIC_TASK_KV_PREFIX,
+)
+from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
 from onyx.db.models import KVStore
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID

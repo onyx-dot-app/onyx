@@ -1,16 +1,17 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import HierarchyNodeType
-from onyx.db.models import Document
-from onyx.db.models import HierarchyNode
-from onyx.db.models import Persona
-from onyx.db.models import PersonaLabel
-from onyx.db.models import StarterMessage
+from onyx.db.models import (
+    Document,
+    HierarchyNode,
+    Persona,
+    PersonaLabel,
+    StarterMessage,
+)
 from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe

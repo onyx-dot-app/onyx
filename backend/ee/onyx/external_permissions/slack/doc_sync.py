@@ -2,21 +2,26 @@ from collections.abc import Generator
 
 from slack_sdk import WebClient
 
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
+from ee.onyx.external_permissions.perm_sync_types import (
+    FetchAllDocumentsFunction,
+    FetchAllDocumentsIdsFunction,
+)
 from ee.onyx.external_permissions.slack.channel_access import get_channel_access
-from ee.onyx.external_permissions.slack.utils import fetch_team_user_emails
-from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
-from onyx.access.models import DocExternalAccess
-from onyx.access.models import ExternalAccess
+from ee.onyx.external_permissions.slack.utils import (
+    fetch_team_user_emails,
+    fetch_user_id_to_email_map,
+)
+from onyx.access.models import DocExternalAccess, ExternalAccess
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import HierarchyNode
-from onyx.connectors.slack.connector import get_channels
-from onyx.connectors.slack.connector import get_channels_across_teams
-from onyx.connectors.slack.connector import list_grid_team_ids
-from onyx.connectors.slack.connector import make_paginated_slack_api_call
-from onyx.connectors.slack.connector import SlackConnector
+from onyx.connectors.slack.connector import (
+    get_channels,
+    get_channels_across_teams,
+    list_grid_team_ids,
+    make_paginated_slack_api_call,
+    SlackConnector,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_pool import get_redis_client

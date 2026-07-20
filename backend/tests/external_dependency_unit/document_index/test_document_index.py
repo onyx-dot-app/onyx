@@ -5,28 +5,28 @@ These tests assume OpenSearch is running.
 
 import time
 import uuid
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from unittest.mock import patch
 
 import pytest
 
 from onyx.configs.constants import PUBLIC_DOC_PAT
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.interfaces_new import DocumentIndex as DocumentIndexNew
-from onyx.document_index.interfaces_new import DocumentSectionRequest
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces_new import (
+    DocumentSectionRequest,
+    MetadataUpdateRequest,
+    TenantState,
+)
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.document_index.conftest import EMBEDDING_DIM
-from tests.external_dependency_unit.document_index.conftest import make_chunk
 from tests.external_dependency_unit.document_index.conftest import (
+    EMBEDDING_DIM,
+    make_chunk,
     make_indexing_metadata,
 )
 

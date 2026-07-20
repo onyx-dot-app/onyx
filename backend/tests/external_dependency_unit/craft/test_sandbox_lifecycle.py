@@ -21,24 +21,24 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.enums import BuildSessionStatus, SandboxStatus
+from onyx.db.models import BuildSession, Sandbox, User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.sessions_api import restore_session
-from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
-from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
-from onyx.server.features.build.db.sandbox import get_idle_sandboxes
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import SandboxInfo
+from onyx.server.features.build.db.sandbox import (
+    create_sandbox__no_commit,
+    create_snapshot__no_commit,
+    get_idle_sandboxes,
+)
+from onyx.server.features.build.sandbox.models import FilesystemEntry, SandboxInfo
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.sandbox_lifecycle import provision_sandbox
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import default_llm_config
-from tests.external_dependency_unit.craft._test_helpers import make_sandbox
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from tests.external_dependency_unit.craft._test_helpers import (
+    default_llm_config,
+    make_sandbox,
+    make_user,
+)
 from tests.external_dependency_unit.craft.conftest import (
     assert_lock_serializes_two_threads,
 )

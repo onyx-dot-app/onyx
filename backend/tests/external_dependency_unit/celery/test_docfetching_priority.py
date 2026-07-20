@@ -8,10 +8,8 @@ previously completed indexing.
 Uses real Redis for locking and real database objects for CC pairs and search settings.
 """
 
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -20,17 +18,20 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.tasks.docfetching.task_creation_utils import (
     try_creating_docfetching_task,
 )
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import OnyxCeleryPriority
+from onyx.configs.constants import DocumentSource, OnyxCeleryPriority
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.enums import IndexModelStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import SearchSettings
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    EmbeddingPrecision,
+    IndexModelStatus,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    SearchSettings,
+)
 from onyx.redis.redis_pool import get_redis_client
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 

@@ -1,17 +1,17 @@
 import json
 import os
 import urllib.parse
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
 from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import AuthType
-from onyx.configs.constants import QueryHistoryType
+from onyx.configs.constants import AuthType, QueryHistoryType
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.prompts.image_analysis import (
+    DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+    DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

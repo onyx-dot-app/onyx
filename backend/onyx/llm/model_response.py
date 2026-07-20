@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
-from typing import List
-from typing import TYPE_CHECKING
+from typing import Any, List, TYPE_CHECKING
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 
 class FunctionCall(BaseModel):

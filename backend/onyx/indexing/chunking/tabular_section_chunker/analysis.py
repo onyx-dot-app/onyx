@@ -3,9 +3,7 @@ from datetime import date
 from itertools import zip_longest
 
 from dateutil.parser import parse as parse_dt
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.utils.csv_utils import ParsedRow
 

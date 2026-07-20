@@ -7,35 +7,32 @@ import time
 import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from retry import retry
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from slack_sdk.models.blocks import Block
-from slack_sdk.models.blocks import SectionBlock
+from slack_sdk.models.blocks import Block, SectionBlock
 from slack_sdk.models.metadata import Metadata
 from slack_sdk.socket_mode import SocketModeClient
 
 from onyx.configs.app_configs import DISABLE_TELEMETRY
-from onyx.configs.constants import ID_SEPARATOR
-from onyx.configs.constants import MessageType
-from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_VISIBILITY
-from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_QPM
-from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_WAIT_TIME
-from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
-from onyx.configs.onyxbot_configs import ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD
-from onyx.configs.onyxbot_configs import ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS
+from onyx.configs.constants import ID_SEPARATOR, MessageType
+from onyx.configs.onyxbot_configs import (
+    ONYX_BOT_FEEDBACK_VISIBILITY,
+    ONYX_BOT_MAX_QPM,
+    ONYX_BOT_MAX_WAIT_TIME,
+    ONYX_BOT_NUM_RETRIES,
+    ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD,
+    ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
+)
 from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.constants import FeedbackVisibility
-from onyx.onyxbot.slack.models import ChannelType
-from onyx.onyxbot.slack.models import ThreadMessage
+from onyx.onyxbot.slack.models import ChannelType, ThreadMessage
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import optional_telemetry, RecordType
 from onyx.utils.text_processing import replace_whitespaces_w_space
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 

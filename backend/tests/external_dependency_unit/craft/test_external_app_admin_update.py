@@ -14,12 +14,12 @@ from sqlalchemy.orm import Session
 import onyx.server.features.build.api.external_apps_api as api
 from onyx.db.enums import ExternalAppType
 from onyx.db.external_app import get_external_app_by_id
-from onyx.db.models import ExternalApp
-from onyx.db.models import Skill
-from onyx.db.models import User
+from onyx.db.models import ExternalApp, Skill, User
 from onyx.server.features.build.api.models import UpdateExternalAppRequest
-from tests.external_dependency_unit.craft._test_helpers import make_external_app
-from tests.external_dependency_unit.craft._test_helpers import reset_built_in_skill_row
+from tests.external_dependency_unit.craft._test_helpers import (
+    make_external_app,
+    reset_built_in_skill_row,
+)
 
 _AUTH_TEMPLATE = {"Authorization": "Bearer {token}"}
 _PATTERNS = ["https://slack.com/api/.*"]

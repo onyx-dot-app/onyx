@@ -20,8 +20,7 @@ from __future__ import annotations
 import datetime
 import threading
 from typing import Any
-from unittest.mock import patch
-from unittest.mock import PropertyMock
+from unittest.mock import patch, PropertyMock
 from uuid import UUID
 
 import pytest
@@ -29,25 +28,21 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.scheduled_tasks.tasks import (
     cleanup_stuck_scheduled_runs,
-)
-from onyx.background.celery.tasks.scheduled_tasks.tasks import (
     dispatch_due_scheduled_tasks,
 )
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import ScheduledTaskErrorClass
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskStatus
-from onyx.db.enums import ScheduledTaskTriggerSource
-from onyx.db.models import ScheduledTask
-from onyx.db.models import ScheduledTaskRun
-from onyx.db.models import User
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.db.enums import (
+    SandboxStatus,
+    ScheduledTaskErrorClass,
+    ScheduledTaskRunStatus,
+    ScheduledTaskStatus,
+    ScheduledTaskTriggerSource,
+)
+from onyx.db.models import ScheduledTask, ScheduledTaskRun, User
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import make_sandbox
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from tests.external_dependency_unit.craft._test_helpers import make_sandbox, make_user
 
 # ---------------------------------------------------------------------------
 # Fixtures

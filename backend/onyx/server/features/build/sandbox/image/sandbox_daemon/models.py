@@ -6,13 +6,10 @@ to ``/workspace/sandbox_daemon/``); the api-server imports the full module
 path.
 """
 
-from typing import Annotated
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import BaseModel, Field, model_validator
 
 SnapshotCreateStatus = Literal["created", "empty"]
 

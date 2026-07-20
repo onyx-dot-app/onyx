@@ -3,13 +3,15 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import ChunkIndexRequest
-from onyx.context.search.models import ChunkSearchRequest
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import PersonaSearchInfo
+from onyx.context.search.models import (
+    BaseFilters,
+    ChunkIndexRequest,
+    ChunkSearchRequest,
+    IndexFilters,
+    InferenceChunk,
+    InferenceSection,
+    PersonaSearchInfo,
+)
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
@@ -27,8 +29,7 @@ from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.secondary_llm_flows.source_filter import extract_source_filter
 from onyx.secondary_llm_flows.time_filter import extract_time_filter
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import FunctionCall
-from onyx.utils.threadpool_concurrency import run_functions_in_parallel
+from onyx.utils.threadpool_concurrency import FunctionCall, run_functions_in_parallel
 from onyx.utils.timing import log_function_time
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT

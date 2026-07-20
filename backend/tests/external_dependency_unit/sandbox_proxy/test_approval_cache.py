@@ -3,20 +3,21 @@
 
 import threading
 import time
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.cache.factory import get_cache_backend
 from onyx.db.enums import ApprovalDecision
 from onyx.sandbox_proxy import approval_cache as approval_cache_module
-from onyx.sandbox_proxy.approval_cache import _wake_key
-from onyx.sandbox_proxy.approval_cache import announce_approval
-from onyx.sandbox_proxy.approval_cache import announce_key
-from onyx.sandbox_proxy.approval_cache import pop_announcement
-from onyx.sandbox_proxy.approval_cache import send_wake
-from onyx.sandbox_proxy.approval_cache import wait_for_wake
+from onyx.sandbox_proxy.approval_cache import (
+    _wake_key,
+    announce_approval,
+    announce_key,
+    pop_announcement,
+    send_wake,
+    wait_for_wake,
+)
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 # ---------------------------------------------------------------------------

@@ -6,21 +6,21 @@ from typing import Any
 
 import requests
 
-from onyx.configs.app_configs import DISABLE_TELEMETRY
-from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
-from onyx.configs.constants import KV_CUSTOMER_UUID_KEY
-from onyx.configs.constants import KV_INSTANCE_DOMAIN_KEY
-from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.app_configs import DISABLE_TELEMETRY, ENTERPRISE_EDITION_ENABLED
+from onyx.configs.constants import (
+    KV_CUSTOMER_UUID_KEY,
+    KV_INSTANCE_DOMAIN_KEY,
+    MilestoneRecordType,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.key_value_store.factory import get_kv_store
-from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.key_value_store.interface import unwrap_str
+from onyx.key_value_store.interface import KvKeyNotFoundError, unwrap_str
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
+    noop_fallback,
 )
-from onyx.utils.variable_functionality import noop_fallback
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 

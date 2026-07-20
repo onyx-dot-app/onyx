@@ -3,10 +3,12 @@ from typing import NamedTuple
 
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import FileStore
-from onyx.skills.bundle import compute_bundle_sha256
-from onyx.skills.bundle import parse_skill_md_metadata
-from onyx.skills.bundle import slug_from_filename
-from onyx.skills.bundle import validate_custom_bundle
+from onyx.skills.bundle import (
+    compute_bundle_sha256,
+    parse_skill_md_metadata,
+    slug_from_filename,
+    validate_custom_bundle,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

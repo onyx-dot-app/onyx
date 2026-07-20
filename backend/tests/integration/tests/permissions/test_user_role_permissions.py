@@ -8,8 +8,7 @@ import httpx
 import pytest
 
 from onyx.db.models import UserRole
-from tests.integration.common_utils.managers.user import DATestUser
-from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user import DATestUser, UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 
 

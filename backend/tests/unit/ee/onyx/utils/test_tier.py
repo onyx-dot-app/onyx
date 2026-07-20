@@ -4,8 +4,7 @@ Focuses on cache-failure resilience: a Redis blip on the cached license
 read must not bubble up to callers (e.g. admin settings updates).
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from redis.exceptions import RedisError
@@ -15,8 +14,7 @@ from ee.onyx.server.license.models import CustomerTier
 from onyx.db.enums import AccessType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.settings.models import ApplicationStatus
-from onyx.server.settings.models import Tier
+from onyx.server.settings.models import ApplicationStatus, Tier
 
 
 def _metadata(

@@ -1,15 +1,15 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.db.notification import dismiss_notification
-from onyx.db.notification import get_notification_by_id
-from onyx.db.notification import get_notifications
+from onyx.db.notification import (
+    dismiss_notification,
+    get_notification_by_id,
+    get_notifications,
+)
 from onyx.server.features.build.utils import ensure_build_mode_intro_notification
 from onyx.server.features.notifications.utils import (
     ensure_permissions_migration_notification,

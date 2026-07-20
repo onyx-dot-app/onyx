@@ -1,11 +1,8 @@
 import pytest
 from chonkie import SentenceChunker
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import SECTION_SEPARATOR
-from onyx.connectors.models import IndexingDocument
-from onyx.connectors.models import Section
-from onyx.connectors.models import SectionType
+from onyx.configs.constants import DocumentSource, SECTION_SEPARATOR
+from onyx.connectors.models import IndexingDocument, Section, SectionType
 from onyx.indexing.chunking import DocumentChunker
 from onyx.indexing.chunking import text_section_chunker as text_chunker_module
 from onyx.natural_language_processing.utils import BaseTokenizer

@@ -34,17 +34,18 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentThoughtChunk,
+    Error,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config

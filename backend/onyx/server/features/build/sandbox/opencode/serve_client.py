@@ -14,31 +14,33 @@ from __future__ import annotations
 
 import queue
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterable
-from dataclasses import dataclass
-from dataclasses import field
-from typing import Any
-from typing import cast
+from collections.abc import Callable, Generator, Iterable
+from dataclasses import dataclass, field
+from typing import Any, cast
 
 import httpx
 
-from onyx.server.features.build.configs import OPENCODE_SERVE_CONNECT_TIMEOUT
-from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
-from onyx.server.features.build.configs import OPENCODE_SERVE_REQUEST_TIMEOUT
-from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
-from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
-from onyx.server.features.build.sandbox.opencode.event_bus import _Subscription
-from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
-from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
+from onyx.server.features.build.configs import (
+    OPENCODE_SERVE_CONNECT_TIMEOUT,
+    OPENCODE_SERVE_EVENT_READ_TIMEOUT,
+    OPENCODE_SERVE_REQUEST_TIMEOUT,
+    OPENCODE_SERVER_USERNAME,
+    SANDBOX_TURN_TIMEOUT_SECONDS,
+    SSE_KEEPALIVE_INTERVAL,
+)
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentThoughtChunk,
+    Error,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
+from onyx.server.features.build.sandbox.opencode.event_bus import (
+    _Subscription,
+    BUS_CLOSED_SENTINEL,
+    PodEventBus,
+)
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
 

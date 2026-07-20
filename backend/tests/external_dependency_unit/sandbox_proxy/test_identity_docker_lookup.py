@@ -14,17 +14,17 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Generator
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from docker import DockerClient
-from docker.errors import APIError
-from docker.errors import NotFound
+from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 
-from onyx.sandbox_proxy.identity_docker import _identity_from_container
-from onyx.sandbox_proxy.identity_docker import DockerEventsLookup
+from onyx.sandbox_proxy.identity_docker import (
+    _identity_from_container,
+    DockerEventsLookup,
+)
 
 _DOCKER_SOCKET = os.environ.get("SANDBOX_DOCKER_SOCKET", "/var/run/docker.sock")
 _TEST_NETWORK = "onyx-craft-sandbox-test"

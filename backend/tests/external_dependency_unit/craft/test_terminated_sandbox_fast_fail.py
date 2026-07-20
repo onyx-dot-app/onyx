@@ -13,8 +13,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.models import Sandbox, User
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
 from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 

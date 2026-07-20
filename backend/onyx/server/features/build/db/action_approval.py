@@ -3,21 +3,20 @@
 `try_record_decision`'s conditional UPDATE is the only race arbiter.
 """
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import POLICY_SEVERITY
-from onyx.db.models import ActionApproval
-from onyx.db.models import BuildSession
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    EndpointPolicy,
+    POLICY_SEVERITY,
+)
+from onyx.db.models import ActionApproval, BuildSession
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

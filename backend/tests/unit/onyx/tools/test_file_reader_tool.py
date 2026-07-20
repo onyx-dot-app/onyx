@@ -8,21 +8,19 @@ Verifies:
 - is_available() reflects DISABLE_VECTOR_DB
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import ToolCallException
-from onyx.tools.tool_implementations.file_reader.file_reader_tool import FILE_ID_FIELD
-from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
-from onyx.tools.tool_implementations.file_reader.file_reader_tool import MAX_NUM_CHARS
-from onyx.tools.tool_implementations.file_reader.file_reader_tool import NUM_CHARS_FIELD
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
+    FILE_ID_FIELD,
+    FileReaderTool,
+    MAX_NUM_CHARS,
+    NUM_CHARS_FIELD,
     START_CHAR_FIELD,
 )
 

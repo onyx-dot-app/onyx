@@ -1,9 +1,11 @@
 import pytest
 
-from onyx.connectors.slack.connector import _bot_inclusive_msg_filter
-from onyx.connectors.slack.connector import default_msg_filter
-from onyx.connectors.slack.connector import SlackConnector
-from onyx.connectors.slack.connector import SlackMessageFilterReason
+from onyx.connectors.slack.connector import (
+    _bot_inclusive_msg_filter,
+    default_msg_filter,
+    SlackConnector,
+    SlackMessageFilterReason,
+)
 from onyx.connectors.slack.models import MessageType
 
 # -- default_msg_filter tests --

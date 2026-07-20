@@ -5,9 +5,7 @@ from jira import JIRA
 from jira.resources import PermissionScheme
 from pydantic import ValidationError
 
-from ee.onyx.external_permissions.jira.models import Holder
-from ee.onyx.external_permissions.jira.models import Permission
-from ee.onyx.external_permissions.jira.models import User
+from ee.onyx.external_permissions.jira.models import Holder, Permission, User
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource

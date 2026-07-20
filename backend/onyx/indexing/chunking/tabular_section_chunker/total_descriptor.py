@@ -1,8 +1,7 @@
 from collections import Counter
 
 from onyx.indexing.chunking.tabular_section_chunker.analysis import SheetAnalysis
-from onyx.indexing.chunking.tabular_section_chunker.util import label
-from onyx.indexing.chunking.tabular_section_chunker.util import pack_lines
+from onyx.indexing.chunking.tabular_section_chunker.util import label, pack_lines
 from onyx.natural_language_processing.utils import BaseTokenizer
 
 TOTALS_HEADER = (

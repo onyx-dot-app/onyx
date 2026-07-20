@@ -18,17 +18,17 @@ import base64
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding
-from cryptography.hazmat.primitives.serialization import NoEncryption
-from cryptography.hazmat.primitives.serialization import PrivateFormat
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+)
 from kubernetes import client
 
 import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
-)
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     PUSH_DAEMON_PORT,
 )
 

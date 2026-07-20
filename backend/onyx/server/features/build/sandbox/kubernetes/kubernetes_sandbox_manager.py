@@ -50,69 +50,68 @@ import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding
-from cryptography.hazmat.primitives.serialization import PublicFormat
-from kubernetes import client
-from kubernetes import watch
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from kubernetes import client, watch
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
 from onyx.db.enums import SandboxStatus
-from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
-from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
-from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
-from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
-from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
-from onyx.server.features.build.configs import SANDBOX_POD_CPU_LIMIT
-from onyx.server.features.build.configs import SANDBOX_POD_CPU_REQUEST
-from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_LIMIT
-from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_REQUEST
-from onyx.server.features.build.configs import SANDBOX_PROXY_CA_CONFIGMAP
-from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
-from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
-from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
-from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
-from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
-from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
-from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
-from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.configs import (
+    OPENCODE_DISABLED_TOOLS,
+    OPENCODE_SERVE_PORT,
+    OPENCODE_SERVER_PASSWORD,
+    SANDBOX_API_SERVER_URL,
+    SANDBOX_CONTAINER_IMAGE,
+    SANDBOX_NAMESPACE,
+    SANDBOX_NEXTJS_PORT_END,
+    SANDBOX_NEXTJS_PORT_START,
+    SANDBOX_POD_CPU_LIMIT,
+    SANDBOX_POD_CPU_REQUEST,
+    SANDBOX_POD_MEMORY_LIMIT,
+    SANDBOX_POD_MEMORY_REQUEST,
+    SANDBOX_PROXY_CA_CONFIGMAP,
+    SANDBOX_PROXY_HOST,
+    SANDBOX_PROXY_INJECTED_PLACEHOLDER,
+    SANDBOX_PROXY_NAMESPACE,
+    SANDBOX_PROXY_PORT,
+    SANDBOX_S3_BUCKET,
+    SANDBOX_SERVICE_ACCOUNT_NAME,
+)
+from onyx.server.features.build.sandbox.base import (
+    BUN_CACHE_DIR,
+    BUN_IMAGE_CACHE_DIR,
+    SandboxManager,
+)
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SnapshotCreateRequest,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SnapshotCreateResponse,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SnapshotRestoreRequest,
 )
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT_SANDBOX
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
-from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
-from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
-from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import RetriableWriteError
-from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.labels import (
+    LABEL_K8S_COMPONENT,
+    LABEL_K8S_COMPONENT_SANDBOX,
+    LABEL_K8S_MANAGED_BY,
+    LABEL_K8S_MANAGED_BY_ONYX,
+    LABEL_SANDBOX_ID,
+    LABEL_TENANT_ID,
+)
+from onyx.server.features.build.sandbox.models import (
+    FatalWriteError,
+    FileSet,
+    FilesystemEntry,
+    LLMProviderConfig,
+    RetriableWriteError,
+    SandboxInfo,
+    SnapshotResult,
+)
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
-)
-from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (

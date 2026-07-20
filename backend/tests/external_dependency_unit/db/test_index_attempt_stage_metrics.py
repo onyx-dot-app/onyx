@@ -21,8 +21,7 @@ Validates the upsert + Chan-combination logic against real Postgres:
 import math
 import statistics
 from collections.abc import Generator
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed, ThreadPoolExecutor
 
 import pytest
 from sqlalchemy import select
@@ -30,15 +29,21 @@ from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
-from onyx.db.index_attempt_metrics import record_single_event
-from onyx.db.index_attempt_metrics import record_stage_aggregate
-from onyx.db.index_attempt_metrics import StageEventBuffer
+from onyx.db.index_attempt_metrics import (
+    record_single_event,
+    record_stage_aggregate,
+    StageEventBuffer,
+)
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptStageMetric
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    IndexAttemptStageMetric,
+)
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+)
 
 
 @pytest.fixture

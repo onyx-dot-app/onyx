@@ -4,12 +4,7 @@ from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
-from fastapi import Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -22,83 +17,83 @@ from onyx.auth.users import current_chat_accessible_user
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import is_chat_session_processing
 from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.chat_utils import convert_chat_history_basic
-from onyx.chat.chat_utils import create_chat_history_chain
-from onyx.chat.chat_utils import create_chat_session_from_request
-from onyx.chat.chat_utils import extract_headers
-from onyx.chat.models import ChatFullResponse
-from onyx.chat.models import CreateChatSessionID
-from onyx.chat.process_message import gather_stream_full
-from onyx.chat.process_message import handle_multi_model_stream
-from onyx.chat.process_message import handle_stream_message_objects
+from onyx.chat.chat_utils import (
+    convert_chat_history_basic,
+    create_chat_history_chain,
+    create_chat_session_from_request,
+    extract_headers,
+)
+from onyx.chat.models import ChatFullResponse, CreateChatSessionID
+from onyx.chat.process_message import (
+    gather_stream_full,
+    handle_multi_model_stream,
+    handle_stream_message_objects,
+)
 from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import set_fence
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.configs.constants import MessageType, MilestoneRecordType, PUBLIC_API_TAGS
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
-from onyx.db.chat import add_chats_to_session_from_slack_thread
-from onyx.db.chat import delete_all_chat_sessions_for_user
-from onyx.db.chat import delete_chat_session
-from onyx.db.chat import duplicate_chat_session_for_user_from_slack
-from onyx.db.chat import get_chat_message
-from onyx.db.chat import get_chat_messages_by_session
-from onyx.db.chat import get_chat_session_by_id
-from onyx.db.chat import get_chat_sessions_by_user
-from onyx.db.chat import set_as_latest_chat_message
-from onyx.db.chat import set_preferred_response
-from onyx.db.chat import translate_db_message_to_chat_message_detail
-from onyx.db.chat import update_chat_session
+from onyx.db.chat import (
+    add_chats_to_session_from_slack_thread,
+    delete_all_chat_sessions_for_user,
+    delete_chat_session,
+    duplicate_chat_session_for_user_from_slack,
+    get_chat_message,
+    get_chat_messages_by_session,
+    get_chat_session_by_id,
+    get_chat_sessions_by_user,
+    set_as_latest_chat_message,
+    set_preferred_response,
+    translate_db_message_to_chat_message_detail,
+    update_chat_session,
+)
 from onyx.db.chat_search import search_chat_sessions
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
-from onyx.db.feedback import create_chat_message_feedback
-from onyx.db.feedback import remove_chat_message_feedback
-from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import Persona
-from onyx.db.models import User
+from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
+from onyx.db.models import ChatSessionSharedStatus, Persona, User
 from onyx.db.persona import get_persona_by_id
-from onyx.db.usage import increment_usage
-from onyx.db.usage import UsageType
+from onyx.db.usage import increment_usage, UsageType
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.factory import get_default_llm
-from onyx.llm.factory import get_llm_for_persona
-from onyx.llm.factory import get_llm_token_counter
+from onyx.llm.factory import get_default_llm, get_llm_for_persona, get_llm_token_counter
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
-from onyx.server.query_and_chat.models import ChatFeedbackRequest
-from onyx.server.query_and_chat.models import ChatMessageIdentifier
-from onyx.server.query_and_chat.models import ChatRenameRequest
-from onyx.server.query_and_chat.models import ChatSearchResponse
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.models import ChatSessionDetailResponse
-from onyx.server.query_and_chat.models import ChatSessionDetails
-from onyx.server.query_and_chat.models import ChatSessionGroup
-from onyx.server.query_and_chat.models import ChatSessionsResponse
-from onyx.server.query_and_chat.models import ChatSessionSummary
-from onyx.server.query_and_chat.models import ChatSessionUpdateRequest
-from onyx.server.query_and_chat.models import MessageOrigin
-from onyx.server.query_and_chat.models import RenameChatSessionResponse
-from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.server.query_and_chat.models import SetPreferredResponseRequest
-from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
-from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
+from onyx.server.query_and_chat.models import (
+    ChatFeedbackRequest,
+    ChatMessageIdentifier,
+    ChatRenameRequest,
+    ChatSearchResponse,
+    ChatSessionCreationRequest,
+    ChatSessionDetailResponse,
+    ChatSessionDetails,
+    ChatSessionGroup,
+    ChatSessionsResponse,
+    ChatSessionSummary,
+    ChatSessionUpdateRequest,
+    MessageOrigin,
+    RenameChatSessionResponse,
+    SendMessageRequest,
+    SetPreferredResponseRequest,
+    UpdateChatSessionTemperatureRequest,
+    UpdateChatSessionThreadRequest,
+)
 from onyx.server.query_and_chat.session_loading import (
     translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
-from onyx.server.usage_limits import check_llm_cost_limit_for_provider
-from onyx.server.usage_limits import check_usage_and_raise
-from onyx.server.usage_limits import is_usage_limits_enabled
+from onyx.server.usage_limits import (
+    check_llm_cost_limit_for_provider,
+    check_usage_and_raise,
+    is_usage_limits_enabled,
+)
 from onyx.server.utils import get_json_line
 from onyx.tracing.framework.create import ensure_trace
 from onyx.utils.headers import get_custom_tool_additional_request_headers

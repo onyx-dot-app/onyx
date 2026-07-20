@@ -20,17 +20,12 @@ them inside ``backend/onyx/db/scheduled_task.py`` for persisted reads/writes.
 from __future__ import annotations
 
 import re
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Literal
 
 from cron_descriptor import ExpressionDescriptor
 from croniter import croniter
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import field_validator
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError

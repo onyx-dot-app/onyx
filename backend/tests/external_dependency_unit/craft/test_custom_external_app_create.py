@@ -7,20 +7,19 @@ from uuid import uuid4
 
 import pytest
 from fastapi import UploadFile
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 import onyx.server.features.build.api.external_apps_api as api
 from onyx.db.enums import ExternalAppType
-from onyx.db.models import ExternalApp
-from onyx.db.models import Skill
-from onyx.db.models import User
+from onyx.db.models import ExternalApp, Skill, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.api.models import CreateBuiltInExternalAppRequest
-from onyx.server.features.build.api.models import ExternalAppAdminResponse
-from onyx.server.features.build.api.models import UpdateExternalAppRequest
+from onyx.server.features.build.api.models import (
+    CreateBuiltInExternalAppRequest,
+    ExternalAppAdminResponse,
+    UpdateExternalAppRequest,
+)
 from onyx.utils.encryption import is_masked_credential
 
 _AUTH_TEMPLATE = {"Authorization": "Bearer {api_key}"}

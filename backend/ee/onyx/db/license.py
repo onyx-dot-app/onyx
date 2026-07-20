@@ -5,20 +5,15 @@ import struct
 from datetime import datetime
 from typing import NamedTuple
 
-from sqlalchemy import func
-from sqlalchemy import select
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from ee.onyx.server.license.models import LicenseMetadata
-from ee.onyx.server.license.models import LicensePayload
-from ee.onyx.server.license.models import LicenseSource
+from ee.onyx.server.license.models import LicenseMetadata, LicensePayload, LicenseSource
 from onyx.auth.schemas import UserRole
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.db.enums import AccountType
-from onyx.db.models import License
-from onyx.db.models import User
+from onyx.db.models import License, User
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -244,8 +239,10 @@ def update_license_cache(
         The cached LicenseMetadata
     """
     from ee.onyx.utils.license import get_license_status
-    from ee.onyx.utils.license_expiry import get_expiry_warning_stage
-    from ee.onyx.utils.license_expiry import get_grace_period_end
+    from ee.onyx.utils.license_expiry import (
+        get_expiry_warning_stage,
+        get_grace_period_end,
+    )
 
     tenant = tenant_id or get_current_tenant_id()
     cache = get_cache_backend(tenant_id=tenant_id)

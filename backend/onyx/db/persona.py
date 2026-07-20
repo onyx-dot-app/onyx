@@ -4,45 +4,40 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import exists
-from sqlalchemy import func
-from sqlalchemy import not_
-from sqlalchemy import or_
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy import exists, func, not_, or_, Select, select, update
+from sqlalchemy.orm import aliased, selectinload, Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS
-from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.constants import NotificationType
+from onyx.configs.constants import DEFAULT_PERSONA_ID, NotificationType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.document_access import get_accessible_documents_by_ids
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Document
-from onyx.db.models import DocumentSet
-from onyx.db.models import FederatedConnector__DocumentSet
-from onyx.db.models import HierarchyNode
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import Persona__UserGroup
-from onyx.db.models import PersonaLabel
-from onyx.db.models import StarterMessage
-from onyx.db.models import Tool
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserFile
-from onyx.db.models import UserGroup
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    DocumentSet,
+    FederatedConnector__DocumentSet,
+    HierarchyNode,
+    Persona,
+    Persona__User,
+    Persona__UserGroup,
+    PersonaLabel,
+    StarterMessage,
+    Tool,
+    User,
+    User__UserGroup,
+    UserFile,
+    UserGroup,
+)
 from onyx.db.notification import create_notification
-from onyx.server.features.persona.models import FullPersonaSnapshot
-from onyx.server.features.persona.models import MinimalPersonaSnapshot
-from onyx.server.features.persona.models import PersonaSharedNotificationData
-from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.features.persona.models import (
+    FullPersonaSnapshot,
+    MinimalPersonaSnapshot,
+    PersonaSharedNotificationData,
+    PersonaSnapshot,
+    PersonaUpsertRequest,
+)
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation

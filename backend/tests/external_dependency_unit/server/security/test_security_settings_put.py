@@ -9,13 +9,11 @@ import asyncio
 import json
 import threading
 from collections.abc import Generator
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi import Request
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -27,9 +25,11 @@ from onyx.server.security import api as security_api
 from onyx.server.security import store as security_store
 from onyx.server.security.api import put_security_settings_endpoint
 from onyx.server.security.models import SecuritySettingsOverrides
-from onyx.server.security.store import _build_env_defaults
-from onyx.server.security.store import _install_cache_for_test
-from onyx.server.security.store import invalidate_security_cache
+from onyx.server.security.store import (
+    _build_env_defaults,
+    _install_cache_for_test,
+    invalidate_security_cache,
+)
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 

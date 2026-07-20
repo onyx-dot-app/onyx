@@ -21,10 +21,12 @@ import httpx
 import pytest
 
 from onyx.server.features.build.sandbox.opencode import event_bus as event_bus_mod
-from onyx.server.features.build.sandbox.opencode.event_bus import _extract_session_id
-from onyx.server.features.build.sandbox.opencode.event_bus import _parse_sse_block
-from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
-from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
+from onyx.server.features.build.sandbox.opencode.event_bus import (
+    _extract_session_id,
+    _parse_sse_block,
+    BUS_CLOSED_SENTINEL,
+    PodEventBus,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures

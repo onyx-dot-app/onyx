@@ -4,8 +4,7 @@ from uuid import UUID
 import httpx
 from retry import retry
 
-from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
-from onyx.document_index.vespa_constants import NUM_THREADS
+from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT, NUM_THREADS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

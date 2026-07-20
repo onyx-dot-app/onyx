@@ -4,9 +4,7 @@ constructed ``User`` and the test ``db_session`` (no ``TestClient``)."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -14,25 +12,27 @@ import redis
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
-from onyx.db.models import ActionApproval
-from onyx.db.models import BuildSession
+from onyx.db.enums import ApprovalDecision, EndpointPolicy
+from onyx.db.models import ActionApproval, BuildSession
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import MatchedAction
 from onyx.sandbox_proxy import approval_cache
-from onyx.server.features.build.approvals.api import DecisionBody
-from onyx.server.features.build.approvals.api import list_live_approvals
-from onyx.server.features.build.approvals.api import list_session_approvals
-from onyx.server.features.build.approvals.api import submit_decision
+from onyx.server.features.build.approvals.api import (
+    DecisionBody,
+    list_live_approvals,
+    list_session_approvals,
+    submit_decision,
+)
 from onyx.server.features.build.db import action_approval
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import _set_created_at
+from tests.external_dependency_unit.craft._test_helpers import (
+    _set_created_at,
+    make_user,
+)
 from tests.external_dependency_unit.craft._test_helpers import (
     default_action_entries as _default_actions,
 )
-from tests.external_dependency_unit.craft._test_helpers import make_user
 
 
 def _stub_send_wake_noop(monkeypatch: pytest.MonkeyPatch) -> None:

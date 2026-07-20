@@ -7,21 +7,23 @@ manually during BUSINESS → ENTERPRISE → BUSINESS lifecycle testing.
 """
 
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.license import get_cached_license_metadata
-from ee.onyx.db.license import LICENSE_CACHE_TTL_SECONDS
-from ee.onyx.db.license import LICENSE_METADATA_KEY
-from ee.onyx.db.license import update_license_cache
-from ee.onyx.server.license.models import CustomerTier
-from ee.onyx.server.license.models import LicensePayload
-from ee.onyx.server.license.models import LicenseSource
-from ee.onyx.server.license.models import PlanType
+from ee.onyx.db.license import (
+    get_cached_license_metadata,
+    LICENSE_CACHE_TTL_SECONDS,
+    LICENSE_METADATA_KEY,
+    update_license_cache,
+)
+from ee.onyx.server.license.models import (
+    CustomerTier,
+    LicensePayload,
+    LicenseSource,
+    PlanType,
+)
 from onyx.redis.redis_pool import get_redis_client
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 

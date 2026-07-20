@@ -9,8 +9,7 @@ from collections.abc import Generator
 
 import pytest
 
-from onyx.redis.lock_context import redis_shared_lock
-from onyx.redis.lock_context import RedisSharedLockAcquisitionError
+from onyx.redis.lock_context import redis_shared_lock, RedisSharedLockAcquisitionError
 from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.utils.logger import setup_logger
 

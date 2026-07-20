@@ -16,32 +16,33 @@ Architecture Note (User-Shared Sandbox Model):
 
 import threading
 import time
-from abc import ABC
-from abc import abstractmethod
-from collections.abc import Callable
-from collections.abc import Generator
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentPlanUpdate
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import CurrentModeUpdate
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
-from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import PushFailure
-from onyx.server.features.build.sandbox.models import PushResult
-from onyx.server.features.build.sandbox.models import RetriableWriteError
-from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentPlanUpdate,
+    AgentThoughtChunk,
+    CurrentModeUpdate,
+    Error,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
+from onyx.server.features.build.sandbox.models import (
+    FatalWriteError,
+    FileSet,
+    FilesystemEntry,
+    LLMProviderConfig,
+    PushFailure,
+    PushResult,
+    RetriableWriteError,
+    SandboxInfo,
+    SnapshotResult,
+)
 from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger

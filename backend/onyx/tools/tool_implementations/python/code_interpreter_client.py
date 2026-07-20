@@ -3,16 +3,9 @@ from __future__ import annotations
 import json
 import re
 import time
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from functools import wraps
-from typing import Any
-from typing import Concatenate
-from typing import Literal
-from typing import ParamSpec
-from typing import TypedDict
-from typing import TypeVar
-from typing import Union
+from typing import Any, Concatenate, Literal, ParamSpec, TypedDict, TypeVar, Union
 
 import requests
 from pydantic import BaseModel

@@ -3,22 +3,13 @@
 import datetime
 from uuid import UUID
 
-from sqlalchemy import and_
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
-from onyx.db.enums import PatType
-from onyx.db.enums import Permission
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import PersonalAccessToken
-from onyx.db.models import Sandbox
-from onyx.db.models import Snapshot
-from onyx.db.models import User
-from onyx.db.pat import create_pat
-from onyx.db.pat import revoke_pat
+from onyx.db.enums import PatType, Permission, SandboxStatus
+from onyx.db.models import PersonalAccessToken, Sandbox, Snapshot, User
+from onyx.db.pat import create_pat, revoke_pat
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -14,29 +14,24 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
-from cachetools import cachedmethod
-from cachetools import TTLCache
+from cachetools import cachedmethod, TTLCache
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
-from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
 from onyx.db.notification import create_notification
-from onyx.db.scheduled_task import get_live_scheduled_run_grants
-from onyx.db.scheduled_task import ScheduledRunGrants
+from onyx.db.scheduled_task import get_live_scheduled_run_grants, ScheduledRunGrants
 from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy import approval_cache
-from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
-from onyx.sandbox_proxy.credential_injection import InjectionContext
-from onyx.sandbox_proxy.errors import http_403
-from onyx.sandbox_proxy.errors import SandboxProxyError
-from onyx.sandbox_proxy.identity import ResolvedSandbox
-from onyx.sandbox_proxy.identity import SessionContext
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialInjectionDispatcher,
+    InjectionContext,
+)
+from onyx.sandbox_proxy.errors import http_403, SandboxProxyError
+from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from onyx.server.features.build.db import action_approval

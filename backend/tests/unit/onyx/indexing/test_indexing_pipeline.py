@@ -1,36 +1,29 @@
 import random
 import threading
 import time
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import List
-from unittest.mock import MagicMock
-from unittest.mock import Mock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from typing import Any, cast, List
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
-from onyx.hooks.executor import HookSkipped
-from onyx.hooks.executor import HookSoftFailed
-from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
-from onyx.hooks.points.document_ingestion import DocumentIngestionSection
+from onyx.connectors.models import Document, DocumentSource, ImageSection, TextSection
+from onyx.hooks.executor import HookSkipped, HookSoftFailed
+from onyx.hooks.points.document_ingestion import (
+    DocumentIngestionResponse,
+    DocumentIngestionSection,
+)
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
-from onyx.indexing.indexing_pipeline import _apply_document_ingestion_hook
-from onyx.indexing.indexing_pipeline import add_contextual_summaries
-from onyx.indexing.indexing_pipeline import filter_documents
-from onyx.indexing.indexing_pipeline import get_docs_to_update
-from onyx.indexing.indexing_pipeline import process_image_sections
+from onyx.indexing.indexing_pipeline import (
+    _apply_document_ingestion_hook,
+    add_contextual_summaries,
+    filter_documents,
+    get_docs_to_update,
+    process_image_sections,
+)
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.model_response import Choice
-from onyx.llm.model_response import Message
-from onyx.llm.model_response import ModelResponse
+from onyx.llm.model_response import Choice, Message, ModelResponse
 from onyx.llm.utils import get_max_input_tokens
 
 

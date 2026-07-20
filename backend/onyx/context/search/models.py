@@ -3,14 +3,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import SearchSettings
-from onyx.indexing.models import BaseChunk
-from onyx.indexing.models import IndexingSetting
+from onyx.indexing.models import BaseChunk, IndexingSetting
 from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 
 

@@ -29,11 +29,9 @@ After the planned fixes both tests should pass.
 """
 
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 from sqlalchemy import delete
@@ -44,26 +42,27 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.google_drive.models import DriveRetrievalStage
-from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
-from onyx.connectors.google_drive.models import GoogleDriveFileType
-from onyx.connectors.google_drive.models import RetrievedDriveFile
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.google_drive.models import (
+    DriveRetrievalStage,
+    GoogleDriveCheckpoint,
+    GoogleDriveFileType,
+    RetrievedDriveFile,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    SecondsSinceUnixEpoch,
+)
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.hierarchy import ensure_source_node_exists
-from onyx.db.hierarchy import get_hierarchy_node_by_raw_id
-from onyx.db.hierarchy import get_source_hierarchy_node
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import HierarchyNode
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
-from onyx.utils.threadpool_concurrency import ThreadSafeSet
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.hierarchy import (
+    ensure_source_node_exists,
+    get_hierarchy_node_by_raw_id,
+    get_source_hierarchy_node,
+)
+from onyx.db.models import Connector, ConnectorCredentialPair, Credential, HierarchyNode
+from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
 
 SOURCE = DocumentSource.GOOGLE_DRIVE
 ADMIN_EMAIL = "admin@example.com"
