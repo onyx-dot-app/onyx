@@ -573,6 +573,9 @@ def test_snapshot_failure_on_unreachable_pod_still_terminates(
     def _boom(
         _sandbox_id: object, _session_id: object, _tenant_id: object
     ) -> SnapshotResult:
+        # Once the snapshot call establishes that the pod is unreachable, a
+        # second workspace listing must not be required to terminate it.
+        stubbed_cleanup.list_session_workspaces_returns = None
         raise RuntimeError("S3 unreachable")
 
     monkeypatch.setattr(stubbed_cleanup, "create_snapshot", _boom)
@@ -587,6 +590,7 @@ def test_snapshot_failure_on_unreachable_pod_still_terminates(
     # Unreachable pod is terminated despite the snapshot failure. (Tenant-wide
     # task; assert our sandbox's outcome, not global counts.)
     assert refreshed.status == SandboxStatus.SLEEPING
+    assert stubbed_cleanup.list_session_workspaces_count == 1
     assert stubbed_cleanup.terminate_count >= 1
 
 

@@ -538,6 +538,7 @@ def sleep_sandbox(
     # retry next cycle — unless the pod is unreachable, where snapshots can
     # never succeed and the workspace is already gone, so don't pin it
     # RUNNING forever.
+    pod_unreachable = False
     if snapshot_failed:
         if sandbox_manager.health_check(
             sandbox_id, timeout=_HEALTHCHECK_TIMEOUT_SECONDS
@@ -548,6 +549,7 @@ def sleep_sandbox(
                 sandbox_id,
             )
             return
+        pod_unreachable = True
         logger.warning(
             "Sandbox %s pod is unreachable; "
             "terminating despite snapshot failure (cannot recover "
@@ -564,21 +566,22 @@ def sleep_sandbox(
         )
         return
     try:
-        current_session_ids = list_snapshotable_session_workspaces(
-            db_session,
-            sandbox_manager,
-            sandbox,
-            session_creation_lock,
-        )
-        new_session_ids = set(current_session_ids) - set(session_ids)
-        if new_session_ids:
-            logger.info(
-                "Sandbox %s gained %s session workspace(s) during snapshot; "
-                "skipping reap",
-                sandbox_id,
-                len(new_session_ids),
+        if not pod_unreachable:
+            current_session_ids = list_snapshotable_session_workspaces(
+                db_session,
+                sandbox_manager,
+                sandbox,
+                session_creation_lock,
             )
-            return
+            new_session_ids = set(current_session_ids) - set(session_ids)
+            if new_session_ids:
+                logger.info(
+                    "Sandbox %s gained %s session workspace(s) during snapshot; "
+                    "skipping reap",
+                    sandbox_id,
+                    len(new_session_ids),
+                )
+                return
 
         # Snapshotting above can take minutes; re-check idleness right before
         # the kill.
