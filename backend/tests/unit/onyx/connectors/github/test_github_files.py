@@ -1,22 +1,17 @@
 import time
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 from github import Github
-from github.GithubException import GithubException
-from github.GithubException import UnknownObjectException
+from github.GithubException import GithubException, UnknownObjectException
 from github.RateLimit import RateLimit
 from github.Requester import Requester
 
-from onyx.connectors.github.connector import _is_indexable_path
-from onyx.connectors.github.connector import GithubConnector
+from onyx.connectors.github.connector import _is_indexable_path, GithubConnector
 from onyx.connectors.github.models import SerializedRepository
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
+from onyx.connectors.models import ConnectorFailure, Document
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 

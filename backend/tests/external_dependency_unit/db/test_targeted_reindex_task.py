@@ -25,17 +25,23 @@ from onyx.background.celery.tasks.docprocessing.targeted_reindex_task import (
 )
 from onyx.background.indexing.run_targeted_reindex import CCPairReindexResult
 from onyx.db.enums import IndexingStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptError
-from onyx.db.models import TargetedReindexJob
-from onyx.db.models import TargetedReindexJobTarget
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    IndexAttemptError,
+    TargetedReindexJob,
+    TargetedReindexJobTarget,
+)
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.targeted_reindex import create_targeted_reindex_job
-from onyx.db.targeted_reindex import resolve_error_ids_to_targets
-from onyx.db.targeted_reindex import TargetSpec
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from onyx.db.targeted_reindex import (
+    create_targeted_reindex_job,
+    resolve_error_ids_to_targets,
+    TargetSpec,
+)
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+)
 
 _PROCESSOR_PATH = (
     "onyx.background.celery.tasks.docprocessing."

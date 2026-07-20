@@ -9,22 +9,18 @@ import struct
 import time
 import uuid
 from contextlib import AbstractContextManager
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
-from onyx.cache.interface import TTL_KEY_NOT_FOUND
-from onyx.cache.interface import TTL_NO_EXPIRY
+from onyx.cache.interface import (
+    CacheBackend,
+    CacheLock,
+    TTL_KEY_NOT_FOUND,
+    TTL_NO_EXPIRY,
+)
 from onyx.db.models import CacheStore
 
 _LIST_KEY_PREFIX = "_q:"

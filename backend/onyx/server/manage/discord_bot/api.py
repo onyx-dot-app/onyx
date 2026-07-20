@@ -1,37 +1,37 @@
 """Discord bot admin API endpoints."""
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import DISCORD_BOT_TOKEN
+from onyx.configs.app_configs import AUTH_TYPE, DISCORD_BOT_TOKEN
 from onyx.configs.constants import AuthType
-from onyx.db.discord_bot import create_discord_bot_config
-from onyx.db.discord_bot import create_guild_config
-from onyx.db.discord_bot import delete_discord_bot_config
-from onyx.db.discord_bot import delete_discord_service_api_key
-from onyx.db.discord_bot import delete_guild_config
-from onyx.db.discord_bot import get_channel_config_by_internal_ids
-from onyx.db.discord_bot import get_channel_configs
-from onyx.db.discord_bot import get_discord_bot_config
-from onyx.db.discord_bot import get_guild_config_by_internal_id
-from onyx.db.discord_bot import get_guild_configs
-from onyx.db.discord_bot import update_discord_channel_config
-from onyx.db.discord_bot import update_guild_config
+from onyx.db.discord_bot import (
+    create_discord_bot_config,
+    create_guild_config,
+    delete_discord_bot_config,
+    delete_discord_service_api_key,
+    delete_guild_config,
+    get_channel_config_by_internal_ids,
+    get_channel_configs,
+    get_discord_bot_config,
+    get_guild_config_by_internal_id,
+    get_guild_configs,
+    update_discord_channel_config,
+    update_guild_config,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.server.manage.discord_bot.models import DiscordBotConfigCreateRequest
-from onyx.server.manage.discord_bot.models import DiscordBotConfigResponse
-from onyx.server.manage.discord_bot.models import DiscordChannelConfigResponse
-from onyx.server.manage.discord_bot.models import DiscordChannelConfigUpdateRequest
-from onyx.server.manage.discord_bot.models import DiscordGuildConfigCreateResponse
-from onyx.server.manage.discord_bot.models import DiscordGuildConfigResponse
-from onyx.server.manage.discord_bot.models import DiscordGuildConfigUpdateRequest
+from onyx.server.manage.discord_bot.models import (
+    DiscordBotConfigCreateRequest,
+    DiscordBotConfigResponse,
+    DiscordChannelConfigResponse,
+    DiscordChannelConfigUpdateRequest,
+    DiscordGuildConfigCreateResponse,
+    DiscordGuildConfigResponse,
+    DiscordGuildConfigUpdateRequest,
+)
 from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
 from shared_configs.contextvars import get_current_tenant_id
 

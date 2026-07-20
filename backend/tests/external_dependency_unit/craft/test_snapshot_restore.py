@@ -17,25 +17,28 @@ import io
 import shutil
 import tarfile
 from pathlib import Path
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from kubernetes import client
 
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import (
+    SANDBOX_BACKEND,
+    SANDBOX_NAMESPACE,
+    SandboxBackend,
+)
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.snapshot_manager import SNAPSHOT_FILE_TYPE
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import default_llm_config
-from tests.external_dependency_unit.craft.conftest import pod_exec
-from tests.external_dependency_unit.craft.conftest import wait_for_pod_deletion
+from tests.external_dependency_unit.craft.conftest import (
+    pod_exec,
+    wait_for_pod_deletion,
+)
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,

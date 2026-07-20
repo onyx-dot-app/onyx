@@ -13,20 +13,13 @@ import os
 import shlex
 import time
 import zipfile
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterable
-from collections.abc import Sequence
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Generator, Iterable, Sequence
+from concurrent.futures import as_completed, ThreadPoolExecutor
 from contextlib import contextmanager
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import Any
-from typing import TYPE_CHECKING
-from uuid import UUID
-from uuid import uuid4
+from typing import Any, TYPE_CHECKING
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
@@ -37,41 +30,48 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.enums import AccountType
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.llm import fetch_default_llm_model
-from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_llm_provider
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.db.models import Skill
-from onyx.db.models import Skill__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
+from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+from onyx.db.enums import AccountType, BuildSessionStatus, SandboxStatus
+from onyx.db.llm import (
+    fetch_default_llm_model,
+    fetch_existing_llm_provider,
+    remove_llm_provider,
+    update_default_provider,
+    upsert_llm_provider,
+)
+from onyx.db.models import (
+    BuildSession,
+    Sandbox,
+    Skill,
+    Skill__UserGroup,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserRole,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.db.sandbox import (
+    create_sandbox__no_commit,
+    update_sandbox_status__no_commit,
+)
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.common.craft.payloads import default_llm_config
-from tests.common.craft.skill_table_isolation import restore_skill_tables
-from tests.common.craft.skill_table_isolation import snapshot_skill_tables
+from tests.common.craft.skill_table_isolation import (
+    restore_skill_tables,
+    snapshot_skill_tables,
+)
 from tests.common.craft.stubs import StubSandboxManager
 
 _DEV_PUSH_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
@@ -848,8 +848,7 @@ def _pool_pod(
     passed to ``running_sandbox()``; for a user-owned pod use
     ``SandboxHandle.provision_for(user)``.
     """
-    from onyx.server.features.build.configs import SANDBOX_BACKEND
-    from onyx.server.features.build.configs import SandboxBackend
+    from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 
     if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
         pytest.skip(
@@ -903,8 +902,7 @@ def running_sandbox(
     ``with_session=True``) but does not change the pool pod's identity. For a
     user-owned *pod*, call ``SandboxHandle.provision_for(user)`` instead.
     """
-    from onyx.server.features.build.configs import SANDBOX_BACKEND
-    from onyx.server.features.build.configs import SandboxBackend
+    from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 
     if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
         pytest.skip(

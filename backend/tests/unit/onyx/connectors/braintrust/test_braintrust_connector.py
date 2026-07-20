@@ -1,21 +1,23 @@
 import re
 import time
 from collections.abc import Iterator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import patch
 
 import pytest
 
-from onyx.connectors.braintrust.connector import BraintrustCheckpoint
-from onyx.connectors.braintrust.connector import BraintrustConnector
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.braintrust.connector import (
+    BraintrustCheckpoint,
+    BraintrustConnector,
+)
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    HierarchyNode,
+    TabularSection,
+    TextSection,
+)
 
 _PROJECT = {"id": "proj-1", "name": "agent-wiki"}
 _PROMPT = {

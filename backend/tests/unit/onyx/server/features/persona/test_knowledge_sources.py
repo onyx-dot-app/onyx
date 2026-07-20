@@ -1,10 +1,8 @@
 """Unit tests for MinimalPersonaSnapshot.from_model knowledge_sources aggregation."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FederatedConnectorSource
+from onyx.configs.constants import DocumentSource, FederatedConnectorSource
 from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 

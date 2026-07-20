@@ -11,8 +11,7 @@ import time
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 

@@ -1,13 +1,11 @@
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.models import Memory
-from onyx.db.models import User
+from onyx.db.models import Memory, User
 
 MAX_MEMORIES_PER_USER = 10
 

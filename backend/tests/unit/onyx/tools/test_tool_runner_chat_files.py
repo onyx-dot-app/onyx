@@ -10,8 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from onyx.db.models import UserFile
-from onyx.tools.models import ChatFile
-from onyx.tools.models import PythonToolOverrideKwargs
+from onyx.tools.models import ChatFile, PythonToolOverrideKwargs
 
 
 class TestChatFilesPassingToPythonTool:

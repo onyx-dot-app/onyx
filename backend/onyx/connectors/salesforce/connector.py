@@ -11,31 +11,39 @@ from pathlib import Path
 from typing import Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
-from onyx.connectors.salesforce.doc_conversion import convert_sf_object_to_doc
-from onyx.connectors.salesforce.doc_conversion import convert_sf_query_result_to_doc
-from onyx.connectors.salesforce.doc_conversion import ID_PREFIX
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorCheckpoint,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
+from onyx.connectors.salesforce.doc_conversion import (
+    convert_sf_object_to_doc,
+    convert_sf_query_result_to_doc,
+    ID_PREFIX,
+)
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
-from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
-from onyx.connectors.salesforce.utils import ID_FIELD
-from onyx.connectors.salesforce.utils import MODIFIED_FIELD
-from onyx.connectors.salesforce.utils import NAME_FIELD
-from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
-from onyx.connectors.salesforce.utils import validate_sf_identifier
+from onyx.connectors.salesforce.utils import (
+    ACCOUNT_OBJECT_TYPE,
+    ID_FIELD,
+    MODIFIED_FIELD,
+    NAME_FIELD,
+    USER_OBJECT_TYPE,
+    validate_sf_identifier,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 

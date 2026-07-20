@@ -7,8 +7,7 @@ from mitmproxy import http
 from onyx.db.enums import EndpointPolicy
 from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy.credential_injection import InjectionOutcome
-from onyx.sandbox_proxy.identity import ResolvedSandbox
-from onyx.sandbox_proxy.identity import SessionContext
+from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
 
 _EGRESS_CONTEXT_FIELDS = "tenant=%s sandbox=%s"
 _EGRESS_SESSION_FIELDS = f"{_EGRESS_CONTEXT_FIELDS} session=%s"

@@ -4,8 +4,7 @@ from typing import cast
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import KVStore
-from onyx.key_value_store.interface import KeyValueStore
-from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.key_value_store.interface import KeyValueStore, KvKeyNotFoundError
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 

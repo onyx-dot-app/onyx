@@ -1,10 +1,8 @@
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import get_chat_session_by_id
-from onyx.db.models import Persona
-from onyx.db.models import UserProject
+from onyx.db.chat import create_chat_session, get_chat_session_by_id
+from onyx.db.models import Persona, UserProject
 from tests.external_dependency_unit.conftest import create_test_user
 
 

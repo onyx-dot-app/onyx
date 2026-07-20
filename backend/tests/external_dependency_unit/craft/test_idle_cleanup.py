@@ -22,19 +22,14 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.tasks.build import tasks as tasks_module
 from onyx.background.celery.tasks.build.tasks import cleanup_idle_sandboxes_task
 from onyx.configs.constants import OnyxRedisLocks
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.db.models import Snapshot
-from onyx.db.models import User
+from onyx.db.enums import BuildSessionStatus, SandboxStatus
+from onyx.db.models import BuildSession, Sandbox, Snapshot, User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.craft.db_helpers import make_sandbox
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
 # ---------------------------------------------------------------------------
 # Fixtures

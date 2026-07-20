@@ -6,10 +6,12 @@ from pydantic import BaseModel
 
 from onyx.configs.app_configs import XLSX_STREAM_SHEET_BYTES
 from onyx.connectors.models import TabularSection
-from onyx.file_processing.extract_file_text import file_io_to_text
-from onyx.file_processing.extract_file_text import stage_or_inline_xlsx_sheets
-from onyx.file_processing.extract_file_text import xlsx_has_large_sheet
-from onyx.file_processing.extract_file_text import xlsx_sheet_extraction
+from onyx.file_processing.extract_file_text import (
+    file_io_to_text,
+    stage_or_inline_xlsx_sheets,
+    xlsx_has_large_sheet,
+    xlsx_sheet_extraction,
+)
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger

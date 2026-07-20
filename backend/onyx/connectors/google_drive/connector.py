@@ -3,17 +3,11 @@ import json
 import os
 import sys
 import threading
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Callable, Generator, Iterator
 from datetime import datetime
 from enum import Enum
-from typing import Any
-from typing import cast
-from typing import Protocol
-from urllib.parse import parse_qs
-from urllib.parse import ParseResult
-from urllib.parse import urlparse
+from typing import Any, cast, Protocol
+from urllib.parse import parse_qs, ParseResult, urlparse
 
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
@@ -22,84 +16,96 @@ from googleapiclient.errors import HttpError
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import MAX_DRIVE_WORKERS
+from onyx.configs.app_configs import (
+    GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD,
+    INDEX_BATCH_SIZE,
+    MAX_DRIVE_WORKERS,
+)
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.google_drive.doc_conversion import (
     _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE,
-)
-from onyx.connectors.google_drive.doc_conversion import (
     _FALLBACK_WEB_VIEW_LINK_TEMPLATES,
+    build_slim_document,
+    convert_drive_item_to_document,
+    onyx_document_id_from_drive_file,
+    PermissionSyncContext,
+    WEB_VIEW_LINK_KEY,
 )
-from onyx.connectors.google_drive.doc_conversion import build_slim_document
-from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
-from onyx.connectors.google_drive.doc_conversion import onyx_document_id_from_drive_file
-from onyx.connectors.google_drive.doc_conversion import PermissionSyncContext
-from onyx.connectors.google_drive.doc_conversion import WEB_VIEW_LINK_KEY
-from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files
-from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
-from onyx.connectors.google_drive.file_retrieval import get_all_files_for_oauth
 from onyx.connectors.google_drive.file_retrieval import (
+    crawl_folders_for_files,
+    DriveFileFieldType,
+    get_all_files_for_oauth,
     get_all_files_in_my_drive_and_shared,
-)
-from onyx.connectors.google_drive.file_retrieval import get_external_access_for_folder
-from onyx.connectors.google_drive.file_retrieval import (
+    get_external_access_for_folder,
     get_files_by_web_view_links_batch,
+    get_files_in_shared_drive,
+    get_folder_metadata,
+    get_root_folder_id,
+    get_shared_drive_name,
+    has_link_only_permission,
 )
-from onyx.connectors.google_drive.file_retrieval import get_files_in_shared_drive
-from onyx.connectors.google_drive.file_retrieval import get_folder_metadata
-from onyx.connectors.google_drive.file_retrieval import get_root_folder_id
-from onyx.connectors.google_drive.file_retrieval import get_shared_drive_name
-from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
-from onyx.connectors.google_drive.models import DriveRetrievalStage
-from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
-from onyx.connectors.google_drive.models import GoogleDriveFileType
-from onyx.connectors.google_drive.models import RetrievedDriveFile
-from onyx.connectors.google_drive.models import StageCompletion
+from onyx.connectors.google_drive.models import (
+    DriveRetrievalStage,
+    GoogleDriveCheckpoint,
+    GoogleDriveFileType,
+    RetrievedDriveFile,
+    StageCompletion,
+)
 from onyx.connectors.google_utils.google_auth import get_google_creds
-from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
-from onyx.connectors.google_utils.google_utils import get_file_owners
-from onyx.connectors.google_utils.google_utils import GoogleFields
-from onyx.connectors.google_utils.resources import get_admin_service
-from onyx.connectors.google_utils.resources import get_drive_service
-from onyx.connectors.google_utils.resources import GoogleDriveService
-from onyx.connectors.google_utils.resources import ImpersonationError
-from onyx.connectors.google_utils.resources import make_user_removal_checker
+from onyx.connectors.google_utils.google_utils import (
+    execute_paginated_retrieval,
+    get_file_owners,
+    GoogleFields,
+)
+from onyx.connectors.google_utils.resources import (
+    get_admin_service,
+    get_drive_service,
+    GoogleDriveService,
+    ImpersonationError,
+    make_user_removal_checker,
+)
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+    MISSING_SCOPES_ERROR_STR,
+    ONYX_SCOPE_INSTRUCTIONS,
+    SLIM_BATCH_SIZE,
+    USER_FIELDS,
 )
-from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
-from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
-from onyx.connectors.google_utils.shared_constants import SLIM_BATCH_SIZE
-from onyx.connectors.google_utils.shared_constants import USER_FIELDS
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import NormalizationResult
-from onyx.connectors.interfaces import Resolver
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    NormalizationResult,
+    Resolver,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    EntityFailure,
+    HierarchyNode,
+    SlimDocument,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
-from onyx.utils.threadpool_concurrency import parallel_yield
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
-from onyx.utils.threadpool_concurrency import ThreadSafeSet
+from onyx.utils.threadpool_concurrency import (
+    parallel_yield,
+    run_functions_tuples_in_parallel,
+    ThreadSafeDict,
+    ThreadSafeSet,
+)
 
 logger = setup_logger()
 # TODO: Improve this by using the batch utility: https://googleapis.github.io/google-api-python-client/docs/batch.html

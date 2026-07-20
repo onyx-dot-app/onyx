@@ -1,6 +1,5 @@
 import os
-from typing import Any
-from typing import List
+from typing import Any, List
 from urllib.parse import urlparse
 
 # Used for logging

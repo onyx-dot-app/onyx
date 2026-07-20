@@ -7,27 +7,32 @@ from sqlalchemy.orm import Session
 from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DEFAULT_BOOST
-from onyx.connectors.models import Document
-from onyx.connectors.models import IndexAttemptMetadata
+from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.db.chunk import update_chunk_boost_components__no_commit
-from onyx.db.document import fetch_chunk_counts_for_documents
-from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
-from onyx.db.document import prepare_to_modify_documents
-from onyx.db.document import update_docs_chunk_count__no_commit
-from onyx.db.document import update_docs_last_modified__no_commit
-from onyx.db.document import update_docs_updated_at__no_commit
+from onyx.db.document import (
+    fetch_chunk_counts_for_documents,
+    mark_document_as_indexed_for_cc_pair__no_commit,
+    prepare_to_modify_documents,
+    update_docs_chunk_count__no_commit,
+    update_docs_last_modified__no_commit,
+    update_docs_updated_at__no_commit,
+)
 from onyx.db.document_set import fetch_document_sets_for_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
-from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
-from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
-from onyx.indexing.models import ChunkEnrichmentContext
-from onyx.indexing.models import DocAwareChunk
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import IndexChunk
-from onyx.indexing.models import IndexingBatchAdapter
-from onyx.indexing.models import UpdatableChunkData
+from onyx.indexing.indexing_pipeline import (
+    DocumentBatchPrepareContext,
+    index_doc_batch_prepare,
+)
+from onyx.indexing.models import (
+    ChunkEnrichmentContext,
+    DocAwareChunk,
+    DocMetadataAwareIndexChunk,
+    IndexChunk,
+    IndexingBatchAdapter,
+    UpdatableChunkData,
+)
 from onyx.redis.redis_hierarchy import get_ancestors_from_raw_id
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger

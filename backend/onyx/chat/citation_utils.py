@@ -1,7 +1,6 @@
 import re
 
-from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.context.search.models import SearchDocsResponse
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.models import ToolResponse

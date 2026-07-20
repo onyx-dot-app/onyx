@@ -1,22 +1,24 @@
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
-from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
-from onyx.configs.app_configs import CODE_INTERPRETER_DEFAULT_TIMEOUT_MS
-from onyx.configs.app_configs import CODE_INTERPRETER_MAX_OUTPUT_LENGTH
+from onyx.configs.app_configs import (
+    CODE_INTERPRETER_BASE_URL,
+    CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
+    CODE_INTERPRETER_MAX_OUTPUT_LENGTH,
+)
 from onyx.db.code_interpreter import fetch_code_interpreter_server
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import BashToolDelta
-from onyx.server.query_and_chat.streaming_models import BashToolStart
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import (
+    BashToolDelta,
+    BashToolStart,
+    Packet,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import ToolCallException, ToolResponse
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )

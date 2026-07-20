@@ -13,19 +13,19 @@ from typing import Any
 import pytest
 
 from onyx.server.features.build.packets import SubagentStartedPacket
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentThoughtChunk,
+    Error,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
 from onyx.server.features.build.sandbox.opencode.serve_client import (
     _synthesize_tool_content,
-)
-from onyx.server.features.build.sandbox.opencode.serve_client import _tool_status
-from onyx.server.features.build.sandbox.opencode.serve_client import _TurnState
-from onyx.server.features.build.sandbox.opencode.serve_client import _wrap_raw_output
-from onyx.server.features.build.sandbox.opencode.serve_client import (
+    _tool_status,
+    _TurnState,
+    _wrap_raw_output,
     translate_opencode_event,
 )
 

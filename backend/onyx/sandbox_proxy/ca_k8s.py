@@ -13,16 +13,19 @@ import time
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
-from onyx.sandbox_proxy.ca import CAStore
-from onyx.sandbox_proxy.ca import CAStoreConflictError
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_CA_CONFIGMAP
-from onyx.server.features.build.configs import SANDBOX_PROXY_CA_SECRET
-from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
+from onyx.sandbox_proxy.ca import CAStore, CAStoreConflictError
+from onyx.server.features.build.configs import (
+    SANDBOX_NAMESPACE,
+    SANDBOX_PROXY_CA_CONFIGMAP,
+    SANDBOX_PROXY_CA_SECRET,
+    SANDBOX_PROXY_NAMESPACE,
+)
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
+from onyx.server.features.build.sandbox.labels import (
+    LABEL_K8S_COMPONENT,
+    LABEL_K8S_MANAGED_BY,
+    LABEL_K8S_MANAGED_BY_ONYX,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

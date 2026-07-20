@@ -23,13 +23,11 @@ Custom Onyx packets (defined here):
 - subagent_started: A child opencode session was created under a parent turn
 """
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 # =============================================================================
 # Base Packet Type

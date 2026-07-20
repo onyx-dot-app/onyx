@@ -2,24 +2,25 @@ import datetime
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import and_
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from onyx.db.constants import UNSET
-from onyx.db.constants import UnsetType
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPOAuthProviderMode
-from onyx.db.enums import MCPServerStatus
-from onyx.db.enums import MCPTransport
-from onyx.db.models import MCPAuthenticationType
-from onyx.db.models import MCPConnectionConfig
-from onyx.db.models import MCPServer
-from onyx.db.models import Persona
-from onyx.db.models import Tool
-from onyx.db.models import User
+from onyx.db.constants import UNSET, UnsetType
+from onyx.db.enums import (
+    MCPAuthenticationPerformer,
+    MCPOAuthProviderMode,
+    MCPServerStatus,
+    MCPTransport,
+)
+from onyx.db.models import (
+    MCPAuthenticationType,
+    MCPConnectionConfig,
+    MCPServer,
+    Persona,
+    Tool,
+    User,
+)
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue

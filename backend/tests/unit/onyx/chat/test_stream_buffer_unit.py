@@ -4,15 +4,16 @@ and missing-chunk gaps surfacing as non-replayable instead of broken replays."""
 
 import os
 import zlib
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.chat import stream_buffer
-from onyx.chat.stream_buffer import read_stream_chunks
-from onyx.chat.stream_buffer import StreamBufferMeta
-from onyx.chat.stream_buffer import StreamBufferWriter
+from onyx.chat.stream_buffer import (
+    read_stream_chunks,
+    StreamBufferMeta,
+    StreamBufferWriter,
+)
 from tests.unit.fakes import FakeCache
 
 _RUN_ID = 42

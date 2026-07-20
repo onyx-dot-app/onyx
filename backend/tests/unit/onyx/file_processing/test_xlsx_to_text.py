@@ -5,9 +5,11 @@ from unittest.mock import patch
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 
-from onyx.file_processing.extract_file_text import _sheet_to_csv
-from onyx.file_processing.extract_file_text import xlsx_sheet_extraction
-from onyx.file_processing.extract_file_text import xlsx_to_text
+from onyx.file_processing.extract_file_text import (
+    _sheet_to_csv,
+    xlsx_sheet_extraction,
+    xlsx_to_text,
+)
 
 
 def _make_xlsx(sheets: dict[str, list[list[str]]]) -> io.BytesIO:

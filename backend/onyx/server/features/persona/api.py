@@ -1,67 +1,75 @@
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
-from fastapi import Response
-from fastapi import UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from pydantic import model_validator
+from pydantic import BaseModel, model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_limited_user
+from onyx.auth.users import (
+    current_chat_accessible_user,
+    current_curator_or_admin_user,
+    current_limited_user,
+)
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.configs.constants import FileOrigin, MilestoneRecordType, PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
-from onyx.db.enums import PersonaSharePermission
+from onyx.db.enums import Permission, PersonaSharePermission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import User
-from onyx.db.persona import create_assistant_label
-from onyx.db.persona import create_update_persona
-from onyx.db.persona import delete_persona_label
-from onyx.db.persona import get_assistant_labels
-from onyx.db.persona import get_minimal_persona_snapshots_for_user
-from onyx.db.persona import get_minimal_persona_snapshots_paginated
-from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import get_persona_count_for_user
-from onyx.db.persona import get_persona_snapshots_for_user
-from onyx.db.persona import get_persona_snapshots_paginated
-from onyx.db.persona import mark_persona_as_deleted
-from onyx.db.persona import mark_persona_as_not_deleted
-from onyx.db.persona import remove_user_from_persona_shares
-from onyx.db.persona import update_persona_featured
-from onyx.db.persona import update_persona_label
-from onyx.db.persona import update_persona_public_status
-from onyx.db.persona import update_persona_shared
-from onyx.db.persona import update_persona_visibility
-from onyx.db.persona import update_personas_display_priority
-from onyx.db.persona_sharing import get_persona_access_level
-from onyx.db.persona_sharing import get_user_group_ids_for_user
-from onyx.db.persona_sharing import persona_ownership_is_vacant
+from onyx.db.persona import (
+    create_assistant_label,
+    create_update_persona,
+    delete_persona_label,
+    get_assistant_labels,
+    get_minimal_persona_snapshots_for_user,
+    get_minimal_persona_snapshots_paginated,
+    get_persona_by_id,
+    get_persona_count_for_user,
+    get_persona_snapshots_for_user,
+    get_persona_snapshots_paginated,
+    mark_persona_as_deleted,
+    mark_persona_as_not_deleted,
+    remove_user_from_persona_shares,
+    update_persona_featured,
+    update_persona_label,
+    update_persona_public_status,
+    update_persona_shared,
+    update_persona_visibility,
+    update_personas_display_priority,
+)
+from onyx.db.persona_sharing import (
+    get_persona_access_level,
+    get_user_group_ids_for_user,
+    persona_ownership_is_vacant,
+)
 from onyx.db.users import get_active_admin_count
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.server.documents.models import PaginatedReturn
-from onyx.server.features.persona.constants import ADMIN_AGENTS_RESOURCE
-from onyx.server.features.persona.constants import AGENTS_RESOURCE
-from onyx.server.features.persona.models import FullPersonaSnapshot
-from onyx.server.features.persona.models import MinimalPersonaSnapshot
-from onyx.server.features.persona.models import PersonaLabelCreate
-from onyx.server.features.persona.models import PersonaLabelResponse
-from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.features.persona.constants import (
+    ADMIN_AGENTS_RESOURCE,
+    AGENTS_RESOURCE,
+)
+from onyx.server.features.persona.models import (
+    FullPersonaSnapshot,
+    MinimalPersonaSnapshot,
+    PersonaLabelCreate,
+    PersonaLabelResponse,
+    PersonaSnapshot,
+    PersonaUpsertRequest,
+)
 from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings

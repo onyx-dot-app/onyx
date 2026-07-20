@@ -18,18 +18,17 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_utils import load_all_chat_files
-from onyx.chat.chat_utils import load_chat_file
+from onyx.chat.chat_utils import load_all_chat_files, load_chat_file
 from onyx.chat.models import ChatLoadedFile
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MessageType
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import create_new_chat_message
-from onyx.db.chat import get_or_create_root_message
+from onyx.configs.constants import FileOrigin, MessageType
+from onyx.db.chat import (
+    create_chat_session,
+    create_new_chat_message,
+    get_or_create_root_message,
+)
 from onyx.file_store import file_store as file_store_module
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.tools.models import ChatFile
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -404,8 +403,7 @@ class TestLoadAllChatFilesLazy:
     def test_max_workers_capped_at_16(self) -> None:
         """Defense-in-depth: even with 200 files passed in, the thread pool
         is capped at 16 workers."""
-        from typing import Any
-        from typing import cast
+        from typing import Any, cast
 
         captured: dict[str, int] = {}
 

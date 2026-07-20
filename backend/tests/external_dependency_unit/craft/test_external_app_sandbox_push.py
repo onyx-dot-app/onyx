@@ -24,16 +24,16 @@ from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
 from onyx.db.enums import ExternalAppType
-from onyx.db.models import ExternalApp
-from onyx.db.models import Skill
-from onyx.db.models import User
+from onyx.db.models import ExternalApp, Skill, User
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
+    UpsertUserCredentialsRequest,
 )
-from onyx.server.features.build.external_apps.models import UpsertUserCredentialsRequest
-from tests.external_dependency_unit.craft.db_helpers import make_external_app
-from tests.external_dependency_unit.craft.db_helpers import make_user
-from tests.external_dependency_unit.craft.db_helpers import reset_built_in_skill_row
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_external_app,
+    make_user,
+    reset_built_in_skill_row,
+)
 
 _AUTH_TEMPLATE = {"Authorization": "Bearer {token}"}
 

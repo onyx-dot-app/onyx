@@ -17,9 +17,11 @@ when IAM is off.
 import functools
 import ssl
 
-from onyx.configs.app_configs import POSTGRES_SSLMODE
-from onyx.configs.app_configs import POSTGRES_SSLROOTCERT
-from onyx.configs.app_configs import USE_IAM_AUTH
+from onyx.configs.app_configs import (
+    POSTGRES_SSLMODE,
+    POSTGRES_SSLROOTCERT,
+    USE_IAM_AUTH,
+)
 from onyx.db.engine.iam_auth import create_ssl_context_if_iam
 
 # Modes that require an encrypted connection and therefore an explicit

@@ -1,10 +1,12 @@
 """Unified tracing setup for all providers (Braintrust, Langfuse, etc.)."""
 
-from onyx.configs.app_configs import BRAINTRUST_API_KEY
-from onyx.configs.app_configs import BRAINTRUST_PROJECT
-from onyx.configs.app_configs import LANGFUSE_HOST
-from onyx.configs.app_configs import LANGFUSE_PUBLIC_KEY
-from onyx.configs.app_configs import LANGFUSE_SECRET_KEY
+from onyx.configs.app_configs import (
+    BRAINTRUST_API_KEY,
+    BRAINTRUST_PROJECT,
+    LANGFUSE_HOST,
+    LANGFUSE_PUBLIC_KEY,
+    LANGFUSE_SECRET_KEY,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

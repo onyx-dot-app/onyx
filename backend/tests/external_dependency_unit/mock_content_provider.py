@@ -1,13 +1,14 @@
 import abc
-from collections.abc import Generator
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from unittest.mock import patch
 
 from pydantic import BaseModel
 
-from onyx.tools.tool_implementations.open_url.models import WebContent
-from onyx.tools.tool_implementations.open_url.models import WebContentProvider
+from onyx.tools.tool_implementations.open_url.models import (
+    WebContent,
+    WebContentProvider,
+)
 
 
 class MockWebContent(BaseModel):

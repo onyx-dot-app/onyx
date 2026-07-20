@@ -38,27 +38,28 @@ from __future__ import annotations
 import os
 from collections.abc import Generator
 from dataclasses import dataclass
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import (
+    SANDBOX_API_SERVER_URL,
+    SANDBOX_BACKEND,
+    SANDBOX_DOCKER_SOCKET,
+    SandboxBackend,
+)
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     _sandbox_container_name,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     DockerSandboxManager,
 )
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentThoughtChunk,
+    Error,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.sse import SSEKeepalive

@@ -10,13 +10,15 @@ import os
 
 import prometheus_exporter  # noqa: F401  (registers the /metrics exporter)
 from onyx_client.chat_user import BasicChatUser
-from scenarios import ChatWithSearchUser
-from scenarios import CompressionUser
-from scenarios import DeepResearchUser
-from scenarios import DisconnectUser
-from scenarios import FileAttachmentUser
-from scenarios import LongConversationUser
-from scenarios import MultiToolUser
+from scenarios import (
+    ChatWithSearchUser,
+    CompressionUser,
+    DeepResearchUser,
+    DisconnectUser,
+    FileAttachmentUser,
+    LongConversationUser,
+    MultiToolUser,
+)
 
 __all__ = [
     "BasicChatUser",

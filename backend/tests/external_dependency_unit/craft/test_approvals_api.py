@@ -4,37 +4,36 @@ constructed ``User`` and the test ``db_session`` (no ``TestClient``)."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from uuid import UUID
-from uuid import uuid4
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
 
 import pytest
 import redis
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
 from onyx.db.models import BuildSession
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import MatchedAction
 from onyx.sandbox_proxy import approval_cache
-from onyx.server.features.build.approvals.api import DecisionBody
-from onyx.server.features.build.approvals.api import list_live_approvals
-from onyx.server.features.build.approvals.api import submit_decision
-from onyx.server.features.build.approvals.api import submit_session_grant
+from onyx.server.features.build.approvals.api import (
+    DecisionBody,
+    list_live_approvals,
+    submit_decision,
+    submit_session_grant,
+)
 from onyx.server.features.build.db import action_approval
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import action_entry
 from tests.common.craft.payloads import default_action_entries as _default_actions
-from tests.external_dependency_unit.craft.db_helpers import force_approval_created_at
-from tests.external_dependency_unit.craft.db_helpers import make_external_app
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import (
+    force_approval_created_at,
+    make_external_app,
+    make_skill,
+    make_user,
+)
 
 
 def _stub_send_wake_noop(monkeypatch: pytest.MonkeyPatch) -> None:

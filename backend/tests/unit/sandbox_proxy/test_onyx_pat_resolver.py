@@ -15,14 +15,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME
-from onyx.auth.constants import API_KEY_HEADER_NAME
-from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
-from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME, API_KEY_HEADER_NAME
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialUnavailableError,
+    InjectionContext,
+)
 from onyx.sandbox_proxy.resolvers import onyx_pat
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
-from tests.unit.sandbox_proxy.conftest import make_flow
-from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox
+from tests.unit.sandbox_proxy.conftest import make_flow, make_resolved_sandbox
 
 _API_URL = "https://api.onyx.example.com"
 _API_HOST = "api.onyx.example.com"

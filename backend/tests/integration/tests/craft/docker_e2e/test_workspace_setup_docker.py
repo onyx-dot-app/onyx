@@ -9,21 +9,21 @@ hydration, and file API operations backed by docker exec.
 
 from __future__ import annotations
 
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     SANDBOX_EXEC_USER,
 )
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.craft.docker_e2e.conftest import DockerExec
-from tests.integration.tests.craft.docker_e2e.conftest import ProvisionSandbox
+from tests.integration.tests.craft.docker_e2e.conftest import (
+    DockerExec,
+    ProvisionSandbox,
+)
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.DOCKER,

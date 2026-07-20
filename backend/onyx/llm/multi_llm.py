@@ -3,60 +3,57 @@ import os
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
-from typing import cast
-from typing import TYPE_CHECKING
-from typing import Union
+from typing import Any, cast, TYPE_CHECKING, Union
 
-from onyx.configs.app_configs import MOCK_LLM_RESPONSE
-from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
-from onyx.configs.chat_configs import LLM_FIRST_CHUNK_MAX_RETRIES
-from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
-from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.configs.model_configs import LITELLM_EXTRA_BODY
+from onyx.configs.app_configs import (
+    MOCK_LLM_RESPONSE,
+    SEND_USER_METADATA_TO_LLM_PROVIDER,
+)
+from onyx.configs.chat_configs import (
+    LLM_FIRST_CHUNK_MAX_RETRIES,
+    LLM_SOCKET_READ_TIMEOUT,
+)
+from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.cost import calculate_llm_cost_cents
-from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.interfaces import ReasoningEffort
-from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.model_response import Usage
-from onyx.llm.models import ANTHROPIC_ADAPTIVE_REASONING_EFFORT
-from onyx.llm.models import ANTHROPIC_REASONING_EFFORT_BUDGET
-from onyx.llm.models import OPENAI_REASONING_EFFORT
+from onyx.llm.interfaces import (
+    LanguageModelInput,
+    LLM,
+    LLMConfig,
+    LLMUserIdentity,
+    ReasoningEffort,
+    ToolChoiceOptions,
+)
+from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
+from onyx.llm.models import (
+    ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
+    ANTHROPIC_REASONING_EFFORT_BUDGET,
+    OPENAI_REASONING_EFFORT,
+)
 from onyx.llm.request_context import get_llm_mock_response
-from onyx.llm.utils import build_litellm_passthrough_kwargs
-from onyx.llm.utils import is_true_openai_model
-from onyx.llm.utils import model_is_reasoning_model
-from onyx.llm.well_known_providers.constants import AWS_ACCESS_KEY_ID_KWARG
+from onyx.llm.utils import (
+    build_litellm_passthrough_kwargs,
+    is_true_openai_model,
+    model_is_reasoning_model,
+)
 from onyx.llm.well_known_providers.constants import (
+    AWS_ACCESS_KEY_ID_KWARG,
     AWS_ACCESS_KEY_ID_KWARG_ENV_VAR_FORMAT,
-)
-from onyx.llm.well_known_providers.constants import (
     AWS_BEARER_TOKEN_BEDROCK_KWARG_ENV_VAR_FORMAT,
-)
-from onyx.llm.well_known_providers.constants import AWS_REGION_NAME_KWARG
-from onyx.llm.well_known_providers.constants import AWS_REGION_NAME_KWARG_ENV_VAR_FORMAT
-from onyx.llm.well_known_providers.constants import AWS_SECRET_ACCESS_KEY_KWARG
-from onyx.llm.well_known_providers.constants import (
+    AWS_REGION_NAME_KWARG,
+    AWS_REGION_NAME_KWARG_ENV_VAR_FORMAT,
+    AWS_SECRET_ACCESS_KEY_KWARG,
     AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
-)
-from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
-from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
-from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
-from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
-from onyx.llm.well_known_providers.constants import (
+    LM_STUDIO_API_KEY_CONFIG_KEY,
+    OLLAMA_API_KEY_CONFIG_KEY,
+    VERTEX_AUTH_METHOD_KWARG,
+    VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY,
+    VERTEX_CREDENTIALS_FILE_KWARG,
     VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT,
+    VERTEX_LOCATION_KWARG,
+    VERTEX_PROJECT_KWARG,
 )
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
-from onyx.utils.encryption import mask_env_value_for_logging
-from onyx.utils.encryption import mask_string
+from onyx.utils.encryption import mask_env_value_for_logging, mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_generator_function_time
 
@@ -65,8 +62,7 @@ logger = setup_logger()
 _env_lock = threading.Lock()
 
 if TYPE_CHECKING:
-    from litellm import CustomStreamWrapper
-    from litellm import HTTPHandler
+    from litellm import CustomStreamWrapper, HTTPHandler
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
@@ -465,8 +461,7 @@ class LitellmLLM(LLM):
             return
         # Import here to avoid circular imports
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
-        from onyx.db.usage import increment_usage
-        from onyx.db.usage import UsageType
+        from onyx.db.usage import increment_usage, UsageType
 
         # Calculate cost in cents
         cost_cents = calculate_llm_cost_cents(
@@ -501,8 +496,7 @@ class LitellmLLM(LLM):
         client: "HTTPHandler | None" = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
-        from litellm.exceptions import RateLimitError
-        from litellm.exceptions import Timeout
+        from litellm.exceptions import RateLimitError, Timeout
 
         from onyx.llm.litellm_singleton import litellm
 
