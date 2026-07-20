@@ -21,7 +21,7 @@ from onyx.llm.model_capabilities import (
     litellm_thinks_model_supports_image_input,
 )
 from onyx.llm.model_response import ModelResponse
-from onyx.llm.models import UserMessage
+from onyx.llm.models import LLMErrorInfo, UserMessage
 from onyx.prompts.contextual_retrieval import (
     CONTEXTUAL_RAG_TOKEN_ESTIMATE,
     DOCUMENT_SUMMARY_TOKEN_ESTIMATE,
@@ -401,7 +401,7 @@ def litellm_exception_to_safe_error(
         dict[str, str] | None
     ) = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
     secrets: Iterable[str | None] = (),
-) -> tuple[str, str, bool]:
+) -> LLMErrorInfo:
     """Classify a LiteLLM exception and redact secrets from its message."""
     message, error_code, is_retryable = litellm_exception_to_error_msg(
         e,
@@ -415,7 +415,11 @@ def litellm_exception_to_safe_error(
         else []
     )
     safe_message = scrub_sensitive_values(message, [*llm_secrets, *secrets])
-    return safe_message, error_code, is_retryable
+    return LLMErrorInfo(
+        message=safe_message,
+        error_code=error_code,
+        is_retryable=is_retryable,
+    )
 
 
 def test_llm(llm: LLM) -> str | None:
@@ -438,7 +442,7 @@ def test_llm(llm: LLM) -> str | None:
             return None
         except Exception as e:
             logger.warning("Failed to call LLM with the following error: %s", e)
-            error_msg, _, _ = litellm_exception_to_safe_error(e, llm)
+            error_msg = litellm_exception_to_safe_error(e, llm).message
 
     return error_msg
 

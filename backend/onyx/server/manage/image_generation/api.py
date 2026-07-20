@@ -297,10 +297,10 @@ def test_image_generation(
         raise
     except Exception as e:
         logger.warning("Image generation test failed: %s", type(e).__name__)
-        safe_error_msg = litellm_exception_to_safe_error(
+        safe_error = litellm_exception_to_safe_error(
             e, secrets=collect_credential_values(api_key, custom_config)
-        )[0]
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, safe_error_msg)
+        )
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, safe_error.message)
 
 
 @admin_router.post("/config")

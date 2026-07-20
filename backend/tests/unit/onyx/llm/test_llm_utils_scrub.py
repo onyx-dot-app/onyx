@@ -174,17 +174,17 @@ def test_safe_error_preserves_classification_and_redacts_fallback() -> None:
     llm = _StubLLM(_make_config(custom_config={"auth_token": custom_secret}))
     error = RuntimeError(f"provider rejected {_SECRET_KEY} and {custom_secret}")
 
-    message, error_code, is_retryable = litellm_exception_to_safe_error(
+    error_info = litellm_exception_to_safe_error(
         error,
         llm,
         fallback_to_error_msg=True,
     )
 
-    assert message.count("[REDACTED]") == 2
-    assert _SECRET_KEY not in message
-    assert custom_secret not in message
-    assert error_code == "UNKNOWN_ERROR"
-    assert is_retryable is True
+    assert error_info.message.count("[REDACTED]") == 2
+    assert _SECRET_KEY not in error_info.message
+    assert custom_secret not in error_info.message
+    assert error_info.error_code == "UNKNOWN_ERROR"
+    assert error_info.is_retryable is True
 
 
 # ---------------------------------------------------------------------------
