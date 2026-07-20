@@ -263,6 +263,7 @@ class SessionManager:
             )
 
         update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
 
         prompt_slot = (
             self._sandbox_manager.prompt_slot(
@@ -759,7 +760,10 @@ class SessionManager:
                     # Log but don't fail - session can still be deleted even if
                     # workspace cleanup fails (e.g., if pod is already terminated)
                     logger.warning(
-                        "Failed to cleanup session workspace %s: %s", session_id, e
+                        "Failed to cleanup session workspace %s: %s",
+                        session_id,
+                        e,
+                        exc_info=True,
                     )
 
                 ensure_prompt_slot_owned()
@@ -1558,6 +1562,7 @@ class SessionManager:
 
         # Update heartbeat - file upload is user activity that keeps sandbox alive
         update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
 
         return relative_path, len(content)
 
@@ -1596,5 +1601,6 @@ class SessionManager:
             # SandboxManager already logs the deletion details
             # Update heartbeat - file deletion is user activity that keeps sandbox alive
             update_sandbox_heartbeat(self._db_session, sandbox.id)
+            self._db_session.commit()
 
         return deleted

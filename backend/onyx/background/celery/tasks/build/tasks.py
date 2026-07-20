@@ -19,9 +19,11 @@ from onyx.server.features.build.db.sandbox import (
     user_has_stale_active_session,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.session.locks import get_session_creation_lock
 from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
     is_sandbox_idle,
+    list_snapshotable_session_workspaces,
     sleep_sandbox,
 )
 
@@ -95,12 +97,16 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                 ).append(sandbox)
 
             for sandbox in idle_sandboxes:
+                session_creation_lock = get_session_creation_lock(
+                    redis_client, sandbox.user_id
+                )
                 try:
                     sleep_sandbox(
                         db_session=db_session,
                         sandbox_manager=sandbox_manager,
                         sandbox=sandbox,
                         tenant_id=tenant_id,
+                        session_creation_lock=session_creation_lock,
                     )
                 except Exception as e:
                     task_logger.error(
@@ -121,11 +127,28 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                     ):
                         continue
 
-                    # List session directories in the sandbox via the
-                    # backend-agnostic manager API. K8s lists pod paths via
-                    # exec; Docker lists container paths via exec; Local
-                    # walks the on-disk sessions/ directory.
-                    session_ids = sandbox_manager.list_session_workspaces(sandbox_id)
+                    session_creation_lock = get_session_creation_lock(
+                        redis_client, sandbox.user_id
+                    )
+                    if not session_creation_lock.acquire(blocking=False):
+                        task_logger.info(
+                            "Skipping sandbox %s background snapshot while a "
+                            "session is being created",
+                            sandbox.id,
+                        )
+                        continue
+                    try:
+                        # List session directories in the sandbox via the
+                        # backend-agnostic manager API.
+                        session_ids = list_snapshotable_session_workspaces(
+                            db_session,
+                            sandbox_manager,
+                            sandbox,
+                            session_creation_lock,
+                        )
+                    finally:
+                        if session_creation_lock.owned():
+                            session_creation_lock.release()
 
                     # Background snapshot failures are log-only (unlike the
                     # reap path, nothing is about to be terminated).

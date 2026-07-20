@@ -226,6 +226,7 @@ def send_subagent_message(
                 sandbox = get_sandbox_by_user_id(db_session, user.id)
                 if sandbox and sandbox.status.is_active():
                     update_sandbox_heartbeat(db_session, sandbox.id)
+                    db_session.commit()
 
                 session_manager = SessionManager(db_session)
                 for chunk in session_manager.send_subagent_message(

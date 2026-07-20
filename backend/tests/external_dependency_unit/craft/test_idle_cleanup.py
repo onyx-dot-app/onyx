@@ -14,7 +14,7 @@ from __future__ import annotations
 import datetime
 import logging
 from collections.abc import Generator
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import update
@@ -187,6 +187,153 @@ def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
         "timeout_seconds": 300.0,
     } in stubbed_cleanup.create_opencode_history_snapshot_payloads
     assert stubbed_cleanup.terminate_count >= 1
+
+
+def test_orphan_workspace_cleanup_failure_does_not_block_sleep(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An orphan is skipped even when deleting its workspace fails."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    orphan_session_id = uuid4()
+
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+
+    stubbed_cleanup.list_session_workspaces_returns = [orphan_session_id]
+    stubbed_cleanup.terminate_silent = True
+
+    with caplog.at_level(logging.WARNING):
+        cleanup_idle_sandboxes_task.run(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.SLEEPING
+    assert stubbed_cleanup.last_cleanup_session_workspace_payload == {
+        "sandbox_id": sandbox.id,
+        "session_id": orphan_session_id,
+    }
+    assert stubbed_cleanup.create_snapshot_count == 0
+    assert sandbox.id in stubbed_cleanup.terminated_sandbox_ids
+    assert any(
+        "Failed to remove orphan workspace" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_session_creation_lock_prevents_idle_reap(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+) -> None:
+    """An uncommitted session workspace must not be treated as an orphan."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+
+    # Model the visibility gap from session creation: the workspace already
+    # exists in the pod, but its owning BuildSession is not committed yet.
+    uncommitted_session_id = uuid4()
+    stubbed_cleanup.list_session_workspaces_returns = [uncommitted_session_id]
+
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    session_creation_lock = redis_client.lock(
+        f"{OnyxRedisLocks.SESSION_CREATE_LOCK_PREFIX}:{user.id}",
+        timeout=60,
+    )
+    assert session_creation_lock.acquire(blocking=False)
+    try:
+        cleanup_idle_sandboxes_task.run(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
+    finally:
+        session_creation_lock.release()
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.RUNNING
+    assert stubbed_cleanup.list_session_workspaces_count == 0
+    assert stubbed_cleanup.last_cleanup_session_workspace_payload is None
+    assert sandbox.id not in stubbed_cleanup.terminated_sandbox_ids
+
+
+def test_session_created_during_snapshot_prevents_idle_reap(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session committed during snapshots is caught by the final rescan."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    initial_session = BuildSession(
+        user_id=user.id,
+        name="initial-session",
+        status=BuildSessionStatus.ACTIVE,
+    )
+    db_session.add(initial_session)
+    db_session.commit()
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+
+    stubbed_cleanup.list_session_workspaces_returns = [initial_session.id]
+    stubbed_cleanup.terminate_silent = True
+
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    creation_lock = redis_client.lock(
+        f"{OnyxRedisLocks.SESSION_CREATE_LOCK_PREFIX}:{user.id}",
+        timeout=60,
+    )
+
+    def create_snapshot_during_session_creation(
+        sandbox_id: UUID,
+        session_id: UUID,
+        tenant_id: str,
+    ) -> SnapshotResult:
+        assert sandbox_id == sandbox.id
+        assert session_id == initial_session.id
+        assert tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        assert creation_lock.acquire(blocking=False)
+        try:
+            new_session = BuildSession(
+                user_id=user.id,
+                name="concurrent-session",
+                status=BuildSessionStatus.ACTIVE,
+            )
+            db_session.add(new_session)
+            db_session.commit()
+            assert stubbed_cleanup.list_session_workspaces_returns is not None
+            stubbed_cleanup.list_session_workspaces_returns.append(new_session.id)
+        finally:
+            creation_lock.release()
+
+        return SnapshotResult(
+            storage_path=f"s3://snapshots/{sandbox.id}/{initial_session.id}.tar.gz",
+            size_bytes=1234,
+        )
+
+    monkeypatch.setattr(
+        stubbed_cleanup,
+        "create_snapshot",
+        create_snapshot_during_session_creation,
+    )
+
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.RUNNING
+    assert stubbed_cleanup.list_session_workspaces_count == 2
+    assert sandbox.id not in stubbed_cleanup.terminated_sandbox_ids
 
 
 def test_active_sandbox_within_threshold_not_touched(
@@ -426,6 +573,9 @@ def test_snapshot_failure_on_unreachable_pod_still_terminates(
     def _boom(
         _sandbox_id: object, _session_id: object, _tenant_id: object
     ) -> SnapshotResult:
+        # Once the snapshot call establishes that the pod is unreachable, a
+        # second workspace listing must not be required to terminate it.
+        stubbed_cleanup.list_session_workspaces_returns = None
         raise RuntimeError("S3 unreachable")
 
     monkeypatch.setattr(stubbed_cleanup, "create_snapshot", _boom)
@@ -440,6 +590,7 @@ def test_snapshot_failure_on_unreachable_pod_still_terminates(
     # Unreachable pod is terminated despite the snapshot failure. (Tenant-wide
     # task; assert our sandbox's outcome, not global counts.)
     assert refreshed.status == SandboxStatus.SLEEPING
+    assert stubbed_cleanup.list_session_workspaces_count == 1
     assert stubbed_cleanup.terminate_count >= 1
 
 

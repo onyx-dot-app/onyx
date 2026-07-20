@@ -50,12 +50,14 @@ from onyx.server.features.build.db.build_session import (
     create_message,
     get_session_messages,
 )
+from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.sandbox.event_schema import (
     TURN_ERROR_CODE_TIMEOUT,
     Error,
     PromptResponse,
     RequestPermissionRequest,
 )
+from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.utils.logger import setup_logger
@@ -344,39 +346,41 @@ def _drive_agent(
     with get_session_with_current_tenant() as db_session:
         session_manager = SessionManager(db_session)
 
-        # Create the BuildSession. SCHEDULED origin keeps it out of the
-        # Craft sidebar (see `get_user_build_sessions`).
-        build_session = session_manager.create_session__no_commit(
-            user_id=task_user_id,
-            origin=SessionOrigin.SCHEDULED,
-            name=f"Scheduled: {task_name}",
-        )
-        session_id = build_session.id
+        with session_creation_lock(task_user_id):
+            # Create the BuildSession. SCHEDULED origin keeps it out of the
+            # Craft sidebar (see `get_user_build_sessions`).
+            build_session = session_manager.create_session__no_commit(
+                user_id=task_user_id,
+                origin=SessionOrigin.SCHEDULED,
+                name=f"Scheduled: {task_name}",
+            )
+            session_id = build_session.id
 
-        # Persist the user prompt as turn 0 so the transcript matches an
-        # interactive run exactly (interactive flow does the same in
-        # `_stream_cli_agent_response`).
-        create_message(
-            session_id=session_id,
-            message_type=MessageType.USER,
-            turn_index=0,
-            message_metadata={
-                "type": "user_message",
-                "content": {"type": "text", "text": task_prompt},
-            },
-            db_session=db_session,
-        )
+            # Persist the user prompt as turn 0 so the transcript matches an
+            # interactive run exactly (interactive flow does the same in
+            # `_stream_cli_agent_response`).
+            create_message(
+                session_id=session_id,
+                message_type=MessageType.USER,
+                turn_index=0,
+                message_metadata={
+                    "type": "user_message",
+                    "content": {"type": "text", "text": task_prompt},
+                },
+                db_session=db_session,
+            )
 
-        # Wire the session id onto the run row so the UI can deep-link
-        # from the run history into the session view as soon as anything
-        # is persisted.
-        mark_run_status(
-            db_session=db_session,
-            run_id=run_id,
-            status=ScheduledTaskRunStatus.RUNNING,
-            session_id=session_id,
-        )
-        db_session.commit()
+            # Wire the session id onto the run row so the UI can deep-link
+            # from the run history into the session view as soon as anything
+            # is persisted.
+            mark_run_status(
+                db_session=db_session,
+                run_id=run_id,
+                status=ScheduledTaskRunStatus.RUNNING,
+                session_id=session_id,
+            )
+            update_sandbox_heartbeat(db_session, sandbox_id)
+            db_session.commit()
 
         state = BuildStreamingState(turn_index=0)
         deadline = time.monotonic() + budget_seconds
