@@ -12,17 +12,14 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Sandbox
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.server.features.build.configs import (
-    SANDBOX_IDLE_TIMEOUT_SECONDS,
-    SESSION_CREATE_LOCK_TIMEOUT_SECONDS,
-)
+from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.db.sandbox import (
     get_latest_snapshot_for_session,
     get_running_sandboxes,
     user_has_stale_active_session,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.session.locks import get_session_creation_lock
 from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
     is_sandbox_idle,
@@ -37,16 +34,6 @@ TIMEOUT_SECONDS = 6000
 # its latest snapshot is older than idle_timeout/4 (15 min at the default 1h),
 # so the data-loss bound scales with the pace of sandboxes going to sleep.
 SNAPSHOT_INTERVAL_DIVISOR = 4
-
-
-def _get_session_creation_lock(
-    redis_client: TenantRedisClient,
-    sandbox: Sandbox,
-) -> RedisLock:
-    return redis_client.lock(
-        f"{OnyxRedisLocks.SESSION_CREATE_LOCK_PREFIX}:{sandbox.user_id}",
-        timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS,
-    )
 
 
 @shared_task(
@@ -110,8 +97,8 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                 ).append(sandbox)
 
             for sandbox in idle_sandboxes:
-                session_creation_lock = _get_session_creation_lock(
-                    redis_client, sandbox
+                session_creation_lock = get_session_creation_lock(
+                    redis_client, sandbox.user_id
                 )
                 try:
                     sleep_sandbox(
@@ -140,8 +127,8 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                     ):
                         continue
 
-                    session_creation_lock = _get_session_creation_lock(
-                        redis_client, sandbox
+                    session_creation_lock = get_session_creation_lock(
+                        redis_client, sandbox.user_id
                     )
                     if not session_creation_lock.acquire(blocking=False):
                         task_logger.info(

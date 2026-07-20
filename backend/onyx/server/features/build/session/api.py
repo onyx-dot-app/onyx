@@ -13,7 +13,6 @@ from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
     BuildSessionStatus,
@@ -26,7 +25,6 @@ from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.configs import SESSION_CREATE_LOCK_TIMEOUT_SECONDS
 from onyx.server.features.build.db.build_session import (
     allocate_nextjs_port,
     get_build_session,
@@ -42,6 +40,10 @@ from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.session.errors import UploadLimitExceededError
+from onyx.server.features.build.session.locks import (
+    SessionCreationLockAcquisitionError,
+    session_creation_lock,
+)
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.models import (
     ArtifactResponse,
@@ -121,43 +123,28 @@ def create_session(
     Uses Redis lock to prevent race conditions when multiple requests try to
     create/provision a session for the same user concurrently.
     """
-    tenant_id = get_current_tenant_id()
-    redis_client = get_redis_client(tenant_id=tenant_id)
-
-    # Lock on user_id to prevent concurrent session creation for the same user
-    # This prevents race conditions where two requests both see sandbox as SLEEPING
-    # and both try to provision, with one deleting the other's work
-    lock_key = f"{OnyxRedisLocks.SESSION_CREATE_LOCK_PREFIX}:{user.id}"
-    lock = redis_client.lock(lock_key, timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS)
-
-    # blocking=True means wait if another create is in progress
-    acquired = lock.acquire(
-        blocking=True, blocking_timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS
-    )
-    if not acquired:
-        raise HTTPException(
-            status_code=503,
-            detail="Session creation timed out waiting for lock",
-        )
-
     try:
-        session_manager = SessionManager(db_session)
-        build_session = session_manager.get_or_create_empty_session(
-            user.id,
-            llm_provider_type=request.llm_provider_type,
-            llm_model_name=request.llm_model_name,
-            headless=request.headless,
-        )
-        sandbox = get_sandbox_by_user_id(db_session, user.id)
-        if sandbox is None:
-            raise RuntimeError("Session creation completed without a sandbox")
-        update_sandbox_heartbeat(db_session, sandbox.id)
-        db_session.commit()
+        with session_creation_lock(user.id):
+            session_manager = SessionManager(db_session)
+            build_session = session_manager.get_or_create_empty_session(
+                user.id,
+                llm_provider_type=request.llm_provider_type,
+                llm_model_name=request.llm_model_name,
+                headless=request.headless,
+            )
+            sandbox = get_sandbox_by_user_id(db_session, user.id)
+            if sandbox is None:
+                raise RuntimeError("Session creation completed without a sandbox")
+            update_sandbox_heartbeat(db_session, sandbox.id)
+            db_session.commit()
 
         base_response = SessionResponse.from_model(build_session, sandbox)
         return DetailedSessionResponse.from_session_response(
             base_response, session_loaded_in_sandbox=True
         )
+    except SessionCreationLockAcquisitionError as e:
+        db_session.rollback()
+        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, str(e)) from e
     except OnyxError:
         # e.g. no provider exposes a supported model; let the global handler
         # return its own status code instead of collapsing to 429/500.
@@ -171,9 +158,6 @@ def create_session(
         db_session.rollback()
         logger.error("Session creation failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Session creation failed: {e}")
-    finally:
-        if lock.owned():
-            lock.release()
 
 
 @router.get("/{session_id}", response_model=DetailedSessionResponse)
