@@ -67,14 +67,38 @@ def get_action_policies(
     db_session: Session, kind: GatedAppKind, target_id: int
 ) -> dict[str, EndpointPolicy]:
     """The target's stored per-action policy overrides as ``{action_id: policy}``.
-    Sparse — only actions an admin has explicitly set."""
-    gated_app_id = get_gated_app_id(db_session, kind, target_id)
-    if gated_app_id is None:
-        return {}
-    rows = db_session.scalars(
-        select(GatedActionPolicy).where(GatedActionPolicy.gated_app_id == gated_app_id)
+    Sparse — only actions an admin has explicitly set.
+
+    Single query: joins ``gated_action_policy`` to ``gated_app`` so resolving the
+    identity row and reading its policies is one round trip (this runs on the
+    request matching path).
+    """
+    rows = db_session.execute(
+        select(GatedActionPolicy.action_id, GatedActionPolicy.policy)
+        .join(GatedApp, GatedApp.id == GatedActionPolicy.gated_app_id)
+        .where(_target_column(kind) == target_id)
     ).all()
-    return {row.action_id: row.policy for row in rows}
+    return {action_id: policy for action_id, policy in rows}
+
+
+def get_action_policies_by_target(
+    db_session: Session, kind: GatedAppKind, target_ids: list[int]
+) -> dict[int, dict[str, EndpointPolicy]]:
+    """Batched :func:`get_action_policies` for many targets of one kind, as
+    ``{target_id: {action_id: policy}}``. Targets with no stored overrides are
+    absent from the result. One query regardless of target count."""
+    if not target_ids:
+        return {}
+    target_column = _target_column(kind)
+    rows = db_session.execute(
+        select(target_column, GatedActionPolicy.action_id, GatedActionPolicy.policy)
+        .join(GatedApp, GatedApp.id == GatedActionPolicy.gated_app_id)
+        .where(target_column.in_(target_ids))
+    ).all()
+    result: dict[int, dict[str, EndpointPolicy]] = {}
+    for target_id, action_id, policy in rows:
+        result.setdefault(target_id, {})[action_id] = policy
+    return result
 
 
 def replace_action_policies__no_commit(

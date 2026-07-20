@@ -47,7 +47,10 @@ def upgrade() -> None:
         sa.UniqueConstraint("external_app_id", name="uq_gated_app_external_app"),
         sa.UniqueConstraint("mcp_server_id", name="uq_gated_app_mcp_server"),
         sa.CheckConstraint(
-            "num_nonnulls(external_app_id, mcp_server_id) = 1",
+            "(kind = 'EXTERNAL_APP' AND external_app_id IS NOT NULL "
+            "AND mcp_server_id IS NULL) OR "
+            "(kind = 'MCP_SERVER' AND mcp_server_id IS NOT NULL "
+            "AND external_app_id IS NULL)",
             name="ck_gated_app_single_target",
         ),
     )

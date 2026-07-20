@@ -8,7 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.enums import (
     POLICY_SEVERITY,
@@ -133,17 +133,24 @@ def list_session_pending_action_approvals(
     session_id: UUID,
     *,
     created_after: datetime | None = None,
+    load_target: bool = False,
 ) -> list[ActionApproval]:
     """Undecided rows for the session.
 
     `created_after` excludes rows older than the proxy's wait window
     (likely orphaned by a crashed proxy that couldn't write EXPIRED).
+
+    `load_target` eager-loads each row's ``gated_app`` in one batched SELECT —
+    set it when the caller inspects the target per row (else it stays lazy and a
+    caller that never touches it pays nothing).
     """
     stmt = (
         select(ActionApproval)
         .where(ActionApproval.session_id == session_id)
         .where(ActionApproval.decision.is_(None))
     )
+    if load_target:
+        stmt = stmt.options(selectinload(ActionApproval.gated_app))
     if created_after is not None:
         stmt = stmt.where(ActionApproval.created_at >= created_after)
     stmt = stmt.order_by(ActionApproval.created_at.desc())

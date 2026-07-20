@@ -300,7 +300,7 @@ def submit_session_grant(
         )
 
     pending_rows = action_approval.list_session_pending_action_approvals(
-        db_session, session_id, created_after=cutoff
+        db_session, session_id, created_after=cutoff, load_target=True
     )
     for row in pending_rows:
         if row.approval_id == approval_id:

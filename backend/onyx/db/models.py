@@ -6220,7 +6220,9 @@ class ScheduledTaskPreApprovedApp(Base):
     task: Mapped[ScheduledTask] = relationship(
         "ScheduledTask", back_populates="pre_approved_apps"
     )
-    gated_app: Mapped["GatedApp"] = relationship("GatedApp")
+    # selectin: pre_approved_app_ids and set_pre_approved_apps read gated_app for
+    # every grant, so batch them in one SELECT rather than one per grant.
+    gated_app: Mapped["GatedApp"] = relationship("GatedApp", lazy="selectin")
 
     __table_args__ = (
         UniqueConstraint(
@@ -6616,8 +6618,14 @@ class GatedApp(Base):
     )
 
     __table_args__ = (
+        # Exactly one target column is populated AND it matches ``kind`` — a
+        # mismatched pair (kind=EXTERNAL_APP with only mcp_server_id set) would
+        # make ``target_id`` assert and resolve policies against the wrong row.
         CheckConstraint(
-            "num_nonnulls(external_app_id, mcp_server_id) = 1",
+            "(kind = 'EXTERNAL_APP' AND external_app_id IS NOT NULL "
+            "AND mcp_server_id IS NULL) OR "
+            "(kind = 'MCP_SERVER' AND mcp_server_id IS NOT NULL "
+            "AND external_app_id IS NULL)",
             name="ck_gated_app_single_target",
         ),
     )

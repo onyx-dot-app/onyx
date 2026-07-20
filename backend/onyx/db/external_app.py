@@ -14,6 +14,7 @@ from onyx.db.enums import (
 )
 from onyx.db.gated_app import (
     get_action_policies,
+    get_action_policies_by_target,
     get_or_create_gated_app_id,
     replace_action_policies__no_commit,
 )
@@ -433,6 +434,17 @@ def get_policies(
     """Return the app's stored per-action policy overrides as
     ``{action_id: policy}``. Sparse — only actions the admin has set."""
     return get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app_id)
+
+
+def get_policies_for_apps(
+    db_session: Session, external_app_ids: list[int]
+) -> dict[int, dict[str, EndpointPolicy]]:
+    """Batched :func:`get_policies` for many apps, as
+    ``{external_app_id: {action_id: policy}}``. Apps with no overrides are
+    absent. One query — use to avoid a per-app policy lookup when listing."""
+    return get_action_policies_by_target(
+        db_session, GatedAppKind.EXTERNAL_APP, external_app_ids
+    )
 
 
 def _write_policies__no_commit(

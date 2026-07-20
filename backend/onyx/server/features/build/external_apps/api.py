@@ -7,13 +7,14 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ExternalAppType, Permission, SandboxStatus
+from onyx.db.enums import EndpointPolicy, ExternalAppType, Permission, SandboxStatus
 from onyx.db.external_app import (
     create_external_app,
     delete_external_app,
     get_external_app_by_id,
     get_external_apps,
     get_policies,
+    get_policies_for_apps,
     get_user_credentials_by_app_id,
     required_user_credential_keys,
     update_external_app,
@@ -77,9 +78,15 @@ def _get_app_or_404(db_session: Session, external_app_id: int) -> ExternalApp:
 
 
 def _to_admin_response(
-    db_session: Session, app: ExternalApp
+    db_session: Session,
+    app: ExternalApp,
+    *,
+    stored: dict[str, EndpointPolicy] | None = None,
 ) -> ExternalAppAdminResponse:
-    stored = get_policies(db_session, app.id)
+    # ``stored`` lets a list caller pass policies fetched in one batched query
+    # instead of paying a per-app lookup here.
+    if stored is None:
+        stored = get_policies(db_session, app.id)
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
     return ExternalAppAdminResponse(
         id=app.id,
@@ -366,7 +373,11 @@ def list_external_apps_admin(
 ) -> list[ExternalAppAdminResponse]:
     """List all external apps with admin-only fields (org credentials, auth template)."""
     apps = get_external_apps(db_session=db_session)
-    return [_to_admin_response(db_session, app) for app in apps]
+    policies_by_app = get_policies_for_apps(db_session, [app.id for app in apps])
+    return [
+        _to_admin_response(db_session, app, stored=policies_by_app.get(app.id, {}))
+        for app in apps
+    ]
 
 
 @admin_router.get("/apps/built-in/options")
