@@ -21,7 +21,7 @@ from onyx.llm.model_capabilities import (
     litellm_thinks_model_supports_image_input,
 )
 from onyx.llm.model_response import ModelResponse
-from onyx.llm.models import UserMessage
+from onyx.llm.models import LLMErrorInfo, UserMessage
 from onyx.prompts.contextual_retrieval import (
     CONTEXTUAL_RAG_TOKEN_ESTIMATE,
     DOCUMENT_SUMMARY_TOKEN_ESTIMATE,
@@ -363,9 +363,8 @@ def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
     already maps known LiteLLM exception types to friendly messages and
     swallows unknown ones, but a few branches (`RateLimitError`, `APIError`,
     `ServiceUnavailableError`) still embed `str(core_exception)`. This pass
-    strips any credential we already know about (typically the values pulled
-    off `llm.config` via `collect_llm_credential_values`) before the message
-    is surfaced to a client.
+    strips any credential we already know about before the message is surfaced
+    to a client.
 
     Short / empty secrets are ignored so we don't accidentally eat common
     substrings.
@@ -375,28 +374,52 @@ def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
 
     scrubbed = message
     for secret in secrets:
-        if not secret or len(secret) < 4:
+        if not secret or len(secret) < 3:
             continue
         scrubbed = scrubbed.replace(secret, _SCRUB_PLACEHOLDER)
 
     return scrubbed
 
 
-def collect_llm_credential_values(llm: LLM | None) -> list[str]:
-    """Pull every credential-looking value out of an LLM's config.
+def collect_credential_values(
+    api_key: str | None, custom_config: dict[str, str] | None
+) -> list[str]:
+    """Collect credential-bearing values from a provider configuration."""
+    credential_values = [api_key] if api_key else []
+    for key, value in (custom_config or {}).items():
+        if value and is_sensitive_custom_config_key(key):
+            credential_values.append(value)
+    return credential_values
 
-    Used to build the `secrets` argument for `scrub_sensitive_values`.
-    """
-    if llm is None:
-        return []
-    config_secrets: list[str] = []
-    if llm.config.api_key:
-        config_secrets.append(llm.config.api_key)
-    custom_config = llm.config.custom_config or {}
-    for key, value in custom_config.items():
-        if isinstance(value, str) and value and is_sensitive_custom_config_key(key):
-            config_secrets.append(value)
-    return config_secrets
+
+def litellm_exception_to_safe_error(
+    e: Exception,
+    llm: LLM | None = None,
+    *,
+    fallback_to_error_msg: bool = False,
+    custom_error_msg_mappings: (
+        dict[str, str] | None
+    ) = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    secrets: Iterable[str | None] = (),
+) -> LLMErrorInfo:
+    """Classify a LiteLLM exception and redact secrets from its message."""
+    message, error_code, is_retryable = litellm_exception_to_error_msg(
+        e,
+        llm,
+        fallback_to_error_msg=fallback_to_error_msg,
+        custom_error_msg_mappings=custom_error_msg_mappings,
+    )
+    llm_secrets = (
+        collect_credential_values(llm.config.api_key, llm.config.custom_config)
+        if llm is not None
+        else []
+    )
+    safe_message = scrub_sensitive_values(message, [*llm_secrets, *secrets])
+    return LLMErrorInfo(
+        message=safe_message,
+        error_code=error_code,
+        is_retryable=is_retryable,
+    )
 
 
 def test_llm(llm: LLM) -> str | None:
@@ -411,7 +434,6 @@ def test_llm(llm: LLM) -> str | None:
 
     The full raw error is still logged at WARNING for ops debugging.
     """
-    secrets = collect_llm_credential_values(llm)
     error_msg: str | None = None
     # try for up to 2 timeouts (e.g. 10 seconds in total)
     for _ in range(2):
@@ -420,10 +442,7 @@ def test_llm(llm: LLM) -> str | None:
             return None
         except Exception as e:
             logger.warning("Failed to call LLM with the following error: %s", e)
-            safe_msg, _, _ = litellm_exception_to_error_msg(
-                e, llm, fallback_to_error_msg=False
-            )
-            error_msg = scrub_sensitive_values(safe_msg, secrets)
+            error_msg = litellm_exception_to_safe_error(e, llm).message
 
     return error_msg
 
