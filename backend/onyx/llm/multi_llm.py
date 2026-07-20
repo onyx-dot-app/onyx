@@ -13,7 +13,6 @@ from typing import Union
 
 from readerwriterlock import rwlock
 
-from onyx.configs.app_configs import LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.chat_configs import LLM_FIRST_CHUNK_MAX_RETRIES
@@ -293,6 +292,14 @@ def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
 def _anthropic_omits_sampling_params(model_name: str) -> bool:
     version = _parse_anthropic_model_version(model_name)
     return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+
+
+def _env_injection_enabled() -> bool:
+    # Deferred import: the security store pulls in the DB layer, which this
+    # module must not import at module load.
+    from onyx.server.security.store import llm_custom_config_env_injection_enabled
+
+    return llm_custom_config_env_injection_enabled()
 
 
 _warned_dropped_keys: set[tuple[str, tuple[str, ...]]] = set()
@@ -759,7 +766,7 @@ class LitellmLLM(LLM):
             # Injection disabled means no env writer exists anywhere in the
             # process, so skip the rwlock entirely.
             env_ctx: AbstractContextManager[None]
-            if LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED:
+            if _env_injection_enabled():
                 env_ctx = temporary_env_and_lock(self._env_only_custom_config)
             else:
                 if self._env_only_custom_config:
@@ -1032,9 +1039,9 @@ def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
         return
 
     if MULTI_TENANT:
-        # Unreachable via the LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED gate;
-        # process-global env vars are a cross-tenant risk, so refuse rather
-        # than inject if a future caller bypasses it.
+        # Unreachable via the llm_custom_config_env_injection security-setting
+        # gate; process-global env vars are a cross-tenant risk, so refuse
+        # rather than inject if a future caller bypasses it.
         logger.error(
             "Refusing LLM custom_config env injection in a multi-tenant "
             "deployment; proceeding without the env var(s)."

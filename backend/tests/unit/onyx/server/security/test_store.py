@@ -58,3 +58,26 @@ def test_mcp_private_and_loopback_disables(monkeypatch: pytest.MonkeyPatch) -> N
     """Loopback opt-in wins over the private-network opt-in — it needs DISABLED."""
     _set_env(monkeypatch, mcp_allow_private_network=True, mcp_allow_loopback=True)
     assert store._derive_ssrf_level_from_env() == SSRFProtectionLevel.DISABLED
+
+
+def test_llm_env_injection_hard_off_on_multi_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The MULTI_TENANT clamp wins even if a stored setting says enabled."""
+    monkeypatch.setattr(store, "MULTI_TENANT", True)
+    assert store.llm_custom_config_env_injection_enabled() is False
+
+
+def test_llm_env_injection_follows_setting_on_single_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(store, "MULTI_TENANT", False)
+    for enabled in (True, False):
+        monkeypatch.setattr(
+            store,
+            "get_security_settings",
+            lambda enabled=enabled: store._build_env_defaults().model_copy(
+                update={"llm_custom_config_env_injection": enabled}
+            ),
+        )
+        assert store.llm_custom_config_env_injection_enabled() is enabled

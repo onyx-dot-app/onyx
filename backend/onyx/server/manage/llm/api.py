@@ -21,7 +21,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_chat_accessible_user
-from onyx.configs.app_configs import LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.enums import Permission
@@ -113,6 +112,7 @@ from onyx.server.manage.llm.utils import is_reasoning_model
 from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
+from onyx.server.security.store import llm_custom_config_env_injection_enabled
 from onyx.utils.audit import actor_from_user
 from onyx.utils.audit import AuditAction
 from onyx.utils.audit import AuditOutcome
@@ -375,11 +375,12 @@ def _validate_custom_config_keys_supported(
 ) -> None:
     """Reject custom_config keys that would silently be dropped at call time.
 
-    Only enforced when env injection is disabled (multi-tenant cloud): keys the
-    kwarg mapping doesn't recognize have no way to reach LiteLLM there. On
+    Only enforced when env injection is disabled (always on multi-tenant cloud,
+    or via the security hardening setting on self-hosted): keys the kwarg
+    mapping doesn't recognize have no way to reach LiteLLM there. On
     deployments with env injection enabled, arbitrary keys remain supported.
     """
-    if LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED:
+    if llm_custom_config_env_injection_enabled():
         return
 
     unsupported = get_unsupported_custom_config_keys(provider, custom_config)
