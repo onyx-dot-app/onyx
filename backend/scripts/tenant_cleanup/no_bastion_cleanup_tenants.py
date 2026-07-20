@@ -13,7 +13,9 @@ Usage:
 """
 
 import csv
+import fcntl
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -30,6 +32,7 @@ from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
     find_worker_pod,
     get_tenant_status,
     read_tenant_ids_from_csv,
+    validate_tenant_id,
 )
 
 # Global lock for thread-safe operations
@@ -359,6 +362,7 @@ def cleanup_control_plane(
     print(f"Cleaning up control plane data for tenant: {tenant_id}")
 
     # Delete in order respecting foreign key constraints
+    validate_tenant_id(tenant_id)
     delete_queries = [
         (
             "tenant_notification",
@@ -767,12 +771,19 @@ def main() -> None:
     # Append rather than truncate: cleanup runs in batches, and this file is the only
     # record of what was deleted. Opening it "w" silently erased prior batches.
     csv_output_path = "cleaned_tenants.csv"
-    write_header = not Path(csv_output_path).exists()
     with open(csv_output_path, "a", newline="") as csv_file:
         csv_writer = csv.writer(csv_file)
-        if write_header:
-            csv_writer.writerow(["tenant_id", "cleaned_at"])
-        csv_file.flush()
+
+        # Emit the header under an exclusive lock, and decide whether one is needed
+        # while holding it. Two runs starting together would otherwise both see an
+        # absent file and each write a header.
+        fcntl.flock(csv_file.fileno(), fcntl.LOCK_EX)
+        try:
+            if os.fstat(csv_file.fileno()).st_size == 0:
+                csv_writer.writerow(["tenant_id", "cleaned_at"])
+                csv_file.flush()
+        finally:
+            fcntl.flock(csv_file.fileno(), fcntl.LOCK_UN)
 
         print(f"Writing successful cleanups to: {csv_output_path}\n")
 

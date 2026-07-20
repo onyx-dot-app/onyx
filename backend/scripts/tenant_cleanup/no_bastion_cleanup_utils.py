@@ -5,6 +5,7 @@ Control plane and data plane are in SEPARATE clusters.
 
 import csv
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,21 @@ from pathlib import Path
 
 class TenantNotFoundInControlPlaneError(Exception):
     """Exception raised when tenant/table is not found in control plane."""
+
+
+# Tenant ids reach SQL through string interpolation, so anything that could carry a
+# quote, semicolon, or whitespace is rejected before it gets there.
+_TENANT_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def validate_tenant_id(tenant_id: str) -> str:
+    """Return the tenant id if it is safe to interpolate, otherwise raise."""
+    if not _TENANT_ID_RE.match(tenant_id):
+        raise ValueError(
+            f"Refusing to use unsafe tenant id: {tenant_id!r}. "
+            "Expected only letters, digits, underscores and dashes."
+        )
+    return tenant_id
 
 
 def find_worker_pod(context: str) -> str:
@@ -217,6 +233,7 @@ def get_tenant_status(pod_name: str, tenant_id: str, context: str) -> str | None
     """
     print(f"Fetching tenant status for tenant: {tenant_id}")
 
+    validate_tenant_id(tenant_id)
     query = f"SELECT application_status FROM tenant WHERE tenant_id = '{tenant_id}'"
 
     result = execute_control_plane_query_from_pod(pod_name, query, context)
@@ -298,7 +315,12 @@ def read_tenant_ids_from_csv(csv_path: str) -> list[str]:
 
         for row in reader:
             tenant_id = row.get("tenant_id", "").strip()
-            if tenant_id:
-                tenant_ids.append(tenant_id)
+            if not tenant_id:
+                continue
+            # cleaned_tenants.csv is appended to across runs, so a repeated header row
+            # is possible. Never treat one as a tenant.
+            if tenant_id == "tenant_id":
+                continue
+            tenant_ids.append(validate_tenant_id(tenant_id))
 
     return tenant_ids

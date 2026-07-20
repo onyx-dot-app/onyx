@@ -40,23 +40,47 @@ def safe_print(*args: Any, **kwargs: Any) -> None:
         print(*args, **kwargs)
 
 
+def _last_json_object(stdout: str) -> Any | None:
+    """Return the last JSON object in stdout, or None if there is none.
+
+    The on-pod script pretty-prints its payload across multiple lines, so this cannot
+    be done line by line.
+    """
+    text = stdout.strip()
+    if not text:
+        return None
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Fall back to scanning, in case anything else ever shares stdout.
+    decoder = json.JSONDecoder()
+    found: Any | None = None
+    for idx, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            payload, _ = decoder.raw_decode(text, idx)
+        except json.JSONDecodeError:
+            continue
+        found = payload
+    return found
+
+
 def _raise_on_reported_failure(stdout: str, tenant_id: str) -> None:
     """Raise if the on-pod script reported an error in its JSON payload.
 
     The on-pod script exits 0 even when it fails, so its payload is the only signal.
     Unparseable output is left alone - the exit code has already been checked.
     """
-    for line in reversed(stdout.strip().splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(payload, dict) and payload.get("status") == "error":
-            raise RuntimeError(
-                f"Connector deletion reported failure for {tenant_id}: "
-                f"{payload.get('message', 'no message')}"
-            )
-        return
+    payload = _last_json_object(stdout)
+    if isinstance(payload, dict) and payload.get("status") == "error":
+        raise RuntimeError(
+            f"Connector deletion reported failure for {tenant_id}: "
+            f"{payload.get('message', 'no message')}"
+        )
 
 
 def run_connector_deletion(pod_name: str, tenant_id: str, context: str) -> None:
@@ -135,6 +159,23 @@ def run_connector_deletion(pod_name: str, tenant_id: str, context: str) -> None:
             file=sys.stderr,
         )
         raise
+
+    finally:
+        # Otherwise a large batch leaves one file per tenant behind on the pod.
+        subprocess.run(
+            [
+                "kubectl",
+                "exec",
+                "--context",
+                context,
+                pod_name,
+                "--",
+                "rm",
+                "-f",
+                remote_script,
+            ],
+            capture_output=True,
+        )
 
 
 def mark_tenant_connectors_for_deletion(
