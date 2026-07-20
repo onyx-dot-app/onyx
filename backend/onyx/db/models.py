@@ -4404,6 +4404,9 @@ class SecuritySettings(Base):
     mask_credential_prefix: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    llm_custom_config_env_injection: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
     valid_email_domains: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True, default=None
     )

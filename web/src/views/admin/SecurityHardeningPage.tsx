@@ -41,6 +41,7 @@ interface SecuritySettings {
   track_external_idp_expiry: boolean;
   ssrf_protection_level: SSRFProtectionLevel;
   mask_credential_prefix: boolean;
+  llm_custom_config_env_injection: boolean;
   valid_email_domains: string[];
   password_min_length: number;
   password_max_length: number;
@@ -450,6 +451,17 @@ export default function SecurityHardeningPage() {
 
             <Card border="solid" rounding="lg">
               <Section>
+                <ToggleRow
+                  title="LLM Environment Variable Injection"
+                  description="Allow custom LLM provider configurations to temporarily set process environment variables during calls. Disable to require all provider settings to have a LiteLLM parameter equivalent."
+                  checked={draft.llm_custom_config_env_injection}
+                  onCheckedChange={(checked) =>
+                    void saveSettings({
+                      llm_custom_config_env_injection: checked,
+                    })
+                  }
+                />
+
                 <InputHorizontal
                   title="SSRF Protection"
                   description="Validate outbound requests against private or internal IPs for Server-Side Request Forgery (SSRF) protection."

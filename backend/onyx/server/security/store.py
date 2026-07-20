@@ -86,6 +86,7 @@ def _build_env_defaults() -> SecuritySettings:
         track_external_idp_expiry=_cfg.TRACK_EXTERNAL_IDP_EXPIRY,
         ssrf_protection_level=_derive_ssrf_level_from_env(),
         mask_credential_prefix=_cfg.MASK_CREDENTIAL_PREFIX,
+        llm_custom_config_env_injection=not MULTI_TENANT,
         valid_email_domains=tuple(_cfg.VALID_EMAIL_DOMAINS),
         password_min_length=_cfg.PASSWORD_MIN_LENGTH,
         password_max_length=_cfg.PASSWORD_MAX_LENGTH,
