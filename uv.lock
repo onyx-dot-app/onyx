@@ -829,14 +829,14 @@ wheels = [
 
 [[package]]
 name = "celery-types"
-version = "0.19.0"
+version = "0.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/05/a6/9923b3cb1902613d0aeeb561249f20ef0a58d6e173eed11149f7214ba693/celery-types-0.19.0.tar.gz", hash = "sha256:d4e2d4271b2ec46fec08a0f12a25388bba391f26897485bcacfa3c5287cc236f", size = 24945, upload-time = "2023-08-06T22:52:29.158Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fc/38/813dd7534e41682684d3a5c2cc4a8710e3acc51b364920b9c4d747c7b18f/celery_types-0.26.0.tar.gz", hash = "sha256:fa318136fdad83f83f1531deecd9fe664b5dfffff29f3c31e9120a46b8e3908f", size = 106210, upload-time = "2026-03-12T23:06:49.941Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/7b/c91fabc3c67ce28634d079b70ec0e7a2e7469c8435e690d14bff1709432e/celery_types-0.19.0-py3-none-any.whl", hash = "sha256:3d3b54fa115aba1798c341d01cb156d5ccbfbebdae0a57dfa9b4b6a726271d80", size = 38129, upload-time = "2023-08-06T22:52:30.871Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/e5/c5ec98f7fd7817d077c9a5a5e705d54f74d4ca08ee3f14dee881c93c0511/celery_types-0.26.0-py3-none-any.whl", hash = "sha256:eb9da76f461786091970df466ec647d9a27956399852542cb6cab9309970f950", size = 211260, upload-time = "2026-03-12T23:06:48.588Z" },
 ]
 
 [[package]]
@@ -4502,7 +4502,7 @@ backend = [
 ]
 dev = [
     { name = "boto3-stubs", extras = ["s3"], specifier = "==1.39.11" },
-    { name = "celery-types", specifier = "==0.19.0" },
+    { name = "celery-types", specifier = "==0.26.0" },
     { name = "faker", specifier = "==40.1.2" },
     { name = "hatchling", specifier = "==1.28.0" },
     { name = "ipykernel", specifier = "==6.29.5" },
