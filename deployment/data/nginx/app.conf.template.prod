@@ -23,9 +23,6 @@ upstream web_server {
     server ${ONYX_WEB_SERVER_HOST}:3000 fail_timeout=0;
 }
 
-# Conditionally include MCP upstream configuration
-include /etc/nginx/conf.d/mcp_upstream.conf.inc;
-
 # WebSocket support: only set Connection "upgrade" for actual upgrade requests
 map $http_upgrade $connection_upgrade {
     default upgrade;
@@ -39,7 +36,6 @@ server {
 
     access_log /var/log/nginx/access.log custom_main;
 
-    # Conditionally include MCP location configuration
     include /etc/nginx/conf.d/mcp.conf.inc;
 
     # First-party health probe served directly by nginx (no upstreams),

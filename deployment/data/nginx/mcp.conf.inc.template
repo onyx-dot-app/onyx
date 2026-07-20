@@ -34,5 +34,7 @@ location ~ ^/mcp(/.*)?$ {
     proxy_redirect off;
     rewrite ^/mcp(/.*)$ $1 break;
     rewrite ^/mcp/?$ / break;
-    proxy_pass http://mcp_server;
+    resolver 127.0.0.11 ipv6=off valid=30s;
+    set $mcp_server "http://${ONYX_MCP_SERVER_HOST}:8090";
+    proxy_pass $mcp_server;
 }
