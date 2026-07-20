@@ -4,13 +4,14 @@ import httpx
 import pytest
 
 from onyx.auth.schemas import UserRole
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.user import build_email
-from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
-from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user import (
+    build_email,
+    DEFAULT_PASSWORD,
+    UserManager,
+)
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestUser
 

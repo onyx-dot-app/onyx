@@ -6,15 +6,12 @@ The classification matrix lives in test_session_token_strategy.py.
 
 import json
 import secrets
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import cast
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import TenantAwareRedisStrategy

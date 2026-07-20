@@ -17,8 +17,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from onyx.db.enums import AccountType
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
+from onyx.db.models import User__UserGroup, UserGroup
 from onyx.db.users import assign_user_to_default_groups__no_commit
 
 

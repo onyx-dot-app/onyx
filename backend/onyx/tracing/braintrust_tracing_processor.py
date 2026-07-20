@@ -1,7 +1,5 @@
 import datetime
-from typing import Any
-from typing import Dict
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import braintrust
 from braintrust import NOOP_SPAN
@@ -9,10 +7,12 @@ from braintrust import NOOP_SPAN
 from onyx.llm.cost import calculate_llm_cost_cents
 
 from .framework.processor_interface import TracingProcessor
-from .framework.span_data import AgentSpanData
-from .framework.span_data import FunctionSpanData
-from .framework.span_data import GenerationSpanData
-from .framework.span_data import SpanData
+from .framework.span_data import (
+    AgentSpanData,
+    FunctionSpanData,
+    GenerationSpanData,
+    SpanData,
+)
 from .framework.spans import Span
 from .framework.traces import Trace
 

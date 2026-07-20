@@ -1,7 +1,6 @@
 """Main processor for prompt caching."""
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
 from onyx.llm.interfaces import LLMConfig

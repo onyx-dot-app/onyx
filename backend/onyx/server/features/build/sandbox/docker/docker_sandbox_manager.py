@@ -74,64 +74,63 @@ from typing import TypedDict
 from uuid import UUID
 
 from docker import DockerClient
-from docker.errors import APIError
-from docker.errors import NotFound
+from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 
 from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import ATTACHMENTS_DIRECTORY
-from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
-from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
-from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
-from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
-from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
-from onyx.server.features.build.configs import SANDBOX_DOCKER_CPU_LIMIT
-from onyx.server.features.build.configs import SANDBOX_DOCKER_MEMORY_LIMIT
-from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
-from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
-from onyx.server.features.build.configs import SANDBOX_DOCKER_VOLUME_PREFIX
-from onyx.server.features.build.configs import SANDBOX_PROXY_CA_VOLUME_NAME
-from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
-from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
-from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
-from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
-from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
-from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.configs import (
+    ATTACHMENTS_DIRECTORY,
+    OPENCODE_DISABLED_TOOLS,
+    OPENCODE_SERVE_PORT,
+    OPENCODE_SERVER_PASSWORD,
+    SANDBOX_API_SERVER_URL,
+    SANDBOX_CONTAINER_IMAGE,
+    SANDBOX_DOCKER_CPU_LIMIT,
+    SANDBOX_DOCKER_MEMORY_LIMIT,
+    SANDBOX_DOCKER_NETWORK,
+    SANDBOX_DOCKER_SOCKET,
+    SANDBOX_DOCKER_VOLUME_PREFIX,
+    SANDBOX_PROXY_CA_VOLUME_NAME,
+    SANDBOX_PROXY_HOST,
+    SANDBOX_PROXY_INJECTED_PLACEHOLDER,
+    SANDBOX_PROXY_PORT,
+)
+from onyx.server.features.build.sandbox.base import (
+    BUN_CACHE_DIR,
+    BUN_IMAGE_CACHE_DIR,
+    SandboxManager,
+)
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     opencode_serve_port_bindings,
-)
-from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     published_opencode_serve_base_url,
 )
-from onyx.server.features.build.sandbox.docker.internal.exec_helpers import ExecError
-from onyx.server.features.build.sandbox.docker.internal.exec_helpers import ExecResult
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
+    ExecError,
+    ExecResult,
     run_in_container,
-)
-from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdin_to_container,
-)
-from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdout_from_container,
 )
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
-from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
-from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.labels import (
+    LABEL_K8S_MANAGED_BY,
+    LABEL_K8S_MANAGED_BY_ONYX,
+    LABEL_SANDBOX_ID,
+    LABEL_TENANT_ID,
+)
+from onyx.server.features.build.sandbox.models import (
+    FileSet,
+    FilesystemEntry,
+    LLMProviderConfig,
+    SandboxInfo,
+    SnapshotResult,
+)
 from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
-)
-from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (

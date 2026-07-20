@@ -5,28 +5,26 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Generator
 from typing import NamedTuple
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 
-from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.engine.sql_engine import SqlEngine
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.db.engine.sql_engine import get_session_with_tenant, SqlEngine
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.build.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.users import create_or_login_admin
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
-from tests.integration.common_utils.http_client import RetryingTransport
-from tests.integration.common_utils.http_client import set_test_client
+from tests.integration.common_utils.http_client import (
+    RetryingTransport,
+    set_test_client,
+)
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
 
 
 class SharedSession(NamedTuple):

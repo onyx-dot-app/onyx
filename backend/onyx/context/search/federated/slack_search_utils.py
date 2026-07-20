@@ -1,16 +1,13 @@
 import fnmatch
 import json
 import re
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from pydantic import ValidationError
 
 from onyx.configs.app_configs import MAX_SLACK_QUERY_EXPANSIONS
-from onyx.context.search.federated.models import ChannelMetadata
-from onyx.context.search.federated.models import DirectThreadFetch
+from onyx.context.search.federated.models import ChannelMetadata, DirectThreadFetch
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.llm.interfaces import LLM
@@ -18,11 +15,12 @@ from onyx.llm.models import UserMessage
 from onyx.llm.utils import llm_response_to_string
 from onyx.natural_language_processing.english_stopwords import ENGLISH_STOPWORDS_SET
 from onyx.onyxbot.slack.models import ChannelType
-from onyx.prompts.federated_search import SLACK_DATE_EXTRACTION_PROMPT
-from onyx.prompts.federated_search import SLACK_QUERY_EXPANSION_PROMPT
+from onyx.prompts.federated_search import (
+    SLACK_DATE_EXTRACTION_PROMPT,
+    SLACK_QUERY_EXPANSION_PROMPT,
+)
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

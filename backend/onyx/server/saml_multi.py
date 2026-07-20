@@ -1,40 +1,34 @@
 import base64
 import uuid
-from typing import Any
-from typing import NoReturn
-from typing import TypedDict
+from typing import Any, NoReturn, TypedDict
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Request
-from fastapi import Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi_users.authentication import Strategy
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.xml_utils import OneLogin_Saml2_XML
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import auth_backend
-from onyx.auth.users import fastapi_users
-from onyx.auth.users import get_user_manager
-from onyx.auth.users import UserManager
-from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.auth.users import auth_backend, fastapi_users, get_user_manager, UserManager
+from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION, WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import SSOProviderType
-from onyx.db.models import SSOProvider
-from onyx.db.models import User
-from onyx.db.sso_provider import fetch_sso_provider_by_name
-from onyx.db.sso_provider import fetch_sso_providers
-from onyx.db.sso_provider import SAMLProviderConfig
+from onyx.db.models import SSOProvider, User
+from onyx.db.sso_provider import (
+    fetch_sso_provider_by_name,
+    fetch_sso_providers,
+    SAMLProviderConfig,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.saml import _sanitize_relay_state
-from onyx.server.saml import EMAIL_ATTRIBUTE_KEYS
-from onyx.server.saml import EMAIL_ATTRIBUTE_KEYS_LOWER
-from onyx.server.saml import prepare_from_fastapi_request
-from onyx.server.saml import SAMLAuthorizeResponse
-from onyx.server.saml import upsert_saml_user
+from onyx.server.saml import (
+    _sanitize_relay_state,
+    EMAIL_ATTRIBUTE_KEYS,
+    EMAIL_ATTRIBUTE_KEYS_LOWER,
+    prepare_from_fastapi_request,
+    SAMLAuthorizeResponse,
+    upsert_saml_user,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

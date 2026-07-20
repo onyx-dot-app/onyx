@@ -3,18 +3,15 @@ from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FederatedConnectorSource
-from onyx.context.search.models import ChunkIndexRequest
-from onyx.context.search.models import InferenceChunk
+from onyx.configs.constants import DocumentSource, FederatedConnectorSource
+from onyx.context.search.models import ChunkIndexRequest, InferenceChunk
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
+    list_federated_connector_oauth_tokens,
 )
-from onyx.db.federated import list_federated_connector_oauth_tokens
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.federated_connectors.factory import get_federated_connector

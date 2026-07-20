@@ -55,8 +55,7 @@ from pathlib import Path
 from typing import cast
 from uuid import UUID
 
-from kubernetes import client
-from kubernetes import watch
+from kubernetes import client, watch
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
@@ -64,79 +63,67 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
-from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
-from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
-from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
-from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
-from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
-from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
-from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
-from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
-from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
-from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.configs import (
+    OPENCODE_DISABLED_TOOLS,
+    OPENCODE_SERVE_PORT,
+    OPENCODE_SERVER_PASSWORD,
+    SANDBOX_API_SERVER_URL,
+    SANDBOX_CONTAINER_IMAGE,
+    SANDBOX_NAMESPACE,
+    SANDBOX_NEXTJS_PORT_END,
+    SANDBOX_NEXTJS_PORT_START,
+    SANDBOX_PROXY_HOST,
+    SANDBOX_PROXY_INJECTED_PLACEHOLDER,
+    SANDBOX_PROXY_NAMESPACE,
+    SANDBOX_SERVICE_ACCOUNT_NAME,
+)
+from onyx.server.features.build.sandbox.base import (
+    BUN_CACHE_DIR,
+    BUN_IMAGE_CACHE_DIR,
+    SandboxManager,
+)
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     PUSH_DAEMON_PORT,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_SNAPSHOT_CREATE_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     sidecar_snapshot_restore_path,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SnapshotCreateRequest,
 )
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
 from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
     get_push_key_pair,
-)
-from onyx.server.features.build.sandbox.kubernetes.sidecar_client import SidecarClient
-from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
+    SidecarClient,
     SidecarRequestError,
-)
-from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
     SidecarStatusError,
 )
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT_SANDBOX
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
-from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
-from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
-from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import RetriableWriteError
-from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.labels import (
+    LABEL_K8S_COMPONENT,
+    LABEL_K8S_COMPONENT_SANDBOX,
+    LABEL_K8S_MANAGED_BY,
+    LABEL_K8S_MANAGED_BY_ONYX,
+    LABEL_SANDBOX_ID,
+    LABEL_TENANT_ID,
+)
+from onyx.server.features.build.sandbox.models import (
+    FatalWriteError,
+    FileSet,
+    FilesystemEntry,
+    LLMProviderConfig,
+    RetriableWriteError,
+    SandboxInfo,
+    SnapshotResult,
+)
 from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
 from onyx.server.features.build.sandbox.serve_transport import (
     OPENCODE_SERVE_READY_TIMEOUT_SECONDS,
+    ServeConnectionInfo,
 )
-from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
-)
-from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (

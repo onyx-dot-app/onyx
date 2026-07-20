@@ -2,8 +2,7 @@ import os
 import platform
 import shutil
 import subprocess
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Any
 from unittest.mock import patch
 
@@ -54,16 +53,20 @@ import onyx.main  # noqa: E402, F401
 from onyx.auth.schemas import UserRole  # noqa: E402
 from onyx.background.celery.apps.client import celery_app  # noqa: E402
 from onyx.configs.constants import DocumentSource  # noqa: E402
-from onyx.db.engine.sql_engine import get_session_with_current_tenant  # noqa: E402
-from onyx.db.engine.sql_engine import SqlEngine  # noqa: E402
+from onyx.db.engine.sql_engine import (  # noqa: E402
+    get_session_with_current_tenant,
+    SqlEngine,
+)
 from onyx.db.search_settings import get_current_search_settings  # noqa: E402
 from onyx.utils.variable_functionality import (  # noqa: E402
     fetch_versioned_implementation,
 )
 from shared_configs.configs import MULTI_TENANT  # noqa: E402
 from tests.integration.common_utils import http_client  # noqa: E402
-from tests.integration.common_utils.constants import ADMIN_USER_NAME  # noqa: E402
-from tests.integration.common_utils.constants import GENERAL_HEADERS  # noqa: E402
+from tests.integration.common_utils.constants import (  # noqa: E402
+    ADMIN_USER_NAME,
+    GENERAL_HEADERS,
+)
 from tests.integration.common_utils.managers.api_key import APIKeyManager  # noqa: E402
 from tests.integration.common_utils.managers.document import (  # noqa: E402
     DocumentManager,
@@ -74,19 +77,23 @@ from tests.integration.common_utils.managers.image_generation import (  # noqa: 
 from tests.integration.common_utils.managers.llm_provider import (  # noqa: E402
     LLMProviderManager,
 )
-from tests.integration.common_utils.managers.user import build_email  # noqa: E402
-from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD  # noqa: E402
-from tests.integration.common_utils.managers.user import UserManager  # noqa: E402
-from tests.integration.common_utils.reset import _seed_dev_license_if_set  # noqa: E402
-from tests.integration.common_utils.reset import reset_all  # noqa: E402
-from tests.integration.common_utils.reset import reset_all_multitenant  # noqa: E402
-from tests.integration.common_utils.test_models import DATestAPIKey  # noqa: E402
-from tests.integration.common_utils.test_models import (  # noqa: E402
-    DATestImageGenerationConfig,
+from tests.integration.common_utils.managers.user import (  # noqa: E402
+    build_email,
+    DEFAULT_PASSWORD,
+    UserManager,
 )
-from tests.integration.common_utils.test_models import DATestLLMProvider  # noqa: E402
-from tests.integration.common_utils.test_models import DATestUser  # noqa: E402
-from tests.integration.common_utils.test_models import SimpleTestDocument  # noqa: E402
+from tests.integration.common_utils.reset import (  # noqa: E402
+    _seed_dev_license_if_set,
+    reset_all,
+    reset_all_multitenant,
+)
+from tests.integration.common_utils.test_models import (  # noqa: E402
+    DATestAPIKey,  # noqa: E402
+    DATestImageGenerationConfig,
+    DATestLLMProvider,  # noqa: E402
+    DATestUser,  # noqa: E402
+    SimpleTestDocument,  # noqa: E402
+)
 from tests.integration.common_utils.vespa import vespa_fixture  # noqa: E402
 
 BASIC_USER_NAME = "basic_user"

@@ -4,16 +4,16 @@ when undated documents are included, via `DocumentQuery._get_search_filters`
 document_index/FILTER_SEMANTICS.md ("Time filtering").
 """
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from onyx.context.search.models import TimeRange
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import ASSUMED_DOCUMENT_AGE_DAYS
-from onyx.document_index.opensearch.schema import CREATED_AT_FIELD_NAME
-from onyx.document_index.opensearch.schema import LAST_UPDATED_FIELD_NAME
+from onyx.document_index.opensearch.schema import (
+    CREATED_AT_FIELD_NAME,
+    LAST_UPDATED_FIELD_NAME,
+)
 from onyx.document_index.opensearch.search import DocumentQuery
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 

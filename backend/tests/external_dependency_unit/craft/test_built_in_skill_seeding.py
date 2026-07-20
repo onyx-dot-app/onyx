@@ -16,20 +16,17 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.skill import fetch_skill
-from onyx.db.skill import list_skills
-from onyx.db.skill import SkillAccessPolicy
-from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.built_in import BuiltInSkillDefinition
-from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
-from tests.external_dependency_unit.craft.db_helpers import make_skill
+from onyx.db.models import Skill, User
+from onyx.db.skill import fetch_skill, list_skills, SkillAccessPolicy
+from onyx.skills.built_in import BUILT_IN_SKILLS, BuiltInSkillDefinition
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_built_in_skill_row,
+    make_skill,
+)
 
 
 @pytest.fixture(autouse=True)

@@ -1,23 +1,24 @@
 from collections.abc import Generator
-from typing import Optional
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from ee.onyx.configs.app_configs import CANVAS_PERMISSION_DOC_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import GITHUB_PERMISSION_DOC_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import JIRA_PERMISSION_DOC_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import JIRA_PERMISSION_GROUP_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import SLACK_PERMISSION_DOC_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import TEAMS_PERMISSION_DOC_SYNC_FREQUENCY
+from ee.onyx.configs.app_configs import (
+    CANVAS_PERMISSION_DOC_SYNC_FREQUENCY,
+    CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY,
+    CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY,
+    CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY,
+    DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
+    GITHUB_PERMISSION_DOC_SYNC_FREQUENCY,
+    GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY,
+    GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
+    JIRA_PERMISSION_DOC_SYNC_FREQUENCY,
+    JIRA_PERMISSION_GROUP_SYNC_FREQUENCY,
+    SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY,
+    SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY,
+    SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
+    TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
+)
 from ee.onyx.external_permissions.canvas.doc_sync import canvas_doc_sync
 from ee.onyx.external_permissions.canvas.group_sync import canvas_group_sync
 from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
@@ -29,11 +30,13 @@ from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
 from ee.onyx.external_permissions.jira.doc_sync import jira_doc_sync
 from ee.onyx.external_permissions.jira.group_sync import jira_group_sync
-from ee.onyx.external_permissions.perm_sync_types import CensoringFuncType
-from ee.onyx.external_permissions.perm_sync_types import DocSyncFuncType
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
-from ee.onyx.external_permissions.perm_sync_types import GroupSyncFuncType
+from ee.onyx.external_permissions.perm_sync_types import (
+    CensoringFuncType,
+    DocSyncFuncType,
+    FetchAllDocumentsFunction,
+    FetchAllDocumentsIdsFunction,
+    GroupSyncFuncType,
+)
 from ee.onyx.external_permissions.salesforce.postprocessing import (
     censor_salesforce_chunks,
 )

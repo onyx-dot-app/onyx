@@ -8,23 +8,23 @@ and Redis-backed dedup that degrades safely when Redis is unavailable.
 import io
 import json
 import logging
-from typing import Any
-from typing import cast
-from typing import TextIO
+from typing import Any, cast, TextIO
 from unittest.mock import MagicMock
 
 import pytest
 
 from onyx.utils import audit
-from onyx.utils.audit import _OCSF_CLASS_BY_ACTION
-from onyx.utils.audit import actor_from_user
-from onyx.utils.audit import AUDIT_HANDLER_NAME
-from onyx.utils.audit import AUDIT_LOGGER_ROOT
-from onyx.utils.audit import AuditAction
-from onyx.utils.audit import AuditActor
-from onyx.utils.audit import AuditOutcome
-from onyx.utils.audit import emit_audit_event
-from onyx.utils.audit import OCSFEventClass
+from onyx.utils.audit import (
+    _OCSF_CLASS_BY_ACTION,
+    actor_from_user,
+    AUDIT_HANDLER_NAME,
+    AUDIT_LOGGER_ROOT,
+    AuditAction,
+    AuditActor,
+    AuditOutcome,
+    emit_audit_event,
+    OCSFEventClass,
+)
 
 
 def _capture(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:

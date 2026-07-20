@@ -10,12 +10,14 @@ import pytest
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM
-from onyx.skills.bundle import compute_bundle_sha256
-from onyx.skills.bundle import normalize_custom_bundle
-from onyx.skills.bundle import read_custom_bundle_instructions
-from onyx.skills.bundle import rewrite_custom_bundle_skill_md
-from onyx.skills.bundle import strip_skill_md_frontmatter
+from onyx.skills.bundle import (
+    _ZIP_UNIX_CREATE_SYSTEM,
+    compute_bundle_sha256,
+    normalize_custom_bundle,
+    read_custom_bundle_instructions,
+    rewrite_custom_bundle_skill_md,
+    strip_skill_md_frontmatter,
+)
 from onyx.skills.metadata import parse_skill_document
 
 

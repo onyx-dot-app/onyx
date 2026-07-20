@@ -3,9 +3,11 @@ from unittest.mock import MagicMock
 
 from google.auth.exceptions import RefreshError
 
-from onyx.connectors.google_utils.resources import ImpersonationError
-from onyx.connectors.google_utils.resources import make_user_removal_checker
-from onyx.connectors.google_utils.resources import UserRemovedError
+from onyx.connectors.google_utils.resources import (
+    ImpersonationError,
+    make_user_removal_checker,
+    UserRemovedError,
+)
 from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
 
 

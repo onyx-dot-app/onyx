@@ -9,12 +9,13 @@ flow again.
 
 from typing import Any
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from onyx.auth.oauth_claims_capture import get_captured_oauth_claims
-from onyx.auth.oauth_claims_capture import get_idp_profile_fields
+from onyx.auth.oauth_claims_capture import (
+    get_captured_oauth_claims,
+    get_idp_profile_fields,
+)
 from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import IDP_PROFILE_ENRICHMENT_ENABLED
 from onyx.db.enums import Permission

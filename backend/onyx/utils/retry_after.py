@@ -1,6 +1,5 @@
 import math
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
 from onyx.utils.datetime import datetime_to_utc

@@ -1,5 +1,4 @@
-from collections.abc import Mapping
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TypeAlias
 
 JSON_ro: TypeAlias = (

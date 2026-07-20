@@ -5,8 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import cast
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -14,11 +13,13 @@ from sqlalchemy.orm import Session
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.interactive_turns import api as turns_api
-from onyx.server.features.build.interactive_turns.state import claim_turn_for_runner
-from onyx.server.features.build.interactive_turns.state import create_interactive_turn
-from onyx.server.features.build.interactive_turns.state import finish_turn
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_SUCCEEDED
+from onyx.server.features.build.interactive_turns.state import (
+    claim_turn_for_runner,
+    create_interactive_turn,
+    finish_turn,
+    TURN_STATUS_FAILED,
+    TURN_STATUS_SUCCEEDED,
+)
 from tests.unit.fakes import FakeCache
 
 

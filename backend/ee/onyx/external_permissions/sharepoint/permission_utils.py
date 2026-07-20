@@ -1,9 +1,7 @@
 import re
 import time
 from collections import deque
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterable
+from collections.abc import Callable, Generator, Iterable
 from typing import Any
 from urllib.parse import urlparse
 
@@ -23,10 +21,12 @@ from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.sharepoint.connector import GRAPH_API_MAX_RETRIES
-from onyx.connectors.sharepoint.connector import GRAPH_API_RETRYABLE_STATUSES
-from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP_REVERSE
-from onyx.connectors.sharepoint.connector import sleep_and_retry
+from onyx.connectors.sharepoint.connector import (
+    GRAPH_API_MAX_RETRIES,
+    GRAPH_API_RETRYABLE_STATUSES,
+    SHARED_DOCUMENTS_MAP_REVERSE,
+    sleep_and_retry,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 

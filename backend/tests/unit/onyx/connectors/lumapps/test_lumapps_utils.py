@@ -1,9 +1,11 @@
 """Unit tests for the LumApps connector's pure helpers (no API / services)."""
 
-from onyx.connectors.lumapps.utils import extract_body_text
-from onyx.connectors.lumapps.utils import pick_lang
-from onyx.connectors.lumapps.utils import resolve_metadata_labels
-from onyx.connectors.lumapps.utils import slugify_family_key
+from onyx.connectors.lumapps.utils import (
+    extract_body_text,
+    pick_lang,
+    resolve_metadata_labels,
+    slugify_family_key,
+)
 
 
 def test_slugify_family_key() -> None:

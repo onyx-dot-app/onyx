@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from typing import Any
-from typing import TypeVar
+from typing import Any, TypeVar
 
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
+    rate_limit_builder,
     RateLimitTriedTooManyTimesError,
 )
 from onyx.utils.logger import setup_logger

@@ -4,27 +4,30 @@ from itertools import chain
 
 from pydantic import BaseModel
 
-from onyx.connectors.models import Section
-from onyx.connectors.models import TabularSection
+from onyx.connectors.models import Section, TabularSection
 from onyx.file_store.file_store import get_default_file_store
-from onyx.indexing.chunking.section_chunker import AccumulatorState
-from onyx.indexing.chunking.section_chunker import ChunkPayload
-from onyx.indexing.chunking.section_chunker import SectionChunker
-from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
-from onyx.indexing.chunking.tabular_section_chunker.analysis import analyze_sheet
-from onyx.indexing.chunking.tabular_section_chunker.analysis import SheetAnalysis
+from onyx.indexing.chunking.section_chunker import (
+    AccumulatorState,
+    ChunkPayload,
+    SectionChunker,
+    SectionChunkerOutput,
+)
+from onyx.indexing.chunking.tabular_section_chunker.analysis import (
+    analyze_sheet,
+    SheetAnalysis,
+)
 from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
     build_sheet_descriptor_chunks,
 )
 from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
     build_total_descriptor_chunks,
 )
-from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.natural_language_processing.utils import count_tokens
-from onyx.natural_language_processing.utils import split_text_by_tokens
-from onyx.utils.csv_utils import parse_csv_stream
-from onyx.utils.csv_utils import ParsedRow
-from onyx.utils.csv_utils import read_csv_header
+from onyx.natural_language_processing.utils import (
+    BaseTokenizer,
+    count_tokens,
+    split_text_by_tokens,
+)
+from onyx.utils.csv_utils import parse_csv_stream, ParsedRow, read_csv_header
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

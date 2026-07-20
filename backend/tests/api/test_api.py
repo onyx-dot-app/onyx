@@ -6,8 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from onyx.configs.constants import DEV_VERSION_PATTERN
-from onyx.configs.constants import STABLE_VERSION_PATTERN
+from onyx.configs.constants import DEV_VERSION_PATTERN, STABLE_VERSION_PATTERN
 from onyx.main import fetch_versioned_implementation
 from onyx.utils.logger import setup_logger
 

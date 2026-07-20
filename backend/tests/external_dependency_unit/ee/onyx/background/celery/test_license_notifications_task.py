@@ -10,11 +10,8 @@ And dispatches to ``notify_admins_for_stage`` only when there is a real,
 verifiable, in-window license.
 """
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 

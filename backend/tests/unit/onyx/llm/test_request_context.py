@@ -1,8 +1,10 @@
 import contextvars
 
-from onyx.llm.request_context import get_llm_mock_response
-from onyx.llm.request_context import reset_llm_mock_response
-from onyx.llm.request_context import set_llm_mock_response
+from onyx.llm.request_context import (
+    get_llm_mock_response,
+    reset_llm_mock_response,
+    set_llm_mock_response,
+)
 
 
 def test_reset_llm_mock_response_same_context() -> None:

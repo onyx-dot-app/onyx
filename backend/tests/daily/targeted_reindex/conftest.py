@@ -16,8 +16,7 @@ from collections.abc import Generator
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 

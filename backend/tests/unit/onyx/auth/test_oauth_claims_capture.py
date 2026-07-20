@@ -1,17 +1,17 @@
 import json
 from typing import Any
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
 import pytest
 
 import onyx.auth.oauth_claims_capture as claims_capture
-from onyx.auth.oauth_claims_capture import capture_oauth_login_claims
-from onyx.auth.oauth_claims_capture import get_captured_oauth_claims
-from onyx.auth.oauth_claims_capture import get_idp_profile_fields
-from onyx.auth.oauth_claims_capture import get_idp_profile_placeholder_values
+from onyx.auth.oauth_claims_capture import (
+    capture_oauth_login_claims,
+    get_captured_oauth_claims,
+    get_idp_profile_fields,
+    get_idp_profile_placeholder_values,
+)
 
 
 @pytest.fixture(autouse=True)

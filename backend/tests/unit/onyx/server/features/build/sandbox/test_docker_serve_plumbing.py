@@ -23,8 +23,10 @@ import pytest
 
 import onyx.server.features.build.sandbox.docker.dev_mode_serve as dev_mode_serve
 import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
-from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
-from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
+from onyx.server.features.build.configs import (
+    OPENCODE_SERVE_PORT,
+    OPENCODE_SERVER_PASSWORD,
+)
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     DockerSandboxManager,
 )

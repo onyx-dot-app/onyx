@@ -5,8 +5,7 @@ from __future__ import annotations
 import httpx
 from fastmcp.server.auth.auth import AccessToken
 from fastmcp.server.dependencies import get_access_token
-from pydantic import BaseModel
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import build_api_server_url_for_http_requests

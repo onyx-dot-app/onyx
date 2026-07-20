@@ -18,8 +18,7 @@ the admin exactly once at creation time.
 import hashlib
 import secrets
 
-from fastapi import Depends
-from fastapi import Request
+from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.scim import ScimDAL

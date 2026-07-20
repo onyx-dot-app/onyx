@@ -4,12 +4,13 @@ from sqlalchemy.orm import Session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.image_generation import get_default_image_generation_config
 from onyx.image_gen.exceptions import ImageGenerationNotConfiguredError
-from onyx.image_gen.factory import get_image_generation_provider
-from onyx.image_gen.factory import validate_credentials
-from onyx.image_gen.interfaces import ImageGenerationProvider
-from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
-from onyx.image_gen.interfaces import ImageShape
-from onyx.image_gen.interfaces import ReferenceImage
+from onyx.image_gen.factory import get_image_generation_provider, validate_credentials
+from onyx.image_gen.interfaces import (
+    ImageGenerationProvider,
+    ImageGenerationProviderCredentials,
+    ImageShape,
+    ReferenceImage,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

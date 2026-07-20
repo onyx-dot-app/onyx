@@ -23,15 +23,16 @@ claims and token metadata (key names, scope, expiry).
 
 import asyncio
 import json
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 import jwt
 
-from onyx.configs.app_configs import IDP_PROFILE_CLAIM_MAP
-from onyx.configs.app_configs import IDP_PROFILE_ENRICHMENT_ENABLED
+from onyx.configs.app_configs import (
+    IDP_PROFILE_CLAIM_MAP,
+    IDP_PROFILE_ENRICHMENT_ENABLED,
+)
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id

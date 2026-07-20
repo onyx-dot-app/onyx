@@ -8,9 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.user_group import prepare_user_group_for_deletion
-from onyx.db.models import MCPServer
-from onyx.db.models import MCPServer__UserGroup
-from onyx.db.models import UserGroup
+from onyx.db.models import MCPServer, MCPServer__UserGroup, UserGroup
 
 pytestmark = pytest.mark.usefixtures("enable_ee")
 

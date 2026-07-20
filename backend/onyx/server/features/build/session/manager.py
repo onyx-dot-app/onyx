@@ -11,12 +11,9 @@ import mimetypes
 import threading
 import uuid
 import zipfile
-from collections.abc import Callable
-from collections.abc import Generator
-from contextlib import AbstractContextManager
-from contextlib import nullcontext
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator
+from contextlib import AbstractContextManager, nullcontext
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -26,54 +23,62 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.models import BuildMessage
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.enums import SandboxStatus, SessionOrigin
+from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
-from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
-from onyx.server.features.build.configs import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
-from onyx.server.features.build.db.build_session import allocate_nextjs_port
-from onyx.server.features.build.db.build_session import create_build_session__no_commit
-from onyx.server.features.build.db.build_session import delete_build_session__no_commit
-from onyx.server.features.build.db.build_session import (
-    fetch_all_supported_build_llm_providers,
+from onyx.server.features.build.configs import (
+    MAX_TOTAL_UPLOAD_SIZE_BYTES,
+    MAX_UPLOAD_FILES_PER_SESSION,
+    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
 )
-from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.build_session import get_empty_session_for_user
-from onyx.server.features.build.db.build_session import get_session_messages
-from onyx.server.features.build.db.build_session import get_user_build_sessions
-from onyx.server.features.build.db.build_session import update_session_activity
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import get_snapshots_for_session
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.db.build_session import (
+    allocate_nextjs_port,
+    create_build_session__no_commit,
+    delete_build_session__no_commit,
+    fetch_all_supported_build_llm_providers,
+    get_build_session,
+    get_empty_session_for_user,
+    get_session_messages,
+    get_user_build_sessions,
+    update_session_activity,
+)
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_by_user_id,
+    get_snapshots_for_session,
+    update_sandbox_heartbeat,
+)
 from onyx.server.features.build.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.models import DirectoryListing
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import (
+    DirectoryListing,
+    FilesystemEntry,
+    LLMProviderConfig,
+)
 from onyx.server.features.build.sandbox.serve_transport import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+    PromptSlot,
 )
-from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.session import streaming as _streaming
-from onyx.server.features.build.session.errors import RateLimitError
-from onyx.server.features.build.session.errors import UploadLimitExceededError
+from onyx.server.features.build.session.errors import (
+    RateLimitError,
+    UploadLimitExceededError,
+)
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
-from onyx.server.features.build.session.llm_config import get_all_build_mode_llm_configs
-from onyx.server.features.build.session.llm_config import select_default_llm_config
+from onyx.server.features.build.session.llm_config import (
+    get_all_build_mode_llm_configs,
+    select_default_llm_config,
+)
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.naming import generate_session_name
-from onyx.server.features.build.session.sandbox_lifecycle import ensure_sandbox_ready
-from onyx.server.features.build.session.sandbox_lifecycle import hydrate_managed_content
-from onyx.server.features.build.session.sandbox_lifecycle import ProvisioningPolicy
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    ensure_sandbox_ready,
+    hydrate_managed_content,
+    ProvisioningPolicy,
+)
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.skills.push import build_user_skills_payload
 from onyx.utils.logger import setup_logger

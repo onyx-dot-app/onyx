@@ -12,10 +12,8 @@ import pytest
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.db.enums import EmbeddingPrecision
-from onyx.document_index.disabled import DisabledDocumentIndex
-from onyx.document_index.disabled import VECTOR_DB_DISABLED_ERROR
-from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.disabled import DisabledDocumentIndex, VECTOR_DB_DISABLED_ERROR
+from onyx.document_index.interfaces_new import IndexingMetadata, MetadataUpdateRequest
 
 ESCAPED_ERROR = re.escape(VECTOR_DB_DISABLED_ERROR)
 
