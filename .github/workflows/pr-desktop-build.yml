@@ -61,6 +61,7 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
+          components: clippy, rustfmt
 
       - name: Cache Cargo registry and build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # zizmor: ignore[cache-poisoning]
@@ -94,6 +95,14 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Check Rust formatting
+        working-directory: ./desktop/src-tauri
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        working-directory: ./desktop/src-tauri
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build desktop app
         working-directory: ./desktop

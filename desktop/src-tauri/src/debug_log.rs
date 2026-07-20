@@ -73,7 +73,14 @@ pub fn log_backend_error(app: &AppHandle, message: &str) {
     if !state.debug_mode {
         return;
     }
-    if let Ok(mut guard) = state.debug_log_file.lock() {
+    // Bind the lock result to a named local rather than matching on it
+    // directly in the `if let` scrutinee: `if let Ok(x) = mutex.lock() { }`
+    // extends the whole `Result<MutexGuard, _>` temporary's lifetime to the
+    // end of the enclosing block, which the borrow checker rejects here
+    // since that block also owns `state` (the guard's ultimate borrow
+    // source). A named binding is scoped by normal liveness instead.
+    let lock_result = state.debug_log_file.lock();
+    if let Ok(mut guard) = lock_result {
         if let Some(ref mut file) = *guard {
             let line = format!("[{}] [ERROR] {}", format_utc_timestamp(), message);
             let _ = writeln!(file, "{}", line);

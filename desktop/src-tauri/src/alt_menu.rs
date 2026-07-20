@@ -47,6 +47,7 @@ mod linux {
     use super::AltAloneTracker;
     use crate::menu::handle_menu_bar_toggle;
     use gtk::gdk::{self, keys::constants as key};
+    use gtk::glib;
     use gtk::prelude::*;
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -80,8 +81,10 @@ mod linux {
 
         let press_tracker = tracker.clone();
         gtk_window.connect_key_press_event(move |_win, event| {
-            press_tracker.borrow_mut().on_key_press(is_alt(event.keyval()));
-            gtk::Inhibit(false)
+            press_tracker
+                .borrow_mut()
+                .on_key_press(is_alt(event.keyval()));
+            glib::Propagation::Proceed
         });
 
         let app_handle_release = app.clone();
@@ -90,7 +93,7 @@ mod linux {
             if toggled {
                 handle_menu_bar_toggle(&app_handle_release);
             }
-            gtk::Inhibit(false)
+            glib::Propagation::Proceed
         });
     }
 }

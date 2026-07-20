@@ -35,7 +35,7 @@ pub fn trigger_new_chat(app: &AppHandle) {
 
     if let Some(window) = app.get_webview_window("main") {
         let url = format!("{}/chat", server_url);
-        if let Err(e) = window.eval(&format!("window.location.href = '{}'", url)) {
+        if let Err(e) = window.eval(format!("window.location.href = '{}'", url)) {
             log_backend_error(app, &format!("Failed to navigate to new chat: {e}"));
         }
     }
@@ -120,11 +120,11 @@ pub fn open_settings(app: &AppHandle) {
     let settings_url = app
         .state::<ConfigState>()
         .app_base_url()
-        .and_then(|mut url| {
+        .map(|mut url| {
             url.set_query(None);
             url.set_fragment(Some("settings"));
             url.set_path("/");
-            Some(url)
+            url
         })
         .or_else(|| Url::parse("tauri://localhost/#settings").ok());
 

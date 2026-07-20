@@ -2334,6 +2334,7 @@ name = "onyx"
 version = "0.0.0-dev"
 dependencies = [
  "directories",
+ "gtk",
  "reqwest",
  "serde",
  "serde_json",

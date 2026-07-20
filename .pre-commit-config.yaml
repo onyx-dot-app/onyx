@@ -296,6 +296,27 @@ repos:
         pass_filenames: false
         files: ^web/lib/shared/(.*\.(ts|tsx)|package\.json|tsconfig.*\.json)$
 
+      # These require a Rust toolchain plus the GTK3/WebKitGTK dev headers the
+      # desktop crate links against (see .github/workflows/pr-desktop-build.yml's
+      # "Install Linux dependencies" step) -- present on a real desktop dev
+      # machine, but not on the shared Quality-Checks-PR runner. That workflow
+      # SKIPs both hook ids and relies on pr-desktop-build.yml (which already
+      # provisions the full toolchain and is path-scoped to desktop/**) as the
+      # actual CI gate, the same split used for `ty`/pr-python-checks.yml.
+      - id: desktop-rust-fmt
+        name: desktop cargo fmt
+        entry: bash -c 'cd desktop/src-tauri && cargo fmt --check'
+        language: system
+        pass_filenames: false
+        files: ^desktop/src-tauri/src/.*\.rs$
+
+      - id: desktop-rust-clippy
+        name: desktop cargo clippy
+        entry: bash -c 'cd desktop/src-tauri && cargo clippy --all-targets --all-features -- -D warnings'
+        language: system
+        pass_filenames: false
+        files: ^desktop/src-tauri/(src/.*\.rs|Cargo\.(toml|lock))$
+
       # mobile/ is a standalone Expo (SDK 56) app with its own bun.lock — it is NOT
       # part of the root bun workspace, so it gets its own install + lockfile-check
       # hooks. Lint/format use the Expo-native toolchain (ESLint flat config +

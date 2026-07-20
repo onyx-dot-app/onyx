@@ -69,7 +69,10 @@ fn print_version_info() {
             "Server version: unknown (empty response from {})",
             server_url
         ),
-        Err(_) => println!("Server version: unknown (could not fetch from {})", server_url),
+        Err(_) => println!(
+            "Server version: unknown (could not fetch from {})",
+            server_url
+        ),
     }
 }
 

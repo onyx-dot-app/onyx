@@ -36,13 +36,8 @@ pub struct MenuHandles {
 pub fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
     let menu = app.menu().unwrap_or(Menu::default(app)?);
 
-    let new_chat_item = MenuItem::with_id(
-        app,
-        MENU_NEW_CHAT_ID,
-        "New Chat",
-        true,
-        Some("CmdOrCtrl+N"),
-    )?;
+    let new_chat_item =
+        MenuItem::with_id(app, MENU_NEW_CHAT_ID, "New Chat", true, Some("CmdOrCtrl+N"))?;
     let new_window_item = MenuItem::with_id(
         app,
         MENU_NEW_WINDOW_ID,
@@ -223,7 +218,8 @@ pub fn handle_menu_bar_toggle(app: &AppHandle) {
 pub fn handle_decorations_toggle(app: &AppHandle) {
     let state = app.state::<ConfigState>();
     let hide = {
-        let config = state.update_config(|c| c.hide_window_decorations = !c.hide_window_decorations);
+        let config =
+            state.update_config(|c| c.hide_window_decorations = !c.hide_window_decorations);
         if let Err(e) = save_config(&config) {
             log_backend_error(app, &format!("Failed to save config: {e}"));
         }

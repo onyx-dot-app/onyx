@@ -2,6 +2,7 @@ use crate::config::{get_config_dir, get_config_path, save_config, AppConfig, Con
 use crate::window::{build_and_setup_window, open_in_default_browser};
 use serde::Serialize;
 use std::fs;
+use tauri::Manager;
 use url::Url;
 
 #[tauri::command]
@@ -60,8 +61,8 @@ pub struct BootstrapState {
 #[tauri::command]
 pub fn get_bootstrap_state(state: tauri::State<ConfigState>) -> BootstrapState {
     let server_url = state.config().server_url;
-    let config_exists =
-        state.is_config_initialized() && get_config_path().map(|path| path.exists()).unwrap_or(false);
+    let config_exists = state.is_config_initialized()
+        && get_config_path().map(|path| path.exists()).unwrap_or(false);
 
     BootstrapState {
         server_url,
@@ -170,7 +171,7 @@ pub fn open_config_directory() -> Result<(), String> {
 pub fn navigate_to(window: tauri::WebviewWindow, state: tauri::State<ConfigState>, path: &str) {
     let base_url = state.config().server_url;
     let url = format!("{}{}", base_url, path);
-    if let Err(e) = window.eval(&format!("window.location.href = '{}'", url)) {
+    if let Err(e) = window.eval(format!("window.location.href = '{}'", url)) {
         crate::debug_log::log_backend_error(
             window.app_handle(),
             &format!("Failed to navigate to {path}: {e}"),

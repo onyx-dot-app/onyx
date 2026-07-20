@@ -101,7 +101,12 @@ pub struct ConfigState {
 }
 
 impl ConfigState {
-    pub fn new(config: AppConfig, config_initialized: bool, debug_mode: bool, debug_log_file: Option<fs::File>) -> Self {
+    pub fn new(
+        config: AppConfig,
+        config_initialized: bool,
+        debug_mode: bool,
+        debug_log_file: Option<fs::File>,
+    ) -> Self {
         Self {
             config: RwLock::new(config),
             config_initialized: RwLock::new(config_initialized),
@@ -150,9 +155,6 @@ impl ConfigState {
     }
 
     pub fn set_app_base_url(&self, url: Option<Url>) {
-        *self
-            .app_base_url
-            .write()
-            .unwrap_or_else(|e| e.into_inner()) = url;
+        *self.app_base_url.write().unwrap_or_else(|e| e.into_inner()) = url;
     }
 }
