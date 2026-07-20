@@ -7,8 +7,7 @@ derivation reads controlled values instead of the process environment.
 import pytest
 
 from onyx.server.security import store
-from onyx.server.security.models import SecuritySettingsOverrides
-from onyx.server.security.models import SSRFProtectionLevel
+from onyx.server.security.models import SecuritySettingsOverrides, SSRFProtectionLevel
 
 
 def _set_env(
