@@ -15,6 +15,7 @@ import {
   Card,
   CompactMarkdown,
   Divider,
+  InputTextArea,
   InputTypeIn,
   MessageCard,
   Tag,
@@ -35,7 +36,6 @@ import {
   toast,
 } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -551,7 +551,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                       onChange={(event) =>
                         setInstructionsMarkdown(event.target.value)
                       }
-                      className="border-0"
                       placeholder="Write the skill instructions."
                       variant={fieldsLocked ? "disabled" : "internal"}
                     />

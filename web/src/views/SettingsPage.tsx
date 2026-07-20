@@ -24,10 +24,9 @@ import {
 } from "@opal/icons";
 import { getSourceMetadata } from "@/lib/sources";
 import Card from "@/refresh-components/cards/Card";
-import { InputTypeIn } from "@opal/components";
+import { InputTextArea, InputTypeIn } from "@opal/components";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { Switch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
