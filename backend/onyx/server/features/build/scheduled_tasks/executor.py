@@ -52,6 +52,7 @@ from onyx.server.features.build.db.build_session import (
     create_message,
     get_session_messages,
 )
+from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.sandbox.event_schema import (
     TURN_ERROR_CODE_TIMEOUT,
     Error,
@@ -390,7 +391,7 @@ def _drive_agent(
                 status=ScheduledTaskRunStatus.RUNNING,
                 session_id=session_id,
             )
-            db_session.commit()
+            update_sandbox_heartbeat(db_session, sandbox_id)
         finally:
             if creation_lock.owned():
                 creation_lock.release()

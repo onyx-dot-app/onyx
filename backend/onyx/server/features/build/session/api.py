@@ -151,7 +151,7 @@ def create_session(
         sandbox = get_sandbox_by_user_id(db_session, user.id)
         if sandbox is None:
             raise RuntimeError("Session creation completed without a sandbox")
-        db_session.commit()
+        update_sandbox_heartbeat(db_session, sandbox.id)
 
         base_response = SessionResponse.from_model(build_session, sandbox)
         return DetailedSessionResponse.from_session_response(

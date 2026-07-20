@@ -51,7 +51,6 @@ from onyx.server.features.build.db.sandbox import (
     get_sandbox_by_user_id,
     get_snapshots_for_session,
     update_sandbox_heartbeat,
-    update_sandbox_heartbeat__no_commit,
 )
 from onyx.server.features.build.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
@@ -477,7 +476,6 @@ class SessionManager:
             user_name=user_name,
         )
         self._prewarm_opencode_session(sandbox, build_session)
-        update_sandbox_heartbeat__no_commit(self._db_session, sandbox.id)
 
         logger.info(
             "Successfully created session %s with workspace in sandbox %s",
@@ -542,7 +540,6 @@ class SessionManager:
                             self._sandbox_manager, sandbox.id, user, self._db_session
                         )
                     self._prewarm_opencode_session(sandbox, existing)
-                    update_sandbox_heartbeat__no_commit(self._db_session, sandbox.id)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,
