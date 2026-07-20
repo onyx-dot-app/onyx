@@ -1,31 +1,31 @@
-from collections import defaultdict
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import (
-    TokenRateLimit,
-    TokenRateLimit__UserGroup,
-    User,
-    User__UserGroup,
-    UserGroup,
+from onyx.db.models import TokenRateLimit, User
+from onyx.db.token_limit import (
+    fetch_all_user_token_rate_limits,
+    fetch_user_group_token_rate_limits,
 )
-from onyx.db.token_limit import fetch_all_user_token_rate_limits
 from onyx.db.user_usage import (
     TokenUsageBucket,
+    get_group_cost_cents_buckets_since,
     get_group_token_buckets_since,
+    get_user_cost_cents_buckets_since,
     get_user_token_buckets_since,
 )
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat.token_limit import (
+    _LEDGER_GRID,
     _get_cutoff_time,
-    _is_rate_limited,
+    _has_token_budget,
+    _raise_for_longest_window,
     _user_is_rate_limited_by_global,
+    _worst_triggered_cost_limit,
+    _worst_triggered_limit,
 )
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -59,16 +59,36 @@ def _user_is_rate_limited(user_id: UUID) -> None:
         user_rate_limits = fetch_all_user_token_rate_limits(
             db_session=db_session, enabled_only=True, ordered=False
         )
+        if not user_rate_limits:
+            return
 
-        if user_rate_limits:
-            user_cutoff_time = _get_cutoff_time(user_rate_limits)
+        token_triggered: TokenRateLimit | None = None
+        token_limits = [
+            limit
+            for limit in user_rate_limits
+            if limit.token_budget is not None and limit.token_budget > 0
+        ]
+        if token_limits:
+            user_cutoff_time = _get_cutoff_time(token_limits)
             user_usage = _fetch_user_usage(user_id, user_cutoff_time, db_session)
+            token_triggered = _worst_triggered_limit(user_rate_limits, user_usage)
 
-            if _is_rate_limited(user_rate_limits, user_usage):
-                raise OnyxError(
-                    OnyxErrorCode.RATE_LIMITED,
-                    "Token budget exceeded for user. Try again later.",
-                )
+        cost_triggered: TokenRateLimit | None = None
+        cost_limits = [
+            limit for limit in user_rate_limits if limit.cost_budget_cents is not None
+        ]
+        if cost_limits:
+            cost_cutoff = _get_cutoff_time(cost_limits) - _LEDGER_GRID
+            cost_buckets = get_user_cost_cents_buckets_since(
+                db_session, str(user_id), cost_cutoff
+            )
+            cost_triggered = _worst_triggered_cost_limit(user_rate_limits, cost_buckets)
+
+        _raise_for_longest_window(
+            TokenRateLimitScope.USER.value,
+            token_triggered.period_hours if token_triggered else None,
+            cost_triggered.period_hours if cost_triggered else None,
+        )
 
 
 def _fetch_user_usage(
@@ -84,66 +104,55 @@ User Group rate limits
 
 def _user_is_rate_limited_by_group(user_id: UUID) -> None:
     with get_session_with_current_tenant() as db_session:
-        group_rate_limits = _fetch_all_user_group_rate_limits(user_id, db_session)
+        group_rate_limits = fetch_user_group_token_rate_limits(db_session, user_id)
+        if not group_rate_limits:
+            return
 
-        if group_rate_limits:
-            # Group cutoff time is the same for all groups.
-            # This could be optimized to only fetch the maximum cutoff time for
-            # a specific group, but seems unnecessary for now.
-            group_cutoff_time = _get_cutoff_time(
-                [e for sublist in group_rate_limits.values() for e in sublist]
+        all_rate_limits = [
+            limit for limits in group_rate_limits.values() for limit in limits
+        ]
+        user_group_ids = list(group_rate_limits)
+
+        group_token_usage: dict[int, list[TokenUsageBucket]] = {}
+        if _has_token_budget(all_rate_limits):
+            token_limits = [
+                limit
+                for limit in all_rate_limits
+                if limit.token_budget is not None and limit.token_budget > 0
+            ]
+            token_cutoff = _get_cutoff_time(token_limits)
+            group_token_usage = _fetch_user_group_usage(
+                user_group_ids, token_cutoff, db_session
             )
 
-            user_group_ids = list(group_rate_limits.keys())
-            group_usage = _fetch_user_group_usage(
-                user_group_ids, group_cutoff_time, db_session
+        group_cost_usage: dict[int, list[tuple[datetime, float]]] = {}
+        cost_limits = [
+            limit for limit in all_rate_limits if limit.cost_budget_cents is not None
+        ]
+        if cost_limits:
+            cost_cutoff = _get_cutoff_time(cost_limits) - _LEDGER_GRID
+            group_cost_usage = get_group_cost_cents_buckets_since(
+                db_session, user_group_ids, cost_cutoff
             )
 
-            has_at_least_one_untriggered_limit = False
-            for user_group_id, rate_limits in group_rate_limits.items():
-                usage = group_usage.get(user_group_id, [])
+        triggered_periods: list[int] = []
+        for user_group_id, rate_limits in group_rate_limits.items():
+            token_triggered = _worst_triggered_limit(
+                rate_limits, group_token_usage.get(user_group_id, [])
+            )
+            cost_triggered = _worst_triggered_cost_limit(
+                rate_limits, group_cost_usage.get(user_group_id, [])
+            )
+            if token_triggered is None and cost_triggered is None:
+                return
+            if token_triggered:
+                triggered_periods.append(token_triggered.period_hours)
+            if cost_triggered:
+                triggered_periods.append(cost_triggered.period_hours)
 
-                if not _is_rate_limited(rate_limits, usage):
-                    has_at_least_one_untriggered_limit = True
-                    break
-
-            if not has_at_least_one_untriggered_limit:
-                raise OnyxError(
-                    OnyxErrorCode.RATE_LIMITED,
-                    "Token budget exceeded for user's groups. Try again later.",
-                )
-
-
-def _fetch_all_user_group_rate_limits(
-    user_id: UUID, db_session: Session
-) -> dict[int, list[TokenRateLimit]]:
-    group_limits = (
-        select(TokenRateLimit, User__UserGroup.user_group_id)
-        .join(
-            TokenRateLimit__UserGroup,
-            TokenRateLimit.id == TokenRateLimit__UserGroup.rate_limit_id,
+        _raise_for_longest_window(
+            TokenRateLimitScope.USER_GROUP.value, *triggered_periods
         )
-        .join(
-            UserGroup,
-            UserGroup.id == TokenRateLimit__UserGroup.user_group_id,
-        )
-        .join(
-            User__UserGroup,
-            User__UserGroup.user_group_id == UserGroup.id,
-        )
-        .where(
-            User__UserGroup.user_id == user_id,
-            TokenRateLimit.enabled.is_(True),
-        )
-    )
-
-    raw_rate_limits = db_session.execute(group_limits).all()
-
-    group_rate_limits = defaultdict(list)
-    for rate_limit, user_group_id in raw_rate_limits:
-        group_rate_limits[user_group_id].append(rate_limit)
-
-    return group_rate_limits
 
 
 def _fetch_user_group_usage(
