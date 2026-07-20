@@ -1,15 +1,13 @@
 """Fixtures for Discord bot external dependency tests."""
 
 from collections.abc import Generator
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 TEST_TENANT_ID: str = "public"

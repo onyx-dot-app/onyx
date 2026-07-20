@@ -1,7 +1,6 @@
 from box_sdk_gen import BoxClient
 from box_sdk_gen.box.errors import BoxAPIError
-from box_sdk_gen.schemas.collaboration import Collaboration
-from box_sdk_gen.schemas.collaboration import CollaborationStatusField
+from box_sdk_gen.schemas.collaboration import Collaboration, CollaborationStatusField
 from box_sdk_gen.schemas.file import FileSharedLinkField
 from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder import FolderSharedLinkField
@@ -9,17 +8,17 @@ from box_sdk_gen.schemas.folder_mini import FolderMini
 from box_sdk_gen.schemas.group_mini import GroupMini
 from box_sdk_gen.schemas.user_collaborations import UserCollaborations
 from box_sdk_gen.schemas.user_mini import UserMini
-from box_sdk_gen.schemas.web_link import WebLink
-from box_sdk_gen.schemas.web_link import WebLinkSharedLinkField
-from pydantic import BaseModel
-from pydantic import Field
+from box_sdk_gen.schemas.web_link import WebLink, WebLinkSharedLinkField
+from pydantic import BaseModel, Field
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.box.connector import box_all_enterprise_users_group_id
-from onyx.connectors.box.connector import box_api_status_code
-from onyx.connectors.box.connector import box_group_id
-from onyx.connectors.box.connector import BOX_ROOT_FOLDER_ID
-from onyx.connectors.box.connector import normalize_box_login
+from onyx.connectors.box.connector import (
+    box_all_enterprise_users_group_id,
+    box_api_status_code,
+    box_group_id,
+    BOX_ROOT_FOLDER_ID,
+    normalize_box_login,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

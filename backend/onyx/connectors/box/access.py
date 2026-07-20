@@ -9,8 +9,8 @@ from box_sdk_gen.schemas.web_link import WebLink
 from onyx.access.models import ExternalAccess
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
+    noop_fallback,
 )
-from onyx.utils.variable_functionality import noop_fallback
 
 
 def resolve_box_ancestor_access(

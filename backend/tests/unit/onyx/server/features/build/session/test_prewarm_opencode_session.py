@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
+from onyx.db.models import BuildSession, Sandbox
 from onyx.server.features.build.session.manager import SessionManager
 
 

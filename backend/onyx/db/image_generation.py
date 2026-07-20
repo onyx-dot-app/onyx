@@ -1,11 +1,7 @@
-from sqlalchemy import select
-from sqlalchemy import update
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy import select, update
+from sqlalchemy.orm import selectinload, Session
 
-from onyx.db.models import ImageGenerationConfig
-from onyx.db.models import LLMProvider
-from onyx.db.models import ModelConfiguration
+from onyx.db.models import ImageGenerationConfig, LLMProvider, ModelConfiguration
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.utils.logger import setup_logger
 

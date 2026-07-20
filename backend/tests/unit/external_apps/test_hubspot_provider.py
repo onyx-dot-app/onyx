@@ -8,8 +8,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock
-from urllib.parse import parse_qs
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 

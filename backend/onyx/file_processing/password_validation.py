@@ -1,8 +1,6 @@
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from typing import Any
-from typing import IO
+from typing import Any, IO
 
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.utils.logger import setup_logger

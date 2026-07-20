@@ -13,8 +13,7 @@ Example:
 import argparse
 import os
 import sys
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
@@ -23,8 +22,10 @@ from sqlalchemy import update  # noqa: E402
 from sqlalchemy.engine import CursorResult  # noqa: E402
 from sqlalchemy.exc import ProgrammingError  # noqa: E402
 
-from onyx.db.engine.sql_engine import get_session_with_tenant  # noqa: E402
-from onyx.db.engine.sql_engine import SqlEngine  # noqa: E402
+from onyx.db.engine.sql_engine import (  # noqa: E402
+    get_session_with_tenant,
+    SqlEngine,
+)
 from onyx.db.engine.tenant_utils import get_all_tenant_ids  # noqa: E402
 from onyx.db.models import Connector  # noqa: E402
 from onyx.utils.variable_functionality import global_version  # noqa: E402

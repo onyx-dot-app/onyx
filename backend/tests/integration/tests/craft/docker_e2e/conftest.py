@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 import subprocess
-from typing import NamedTuple
-from typing import Protocol
+from typing import NamedTuple, Protocol
 from uuid import UUID
 
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.enums import SandboxStatus
-from onyx.db.external_app import create_external_app
-from onyx.db.external_app import get_built_in_external_app
+from onyx.db.enums import EndpointPolicy, ExternalAppType, SandboxStatus
+from onyx.db.external_app import create_external_app, get_built_in_external_app
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.test_models import DATestUser
 

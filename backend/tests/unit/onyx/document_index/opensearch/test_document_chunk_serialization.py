@@ -5,12 +5,13 @@ pin that the pydantic model serializes tz-aware datetimes to epoch ints, parses
 them back to UTC datetimes, and omits the fields entirely when unset.
 """
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
-from onyx.document_index.opensearch.schema import CREATED_AT_FIELD_NAME
-from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
-from onyx.document_index.opensearch.schema import LAST_UPDATED_FIELD_NAME
+from onyx.document_index.opensearch.schema import (
+    CREATED_AT_FIELD_NAME,
+    DocumentChunkWithoutVectors,
+    LAST_UPDATED_FIELD_NAME,
+)
 
 
 def _make_chunk(

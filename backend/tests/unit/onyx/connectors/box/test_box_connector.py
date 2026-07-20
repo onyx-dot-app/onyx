@@ -1,35 +1,40 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
-from box_sdk_gen import BoxCCGAuth
-from box_sdk_gen import BoxClient
+from box_sdk_gen import BoxCCGAuth, BoxClient
 from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder_full import FolderFull
 from box_sdk_gen.schemas.folder_mini import FolderMini
 from box_sdk_gen.schemas.items import Items
 from box_sdk_gen.schemas.user_mini import UserMini
-from box_sdk_gen.schemas.web_link import WebLink
-from box_sdk_gen.schemas.web_link import WebLinkSharedLinkEffectiveAccessField
-from box_sdk_gen.schemas.web_link import WebLinkSharedLinkEffectivePermissionField
-from box_sdk_gen.schemas.web_link import WebLinkSharedLinkField
+from box_sdk_gen.schemas.web_link import (
+    WebLink,
+    WebLinkSharedLinkEffectiveAccessField,
+    WebLinkSharedLinkEffectivePermissionField,
+    WebLinkSharedLinkField,
+)
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.box.connector import BoxConnector
-from onyx.connectors.box.connector import parse_box_folder_id
+from onyx.connectors.box.connector import BoxConnector, parse_box_folder_id
 from onyx.connectors.box.models import BoxFolderFrontierEntry
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
-from tests.unit.onyx.connectors.box.fake_box_client import FakeBoxClient
-from tests.unit.onyx.connectors.box.fake_box_client import make_box_api_error
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
+from tests.unit.onyx.connectors.box.fake_box_client import (
+    FakeBoxClient,
+    make_box_api_error,
+)
 
 _OWNER = UserMini(id="u1", name="Alice", login="alice@example.com")
 

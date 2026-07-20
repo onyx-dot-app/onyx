@@ -1,16 +1,16 @@
 """Unit tests for the PERSISTENT_INDEXING catch-all helpers in
 `onyx.indexing.persistent_indexing`."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
-from onyx.indexing.persistent_indexing import build_generic_connector_failure
-from onyx.indexing.persistent_indexing import record_generic_failure
+from onyx.connectors.models import Document, TextSection
+from onyx.indexing.persistent_indexing import (
+    build_generic_connector_failure,
+    record_generic_failure,
+)
 
 
 def _make_doc(

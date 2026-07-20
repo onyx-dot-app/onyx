@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -11,12 +10,14 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import User
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
+    UpsertUserCredentialsRequest,
 )
-from onyx.server.features.build.external_apps.models import UpsertUserCredentialsRequest
-from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
-from tests.external_dependency_unit.craft.db_helpers import make_external_app
-from tests.external_dependency_unit.craft.db_helpers import make_sandbox
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_built_in_skill_row,
+    make_external_app,
+    make_sandbox,
+    make_user,
+)
 
 
 def test_credential_upsert_refreshes_only_the_calling_user(

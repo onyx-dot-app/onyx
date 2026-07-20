@@ -1,5 +1,4 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 
 def datetime_to_utc(dt: datetime) -> datetime:

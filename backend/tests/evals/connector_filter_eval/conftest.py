@@ -5,33 +5,34 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import LLMModelFlowType
-from onyx.db.llm import fetch_existing_llm_providers
-from onyx.db.llm import fetch_llm_provider_view
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import (
+    fetch_existing_llm_providers,
+    fetch_llm_provider_view,
+    update_default_provider,
+    upsert_llm_provider,
+)
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.factory import get_default_llm
-from onyx.llm.factory import llm_from_provider
+from onyx.llm.factory import get_default_llm, llm_from_provider
 from onyx.llm.interfaces import LLM
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 
 # This suite lives outside tests/external_dependency_unit (so the EDU CI
 # matrix doesn't discover it) but runs against the same live dependencies,
 # so it reuses that tree's fixtures via explicit imports.
-from tests.external_dependency_unit.answer.conftest import (  # noqa: F401
+from tests.external_dependency_unit.answer.conftest import (  # noqa: F401  # noqa: F401  # noqa: F401
     mock_external_deps,
-)
-from tests.external_dependency_unit.answer.conftest import mock_file_store  # noqa: F401
-from tests.external_dependency_unit.answer.conftest import mock_gpu_status  # noqa: F401
-from tests.external_dependency_unit.answer.conftest import (  # noqa: F401
+    mock_file_store,  # noqa: F401
+    mock_gpu_status,  # noqa: F401
     mock_nlp_embeddings_post,
-)
-from tests.external_dependency_unit.answer.conftest import (  # noqa: F401
     mock_vespa_query,
 )
-from tests.external_dependency_unit.conftest import db_session  # noqa: F401
-from tests.external_dependency_unit.conftest import full_deployment_setup  # noqa: F401
+from tests.external_dependency_unit.conftest import (
+    db_session,  # noqa: F401
+    full_deployment_setup,  # noqa: F401
+)
 
 # This suite makes real LLM calls, so it is disabled by default and only runs
 # when explicitly opted in.

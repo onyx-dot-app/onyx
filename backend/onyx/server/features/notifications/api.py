@@ -1,6 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -8,21 +6,23 @@ from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.db.notification import count_notifications
-from onyx.db.notification import dismiss_notification
-from onyx.db.notification import dismiss_user_notifications
-from onyx.db.notification import get_notification_by_id
-from onyx.db.notification import get_notifications
+from onyx.db.notification import (
+    count_notifications,
+    dismiss_notification,
+    dismiss_user_notifications,
+    get_notification_by_id,
+    get_notifications,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.utils import ensure_build_mode_intro_notification
-from onyx.server.features.notifications.models import NotificationResponse
-from onyx.server.features.notifications.models import NotificationSummary
-from onyx.server.features.notifications.models import PaginatedNotifications
-from onyx.server.features.notifications.utils import (
-    ensure_permissions_migration_notification,
+from onyx.server.features.notifications.models import (
+    NotificationResponse,
+    NotificationSummary,
+    PaginatedNotifications,
 )
 from onyx.server.features.notifications.utils import (
+    ensure_permissions_migration_notification,
     ensure_system_announcement_notification,
 )
 from onyx.server.features.release_notes.utils import (

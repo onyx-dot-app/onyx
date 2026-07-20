@@ -23,12 +23,9 @@ import time
 import uuid
 from typing import Any
 
-from locust import constant
-from locust import HttpUser
-from locust import task
+from locust import constant, HttpUser, task
 
-from onyx_client.env import env_float
-from onyx_client.env import env_int
+from onyx_client.env import env_float, env_int
 from onyx_client.stream_parser import ChatStreamAnalyzer
 
 DEFAULT_MESSAGES = [

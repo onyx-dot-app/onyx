@@ -1,17 +1,12 @@
 import abc
-from collections.abc import Callable
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from pydantic import BaseModel
 
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.models import LanguageModelInput
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import ToolChoiceOptions
-from onyx.llm.tracing_wrap import wrap_invoke
-from onyx.llm.tracing_wrap import wrap_stream
+from onyx.llm.model_response import ModelResponse, ModelResponseStream
+from onyx.llm.models import LanguageModelInput, ReasoningEffort, ToolChoiceOptions
+from onyx.llm.tracing_wrap import wrap_invoke, wrap_stream
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

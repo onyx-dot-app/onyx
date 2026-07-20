@@ -5,8 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from onyx.server.settings import api as settings_api
-from onyx.server.settings.models import CRAFT_INSTRUCTIONS_MAX_LENGTH
-from onyx.server.settings.models import Settings
+from onyx.server.settings.models import CRAFT_INSTRUCTIONS_MAX_LENGTH, Settings
 
 
 def _put_settings(

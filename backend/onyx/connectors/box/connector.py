@@ -1,15 +1,12 @@
 from collections import deque
 from collections.abc import Generator
 from copy import deepcopy
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
 from urllib.parse import urlparse
 
-from box_sdk_gen import BoxCCGAuth
-from box_sdk_gen import BoxClient
-from box_sdk_gen import CCGConfig
+from box_sdk_gen import BoxCCGAuth, BoxClient, CCGConfig
 from box_sdk_gen.box.errors import BoxAPIError
 from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder_mini import FolderMini
@@ -17,41 +14,45 @@ from box_sdk_gen.schemas.user_full import UserFull
 from box_sdk_gen.schemas.web_link import WebLink
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import BOX_CONNECTOR_SIZE_THRESHOLD
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
-from onyx.connectors.box.access import resolve_box_ancestor_access
-from onyx.connectors.box.access import resolve_box_file_access
-from onyx.connectors.box.access import resolve_box_folder_access
-from onyx.connectors.box.access import resolve_box_web_link_access
-from onyx.connectors.box.models import BoxConnectorCheckpoint
-from onyx.connectors.box.models import BoxFolderFrontierEntry
+from onyx.configs.app_configs import BOX_CONNECTOR_SIZE_THRESHOLD, INDEX_BATCH_SIZE
+from onyx.configs.constants import DocumentSource, FileOrigin
+from onyx.connectors.box.access import (
+    resolve_box_ancestor_access,
+    resolve_box_file_access,
+    resolve_box_folder_access,
+    resolve_box_web_link_access,
+)
+from onyx.connectors.box.models import BoxConnectorCheckpoint, BoxFolderFrontierEntry
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import datetime_to_utc
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import NormalizationResult
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    NormalizationResult,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    EntityFailure,
+    HierarchyNode,
+    ImageSection,
+    SlimDocument,
+    TextSection,
+)
 from onyx.db.enums import HierarchyNodeType
-from onyx.file_processing.extract_file_text import extract_text_and_images
-from onyx.file_processing.extract_file_text import get_file_ext
+from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface

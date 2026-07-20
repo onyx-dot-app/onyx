@@ -9,9 +9,7 @@ Tests cover:
 """
 
 from types import TracebackType
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi_users import exceptions

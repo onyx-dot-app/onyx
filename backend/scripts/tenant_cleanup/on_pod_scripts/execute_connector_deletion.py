@@ -31,13 +31,13 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import get_connector_credential_pairs
-from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
-from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.engine.sql_engine import SqlEngine
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair_from_id,
+    get_connector_credential_pairs,
+    update_connector_credential_pair_from_id,
+)
+from onyx.db.engine.sql_engine import get_session_with_tenant, SqlEngine
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 

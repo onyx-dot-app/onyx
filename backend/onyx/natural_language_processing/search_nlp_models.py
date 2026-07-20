@@ -4,12 +4,10 @@ import os
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed, ThreadPoolExecutor
 from functools import wraps
 from types import TracebackType
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import aioboto3
 import httpx
@@ -19,62 +17,71 @@ from cohere import AsyncClient as CohereAsyncClient
 from cohere.core.api_error import ApiError
 from google.oauth2 import service_account
 from httpx import HTTPError
-from requests import JSONDecodeError
-from requests import RequestException
-from requests import Response
-from tenacity import retry
-from tenacity import retry_if_exception_type
-from tenacity import stop_after_attempt
-from tenacity import wait_exponential
-from tenacity import wait_fixed
-from tenacity import wait_random
+from requests import JSONDecodeError, RequestException, Response
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+    wait_fixed,
+    wait_random,
+)
 
-from onyx.configs.app_configs import INDEXING_EMBEDDING_MODEL_NUM_THREADS
-from onyx.configs.app_configs import LARGE_CHUNK_RATIO
-from onyx.configs.model_configs import BATCH_SIZE_ENCODE_CHUNKS
+from onyx.configs.app_configs import (
+    INDEXING_EMBEDDING_MODEL_NUM_THREADS,
+    LARGE_CHUNK_RATIO,
+)
 from onyx.configs.model_configs import (
+    BATCH_SIZE_ENCODE_CHUNKS,
     BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES,
 )
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.natural_language_processing.constants import DEFAULT_COHERE_MODEL
-from onyx.natural_language_processing.constants import DEFAULT_OPENAI_MODEL
-from onyx.natural_language_processing.constants import DEFAULT_VERTEX_MODEL
-from onyx.natural_language_processing.constants import DEFAULT_VOYAGE_MODEL
-from onyx.natural_language_processing.constants import EmbeddingModelTextType
-from onyx.natural_language_processing.exceptions import CohereBillingLimitError
-from onyx.natural_language_processing.exceptions import ModelServerRateLimitError
-from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.natural_language_processing.utils import tokenizer_trim_content
-from onyx.server.metrics.embedding import observe_embedding_client
-from onyx.server.metrics.embedding import track_embedding_in_progress
+from onyx.natural_language_processing.constants import (
+    DEFAULT_COHERE_MODEL,
+    DEFAULT_OPENAI_MODEL,
+    DEFAULT_VERTEX_MODEL,
+    DEFAULT_VOYAGE_MODEL,
+    EmbeddingModelTextType,
+)
+from onyx.natural_language_processing.exceptions import (
+    CohereBillingLimitError,
+    ModelServerRateLimitError,
+)
+from onyx.natural_language_processing.utils import get_tokenizer, tokenizer_trim_content
+from onyx.server.metrics.embedding import (
+    observe_embedding_client,
+    track_embedding_in_progress,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
 from onyx.utils.search_nlp_models_utils import pass_aws_key
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 from onyx.utils.timing import log_function_time
-from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
-from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
-from shared_configs.configs import INDEXING_ONLY
-from shared_configs.configs import MODEL_SERVER_CONNECT_TIMEOUT
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
-from shared_configs.configs import MODEL_SERVER_READ_TIMEOUT
-from shared_configs.configs import OPENAI_EMBEDDING_TIMEOUT
-from shared_configs.configs import SKIP_WARM_UP
-from shared_configs.configs import VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import EmbedTextType
-from shared_configs.enums import RerankerProvider
-from shared_configs.model_server_models import Embedding
-from shared_configs.model_server_models import EmbedRequest
-from shared_configs.model_server_models import EmbedResponse
-from shared_configs.model_server_models import IntentRequest
-from shared_configs.model_server_models import IntentResponse
-from shared_configs.model_server_models import RerankRequest
-from shared_configs.model_server_models import RerankResponse
+from shared_configs.configs import (
+    API_BASED_EMBEDDING_TIMEOUT,
+    DOC_EMBEDDING_CONTEXT_SIZE,
+    INDEXING_ONLY,
+    MODEL_SERVER_CONNECT_TIMEOUT,
+    MODEL_SERVER_HOST,
+    MODEL_SERVER_PORT,
+    MODEL_SERVER_READ_TIMEOUT,
+    OPENAI_EMBEDDING_TIMEOUT,
+    SKIP_WARM_UP,
+    VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE,
+)
+from shared_configs.enums import EmbeddingProvider, EmbedTextType, RerankerProvider
+from shared_configs.model_server_models import (
+    Embedding,
+    EmbedRequest,
+    EmbedResponse,
+    IntentRequest,
+    IntentResponse,
+    RerankRequest,
+    RerankResponse,
+)
 from shared_configs.utils import batch_list
 
 logger = setup_logger()

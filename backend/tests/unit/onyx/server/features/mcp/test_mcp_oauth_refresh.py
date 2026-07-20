@@ -11,8 +11,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from urllib.parse import parse_qs
 
 import httpx

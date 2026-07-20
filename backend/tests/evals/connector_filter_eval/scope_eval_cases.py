@@ -15,8 +15,7 @@ carrying) across turns.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.configs.constants import DocumentSource
 from onyx.secondary_llm_flows.source_filter import SearchCycle

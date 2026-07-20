@@ -1,98 +1,109 @@
 import time
 from collections import defaultdict
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
-from typing import NamedTuple
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 import sentry_sdk
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
-from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
-from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
-from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
-from onyx.configs.app_configs import USE_CHUNK_SUMMARY
-from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
+from onyx.configs.app_configs import (
+    ENABLE_CONTEXTUAL_RAG,
+    MAX_CHUNKS_PER_DOC_BATCH,
+    MAX_DOCUMENT_CHARS,
+    MAX_TOKENS_FOR_FULL_INCLUSION,
+    USE_CHUNK_SUMMARY,
+    USE_DOCUMENT_SUMMARY,
+)
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorStopSignal
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import IndexAttemptMetadata
-from onyx.connectors.models import IndexingDocument
-from onyx.connectors.models import Section
-from onyx.connectors.models import SectionType
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorStopSignal,
+    Document,
+    DocumentFailure,
+    ImageSection,
+    IndexAttemptMetadata,
+    IndexingDocument,
+    Section,
+    SectionType,
+    TextSection,
+)
 from onyx.db.connector_credential_pair import get_connector_credential_pair
-from onyx.db.document import get_documents_by_ids
-from onyx.db.document import update_docs_content_hash__no_commit
-from onyx.db.document import upsert_document_by_connector_credential_pair
-from onyx.db.document import upsert_documents
+from onyx.db.document import (
+    get_documents_by_ids,
+    update_docs_content_hash__no_commit,
+    upsert_document_by_connector_credential_pair,
+    upsert_documents,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import HookPoint
+from onyx.db.enums import AccessType, HookPoint
 from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
-from onyx.db.index_attempt_metrics import IndexAttemptStage
-from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
-from onyx.db.index_attempt_metrics import time_stage_if_set
+from onyx.db.index_attempt_metrics import (
+    IndexAttemptStage,
+    safe_record_single_event_if_set,
+    time_stage_if_set,
+)
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tag import upsert_document_tags
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.document_metadata import DocumentMetadata
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentInsertionRecord
-from onyx.document_index.interfaces_new import IndexingMetadata
+from onyx.document_index.interfaces_new import (
+    DocumentIndex,
+    DocumentInsertionRecord,
+    IndexingMetadata,
+)
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import promote_staged_file
-from onyx.hooks.executor import execute_hook
-from onyx.hooks.executor import HookSkipped
-from onyx.hooks.executor import HookSoftFailed
-from onyx.hooks.points.document_ingestion import DocumentIngestionOwner
-from onyx.hooks.points.document_ingestion import DocumentIngestionPayload
-from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
-from onyx.hooks.points.document_ingestion import DocumentIngestionSection
+from onyx.hooks.executor import execute_hook, HookSkipped, HookSoftFailed
+from onyx.hooks.points.document_ingestion import (
+    DocumentIngestionOwner,
+    DocumentIngestionPayload,
+    DocumentIngestionResponse,
+    DocumentIngestionSection,
+)
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
-from onyx.indexing.document_push import DocumentPushPayload
-from onyx.indexing.document_push import DocumentPushResponse
-from onyx.indexing.document_push import get_document_push_config
-from onyx.indexing.document_push import push_document_via_config
-from onyx.indexing.embedder import embed_chunks_with_failure_handling
-from onyx.indexing.embedder import IndexingEmbedder
-from onyx.indexing.models import DocAwareChunk
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import IndexingBatchAdapter
-from onyx.indexing.models import UpdatableChunkData
+from onyx.indexing.document_push import (
+    DocumentPushPayload,
+    DocumentPushResponse,
+    get_document_push_config,
+    push_document_via_config,
+)
+from onyx.indexing.embedder import embed_chunks_with_failure_handling, IndexingEmbedder
+from onyx.indexing.models import (
+    DocAwareChunk,
+    DocMetadataAwareIndexChunk,
+    IndexingBatchAdapter,
+    UpdatableChunkData,
+)
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
-from onyx.llm.factory import get_contextual_rag_llm_for_search_settings
-from onyx.llm.factory import get_default_llm_with_vision
+from onyx.llm.factory import (
+    get_contextual_rag_llm_for_search_settings,
+    get_default_llm_with_vision,
+)
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import UserMessage
+from onyx.llm.models import ReasoningEffort, UserMessage
 from onyx.llm.multi_llm import LLMRateLimitError
-from onyx.llm.utils import llm_response_to_string
-from onyx.llm.utils import MAX_CONTEXT_TOKENS
-from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.natural_language_processing.utils import tokenizer_trim_middle
-from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT1
-from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT2
-from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_PROMPT
+from onyx.llm.utils import llm_response_to_string, MAX_CONTEXT_TOKENS
+from onyx.natural_language_processing.utils import (
+    BaseTokenizer,
+    get_tokenizer,
+    tokenizer_trim_middle,
+)
+from onyx.prompts.contextual_retrieval import (
+    CONTEXTUAL_RAG_PROMPT1,
+    CONTEXTUAL_RAG_PROMPT2,
+    DOCUMENT_SUMMARY_PROMPT,
+)
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres

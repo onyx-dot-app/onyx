@@ -1,8 +1,10 @@
 from typing import List
 
-from onyx.server.features.projects.models import CategorizedFilesSnapshot
-from onyx.server.features.projects.models import UserFileSnapshot
-from onyx.server.features.projects.models import UserProjectSnapshot
+from onyx.server.features.projects.models import (
+    CategorizedFilesSnapshot,
+    UserFileSnapshot,
+    UserProjectSnapshot,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser

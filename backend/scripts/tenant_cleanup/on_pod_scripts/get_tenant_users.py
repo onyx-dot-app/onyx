@@ -15,8 +15,7 @@ import sys
 
 from sqlalchemy import select
 
-from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.engine.sql_engine import get_session_with_tenant, SqlEngine
 from onyx.db.models import User
 
 

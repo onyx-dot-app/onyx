@@ -10,8 +10,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Skill
-from onyx.db.models import User
+from onyx.db.models import Skill, User
 from onyx.file_store.file_store import FileStore
 from onyx.skills import push
 

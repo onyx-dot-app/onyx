@@ -11,8 +11,7 @@ a JSON-Schema-valid `parameters` dict with a `properties` key.
 """
 
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -21,8 +20,10 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_constructor import _disambiguate_mcp_tool_names
-from onyx.tools.tool_implementations.mcp.mcp_tool import _normalize_parameters_schema
-from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+from onyx.tools.tool_implementations.mcp.mcp_tool import (
+    _normalize_parameters_schema,
+    MCPTool,
+)
 
 
 class TestNormalizeParametersSchema:

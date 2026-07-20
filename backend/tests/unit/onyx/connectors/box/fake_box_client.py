@@ -4,9 +4,7 @@ connector exercises the same attribute access paths as against the live API."""
 
 from io import BytesIO
 
-from box_sdk_gen.box.errors import BoxAPIError
-from box_sdk_gen.box.errors import RequestInfo
-from box_sdk_gen.box.errors import ResponseInfo
+from box_sdk_gen.box.errors import BoxAPIError, RequestInfo, ResponseInfo
 from box_sdk_gen.schemas.collaboration import Collaboration
 from box_sdk_gen.schemas.collaborations import Collaborations
 from box_sdk_gen.schemas.folder_full import FolderFull

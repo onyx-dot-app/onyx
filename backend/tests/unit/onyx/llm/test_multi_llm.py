@@ -2,13 +2,11 @@ import os
 import threading
 import time
 from typing import Any
-from unittest.mock import ANY
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import litellm
 import pytest
-from litellm.types.utils import ChatCompletionDeltaToolCall
-from litellm.types.utils import Delta
+from litellm.types.utils import ChatCompletionDeltaToolCall, Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
 import onyx.llm.models
@@ -16,18 +14,21 @@ from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.models import AssistantMessage
-from onyx.llm.models import FunctionCall
-from onyx.llm.models import LanguageModelInput
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import ToolCall
-from onyx.llm.models import ToolChoiceOptions
-from onyx.llm.models import UserMessage
-from onyx.llm.multi_llm import _parse_anthropic_model_version
-from onyx.llm.multi_llm import LitellmLLM
-from onyx.llm.multi_llm import temporary_env_and_lock
+from onyx.llm.model_response import ModelResponse, ModelResponseStream
+from onyx.llm.models import (
+    AssistantMessage,
+    FunctionCall,
+    LanguageModelInput,
+    ReasoningEffort,
+    ToolCall,
+    ToolChoiceOptions,
+    UserMessage,
+)
+from onyx.llm.multi_llm import (
+    _parse_anthropic_model_version,
+    LitellmLLM,
+    temporary_env_and_lock,
+)
 
 VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG = [
     "claude-opus-4-5@20251101",

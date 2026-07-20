@@ -20,12 +20,14 @@ from functools import lru_cache
 
 from pydantic import BaseModel
 
-from onyx.llm.constants import AGGREGATOR_PROVIDERS
-from onyx.llm.constants import HYPHENATED_MODEL_NAMES
-from onyx.llm.constants import LlmProviderNames
-from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR
-from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
-from onyx.llm.constants import VENDOR_BRAND_NAMES
+from onyx.llm.constants import (
+    AGGREGATOR_PROVIDERS,
+    HYPHENATED_MODEL_NAMES,
+    LlmProviderNames,
+    MODEL_PREFIX_TO_VENDOR,
+    PROVIDER_DISPLAY_NAMES,
+    VENDOR_BRAND_NAMES,
+)
 
 
 class ParsedModelName(BaseModel):

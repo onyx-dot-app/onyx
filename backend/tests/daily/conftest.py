@@ -5,11 +5,15 @@ import os
 # module-level imports below pull in EE versioned implementations.
 os.environ["LICENSE_ENFORCEMENT_ENABLED"] = "false"
 
-from collections.abc import AsyncGenerator  # noqa: E402
-from collections.abc import Generator  # noqa: E402
+from collections.abc import (
+    AsyncGenerator,  # noqa: E402
+    Generator,  # noqa: E402
+)
 from contextlib import asynccontextmanager  # noqa: E402
-from unittest.mock import MagicMock  # noqa: E402
-from unittest.mock import patch  # noqa: E402
+from unittest.mock import (
+    MagicMock,  # noqa: E402
+    patch,  # noqa: E402
+)
 
 import pytest  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402

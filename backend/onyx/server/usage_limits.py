@@ -4,28 +4,32 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
-from onyx.configs.app_configs import COHERE_DEFAULT_API_KEY
-from onyx.configs.app_configs import OPENAI_DEFAULT_API_KEY
-from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
-from onyx.db.usage import check_usage_limit
-from onyx.db.usage import UsageLimitExceededError
-from onyx.db.usage import UsageType
+from onyx.configs.app_configs import (
+    ANTHROPIC_DEFAULT_API_KEY,
+    COHERE_DEFAULT_API_KEY,
+    OPENAI_DEFAULT_API_KEY,
+    OPENROUTER_DEFAULT_API_KEY,
+)
+from onyx.db.usage import check_usage_limit, UsageLimitExceededError, UsageType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.tenant_usage_limits import TenantUsageLimitKeys
-from onyx.server.tenant_usage_limits import TenantUsageLimitOverrides
+from onyx.server.tenant_usage_limits import (
+    TenantUsageLimitKeys,
+    TenantUsageLimitOverrides,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
-from shared_configs.configs import USAGE_LIMIT_API_CALLS_PAID
-from shared_configs.configs import USAGE_LIMIT_API_CALLS_TRIAL
-from shared_configs.configs import USAGE_LIMIT_CHUNKS_INDEXED_PAID
-from shared_configs.configs import USAGE_LIMIT_CHUNKS_INDEXED_TRIAL
-from shared_configs.configs import USAGE_LIMIT_LLM_COST_CENTS_PAID
-from shared_configs.configs import USAGE_LIMIT_LLM_COST_CENTS_TRIAL
-from shared_configs.configs import USAGE_LIMIT_NON_STREAMING_CALLS_PAID
-from shared_configs.configs import USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL
-from shared_configs.configs import USAGE_LIMITS_ENABLED
+from shared_configs.configs import (
+    USAGE_LIMIT_API_CALLS_PAID,
+    USAGE_LIMIT_API_CALLS_TRIAL,
+    USAGE_LIMIT_CHUNKS_INDEXED_PAID,
+    USAGE_LIMIT_CHUNKS_INDEXED_TRIAL,
+    USAGE_LIMIT_LLM_COST_CENTS_PAID,
+    USAGE_LIMIT_LLM_COST_CENTS_TRIAL,
+    USAGE_LIMIT_NON_STREAMING_CALLS_PAID,
+    USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL,
+    USAGE_LIMITS_ENABLED,
+)
 
 logger = setup_logger()
 

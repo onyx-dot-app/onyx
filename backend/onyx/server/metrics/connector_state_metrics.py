@@ -6,17 +6,12 @@ from collections.abc import Iterator
 from datetime import datetime
 from typing import NamedTuple
 
-from prometheus_client.core import GaugeMetricFamily
-from prometheus_client.core import InfoMetricFamily
-from prometheus_client.core import Metric
-from prometheus_client.core import REGISTRY
+from prometheus_client.core import GaugeMetricFamily, InfoMetricFamily, Metric, REGISTRY
 from prometheus_client.registry import Collector
 
 from onyx.db.connector_credential_pair import get_connector_state_snapshots
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingMode
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, IndexingMode
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT

@@ -1,21 +1,26 @@
 from typing import Any
 
-from onyx.configs.app_configs import EXT_APP_SLACK_CLIENT_ID
-from onyx.configs.app_configs import EXT_APP_SLACK_CLIENT_SECRET
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.configs.app_configs import (
+    EXT_APP_SLACK_CLIENT_ID,
+    EXT_APP_SLACK_CLIENT_SECRET,
+)
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.actions import ExternalAppAction
-from onyx.external_apps.providers.actions import RestRoute
-from onyx.external_apps.providers.base import AdminDescriptorSpec
-from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.base import OAuthFlowSpec
-from onyx.external_apps.providers.base import OAuthProviderSpec
-from onyx.external_apps.providers.base import OnyxManagedExtApp
-from onyx.external_apps.providers.base import OrgCredentialField
-from onyx.external_apps.providers.base import parse_granted_scopes
+from onyx.external_apps.providers.actions import (
+    EndpointSpec,
+    ExternalAppAction,
+    RestRoute,
+)
+from onyx.external_apps.providers.base import (
+    AdminDescriptorSpec,
+    OAuthExternalAppProvider,
+    OAuthFlowSpec,
+    OAuthProviderSpec,
+    OnyxManagedExtApp,
+    OrgCredentialField,
+    parse_granted_scopes,
+)
 
 
 class SlackAction(ExternalAppAction):

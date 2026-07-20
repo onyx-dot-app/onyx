@@ -1,5 +1,4 @@
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.models import ConnectorCheckpoint

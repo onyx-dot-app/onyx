@@ -6,28 +6,34 @@ from typing import Any
 
 import httpx
 from fastmcp.server.auth.auth import AccessToken
-from pydantic import BaseModel
-from pydantic import TypeAdapter
-from pydantic import ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from onyx.configs.constants import DocumentSource
 from onyx.mcp_server.api import mcp_server
-from onyx.mcp_server.utils import get_http_client
-from onyx.mcp_server.utils import get_indexed_sources
-from onyx.mcp_server.utils import require_access_token
-from onyx.server.features.search.models import SearchRequest
-from onyx.server.features.search.models import SearchResponse
-from onyx.server.features.search.models import SearchResult
-from onyx.server.features.web_search.models import OpenUrlsToolRequest
-from onyx.server.features.web_search.models import OpenUrlsToolResponse
-from onyx.server.features.web_search.models import WebSearchToolRequest
-from onyx.server.features.web_search.models import WebSearchToolResponse
+from onyx.mcp_server.utils import (
+    get_http_client,
+    get_indexed_sources,
+    require_access_token,
+)
+from onyx.server.features.search.models import (
+    SearchRequest,
+    SearchResponse,
+    SearchResult,
+)
+from onyx.server.features.web_search.models import (
+    OpenUrlsToolRequest,
+    OpenUrlsToolResponse,
+    WebSearchToolRequest,
+    WebSearchToolResponse,
+)
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
-from onyx.server.metrics.mcp_server import MCPServerToolName
-from onyx.server.metrics.mcp_server import record_mcp_search_results
-from onyx.server.metrics.mcp_server import record_mcp_search_source
-from onyx.server.metrics.mcp_server import record_mcp_server_tool_outcome
-from onyx.server.metrics.mcp_server import UNKNOWN_SOURCE_LABEL
+from onyx.server.metrics.mcp_server import (
+    MCPServerToolName,
+    record_mcp_search_results,
+    record_mcp_search_source,
+    record_mcp_server_tool_outcome,
+    UNKNOWN_SOURCE_LABEL,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import build_api_server_url_for_http_requests
 

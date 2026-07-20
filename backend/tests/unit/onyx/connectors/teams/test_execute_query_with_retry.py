@@ -7,15 +7,16 @@ gateway/server hiccups). A live daily-connector test cannot reliably induce a
 """
 
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from office365.runtime.client_request_exception import ClientRequestException
 
-from onyx.connectors.teams.utils import _backoff_seconds
-from onyx.connectors.teams.utils import execute_query_with_retry
-from onyx.connectors.teams.utils import GRAPH_API_RETRYABLE_STATUSES
+from onyx.connectors.teams.utils import (
+    _backoff_seconds,
+    execute_query_with_retry,
+    GRAPH_API_RETRYABLE_STATUSES,
+)
 
 
 def _client_request_exception(

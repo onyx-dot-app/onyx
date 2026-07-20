@@ -2,8 +2,7 @@
 in handle_regular_answer.py."""
 
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from slack_sdk.errors import SlackApiError
@@ -11,15 +10,17 @@ from slack_sdk.errors import SlackApiError
 from onyx.chat.models import ChatBasicResponse
 from onyx.context.search.models import Tag
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
-from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
-from onyx.onyxbot.slack.handlers.handle_regular_answer import resolve_channel_references
 from onyx.onyxbot.slack.handlers.handle_regular_answer import (
+    handle_regular_answer,
+    resolve_channel_references,
     SLACK_PERSONA_ACCESS_DENIED_MESSAGE,
 )
-from onyx.onyxbot.slack.models import ChannelType
-from onyx.onyxbot.slack.models import SlackContext
-from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.onyxbot.slack.models import ThreadMessage
+from onyx.onyxbot.slack.models import (
+    ChannelType,
+    SlackContext,
+    SlackMessageInfo,
+    ThreadMessage,
+)
 
 _HANDLE_REGULAR_ANSWER = "onyx.onyxbot.slack.handlers.handle_regular_answer"
 

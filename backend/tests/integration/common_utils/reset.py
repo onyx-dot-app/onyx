@@ -7,13 +7,17 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import POSTGRES_HOST
-from onyx.configs.app_configs import POSTGRES_PASSWORD
-from onyx.configs.app_configs import POSTGRES_PORT
-from onyx.configs.app_configs import POSTGRES_USER
-from onyx.db.engine.sql_engine import build_connection_string
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SYNC_DB_API
+from onyx.configs.app_configs import (
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_PORT,
+    POSTGRES_USER,
+)
+from onyx.db.engine.sql_engine import (
+    build_connection_string,
+    get_session_with_current_tenant,
+    SYNC_DB_API,
+)
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.file_store.file_store import get_default_file_store
 from onyx.setup import setup_postgres

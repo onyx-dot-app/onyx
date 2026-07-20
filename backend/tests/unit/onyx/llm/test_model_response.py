@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from typing import cast
-from typing import TYPE_CHECKING
+from typing import cast, TYPE_CHECKING
 
 import pytest
 
-from onyx.llm.model_response import ChatCompletionDeltaToolCall
-from onyx.llm.model_response import from_litellm_model_response
-from onyx.llm.model_response import from_litellm_model_response_stream
-from onyx.llm.model_response import FunctionCall
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.model_response import ModelResponseStream
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
+    from_litellm_model_response,
+    from_litellm_model_response_stream,
+    FunctionCall,
+    ModelResponse,
+    ModelResponseStream,
+)
 
 if TYPE_CHECKING:
     from litellm.types.utils import ModelResponse as LiteLLMModelResponse

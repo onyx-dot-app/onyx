@@ -12,13 +12,14 @@ from typing import Any
 import braintrust
 import requests
 
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
+from onyx.configs.app_configs import (
+    POSTGRES_API_SERVER_POOL_OVERFLOW,
+    POSTGRES_API_SERVER_POOL_SIZE,
+)
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.evals.eval import run_eval
-from onyx.evals.models import EvalationAck
-from onyx.evals.models import EvalConfigurationOptions
+from onyx.evals.models import EvalationAck, EvalConfigurationOptions
 from onyx.evals.provider import get_provider
 from onyx.tracing.setup import setup_tracing
 

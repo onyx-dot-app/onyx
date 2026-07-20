@@ -2,12 +2,10 @@
 """Utility functions for prompt caching."""
 
 import json
-from collections.abc import Callable
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
-from onyx.llm.models import ChatCompletionMessage
-from onyx.llm.models import LanguageModelInput
+from onyx.llm.models import ChatCompletionMessage, LanguageModelInput
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -1,10 +1,8 @@
 """Tests for Asana connector configuration parsing."""
 
 from collections.abc import Iterator
-from typing import Any
-from typing import NamedTuple
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, NamedTuple
+from unittest.mock import MagicMock, patch
 
 import pytest
 

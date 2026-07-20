@@ -1,6 +1,5 @@
 from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from box_sdk_gen import BoxClient
@@ -10,9 +9,11 @@ from box_sdk_gen.schemas.user_mini import UserMini
 
 from ee.onyx.external_permissions.box import group_sync as group_sync_module
 from ee.onyx.external_permissions.box.group_sync import box_group_sync
-from onyx.connectors.box.connector import box_all_enterprise_users_group_id
-from onyx.connectors.box.connector import box_group_id
-from onyx.connectors.box.connector import BoxConnector
+from onyx.connectors.box.connector import (
+    box_all_enterprise_users_group_id,
+    box_group_id,
+    BoxConnector,
+)
 from onyx.db.models import ConnectorCredentialPair
 from tests.unit.onyx.connectors.box.fake_box_client import FakeBoxClient
 

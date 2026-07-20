@@ -1,9 +1,10 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
-from onyx.server.features.build.scheduled_tasks.schedule import compute_next_run_at
-from onyx.server.features.build.scheduled_tasks.schedule import human_readable
-from onyx.server.features.build.scheduled_tasks.schedule import next_n_fires
+from onyx.server.features.build.scheduled_tasks.schedule import (
+    compute_next_run_at,
+    human_readable,
+    next_n_fires,
+)
 
 
 def test_compute_next_run_at_uses_utc_cron_fields() -> None:

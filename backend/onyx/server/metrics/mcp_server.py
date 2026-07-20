@@ -1,8 +1,7 @@
 import time
 from enum import Enum
 
-from prometheus_client import Counter
-from prometheus_client import Histogram
+from prometheus_client import Counter, Histogram
 
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.utils.logger import setup_logger

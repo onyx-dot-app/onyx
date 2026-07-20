@@ -14,8 +14,7 @@ import queue
 import threading
 import time
 from abc import abstractmethod
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -23,26 +22,28 @@ from uuid import UUID
 import httpx
 
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
-from onyx.cache.interface import CacheLock
-from onyx.cache.interface import CacheLockLostError
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheLock, CacheLockLostError
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+    OPENCODE_SERVE_EVENT_READ_TIMEOUT,
+    OPENCODE_SERVER_USERNAME,
+    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
+    PROMPT_SLOT_LEASE_SECONDS,
 )
-from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
-from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
-from onyx.server.features.build.configs import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
-from onyx.server.features.build.configs import PROMPT_SLOT_LEASE_SECONDS
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
-from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
-from onyx.server.features.build.sandbox.opencode.serve_client import _TurnState
-from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentThoughtChunk,
+    PromptResponse,
+)
+from onyx.server.features.build.sandbox.opencode.event_bus import (
+    BUS_CLOSED_SENTINEL,
+    PodEventBus,
+)
 from onyx.server.features.build.sandbox.opencode.serve_client import (
+    _TurnState,
+    OpencodeServeClient,
     translate_opencode_event,
 )
 from onyx.server.features.build.sandbox.sse import SSEKeepalive

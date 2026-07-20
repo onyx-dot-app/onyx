@@ -14,14 +14,14 @@ import re
 import threading
 import time
 from functools import lru_cache
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
-from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
-from onyx.llm.constants import BEDROCK_MODEL_TOKEN_LIMITS
-from onyx.llm.constants import LlmProviderNames
+from onyx.configs.model_configs import (
+    GEN_AI_MAX_TOKENS,
+    GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+    GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
+)
+from onyx.llm.constants import BEDROCK_MODEL_TOKEN_LIMITS, LlmProviderNames
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

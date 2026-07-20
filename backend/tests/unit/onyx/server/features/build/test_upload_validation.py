@@ -13,8 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from onyx.server.features.build.configs import MAX_UPLOAD_FILE_SIZE_BYTES
-from onyx.server.features.build.utils import sanitize_filename
-from onyx.server.features.build.utils import validate_file
+from onyx.server.features.build.utils import sanitize_filename, validate_file
 
 
 def test_sanitize_filename_strips_path_components() -> None:

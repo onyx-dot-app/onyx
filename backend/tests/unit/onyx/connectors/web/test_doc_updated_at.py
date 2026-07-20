@@ -10,14 +10,12 @@ rely on the content hash instead.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.connectors.models import Document
-from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
-from onyx.connectors.web.connector import WebConnector
+from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS, WebConnector
 from onyx.file_processing.html_utils import ParsedHTML
 
 
