@@ -306,7 +306,7 @@ class SessionManager:
                     )
                     raise OnyxError(
                         OnyxErrorCode.BAD_GATEWAY,
-                        "Failed to reload session skills.",
+                        "Failed to reload session.",
                     ) from exc
 
             session.skills_hash = skills_hash
@@ -465,6 +465,7 @@ class SessionManager:
             sandbox.id,
             user,
             self._db_session,
+            connectable_apps_section=connectable_apps_section,
             skills_files=skills_files,
         )
         self._sandbox_manager.setup_session_workspace(

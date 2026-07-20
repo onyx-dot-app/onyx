@@ -27,9 +27,7 @@ export default function SkillsStaleNotice({
       updateSessionData(sessionId, { skillsStale: state.skills_stale });
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to reload session skills"
+        error instanceof Error ? error.message : "Failed to reload session"
       );
     } finally {
       setReloading(false);
@@ -39,8 +37,8 @@ export default function SkillsStaleNotice({
   return (
     <MessageCard
       variant="warning"
-      title="Your skills have changed"
-      description="Reload this session to update skills."
+      title="Your agent’s capabilities have changed"
+      description="Reload this session to apply the latest skills and app access."
       rightChildren={
         <Button
           icon={SvgRefreshCw}
@@ -50,7 +48,7 @@ export default function SkillsStaleNotice({
             turnActive ? "Wait for the current turn to finish." : undefined
           }
         >
-          {reloading ? "Reloading…" : "Reload skills"}
+          {reloading ? "Reloading…" : "Reload"}
         </Button>
       }
     />

@@ -17,7 +17,10 @@ import {
 } from "@/app/craft/v1/apps/registry";
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
 import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
-import { deleteExternalApp } from "@/app/craft/services/externalAppsService";
+import {
+  deleteExternalApp,
+  updateExternalApp,
+} from "@/app/craft/services/externalAppsService";
 
 interface ModalState {
   descriptor: BuiltInExternalAppDescriptor;
@@ -175,7 +178,7 @@ interface ConfiguredAppCardProps {
   onEdit: (descriptor: BuiltInExternalAppDescriptor) => void;
   /** Edit a custom app (no descriptor — config is on the row itself). */
   onEditCustom: (app: ExternalAppAdminResponse) => void;
-  onChange: () => void;
+  onChange: () => Promise<unknown>;
 }
 
 function ConfiguredAppCard({
@@ -188,11 +191,27 @@ function ConfiguredAppCard({
   const [isMutating, setIsMutating] = useState(false);
   const Logo = getAppTypeLogo(app.app_type);
 
+  async function toggleEnabled() {
+    setIsMutating(true);
+    try {
+      await updateExternalApp(app.id, { enabled: !app.enabled });
+      await onChange();
+    } catch (e) {
+      toast.error(
+        e instanceof Error
+          ? e.message
+          : `Failed to ${app.enabled ? "disable" : "enable"} "${app.name}"`
+      );
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   async function remove() {
     setIsMutating(true);
     try {
       await deleteExternalApp(app.id);
-      onChange();
+      await onChange();
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : `Failed to delete "${app.name}"`
@@ -209,7 +228,9 @@ function ConfiguredAppCard({
         <div className="flex-1 flex flex-col gap-0.5">
           <Text font="main-ui-action">{app.name}</Text>
           <Text font="secondary-body" color="text-03">
-            Users connect this app on the Apps page to make its skill available
+            {app.enabled
+              ? "Users connect this app on the Apps page to make its skill available"
+              : "Disabled — unavailable to users"}
           </Text>
         </div>
         <div className="flex items-center gap-2">
@@ -232,6 +253,13 @@ function ConfiguredAppCard({
               </Button>
             )
           )}
+          <Button
+            prominence="secondary"
+            onClick={toggleEnabled}
+            disabled={isMutating}
+          >
+            {app.enabled ? "Disable" : "Enable"}
+          </Button>
           {/* Onyx-managed built-ins are provisioned by Onyx. */}
           {!app.is_onyx_managed && (
             <Button

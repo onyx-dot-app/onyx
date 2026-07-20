@@ -6463,6 +6463,12 @@ class ExternalApp(Base):
         default=ExternalAppType.CUSTOM,
         server_default=ExternalAppType.CUSTOM.value,
     )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
+    )
     # CUSTOM apps store URL globs here (translated to regexes at match time).
     upstream_url_patterns: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"

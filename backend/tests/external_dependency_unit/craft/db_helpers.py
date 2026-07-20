@@ -221,12 +221,14 @@ def make_external_app(
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
     upstream_url_patterns: list[str] | None = None,
     action_policies: dict[str, EndpointPolicy] | None = None,
+    enabled: bool = True,
 ) -> ExternalApp:
     """Insert an ``ExternalApp`` row backing ``skill``, plus any per-action
     policy overrides in ``action_policies`` (``{action_id: policy}``)."""
     app = ExternalApp(
         skill_id=skill.id,
         app_type=app_type,
+        enabled=enabled,
         upstream_url_patterns=upstream_url_patterns or [],
         auth_template=auth_template,
         organization_credentials=organization_credentials or {},

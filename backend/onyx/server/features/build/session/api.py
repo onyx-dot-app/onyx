@@ -470,6 +470,7 @@ def restore_session(
                     sandbox.id,
                     user,
                     db_session,
+                    connectable_apps_section=connectable_apps_section,
                     skills_files=skills_files,
                 )
                 if snapshot:

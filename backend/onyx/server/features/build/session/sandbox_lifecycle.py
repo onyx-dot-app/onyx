@@ -42,8 +42,8 @@ from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.errors import SandboxProvisioningError
 from onyx.skills.push import (
-    build_skills_fileset_for_user,
-    compute_skills_hash,
+    build_user_skills_payload,
+    compute_skill_runtime_hash,
     hydrate_sandbox_skills,
 )
 from onyx.utils.logger import setup_logger
@@ -146,6 +146,8 @@ def hydrate_managed_content(
     sandbox_id: UUID,
     user: User,
     db_session: DBSession,
+    *,
+    connectable_apps_section: str | None = None,
     skills_files: FileSet | None = None,
 ) -> bool:
     """Push managed skills + user library into a sandbox.
@@ -153,13 +155,25 @@ def hydrate_managed_content(
     Must complete before the sandbox is reported RUNNING: turns dispatch as
     soon as RUNNING is visible, and opencode scans the skills directory once
     per instance, so a turn started mid-push permanently misses managed
-    skills. Each push is best-effort — failures are logged, never raised.
+    skills. The persisted hash also covers the connectable-app guidance used
+    to regenerate ``AGENTS.md`` on reload.
+
+    ``connectable_apps_section`` and ``skills_files`` must be supplied together
+    or both omitted; mismatched nullity is a programmer error and raises
+    ``ValueError`` eagerly. Runtime push failures are logged, never raised.
     """
+    if (connectable_apps_section is None) != (skills_files is None):
+        raise ValueError(
+            "connectable_apps_section and skills_files must be provided together"
+        )
+    if connectable_apps_section is None or skills_files is None:
+        connectable_apps_section, skills_files = build_user_skills_payload(
+            user, db_session
+        )
+
     skills_hydrated = False
     try:
-        if skills_files is None:
-            skills_files = build_skills_fileset_for_user(user, db_session)
-        skills_hash = compute_skills_hash(skills_files)
+        skills_hash = compute_skill_runtime_hash(skills_files, connectable_apps_section)
         result = hydrate_sandbox_skills(
             sandbox_id,
             user,

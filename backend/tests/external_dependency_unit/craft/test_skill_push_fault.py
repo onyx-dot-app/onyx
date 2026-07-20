@@ -13,7 +13,7 @@ from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.models import BuildSession, Skill, User
 from onyx.server.features.build.db.build_session import skills_are_stale
 from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.skills.push import compute_skills_hash, push_skills_for_users
+from onyx.skills.push import compute_skill_runtime_hash, push_skills_for_users
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
@@ -104,7 +104,7 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
         assert not skills_are_stale(session, sandbox)
 
 
-def test_only_changed_skill_files_are_pushed_and_hashes_self_heal(
+def test_connectable_app_change_pushes_and_hashes_self_heal(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -127,19 +127,21 @@ def test_only_changed_skill_files_are_pushed_and_hashes_self_heal(
         opencode_session_id="changed-runtime",
     )
 
-    contents = {
-        unchanged_user.id: b"content",
-        changed_user.id: b"changed",
+    def files_for(user: User, _db_session: Session) -> dict[str, bytes]:
+        return {f"{user.id}/SKILL.md": b"content"}
+
+    connectable_apps_sections = {
+        unchanged_user.id: "",
+        changed_user.id: "new apps",
     }
 
-    def files_for(user: User, _db_session: Session) -> dict[str, bytes]:
-        return {f"{user.id}/SKILL.md": contents[user.id]}
-
-    unchanged_sandbox.skills_hash = compute_skills_hash(
-        files_for(unchanged_user, db_session)
+    unchanged_sandbox.skills_hash = compute_skill_runtime_hash(
+        files_for(unchanged_user, db_session),
+        "",
     )
-    changed_sandbox.skills_hash = compute_skills_hash(
-        {f"{changed_user.id}/SKILL.md": b"original"}
+    changed_sandbox.skills_hash = compute_skill_runtime_hash(
+        files_for(changed_user, db_session),
+        "old apps",
     )
     unchanged_session.skills_hash = unchanged_sandbox.skills_hash
     changed_session.skills_hash = changed_sandbox.skills_hash
@@ -149,7 +151,13 @@ def test_only_changed_skill_files_are_pushed_and_hashes_self_heal(
     stub = StubSandboxManager()
     stub.write_files_to_sandbox_silent = True
     monkeypatch.setattr("onyx.skills.push.get_sandbox_manager", lambda: stub)
-    monkeypatch.setattr("onyx.skills.push.build_skills_fileset_for_user", files_for)
+    monkeypatch.setattr(
+        "onyx.skills.push.build_user_skills_payload",
+        lambda user, session: (
+            connectable_apps_sections[user.id],
+            files_for(user, session),
+        ),
+    )
 
     push_skills_for_users({unchanged_user.id, changed_user.id}, db_session)
 
@@ -161,7 +169,7 @@ def test_only_changed_skill_files_are_pushed_and_hashes_self_heal(
     assert not skills_are_stale(unchanged_session, unchanged_sandbox)
     assert skills_are_stale(changed_session, changed_sandbox)
 
-    contents[changed_user.id] = b"original"
+    connectable_apps_sections[changed_user.id] = "old apps"
     push_skills_for_users({changed_user.id}, db_session)
 
     db_session.refresh(changed_sandbox)

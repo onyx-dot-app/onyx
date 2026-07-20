@@ -99,7 +99,7 @@ def set_sandbox_skills_hashes__no_commit(
     db_session: Session,
     skills_hashes: dict[UUID, str],
 ) -> None:
-    """Record the contents successfully hydrated into each sandbox."""
+    """Record the skill runtime state successfully synchronized to each sandbox."""
     if not skills_hashes:
         return
     sandboxes = db_session.scalars(

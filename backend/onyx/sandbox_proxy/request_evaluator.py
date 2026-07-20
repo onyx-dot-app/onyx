@@ -73,7 +73,7 @@ class ExternalAppRequestEvaluator(RequestEvaluator):
         self, request: http.Request, tenant_id: str, user_id: UUID
     ) -> AllMatchedActions | None:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            apps = get_external_apps(db)
+            apps = get_external_apps(db, enabled_only=True)
             app = resolve_app_for_url(request.url, apps)
             if app is None:
                 return None

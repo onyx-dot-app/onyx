@@ -114,6 +114,28 @@ def test_use_includes_authenticated_external_app_without_preference(
     assert skill.id in _skill_ids(user, db_session, SkillAccessPolicy.USE)
 
 
+def test_use_excludes_disabled_external_app(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session)
+    skill = make_skill(db_session, is_public=True)
+    app = make_external_app(
+        db_session,
+        skill=skill,
+        auth_template=_AUTH_TEMPLATE,
+        enabled=False,
+    )
+    make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+
+    assert skill.id not in _skill_ids(user, db_session, SkillAccessPolicy.USE)
+
+    app.enabled = True
+    db_session.flush()
+
+    assert skill.id in _skill_ids(user, db_session, SkillAccessPolicy.USE)
+
+
 def test_use_excludes_unauthenticated_or_partially_authenticated_external_app(
     db_session: Session,
     test_user: User,  # noqa: ARG001

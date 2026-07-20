@@ -26,7 +26,7 @@ describe("SkillsStaleNotice", () => {
   it("reloads only this session and clears its stale state", async () => {
     render(<SkillsStaleNotice sessionId={SESSION_ID} turnActive={false} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Reload skills" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reload" }));
 
     await waitFor(() => {
       expect(api.reloadSessionSkills).toHaveBeenCalledWith(SESSION_ID);
@@ -39,8 +39,6 @@ describe("SkillsStaleNotice", () => {
   it("disables reload while a turn is active", () => {
     render(<SkillsStaleNotice sessionId={SESSION_ID} turnActive />);
 
-    expect(
-      screen.getByRole("button", { name: "Reload skills" })
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reload" })).toBeDisabled();
   });
 });
