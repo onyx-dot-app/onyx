@@ -21,6 +21,18 @@ stages:
           - checkout: self
 
           - bash: |
+              docker system prune -af
+              sudo rm -rf \
+                /usr/share/dotnet \
+                /usr/local/lib/android \
+                /opt/ghc \
+                /opt/hostedtoolcache/CodeQL \
+                /usr/local/share/powershell \
+                /usr/share/swift
+              df -h /
+            displayName: "Free up disk space on ADO agent"
+
+          - bash: |
               short_hash=$(git rev-parse --short=7 HEAD)
               echo "##vso[task.setvariable variable=short_hash]$short_hash"
             displayName: "Set git short hash"
