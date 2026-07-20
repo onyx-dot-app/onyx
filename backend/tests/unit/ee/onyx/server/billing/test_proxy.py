@@ -1,17 +1,13 @@
 """Tests for the billing proxy endpoints."""
 
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
 from ee.onyx.server.license.models import LicensePayload
 
-from .conftest import make_license_payload
-from .conftest import make_mock_http_client
-from .conftest import make_mock_response
+from .conftest import make_license_payload, make_mock_http_client, make_mock_response
 
 
 class TestProxySeatUpdate:

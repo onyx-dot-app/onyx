@@ -4,9 +4,11 @@
 from unittest.mock import patch
 
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-from onyx.llm.model_capabilities import get_llm_max_output_tokens
-from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.model_capabilities import llm_max_input_tokens
+from onyx.llm.model_capabilities import (
+    get_llm_max_output_tokens,
+    get_max_input_tokens,
+    llm_max_input_tokens,
+)
 
 
 class TestLlmMaxInputTokens:

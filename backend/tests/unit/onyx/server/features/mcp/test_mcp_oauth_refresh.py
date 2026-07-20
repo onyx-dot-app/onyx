@@ -9,8 +9,7 @@ the DB layer and the outbound network call.
 
 import time
 from types import SimpleNamespace
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from urllib.parse import parse_qs
 
 import httpx

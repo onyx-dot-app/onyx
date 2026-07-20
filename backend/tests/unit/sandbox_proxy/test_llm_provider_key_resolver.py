@@ -16,14 +16,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
-from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialUnavailableError,
+    InjectionContext,
+)
 from onyx.sandbox_proxy.resolvers import llm_provider_key
 from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver
 from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
 from onyx.utils.sensitive import make_mock_sensitive_value
-from tests.unit.sandbox_proxy.conftest import make_flow
-from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox
+from tests.unit.sandbox_proxy.conftest import make_flow, make_resolved_sandbox
 
 
 class _FakeProvider:

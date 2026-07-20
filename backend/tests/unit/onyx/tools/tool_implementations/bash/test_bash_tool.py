@@ -14,20 +14,22 @@ Covers:
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.configs.app_configs import CODE_INTERPRETER_DEFAULT_TIMEOUT_MS
-from onyx.configs.app_configs import CODE_INTERPRETER_MAX_OUTPUT_LENGTH
+from onyx.configs.app_configs import (
+    CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
+    CODE_INTERPRETER_MAX_OUTPUT_LENGTH,
+)
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import BashToolDelta
-from onyx.server.query_and_chat.streaming_models import BashToolStart
+from onyx.server.query_and_chat.streaming_models import BashToolDelta, BashToolStart
 from onyx.tools.models import ToolCallException
-from onyx.tools.tool_implementations.bash.bash_tool import BashTool
-from onyx.tools.tool_implementations.bash.bash_tool import BashToolOverrideKwargs
-from onyx.tools.tool_implementations.bash.bash_tool import CMD_FIELD
+from onyx.tools.tool_implementations.bash.bash_tool import (
+    BashTool,
+    BashToolOverrideKwargs,
+    CMD_FIELD,
+)
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     BashExecResponse,
 )

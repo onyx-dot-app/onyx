@@ -12,23 +12,25 @@ import time
 from typing import Any
 from urllib.parse import urlparse
 
-from mcp.client.auth import OAuthClientProvider
-from mcp.client.auth import TokenStorage
+from mcp.client.auth import OAuthClientProvider, TokenStorage
 from mcp.client.auth.oauth2 import OAuthContext
-from mcp.shared.auth import OAuthClientInformationFull
-from mcp.shared.auth import OAuthClientMetadata
-from mcp.shared.auth import OAuthMetadata
-from mcp.shared.auth import OAuthToken
-from pydantic import AnyUrl
-from pydantic import BaseModel
+from mcp.shared.auth import (
+    OAuthClientInformationFull,
+    OAuthClientMetadata,
+    OAuthMetadata,
+    OAuthToken,
+)
+from pydantic import AnyUrl, BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPOAuthProviderMode
-from onyx.db.mcp import extract_connection_data
-from onyx.db.mcp import get_connection_config_by_id
-from onyx.db.mcp import update_connection_config
+from onyx.db.mcp import (
+    extract_connection_data,
+    get_connection_config_by_id,
+    update_connection_config,
+)
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode

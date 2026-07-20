@@ -1,20 +1,19 @@
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import ChunkSearchRequest
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import PersonaSearchInfo
-from onyx.context.search.models import SearchDoc
-from onyx.db.models import SearchSettings
-from onyx.db.models import User
+from onyx.context.search.models import (
+    ChunkSearchRequest,
+    InferenceChunk,
+    PersonaSearchInfo,
+    SearchDoc,
+)
+from onyx.db.models import SearchSettings, User
 from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
 from onyx.llm.interfaces import LLM

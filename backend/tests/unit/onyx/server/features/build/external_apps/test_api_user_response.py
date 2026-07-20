@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.db.enums import ExternalAppType
-from onyx.db.models import ExternalApp
-from onyx.db.models import ExternalAppUserCredential
+from onyx.db.models import ExternalApp, ExternalAppUserCredential
 from onyx.server.features.build.external_apps.api import _to_user_response
 from onyx.utils.encryption import mask_string
 from onyx.utils.sensitive import SensitiveValue

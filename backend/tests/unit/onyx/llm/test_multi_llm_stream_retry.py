@@ -1,14 +1,11 @@
 from collections.abc import Iterator
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from litellm.exceptions import Timeout as LiteLLMTimeout
 
 from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.model_response import Delta
-from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.model_response import StreamingChoice
+from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice
 from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 

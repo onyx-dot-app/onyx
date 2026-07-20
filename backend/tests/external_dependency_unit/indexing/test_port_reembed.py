@@ -15,15 +15,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import RETURN_SEPARATOR
-from onyx.configs.model_configs import ASYM_PASSAGE_PREFIX
-from onyx.configs.model_configs import ASYM_QUERY_PREFIX
-from onyx.configs.model_configs import DEFAULT_DOCUMENT_ENCODER_MODEL
-from onyx.configs.model_configs import DOC_EMBEDDING_DIM
-from onyx.configs.model_configs import NORMALIZE_EMBEDDINGS
-from onyx.connectors.models import convert_metadata_dict_to_list_of_strings
-from onyx.connectors.models import convert_metadata_list_of_strings_to_dict
+from onyx.configs.constants import DocumentSource, RETURN_SEPARATOR
+from onyx.configs.model_configs import (
+    ASYM_PASSAGE_PREFIX,
+    ASYM_QUERY_PREFIX,
+    DEFAULT_DOCUMENT_ENCODER_MODEL,
+    DOC_EMBEDDING_DIM,
+    NORMALIZE_EMBEDDINGS,
+)
+from onyx.connectors.models import (
+    convert_metadata_dict_to_list_of_strings,
+    convert_metadata_list_of_strings_to_dict,
+)
 from onyx.db.models import SearchSettings
 from onyx.document_index.chunk_content_enrichment import (
     generate_enriched_content_for_chunk_embedding,
@@ -32,25 +35,26 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.indexing.chunker import get_metadata_suffix_for_document_index
-from onyx.indexing.embedder import DefaultIndexingEmbedder
-from onyx.indexing.embedder import IndexingEmbedder
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import DocAwareChunk
-from onyx.indexing.models import IndexChunk
-from onyx.indexing.port_reembed import _bare_contents
-from onyx.indexing.port_reembed import _reconstruct_source_document
-from onyx.indexing.port_reembed import _stored_chunk_to_doc_aware
-from onyx.indexing.port_reembed import AugmentationReembedContext
-from onyx.indexing.port_reembed import re_embed_chunks
-from onyx.indexing.port_reembed import rebuild_semantic_tail
-from onyx.indexing.port_reembed import recover_embedding_input
-from onyx.indexing.port_reembed import ReembedStrategy
-from onyx.indexing.port_reembed import select_reembed_strategy
+from onyx.indexing.embedder import DefaultIndexingEmbedder, IndexingEmbedder
+from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
+from onyx.indexing.port_reembed import (
+    _bare_contents,
+    _reconstruct_source_document,
+    _stored_chunk_to_doc_aware,
+    AugmentationReembedContext,
+    re_embed_chunks,
+    rebuild_semantic_tail,
+    recover_embedding_input,
+    ReembedStrategy,
+    select_reembed_strategy,
+)
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.pydantic_util import shallow_model_dump
-from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import (
+    DOC_EMBEDDING_CONTEXT_SIZE,
+    MODEL_SERVER_HOST,
+    POSTGRES_DEFAULT_SCHEMA,
+)
 
 
 def _stored_chunk(

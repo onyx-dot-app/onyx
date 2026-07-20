@@ -1,15 +1,9 @@
 import hashlib
 import tempfile
 import uuid
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from io import BytesIO
-from typing import Any
-from typing import cast
-from typing import IO
-from typing import NotRequired
-from typing import TYPE_CHECKING
-from typing import TypedDict
+from typing import Any, cast, IO, NotRequired, TYPE_CHECKING, TypedDict
 
 import boto3
 import puremagic
@@ -17,22 +11,28 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import AWS_REGION_NAME
-from onyx.configs.app_configs import S3_AWS_ACCESS_KEY_ID
-from onyx.configs.app_configs import S3_AWS_SECRET_ACCESS_KEY
-from onyx.configs.app_configs import S3_ENDPOINT_URL
-from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
-from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
-from onyx.configs.app_configs import S3_GENERATE_LOCAL_CHECKSUM
-from onyx.configs.app_configs import S3_VERIFY_SSL
+from onyx.configs.app_configs import (
+    AWS_REGION_NAME,
+    S3_AWS_ACCESS_KEY_ID,
+    S3_AWS_SECRET_ACCESS_KEY,
+    S3_ENDPOINT_URL,
+    S3_FILE_STORE_BUCKET_NAME,
+    S3_FILE_STORE_PREFIX,
+    S3_GENERATE_LOCAL_CHECKSUM,
+    S3_VERIFY_SSL,
+)
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.file_record import delete_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id_optional
-from onyx.db.file_record import get_filerecord_by_prefix
-from onyx.db.file_record import upsert_filerecord
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_current_tenant_if_none,
+)
+from onyx.db.file_record import (
+    delete_filerecord_by_file_id,
+    get_filerecord_by_file_id,
+    get_filerecord_by_file_id_optional,
+    get_filerecord_by_prefix,
+    upsert_filerecord,
+)
 from onyx.db.models import FileRecord
 from onyx.db.models import FileRecord as FileStoreModel
 from onyx.file_store.s3_key_utils import generate_s3_key
@@ -608,11 +608,13 @@ def get_s3_file_store() -> S3BackedFileStore:
 
 def get_gcs_file_store() -> "GCSBackedFileStore":
     """Returns the GCS file store implementation."""
-    from onyx.configs.app_configs import GCS_FILE_STORE_BUCKET_NAME
-    from onyx.configs.app_configs import GCS_FILE_STORE_PREFIX
-    from onyx.configs.app_configs import GCS_PROJECT_ID
-    from onyx.configs.app_configs import GCS_SERVICE_ACCOUNT_KEY_JSON
-    from onyx.configs.app_configs import GCS_SERVICE_ACCOUNT_KEY_PATH
+    from onyx.configs.app_configs import (
+        GCS_FILE_STORE_BUCKET_NAME,
+        GCS_FILE_STORE_PREFIX,
+        GCS_PROJECT_ID,
+        GCS_SERVICE_ACCOUNT_KEY_JSON,
+        GCS_SERVICE_ACCOUNT_KEY_PATH,
+    )
     from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
     bucket_name = GCS_FILE_STORE_BUCKET_NAME

@@ -1,55 +1,49 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import InternetContentProvider
-from onyx.db.models import InternetSearchProvider
-from onyx.db.models import User
-from onyx.db.web_search import deactivate_web_content_provider
-from onyx.db.web_search import deactivate_web_search_provider
-from onyx.db.web_search import delete_web_content_provider
-from onyx.db.web_search import delete_web_search_provider
-from onyx.db.web_search import fetch_web_content_provider_by_name
-from onyx.db.web_search import fetch_web_content_provider_by_type
-from onyx.db.web_search import fetch_web_content_providers
-from onyx.db.web_search import fetch_web_search_provider_by_name
-from onyx.db.web_search import fetch_web_search_provider_by_type
-from onyx.db.web_search import fetch_web_search_providers
-from onyx.db.web_search import set_active_web_content_provider
-from onyx.db.web_search import set_active_web_search_provider
-from onyx.db.web_search import upsert_web_content_provider
-from onyx.db.web_search import upsert_web_search_provider
-from onyx.server.manage.web_search.models import WebContentProviderTestRequest
-from onyx.server.manage.web_search.models import WebContentProviderUpsertRequest
-from onyx.server.manage.web_search.models import WebContentProviderView
-from onyx.server.manage.web_search.models import WebSearchProviderTestRequest
-from onyx.server.manage.web_search.models import WebSearchProviderUpsertRequest
-from onyx.server.manage.web_search.models import WebSearchProviderView
+from onyx.db.models import InternetContentProvider, InternetSearchProvider, User
+from onyx.db.web_search import (
+    deactivate_web_content_provider,
+    deactivate_web_search_provider,
+    delete_web_content_provider,
+    delete_web_search_provider,
+    fetch_web_content_provider_by_name,
+    fetch_web_content_provider_by_type,
+    fetch_web_content_providers,
+    fetch_web_search_provider_by_name,
+    fetch_web_search_provider_by_type,
+    fetch_web_search_providers,
+    set_active_web_content_provider,
+    set_active_web_search_provider,
+    upsert_web_content_provider,
+    upsert_web_search_provider,
+)
+from onyx.server.manage.web_search.models import (
+    WebContentProviderTestRequest,
+    WebContentProviderUpsertRequest,
+    WebContentProviderView,
+    WebSearchProviderTestRequest,
+    WebSearchProviderUpsertRequest,
+    WebSearchProviderView,
+)
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
 )
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.tools.tool_implementations.web_search.providers import (
     build_content_provider_from_config,
-)
-from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
-)
-from onyx.tools.tool_implementations.web_search.providers import (
     provider_requires_api_key,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.enums import WebContentProviderType
-from shared_configs.enums import WebSearchProviderType
+from shared_configs.enums import WebContentProviderType, WebSearchProviderType
 
 logger = setup_logger()
 

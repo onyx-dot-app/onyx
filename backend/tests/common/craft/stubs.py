@@ -50,22 +50,22 @@ Usage
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterable
-from typing import Any
-from typing import cast
+from collections.abc import Callable, Generator, Iterable
+from typing import Any, cast
 from uuid import UUID
 
-from onyx.server.features.build.sandbox.base import SandboxEvent
-from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotResult
-from onyx.server.features.build.sandbox.serve_transport import PromptSlot
-from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
+from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
+from onyx.server.features.build.sandbox.models import (
+    FileSet,
+    FilesystemEntry,
+    LLMProviderConfig,
+    SandboxInfo,
+    SnapshotResult,
+)
+from onyx.server.features.build.sandbox.serve_transport import (
+    PromptSlot,
+    ServeConnectionInfo,
+)
 
 _UNSET = object()
 

@@ -1,13 +1,11 @@
 """Unit tests for the generic external endpoint client."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 from pydantic import BaseModel
 
-from onyx.utils.external_endpoint import ExternalEndpointConfig
-from onyx.utils.external_endpoint import post_json_to_endpoint
+from onyx.utils.external_endpoint import ExternalEndpointConfig, post_json_to_endpoint
 
 _CONFIG = ExternalEndpointConfig(
     endpoint_url="https://endpoint.example.com/x", timeout_seconds=5.0

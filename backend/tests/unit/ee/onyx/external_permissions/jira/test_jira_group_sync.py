@@ -5,8 +5,10 @@ import pytest
 from jira import JIRA
 from jira.exceptions import JIRAError
 
-from ee.onyx.external_permissions.jira.group_sync import _fetch_group_member_page
-from ee.onyx.external_permissions.jira.group_sync import _get_group_member_emails
+from ee.onyx.external_permissions.jira.group_sync import (
+    _fetch_group_member_page,
+    _get_group_member_emails,
+)
 
 
 def test_get_group_member_emails_skips_deleted_group(

@@ -7,18 +7,21 @@ from uuid import UUID
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User
-from onyx.db.models import UserRole
-from onyx.db.skill import fetch_skill
-from onyx.db.skill import list_skills
-from onyx.db.skill import set_skill_enabled_for_user
-from onyx.db.skill import SkillAccessPolicy
+from onyx.db.models import User, UserRole
+from onyx.db.skill import (
+    fetch_skill,
+    list_skills,
+    set_skill_enabled_for_user,
+    SkillAccessPolicy,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from tests.external_dependency_unit.craft.db_helpers import make_external_app
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
-from tests.external_dependency_unit.craft.db_helpers import make_user_credential
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_external_app,
+    make_skill,
+    make_user,
+    make_user_credential,
+)
 
 _AUTH_TEMPLATE = {"token": "{token}", "account": "{account}"}
 _FULL_CREDS = {"token": "t", "account": "a"}

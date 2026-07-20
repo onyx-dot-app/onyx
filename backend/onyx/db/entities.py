@@ -1,24 +1,16 @@
 import uuid
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import List
 
-from sqlalchemy import func
-from sqlalchemy import literal
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import func, literal, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
 import onyx.db.document as dbdocument
 from onyx.db.entity_type import UNGROUNDED_SOURCE_NAME
-from onyx.db.models import Document
-from onyx.db.models import KGEntity
-from onyx.db.models import KGEntityExtractionStaging
-from onyx.db.models import KGEntityType
-from onyx.kg.models import KGGroundingType
-from onyx.kg.models import KGStage
+from onyx.db.models import Document, KGEntity, KGEntityExtractionStaging, KGEntityType
+from onyx.kg.models import KGGroundingType, KGStage
 from onyx.kg.utils.formatting_utils import make_entity_id
 
 

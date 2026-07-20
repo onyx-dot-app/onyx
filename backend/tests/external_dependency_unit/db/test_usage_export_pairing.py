@@ -1,14 +1,15 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.usage_export import get_empty_chat_messages_entries__paginated
 from onyx.configs.constants import MessageType
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import create_new_chat_message
-from onyx.db.chat import get_or_create_root_message
+from onyx.db.chat import (
+    create_chat_session,
+    create_new_chat_message,
+    get_or_create_root_message,
+)
 from onyx.db.models import ChatMessage
 from tests.external_dependency_unit.conftest import create_test_user
 

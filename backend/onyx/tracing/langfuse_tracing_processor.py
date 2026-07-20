@@ -5,18 +5,18 @@ from __future__ import annotations
 import logging
 import threading
 from datetime import datetime
-from typing import Any
-from typing import Optional
-from typing import Union
+from typing import Any, Optional, Union
 
 from langfuse import Langfuse
 from langfuse._client.span import LangfuseObservationWrapper
 
 from onyx.tracing.framework.processor_interface import TracingProcessor
-from onyx.tracing.framework.span_data import AgentSpanData
-from onyx.tracing.framework.span_data import FunctionSpanData
-from onyx.tracing.framework.span_data import GenerationSpanData
-from onyx.tracing.framework.span_data import SpanData
+from onyx.tracing.framework.span_data import (
+    AgentSpanData,
+    FunctionSpanData,
+    GenerationSpanData,
+    SpanData,
+)
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
 

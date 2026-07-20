@@ -3,11 +3,10 @@ infrastructure (deploy / autoscaling) must not count as a failure, so it never
 trips the repeated-error auto-pause, while genuine consecutive FAILED still does.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.background.celery.tasks.docprocessing.utils import is_in_repeated_error_state
 from onyx.background.celery.tasks.docprocessing.utils import (
+    is_in_repeated_error_state,
     NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE,
 )
 from onyx.db.enums import IndexingStatus

@@ -9,8 +9,7 @@ from onyx.db.enums import Permission
 from onyx.db.pat import create_pat
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.test_models import DATestPAT
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestPAT, DATestUser
 
 
 class PATManager:

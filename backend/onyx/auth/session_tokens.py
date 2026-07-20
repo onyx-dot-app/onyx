@@ -16,18 +16,12 @@ only where authentication has conclusively failed for the request.
 
 from contextvars import ContextVar
 from dataclasses import dataclass
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
-from pydantic import AwareDatetime
-from pydantic import BaseModel
-from pydantic import ValidationError
+from pydantic import AwareDatetime, BaseModel, ValidationError
 
-from onyx.auth.constants import API_KEY_PREFIX
-from onyx.auth.constants import DEPRECATED_API_KEY_PREFIX
-from onyx.auth.constants import PAT_PREFIX
+from onyx.auth.constants import API_KEY_PREFIX, DEPRECATED_API_KEY_PREFIX, PAT_PREFIX
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger

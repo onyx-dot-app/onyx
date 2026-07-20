@@ -1,32 +1,22 @@
 from ee.onyx.configs.app_configs import CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC
-from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
-from ee.onyx.external_permissions.confluence.constants import REQUEST_PAGINATION_LIMIT
 from ee.onyx.external_permissions.confluence.constants import (
+    ALL_CONF_EMAILS_GROUP_NAME,
+    REQUEST_PAGINATION_LIMIT,
     SPACE_PERMISSION_OPERATION_READ,
-)
-from ee.onyx.external_permissions.confluence.constants import (
     SPACE_PERMISSION_SUBJECT_TYPE_GROUP,
-)
-from ee.onyx.external_permissions.confluence.constants import (
     SPACE_PERMISSION_SUBJECT_TYPE_USER,
-)
-from ee.onyx.external_permissions.confluence.constants import (
     SPACE_PERMISSION_TARGET_TYPE_SPACE,
+    VIEWSPACE_PERMISSION_TYPE,
 )
-from ee.onyx.external_permissions.confluence.constants import VIEWSPACE_PERMISSION_TYPE
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.onyx_confluence import (
     ConfluenceRestSpacePermissionsNotAvailableError,
-)
-from onyx.connectors.confluence.onyx_confluence import (
     get_user_email_from_userkey__server,
-)
-from onyx.connectors.confluence.onyx_confluence import (
     get_user_email_from_username__server,
+    OnyxConfluence,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.utils.logger import setup_logger
 

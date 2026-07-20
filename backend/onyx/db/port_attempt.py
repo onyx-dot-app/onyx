@@ -8,22 +8,14 @@ history. Nothing here enqueues celery work — that is the caller's job.
 
 from datetime import datetime
 
-from sqlalchemy import and_
-from sqlalchemy import exists
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
 )
-from onyx.db.enums import IndexModelStatus
-from onyx.db.enums import PortAttemptStatus
-from onyx.db.enums import SwitchoverType
-from onyx.db.models import PortAttempt
-from onyx.db.models import SearchSettings
+from onyx.db.enums import IndexModelStatus, PortAttemptStatus, SwitchoverType
+from onyx.db.models import PortAttempt, SearchSettings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -2,8 +2,7 @@ from celery import shared_task
 
 from ee.onyx.db.license import get_license
 from ee.onyx.utils.license import verify_license_signature
-from ee.onyx.utils.license_expiry import ExpiryWarningStage
-from ee.onyx.utils.license_expiry import get_expiry_warning_stage
+from ee.onyx.utils.license_expiry import ExpiryWarningStage, get_expiry_warning_stage
 from ee.onyx.utils.license_notifications import notify_admins_for_stage
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask

@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import DocumentSource, MessageType
 from onyx.llm.models import UserMessage
-from onyx.secondary_llm_flows.source_filter import decide_search_scope
-from onyx.secondary_llm_flows.source_filter import SearchCycle
+from onyx.secondary_llm_flows.source_filter import decide_search_scope, SearchCycle
 from onyx.tools.models import ChatMinimalTextMessage
 
 A = DocumentSource.ZENDESK

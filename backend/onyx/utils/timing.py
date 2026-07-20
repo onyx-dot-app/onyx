@@ -1,16 +1,11 @@
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Callable, Generator, Iterator
 from functools import wraps
 from inspect import signature
-from typing import Any
-from typing import cast
-from typing import TypeVar
+from typing import Any, cast, TypeVar
 
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import optional_telemetry, RecordType
 
 logger = setup_logger()
 

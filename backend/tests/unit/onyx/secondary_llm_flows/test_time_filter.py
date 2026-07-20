@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import TimeRange
+from onyx.context.search.models import BaseFilters, TimeRange
 from onyx.llm.models import UserMessage
-from onyx.secondary_llm_flows.time_filter import _parse_time_decision
-from onyx.secondary_llm_flows.time_filter import decide_time_filter
-from onyx.secondary_llm_flows.time_filter import DocumentTimeField
-from onyx.secondary_llm_flows.time_filter import TimeFilter
+from onyx.secondary_llm_flows.time_filter import (
+    _parse_time_decision,
+    decide_time_filter,
+    DocumentTimeField,
+    TimeFilter,
+)
 from onyx.tools.models import ChatMinimalTextMessage
 
 

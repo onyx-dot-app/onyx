@@ -1,13 +1,14 @@
 from collections.abc import Callable
-from typing import Any
-from typing import IO
+from typing import Any, IO
 
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.file_record import get_staged_file_ids_by_index_attempt_id
-from onyx.db.file_record import get_staged_file_ids_for_cc_pair_excluding_attempt
-from onyx.db.file_record import update_filerecord_origin
+from onyx.db.file_record import (
+    get_staged_file_ids_by_index_attempt_id,
+    get_staged_file_ids_for_cc_pair_excluding_attempt,
+    update_filerecord_origin,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 

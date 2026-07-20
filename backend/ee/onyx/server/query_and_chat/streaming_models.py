@@ -1,7 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 from ee.onyx.server.query_and_chat.models import SearchDocWithContent
 

@@ -17,10 +17,8 @@ import json
 import queue as queue_lib
 import threading
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -33,32 +31,40 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
-from onyx.server.features.build.configs import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
 from onyx.server.features.build.configs import (
+    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
     SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
 )
-from onyx.server.features.build.db.build_session import create_message
-from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.build_session import update_session_activity
-from onyx.server.features.build.db.build_session import upsert_agent_plan
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.packets import ApprovalRequestedPacket
-from onyx.server.features.build.packets import BuildPacket
-from onyx.server.features.build.packets import CompactionPacket
-from onyx.server.features.build.packets import ConnectAppRequestPacket
-from onyx.server.features.build.packets import ContextUsagePacket
-from onyx.server.features.build.packets import ErrorPacket
-from onyx.server.features.build.packets import SubagentStartedPacket
+from onyx.server.features.build.db.build_session import (
+    create_message,
+    get_build_session,
+    update_session_activity,
+    upsert_agent_plan,
+)
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+)
+from onyx.server.features.build.packets import (
+    ApprovalRequestedPacket,
+    BuildPacket,
+    CompactionPacket,
+    ConnectAppRequestPacket,
+    ContextUsagePacket,
+    ErrorPacket,
+    SubagentStartedPacket,
+)
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentPlanUpdate
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import CurrentModeUpdate
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentPlanUpdate,
+    AgentThoughtChunk,
+    CurrentModeUpdate,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.sse import SSEKeepalive

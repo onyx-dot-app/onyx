@@ -1,18 +1,13 @@
 import asyncio
 import time
-from typing import Any
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
-from fastapi import APIRouter
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import APIRouter, HTTPException, Request
 
 from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbedTextType
-from shared_configs.model_server_models import Embedding
-from shared_configs.model_server_models import EmbedRequest
-from shared_configs.model_server_models import EmbedResponse
+from shared_configs.model_server_models import Embedding, EmbedRequest, EmbedResponse
 
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer

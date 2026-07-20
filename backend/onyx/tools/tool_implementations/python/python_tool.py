@@ -3,48 +3,45 @@ import mimetypes
 import os
 import re
 from io import BytesIO
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from pydantic import BaseModel
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
-from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
-from onyx.configs.app_configs import CODE_INTERPRETER_DEFAULT_TIMEOUT_MS
-from onyx.configs.app_configs import CODE_INTERPRETER_MAX_OUTPUT_LENGTH
-from onyx.configs.app_configs import CODE_INTERPRETER_MAX_STAGED_BYTES
-from onyx.configs.app_configs import CODE_INTERPRETER_MAX_STAGED_FILES
-from onyx.configs.app_configs import CODE_INTERPRETER_STAGING_CONCURRENCY
+from onyx.configs.app_configs import (
+    CODE_INTERPRETER_BASE_URL,
+    CODE_INTERPRETER_DEFAULT_TIMEOUT_MS,
+    CODE_INTERPRETER_MAX_OUTPUT_LENGTH,
+    CODE_INTERPRETER_MAX_STAGED_BYTES,
+    CODE_INTERPRETER_MAX_STAGED_FILES,
+    CODE_INTERPRETER_STAGING_CONCURRENCY,
+)
 from onyx.configs.constants import FileOrigin
 from onyx.db.code_interpreter import fetch_code_interpreter_server
-from onyx.file_store.utils import build_full_frontend_file_url
-from onyx.file_store.utils import get_default_file_store
+from onyx.file_store.utils import build_full_frontend_file_url, get_default_file_store
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import PythonToolDelta
-from onyx.server.query_and_chat.streaming_models import PythonToolStart
+from onyx.server.query_and_chat.streaming_models import (
+    Packet,
+    PythonToolDelta,
+    PythonToolStart,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatFile
-from onyx.tools.models import LlmPythonExecutionResult
-from onyx.tools.models import PythonExecutionFile
-from onyx.tools.models import PythonToolOverrideKwargs
-from onyx.tools.models import PythonToolRichResponse
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import (
+    ChatFile,
+    LlmPythonExecutionResult,
+    PythonExecutionFile,
+    PythonToolOverrideKwargs,
+    PythonToolRichResponse,
+    ToolCallException,
+    ToolResponse,
+)
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import FileInput
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
+    FileInput,
     StreamErrorEvent,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamOutputEvent,
-)
-from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
 from onyx.tools.tool_implementations.utils import truncate_output as _truncate_output
