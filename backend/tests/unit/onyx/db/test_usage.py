@@ -22,7 +22,7 @@ class TestGetCurrentWindowStart:
 
     def test_weekly_window_aligns_to_monday(self) -> None:
         """Test that weekly windows align to Monday 00:00 UTC."""
-        with patch("onyx.db.usage.USAGE_LIMIT_WINDOW_SECONDS", 604800):  # 1 week
+        with patch("onyx.db.usage.USAGE_LIMIT_WINDOW_SECONDS", 604_800):
             window_start = get_current_window_start()
 
             # Window should be on a Monday

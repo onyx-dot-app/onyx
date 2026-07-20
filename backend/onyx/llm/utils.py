@@ -464,8 +464,6 @@ def get_llm_contextual_cost(
     which do not get contextualized.
     """
 
-    import litellm
-
     # calculate input costs
     num_tokens = ONE_MILLION
     num_input_chunks = num_tokens // DOC_EMBEDDING_CONTEXT_SIZE
@@ -507,10 +505,13 @@ def get_llm_contextual_cost(
     num_output_tokens += num_docs * MAX_CONTEXT_TOKENS
 
     try:
-        usd_per_prompt, usd_per_completion = litellm.cost_per_token(
-            model=llm.config.model_name,
-            prompt_tokens=num_input_tokens,
-            completion_tokens=num_output_tokens,
+        from onyx.llm.cost import compute_cost_cents
+
+        input_cents, output_cents = compute_cost_cents(
+            llm.config.model_name,
+            llm.config.model_provider,
+            num_input_tokens,
+            num_output_tokens,
         )
     except Exception:
         logger.exception(
@@ -519,8 +520,8 @@ def get_llm_contextual_cost(
         )
         return 0
 
-    # Costs are in USD dollars per million tokens
-    return usd_per_prompt + usd_per_completion
+    # compute_cost_cents returns cents; contextual cost UI expects USD.
+    return (input_cents + output_cents) / 100.0
 
 
 def get_max_input_tokens_from_llm_provider(

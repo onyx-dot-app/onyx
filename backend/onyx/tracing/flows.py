@@ -63,3 +63,8 @@ class LLMFlow(StrEnum):
     # ``llm_generation_span`` at the call site with the right tag.
     UNTAGGED_INVOKE = "untagged_invoke"
     UNTAGGED_STREAM = "untagged_stream"
+
+
+IMAGE_FLOWS: frozenset[LLMFlow] = frozenset(
+    {LLMFlow.IMAGE_GENERATION, LLMFlow.IMAGE_EDIT}
+)

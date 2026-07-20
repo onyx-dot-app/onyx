@@ -99,6 +99,7 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
                 flow=LLMFlow.IMAGE_EDIT,
                 model=normalized_model,
                 provider="openai",
+                image_count=n,
                 input_messages=[{"role": "user", "content": prompt}],
             ):
                 return image_edit(
@@ -119,6 +120,7 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
             flow=LLMFlow.IMAGE_GENERATION,
             model=normalized_model,
             provider="openai",
+            image_count=n,
             input_messages=[{"role": "user", "content": prompt}],
         ):
             return image_generation(

@@ -59,6 +59,7 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span
+from onyx.tracing.llm_utils import build_llm_model_config
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
@@ -1148,10 +1149,9 @@ def run_llm_step_pkt_generator(
 
     with generation_span(
         model=llm.config.model_name,
-        model_config={
-            "base_url": str(llm.config.api_base or ""),
+        model_config=build_llm_model_config(llm, LLMFlow.CHAT_RESPONSE)
+        | {
             "model_impl": "litellm",
-            "flow": LLMFlow.CHAT_RESPONSE.value,
         },
     ) as span_generation:
         span_generation.span_data.input = cast(

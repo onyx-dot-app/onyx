@@ -168,6 +168,7 @@ from shared_configs.configs import (
 )
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
+    CURRENT_USER_ID_CONTEXTVAR,
     get_current_tenant_id,
 )
 
@@ -1989,11 +1990,11 @@ def _scoped_pat_permitted_on_route(
     )
 
 
-async def optional_user(
+async def _resolve_optional_user(
     request: Request,
-    async_db_session: AsyncSession = Depends(get_async_session),
-    user: User | None = Depends(optional_fastapi_current_user),
-    user_manager: BaseUserManager[User, uuid.UUID] = Depends(get_user_manager),
+    async_db_session: AsyncSession,
+    user: User | None,
+    user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
@@ -2028,6 +2029,25 @@ async def optional_user(
     if user is not None:
         await _maybe_refresh_oauth_tokens(user, async_db_session, user_manager)
     return user
+
+
+async def optional_user(
+    request: Request,
+    async_db_session: AsyncSession = Depends(get_async_session),
+    user: User | None = Depends(optional_fastapi_current_user),
+    user_manager: BaseUserManager[User, uuid.UUID] = Depends(get_user_manager),
+) -> AsyncGenerator[User | None, None]:
+    user = await _resolve_optional_user(
+        request,
+        async_db_session,
+        user,
+        user_manager,
+    )
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id) if user is not None else None)
+    try:
+        yield user
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
 
 def get_anonymous_user() -> User:
@@ -2193,11 +2213,11 @@ def is_same_origin(actual: str, expected: str) -> bool:
 async def current_user_from_websocket(
     websocket: WebSocket,
     token: str = Query(..., description="WebSocket authentication token"),
-) -> User:
+) -> AsyncGenerator[User, None]:
     """
     WebSocket authentication dependency using query parameter.
 
-    Validates the WS token from query param and returns the User.
+    Validates the WS token from query param and yields the User.
     Raises BasicAuthenticationError if authentication fails.
 
     The token must be obtained from POST /voice/ws-token before connecting.
@@ -2256,7 +2276,11 @@ async def current_user_from_websocket(
         )
 
     logger.debug("WS auth: authenticated %s", user.email)
-    return user
+    context_token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+    try:
+        yield user
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(context_token)
 
 
 def get_default_admin_user_emails_() -> list[str]:

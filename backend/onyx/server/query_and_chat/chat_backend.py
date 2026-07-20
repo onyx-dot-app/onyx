@@ -435,6 +435,10 @@ def rename_chat_session(
             )
         return RenameChatSessionResponse(new_name=name)
 
+    # Auto-naming calls an LLM, so apply the same per-user budget gate as
+    # send-message. Manual renames return above and stay free.
+    check_token_rate_limits(user)
+
     llm = get_default_llm(
         additional_headers=extract_headers(
             request.headers, LITELLM_PASS_THROUGH_HEADERS
