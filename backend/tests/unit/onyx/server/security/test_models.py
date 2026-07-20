@@ -30,6 +30,8 @@ _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {
     "password_require_lowercase": True,
     "password_require_digit": True,
     "password_require_special_char": False,
+    "password_signup_enabled": True,
+    "password_login_enabled": True,
 }
 
 

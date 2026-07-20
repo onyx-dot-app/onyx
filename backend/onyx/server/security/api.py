@@ -23,6 +23,13 @@ logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/security")
 
+# Enforcement in users.py fires only on self-hosted deployments, so the lockdown
+# toggles are inert on every other deployment. Reject them there rather than
+# persist a control that would silently never fire.
+_PASSWORD_LOCKDOWN_FIELDS = frozenset(
+    {"password_signup_enabled", "password_login_enabled"}
+)
+
 
 def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, set[str]]:
     """Parse the PUT body. Returns (parsed model, present_keys).
@@ -62,6 +69,14 @@ async def put_security_settings_endpoint(
 ) -> SecuritySettings:
     raw = await request.body()
     overrides, present_keys = _parse_put_body(raw)
+
+    lockdown_in_payload = present_keys & _PASSWORD_LOCKDOWN_FIELDS
+    if lockdown_in_payload and MULTI_TENANT:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Password login controls apply only to password-based deployments: "
+            + ", ".join(sorted(lockdown_in_payload)),
+        )
 
     # Primary boundary for operator-locked fields. The storage layer also
     # strips them; this gives admins a clear 403 instead of a silent no-op.
