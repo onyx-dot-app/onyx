@@ -24,6 +24,7 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from starlette.types import Lifespan
 
 from onyx import __version__
+from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRead
 from onyx.auth.schemas import UserUpdate
@@ -38,6 +39,7 @@ from onyx.configs.app_configs import API_SERVER_THREADPOOL_SIZE
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
+from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_PUBLIC_DOCS
@@ -375,8 +377,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     # Will throw exception if USER_AUTH_SECRET is missing on a real deployment
     verify_user_auth_secret()
 
-    # Surface Redis config that can silently drop session keys.
-    await log_redis_server_diagnostics()
+    # Surface Redis configs that can silently drop session keys. Only relevant
+    # when sessions live in Redis; lite deployments may not run Redis at all.
+    if AUTH_BACKEND == AuthBackend.REDIS:
+        await log_redis_server_diagnostics()
 
     if OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET:
         logger.notice("Both OAuth Client ID and Secret are configured.")

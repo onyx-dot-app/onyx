@@ -492,7 +492,9 @@ async def log_redis_server_diagnostics() -> None:
         info.get("aof_enabled", "unknown"),
         info.get("rdb_last_bgsave_status", "unknown"),
     )
-    if str(maxmemory_policy).startswith("allkeys"):
+    # ``volatile-*`` policies evict only TTL-bearing keys, and session tokens
+    # always carry a TTL, so they are exposed under both policy families.
+    if str(maxmemory_policy).startswith(("allkeys", "volatile")):
         logger.warning(
             "Redis maxmemory_policy=%s can evict live session keys under memory "
             "pressure; unexplained sign-outs may be evictions.",
