@@ -68,25 +68,41 @@ kubectl get po | grep celery-worker-user-file-processing | grep Running
 8. **Search indices are not cleaned up.** In multi-tenant deployments all tenants share indices
    and are separated by a `tenant_id` field, so dropping a schema leaves that tenant's chunks
    behind. They can be swept later by selecting on `tenant_id` - keep `cleaned_tenants.csv`.
-9. **To go faster, spread across pods - do not just raise `--concurrency`.** Every operation is a
-   `kubectl exec` against the one pod the run picked, so that pod is the bottleneck. Running two
-   batches at once without pinning gains nothing: pod selection is random over a small set, so
-   both runs usually land on the same pod, and it ends up saturated while its replicas idle.
-   Pin distinct pods per run instead:
+9. **The database writer is the real limit. Do not tune for throughput.**
+   Dropping a tenant schema deletes on the order of 500 relations, so cleanup is a sustained
+   burst of catalog writes against the cluster writer. On a live cluster this is the constraint
+   that matters, well before pod CPU is.
 
-   ```bash
-   # terminal 1
-   ... --csv batch_a.csv --concurrency 8 \
-       --data-plane-pod <worker-pod-1> --control-plane-pod <control-pod-1>
-   # terminal 2
-   ... --csv batch_b.csv --concurrency 8 \
-       --data-plane-pod <worker-pod-2> --control-plane-pod <control-pod-2>
-   ```
+   Measured on a real cleanup, and the reason this note exists:
 
-   Measured on a real cleanup: one run at `--concurrency 12` reached ~34 tenants/min and pinned a
-   worker at ~2 cores while its replica sat idle. Two pinned runs at `--concurrency 8` reached
-   ~67 tenants/min with neither worker above ~1.2 cores. Remember these are live workers doing
-   real work, so prefer spreading load over concentrating it.
+   | rate | writer `DiskQueueDepth` | failures |
+   |---|---|---|
+   | ~34 tenants/min | low, occasional spikes | 0 in 500 tenants |
+   | ~67 tenants/min | **50-64 sustained, tripped a >25 alarm** | 39 (`TLS handshake timeout`, `EOF`, failed execs) |
+
+   The faster run paged an on-call engineer and started failing on infrastructure timeouts.
+   `WriteLatency` stayed healthy throughout (2-5 ms), so `DiskQueueDepth` is the signal to watch -
+   by the time latency moves you have gone much too far. **Watch it while running and back off if
+   it approaches the alarm threshold. Prefer off-peak hours.** Roughly 30 tenants/min is a
+   reasonable ceiling; there is no prize for finishing sooner.
+
+10. **`--data-plane-pod` / `--control-plane-pod` are for spreading load, not for going faster.**
+    Every operation is a `kubectl exec` against the one pod a run picked. Two runs without pinning
+    usually land on the *same* pod - selection is random over a small set - saturating one live
+    worker (~2 cores) while its replica idles. Pinning distinct pods per run fixes that
+    distribution problem:
+
+    ```bash
+    # terminal 1
+    ... --csv batch_a.csv --concurrency 8 \
+        --data-plane-pod <worker-pod-1> --control-plane-pod <control-pod-1>
+    # terminal 2
+    ... --csv batch_b.csv --concurrency 8 \
+        --data-plane-pod <worker-pod-2> --control-plane-pod <control-pod-2>
+    ```
+
+    Use this to keep any single worker from being pinned, and keep the *combined* rate under the
+    ceiling in note 9. Running both at full tilt is what produced the failure row above.
 
 ## Files Generated
 
