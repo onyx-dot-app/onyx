@@ -80,8 +80,11 @@ def start_metrics_server(worker_type: str) -> int | None:
             )
             return None
 
+        # Bind on "::" so the listener works on IPv6-only clusters. On Linux
+        # this also accepts IPv4 connections via the default v4-mapped-v6
+        # behavior (net.ipv6.bindv6only=0).
         try:
-            start_http_server(port)
+            start_http_server(port, addr="::")
             _server_started = True
             logger.info(
                 "Prometheus metrics server started on :%s for %s", port, worker_type
