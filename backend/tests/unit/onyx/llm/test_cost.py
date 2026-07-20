@@ -47,8 +47,10 @@ def db_session() -> Generator[Session, None, None]:
 def _clear_override_cache() -> Generator[None, None, None]:
     # Clear process-global override cache.
     cost_overrides._cache.clear()
+    cost_overrides._last_known_cache.clear()
     yield
     cost_overrides._cache.clear()
+    cost_overrides._last_known_cache.clear()
 
 
 class TestComputeCostCents:
@@ -298,7 +300,9 @@ class TestGetOverride:
 
         rates = cost_overrides.get_override(db_session, "claude-x")
         assert rates is not None
-        assert rates == (3.0, 15.0, None)
+        assert rates.input_cost_per_mtok == 3.0
+        assert rates.output_cost_per_mtok == 15.0
+        assert rates.cache_read_cost_per_mtok is None
 
     def test_cache_invalidation_picks_up_new_row(self, db_session: Session) -> None:
         assert cost_overrides.get_override(db_session, "late-model") is None
@@ -313,7 +317,61 @@ class TestGetOverride:
         # Stale cache still says None until invalidated.
         assert cost_overrides.get_override(db_session, "late-model") is None
         cost_overrides.invalidate_override_cache()
-        assert cost_overrides.get_override(db_session, "late-model") == (4.0, 8.0, None)
+        assert cost_overrides.get_override(
+            db_session, "late-model"
+        ) == cost_overrides.CostOverrideRates(
+            input_cost_per_mtok=4.0,
+            output_cost_per_mtok=8.0,
+            cache_read_cost_per_mtok=None,
+        )
+
+    def test_expired_snapshot_reloads(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        now = 0.0
+        loads = 0
+        monkeypatch.setattr(
+            cost_overrides,
+            "_cache",
+            cost_overrides.TTLCache(
+                maxsize=10,
+                ttl=60,
+                timer=lambda: now,
+            ),
+        )
+
+        def _load(
+            _db_session: Session,
+        ) -> dict[tuple[str, str], cost_overrides.CostOverrideRates]:
+            nonlocal loads
+            loads += 1
+            return {
+                ("", "model"): cost_overrides.CostOverrideRates(
+                    input_cost_per_mtok=float(loads),
+                    output_cost_per_mtok=float(loads),
+                    cache_read_cost_per_mtok=None,
+                )
+            }
+
+        monkeypatch.setattr(cost_overrides, "_load_cache", _load)
+        first = cost_overrides.get_override(db_session, "model")
+        assert first is not None
+        assert first.input_cost_per_mtok == 1.0
+
+        now = 61.0
+        second = cost_overrides.get_override(db_session, "model")
+        assert second is not None
+        assert second.input_cost_per_mtok == 2.0
+
+        def _fail_load(
+            _: Session,
+        ) -> dict[tuple[str, str], cost_overrides.CostOverrideRates]:
+            raise RuntimeError("database unavailable")
+
+        monkeypatch.setattr(cost_overrides, "_load_cache", _fail_load)
+        now = 122.0
+        stale = cost_overrides.get_override(db_session, "model")
+        assert stale == second
 
     def test_invalidation_during_reload_discards_stale_snapshot(
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
@@ -322,13 +380,31 @@ class TestGetOverride:
 
         def _load(
             _db_session: Session,
-        ) -> dict[tuple[str, str], tuple[float, float, float | None]]:
+        ) -> dict[tuple[str, str], cost_overrides.CostOverrideRates]:
             nonlocal loads
             loads += 1
             if loads == 1:
                 cost_overrides.invalidate_override_cache()
-                return {("", "model"): (1.0, 1.0, None)}
-            return {("", "model"): (2.0, 2.0, None)}
+                return {
+                    ("", "model"): cost_overrides.CostOverrideRates(
+                        input_cost_per_mtok=1.0,
+                        output_cost_per_mtok=1.0,
+                        cache_read_cost_per_mtok=None,
+                    )
+                }
+            return {
+                ("", "model"): cost_overrides.CostOverrideRates(
+                    input_cost_per_mtok=2.0,
+                    output_cost_per_mtok=2.0,
+                    cache_read_cost_per_mtok=None,
+                )
+            }
 
         monkeypatch.setattr(cost_overrides, "_load_cache", _load)
-        assert cost_overrides.get_override(db_session, "model") == (2.0, 2.0, None)
+        assert cost_overrides.get_override(
+            db_session, "model"
+        ) == cost_overrides.CostOverrideRates(
+            input_cost_per_mtok=2.0,
+            output_cost_per_mtok=2.0,
+            cache_read_cost_per_mtok=None,
+        )

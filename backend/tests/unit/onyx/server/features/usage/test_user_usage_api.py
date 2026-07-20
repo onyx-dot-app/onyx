@@ -125,11 +125,11 @@ def _seed_usage(
 
 
 def _seed_current_window(db_session: Session, user_id: str) -> datetime.datetime:
-    from onyx.db.usage import USAGE_PERIOD_SECONDS
     from onyx.utils.datetime import get_window_start
+    from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
     now = datetime.datetime.now(datetime.timezone.utc)
-    window = get_window_start(now, USAGE_PERIOD_SECONDS)
+    window = get_window_start(now, USAGE_LIMIT_WINDOW_SECONDS)
     _seed_usage(
         db_session, user_id, "gpt-4o", "CHAT", "openai", 100, 50, 0, 1.25, window
     )

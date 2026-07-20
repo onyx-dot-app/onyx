@@ -112,7 +112,7 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
                 flow=LLMFlow.IMAGE_EDIT,
                 model=deployment,
                 provider="azure",
-                extra_config={"image_count": str(n)},
+                image_count=n,
                 input_messages=[{"role": "user", "content": prompt}],
             ):
                 return image_edit(
@@ -134,7 +134,7 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
             flow=LLMFlow.IMAGE_GENERATION,
             model=deployment,
             provider="azure",
-            extra_config={"image_count": str(n)},
+            image_count=n,
             input_messages=[{"role": "user", "content": prompt}],
         ):
             return image_generation(

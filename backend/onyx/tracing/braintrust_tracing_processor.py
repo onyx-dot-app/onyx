@@ -184,7 +184,7 @@ class BraintrustTracingProcessor(TracingProcessor):
                 output_tokens,
                 cache_read_tokens=cache_read,
                 flow=flow,
-                image_count=int(model_config.get("image_count") or 1),
+                image_count=span.span_data.image_count or 1,
             )
             cost_cents = input_cents + output_cents
             if cost_cents > 0:

@@ -15,7 +15,6 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.usage import USAGE_PERIOD_SECONDS
 from onyx.db.user_usage import record_user_usage
 from onyx.llm.cost import compute_cost_cents
 from onyx.tracing.flows import IMAGE_FLOWS
@@ -25,6 +24,7 @@ from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
 from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 from shared_configs.contextvars import get_current_user_id
@@ -129,10 +129,9 @@ class UserUsageTracingProcessor(TracingProcessor):
         output_tokens = _usage_field(usage, "output_tokens", "completion_tokens")
         cache_read_tokens = _usage_field(usage, "cache_read_input_tokens")
         provider = model_config.get("model_provider")
-        image_count = int(model_config.get("image_count") or 1)
 
         window_start = get_window_start(
-            datetime.now(timezone.utc), period_seconds=USAGE_PERIOD_SECONDS
+            datetime.now(timezone.utc), period_seconds=USAGE_LIMIT_WINDOW_SECONDS
         )
 
         return _UsageRecord(
@@ -144,7 +143,7 @@ class UserUsageTracingProcessor(TracingProcessor):
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
-            image_count=image_count,
+            image_count=data.image_count or 1,
             window_start=window_start,
         )
 

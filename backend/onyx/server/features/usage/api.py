@@ -26,7 +26,6 @@ from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
 from onyx.db.token_limit import fetch_user_group_token_rate_limits
-from onyx.db.usage import USAGE_PERIOD_SECONDS
 from onyx.db.user_usage import get_group_cost_cents_buckets_since
 from onyx.db.user_usage import get_total_cost_cents_buckets_since
 from onyx.db.user_usage import get_usage_export
@@ -188,7 +187,7 @@ def get_my_usage(
 ) -> UserUsageResponse:
     """Caller's token/cost usage for the Usage tab."""
     now = datetime.now(timezone.utc)
-    window_start = get_window_start(now, period_seconds=USAGE_PERIOD_SECONDS)
+    window_start = get_window_start(now, period_seconds=USAGE_LIMIT_WINDOW_SECONDS)
 
     since = now - timedelta(days=days) if days else window_start
     user_id = str(user.id)

@@ -26,7 +26,7 @@ def get_model_price_per_million(
             logger.exception("Override lookup failed for model %s", model)
             rates = None
         if rates is not None:
-            return rates[0], rates[1]
+            return rates.input_cost_per_mtok, rates.output_cost_per_mtok
 
     try:
         import litellm
@@ -68,14 +68,16 @@ def _image_cost_cents(model: str, provider: str | None) -> float:
 
 
 def _override_cost_cents(
-    rates: tuple[float, float, float | None],
+    rates: cost_overrides.CostOverrideRates,
     input_tokens: int,
     output_tokens: int,
     cache_read_tokens: int,
 ) -> tuple[float, float]:
     """Apply admin per-Mtok rates. Cache reads bill at the admin cache rate when
     set, otherwise at the input rate. Cache cost is folded into the input half."""
-    input_per_mtok, output_per_mtok, cache_per_mtok = rates
+    input_per_mtok = rates.input_cost_per_mtok
+    output_per_mtok = rates.output_cost_per_mtok
+    cache_per_mtok = rates.cache_read_cost_per_mtok
     cache_rate = cache_per_mtok if cache_per_mtok is not None else input_per_mtok
     input_cents = (
         input_tokens / 1_000_000 * input_per_mtok * 100

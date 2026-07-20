@@ -204,8 +204,8 @@ def test_records_image_span_without_token_usage(
                     model_config={
                         "model_provider": "openai",
                         "flow": LLMFlow.IMAGE_GENERATION.value,
-                        "image_count": "2",
                     },
+                    image_count=2,
                     usage=None,
                 )
             )

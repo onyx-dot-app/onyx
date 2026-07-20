@@ -3,6 +3,10 @@
 import threading
 import time
 
+from cachetools import LRUCache
+from cachetools import TTLCache
+from pydantic import BaseModel
+from pydantic import ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,76 +16,82 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-# (input, output, cache_read | None) per-Mtok USD; null cache => bill at input.
-_OverrideRates = tuple[float, float, float | None]
 
-# Per-tenant snapshot of the override table, keyed by tenant_id: a shared
-# process serves many tenants, so an unkeyed cache would bill one tenant's
-# negotiated rates to all. A write invalidates only the writer's process, so
-# the TTL bounds how long sibling workers serve stale rates after an admin edit.
+class CostOverrideRates(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    input_cost_per_mtok: float
+    output_cost_per_mtok: float
+    cache_read_cost_per_mtok: float | None
+
+
 _CACHE_TTL_SECONDS = 60.0
+_MAX_CACHED_TENANTS = 10_000
 _cache_lock = threading.Lock()
 # Keyed by (provider, model) so the same model can carry per-provider rates;
 # provider is "" for a provider-agnostic override.
 _OverrideKey = tuple[str, str]
-# tenant_id -> (loaded_at_monotonic, {(provider, model): rates})
-_cache: dict[str, tuple[float, dict[_OverrideKey, _OverrideRates]]] = {}
+# Process-local tenant snapshots; TTL bounds cross-worker staleness.
+_cache: TTLCache[str, dict[_OverrideKey, CostOverrideRates]] = TTLCache(
+    maxsize=_MAX_CACHED_TENANTS,
+    ttl=_CACHE_TTL_SECONDS,
+    timer=time.monotonic,
+)
+# Preserve the last valid snapshot when a refresh fails after TTL expiry.
+_last_known_cache: LRUCache[str, dict[_OverrideKey, CostOverrideRates]] = LRUCache(
+    maxsize=_MAX_CACHED_TENANTS
+)
 _cache_generation = 0
-# Bound the per-tenant cache so a many-tenant process can't accumulate entries
-# unboundedly; evict the oldest (insertion order) when full.
-_MAX_CACHED_TENANTS = 10_000
 
 
-def _load_cache(db_session: Session) -> dict[_OverrideKey, _OverrideRates]:
+def _load_cache(db_session: Session) -> dict[_OverrideKey, CostOverrideRates]:
     rows = db_session.execute(select(ModelCostOverride)).scalars().all()
     return {
-        (r.provider, r.model): (
-            r.input_cost_per_mtok,
-            r.output_cost_per_mtok,
-            r.cache_read_cost_per_mtok,
+        (r.provider, r.model): CostOverrideRates(
+            input_cost_per_mtok=r.input_cost_per_mtok,
+            output_cost_per_mtok=r.output_cost_per_mtok,
+            cache_read_cost_per_mtok=r.cache_read_cost_per_mtok,
         )
         for r in rows
     }
 
 
 def _lookup(
-    snapshot: dict[_OverrideKey, _OverrideRates], model: str, provider: str
-) -> _OverrideRates | None:
+    snapshot: dict[_OverrideKey, CostOverrideRates], model: str, provider: str
+) -> CostOverrideRates | None:
     # Prefer a provider-specific rate, else the provider-agnostic ("") one.
     return snapshot.get((provider, model)) or snapshot.get(("", model))
 
 
 def get_override(
     db_session: Session, model: str, provider: str = ""
-) -> _OverrideRates | None:
+) -> CostOverrideRates | None:
     tenant_id = get_current_tenant_id()
     with _cache_lock:
-        entry = _cache.get(tenant_id)
+        snapshot = _cache.get(tenant_id)
+        last_known = _last_known_cache.get(tenant_id)
         generation = _cache_generation
-    if entry is not None and (time.monotonic() - entry[0]) < _CACHE_TTL_SECONDS:
-        return _lookup(entry[1], model, provider)
+    if snapshot is not None:
+        return _lookup(snapshot, model, provider)
 
     # Reload outside lock — slow query must not block other tenants.
     try:
         snapshot = _load_cache(db_session)
     except Exception:
-        # Load failure: serve last snapshot if any; else no overrides.
         logger.exception("Failed to load model cost overrides")
-        return _lookup(entry[1], model, provider) if entry is not None else None
+        return _lookup(last_known, model, provider) if last_known is not None else None
 
-    entry = (time.monotonic(), snapshot)
     with _cache_lock:
         stale = generation != _cache_generation
         if stale:
             current = _cache.get(tenant_id)
         else:
             current = None
-            if tenant_id not in _cache and len(_cache) >= _MAX_CACHED_TENANTS:
-                _cache.pop(next(iter(_cache)), None)
-            _cache[tenant_id] = entry
+            _cache[tenant_id] = snapshot
+            _last_known_cache[tenant_id] = snapshot
     if stale:
         if current is not None:
-            return _lookup(current[1], model, provider)
+            return _lookup(current, model, provider)
         return get_override(db_session, model, provider)
     return _lookup(snapshot, model, provider)
 
@@ -94,6 +104,7 @@ def invalidate_override_cache() -> None:
     with _cache_lock:
         _cache_generation += 1
         _cache.pop(tenant_id, None)
+        _last_known_cache.pop(tenant_id, None)
 
 
 def list_overrides(db_session: Session) -> list[ModelCostOverride]:

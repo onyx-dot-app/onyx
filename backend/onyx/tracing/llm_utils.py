@@ -56,6 +56,7 @@ def traced_llm_call(
     model: str,
     provider: str,
     extra_config: Mapping[str, str] | None = None,
+    image_count: int | None = None,
     input_messages: Sequence[Any] | Any | None = None,
     tools: Sequence[Mapping[str, Any]] | None = None,
     parent: Any | None = None,
@@ -76,6 +77,7 @@ def traced_llm_call(
     with generation_span(
         model=model,
         model_config=model_config,
+        image_count=image_count,
         tools=tools,
         parent=parent,
     ) as span:
