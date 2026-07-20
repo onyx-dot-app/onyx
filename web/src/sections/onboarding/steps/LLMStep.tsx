@@ -12,7 +12,6 @@ import {
 import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
 import { getProvider } from "@/lib/languageModels";
 import ProviderSetupModal from "@/sections/modals/languageModels/ProviderSetupModal";
-import { Disabled } from "@opal/core";
 import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
@@ -123,107 +122,109 @@ const LLMStep = memo(
         ? "custom"
         : (selectedProvider?.llmDescriptor?.name ?? "custom");
 
+      // Note: individual controls below (Button, LLMProviderCard) already
+      // manage their own `disabled` visuals — do not also wrap this section
+      // in `<Disabled>`, or their opacity compounds and renders far darker
+      // than every other disabled control on the page.
       return (
-        <Disabled disabled={disabled} allowClick>
-          <div
-            className="flex flex-col items-center justify-between w-full p-1 rounded-16 border border-border-01 bg-background-tint-00"
-            aria-label="onboarding-llm-step"
-          >
-            <ContentAction
-              icon={SvgCpu}
-              title="Connect your LLM models"
-              description="Onyx supports both self-hosted models and popular providers."
-              sizePreset="main-ui"
-              variant="section"
-              padding="lg"
-              rightChildren={
-                <Button
-                  disabled={disabled}
-                  prominence="tertiary"
-                  rightIcon={SvgExternalLink}
-                  href="/admin/configuration/language-models"
+        <div
+          className="flex flex-col items-center justify-between w-full p-1 rounded-16 border border-border-01 bg-background-tint-00"
+          aria-label="onboarding-llm-step"
+        >
+          <ContentAction
+            icon={SvgCpu}
+            title="Connect your LLM models"
+            description="Onyx supports both self-hosted models and popular providers."
+            sizePreset="main-ui"
+            variant="section"
+            padding="lg"
+            rightChildren={
+              <Button
+                disabled={disabled}
+                prominence="tertiary"
+                rightIcon={SvgExternalLink}
+                href="/admin/configuration/language-models"
+              >
+                View in Admin Panel
+              </Button>
+            }
+          />
+          <Divider />
+          <div className="@container/llmcards flex flex-wrap gap-1 w-full max-h-[40vh] overflow-y-auto [&>*:last-child:nth-child(odd)]:basis-full">
+            {isLoading ? (
+              Array.from({ length: 8 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow"
                 >
-                  View in Admin Panel
-                </Button>
-              }
-            />
-            <Divider />
-            <div className="@container/llmcards flex flex-wrap gap-1 w-full max-h-[40vh] overflow-y-auto [&>*:last-child:nth-child(odd)]:basis-full">
-              {isLoading ? (
-                Array.from({ length: 8 }).map((_, idx) => (
-                  <div
-                    key={idx}
-                    className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow"
-                  >
-                    <LLMProviderSkeleton />
-                  </div>
-                ))
-              ) : (
-                <>
-                  {/* Render the selected provider form */}
-                  <ProviderSetupModal
-                    providerKey={
-                      selectedProvider && isModalOpen ? providerName : null
-                    }
-                    shouldMarkAsDefault={
-                      (onboardingState?.data.llmProviders ?? []).length === 0
-                    }
-                    onboardingActions={onboardingActions}
-                    onOpenChange={handleModalClose}
-                    onSuccess={() => {
-                      onboardingActions.updateData({
-                        llmProviders: [
-                          ...(onboardingState?.data.llmProviders ?? []),
-                          providerName,
-                        ],
-                      });
-                      onboardingActions.setButtonActive(true);
-                    }}
+                  <LLMProviderSkeleton />
+                </div>
+              ))
+            ) : (
+              <>
+                {/* Render the selected provider form */}
+                <ProviderSetupModal
+                  providerKey={
+                    selectedProvider && isModalOpen ? providerName : null
+                  }
+                  shouldMarkAsDefault={
+                    (onboardingState?.data.llmProviders ?? []).length === 0
+                  }
+                  onboardingActions={onboardingActions}
+                  onOpenChange={handleModalClose}
+                  onSuccess={() => {
+                    onboardingActions.updateData({
+                      llmProviders: [
+                        ...(onboardingState?.data.llmProviders ?? []),
+                        providerName,
+                      ],
+                    });
+                    onboardingActions.setButtonActive(true);
+                  }}
+                />
+
+                {/* Render provider cards */}
+                {llmDescriptors.map((llmDescriptor) => {
+                  const { productName, companyName } = getProvider(
+                    llmDescriptor.name
+                  );
+                  return (
+                    <div
+                      key={llmDescriptor.name}
+                      className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow"
+                    >
+                      <LLMProviderCard
+                        title={productName}
+                        subtitle={companyName}
+                        providerName={llmDescriptor.name}
+                        disabled={disabled}
+                        isConnected={onboardingState.data.llmProviders?.some(
+                          (provider) => provider === llmDescriptor.name
+                        )}
+                        onClick={() =>
+                          handleProviderClick(llmDescriptor, false)
+                        }
+                      />
+                    </div>
+                  );
+                })}
+
+                {/* Custom provider card */}
+                <div className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow">
+                  <LLMProviderCard
+                    title="Custom LLM Provider"
+                    subtitle="LiteLLM Compatible APIs"
+                    disabled={disabled}
+                    isConnected={onboardingState.data.llmProviders?.some(
+                      (provider) => provider === "custom"
+                    )}
+                    onClick={() => handleProviderClick(undefined, true)}
                   />
-
-                  {/* Render provider cards */}
-                  {llmDescriptors.map((llmDescriptor) => {
-                    const { productName, companyName } = getProvider(
-                      llmDescriptor.name
-                    );
-                    return (
-                      <div
-                        key={llmDescriptor.name}
-                        className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow"
-                      >
-                        <LLMProviderCard
-                          title={productName}
-                          subtitle={companyName}
-                          providerName={llmDescriptor.name}
-                          disabled={disabled}
-                          isConnected={onboardingState.data.llmProviders?.some(
-                            (provider) => provider === llmDescriptor.name
-                          )}
-                          onClick={() =>
-                            handleProviderClick(llmDescriptor, false)
-                          }
-                        />
-                      </div>
-                    );
-                  })}
-
-                  {/* Custom provider card */}
-                  <div className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow">
-                    <LLMProviderCard
-                      title="Custom LLM Provider"
-                      subtitle="LiteLLM Compatible APIs"
-                      disabled={disabled}
-                      isConnected={onboardingState.data.llmProviders?.some(
-                        (provider) => provider === "custom"
-                      )}
-                      onClick={() => handleProviderClick(undefined, true)}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
+                </div>
+              </>
+            )}
           </div>
-        </Disabled>
+        </div>
       );
     }
 
