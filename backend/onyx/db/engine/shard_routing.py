@@ -118,6 +118,13 @@ def invalidate_shard_cache(tenant_id: str | None = None) -> None:
     _ShardCache.invalidate(tenant_id)
 
 
+def reset_shard_overrides() -> None:
+    """Re-read ONYX_DB_SHARD_OVERRIDES from configuration."""
+    global _OVERRIDES
+    with _OVERRIDES_LOCK:
+        _OVERRIDES = None
+
+
 def _lookup_shard_in_catalog(tenant_id: str) -> str | None:
     """Read `public.tenant_shard` from the catalog database.
 

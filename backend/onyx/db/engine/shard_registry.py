@@ -139,6 +139,18 @@ def get_shard_specs() -> dict[str, ShardSpec]:
     return _SHARD_SPECS
 
 
+def reset_shard_specs() -> None:
+    """Re-read the shard table from configuration, disposing engines built from the old one.
+
+    Mirrors ``SqlEngine.reset_engine``. Needed anywhere shard configuration can change
+    within a process — tests, and forked children that re-read their environment.
+    """
+    global _SHARD_SPECS
+    ShardRegistry.reset()
+    with _SPECS_LOCK:
+        _SHARD_SPECS = None
+
+
 def shard_pool_divisor() -> int:
     """Divisor applied to per-engine pool sizes so the total stays bounded.
 
