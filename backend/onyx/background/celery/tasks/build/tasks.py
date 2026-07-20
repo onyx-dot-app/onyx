@@ -22,6 +22,7 @@ from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
     is_sandbox_idle,
+    list_snapshotable_session_workspaces,
     sleep_sandbox,
 )
 
@@ -122,10 +123,12 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                         continue
 
                     # List session directories in the sandbox via the
-                    # backend-agnostic manager API. K8s lists pod paths via
-                    # exec; Docker lists container paths via exec; Local
-                    # walks the on-disk sessions/ directory.
-                    session_ids = sandbox_manager.list_session_workspaces(sandbox_id)
+                    # backend-agnostic manager API.
+                    session_ids = list_snapshotable_session_workspaces(
+                        db_session,
+                        sandbox_manager,
+                        sandbox,
+                    )
 
                     # Background snapshot failures are log-only (unlike the
                     # reap path, nothing is about to be terminated).

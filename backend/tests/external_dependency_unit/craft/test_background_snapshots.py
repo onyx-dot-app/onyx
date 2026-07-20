@@ -181,6 +181,38 @@ def test_running_sandbox_snapshotted_without_termination(
     assert stubbed_sweep.terminate_count == 0
 
 
+def test_orphan_workspace_removed_and_skipped_during_background_snapshot(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_sweep: StubSandboxManager,
+) -> None:
+    """Background sweeps delete orphan workspaces without snapshotting them."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    session_row = _make_session(db_session, user)
+    orphan_session_id = uuid4()
+
+    stubbed_sweep.list_session_workspaces_returns = [
+        orphan_session_id,
+        session_row.id,
+    ]
+    stubbed_sweep.cleanup_session_workspace_silent = True
+    stubbed_sweep.create_snapshot_returns = SnapshotResult(
+        storage_path=f"s3://snapshots/{sandbox.id}/{session_row.id}.tar.gz",
+        size_bytes=4321,
+    )
+
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+
+    assert stubbed_sweep.last_cleanup_session_workspace_payload == {
+        "sandbox_id": sandbox.id,
+        "session_id": orphan_session_id,
+    }
+    assert stubbed_sweep.create_snapshot_count == 1
+    assert stubbed_sweep.last_create_snapshot_payload is not None
+    assert stubbed_sweep.last_create_snapshot_payload["session_id"] == session_row.id
+
+
 def test_fresh_snapshot_skipped_by_age_gate(
     db_session: Session,
     test_user: User,  # noqa: ARG001

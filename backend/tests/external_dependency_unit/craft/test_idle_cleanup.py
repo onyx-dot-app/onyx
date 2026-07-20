@@ -14,7 +14,7 @@ from __future__ import annotations
 import datetime
 import logging
 from collections.abc import Generator
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import update
@@ -187,6 +187,44 @@ def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
         "timeout_seconds": 300.0,
     } in stubbed_cleanup.create_opencode_history_snapshot_payloads
     assert stubbed_cleanup.terminate_count >= 1
+
+
+def test_orphan_workspace_cleanup_failure_does_not_block_sleep(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An orphan is skipped even when deleting its workspace fails."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    orphan_session_id = uuid4()
+
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+
+    stubbed_cleanup.list_session_workspaces_returns = [orphan_session_id]
+    stubbed_cleanup.terminate_silent = True
+
+    with caplog.at_level(logging.WARNING):
+        cleanup_idle_sandboxes_task.run(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.SLEEPING
+    assert stubbed_cleanup.last_cleanup_session_workspace_payload == {
+        "sandbox_id": sandbox.id,
+        "session_id": orphan_session_id,
+    }
+    assert stubbed_cleanup.create_snapshot_count == 0
+    assert sandbox.id in stubbed_cleanup.terminated_sandbox_ids
+    assert any(
+        "Failed to remove orphan workspace" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def test_active_sandbox_within_threshold_not_touched(

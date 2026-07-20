@@ -19,6 +19,7 @@ from onyx.server.features.build.configs import (
 )
 from onyx.server.features.build.db.build_session import (
     clear_nextjs_ports_for_user,
+    get_build_session,
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.db.sandbox import (
@@ -401,6 +402,37 @@ def is_sandbox_idle(sandbox: Sandbox, now: datetime) -> bool:
     return reference < now - timedelta(seconds=SANDBOX_IDLE_TIMEOUT_SECONDS)
 
 
+def list_snapshotable_session_workspaces(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    sandbox: Sandbox,
+) -> list[UUID]:
+    """List session workspaces, removing any without an owning DB row."""
+    existing_session_ids: list[UUID] = []
+    for session_id in sandbox_manager.list_session_workspaces(sandbox.id):
+        if get_build_session(session_id, sandbox.user_id, db_session) is not None:
+            existing_session_ids.append(session_id)
+            continue
+
+        logger.warning(
+            "Removing orphan workspace for session %s from sandbox %s",
+            session_id,
+            sandbox.id,
+        )
+        try:
+            sandbox_manager.cleanup_session_workspace(sandbox.id, session_id)
+        except Exception:
+            logger.warning(
+                "Failed to remove orphan workspace for session %s from sandbox %s; "
+                "skipping it",
+                session_id,
+                sandbox.id,
+                exc_info=True,
+            )
+
+    return existing_session_ids
+
+
 def sleep_sandbox(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
@@ -441,7 +473,11 @@ def sleep_sandbox(
                 e,
             )
 
-    session_ids = sandbox_manager.list_session_workspaces(sandbox_id)
+    session_ids = list_snapshotable_session_workspaces(
+        db_session,
+        sandbox_manager,
+        sandbox,
+    )
 
     snapshot_failed = False
     for session_id in session_ids:
