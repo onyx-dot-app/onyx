@@ -1,7 +1,7 @@
 import multiprocessing
 from typing import Any
 
-from celery import Celery, signals, Task
+from celery import Celery, Task, signals
 from celery.signals import celeryd_init, worker_init, worker_ready, worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base

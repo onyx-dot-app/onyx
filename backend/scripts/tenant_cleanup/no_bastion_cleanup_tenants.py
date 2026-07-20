@@ -17,19 +17,19 @@ import json
 import signal
 import subprocess
 import sys
-from concurrent.futures import as_completed, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
+    TenantNotFoundInControlPlaneError,
     confirm_step,
     execute_control_plane_delete,
     find_background_pod,
     find_worker_pod,
     get_tenant_status,
     read_tenant_ids_from_csv,
-    TenantNotFoundInControlPlaneError,
 )
 
 # Global lock for thread-safe operations

@@ -32,7 +32,7 @@ from onyx.db.models import OAuthAccount, Persona, Tool, User
 from onyx.llm.factory import get_default_llm
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import CustomToolCallSummary
-from onyx.tools.tool_constructor import construct_tools, SearchToolConfig
+from onyx.tools.tool_constructor import SearchToolConfig, construct_tools
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.conftest import create_test_user

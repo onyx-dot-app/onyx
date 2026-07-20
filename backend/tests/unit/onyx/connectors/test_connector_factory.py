@@ -18,9 +18,9 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.factory import (
+    ConnectorMissingException,
     _connector_cache,
     _load_connector_class,
-    ConnectorMissingException,
     identify_connector_class,
     instantiate_connector,
     validate_ccpair_for_user,

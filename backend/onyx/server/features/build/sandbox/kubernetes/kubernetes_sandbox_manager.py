@@ -89,15 +89,15 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
     SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
     SIDECAR_SNAPSHOT_CREATE_PATH,
-    sidecar_snapshot_restore_path,
     SnapshotCreateRequest,
+    sidecar_snapshot_restore_path,
 )
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
 from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
-    get_push_key_pair,
     SidecarClient,
     SidecarRequestError,
     SidecarStatusError,
+    get_push_key_pair,
 )
 from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_COMPONENT,

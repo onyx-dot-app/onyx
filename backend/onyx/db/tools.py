@@ -1,4 +1,4 @@
-from typing import Any, cast, Type, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Type, cast
 from uuid import UUID
 
 from sqlalchemy import func, or_, select

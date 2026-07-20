@@ -2,7 +2,7 @@ import datetime
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import and_, case, cast, Date, func, or_, select
+from sqlalchemy import Date, and_, case, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType

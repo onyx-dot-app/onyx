@@ -2,7 +2,7 @@ import logging
 
 from celery import current_task
 
-from onyx.utils.logger import ColoredFormatter, get_json_formatter, PlainFormatter
+from onyx.utils.logger import ColoredFormatter, PlainFormatter, get_json_formatter
 
 
 class CeleryTaskJsonFormatter(logging.Formatter):

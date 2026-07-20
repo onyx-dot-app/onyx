@@ -2,7 +2,7 @@ import re
 import time
 from collections.abc import Callable, Generator
 from datetime import datetime, timezone
-from typing import Any, cast, TypeVar
+from typing import Any, TypeVar, cast
 
 import requests
 from hubspot import HubSpot

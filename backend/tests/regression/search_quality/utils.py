@@ -2,12 +2,12 @@ import json
 import re
 from pathlib import Path
 from textwrap import indent
-from typing import Any, cast, TextIO
+from typing import Any, TextIO, cast
 
 from ragas import (  # ty: ignore[unresolved-import]
-    evaluate,
     EvaluationDataset,
     SingleTurnSample,
+    evaluate,
 )
 from ragas.dataset_schema import EvaluationResult  # ty: ignore[unresolved-import]
 from ragas.metrics import (  # ty: ignore[unresolved-import]

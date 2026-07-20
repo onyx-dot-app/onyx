@@ -15,13 +15,10 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
-    desc,
     Enum,
-    event,
     Float,
     ForeignKey,
     ForeignKeyConstraint,
-    func,
     Index,
     Integer,
     Numeric,
@@ -29,9 +26,12 @@ from sqlalchemy import (
     Sequence,
     String,
     Text,
+    UniqueConstraint,
+    desc,
+    event,
+    func,
     text,
     true,
-    UniqueConstraint,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
@@ -40,8 +40,8 @@ from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
-    mapped_column,
     Mapper,
+    mapped_column,
     relationship,
     validates,
 )

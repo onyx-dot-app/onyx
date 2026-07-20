@@ -4,7 +4,7 @@ from typing import cast
 
 import numpy as np
 from rapidfuzz.distance.DamerauLevenshtein import normalized_similarity
-from sqlalchemy import desc, Float, func, MetaData, select, String, Table
+from sqlalchemy import Float, MetaData, String, Table, desc, func, select
 from sqlalchemy.dialects.postgresql import ARRAY
 
 from onyx.configs.kg_configs import (

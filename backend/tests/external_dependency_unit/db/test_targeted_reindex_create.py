@@ -25,11 +25,11 @@ from onyx.db.models import (
 )
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.targeted_reindex import (
+    MAX_TARGETS_PER_REQUEST,
+    TargetSpec,
     create_targeted_reindex_job,
     get_targeted_reindex_job,
-    MAX_TARGETS_PER_REQUEST,
     resolve_error_ids_to_targets,
-    TargetSpec,
 )
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,

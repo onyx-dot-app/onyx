@@ -17,10 +17,10 @@ import requests
 
 from onyx.connectors.sharepoint import connector as sp_connector
 from onyx.connectors.sharepoint.connector import (
+    SizeCapExceeded,
     _download_via_graph_api,
     _download_with_cap,
     _redact_url_for_logging,
-    SizeCapExceeded,
 )
 
 CAP = 10 * 1024 * 1024  # 10 MiB cap; well above the byte payloads used in tests

@@ -38,11 +38,11 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from onyx.configs.constants import DocumentSource, RETURN_SEPARATOR
+from onyx.configs.constants import RETURN_SEPARATOR, DocumentSource
 from onyx.connectors.models import (
-    convert_metadata_list_of_strings_to_dict,
     Document,
     TextSection,
+    convert_metadata_list_of_strings_to_dict,
 )
 from onyx.db.models import SearchSettings
 from onyx.document_index.chunk_content_enrichment import (
@@ -54,8 +54,8 @@ from onyx.document_index.opensearch.schema import (
     DocumentChunkWithoutVectors,
 )
 from onyx.indexing.chunker import (
-    get_metadata_suffix_for_document_index,
     MAX_METADATA_PERCENTAGE,
+    get_metadata_suffix_for_document_index,
 )
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk, IndexChunk

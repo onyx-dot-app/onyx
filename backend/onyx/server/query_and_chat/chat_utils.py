@@ -1,9 +1,9 @@
-from typing import Any, IO
+from typing import IO, Any
 
 from pydantic import BaseModel
 
 from onyx.file_processing.extract_file_text import xlsx_sheet_extraction
-from onyx.file_processing.file_types import OnyxMimeTypes, SPREADSHEET_MIME_TYPES
+from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPES, OnyxMimeTypes
 from onyx.file_store.models import ChatFileType
 
 # Per-sheet cap on CSV text returned for in-chat spreadsheet previews. Sheets are

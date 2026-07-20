@@ -1,6 +1,6 @@
 import contextvars
 import re
-from concurrent.futures import as_completed, Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from io import BytesIO
 from typing import Any, cast
 

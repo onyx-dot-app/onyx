@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecision, BuildSessionStatus
 from onyx.db.models import ActionApproval, BuildSession
-from onyx.sandbox_proxy.addons.gate import _IdentityResolver, GateAddon
+from onyx.sandbox_proxy.addons.gate import GateAddon, _IdentityResolver
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator

@@ -29,7 +29,7 @@ from fastapi_users.jwt import decode_jwt
 from httpx_oauth.oauth2 import BaseOAuth2
 
 from onyx.auth.mobile_sso.code_store import consume_sso_code
-from onyx.auth.users import generate_pkce_pair, get_oauth_router, STATE_TOKEN_AUDIENCE
+from onyx.auth.users import STATE_TOKEN_AUDIENCE, generate_pkce_pair, get_oauth_router
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 
 _STATE_SECRET = "test-secret"

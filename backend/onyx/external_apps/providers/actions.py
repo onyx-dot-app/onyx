@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, InstanceOf
+from pydantic import BaseModel, ConfigDict, Field, InstanceOf, field_validator
 
 from onyx.db.enums import EndpointPolicy
 

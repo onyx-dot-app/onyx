@@ -6,14 +6,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.db.usage import (
+    TenantUsageStats,
+    UsageLimitExceededError,
+    UsageType,
     check_usage_limit,
     get_current_window_start,
     get_or_create_tenant_usage,
     get_tenant_usage_stats,
     increment_usage,
-    TenantUsageStats,
-    UsageLimitExceededError,
-    UsageType,
 )
 
 

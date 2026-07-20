@@ -75,9 +75,9 @@ from onyx.server.features.build.session.llm_config import (
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.naming import generate_session_name
 from onyx.server.features.build.session.sandbox_lifecycle import (
+    ProvisioningPolicy,
     ensure_sandbox_ready,
     hydrate_managed_content,
-    ProvisioningPolicy,
 )
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.skills.push import build_user_skills_payload

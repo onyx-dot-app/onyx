@@ -20,7 +20,7 @@ since we only need to verify the arguments passed to update_single.
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 from uuid import uuid4
 
 from sqlalchemy.orm import Session

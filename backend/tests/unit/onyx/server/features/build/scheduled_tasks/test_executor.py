@@ -1,6 +1,6 @@
 from onyx.server.features.build.scheduled_tasks.executor import (
-    _clip_summary,
     SUMMARY_MAX_CHARS,
+    _clip_summary,
 )
 
 

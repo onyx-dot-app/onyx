@@ -13,9 +13,9 @@ import pytest
 
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.federated_connectors.factory import (
+    FederatedConnectorMissingException,
     _federated_connector_cache,
     _load_federated_connector_class,
-    FederatedConnectorMissingException,
     get_federated_connector_cls,
 )
 from onyx.federated_connectors.interfaces import FederatedConnector

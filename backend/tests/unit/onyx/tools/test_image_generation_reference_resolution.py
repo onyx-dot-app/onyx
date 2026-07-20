@@ -16,8 +16,8 @@ import pytest
 from onyx.image_gen.interfaces import ImageShape
 from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
     REFERENCE_IMAGE_FILE_IDS_FIELD,
+    ImageGenerationTool,
 )
 
 

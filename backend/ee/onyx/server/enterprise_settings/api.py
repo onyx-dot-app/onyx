@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response, status, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -29,9 +29,9 @@ from ee.onyx.server.scim.models import (
 from ee.onyx.utils.tier import get_tier
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import (
+    UserManager,
     current_user_with_expired_token,
     get_user_manager,
-    UserManager,
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission

@@ -8,7 +8,7 @@ import hashlib
 import io
 from uuid import UUID
 
-from sqlalchemy import and_, cast, func, Integer, select
+from sqlalchemy import Integer, and_, cast, func, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource, FileOrigin
