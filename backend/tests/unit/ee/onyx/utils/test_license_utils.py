@@ -2,21 +2,19 @@
 
 import base64
 import json
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-from ee.onyx.server.license.models import LicensePayload
-from ee.onyx.server.license.models import PlanType
-from ee.onyx.utils.license import get_license_status
-from ee.onyx.utils.license import is_license_valid
-from ee.onyx.utils.license import verify_license_signature
+from ee.onyx.server.license.models import LicensePayload, PlanType
+from ee.onyx.utils.license import (
+    get_license_status,
+    is_license_valid,
+    verify_license_signature,
+)
 from onyx.server.settings.models import ApplicationStatus
 
 

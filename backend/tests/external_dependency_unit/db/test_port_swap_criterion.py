@@ -28,29 +28,39 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.db import swap_index
 from onyx.db.document import mark_document_synced_secondary_pending
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import PortAttemptStatus
-from onyx.db.enums import SwitchoverType
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    PortAttemptStatus,
+    SwitchoverType,
+)
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    DocumentByConnectorCredentialPair,
+    PortAttempt,
+    SearchSettings,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import PortAttempt
-from onyx.db.models import SearchSettings
-from onyx.db.port_attempt import cancel_active_port_attempts
-from onyx.db.port_attempt import create_port_attempt
-from onyx.db.port_attempt import get_active_port_attempt
-from onyx.db.port_attempt import mark_port_canceled
-from onyx.db.port_attempt import mark_port_in_progress
-from onyx.db.port_attempt import mark_port_succeeded
-from onyx.db.port_attempt import request_port_cancel
-from onyx.db.swap_index import _port_swap_ready
-from onyx.db.swap_index import _required_cc_pairs_for_switchover
-from onyx.db.swap_index import check_and_perform_index_swap
+from onyx.db.port_attempt import (
+    cancel_active_port_attempts,
+    create_port_attempt,
+    get_active_port_attempt,
+    mark_port_canceled,
+    mark_port_in_progress,
+    mark_port_succeeded,
+    request_port_cancel,
+)
+from onyx.db.swap_index import (
+    _port_swap_ready,
+    _required_cc_pairs_for_switchover,
+    check_and_perform_index_swap,
+)
 from onyx.kg.models import KGStage
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair_and_future
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_future_search_settings
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    cleanup_cc_pair_and_future,
+    make_cc_pair,
+    make_future_search_settings,
+)
 
 _PENDING_DOC_PREFIX = "swapdoc-"
 

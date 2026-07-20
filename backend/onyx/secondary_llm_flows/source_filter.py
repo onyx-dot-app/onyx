@@ -2,17 +2,13 @@ import json
 
 from pydantic import BaseModel
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import DocumentSource, MessageType
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ChatCompletionMessage
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import UserMessage
+from onyx.llm.models import ChatCompletionMessage, ReasoningEffort, UserMessage
 from onyx.prompts.filter_extration import SOURCE_SCOPE_DECISION_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import parse_bracketed_list
 

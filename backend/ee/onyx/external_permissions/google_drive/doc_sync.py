@@ -1,20 +1,25 @@
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
-from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
-from ee.onyx.external_permissions.google_drive.models import PermissionType
+from ee.onyx.external_permissions.google_drive.models import (
+    GoogleDrivePermission,
+    PermissionType,
+)
 from ee.onyx.external_permissions.google_drive.permission_retrieval import (
     get_permissions_by_ids,
 )
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
-from onyx.access.models import DocExternalAccess
-from onyx.access.models import ElementExternalAccess
-from onyx.access.models import ExternalAccess
-from onyx.access.models import NodeExternalAccess
-from onyx.access.utils import build_domain_group_id
-from onyx.access.utils import build_ext_group_name_for_onyx
+from ee.onyx.external_permissions.perm_sync_types import (
+    FetchAllDocumentsFunction,
+    FetchAllDocumentsIdsFunction,
+)
+from ee.onyx.external_permissions.utils import credential_json
+from onyx.access.models import (
+    DocExternalAccess,
+    ElementExternalAccess,
+    ExternalAccess,
+    NodeExternalAccess,
+)
+from onyx.access.utils import build_domain_group_id, build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import GoogleDriveFileType
@@ -355,12 +360,7 @@ def gdrive_doc_sync(
     google_drive_connector = GoogleDriveConnector(
         **cc_pair.connector.connector_specific_config
     )
-    credential_json = (
-        cc_pair.credential.credential_json.get_value(apply_mask=False)
-        if cc_pair.credential.credential_json
-        else {}
-    )
-    google_drive_connector.load_credentials(credential_json)
+    google_drive_connector.load_credentials(credential_json(cc_pair))
 
     slim_doc_generator = _get_slim_doc_generator(cc_pair, google_drive_connector)
 

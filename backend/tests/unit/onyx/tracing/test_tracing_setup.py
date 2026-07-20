@@ -4,9 +4,11 @@ from unittest.mock import patch
 
 from onyx.tracing import setup as tracing_setup
 from onyx.tracing.dynamic_processor import DynamicTracingProcessor
-from onyx.tracing.provider_config import BraintrustConfig
-from onyx.tracing.provider_config import EffectiveTracingConfig
-from onyx.tracing.provider_config import LangfuseConfig
+from onyx.tracing.provider_config import (
+    BraintrustConfig,
+    EffectiveTracingConfig,
+    LangfuseConfig,
+)
 
 RESOLVE = "onyx.tracing.dynamic_processor.resolve_effective_tracing_config"
 BUILD = "onyx.tracing.dynamic_processor.build_delegates"

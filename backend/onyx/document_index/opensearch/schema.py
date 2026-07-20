@@ -1,33 +1,37 @@
 import hashlib
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import Self
+from datetime import datetime, timezone
+from typing import Any, Self
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_serializer
-from pydantic import field_validator
-from pydantic import model_serializer
-from pydantic import model_validator
-from pydantic import SerializerFunctionWrapHandler
+from pydantic import (
+    BaseModel,
+    Field,
+    SerializerFunctionWrapHandler,
+    ValidationInfo,
+    field_serializer,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
-from onyx.configs.app_configs import OPENSEARCH_INDEX_NUM_REPLICAS
-from onyx.configs.app_configs import OPENSEARCH_INDEX_NUM_SHARDS
-from onyx.configs.app_configs import OPENSEARCH_TEXT_ANALYZER
-from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
+from onyx.configs.app_configs import (
+    OPENSEARCH_INDEX_NUM_REPLICAS,
+    OPENSEARCH_INDEX_NUM_SHARDS,
+    OPENSEARCH_TEXT_ANALYZER,
+    USING_AWS_MANAGED_OPENSEARCH,
+)
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
-from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
-from onyx.document_index.opensearch.constants import EF_SEARCH
-from onyx.document_index.opensearch.constants import M
-from onyx.document_index.opensearch.string_filtering import DocumentIDTooLongError
-from onyx.document_index.opensearch.string_filtering import (
-    filter_and_validate_document_id,
+from onyx.document_index.opensearch.constants import (
+    DEFAULT_MAX_CHUNK_SIZE,
+    EF_CONSTRUCTION,
+    EF_SEARCH,
+    M,
 )
 from onyx.document_index.opensearch.string_filtering import (
     MAX_DOCUMENT_ID_ENCODED_LENGTH,
+    DocumentIDTooLongError,
+    filter_and_validate_document_id,
 )
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.tenant import get_tenant_id_short_string
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -39,6 +43,7 @@ CONTENT_VECTOR_FIELD_NAME = "content_vector"
 SOURCE_TYPE_FIELD_NAME = "source_type"
 METADATA_LIST_FIELD_NAME = "metadata_list"
 LAST_UPDATED_FIELD_NAME = "last_updated"
+CREATED_AT_FIELD_NAME = "created_at"
 PUBLIC_FIELD_NAME = "public"
 ACCESS_CONTROL_LIST_FIELD_NAME = "access_control_list"
 HIDDEN_FIELD_NAME = "hidden"
@@ -128,17 +133,6 @@ def get_opensearch_doc_chunk_id(
     return opensearch_doc_chunk_id
 
 
-def set_or_convert_timezone_to_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        # astimezone will raise if value does not have a timezone set.
-        value = value.replace(tzinfo=timezone.utc)
-    else:
-        # Does appropriate time conversion if value was set in a different
-        # timezone.
-        value = value.astimezone(timezone.utc)
-    return value
-
-
 class DocumentChunkWithoutVectors(BaseModel):
     """
     Represents a chunk of a document in the OpenSearch index without vectors.
@@ -171,6 +165,9 @@ class DocumentChunkWithoutVectors(BaseModel):
     metadata_list: list[str] | None = None
     # If it exists, time zone should always be UTC.
     last_updated: datetime | None = None
+    # Time the document was created at the source. If it exists, time zone should
+    # always be UTC.
+    created_at: datetime | None = None
 
     public: bool
     access_control_list: list[str]
@@ -238,7 +235,7 @@ class DocumentChunkWithoutVectors(BaseModel):
         serialized_exclude_none = {k: v for k, v in serialized.items() if v is not None}
         return serialized_exclude_none
 
-    @field_serializer("last_updated", mode="wrap")
+    @field_serializer("last_updated", "created_at", mode="wrap")
     def serialize_datetime_fields_to_epoch_seconds(
         self,
         value: datetime | None,
@@ -251,12 +248,14 @@ class DocumentChunkWithoutVectors(BaseModel):
         """
         if value is None:
             return None
-        value = set_or_convert_timezone_to_utc(value)
+        value = datetime_to_utc(value)
         return int(value.timestamp())
 
-    @field_validator("last_updated", mode="before")
+    @field_validator("last_updated", "created_at", mode="before")
     @classmethod
-    def parse_epoch_seconds_to_datetime(cls, value: Any) -> datetime | None:
+    def parse_epoch_seconds_to_datetime(
+        cls, value: Any, info: ValidationInfo
+    ) -> datetime | None:
         """Parses seconds since the Unix epoch to a datetime object.
 
         If the input is None, returns None.
@@ -266,11 +265,10 @@ class DocumentChunkWithoutVectors(BaseModel):
         if value is None:
             return None
         if isinstance(value, datetime):
-            value = set_or_convert_timezone_to_utc(value)
-            return value
+            return datetime_to_utc(value)
         if not isinstance(value, int):
             raise ValueError(
-                f"Bug: Expected an int for the last_updated property from OpenSearch, got {type(value)} instead."
+                f"Bug: Expected an int for the datetime property '{info.field_name}' from OpenSearch, got {type(value)} instead."
             )
         return datetime.fromtimestamp(value, tz=timezone.utc)
 
@@ -463,6 +461,12 @@ class DocumentSchema:
                     "format": "epoch_second",
                     # For some reason date defaults to False, even though it
                     # would make sense to sort by date.
+                    "doc_values": True,
+                },
+                # Source creation time.
+                CREATED_AT_FIELD_NAME: {
+                    "type": "date",
+                    "format": "epoch_second",
                     "doc_values": True,
                 },
                 # Access control fields.

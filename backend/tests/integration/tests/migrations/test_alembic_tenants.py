@@ -16,18 +16,21 @@ from typing import Any
 
 import pytest
 from pytest_alembic import create_alembic_fixture
-from pytest_alembic.tests import test_single_head_revision
-from pytest_alembic.tests import test_up_down_consistency
-from pytest_alembic.tests import test_upgrade
+from pytest_alembic.tests import (
+    test_single_head_revision,
+    test_up_down_consistency,
+    test_upgrade,
+)
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
-from onyx.configs.app_configs import POSTGRES_HOST
-from onyx.configs.app_configs import POSTGRES_PASSWORD
-from onyx.configs.app_configs import POSTGRES_PORT
-from onyx.configs.app_configs import POSTGRES_USER
-from onyx.db.engine.sql_engine import build_connection_string
-from onyx.db.engine.sql_engine import SYNC_DB_API
+from onyx.configs.app_configs import (
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_PORT,
+    POSTGRES_USER,
+)
+from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 
 
 @pytest.fixture

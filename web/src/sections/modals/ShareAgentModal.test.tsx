@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { render, screen } from "@tests/setup/test-utils";
 import ShareAgentModal, { ShareAgentModalProps } from "./ShareAgentModal";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 
 jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,

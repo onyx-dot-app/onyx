@@ -2,22 +2,18 @@ import datetime
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import and_
-from sqlalchemy import case
-from sqlalchemy import cast
-from sqlalchemy import Date
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import select
+from sqlalchemy import Date, and_, case, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatMessageFeedback
-from onyx.db.models import ChatSession
-from onyx.db.models import Persona
-from onyx.db.models import User
-from onyx.db.models import UserRole
+from onyx.db.models import (
+    ChatMessage,
+    ChatMessageFeedback,
+    ChatSession,
+    Persona,
+    User,
+    UserRole,
+)
 
 
 def fetch_query_analytics(

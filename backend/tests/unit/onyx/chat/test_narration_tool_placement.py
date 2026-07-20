@@ -13,19 +13,22 @@ pre-tool answer content was emitted, so it forms its own render group.
 
 from collections.abc import Iterator
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.model_response import ChatCompletionDeltaToolCall
-from onyx.llm.model_response import Delta
-from onyx.llm.model_response import FunctionCall
-from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.model_response import StreamingChoice
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    FunctionCall,
+    ModelResponseStream,
+    StreamingChoice,
+)
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
+)
 
 
 def _chunk(delta: Delta) -> ModelResponseStream:

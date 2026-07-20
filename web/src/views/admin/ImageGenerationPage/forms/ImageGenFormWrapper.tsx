@@ -18,7 +18,7 @@ import {
   ImageGenSubmitPayload,
   FormValues,
 } from "@/views/admin/ImageGenerationPage/forms/types";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 
 export function ImageGenFormWrapper<T extends FormValues>({
   modal,

@@ -1,61 +1,59 @@
 import contextlib
 import time
-from collections.abc import Generator
-from collections.abc import Iterable
-from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from collections.abc import Generator, Iterable, Sequence
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_
-from sqlalchemy import CompoundSelect
-from sqlalchemy import delete
-from sqlalchemy import distinct
-from sqlalchemy import exists
-from sqlalchemy import func
-from sqlalchemy import literal
-from sqlalchemy import or_
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import tuple_
-from sqlalchemy import update
+from sqlalchemy import (
+    CompoundSelect,
+    Select,
+    and_,
+    delete,
+    distinct,
+    exists,
+    func,
+    literal,
+    or_,
+    select,
+    tuple_,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import null
 
-from onyx.configs.constants import DEFAULT_BOOST
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
 from onyx.configs.kg_configs import KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document_access import apply_document_access_filter
-from onyx.db.entities import delete_from_kg_entities__no_commit
-from onyx.db.entities import delete_from_kg_entities_extraction_staging__no_commit
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.entities import (
+    delete_from_kg_entities__no_commit,
+    delete_from_kg_entities_extraction_staging__no_commit,
+)
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
 from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    DocumentByConnectorCredentialPair,
+    KGEntity,
+    KGRelationship,
+    User,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import KGEntity
-from onyx.db.models import KGRelationship
-from onyx.db.models import User
-from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.db.relationships import (
+    delete_from_kg_relationships__no_commit,
     delete_from_kg_relationships_extraction_staging__no_commit,
 )
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
-from onyx.db.utils import DocumentRow
-from onyx.db.utils import model_to_dict
-from onyx.db.utils import SortOrder
+from onyx.db.utils import DocumentRow, SortOrder, model_to_dict
 from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
@@ -988,6 +986,48 @@ def update_docs_updated_at__no_commit(
 
     for document in documents_to_update:
         document.doc_updated_at = ids_to_new_updated_at[document.id]
+
+
+def update_docs_created_at__no_commit(
+    ids_to_new_created_at: dict[str, datetime],
+    db_session: Session,
+) -> None:
+    doc_ids = list(ids_to_new_created_at.keys())
+    documents_to_update = (
+        db_session.query(DbDocument).filter(DbDocument.id.in_(doc_ids)).all()
+    )
+
+    for document in documents_to_update:
+        document.doc_created_at = ids_to_new_created_at[document.id]
+
+
+def backfill_docs_created_at__no_commit(
+    ids_to_created_at: dict[str, datetime],
+    db_session: Session,
+) -> None:
+    """Set ``doc_created_at`` for docs whose value is newly available or changed,
+    bumping ``last_modified`` so the metadata sync task propagates it to the index.
+
+    Only touches rows that actually change, so a repeated sweep doesn't needlessly
+    re-dirty every document.
+    """
+    if not ids_to_created_at:
+        return
+
+    documents_to_update = (
+        db_session.query(DbDocument)
+        .filter(DbDocument.id.in_(list(ids_to_created_at.keys())))
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    for document in documents_to_update:
+        if document.chunk_count is None:
+            continue
+        new_created_at = ids_to_created_at[document.id]
+        if document.doc_created_at == new_created_at:
+            continue
+        document.doc_created_at = new_created_at
+        document.last_modified = now
 
 
 def update_docs_last_modified__no_commit(

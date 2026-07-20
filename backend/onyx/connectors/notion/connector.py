@@ -1,37 +1,42 @@
 import re
 from collections.abc import Generator
 from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import Optional
-from urllib.parse import parse_qs
-from urllib.parse import urlparse
+from typing import Any, Optional, cast
+from urllib.parse import parse_qs, urlparse
 
 import requests
 from pydantic import BaseModel
 from typing_extensions import override
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import NormalizationResult
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    NormalizationResult,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    ImageSection,
+    TextSection,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.batching import batch_generator
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -958,9 +963,12 @@ class NotionConnector(LoadConnector, PollConnector):
                         sections=cast(list[TextSection | ImageSection], sections),
                         source=DocumentSource.NOTION,
                         semantic_identifier=page_title,
-                        doc_updated_at=datetime.fromisoformat(
-                            page.last_edited_time
-                        ).astimezone(timezone.utc),
+                        doc_updated_at=datetime_to_utc(
+                            datetime.fromisoformat(page.last_edited_time)
+                        ),
+                        doc_created_at=datetime_to_utc(
+                            datetime.fromisoformat(page.created_time)
+                        ),
                         metadata={},
                         parent_hierarchy_raw_node_id=parent_raw_id,
                     )

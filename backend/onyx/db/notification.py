@@ -1,10 +1,7 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import cast
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import cast, select, update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -13,8 +10,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
-from onyx.db.models import Notification
-from onyx.db.models import User
+from onyx.db.models import Notification, User
 
 
 def _notification_filters(
@@ -102,6 +98,19 @@ def delete_notifications_by_additional_data(
         func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
         == additional_data_normalized,
     ).delete(synchronize_session=False)
+
+
+def delete_notifications_by_type(
+    notif_type: NotificationType,
+    db_session: Session,
+) -> None:
+    """Hard-delete every notification of this type for all users, so an
+    admin-authored source that changed out-of-band re-materializes fresh on
+    the next read."""
+    db_session.query(Notification).filter(Notification.notif_type == notif_type).delete(
+        synchronize_session=False
+    )
+    db_session.commit()
 
 
 def get_notification_by_id(

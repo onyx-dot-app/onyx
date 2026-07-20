@@ -5,8 +5,10 @@ https://confluence.atlassian.com/conf85/check-who-can-view-a-page-1283360557.htm
 
 from collections.abc import Generator
 
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
+from ee.onyx.external_permissions.perm_sync_types import (
+    FetchAllDocumentsFunction,
+    FetchAllDocumentsIdsFunction,
+)
 from ee.onyx.external_permissions.utils import generic_doc_sync
 from onyx.access.models import ElementExternalAccess
 from onyx.configs.constants import DocumentSource

@@ -3,41 +3,49 @@ interactive (``create_session__no_commit``) and headless
 (``ensure_sandbox_running``) flows."""
 
 import time
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from uuid import UUID
 
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.models import Sandbox, User
 from onyx.db.users import fetch_user_by_id
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
-from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
+from onyx.server.features.build.configs import (
+    SANDBOX_IDLE_TIMEOUT_SECONDS,
+    SANDBOX_MAX_CONCURRENT_PER_ORG,
+)
 from onyx.server.features.build.db.build_session import (
+    clear_nextjs_ports_for_user,
     mark_user_sessions_idle__no_commit,
 )
-from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
-from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
-from onyx.server.features.build.db.sandbox import delete_snapshot__no_commit
-from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
-from onyx.server.features.build.db.sandbox import get_running_sandbox_count
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import get_snapshots_for_session
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.db.sandbox import (
+    create_sandbox__no_commit,
+    create_snapshot__no_commit,
+    delete_snapshot__no_commit,
+    ensure_sandbox_pat,
+    get_running_sandbox_count,
+    get_sandbox_by_user_id,
+    get_snapshots_for_session,
+    set_sandbox_skills_hashes__no_commit,
+    update_sandbox_status__no_commit,
+)
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.models import (
+    FileSet,
+    LLMProviderConfig,
+    SnapshotResult,
+)
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.errors import SandboxProvisioningError
-from onyx.skills.push import hydrate_sandbox_skills
+from onyx.skills.push import (
+    build_user_skills_payload,
+    compute_skill_runtime_hash,
+    hydrate_sandbox_skills,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -138,23 +146,48 @@ def hydrate_managed_content(
     sandbox_id: UUID,
     user: User,
     db_session: DBSession,
+    *,
+    connectable_apps_section: str | None = None,
     skills_files: FileSet | None = None,
-) -> None:
+) -> bool:
     """Push managed skills + user library into a sandbox.
 
     Must complete before the sandbox is reported RUNNING: turns dispatch as
     soon as RUNNING is visible, and opencode scans the skills directory once
     per instance, so a turn started mid-push permanently misses managed
-    skills. Each push is best-effort — failures are logged, never raised.
+    skills. The persisted hash also covers the connectable-app guidance used
+    to regenerate ``AGENTS.md`` on reload.
+
+    ``connectable_apps_section`` and ``skills_files`` must be supplied together
+    or both omitted; mismatched nullity is a programmer error and raises
+    ``ValueError`` eagerly. Runtime push failures are logged, never raised.
     """
+    if (connectable_apps_section is None) != (skills_files is None):
+        raise ValueError(
+            "connectable_apps_section and skills_files must be provided together"
+        )
+    if connectable_apps_section is None or skills_files is None:
+        connectable_apps_section, skills_files = build_user_skills_payload(
+            user, db_session
+        )
+
+    skills_hydrated = False
     try:
-        hydrate_sandbox_skills(
+        skills_hash = compute_skill_runtime_hash(skills_files, connectable_apps_section)
+        result = hydrate_sandbox_skills(
             sandbox_id,
             user,
             db_session,
             sandbox_manager=sandbox_manager,
             files=skills_files,
         )
+        if result.succeeded == result.targets:
+            with db_session.begin_nested():
+                set_sandbox_skills_hashes__no_commit(
+                    db_session,
+                    {sandbox_id: skills_hash},
+                )
+            skills_hydrated = True
     except Exception:
         logger.warning("Failed to push skills to sandbox %s", sandbox_id, exc_info=True)
     try:
@@ -168,6 +201,7 @@ def hydrate_managed_content(
         logger.warning(
             "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
         )
+    return skills_hydrated
 
 
 class ProvisioningPolicy(str, Enum):

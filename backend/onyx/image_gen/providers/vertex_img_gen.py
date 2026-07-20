@@ -3,26 +3,39 @@ from __future__ import annotations
 import base64
 import json
 from datetime import datetime
-from typing import Any
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
 from onyx.image_gen.exceptions import ImageProviderCredentialsError
-from onyx.image_gen.interfaces import ImageGenerationProvider
-from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
-from onyx.image_gen.interfaces import ReferenceImage
+from onyx.image_gen.interfaces import (
+    ImageGenerationProvider,
+    ImageGenerationProviderCredentials,
+    ReferenceImage,
+)
+from onyx.llm.well_known_providers.constants import (
+    VERTEX_AUTH_METHOD_KWARG,
+    VERTEX_AUTH_METHOD_SERVICE_ACCOUNT,
+    VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY,
+    VERTEX_CREDENTIALS_FILE_KWARG,
+    VERTEX_LOCATION_KWARG,
+    VERTEX_PROJECT_KWARG,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 
 if TYPE_CHECKING:
     from onyx.image_gen.interfaces import ImageGenerationResponse
 
+VERTEX_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
+
 
 class VertexCredentials(BaseModel):
-    vertex_credentials: str
+    # None when authenticating via Workload Identity (ambient GKE credentials).
+    vertex_credentials: str | None
     vertex_location: str
     project_id: str
+    use_workload_identity: bool = False
 
 
 class VertexImageGenerationProvider(ImageGenerationProvider):
@@ -33,6 +46,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
         self._vertex_credentials = vertex_credentials.vertex_credentials
         self._vertex_location = vertex_credentials.vertex_location
         self._vertex_project = vertex_credentials.project_id
+        self._use_workload_identity = vertex_credentials.use_workload_identity
 
     @classmethod
     def validate_credentials(
@@ -86,6 +100,11 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
 
         from litellm import image_generation
 
+        # In Workload Identity mode, omit vertex_credentials so LiteLLM falls back
+        # to google.auth.default() (the GKE metadata server / ambient credentials).
+        if not self._use_workload_identity and self._vertex_credentials is not None:
+            kwargs["vertex_credentials"] = self._vertex_credentials
+
         with traced_llm_call(
             flow=LLMFlow.IMAGE_GENERATION,
             model=model,
@@ -99,7 +118,6 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
                 n=n,
                 quality=quality,
                 vertex_location=self._vertex_location,
-                vertex_credentials=self._vertex_credentials,
                 vertex_project=self._vertex_project,
                 **kwargs,
             )
@@ -114,15 +132,24 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
     ) -> ImageGenerationResponse:
         from google import genai
         from google.genai import types as genai_types
-        from google.oauth2 import service_account
-        from litellm.types.utils import ImageObject
-        from litellm.types.utils import ImageResponse
+        from litellm.types.utils import ImageObject, ImageResponse
 
-        service_account_info = json.loads(self._vertex_credentials)
-        credentials = service_account.Credentials.from_service_account_info(
-            service_account_info,
-            scopes=["https://www.googleapis.com/auth/cloud-platform"],
-        )
+        credentials: Any
+        if self._use_workload_identity:
+            import google.auth
+
+            # Ambient GKE credentials (pod's bound GCP service account).
+            credentials, _ = google.auth.default(scopes=VERTEX_SCOPES)
+        else:
+            from google.oauth2 import service_account
+
+            if self._vertex_credentials is None:
+                raise ImageProviderCredentialsError("Vertex credentials are required")
+            service_account_info = json.loads(self._vertex_credentials)
+            credentials = service_account.Credentials.from_service_account_info(
+                service_account_info,
+                scopes=VERTEX_SCOPES,
+            )
 
         client = genai.Client(
             vertexai=True,
@@ -212,14 +239,34 @@ def _parse_to_vertex_credentials(
     if not custom_config:
         raise ImageProviderCredentialsError("Custom config is required")
 
-    vertex_credentials = custom_config.get("vertex_credentials")
-    vertex_location = custom_config.get("vertex_location")
-
-    if not vertex_credentials:
-        raise ImageProviderCredentialsError("Vertex credentials are required")
-
+    vertex_location = custom_config.get(VERTEX_LOCATION_KWARG)
     if not vertex_location:
         raise ImageProviderCredentialsError("Vertex location is required")
+
+    # Missing auth method is treated as service_account_json for backwards
+    # compatibility with configs created before this field existed.
+    auth_method = custom_config.get(
+        VERTEX_AUTH_METHOD_KWARG, VERTEX_AUTH_METHOD_SERVICE_ACCOUNT
+    )
+
+    if auth_method == VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY:
+        # No service account JSON: authenticate via ambient GKE credentials. The
+        # project can't be inferred from a key file, so it must be explicit.
+        vertex_project = (custom_config.get(VERTEX_PROJECT_KWARG) or "").strip()
+        if not vertex_project:
+            raise ImageProviderCredentialsError(
+                "Project ID is required when using Workload Identity"
+            )
+        return VertexCredentials(
+            vertex_credentials=None,
+            vertex_location=vertex_location,
+            project_id=vertex_project,
+            use_workload_identity=True,
+        )
+
+    vertex_credentials = custom_config.get(VERTEX_CREDENTIALS_FILE_KWARG)
+    if not vertex_credentials:
+        raise ImageProviderCredentialsError("Vertex credentials are required")
 
     try:
         vertex_json = json.loads(vertex_credentials)
@@ -236,4 +283,5 @@ def _parse_to_vertex_credentials(
         vertex_credentials=vertex_credentials,
         vertex_location=vertex_location,
         project_id=vertex_project,
+        use_workload_identity=False,
     )

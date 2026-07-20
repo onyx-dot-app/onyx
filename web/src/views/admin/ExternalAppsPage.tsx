@@ -5,9 +5,10 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Button, Divider, Text } from "@opal/components";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import { SvgArrowLeft, SvgPlug, SvgPlus, SvgTrash } from "@opal/icons";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   availableBuiltInDescriptors,
   BuiltInExternalAppDescriptor,
@@ -18,41 +19,30 @@ import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderM
 import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
 import {
   deleteExternalApp,
-  setExternalAppEnabled,
+  updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
-import { toast } from "@/hooks/useToast";
 
 interface ModalState {
   descriptor: BuiltInExternalAppDescriptor;
   existingApp: ExternalAppAdminResponse | null;
 }
 
-interface ExternalAppsPageProps {
-  onBack?: () => void;
-}
-
 // Admin External Apps management; members connect their own accounts on the Apps page.
-export default function ExternalAppsPage({
-  onBack,
-}: ExternalAppsPageProps = {}) {
+export default function ExternalAppsPage() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgPlug}
-        title="External Apps"
+        icon={ADMIN_ROUTES.CRAFT_APPS.icon}
+        title={ADMIN_ROUTES.CRAFT_APPS.title}
         description="Connect third-party integrations so users in your org can authorize them with their personal accounts in Onyx Craft."
         rightChildren={
-          onBack ? (
-            <div className="flex items-center gap-2">
-              <Button
-                prominence="secondary"
-                icon={SvgArrowLeft}
-                onClick={onBack}
-              >
-                Back
-              </Button>
-            </div>
-          ) : undefined
+          <Button
+            href="/craft/v1/apps"
+            prominence="secondary"
+            icon={SvgArrowLeft}
+          >
+            Back to Craft
+          </Button>
         }
       />
       <SettingsLayouts.Body>
@@ -188,7 +178,7 @@ interface ConfiguredAppCardProps {
   onEdit: (descriptor: BuiltInExternalAppDescriptor) => void;
   /** Edit a custom app (no descriptor — config is on the row itself). */
   onEditCustom: (app: ExternalAppAdminResponse) => void;
-  onChange: () => void;
+  onChange: () => Promise<unknown>;
 }
 
 function ConfiguredAppCard({
@@ -204,8 +194,8 @@ function ConfiguredAppCard({
   async function toggleEnabled() {
     setIsMutating(true);
     try {
-      await setExternalAppEnabled(app, !app.enabled);
-      onChange();
+      await updateExternalApp(app.id, { enabled: !app.enabled });
+      await onChange();
     } catch (e) {
       toast.error(
         e instanceof Error
@@ -221,7 +211,7 @@ function ConfiguredAppCard({
     setIsMutating(true);
     try {
       await deleteExternalApp(app.id);
-      onChange();
+      await onChange();
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : `Failed to delete "${app.name}"`
@@ -238,7 +228,9 @@ function ConfiguredAppCard({
         <div className="flex-1 flex flex-col gap-0.5">
           <Text font="main-ui-action">{app.name}</Text>
           <Text font="secondary-body" color="text-03">
-            {app.enabled ? "Enabled" : "Disabled"}
+            {app.enabled
+              ? "Users connect this app on the Apps page to make its skill available"
+              : "Disabled — unavailable to users"}
           </Text>
         </div>
         <div className="flex items-center gap-2">
@@ -266,9 +258,9 @@ function ConfiguredAppCard({
             onClick={toggleEnabled}
             disabled={isMutating}
           >
-            {isMutating ? "…" : app.enabled ? "Disable" : "Enable"}
+            {app.enabled ? "Disable" : "Enable"}
           </Button>
-          {/* Onyx-managed built-ins (cloud) can't be deleted — only disabled. */}
+          {/* Onyx-managed built-ins are provisioned by Onyx. */}
           {!app.is_onyx_managed && (
             <Button
               prominence="tertiary"

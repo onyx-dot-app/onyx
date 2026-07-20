@@ -181,6 +181,53 @@ export const connectorConfigs: Record<
     ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
+  lumapps: {
+    description: "Configure LumApps connector",
+    values: [
+      {
+        type: "text",
+        label: "API Base URL (cell host)",
+        name: "base_url",
+        optional: false,
+        description:
+          "Your LumApps cell/API host, e.g. https://go-cell-005.api.lumapps.com (not the docs site api.lumapps.com).",
+      },
+      {
+        type: "text",
+        label: "Organization ID",
+        name: "organization_id",
+        optional: false,
+        description: "Your LumApps organization id (numeric).",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: "Instance (site) IDs",
+        name: "instance_ids",
+        optional: true,
+        description:
+          "Restrict indexing to specific instance/site IDs. Leave empty to index all content visible to the service user.",
+      },
+      {
+        type: "list",
+        label: "Custom Content Type IDs",
+        name: "custom_content_types",
+        optional: true,
+        description:
+          "Restrict to specific custom content type IDs. Leave empty to index all content types.",
+      },
+      {
+        type: "text",
+        label: "Language",
+        name: "lang",
+        optional: true,
+        default: "en",
+        description:
+          "Language used for content title/body and metadata labels (ISO 639-1, e.g. en, fr).",
+      },
+    ],
+  },
   github: {
     description: "Configure GitHub connector",
     values: [
@@ -1363,6 +1410,32 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     values: [],
     advanced_values: [],
   },
+  box: {
+    description: "Configure Box connector",
+    values: [
+      {
+        type: "list",
+        query: "Enter folder IDs or URLs to index:",
+        label: "Folders",
+        name: "folder_ids",
+        description:
+          "Box folder IDs or folder URLs (e.g. https://app.box.com/folder/123456789) to index. " +
+          "Leave empty to index everything visible to the authenticated user.",
+        optional: true,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Include web links:",
+        label: "Include Web Links",
+        name: "include_web_links",
+        description:
+          "Also index Box web links (bookmarks) as lightweight documents.",
+        optional: true,
+      },
+    ],
+  },
   dropbox: {
     description: "Configure Dropbox connector",
     values: [],
@@ -1706,6 +1779,20 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
       },
     ],
   },
+  canvas: {
+    description: "Configure Canvas connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Canvas base URL:",
+        label: "Canvas Base URL",
+        name: "canvas_base_url",
+        optional: false,
+        description: "e.g. https://school.instructure.com",
+      },
+    ],
+    advanced_values: [],
+  },
   egnyte: {
     description: "Configure Egnyte connector",
     values: [
@@ -1996,6 +2083,14 @@ export interface GitlabConfig {
   include_issues: boolean;
 }
 
+export interface LumAppsConfig {
+  base_url: string;
+  organization_id: string;
+  instance_ids?: string[];
+  custom_content_types?: string[];
+  lang?: string;
+}
+
 export interface BitbucketConfig {
   workspace: string;
   repositories?: string;
@@ -2059,6 +2154,10 @@ export interface DiscourseConfig {
 
 export interface AxeroConfig {
   spaces?: string[];
+}
+
+export interface CanvasConfig {
+  canvas_base_url: string;
 }
 
 export interface DrupalWikiConfig {

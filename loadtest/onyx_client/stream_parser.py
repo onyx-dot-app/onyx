@@ -12,8 +12,7 @@ monkey-patching, where importing onyx.* (grpc, psycopg, etc.) breaks.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 
 # Packet type strings (subset of StreamingType in
 # backend/onyx/server/query_and_chat/streaming_models.py — keep in sync).

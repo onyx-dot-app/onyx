@@ -9,12 +9,14 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import Request
 
-from onyx.auth.permissions import ALL_PERMISSIONS
-from onyx.auth.permissions import get_effective_permissions
-from onyx.auth.permissions import IMPLIED_PERMISSIONS
-from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
-from onyx.auth.permissions import require_permission
-from onyx.auth.permissions import resolve_effective_permissions
+from onyx.auth.permissions import (
+    ALL_PERMISSIONS,
+    IMPLIED_PERMISSIONS,
+    NON_TOGGLEABLE_PERMISSIONS,
+    get_effective_permissions,
+    require_permission,
+    resolve_effective_permissions,
+)
 from onyx.auth.users import get_anonymous_user
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode

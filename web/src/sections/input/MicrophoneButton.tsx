@@ -5,7 +5,7 @@ import { Button } from "@opal/components";
 import { SvgMicrophone, SvgSimpleLoader } from "@opal/icons";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { ChatState } from "@/app/app/interfaces";
 
 interface MicrophoneButtonProps {

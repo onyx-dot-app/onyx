@@ -6,19 +6,18 @@ on every agent loop iteration.
 """
 
 import json
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.tools.models import ChatFile
-from onyx.tools.models import PythonToolOverrideKwargs
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import ChatFile, PythonToolOverrideKwargs, ToolResponse
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
-from onyx.tools.tool_implementations.python.python_tool import _build_staging_notice
-from onyx.tools.tool_implementations.python.python_tool import _code_references_file
-from onyx.tools.tool_implementations.python.python_tool import _select_files_for_staging
-from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.python.python_tool import (
+    PythonTool,
+    _build_staging_notice,
+    _code_references_file,
+    _select_files_for_staging,
+)
 
 TOOL_MODULE = "onyx.tools.tool_implementations.python.python_tool"
 

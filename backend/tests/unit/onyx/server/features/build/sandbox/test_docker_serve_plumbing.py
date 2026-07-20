@@ -23,8 +23,10 @@ import pytest
 
 import onyx.server.features.build.sandbox.docker.dev_mode_serve as dev_mode_serve
 import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
-from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
-from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
+from onyx.server.features.build.configs import (
+    OPENCODE_SERVE_PORT,
+    OPENCODE_SERVER_PASSWORD,
+)
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     DockerSandboxManager,
 )
@@ -235,14 +237,46 @@ def test_render_agents_md_returns_escaped_string(
     """
     mgr = _bare_manager()
     agents_md = mgr._render_agents_md(
-        llm_config=llm_config,
+        agent_provider=llm_config.provider,
+        agent_model=llm_config.model_name,
         nextjs_port=None,
-        skills_section="",
         connectable_apps_section="",
     )
     assert isinstance(agents_md, str)
     assert agents_md
     assert "'" not in agents_md or "'\\''" in agents_md
+    assert "## Skills" not in agents_md
+    assert "{{AVAILABLE_SKILLS_SECTION}}" not in agents_md
+
+
+def test_attachments_section_is_inserted_before_connectable_apps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_script = ""
+
+    def capture_script(
+        _container: object,
+        command: list[str],
+        *,
+        check: bool,
+    ) -> MagicMock:
+        nonlocal captured_script
+        assert check is False
+        captured_script = command[2]
+        return MagicMock()
+
+    monkeypatch.setattr(
+        dsm,
+        "_run_in_container_as_sandbox_user",
+        capture_script,
+    )
+
+    mgr = _bare_manager()
+    mgr._ensure_agents_md_attachments_section(MagicMock(), _SBX)
+
+    assert 'grep -q "## Connectable apps"' in captured_script
+    assert "/^## Connectable apps/" in captured_script
+    assert "## Skills" not in captured_script
 
 
 def test_init_serve_state_is_idempotent() -> None:
@@ -267,9 +301,9 @@ def test_prompt_slot_serializes_on_docker() -> None:
 
     other_session = UUID("00000000-0000-0000-0000-000000000001")
     with mgr.prompt_slot(_SBX, other_session) as outer:
-        assert outer is True
+        assert outer.acquired is True
         with mgr.prompt_slot(_SBX, other_session) as inner:
-            assert inner is False
+            assert inner.acquired is False
 
 
 def test_provision_generates_fresh_password_and_injects_into_container_env(

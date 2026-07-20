@@ -1,7 +1,6 @@
 import abc
 from collections import defaultdict
-from collections.abc import Generator
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -10,8 +9,10 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import InternetSearchProvider
 from onyx.db.web_search import fetch_web_search_provider_by_name
-from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
-from onyx.tools.tool_implementations.web_search.models import WebSearchResult
+from onyx.tools.tool_implementations.web_search.models import (
+    WebSearchProvider,
+    WebSearchResult,
+)
 from shared_configs.enums import WebSearchProviderType
 
 

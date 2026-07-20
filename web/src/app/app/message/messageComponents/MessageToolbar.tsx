@@ -22,7 +22,7 @@ import { SvgRefreshCw, SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { LlmManager } from "@/lib/hooks";
 import { RegenerationFactory } from "@/app/app/message/messageComponents/AgentMessage";
 import useFeedbackController from "@/hooks/useFeedbackController";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
@@ -233,7 +233,7 @@ export default function MessageToolbar({
 
       <div
         data-testid="AgentMessage/toolbar"
-        className="flex md:flex-row justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1"
+        className="flex justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1"
       >
         <TooltipGroup>
           <div className="flex items-center">

@@ -31,7 +31,7 @@ const STATUS_CONFIG = {
   restoring: {
     color: "bg-status-warning-05",
     pulse: true,
-    label: "Waking sandbox...",
+    label: "Restoring session...",
   },
   terminated: {
     color: "bg-status-error-05",

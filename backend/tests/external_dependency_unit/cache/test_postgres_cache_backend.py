@@ -10,10 +10,11 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
-from onyx.cache.interface import TTL_KEY_NOT_FOUND
-from onyx.cache.interface import TTL_NO_EXPIRY
-from onyx.cache.postgres_backend import cleanup_expired_cache_entries
-from onyx.cache.postgres_backend import PostgresCacheBackend
+from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY
+from onyx.cache.postgres_backend import (
+    PostgresCacheBackend,
+    cleanup_expired_cache_entries,
+)
 from onyx.db.models import CacheStore
 
 

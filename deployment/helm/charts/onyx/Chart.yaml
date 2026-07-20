@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.6.10
+version: 0.6.16
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,13 +16,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: fixed
-      description: Support clusters running their own cluster-managed CloudNativePG operator.
-        New postgresqlOperator.enabled toggle (mirrors redisOperator.enabled) skips the bundled
-        CNPG operator and its CRDs while keeping the Cluster CR for the external operator to
-        reconcile; the CRDs move byte-for-byte into a condition-gated CRDs-only subchart
-        (onyx-cnpg-crds) with postgresql.installCRDs as an independent override. Default
-        behavior is unchanged; CRDs also no longer install when postgresql.enabled is false.
+    - kind: added
+      description: Add the Box connector with permission sync, and expose its configuration env
+        vars (BOX_CONNECTOR_SIZE_THRESHOLD, BOX_PERMISSION_DOC_SYNC_FREQUENCY,
+        BOX_PERMISSION_GROUP_SYNC_FREQUENCY) in the background config map values.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

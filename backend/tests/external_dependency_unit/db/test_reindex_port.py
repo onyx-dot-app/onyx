@@ -17,12 +17,9 @@ covered by applying the migration, which this repo does not test programmaticall
 """
 
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -32,64 +29,70 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.tasks.docprocessing.utils import should_index
 from onyx.background.celery.tasks.port import tasks as port_task
-from onyx.background.celery.tasks.port.tasks import run_check_for_port
-from onyx.background.celery.tasks.port.tasks import run_port_attempt
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import MAX_CONCURRENT_PORT_ATTEMPTS
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.background.celery.tasks.port.tasks import run_check_for_port, run_port_attempt
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, MAX_CONCURRENT_PORT_ATTEMPTS
+from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db import port_attempt as port_attempt_db
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
-from onyx.db.document import document_has_indexable_cc_pair
-from onyx.db.document import filter_existing_cc_pair_document_ids
-from onyx.db.document import get_document_ids_for_cc_pair_batch
-from onyx.db.document import get_max_document_id_for_cc_pair
-from onyx.db.document import mark_document_as_modified
-from onyx.db.document import mark_document_as_synced
-from onyx.db.document import mark_document_synced_secondary_pending
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.enums import PortAttemptStatus
+from onyx.db.document import (
+    document_has_indexable_cc_pair,
+    filter_existing_cc_pair_document_ids,
+    get_document_ids_for_cc_pair_batch,
+    get_max_document_id_for_cc_pair,
+    mark_document_as_modified,
+    mark_document_as_synced,
+    mark_document_synced_secondary_pending,
+)
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    EmbeddingPrecision,
+    IndexingStatus,
+    IndexModelStatus,
+    PortAttemptStatus,
+)
 from onyx.db.index_attempt import (
     count_unique_active_cc_pairs_with_successful_index_attempts,
+    count_unique_cc_pairs_with_successful_index_attempts,
+    create_synthetic_seed_attempt,
+    get_latest_successful_index_attempt_for_cc_pair_id,
+    mock_successful_index_attempt,
 )
-from onyx.db.index_attempt import count_unique_cc_pairs_with_successful_index_attempts
-from onyx.db.index_attempt import create_synthetic_seed_attempt
-from onyx.db.index_attempt import get_latest_successful_index_attempt_for_cc_pair_id
-from onyx.db.index_attempt import mock_successful_index_attempt
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    DocumentByConnectorCredentialPair,
+    IndexAttempt,
+    PortAttempt,
+    SearchSettings,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import PortAttempt
-from onyx.db.models import SearchSettings
-from onyx.db.port_attempt import cancel_active_port_attempts
-from onyx.db.port_attempt import commit_port_cursor
-from onyx.db.port_attempt import count_consecutive_failed_port_attempts_no_progress
-from onyx.db.port_attempt import create_port_attempt
-from onyx.db.port_attempt import get_active_port_attempt
-from onyx.db.port_attempt import get_latest_port_attempt
-from onyx.db.port_attempt import mark_port_canceled
-from onyx.db.port_attempt import mark_port_failed
-from onyx.db.port_attempt import mark_port_in_progress
-from onyx.db.port_attempt import mark_port_succeeded
-from onyx.db.port_attempt import port_backfill_has_pending_work
-from onyx.db.port_attempt import request_port_cancel
-from onyx.db.search_settings import create_search_settings
-from onyx.db.search_settings import get_current_search_settings
+from onyx.db.port_attempt import (
+    cancel_active_port_attempts,
+    commit_port_cursor,
+    count_consecutive_failed_port_attempts_no_progress,
+    create_port_attempt,
+    get_active_port_attempt,
+    get_latest_port_attempt,
+    mark_port_canceled,
+    mark_port_failed,
+    mark_port_in_progress,
+    mark_port_succeeded,
+    port_backfill_has_pending_work,
+    request_port_cancel,
+)
+from onyx.db.search_settings import create_search_settings, get_current_search_settings
 from onyx.db.swap_index import _port_swap_ready
 from onyx.document_index.opensearch import port_copy
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
 from onyx.indexing.port_reembed import ReembedStrategy
 from onyx.kg.models import KGStage
 from shared_configs.contextvars import get_current_tenant_id
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair_and_future
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_future_search_settings
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    cleanup_cc_pair_and_future,
+    make_cc_pair,
+    make_future_search_settings,
+)
 from tests.external_dependency_unit.indexing_helpers import (
     seed_cc_pair_documents as _seed_cc_pair_documents,
 )

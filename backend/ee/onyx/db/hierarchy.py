@@ -4,19 +4,14 @@ This module provides permission-aware hierarchy node access for Enterprise Editi
 It filters hierarchy nodes based on user email and external group membership.
 """
 
-from sqlalchemy import any_
-from sqlalchemy import cast
-from sqlalchemy import or_
-from sqlalchemy import select
-from sqlalchemy import String
+from sqlalchemy import String, any_, cast, or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import HierarchyNodeType
-from onyx.db.hierarchy import escape_like_pattern
-from onyx.db.hierarchy import HIERARCHY_NODE_SEARCH_LIMIT
+from onyx.db.hierarchy import HIERARCHY_NODE_SEARCH_LIMIT, escape_like_pattern
 from onyx.db.models import HierarchyNode
 
 
@@ -27,11 +22,15 @@ def _build_hierarchy_access_filter(
     """Build SQLAlchemy filter for hierarchy node access.
 
     A user can access a hierarchy node if any of the following are true:
+    - The node is the SOURCE root for its source (always visible as the tree root)
     - The node is marked as public (is_public=True)
     - The user's email is in the node's external_user_emails list
     - Any of the user's external group IDs overlap with the node's external_user_group_ids
     """
-    access_filters: list[ColumnElement[bool]] = [HierarchyNode.is_public.is_(True)]
+    access_filters: list[ColumnElement[bool]] = [
+        HierarchyNode.node_type == HierarchyNodeType.SOURCE,
+        HierarchyNode.is_public.is_(True),
+    ]
     if user_email:
         access_filters.append(any_(HierarchyNode.external_user_emails) == user_email)
     if external_group_ids:
@@ -49,23 +48,7 @@ def _get_accessible_hierarchy_nodes_for_source(
     user_email: str,
     external_group_ids: list[str],
 ) -> list[HierarchyNode]:
-    """
-    EE version: Returns hierarchy nodes filtered by user permissions.
-
-    A user can access a hierarchy node if any of the following are true:
-    - The node is marked as public (is_public=True)
-    - The user's email is in the node's external_user_emails list
-    - Any of the user's external group IDs overlap with the node's external_user_group_ids
-
-    Args:
-        db_session: SQLAlchemy session
-        source: Document source type
-        user_email: User's email for permission checking
-        external_group_ids: User's external group IDs for permission checking
-
-    Returns:
-        List of HierarchyNode objects the user has access to
-    """
+    """EE version: hierarchy nodes the user can access, always including the SOURCE root."""
     stmt = select(HierarchyNode).where(
         HierarchyNode.source == source,
         HierarchyNode.node_type != HierarchyNodeType.STUB,

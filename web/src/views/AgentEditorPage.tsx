@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
@@ -12,6 +12,7 @@ import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
+import InsertUserVariableMenu from "@/sections/agents/InsertUserVariableMenu";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
 import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
 import {
@@ -42,8 +43,7 @@ import SwitchField from "@/refresh-components/form/SwitchField";
 import { Tooltip } from "@opal/components";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { toast } from "@/hooks/useToast";
+import { useCreateModal } from "@opal/components";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import { Popover, PopoverMenu } from "@opal/components";
@@ -73,11 +73,15 @@ import { useAgents, useLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import { AgentUpsertParameters } from "@/lib/agents/types";
-import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
+import { useMcpServersForPersonaEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
+import {
+  AgentEditorMCPServer,
+  MCPTool,
+  ToolSnapshot,
+} from "@/lib/tools/interfaces";
 import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
@@ -91,7 +95,7 @@ import {
 } from "@/lib/agents/svc";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import ShareAgentModal, {
   ShareDraftState,
 } from "@/sections/modals/ShareAgentModal";
@@ -297,7 +301,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
 }
 
 interface MCPServerCardProps {
-  server: MCPServer;
+  server: AgentEditorMCPServer;
   tools: MCPTool[];
   isLoading: boolean;
 }
@@ -367,73 +371,78 @@ function MCPServerCard({
   }
 
   return (
-    <Card
-      expandable
-      expanded={!isFolded}
-      border="solid"
-      rounding="lg"
-      padding="sm"
-      expandedContent={cardContent}
+    <Disabled
+      disabled={!server.can_attach}
+      tooltip="You no longer have access to this MCP server. Its existing tools will be preserved."
     >
-      <CardLayout.Header
-        bottomChildren={
-          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-            <InputTypeIn
-              placeholder="Search tools..."
-              variant="internal"
-              searchIcon
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {enabledTools.length > 0 && (
-              <Button
-                prominence="internal"
-                rightIcon={isFolded ? SvgExpand : SvgFold}
-                onClick={() => setIsFolded((prev) => !prev)}
-              >
-                {isFolded ? "Expand" : "Fold"}
-              </Button>
-            )}
-          </GeneralLayouts.Section>
-        }
+      <Card
+        expandable
+        expanded={!isFolded}
+        border="solid"
+        rounding="lg"
+        padding="sm"
+        expandedContent={cardContent}
       >
-        <div className="p-2">
-          <ContentAction
-            icon={getActionIcon(server.server_url, server.name)}
-            title={server.name}
-            description={server.description}
-            sizePreset="main-ui"
-            variant="section"
-            padding="fit"
-            rightChildren={
-              <GeneralLayouts.Section
-                flexDirection="row"
-                gap={0.5}
-                alignItems="start"
-              >
-                <EnabledCount
-                  enabledCount={enabledCount}
-                  totalCount={enabledTools.length}
-                />
-                <SwitchField
-                  name={`${serverFieldName}.enabled`}
-                  onCheckedChange={(checked) => {
-                    enabledTools.forEach((tool) => {
-                      setFieldValue(
-                        `${serverFieldName}.tool_${tool.id}`,
-                        checked
-                      );
-                    });
-                    if (!checked) return;
-                    setIsFolded(false);
-                  }}
-                />
-              </GeneralLayouts.Section>
-            }
-          />
-        </div>
-      </CardLayout.Header>
-    </Card>
+        <CardLayout.Header
+          bottomChildren={
+            <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+              <InputTypeIn
+                placeholder="Search tools..."
+                variant="internal"
+                searchIcon
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              {enabledTools.length > 0 && (
+                <Button
+                  prominence="internal"
+                  rightIcon={isFolded ? SvgExpand : SvgFold}
+                  onClick={() => setIsFolded((prev) => !prev)}
+                >
+                  {isFolded ? "Expand" : "Fold"}
+                </Button>
+              )}
+            </GeneralLayouts.Section>
+          }
+        >
+          <div className="p-2">
+            <ContentAction
+              icon={getActionIcon(server.server_url, server.name)}
+              title={server.name}
+              description={server.description}
+              sizePreset="main-ui"
+              variant="section"
+              padding="fit"
+              rightChildren={
+                <GeneralLayouts.Section
+                  flexDirection="row"
+                  gap={0.5}
+                  alignItems="start"
+                >
+                  <EnabledCount
+                    enabledCount={enabledCount}
+                    totalCount={enabledTools.length}
+                  />
+                  <SwitchField
+                    name={`${serverFieldName}.enabled`}
+                    onCheckedChange={(checked) => {
+                      enabledTools.forEach((tool) => {
+                        setFieldValue(
+                          `${serverFieldName}.tool_${tool.id}`,
+                          checked
+                        );
+                      });
+                      if (!checked) return;
+                      setIsFolded(false);
+                    }}
+                  />
+                </GeneralLayouts.Section>
+              }
+            />
+          </div>
+        </CardLayout.Header>
+      </Card>
+    </Disabled>
   );
 }
 
@@ -552,6 +561,9 @@ export default function AgentEditorPage({
 
   const agentDraftStorageKey = draftKey("agent-editor", "new");
   const clearAgentDraftRef = useRef<(() => void) | null>(null);
+  // Tracks the latest user_file_ids so async upload callbacks reconcile against
+  // current form state rather than a stale snapshot from when the upload began.
+  const userFileIdsRef = useRef<string[]>([]);
 
   // Labels are edited in the Share Agent section and saved with the form
   const { labels: allLabels, createLabel } = useLabels();
@@ -608,11 +620,12 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpData, isLoading: isMcpLoading } = useMcpServersForAgentEditor();
+  const { mcpServers, isLoading: isMcpLoading } = useMcpServersForPersonaEditor(
+    existingAgent?.id
+  );
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
     useOpenApiTools();
 
-  const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
 
   // Check if the *BUILT-IN* tools are available.
@@ -645,16 +658,19 @@ export default function AgentEditorPage({
     ? undefined
     : "Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin.";
 
-  // Group MCP server tools from availableTools by server ID
+  // Include inaccessible attached tools so edits preserve them.
   const mcpServersWithTools = mcpServers.map((server) => {
-    const serverTools: MCPTool[] = (availableTools || [])
+    const candidateTools = server.can_attach
+      ? availableTools
+      : (existingAgent?.tools ?? []);
+    const serverTools: MCPTool[] = candidateTools
       .filter((tool) => tool.mcp_server_id === server.id)
       .map((tool) => ({
         id: tool.id.toString(),
         icon: getActionIcon(server.server_url, server.name),
         name: tool.display_name || tool.name,
         description: tool.description,
-        isAvailable: true,
+        isAvailable: server.can_attach,
         isEnabled: tool.enabled,
       }));
 
@@ -1082,7 +1098,15 @@ export default function AgentEditorPage({
     const files = e.target.files;
     if (!files || files.length === 0) return;
     try {
-      let selectedIds = [...(currentFileIds || [])];
+      // Seed lazily from the latest form state on the first async callback so
+      // selections the user changed while the upload was in flight are kept.
+      // onFailure and onSuccess share this variable and both run in the same
+      // resolution, so their edits stay consistent with each other.
+      let workingIds: string[] | null = null;
+      const seed = () => {
+        if (workingIds === null) workingIds = [...userFileIdsRef.current];
+        return workingIds;
+      };
       const optimistic = await beginUpload(
         Array.from(files),
         null,
@@ -1094,17 +1118,23 @@ export default function AgentEditorPage({
               .filter((f) => f.temp_id)
               .map((f) => [f.temp_id as string, f.id])
           );
-          const replaced = (selectedIds || []).map(
-            (id: string) => tempToFinal.get(id) ?? id
-          );
-          selectedIds = replaced;
-          setFieldValue("user_file_ids", replaced);
+          workingIds = seed().map((id) => tempToFinal.get(id) ?? id);
+          setFieldValue("user_file_ids", workingIds);
+        },
+        (failedTempIds) => {
+          // Drop optimistic ids for rejected files (e.g. size/token limit) so
+          // they don't linger as "uploading" and keep the submit button disabled.
+          const failed = new Set(failedTempIds);
+          workingIds = seed().filter((id) => !failed.has(id));
+          setFieldValue("user_file_ids", workingIds);
         }
       );
       if (optimistic) {
         const optimisticIds = optimistic.map((f) => f.id);
-        selectedIds = [...selectedIds, ...optimisticIds];
-        setFieldValue("user_file_ids", selectedIds);
+        setFieldValue("user_file_ids", [
+          ...(currentFileIds || []),
+          ...optimisticIds,
+        ]);
       }
     } catch (error) {
       console.error("Upload error:", error);
@@ -1144,6 +1174,9 @@ export default function AgentEditorPage({
           initialStatus={{ warnings: {} }}
         >
           {({ isSubmitting, isValid, dirty, values, setFieldValue }) => {
+            // Keep the ref in sync so async upload callbacks read current ids.
+            userFileIdsRef.current = values.user_file_ids;
+
             const fileStatusMap = new Map(
               allRecentFiles.map((f) => [f.id, f.status])
             );
@@ -1382,6 +1415,9 @@ export default function AgentEditorPage({
                           <InputTextAreaField
                             name="instructions"
                             placeholder="Think step by step and show reasoning for complex problems. Use specific examples. Emphasize action items, and leave blanks for the human to fill in when you have unknown. Use a polite enthusiastic tone."
+                            rightSection={
+                              <InsertUserVariableMenu fieldName="instructions" />
+                            }
                           />
                         </InputVertical>
 
@@ -1744,6 +1780,9 @@ export default function AgentEditorPage({
                                 <InputTextAreaField
                                   name="reminders"
                                   placeholder="Remember, I want you to always format your response as a numbered list."
+                                  rightSection={
+                                    <InsertUserVariableMenu fieldName="reminders" />
+                                  }
                                 />
                               </InputVertical>
                               <Text text03 secondaryBody>

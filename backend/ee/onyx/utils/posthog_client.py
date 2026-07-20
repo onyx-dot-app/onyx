@@ -4,10 +4,12 @@ from urllib.parse import unquote
 
 from posthog import Posthog
 
-from ee.onyx.configs.app_configs import MARKETING_POSTHOG_API_KEY
-from ee.onyx.configs.app_configs import POSTHOG_API_KEY
-from ee.onyx.configs.app_configs import POSTHOG_DEBUG_LOGS_ENABLED
-from ee.onyx.configs.app_configs import POSTHOG_HOST
+from ee.onyx.configs.app_configs import (
+    MARKETING_POSTHOG_API_KEY,
+    POSTHOG_API_KEY,
+    POSTHOG_DEBUG_LOGS_ENABLED,
+    POSTHOG_HOST,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 

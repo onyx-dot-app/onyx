@@ -1,29 +1,23 @@
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from collections.abc import Callable, Generator
+from datetime import datetime, timezone
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 import pytest
-from jira import JIRA
-from jira import JIRAError
+from jira import JIRA, JIRAError
 from jira.resources import Issue
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.jira.connector import JiraConnector
-from onyx.connectors.jira.connector import JiraConnectorCheckpoint
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.jira.connector import JiraConnector, JiraConnectorCheckpoint
 from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import ConnectorFailure, Document, SlimDocument
 from onyx.utils.logger import setup_logger
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
@@ -57,6 +51,7 @@ def create_mock_issue() -> Callable[..., MagicMock]:
         key: str = "TEST-123",
         summary: str = "Test Issue",
         updated: str = "2023-01-01T12:00:00.000+0000",
+        created: str = "2023-01-01T12:00:00.000+0000",
         description: str = "Test Description",
         labels: list[str] | None = None,
         project_key: str = "TEST",
@@ -72,6 +67,7 @@ def create_mock_issue() -> Callable[..., MagicMock]:
         mock_issue.key = key
         mock_issue.fields.summary = summary
         mock_issue.fields.updated = updated
+        mock_issue.fields.created = created
         mock_issue.fields.description = description
         mock_issue.fields.labels = labels or []
 

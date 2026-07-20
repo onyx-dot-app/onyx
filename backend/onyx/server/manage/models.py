@@ -1,34 +1,27 @@
 import re
 from datetime import datetime
 from enum import Enum
-from typing import Any
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import field_validator
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.enums import DefaultAppMode
-from onyx.db.enums import SupportedLanguage
-from onyx.db.enums import ThemePreference
+from onyx.db.enums import (
+    DefaultAppMode,
+    SSOProviderType,
+    SupportedLanguage,
+    ThemePreference,
+)
 from onyx.db.memory import MAX_MEMORIES_PER_USER
-from onyx.db.models import AllowedAnswerFilters
-from onyx.db.models import ChannelConfig
+from onyx.db.models import AllowedAnswerFilters, ChannelConfig, User
 from onyx.db.models import SlackBot as SlackAppModel
 from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
-from onyx.db.models import User
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
-from onyx.server.features.persona.models import FullPersonaSnapshot
-from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.models import FullUserSnapshot
-from onyx.server.models import InvitedUserSnapshot
+from onyx.server.features.persona.models import FullPersonaSnapshot, PersonaSnapshot
+from onyx.server.models import FullUserSnapshot, InvitedUserSnapshot
 
 if TYPE_CHECKING:
     pass
@@ -50,16 +43,35 @@ class VersionResponse(BaseModel):
     backend_version: str
 
 
-class AuthTypeResponse(BaseModel):
-    auth_type: AuthType
+class SSOProviderOption(BaseModel):
+    # No sensitive config. Allowed domains stay server-side so the public login
+    # page does not enumerate the participating companies' domains.
+    name: str
+    display_name: str
+    provider_type: SSOProviderType
+    authorize_url: str
+
+
+class AuthConfigResponse(BaseModel):
+    # Cloud (multi-tenant) signup provisions a tenant and offers Google login.
+    multi_tenant: bool
     # specifies whether the current auth setup requires
     # users to have verified emails
     requires_verification: bool
     anonymous_user_enabled: bool | None = None
     password_min_length: int
+    password_max_length: int
+    password_require_uppercase: bool = False
+    password_require_lowercase: bool = False
+    password_require_digit: bool = False
+    password_require_special_char: bool = False
     # whether there are any users in the system
     has_users: bool = True
     oauth_enabled: bool = False
+    # Enabled DB-backed SSO providers, one login button each. Empty on cloud and
+    # on instances with no provider rows, so the page falls back to the built-in
+    # password (and Google when oauth_enabled) login.
+    sso_providers: list[SSOProviderOption] = []
 
 
 class UserSpecificAssistantPreference(BaseModel):

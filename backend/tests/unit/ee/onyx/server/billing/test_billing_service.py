@@ -1,22 +1,21 @@
 """Tests for the billing service layer."""
 
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
-from ee.onyx.server.billing.models import BillingInformationResponse
-from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
-from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
-from ee.onyx.server.billing.models import SeatUpdateResponse
-from ee.onyx.server.billing.models import SubscriptionStatusResponse
+from ee.onyx.server.billing.models import (
+    BillingInformationResponse,
+    CreateCheckoutSessionResponse,
+    CreateCustomerPortalSessionResponse,
+    SeatUpdateResponse,
+    SubscriptionStatusResponse,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
-from .conftest import make_mock_http_client
-from .conftest import make_mock_response
+from .conftest import make_mock_http_client, make_mock_response
 
 
 class TestMakeBillingRequest:

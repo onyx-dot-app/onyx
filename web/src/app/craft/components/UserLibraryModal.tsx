@@ -11,7 +11,7 @@ import {
   deleteLibraryFile,
 } from "@/app/craft/services/apiServices";
 import { LibraryEntry } from "@/app/craft/types/user-library";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { cn } from "@opal/utils";
 import {
   SvgFolder,

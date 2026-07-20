@@ -6,19 +6,27 @@ from typing import Any
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
-from onyx.connectors.outline.client import OutlineApiClient
-from onyx.connectors.outline.client import OutlineClientRequestFailedError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
+from onyx.connectors.outline.client import (
+    OutlineApiClient,
+    OutlineClientRequestFailedError,
+)
 
 
 class OutlineConnector(LoadConnector, PollConnector):
@@ -77,6 +85,11 @@ class OutlineConnector(LoadConnector, PollConnector):
             if collection.get("updatedAt") is not None
             else None
         )
+        created_at_str = (
+            str(collection.get("createdAt"))
+            if collection.get("createdAt") is not None
+            else None
+        )
         return Document(
             id="outline_collection__" + str(collection.get("id")),
             sections=[TextSection(link=url, text=html.unescape(text))],
@@ -85,6 +98,10 @@ class OutlineConnector(LoadConnector, PollConnector):
             title=title,
             doc_updated_at=(
                 time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=(
+                time_str_to_utc(created_at_str) if created_at_str is not None else None
             ),
             metadata={"type": "collection"},
         )
@@ -103,6 +120,11 @@ class OutlineConnector(LoadConnector, PollConnector):
             if document.get("updatedAt") is not None
             else None
         )
+        created_at_str = (
+            str(document.get("createdAt"))
+            if document.get("createdAt") is not None
+            else None
+        )
         return Document(
             id="outline_document__" + str(document.get("id")),
             sections=[TextSection(link=url, text=html.unescape(text))],
@@ -111,6 +133,10 @@ class OutlineConnector(LoadConnector, PollConnector):
             title=title,
             doc_updated_at=(
                 time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=(
+                time_str_to_utc(created_at_str) if created_at_str is not None else None
             ),
             metadata={"type": "document"},
         )

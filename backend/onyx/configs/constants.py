@@ -2,8 +2,7 @@ import os
 import platform
 import re
 import socket
-from enum import auto
-from enum import Enum
+from enum import Enum, auto
 
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"
@@ -201,6 +200,15 @@ CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
 
+# Chat-retention (TTL) cleanup tuning. Each delete task removes the oldest
+# CHAT_TTL_DELETE_BATCH_SIZE expired sessions and chains the next task, so
+# deletion drains one batch at a time on the light queue and interleaves with
+# the other light-queue work instead of running as one long task.
+CHAT_TTL_DELETE_BATCH_SIZE = 100
+# How long a queued delete task is valid before workers discard it. Bounds queue
+# growth; if a task expires the beat starts a fresh chain on its next run.
+CELERY_CHAT_TTL_DELETE_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
+
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
 
 TMP_DRALPHA_PERSONA_NAME = "KG Beta"
@@ -235,6 +243,7 @@ class DocumentSource(str, Enum):
     GOOGLE_SITES = "google_sites"
     ZENDESK = "zendesk"
     LOOPIO = "loopio"
+    BOX = "box"
     DROPBOX = "dropbox"
     SHAREPOINT = "sharepoint"
     TEAMS = "teams"
@@ -263,6 +272,7 @@ class DocumentSource(str, Enum):
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
     BRAINTRUST = "braintrust"
+    LUMAPPS = "lumapps"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -292,6 +302,7 @@ class NotificationType(str, Enum):
     RELEASE_NOTES = "release_notes"
     ASSISTANT_FILES_READY = "assistant_files_ready"
     FEATURE_ANNOUNCEMENT = "feature_announcement"
+    SYSTEM_ANNOUNCEMENT = "system_announcement"  # admin-authored site-wide banner
     CONNECTOR_REPEATED_ERRORS = "connector_repeated_errors"
     LICENSE_EXPIRY_WARNING = "license_expiry_warning"
     SCHEDULED_TASK_FAILED = "scheduled_task_failed"
@@ -310,16 +321,6 @@ class BlobType(str, Enum):
 class DocumentIndexType(str, Enum):
     COMBINED = "combined"  # Vespa
     SPLIT = "split"  # Typesense + Qdrant
-
-
-class AuthType(str, Enum):
-    BASIC = "basic"
-    GOOGLE_OAUTH = "google_oauth"
-    OIDC = "oidc"
-    SAML = "saml"
-
-    # google auth and basic
-    CLOUD = "cloud"
 
 
 class QueryHistoryType(str, Enum):
@@ -435,6 +436,10 @@ class OnyxCeleryQueues:
     CONNECTOR_HIERARCHY_FETCHING = "connector_hierarchy_fetching"
     CSV_GENERATION = "csv_generation"
 
+    # Chat retention (TTL) hard-deletion queue, consumed by the light worker.
+    # Kept off the primary "celery" queue so cleanup never starves check_for_indexing.
+    CHAT_TTL_DELETION = "chat_ttl_deletion"
+
     # User file processing queue
     USER_FILE_PROCESSING = "user_file_processing"
     USER_FILE_PROJECT_SYNC = "user_file_project_sync"
@@ -481,6 +486,9 @@ class OnyxRedisLocks:
     SECURITY_SETTINGS = "da_lock:security_settings"
 
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
+    # In-flight marker: set while a chat-TTL cleanup chain is active (spanning
+    # its chained tasks) so the beat won't start a second chain per tenant.
+    CHAT_TTL_CHAIN_ACTIVE = "da_lock:chat_ttl_chain_active"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 
@@ -724,6 +732,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.GOOGLE_SITES: "Website pages and content",
     DocumentSource.ZENDESK: "Support tickets and help articles",
     DocumentSource.LOOPIO: "RFP responses and content library",
+    DocumentSource.BOX: "Cloud-stored files and folders",
     DocumentSource.DROPBOX: "Cloud-stored files and folders",
     DocumentSource.SHAREPOINT: "Documents and team sites",
     DocumentSource.TEAMS: "Chat messages and channels",
@@ -749,4 +758,5 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.IMAP: "Email messages and threads",
     DocumentSource.TESTRAIL: "Test cases and QA management",
     DocumentSource.BRAINTRUST: "LLM eval experiments, datasets, and prompts",
+    DocumentSource.LUMAPPS: "Intranet pages, news, and content",
 }

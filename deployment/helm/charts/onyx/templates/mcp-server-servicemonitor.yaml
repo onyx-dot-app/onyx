@@ -1,0 +1,31 @@
+{{- if and .Values.monitoring.serviceMonitors.enabled .Values.mcpServer.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "onyx.fullname" . }}-mcp-server
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.monitoring.serviceMonitors.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app: {{ .Values.mcpServer.deploymentLabels.app }}
+  endpoints:
+    - port: mcp-server-port
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      {{- $metricsAuth := .Values.auth.metricsAuth | default dict }}
+      {{- if dig "enabled" false $metricsAuth }}
+      authorization:
+        credentials:
+          name: {{ include "onyx.secretName" $metricsAuth }}
+          key: {{ default "METRICS_AUTH_TOKEN" (dig "secretKeys" "METRICS_AUTH_TOKEN" "" $metricsAuth) }}
+      {{- end }}
+{{- end }}

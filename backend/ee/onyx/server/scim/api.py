@@ -13,58 +13,56 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import FastAPI
-from fastapi import Query
-from fastapi import Request
-from fastapi import Response
+from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.license import acquire_seat_lock
-from ee.onyx.db.license import check_seat_availability
+from ee.onyx.db.license import acquire_seat_lock, check_seat_availability
 from ee.onyx.db.scim import ScimDAL
-from ee.onyx.server.scim.auth import ScimAuthError
-from ee.onyx.server.scim.auth import verify_scim_token
+from ee.onyx.server.scim.auth import ScimAuthError, verify_scim_token
 from ee.onyx.server.scim.filtering import parse_scim_filter
-from ee.onyx.server.scim.models import SCIM_LIST_RESPONSE_SCHEMA
-from ee.onyx.server.scim.models import ScimError
-from ee.onyx.server.scim.models import ScimGroupMember
-from ee.onyx.server.scim.models import ScimGroupResource
-from ee.onyx.server.scim.models import ScimListResponse
-from ee.onyx.server.scim.models import ScimMappingFields
-from ee.onyx.server.scim.models import ScimName
-from ee.onyx.server.scim.models import ScimPatchRequest
-from ee.onyx.server.scim.models import ScimServiceProviderConfig
-from ee.onyx.server.scim.models import ScimUserResource
-from ee.onyx.server.scim.patch import apply_group_patch
-from ee.onyx.server.scim.patch import apply_user_patch
-from ee.onyx.server.scim.patch import ScimPatchError
-from ee.onyx.server.scim.providers.base import get_default_provider
-from ee.onyx.server.scim.providers.base import ScimProvider
-from ee.onyx.server.scim.providers.base import serialize_emails
-from ee.onyx.server.scim.schema_definitions import ENTERPRISE_USER_SCHEMA_DEF
-from ee.onyx.server.scim.schema_definitions import GROUP_RESOURCE_TYPE
-from ee.onyx.server.scim.schema_definitions import GROUP_SCHEMA_DEF
-from ee.onyx.server.scim.schema_definitions import SERVICE_PROVIDER_CONFIG
-from ee.onyx.server.scim.schema_definitions import USER_RESOURCE_TYPE
-from ee.onyx.server.scim.schema_definitions import USER_SCHEMA_DEF
+from ee.onyx.server.scim.models import (
+    SCIM_LIST_RESPONSE_SCHEMA,
+    ScimError,
+    ScimGroupMember,
+    ScimGroupResource,
+    ScimListResponse,
+    ScimMappingFields,
+    ScimName,
+    ScimPatchRequest,
+    ScimServiceProviderConfig,
+    ScimUserResource,
+)
+from ee.onyx.server.scim.patch import (
+    ScimPatchError,
+    apply_group_patch,
+    apply_user_patch,
+)
+from ee.onyx.server.scim.providers.base import (
+    ScimProvider,
+    get_default_provider,
+    serialize_emails,
+)
+from ee.onyx.server.scim.schema_definitions import (
+    ENTERPRISE_USER_SCHEMA_DEF,
+    GROUP_RESOURCE_TYPE,
+    GROUP_SCHEMA_DEF,
+    SERVICE_PROVIDER_CONFIG,
+    USER_RESOURCE_TYPE,
+    USER_SCHEMA_DEF,
+)
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import AccountType
-from onyx.db.enums import GrantSource
-from onyx.db.enums import Permission
-from onyx.db.models import ScimToken
-from onyx.db.models import ScimUserMapping
-from onyx.db.models import User
-from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
-from onyx.db.permissions import recompute_permissions_for_group__no_commit
-from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.enums import AccountType, GrantSource, Permission
+from onyx.db.models import ScimToken, ScimUserMapping, User, UserGroup, UserRole
+from onyx.db.permissions import (
+    recompute_permissions_for_group__no_commit,
+    recompute_user_permissions__no_commit,
+)
 from onyx.db.users import assign_user_to_default_groups__no_commit
+from onyx.db.utils import is_unique_violation
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -245,15 +243,31 @@ def _assign_default_groups_or_error(
 ) -> ScimJSONResponse | None:
     """Assign *user* to the Basic/Admin default group, or return a SCIM error.
 
-    ``assign_user_to_default_groups__no_commit`` raises (e.g. ``RuntimeError``)
-    if the default group is missing, so failures are rolled back and surfaced
-    as a structured SCIM 500 instead of leaking a raw 500. Returns the error
-    response on failure, else ``None``.
+    Two distinct failure modes are handled:
+    - A concurrent provisioning request already committed the same user, so the
+      pending user INSERT is deferred and its ``ix_user_email`` unique violation
+      surfaces here via autoflush rather than at ``add_user``. That specific race
+      is expected — rolled back and surfaced as a clean 409, matching the
+      ``add_user`` fast-path.
+    - Any other failure (e.g. ``RuntimeError`` for a missing default group, or an
+      unrelated integrity error such as a FK violation) is rolled back and
+      surfaced as a structured SCIM 500 with a full traceback.
+
+    Returns the error response on failure, else ``None``.
     """
     try:
         assign_user_to_default_groups__no_commit(db_session, user, is_admin=is_admin)
-    except Exception:
+    except Exception as e:
         dal.rollback()
+        # Only the duplicate-email race is an expected, benign 409. Every other
+        # failure — including non-email integrity errors — stays a 500 so real
+        # backend faults aren't masked as "already exists".
+        if isinstance(e, IntegrityError) and is_unique_violation(e, "ix_user_email"):
+            logger.info(
+                "SCIM user %s already exists (concurrent provisioning); returning 409",
+                email,
+            )
+            return _scim_error_response(409, f"User with email {email} already exists")
         logger.exception("Failed to assign SCIM user %s to default groups", email)
         return _scim_error_response(
             500, f"Failed to assign user {email} to default group"

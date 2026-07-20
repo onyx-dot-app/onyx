@@ -33,7 +33,7 @@ import { timeAgo } from "@opal/time";
 import type { IconFunctionComponent } from "@opal/types";
 import { noProp } from "@/lib/utils";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";

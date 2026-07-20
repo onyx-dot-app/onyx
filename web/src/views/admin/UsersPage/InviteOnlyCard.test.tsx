@@ -17,7 +17,7 @@ jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => mockUseSettings(),
 }));
 
-jest.mock("@/hooks/useToast", () => ({
+jest.mock("@opal/layouts/toast/store", () => ({
   toast: {
     success: (...args: unknown[]) => mockToastSuccess(...args),
     error: (...args: unknown[]) => mockToastError(...args),

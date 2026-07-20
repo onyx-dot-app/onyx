@@ -5,11 +5,12 @@ tested without a DB. Covers the residual math, the in-span component set, the
 clamp, and the absent-BATCH_TOTAL case.
 """
 
-from onyx.db.index_attempt_metrics_models import IndexAttemptStage
-from onyx.db.index_attempt_metrics_models import STAGE_SCOPE
-from onyx.server.documents.models import _BATCH_TOTAL_COMPONENT_STAGES
-from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
-from onyx.server.documents.models import synthesize_unaccounted
+from onyx.db.index_attempt_metrics_models import STAGE_SCOPE, IndexAttemptStage
+from onyx.server.documents.models import (
+    _BATCH_TOTAL_COMPONENT_STAGES,
+    IndexAttemptStageMetricSnapshot,
+    synthesize_unaccounted,
+)
 
 
 def _snap(

@@ -4,26 +4,28 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
-from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_REMINDER
-from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
+from onyx.configs.onyxbot_configs import (
+    ONYX_BOT_FEEDBACK_REMINDER,
+    ONYX_BOT_REACT_EMOJI,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccountType
-from onyx.db.models import ChannelConfig
-from onyx.db.models import SlackChannelConfig
+from onyx.db.models import ChannelConfig, SlackChannelConfig
 from onyx.db.user_preferences import activate_user
-from onyx.db.users import add_slack_user_if_not_exists
-from onyx.db.users import get_user_by_email
+from onyx.db.users import add_slack_user_if_not_exists, get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks
 from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
 from onyx.onyxbot.slack.handlers.handle_standard_answers import handle_standard_answers
 from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.onyxbot.slack.utils import fetch_slack_user_ids_from_emails
-from onyx.onyxbot.slack.utils import fetch_user_ids_from_groups
-from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
-from onyx.onyxbot.slack.utils import slack_usage_report
-from onyx.onyxbot.slack.utils import update_emote_react
+from onyx.onyxbot.slack.utils import (
+    fetch_slack_user_ids_from_emails,
+    fetch_user_ids_from_groups,
+    respond_in_thread_or_channel,
+    slack_usage_report,
+    update_emote_react,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import SLACK_CHANNEL_ID
@@ -452,6 +454,7 @@ def handle_message(
             client=client,
             channel=channel,
             logger=logger,
+            db_session=db_session,
             feedback_reminder_id=feedback_reminder_id,
         )
         return issue_with_regular_answer

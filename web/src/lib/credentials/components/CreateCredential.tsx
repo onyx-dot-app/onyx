@@ -1,0 +1,275 @@
+import { useState } from "react";
+import { Button as OpalButton } from "@opal/components";
+import { ValidSources, AccessType } from "@/lib/types";
+import { submitCredential } from "@/components/admin/connectors/CredentialForm";
+import { TextFormField } from "@/components/Field";
+import { Form, Formik, FormikHelpers } from "formik";
+import { toast } from "@opal/layouts";
+import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
+import { Connector } from "@/lib/connectors/connectors";
+import {
+  Credential,
+  CredentialTemplateWithAuth,
+  credentialTemplates,
+} from "@/lib/connectors/credentials";
+import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
+import type {
+  CredentialActionType,
+  CredentialFieldValues,
+} from "@/lib/credentials/types";
+import { createValidationSchema } from "@/lib/credentials/utils";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
+import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
+import {
+  IsPublicGroupSelectorFormType,
+  IsPublicGroupSelector,
+} from "@/components/IsPublicGroupSelector";
+import { useUser } from "@/providers/UserProvider";
+import CardSection from "@/components/admin/CardSection";
+import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
+import { TypedFile } from "@/lib/connectors/fileTypes";
+import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
+import { SvgPlusCircle } from "@opal/icons";
+const CreateButton = ({
+  onClick,
+  isSubmitting,
+  isAdmin,
+  groups,
+}: {
+  onClick: () => void;
+  isSubmitting: boolean;
+  isAdmin: boolean;
+  groups: number[];
+}) => (
+  <OpalButton
+    disabled={isSubmitting || (!isAdmin && groups.length === 0)}
+    onClick={onClick}
+    icon={SvgPlusCircle}
+  >
+    Create
+  </OpalButton>
+);
+
+type CreateCredentialFormValues = IsPublicGroupSelectorFormType & {
+  name: string;
+  [key: string]: unknown;
+};
+
+export default function CreateCredential({
+  hideSource,
+  sourceType,
+  accessType,
+  close,
+  onClose = () => null,
+  onSwitch,
+  onSwap = async () => null,
+  swapConnector,
+  refresh = () => null,
+}: {
+  // Source information
+  hideSource?: boolean; // hides docs link
+  sourceType: ValidSources;
+  accessType: AccessType;
+
+  // Optional toggle- close section after selection?
+  close?: boolean;
+
+  // Special handlers
+  onClose?: () => void;
+  // Switch currently selected credential
+  onSwitch?: (selectedCredential: Credential<any>) => Promise<void>;
+  // Switch currently selected credential + link with connector
+  onSwap?: (
+    selectedCredential: Credential<any>,
+    connectorId: number,
+    accessType: AccessType
+  ) => void;
+
+  // For swapping credentials on selection
+  swapConnector?: Connector<any>;
+
+  // Mutating parent state
+  refresh?: () => void;
+}) {
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [authMethod, setAuthMethod] = useState<string>();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
+
+  const { isAdmin } = useUser();
+
+  const handleSubmit = async (
+    values: CreateCredentialFormValues,
+    formikHelpers: FormikHelpers<CreateCredentialFormValues>,
+    action: CredentialActionType
+  ) => {
+    const { setSubmitting, validateForm } = formikHelpers;
+
+    const errors = await validateForm(values);
+    if (Object.keys(errors).length > 0) {
+      formikHelpers.setErrors(errors);
+      return;
+    }
+
+    setSubmitting(true);
+    formikHelpers.setSubmitting(true);
+
+    const { name, is_public, groups, ...credentialValues } = values;
+
+    let privateKey: TypedFile | null = null;
+    const filteredCredentialValues = Object.fromEntries(
+      Object.entries(credentialValues).filter(([key, value]) => {
+        if (value instanceof TypedFile) {
+          privateKey = value;
+          return false;
+        }
+        return value !== null && value !== "";
+      })
+    );
+
+    try {
+      const response = await submitCredential({
+        credential_json: filteredCredentialValues,
+        admin_public: true,
+        curator_public: is_public,
+        groups: groups,
+        name: name,
+        source: sourceType,
+        private_key: privateKey || undefined,
+      });
+
+      const { message, isSuccess, credential } = response;
+
+      if (!credential) {
+        throw new Error("No credential returned");
+      }
+
+      if (isSuccess && swapConnector) {
+        if (action === "createAndSwap") {
+          onSwap(credential, swapConnector.id, accessType);
+        } else {
+          toast.success("Created new credential!");
+        }
+        onClose();
+      } else {
+        if (isSuccess) {
+          toast.success(message);
+        } else {
+          toast.error(message);
+        }
+      }
+
+      if (close) {
+        onClose();
+      }
+      await refresh();
+
+      if (onSwitch) {
+        onSwitch(credential);
+      }
+    } catch (error) {
+      console.error("Error submitting credential:", error);
+      toast.error("Error submitting credential");
+    } finally {
+      formikHelpers.setSubmitting(false);
+    }
+  };
+
+  if (sourceType == "gmail") {
+    return <GmailMain />;
+  }
+
+  if (sourceType == "google_drive") {
+    return <GDriveMain />;
+  }
+
+  const credentialTemplate: CredentialFieldValues =
+    credentialTemplates[sourceType];
+  const validationSchema = createValidationSchema(credentialTemplate);
+
+  // Set initial auth method for templates with multiple auth methods
+  const templateWithAuth =
+    credentialTemplate as CredentialTemplateWithAuth<CredentialFieldValues>;
+  const initialAuthMethod =
+    templateWithAuth?.authMethods?.[0]?.value || undefined;
+
+  return (
+    <Formik
+      initialValues={
+        {
+          name: "",
+          is_public: isAdmin || !businessTier,
+          groups: [],
+          ...(initialAuthMethod && {
+            authentication_method: initialAuthMethod,
+          }),
+        } as CreateCredentialFormValues
+      }
+      validationSchema={validationSchema}
+      onSubmit={() => {}} // This will be overridden by our custom submit handlers
+    >
+      {(formikProps) => {
+        // Update authentication_method in formik when authMethod changes
+        if (
+          authMethod &&
+          formikProps.values.authentication_method !== authMethod
+        ) {
+          formikProps.setFieldValue("authentication_method", authMethod);
+        }
+
+        return (
+          <Form className="w-full flex items-stretch">
+            {!hideSource && <ConnectorDocsLink sourceType={sourceType} />}
+            <CardSection className="w-full items-start dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
+              <TextFormField
+                name="name"
+                placeholder="(Optional) credential name.."
+                label="Name:"
+              />
+
+              <CredentialFieldsRenderer
+                credentialTemplate={credentialTemplate}
+                authMethod={authMethod || initialAuthMethod}
+                setAuthMethod={setAuthMethod}
+              />
+
+              <div className="mt-4 flex w-full flex-col sm:flex-row justify-between items-end">
+                <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
+                  {businessTier && (
+                    <div className="flex flex-col items-start">
+                      {isAdmin && (
+                        <AdvancedOptionsToggle
+                          showAdvancedOptions={showAdvancedOptions}
+                          setShowAdvancedOptions={setShowAdvancedOptions}
+                        />
+                      )}
+                      {(showAdvancedOptions || !isAdmin) && (
+                        <IsPublicGroupSelector
+                          formikProps={formikProps}
+                          objectName="credential"
+                          publicToWhom="Curators"
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+                <CreateButton
+                  onClick={() =>
+                    handleSubmit(
+                      formikProps.values,
+                      formikProps,
+                      swapConnector ? "createAndSwap" : "create"
+                    )
+                  }
+                  isSubmitting={formikProps.isSubmitting}
+                  isAdmin={isAdmin}
+                  groups={formikProps.values.groups}
+                />
+              </div>
+            </CardSection>
+          </Form>
+        );
+      }}
+    </Formik>
+  );
+}

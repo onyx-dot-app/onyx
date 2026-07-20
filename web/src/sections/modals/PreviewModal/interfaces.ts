@@ -1,5 +1,5 @@
 import React from "react";
-import { ModalContentProps } from "@/refresh-components/Modal";
+import type { ModalContentProps } from "@opal/components";
 
 export interface PreviewContext {
   fileContent: string;

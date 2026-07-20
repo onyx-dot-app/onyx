@@ -6,9 +6,11 @@ from uuid import UUID
 
 import pytest
 
-from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import RetriableWriteError
+from onyx.server.features.build.sandbox.models import (
+    FatalWriteError,
+    FileSet,
+    RetriableWriteError,
+)
 from tests.common.craft.stubs import StubSandboxManager
 
 SB_1 = UUID("00000000-0000-0000-0000-000000000001")

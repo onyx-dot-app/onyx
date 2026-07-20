@@ -11,125 +11,133 @@ import re
 import threading
 import time
 import traceback
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import Token
 from enum import Enum
-from typing import cast
-from typing import Final
+from typing import Final, cast
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import set_processing_status
-from onyx.chat.chat_state import AvailableFiles
-from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.chat_state import ChatTurnSetup
-from onyx.chat.chat_utils import build_file_context
-from onyx.chat.chat_utils import convert_chat_history
-from onyx.chat.chat_utils import create_chat_history_chain
-from onyx.chat.chat_utils import create_chat_session_from_request
-from onyx.chat.chat_utils import get_custom_agent_prompt
-from onyx.chat.chat_utils import is_last_assistant_message_clarification
-from onyx.chat.chat_utils import load_all_chat_files
-from onyx.chat.compression import calculate_total_history_tokens
-from onyx.chat.compression import compress_chat_history
-from onyx.chat.compression import find_summary_for_branch
-from onyx.chat.compression import get_compression_params
+from onyx.chat.chat_state import AvailableFiles, ChatStateContainer, ChatTurnSetup
+from onyx.chat.chat_utils import (
+    build_file_context,
+    convert_chat_history,
+    create_chat_history_chain,
+    create_chat_session_from_request,
+    get_custom_agent_prompt,
+    is_last_assistant_message_clarification,
+    load_all_chat_files,
+)
+from onyx.chat.compression import (
+    calculate_total_history_tokens,
+    compress_chat_history,
+    find_summary_for_branch,
+    get_compression_params,
+)
 from onyx.chat.emitter import Emitter
-from onyx.chat.llm_loop import EmptyLLMResponseError
-from onyx.chat.llm_loop import run_llm_loop
-from onyx.chat.models import AnswerStream
-from onyx.chat.models import AnswerStreamPart
-from onyx.chat.models import ChatBasicResponse
-from onyx.chat.models import ChatFullResponse
-from onyx.chat.models import ChatLoadedFile
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import ContextFileMetadata
-from onyx.chat.models import CreateChatSessionID
-from onyx.chat.models import ExtractedContextFiles
-from onyx.chat.models import FileToolMetadata
-from onyx.chat.models import SearchParams
-from onyx.chat.models import StreamingError
-from onyx.chat.models import ToolCallResponse
+from onyx.chat.llm_loop import EmptyLLMResponseError, run_llm_loop
+from onyx.chat.models import (
+    AnswerStream,
+    AnswerStreamPart,
+    ChatBasicResponse,
+    ChatFullResponse,
+    ChatLoadedFile,
+    ChatMessageSimple,
+    ContextFileMetadata,
+    CreateChatSessionID,
+    ExtractedContextFiles,
+    FileToolMetadata,
+    SearchParams,
+    StreamingError,
+    ToolCallResponse,
+)
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_buffer import StreamBufferWriter
-from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
+from onyx.configs.app_configs import DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
-from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import MilestoneRecordType
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import SearchDoc
-from onyx.db.chat import create_new_chat_message
-from onyx.db.chat import get_chat_session_by_id
-from onyx.db.chat import get_or_create_root_message
-from onyx.db.chat import reserve_message_id
-from onyx.db.chat import reserve_multi_model_message_ids
+from onyx.configs.constants import (
+    DEFAULT_PERSONA_ID,
+    DocumentSource,
+    MessageType,
+    MilestoneRecordType,
+)
+from onyx.context.search.models import BaseFilters, SearchDoc
+from onyx.db.chat import (
+    create_new_chat_message,
+    get_chat_session_by_id,
+    get_or_create_root_message,
+    reserve_message_id,
+    reserve_multi_model_message_ids,
+)
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import HookPoint
 from onyx.db.memory import get_memories
-from onyx.db.models import ChatMessage
-from onyx.db.models import Persona
-from onyx.db.models import User
-from onyx.db.models import UserFile
+from onyx.db.models import ChatMessage, Persona, User, UserFile
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import log_onyx_error
-from onyx.error_handling.exceptions import OnyxError
+from onyx.error_handling.exceptions import OnyxError, log_onyx_error
 from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
-from onyx.file_store.utils import get_default_file_store
-from onyx.file_store.utils import load_in_memory_chat_files
-from onyx.file_store.utils import verify_user_files
-from onyx.hooks.executor import execute_hook
-from onyx.hooks.executor import HookSkipped
-from onyx.hooks.executor import HookSoftFailed
-from onyx.hooks.points.query_processing import QueryProcessingPayload
-from onyx.hooks.points.query_processing import QueryProcessingResponse
-from onyx.llm.factory import get_llm_for_persona
-from onyx.llm.factory import get_llm_token_counter
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMUserIdentity
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.file_store.utils import (
+    get_default_file_store,
+    load_in_memory_chat_files,
+    verify_user_files,
+)
+from onyx.hooks.executor import HookSkipped, HookSoftFailed, execute_hook
+from onyx.hooks.points.query_processing import (
+    QueryProcessingPayload,
+    QueryProcessingResponse,
+)
+from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
+from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.models import LLMErrorInfo
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.request_context import reset_llm_mock_response
-from onyx.llm.request_context import set_llm_mock_response
-from onyx.llm.utils import litellm_exception_to_error_msg
+from onyx.llm.request_context import reset_llm_mock_response, set_llm_mock_response
+from onyx.llm.utils import (
+    collect_credential_values,
+    litellm_exception_to_safe_error,
+    scrub_sensitive_values,
+)
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
-from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
-from onyx.server.query_and_chat.models import MessageResponseIDInfo
-from onyx.server.query_and_chat.models import ModelResponseSlot
-from onyx.server.query_and_chat.models import MultiModelMessageResponseIDInfo
-from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.models import (
+    AUTO_PLACE_AFTER_LATEST_MESSAGE,
+    MessageResponseIDInfo,
+    ModelResponseSlot,
+    MultiModelMessageResponseIDInfo,
+    SendMessageRequest,
+)
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import heartbeat_packet
-from onyx.server.query_and_chat.streaming_models import OverallStop
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
+    CitationInfo,
+    OverallStop,
+    Packet,
+    heartbeat_packet,
+)
+from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
-from onyx.tools.constants import FILE_READER_TOOL_ID
-from onyx.tools.constants import SEARCH_TOOL_ID
-from onyx.tools.models import ChatFile
-from onyx.tools.models import SearchToolUsage
-from onyx.tools.tool_constructor import construct_tools
-from onyx.tools.tool_constructor import CustomToolConfig
-from onyx.tools.tool_constructor import FileReaderToolConfig
-from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
+from onyx.tools.models import ChatFile, SearchToolUsage
+from onyx.tools.tool_constructor import (
+    CustomToolConfig,
+    FileReaderToolConfig,
+    SearchToolConfig,
+    construct_tools,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
@@ -821,8 +829,12 @@ def build_chat_turn(
     )
 
     # ── Token reservation ────────────────────────────────────────────────────
-    max_reserved_system_prompt_tokens_str = (persona.system_prompt or "") + (
-        custom_agent_prompt or ""
+    # Reserve against the placeholder-substituted text — the same final form
+    # run_llm_loop sends to the model — so long directory values can't
+    # invalidate the reservation.
+    max_reserved_system_prompt_tokens_str = substitute_user_placeholders(
+        (persona.system_prompt or "") + (custom_agent_prompt or ""),
+        user_memory_context.user_info.placeholder_values,
     )
     reserved_token_count = calculate_reserved_tokens(
         db_session=db_session,
@@ -1089,6 +1101,9 @@ def _run_models(
     """
     n_models = len(setup.llms)
 
+    # Workspace toggle: infer source/time filters from the query (default on).
+    auto_detect_search_filters = load_settings().auto_detect_search_filters is not False
+
     merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
 
     state_containers: list[ChatStateContainer] = [
@@ -1103,9 +1118,9 @@ def _run_models(
     # Set to True when a model raises an exception (distinct from "still running").
     # Used in the stop-button path to avoid calling completion for errored models.
     model_errored: list[bool] = [False] * n_models
-    # Per-model classified (message, error_code, is_retryable), set in _run_model
-    # and reused by the streamed packet and the persisted message.
-    model_error_info: list[tuple[str, str, bool] | None] = [None] * n_models
+    # Per-model classification set in _run_model and reused by the streamed
+    # packet and the persisted message.
+    model_error_info: list[LLMErrorInfo | None] = [None] * n_models
     persist_lock = threading.Lock()
     persisted: list[bool] = [False] * n_models
     post_steps_done = threading.Event()
@@ -1221,6 +1236,7 @@ def _run_models(
                     enable_slack_search=_should_enable_slack_search(
                         setup.persona, setup.new_msg_req.internal_search_filters
                     ),
+                    auto_detect_filters=auto_detect_search_filters,
                 ),
                 custom_tool_config=CustomToolConfig(
                     chat_session_id=setup.chat_session.id,
@@ -1288,16 +1304,9 @@ def _run_models(
 
         except Exception as e:
             model_errored[model_idx] = True
-            message, error_code, is_retryable = litellm_exception_to_error_msg(
+            model_error_info[model_idx] = litellm_exception_to_safe_error(
                 e, model_llm, fallback_to_error_msg=True
             )
-            # Redact here so both the streamed and persisted error are safe:
-            # the fallback path returns str(e) verbatim, which can embed the key.
-            if model_llm.config.api_key and len(model_llm.config.api_key) > 2:
-                message = message.replace(
-                    model_llm.config.api_key, "[REDACTED_API_KEY]"
-                )
-            model_error_info[model_idx] = (message, error_code, is_retryable)
             merged_queue.put((model_idx, e))
 
         finally:
@@ -1314,7 +1323,7 @@ def _run_models(
                 if msg is not None:
                     info = model_error_info[model_idx]
                     detail = (
-                        info[0]
+                        info.message
                         if info is not None
                         else "model encountered an error during generation."
                     )
@@ -1402,30 +1411,26 @@ def _run_models(
                     model_llm = setup.llms[model_idx]
                     # Classified in _run_model; fall back to a generic error.
                     info = model_error_info[model_idx]
-                    if info is not None:
-                        error_msg, err_code, err_retryable = info
-                    else:
-                        error_msg, err_code, err_retryable = (
-                            str(item),
-                            "MODEL_ERROR",
-                            True,
+                    if info is None:
+                        info = LLMErrorInfo(
+                            message=str(item),
+                            error_code="MODEL_ERROR",
+                            is_retryable=True,
                         )
                     stack_trace = "".join(
                         traceback.format_exception(type(item), item, item.__traceback__)
                     )
-                    if model_llm.config.api_key and len(model_llm.config.api_key) > 2:
-                        error_msg = error_msg.replace(
-                            model_llm.config.api_key, "[REDACTED_API_KEY]"
-                        )
-                        stack_trace = stack_trace.replace(
-                            model_llm.config.api_key, "[REDACTED_API_KEY]"
-                        )
+                    secrets = collect_credential_values(
+                        model_llm.config.api_key, model_llm.config.custom_config
+                    )
+                    error_msg = scrub_sensitive_values(info.message, secrets)
+                    stack_trace = scrub_sensitive_values(stack_trace, secrets)
                     _publish(
                         StreamingError(
                             error=error_msg,
                             stack_trace=stack_trace,
-                            error_code=err_code,
-                            is_retryable=err_retryable,
+                            error_code=info.error_code,
+                            is_retryable=info.is_retryable,
                             details={
                                 "model": model_llm.config.model_name,
                                 "provider": model_llm.config.model_provider,
@@ -1689,21 +1694,16 @@ def _stream_chat_turn(
 
         llm = setup.llms[0] if setup else None
         if llm:
-            client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(
-                e, llm
+            error_info = litellm_exception_to_safe_error(e, llm)
+            stack_trace = scrub_sensitive_values(
+                stack_trace,
+                collect_credential_values(llm.config.api_key, llm.config.custom_config),
             )
-            if llm.config.api_key and len(llm.config.api_key) > 2:
-                client_error_msg = client_error_msg.replace(
-                    llm.config.api_key, "[REDACTED_API_KEY]"
-                )
-                stack_trace = stack_trace.replace(
-                    llm.config.api_key, "[REDACTED_API_KEY]"
-                )
             yield StreamingError(
-                error=client_error_msg,
+                error=error_info.message,
                 stack_trace=stack_trace,
-                error_code=error_code,
-                is_retryable=is_retryable,
+                error_code=error_info.error_code,
+                is_retryable=error_info.is_retryable,
                 details={
                     "model": llm.config.model_name,
                     "provider": llm.config.model_provider,

@@ -58,9 +58,10 @@ from onyx.server.metrics.my_metric import my_metric_callback
 instrumentator.add(my_metric_callback)
 ```
 
-### 4. Wire it into setup_prometheus_metrics (if infrastructure-scoped)
+### 4. Register infrastructure metrics after resource initialization
 
-For metrics that attach to engines, pools, or background systems, add a setup function and call it from `setup_prometheus_metrics()` in `metrics/prometheus_setup.py`:
+For metrics that attach to engines, pools, or background systems, add a setup
+function and call it from the owning process lifespan after the resource exists:
 
 ```python
 # metrics/my_metric.py
@@ -70,15 +71,13 @@ def setup_my_metrics(resource: SomeResource) -> None:
 ```
 
 ```python
-# metrics/prometheus_setup.py — inside setup_prometheus_metrics()
+# onyx/main.py — lifespan, after resource initialization
 from onyx.server.metrics.my_metric import setup_my_metrics
 
-def setup_prometheus_metrics(app, engines=None) -> None:
-    setup_my_metrics(resource)  # Add your call here
-    ...
+setup_my_metrics(resource)
 ```
 
-All metrics initialization is funneled through the single `setup_prometheus_metrics()` call in `onyx/main.py:lifespan()`. Do not add separate setup calls to `main.py`.
+Keep `setup_prometheus_metrics()` limited to shared HTTP instrumentation.
 
 ### 5. Write tests
 
@@ -129,12 +128,69 @@ These metrics are exposed at `GET /metrics` on the API server.
 | -------------------------------- | ------- | -------------------------------------------- |
 | `SLOW_REQUEST_THRESHOLD_SECONDS` | `1.0`   | Duration threshold for slow request counting |
 
+The API and MCP `/metrics` endpoints require `Authorization: Bearer
+<METRICS_AUTH_TOKEN>`. They fail closed when no token is configured; set
+`DISABLE_METRICS_AUTH=true` only when unauthenticated access is intentional.
+The Helm API and MCP ServiceMonitors automatically reference
+`auth.metricsAuth` when it is enabled.
+
 ### Instrumentator Settings
 
 - `should_group_status_codes=False` — Reports exact HTTP status codes (e.g. 401, 403, 500)
 - `should_instrument_requests_inprogress=True` — Enables the in-progress request gauge
 - `inprogress_labels=True` — Breaks down in-progress gauge by `method` and `handler`
 - `excluded_handlers=["/health", "/metrics", "/openapi.json"]` — Excludes noisy endpoints from metrics
+
+## Connector State Metrics
+
+The API server collects these metrics from Postgres on each scrape. They are
+available only in single-tenant deployments; multi-tenant collection is skipped
+to avoid cross-tenant data exposure.
+
+| Metric                                                    | Type  | Labels                                         | Description                                                   |
+| --------------------------------------------------------- | ----- | ---------------------------------------------- | ------------------------------------------------------------- |
+| `onyx_connector_state_collection_success`                 | Gauge | _(none)_                                       | Whether the latest bounded snapshot read succeeded            |
+| `onyx_connector_last_successful_index_timestamp_seconds`  | Gauge | `source`, `cc_pair_id`                         | Last successful index timestamp; zero means never              |
+| `onyx_connector_last_pruned_timestamp_seconds`            | Gauge | `source`, `cc_pair_id`                         | Last successful prune timestamp; zero means never              |
+| `onyx_connector_last_perm_sync_timestamp_seconds`         | Gauge | `source`, `cc_pair_id`                         | Last permission sync timestamp; zero means never               |
+| `onyx_connector_last_external_group_sync_timestamp_seconds` | Gauge | `source`, `cc_pair_id`                       | Last external-group sync timestamp; zero means never           |
+| `onyx_connector_repeated_error_state`                     | Gauge | `source`, `cc_pair_id`                         | Whether the connector is in a repeated error state             |
+| `onyx_connector_status`                                   | Gauge | `source`, `cc_pair_id`, `status`               | One-hot current connector status                               |
+| `onyx_connector_access_type`                              | Gauge | `source`, `cc_pair_id`, `access_type`          | One-hot connector access type                                  |
+| `onyx_connector_indexing_trigger`                         | Gauge | `source`, `cc_pair_id`, `trigger_mode`         | One-hot indexing trigger; includes `NONE` and `UNKNOWN`         |
+| `onyx_connector_auto_sync_enabled`                        | Gauge | `source`, `cc_pair_id`                         | Whether auto-sync is configured                                |
+| `onyx_connector_count`                                    | Gauge | `source`, `status`                             | Current connector count                                        |
+| `onyx_connector_document_count`                           | Gauge | `source`                                       | Current indexed document count                                 |
+| `onyx_connector_info`                                     | Info  | `cc_pair_id`, connector metadata               | Display name, source, credential ID, status, and access type   |
+
+The collector stops waiting after eight seconds and permits one in-flight read.
+It does not return stale connector samples after a timeout or error; use
+`onyx_connector_state_collection_success` to alert on missing snapshots.
+Display names appear only in the info metric, limiting rename churn to one
+series per connector.
+
+## MCP Metrics
+
+The MCP server exposes its HTTP and custom metrics on its authenticated
+`/metrics` endpoint. MCP client metrics are exposed by the API server because
+that process calls external MCP servers.
+
+| Metric                                  | Process    | Type      | Labels                               | Description                                      |
+| --------------------------------------- | ---------- | --------- | ------------------------------------ | ------------------------------------------------ |
+| `onyx_mcp_server_auth_total`            | MCP server | Counter   | `result`                             | API token verification outcomes                  |
+| `onyx_mcp_server_tool_calls_total`      | MCP server | Counter   | `tool`, `status`                     | Search-tool execution outcomes                    |
+| `onyx_mcp_server_tool_latency_seconds`  | MCP server | Histogram | `tool`                               | Search-tool execution latency                     |
+| `onyx_mcp_server_search_results`        | MCP server | Histogram | `tool`                               | Results returned by search tools                  |
+| `onyx_mcp_server_search_by_source_total`| MCP server | Counter   | `source_type`                        | Searches requesting each deduplicated source      |
+| `onyx_mcp_client_tool_calls_total`      | API server | Counter   | `server_name`, `tool_name`, `status` | Calls from Onyx to external MCP tools             |
+| `onyx_mcp_client_tool_latency_seconds`  | API server | Histogram | `server_name`, `tool_name`           | External MCP tool latency                         |
+
+Server tool statuses describe execution reliability. An empty tenant is a
+successful search with zero results. `onyx_mcp_server_auth_total` records token
+verifier outcomes; use HTTP request metrics as the source of truth for all 401s,
+including requests rejected before verification. Client `server_name` is the
+configured display name. `tool_name` is the execution name and may be sanitized
+or disambiguated when tools collide.
 
 ## Database Pool Metrics
 
@@ -427,6 +483,30 @@ histogram_quantile(0.99, sum by (handler, le) (rate(onyx_db_connection_hold_seco
 ```promql
 # Checkouts per second by engine
 sum by (engine) (rate(onyx_db_pool_checkout_total[5m]))
+```
+
+### Connector snapshot health and staleness
+
+```promql
+# Snapshot read failed or timed out
+onyx_connector_state_collection_success == 0
+
+# No successful indexing in 24 hours; zero ("never") also alerts
+time() - onyx_connector_last_successful_index_timestamp_seconds > 86400
+
+# Connectors currently stuck in repeated errors
+onyx_connector_repeated_error_state == 1
+```
+
+### MCP tool failures
+
+```promql
+# MCP server tool execution failure rate
+sum by (tool) (rate(onyx_mcp_server_tool_calls_total{status="error"}[5m]))
+  / sum by (tool) (rate(onyx_mcp_server_tool_calls_total[5m]))
+
+# External MCP client failures, including authentication errors
+sum by (server_name, tool_name) (rate(onyx_mcp_client_tool_calls_total{status!="success"}[5m]))
 ```
 
 ### OpenSearch P99 search latency by type

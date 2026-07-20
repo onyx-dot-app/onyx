@@ -16,23 +16,20 @@ import time
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from prometheus_client import Counter
-from prometheus_client import Gauge
-from prometheus_client import Histogram
+from prometheus_client import Counter, Gauge, Histogram
 from prometheus_client.core import GaugeMetricFamily
-from prometheus_client.registry import Collector
-from prometheus_client.registry import REGISTRY
+from prometheus_client.registry import REGISTRY, Collector
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlalchemy.pool import ConnectionPoolEntry
-from sqlalchemy.pool import PoolProxiedConnection
-from sqlalchemy.pool import QueuePool
+from sqlalchemy.pool import ConnectionPoolEntry, PoolProxiedConnection, QueuePool
 
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import CURRENT_ENDPOINT_CONTEXTVAR
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import (
+    CURRENT_ENDPOINT_CONTEXTVAR,
+    CURRENT_TENANT_ID_CONTEXTVAR,
+)
 
 logger = setup_logger()
 

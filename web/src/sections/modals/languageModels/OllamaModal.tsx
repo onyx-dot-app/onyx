@@ -4,7 +4,7 @@ import * as Yup from "yup";
 import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider, InputVertical } from "@opal/layouts";
+import { InputDivider, InputVertical, toast } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
@@ -29,7 +29,6 @@ import {
 } from "@/sections/modals/languageModels/shared";
 import { fetchOllamaModels } from "@/lib/languageModels/svc";
 import { Card, Tabs } from "@opal/components";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { useSettings } from "@/lib/settings/hooks";
@@ -169,6 +168,7 @@ export default function OllamaModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
@@ -235,9 +235,11 @@ export default function OllamaModal({
         };
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.OLLAMA_CHAT,
           values: submitValues,
           initialValues,

@@ -2,12 +2,11 @@
 
 import { useCallback } from "react";
 import { mutate } from "swr";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import { Switch } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { toast } from "@/hooks/useToast";
 import { Settings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 

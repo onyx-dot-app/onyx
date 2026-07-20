@@ -1,19 +1,20 @@
 import json
 import os
 import urllib.parse
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
 from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import AuthType
 from onyx.configs.constants import QueryHistoryType
 from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.prompts.image_analysis import (
+    DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+    DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
+)
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -129,14 +130,6 @@ POSTHOG_HOST = os.environ.get("POSTHOG_HOST") or "https://us.i.posthog.com"
 #####
 # Auth Configs
 #####
-# Silently default to basic - warnings/errors logged in verify_auth_setting()
-# which only runs on app startup, not during migrations/scripts
-_auth_type_str = (os.environ.get("AUTH_TYPE") or "").lower()
-if _auth_type_str in [auth_type.value for auth_type in AuthType]:
-    AUTH_TYPE = AuthType(_auth_type_str)
-else:
-    AUTH_TYPE = AuthType.BASIC
-
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
 PASSWORD_REQUIRE_UPPERCASE = (
@@ -225,9 +218,8 @@ OAUTH_CLIENT_SECRET = (
 # Whether Google OAuth is enabled (requires both client ID and secret)
 OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
 
-# Default scopes requested when signing in with Google (AUTH_TYPE=google_oauth
-# or AUTH_TYPE=cloud, and the BASIC + OAuth fallback path). These are the
-# minimum required to identify the user via OpenID Connect.
+# Default Google sign-in scopes, the minimum required to identify the user
+# via OpenID Connect.
 GOOGLE_LOGIN_BASE_SCOPES = ["openid", "email", "profile"]
 
 # Applicable for Google OAuth login, allows you to override the scopes that
@@ -268,6 +260,39 @@ if _OIDC_SCOPE_OVERRIDE:
 # Enables PKCE for OIDC login flow. Disabled by default to preserve
 # backwards compatibility for existing OIDC deployments.
 OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
+
+# Opt-in: capture IdP claims at OAuth login and enrich the chat experience
+# with the user's directory profile (country, department, job title, ...) —
+# an "Organization Profile" block in the system prompt plus `{{user.<key>}}`
+# placeholders in agent prompts. Off by default: it sends directory data to
+# the configured LLM, which deployments must consciously opt into.
+IDP_PROFILE_ENRICHMENT_ENABLED = (
+    os.environ.get("IDP_PROFILE_ENRICHMENT_ENABLED", "").lower() == "true"
+)
+
+# Optional per-deployment claim-alias overrides for the directory profile,
+# as JSON mapping placeholder key -> ordered claim-name list, e.g.
+# '{"department": ["dept", "division"], "country": ["c"]}'. Configured
+# aliases are checked before the built-in ones.
+IDP_PROFILE_CLAIM_MAP: dict[str, list[str]] = {}
+_IDP_PROFILE_CLAIM_MAP_RAW = os.environ.get("IDP_PROFILE_CLAIM_MAP")
+if _IDP_PROFILE_CLAIM_MAP_RAW:
+    try:
+        _parsed_claim_map = json.loads(_IDP_PROFILE_CLAIM_MAP_RAW)
+        if isinstance(_parsed_claim_map, dict):
+            IDP_PROFILE_CLAIM_MAP = {
+                str(key): [str(alias) for alias in aliases]
+                for key, aliases in _parsed_claim_map.items()
+                if isinstance(aliases, list)
+            }
+    except json.JSONDecodeError:
+        # Import-time, so plain logging: a silently ignored map would make the
+        # misconfiguration invisible (placeholders just stay empty).
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "IDP_PROFILE_CLAIM_MAP is not valid JSON — ignoring it"
+        )
 
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
@@ -1196,6 +1221,10 @@ BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+BOX_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
     for ignored_tag in os.environ.get("JIRA_CONNECTOR_LABELS_TO_SKIP", "").split(",")
@@ -1354,6 +1383,19 @@ INDEXING_WORKER_MEMORY_LIMIT_MB = int(
 # per-allocation CPU/memory overhead — enable only while chasing a leak.
 INDEXING_WORKER_TRACEMALLOC = (
     os.environ.get("INDEXING_WORKER_TRACEMALLOC", "").lower() == "true"
+)
+
+# When set, every successfully indexed public-connector document is POSTed to
+# this endpoint. Intended for non-EE deployments; EE users should prefer the
+# Document Push hook (admin UI / /admin/hooks API) instead — it adds endpoint
+# validation, execution logs, and reachability tracking. If both are set, this
+# env config takes precedence and the hook does not fire. Not supported in
+# multi-tenant deployments. See onyx/indexing/document_push.py.
+DOCUMENT_PUSH_ENDPOINT_URL = os.environ.get("DOCUMENT_PUSH_ENDPOINT_URL") or None
+# Sent as "Authorization: Bearer <key>" on each push request.
+DOCUMENT_PUSH_API_KEY = os.environ.get("DOCUMENT_PUSH_API_KEY") or None
+DOCUMENT_PUSH_TIMEOUT_SECONDS = float(
+    os.environ.get("DOCUMENT_PUSH_TIMEOUT_SECONDS") or 30
 )
 
 MAX_FILE_SIZE_BYTES = int(
@@ -1902,7 +1944,7 @@ INSTANCE_TYPE = (
     "managed"
     if os.environ.get("IS_MANAGED_INSTANCE", "").lower() == "true"
     else "cloud"
-    if AUTH_TYPE == AuthType.CLOUD
+    if MULTI_TENANT
     else "self_hosted"
 )
 

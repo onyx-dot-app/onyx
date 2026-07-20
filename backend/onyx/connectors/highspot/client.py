@@ -1,15 +1,10 @@
 import base64
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
 import requests
 from requests.adapters import HTTPAdapter
-from requests.exceptions import HTTPError
-from requests.exceptions import RequestException
-from requests.exceptions import Timeout
+from requests.exceptions import HTTPError, RequestException, Timeout
 from urllib3.util.retry import Retry
 
 from onyx.utils.logger import setup_logger

@@ -1,6 +1,6 @@
 "use client";
 
-import Logo from "@/refresh-components/Logo";
+import { Logo } from "@/lib/app/components";
 import { Button } from "@opal/components";
 import { SvgEditBig, SvgExternalLink } from "@opal/icons";
 

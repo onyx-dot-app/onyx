@@ -1,13 +1,11 @@
 """Tests for the Prometheus metrics server module."""
 
 from collections.abc import Iterator
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.server.metrics.metrics_server import _DEFAULT_PORTS
-from onyx.server.metrics.metrics_server import start_metrics_server
+from onyx.server.metrics.metrics_server import _DEFAULT_PORTS, start_metrics_server
 
 
 @pytest.fixture(autouse=True)

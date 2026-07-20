@@ -3,8 +3,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel
-from pydantic import field_validator
+from pydantic import BaseModel, field_validator
 
 from onyx.utils.url import normalize_url
 

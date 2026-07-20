@@ -11,7 +11,7 @@ How `IndexFilters` fields combine into the final query filter. Describes the act
 | **Visibility** | `hidden` | Always applied (unless `include_hidden`) |
 | **Tenant** | `tenant_id` | AND (multi-tenant only) |
 | **ACL** | `access_control_list` | OR within, AND with rest |
-| **Narrowing** | `source_type`, `tags`, `time_cutoff`, `time_cutoff_upper` | Each OR within, AND with rest |
+| **Narrowing** | `source_type`, `tags`, `created_at_range`, `updated_at_range` | Each OR within, AND with rest |
 | **Knowledge scope** | `document_set`, `attached_document_ids`, `hierarchy_node_ids`, `persona_id_filter`, `project_id_filter` | OR within group, AND with rest |
 
 ## How filters combine
@@ -25,8 +25,53 @@ AND (acl contains A1 OR acl contains A2)
 AND (source_type = S1 OR ...)           -- if set
 AND (tag = T1 OR ...)                   -- if set
 AND <knowledge scope>                   -- see below
-AND time >= cutoff                      -- if set
+AND <time windows>                      -- if set, see Time filtering
 ```
+
+## Time filtering
+
+Two ways to constrain time, both AND-ed into the query:
+
+`created_at_range` / `updated_at_range` are inclusive `[start, end]` windows
+(either bound may be open) on the document's creation / last-update time,
+AND-ed together when both are set. Use them to express a query's
+created-vs-updated intent. The persona `search_start_date` floor is folded into
+`updated_at_range.start` in the search pipeline. The deprecated Vespa backend
+enforces only `updated_at_range` (it has no `created_at` field, so
+`created_at_range` widens rather than narrows there).
+
+For wire compatibility, `BaseFilters` still accepts the deprecated
+`time_cutoff` request field and folds it into `updated_at_range.start` at
+validation; internal code never sees it.
+
+### Why intent needs both fields
+
+We store only a document's creation time and its **latest** update time — no edit
+history. That shapes how intents map onto ranges:
+
+| Intent | Ranges | Resulting predicate |
+|---|---|---|
+| **created in [S, E]** | `created_at_range=[S, E]` | `created_at >= S AND created_at <= E` |
+| **updated / active in [S, E]** | `updated_at_range=[S, →]` **and** `created_at_range=[→, E]` | `last_updated >= S AND created_at <= E` (overlap) |
+| **last-touched in [S, E]** (strict) | `updated_at_range=[S, E]` | `last_updated >= S AND last_updated <= E` |
+
+The **updated/active** intent is an *overlap*, not a strict `last_updated` range:
+the upper bound must go on `created_at`, because `last_updated` is only the latest
+edit. A doc created 8mo ago, edited 5mo ago (unstored) then 2mo ago (the stored
+latest) was updated inside a "4–7 months ago" window and must still match — a
+strict `last_updated <= 4mo` would wrongly drop it, while the overlap keeps it
+(its latest edit is `>= 7mo` and it existed by `4mo`).
+
+### Undated documents
+
+We prefer to over- than under-extend, so a missing timestamp does not remove a
+document — with one exception to avoid flooding recent-window queries:
+
+- **`created_at_range`**: undated docs are **always** kept (a doc with no
+  `created_at` cannot be shown to fall outside the window).
+- **`updated_at_range`**: undated docs are kept only for an **old, open-ended
+  lower bound** (start older than `ASSUMED_DOCUMENT_AGE_DAYS`, no upper bound); a
+  recent or bounded range excludes them.
 
 ## Knowledge scope rules
 
@@ -114,6 +159,6 @@ AND (user_project contains 7)
 | `access_control_list` | `access_control_list` | `weightedset<string>` | ACL entries for the requesting user |
 | `source_type` | `source_type` | `string` | Connector source type (e.g. `web`, `jira`) |
 | `tags` | `metadata_list` | `array<string>` | Document metadata tags |
-| `time_cutoff` | `doc_updated_at` | `long` | Minimum document update timestamp |
-| `time_cutoff_upper` | `doc_updated_at` | `long` | Maximum document update timestamp; usable alone or together with `time_cutoff` for a closed range; excludes undated docs in all cases |
+| `created_at_range` | `created_at` | `long` | Window on document creation time; see [Time filtering](#time-filtering) (OpenSearch only) |
+| `updated_at_range` | `doc_updated_at` | `long` | Window on document update time; see [Time filtering](#time-filtering) |
 | `tenant_id` | `tenant_id` | `string` | Tenant isolation (multi-tenant) |

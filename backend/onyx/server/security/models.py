@@ -1,11 +1,7 @@
 from enum import Enum
 from typing import NamedTuple
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import field_validator
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
 
 

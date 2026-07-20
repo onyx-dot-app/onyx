@@ -11,14 +11,15 @@ import time
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.server.features.build.connect_app import ConnectAppRequest
-from onyx.server.features.build.packets import ApprovalRequestedPacket
-from onyx.server.features.build.packets import ConnectAppRequestPacket
+from onyx.server.features.build.packets import (
+    ApprovalRequestedPacket,
+    ConnectAppRequestPacket,
+)
 from onyx.server.features.build.session import streaming as streaming_mod
 
 

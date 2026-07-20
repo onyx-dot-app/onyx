@@ -7,24 +7,26 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
-from onyx.db.llm import can_user_access_llm_provider
-from onyx.db.llm import fetch_default_contextual_rag_model
-from onyx.db.llm import fetch_default_llm_model
-from onyx.db.llm import fetch_default_vision_model
-from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import fetch_existing_models
-from onyx.db.llm import fetch_model_configuration_by_id
-from onyx.db.llm import fetch_user_group_ids
+from onyx.db.llm import (
+    can_user_access_llm_provider,
+    fetch_default_contextual_rag_model,
+    fetch_default_llm_model,
+    fetch_default_vision_model,
+    fetch_existing_llm_provider,
+    fetch_existing_models,
+    fetch_model_configuration_by_id,
+    fetch_user_group_ids,
+)
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import Persona
-from onyx.db.models import SearchSettings
-from onyx.db.models import User
+from onyx.db.models import Persona, SearchSettings, User
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.utils import get_max_input_tokens_from_llm_provider
-from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import (
+    get_max_input_tokens_from_llm_provider,
+    model_supports_image_input,
+)
 from onyx.llm.well_known_providers.constants import (
     PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING,
 )

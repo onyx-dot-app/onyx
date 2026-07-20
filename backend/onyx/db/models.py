@@ -1,124 +1,125 @@
 import datetime
 import json
-from typing import Any
-from typing import Literal
-from typing import NotRequired
-from uuid import UUID
-from uuid import uuid4
+from typing import Any, Literal, NotRequired
+from uuid import UUID, uuid4
 
-from fastapi_users_db_sqlalchemy import SQLAlchemyBaseOAuthAccountTableUUID
-from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
+from fastapi_users_db_sqlalchemy import (
+    SQLAlchemyBaseOAuthAccountTableUUID,
+    SQLAlchemyBaseUserTableUUID,
+)
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
-from pydantic import BaseModel
-from pydantic import ValidationError
-from sqlalchemy import BigInteger
-from sqlalchemy import Boolean
-from sqlalchemy import CheckConstraint
-from sqlalchemy import DateTime
-from sqlalchemy import desc
-from sqlalchemy import Enum
-from sqlalchemy import event
-from sqlalchemy import Float
-from sqlalchemy import ForeignKey
-from sqlalchemy import ForeignKeyConstraint
-from sqlalchemy import func
-from sqlalchemy import Index
-from sqlalchemy import Integer
-from sqlalchemy import Numeric
-from sqlalchemy import PrimaryKeyConstraint
-from sqlalchemy import Sequence
-from sqlalchemy import String
-from sqlalchemy import Text
-from sqlalchemy import text
-from sqlalchemy import true
-from sqlalchemy import UniqueConstraint
+from pydantic import BaseModel, ValidationError
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    Numeric,
+    PrimaryKeyConstraint,
+    Sequence,
+    String,
+    Text,
+    UniqueConstraint,
+    desc,
+    event,
+    func,
+    text,
+    true,
+)
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine.interfaces import Dialect
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import Mapper
-from sqlalchemy.orm import relationship
-from sqlalchemy.orm import validates
-from sqlalchemy.types import LargeBinary
-from sqlalchemy.types import TypeDecorator
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Mapper,
+    mapped_column,
+    relationship,
+    validates,
+)
+from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import ANONYMOUS_USER_UUID
-from onyx.configs.constants import DEFAULT_BOOST
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FederatedConnectorSource
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import NotificationType
-from onyx.configs.constants import SearchFeedbackType
-from onyx.configs.constants import TokenRateLimitScope
+from onyx.configs.constants import (
+    ANONYMOUS_USER_UUID,
+    DEFAULT_BOOST,
+    DocumentSource,
+    FederatedConnectorSource,
+    FileOrigin,
+    MessageType,
+    MilestoneRecordType,
+    NotificationType,
+    SearchFeedbackType,
+    TokenRateLimitScope,
+)
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import AccountType
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import ArtifactType
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import ChatSessionSharedStatus
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import DefaultAppMode
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.enums import GrantSource
-from onyx.db.enums import HierarchyNodeType
-from onyx.db.enums import HookFailStrategy
-from onyx.db.enums import HookPoint
-from onyx.db.enums import IndexingMode
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.enums import LLMModelFlowType
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPOAuthProviderMode
-from onyx.db.enums import MCPServerStatus
-from onyx.db.enums import MCPTransport
-from onyx.db.enums import OpenSearchDocumentMigrationStatus
-from onyx.db.enums import OpenSearchTenantMigrationStatus
-from onyx.db.enums import PatType
-from onyx.db.enums import Permission
-from onyx.db.enums import PermissionSyncStatus
-from onyx.db.enums import PersonaSharePermission
-from onyx.db.enums import PortAttemptStatus
-from onyx.db.enums import ProcessingMode
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskStatus
-from onyx.db.enums import ScheduledTaskTriggerSource
-from onyx.db.enums import SessionOrigin
-from onyx.db.enums import SharingScope
-from onyx.db.enums import SkillSharePermission
-from onyx.db.enums import SSOProviderType
-from onyx.db.enums import SwitchoverType
-from onyx.db.enums import SyncStatus
-from onyx.db.enums import SyncType
-from onyx.db.enums import TaskStatus
-from onyx.db.enums import ThemePreference
-from onyx.db.enums import UserFileStatus
+from onyx.db.enums import (
+    AccessType,
+    AccountType,
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    ArtifactType,
+    BuildSessionStatus,
+    ChatSessionSharedStatus,
+    ConnectorCredentialPairStatus,
+    DefaultAppMode,
+    EmbeddingPrecision,
+    EndpointPolicy,
+    ExternalAppType,
+    GrantSource,
+    HierarchyNodeType,
+    HookFailStrategy,
+    HookPoint,
+    IndexingMode,
+    IndexingStatus,
+    IndexModelStatus,
+    LLMModelFlowType,
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPOAuthProviderMode,
+    MCPServerStatus,
+    MCPTransport,
+    OpenSearchDocumentMigrationStatus,
+    OpenSearchTenantMigrationStatus,
+    PatType,
+    Permission,
+    PermissionSyncStatus,
+    PersonaSharePermission,
+    PortAttemptStatus,
+    ProcessingMode,
+    SandboxStatus,
+    ScheduledTaskRunStatus,
+    ScheduledTaskStatus,
+    ScheduledTaskTriggerSource,
+    SessionOrigin,
+    SharingScope,
+    SkillSharePermission,
+    SSOProviderType,
+    SwitchoverType,
+    SyncStatus,
+    SyncType,
+    TaskStatus,
+    ThemePreference,
+    UserFileStatus,
+)
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
-from onyx.db.pydantic_type import PydanticListType
-from onyx.db.pydantic_type import PydanticType
+from onyx.db.pydantic_type import PydanticListType, PydanticType
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
-from onyx.kg.models import KGEntityTypeAttributes
-from onyx.kg.models import KGStage
-from onyx.llm.override_models import LLMOverride
-from onyx.llm.override_models import PromptOverride
+from onyx.kg.models import KGEntityTypeAttributes, KGStage
+from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.security.models import SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
-from onyx.utils.encryption import decrypt_bytes_to_string
-from onyx.utils.encryption import encrypt_string_to_bytes
+from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
@@ -669,6 +670,22 @@ class Skill__User(Base):
     __table_args__ = (Index("ix_skill__user_user_id", "user_id"),)
 
 
+class UserSkillPreference(Base):
+    __tablename__ = "user_skill_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("skill.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+    __table_args__ = (Index("ix_user_skill_preference_skill_id", "skill_id"),)
+
+
 class DocumentSet__User(Base):
     __tablename__ = "document_set__user"
 
@@ -1035,6 +1052,11 @@ class Document(Base):
     # with the local last modified time of the doc and any associated metadata
     # it should just be the server timestamp of the source doc
     doc_updated_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Source creation time. Null for docs indexed before this column.
+    doc_created_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
@@ -4488,6 +4510,8 @@ class Skill(Base):
     # files live on disk under BUILTIN_SKILLS_PATH).
     bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Existing custom rows are classified lazily before sandbox hydration.
+    is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -4498,8 +4522,6 @@ class Skill(Base):
         Enum(SkillSharePermission, native_enum=False),
         nullable=True,
     )
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -5282,6 +5304,12 @@ class MCPServer(Base):
         nullable=True,
     )
 
+    # When True, any user may add this server's tools to their agents.
+    # When False, access is limited to the linked users / user_groups.
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -5746,8 +5774,8 @@ class BuildSession(Base):
         default=SharingScope.PRIVATE,
         server_default="private",
     )
-    # Distinguishes user-initiated sessions from sessions created by the
-    # scheduled-tasks executor (or any future non-interactive caller). The
+    # Distinguishes user-initiated sessions from sessions created by
+    # non-interactive callers (scheduled-tasks executor, Slack bot). The
     # Craft sidebar filters on origin == INTERACTIVE.
     origin: Mapped[SessionOrigin] = mapped_column(
         Enum(SessionOrigin, native_enum=False, name="sessionorigin"),
@@ -5761,6 +5789,7 @@ class BuildSession(Base):
     opencode_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_provider: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_model: Mapped[str | None] = mapped_column(String, nullable=True)
+    skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
@@ -5814,6 +5843,7 @@ class Sandbox(Base):
     last_heartbeat: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
@@ -6406,9 +6436,8 @@ class ExternalApp(Base):
     __tablename__ = "external_app"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # Display name, description, and lifecycle (including enabled state
-    # via skill presence) live on the linked Skill row. ON DELETE
-    # CASCADE: removing the skill removes the external_app gateway.
+    # Display and bundle metadata currently live on the linked Skill row.
+    # App availability is independent of user skill preferences.
     skill_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("skill.id", ondelete="CASCADE"),
@@ -6433,6 +6462,12 @@ class ExternalApp(Base):
         nullable=False,
         default=ExternalAppType.CUSTOM,
         server_default=ExternalAppType.CUSTOM.value,
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
     )
     # CUSTOM apps store URL globs here (translated to regexes at match time).
     upstream_url_patterns: Mapped[list[str]] = mapped_column(

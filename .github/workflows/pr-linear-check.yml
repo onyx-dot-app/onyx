@@ -20,6 +20,7 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           IGNORED_AUTHORS: |
+            dependabot[bot]
             jmelahman
         run: |
           normalized_author="$(printf '%s' "${PR_AUTHOR}" | tr '[:upper:]' '[:lower:]')"

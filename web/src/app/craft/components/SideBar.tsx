@@ -18,7 +18,7 @@ import {
   useSidebarState,
 } from "@opal/layouts";
 import RefreshText from "@/refresh-components/texts/Text";
-import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { Popover, PopoverMenu } from "@opal/components";
@@ -39,7 +39,7 @@ import {
   SvgPlug,
   SvgSimpleLoader,
 } from "@opal/icons";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { Button } from "@opal/components";
 import TypewriterText from "@/app/craft/components/TypewriterText";
 import OpencodeDebugLogsButton from "@/app/craft/components/OpencodeDebugLogs";
@@ -454,7 +454,7 @@ const MemoizedBuildSidebarInner = memo(() => {
   return (
     <SidebarLayouts.Root foldable>
       <SidebarLayouts.Header
-        logo={renderAppLogo}
+        renderAppLogo={renderSidebarLogo}
         showLogoWhenFolded={showLogoWhenFolded}
       >
         <div className="flex flex-col gap-0.5">

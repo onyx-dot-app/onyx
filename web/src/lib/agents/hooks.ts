@@ -23,7 +23,10 @@ import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { ChatSession } from "@/app/app/interfaces";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSettings } from "@/lib/settings/hooks";
-import { MCPServersResponse } from "@/lib/tools/interfaces";
+import {
+  AgentEditorMCPServer,
+  MCPServersResponse,
+} from "@/lib/tools/interfaces";
 import useChatSessions from "@/hooks/useChatSessions";
 import { buildUpdateAgentPreferenceUrl } from "./utils";
 
@@ -467,5 +470,35 @@ export function useMcpServersForAgentEditor() {
     isLoading,
     error,
     mutateMcpServers,
+  };
+}
+
+export function useMcpServersForPersonaEditor(personaId: number | undefined) {
+  const accessible = useMcpServersForAgentEditor();
+  const {
+    data: attachedData,
+    error: attachedError,
+    isLoading: attachedIsLoading,
+  } = useSWR<MCPServersResponse>(
+    personaId ? SWR_KEYS.personaMcpServers(personaId) : null,
+    errorHandlingFetcher
+  );
+
+  const mcpServers = useMemo<AgentEditorMCPServer[]>(() => {
+    const accessibleServers = accessible.mcpData?.mcp_servers ?? [];
+    const accessibleIds = new Set(accessibleServers.map((server) => server.id));
+    return [
+      ...accessibleServers.map((server) => ({ ...server, can_attach: true })),
+      ...(attachedData?.mcp_servers ?? [])
+        .filter((server) => !accessibleIds.has(server.id))
+        .map((server) => ({ ...server, can_attach: false })),
+    ];
+  }, [accessible.mcpData, attachedData]);
+
+  return {
+    mcpServers,
+    isLoading:
+      accessible.isLoading || (personaId !== undefined && attachedIsLoading),
+    error: accessible.error || attachedError,
   };
 }
