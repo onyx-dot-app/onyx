@@ -19,8 +19,8 @@ sys.path.append(parent_dir)
 from ee.onyx.db.license import upsert_license  # noqa: E402
 from ee.onyx.utils.license import verify_license_signature  # noqa: E402
 from onyx.db.engine.sql_engine import (  # noqa: E402
-    get_session_with_current_tenant,
     SqlEngine,
+    get_session_with_current_tenant,
 )
 
 _PEM_BEGIN = "-----BEGIN ONYX LICENSE-----"

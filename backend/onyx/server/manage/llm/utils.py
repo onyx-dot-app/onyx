@@ -12,11 +12,11 @@ from typing import TypedDict
 
 from onyx.llm.constants import (
     BEDROCK_MODEL_NAME_MAPPINGS,
-    LlmProviderNames,
     MODEL_PREFIX_TO_VENDOR,
     OLLAMA_MODEL_NAME_MAPPINGS,
     OLLAMA_MODEL_TO_VENDOR,
     PROVIDER_DISPLAY_NAMES,
+    LlmProviderNames,
 )
 
 # Dynamic providers fetch models directly from source APIs (not LiteLLM)

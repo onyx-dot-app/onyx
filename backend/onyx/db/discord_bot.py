@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload, Session
+from sqlalchemy.orm import Session, joinedload
 
 from onyx.auth.api_key import build_displayable_api_key, generate_api_key, hash_api_key
 from onyx.auth.schemas import UserRole

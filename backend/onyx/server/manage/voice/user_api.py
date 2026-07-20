@@ -18,7 +18,7 @@ from onyx.db.voice import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import store_ws_token, WsTokenRateLimitExceeded
+from onyx.redis.redis_pool import WsTokenRateLimitExceeded, store_ws_token
 from onyx.server.manage.models import VoiceSettingsUpdateRequest
 from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger

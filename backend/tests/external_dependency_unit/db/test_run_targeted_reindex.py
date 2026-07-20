@@ -40,10 +40,10 @@ from onyx.db.models import (
 )
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.targeted_reindex import (
+    TargetSpec,
     create_targeted_reindex_job,
     resolve_error_ids_to_targets,
     targets_to_connector_failures,
-    TargetSpec,
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.indexing_helpers import (

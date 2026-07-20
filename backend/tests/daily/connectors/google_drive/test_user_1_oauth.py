@@ -6,11 +6,7 @@ import pytest
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.models import Document
 from tests.daily.connectors.google_drive.consts_and_utils import (
-    _clear_parents,
-    _pick,
     ADMIN_FOLDER_3_FILE_IDS,
-    assert_expected_docs_in_retrieved_docs,
-    assert_hierarchy_nodes_match_expected,
     DONWLOAD_REVOKED_FILE_ID,
     FOLDER_1_1_FILE_IDS,
     FOLDER_1_1_ID,
@@ -21,15 +17,19 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     FOLDER_1_URL,
     FOLDER_3_ID,
     FOLDER_3_URL,
+    SHARED_DRIVE_1_FILE_IDS,
+    SHARED_DRIVE_1_ID,
+    TEST_USER_1_EMAIL,
+    TEST_USER_1_FILE_IDS,
+    _clear_parents,
+    _pick,
+    assert_expected_docs_in_retrieved_docs,
+    assert_hierarchy_nodes_match_expected,
     get_expected_hierarchy_for_test_user_1,
     get_expected_hierarchy_for_test_user_1_my_drive_only,
     get_expected_hierarchy_for_test_user_1_shared_drives_only,
     get_expected_hierarchy_for_test_user_1_shared_with_me_only,
     load_connector_outputs,
-    SHARED_DRIVE_1_FILE_IDS,
-    SHARED_DRIVE_1_ID,
-    TEST_USER_1_EMAIL,
-    TEST_USER_1_FILE_IDS,
 )
 from tests.daily.connectors.utils import ConnectorOutput
 from tests.utils.secret_names import TestSecret

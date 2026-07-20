@@ -3,7 +3,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload, selectinload, Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant

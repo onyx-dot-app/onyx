@@ -4,8 +4,8 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import exists, func, not_, or_, Select, select, update
-from sqlalchemy.orm import aliased, selectinload, Session
+from sqlalchemy import Select, exists, func, not_, or_, select, update
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.schemas import UserRole

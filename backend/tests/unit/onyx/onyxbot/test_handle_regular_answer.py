@@ -11,9 +11,9 @@ from onyx.chat.models import ChatBasicResponse
 from onyx.context.search.models import Tag
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
 from onyx.onyxbot.slack.handlers.handle_regular_answer import (
+    SLACK_PERSONA_ACCESS_DENIED_MESSAGE,
     handle_regular_answer,
     resolve_channel_references,
-    SLACK_PERSONA_ACCESS_DENIED_MESSAGE,
 )
 from onyx.onyxbot.slack.models import (
     ChannelType,

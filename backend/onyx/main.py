@@ -55,13 +55,13 @@ from onyx.configs.app_configs import (
     USER_AUTH_SECRET,
     WEB_DOMAIN,
 )
-from onyx.configs.constants import AuthType, POSTGRES_WEB_APP_NAME
+from onyx.configs.constants import POSTGRES_WEB_APP_NAME, AuthType
 from onyx.db.engine.async_sql_engine import (
     get_sqlalchemy_async_engine,
     reset_sqlalchemy_async_engine,
 )
 from onyx.db.engine.connection_warmup import warm_up_connections
-from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.hooks.registry import validate_registry
@@ -137,9 +137,9 @@ from onyx.server.metrics.postgres_connection_pool import (
 from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
 from onyx.server.middleware.rate_limiting import (
+    RATE_LIMITING_ENABLED,
     close_auth_limiter,
     get_auth_rate_limiters,
-    RATE_LIMITING_ENABLED,
     setup_auth_limiter,
 )
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
@@ -161,7 +161,7 @@ from onyx.utils.middleware import (
     add_endpoint_context_middleware,
     add_onyx_request_id_middleware,
 )
-from onyx.utils.telemetry import get_or_generate_uuid, optional_telemetry, RecordType
+from onyx.utils.telemetry import RecordType, get_or_generate_uuid, optional_telemetry
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
     fetch_versioned_implementation,

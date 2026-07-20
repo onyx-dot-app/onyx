@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import (
     get_all_document_indices,

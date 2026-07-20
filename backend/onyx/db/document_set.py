@@ -2,8 +2,8 @@ from collections.abc import Sequence
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import and_, delete, exists, func, or_, Select, select
-from sqlalchemy.orm import aliased, selectinload, Session
+from sqlalchemy import Select, and_, delete, exists, func, or_, select
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import (

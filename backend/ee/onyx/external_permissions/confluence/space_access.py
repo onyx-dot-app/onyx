@@ -13,9 +13,9 @@ from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.onyx_confluence import (
     ConfluenceRestSpacePermissionsNotAvailableError,
+    OnyxConfluence,
     get_user_email_from_userkey__server,
     get_user_email_from_username__server,
-    OnyxConfluence,
 )
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.utils.logger import setup_logger

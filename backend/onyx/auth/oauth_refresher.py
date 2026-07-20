@@ -3,7 +3,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, cast, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 from fastapi_users.manager import BaseUserManager

@@ -33,13 +33,13 @@ from onyx.configs.app_configs import (
     MOCK_CONNECTOR_FILE_PATH,
 )
 from onyx.configs.constants import (
+    ONYX_METADATA_FILENAME,
+    PUBLIC_API_TAGS,
     DocumentSource,
     FileOrigin,
     MilestoneRecordType,
-    ONYX_METADATA_FILENAME,
     OnyxCeleryPriority,
     OnyxCeleryTask,
-    PUBLIC_API_TAGS,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
@@ -149,9 +149,9 @@ from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.audit import (
-    actor_from_user,
     AuditAction,
     AuditOutcome,
+    actor_from_user,
     emit_audit_event,
 )
 from onyx.utils.logger import setup_logger

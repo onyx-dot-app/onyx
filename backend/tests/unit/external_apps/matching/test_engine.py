@@ -9,10 +9,10 @@ from pydantic import ValidationError
 from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.engine import (
-    AllMatchedActions,
-    apply_credential_gate,
-    MatchedAction,
     WHOLE_DOMAIN_ACTION_TYPE,
+    AllMatchedActions,
+    MatchedAction,
+    apply_credential_gate,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 

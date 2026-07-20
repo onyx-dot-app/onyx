@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any, IO
+from typing import IO, Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource, FileOrigin

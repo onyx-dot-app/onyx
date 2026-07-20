@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, cast, Literal
+from typing import Any, Literal, cast
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session

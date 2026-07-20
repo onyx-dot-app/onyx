@@ -1,6 +1,6 @@
 from base64 import urlsafe_b64decode
 from collections.abc import Callable, Iterator
-from typing import Any, cast, Dict
+from typing import Any, Dict, cast
 
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -12,15 +12,15 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import (
+    PAGE_TOKEN_KEY,
     execute_paginated_retrieval,
     execute_paginated_retrieval_with_max_pages,
     execute_single_retrieval,
-    PAGE_TOKEN_KEY,
 )
 from onyx.connectors.google_utils.resources import (
+    GmailService,
     get_admin_service,
     get_gmail_service,
-    GmailService,
 )
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,

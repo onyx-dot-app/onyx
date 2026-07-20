@@ -7,7 +7,7 @@ from collections.abc import Callable
 from contextvars import Token
 from threading import Event
 from types import FrameType
-from typing import Any, cast, Dict
+from typing import Any, Dict, cast
 
 import psycopg2.errors
 from prometheus_client import Gauge, start_http_server
@@ -31,9 +31,9 @@ from onyx.configs.constants import MessageType, OnyxRedisLocks
 from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.db.engine.sql_engine import (
+    SqlEngine,
     get_session_with_current_tenant,
     get_session_with_tenant,
-    SqlEngine,
 )
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.db.models import SlackBot
@@ -45,12 +45,12 @@ from onyx.natural_language_processing.search_nlp_models import (
     warm_up_bi_encoder,
 )
 from onyx.onyxbot.slack.config import (
-    get_slack_channel_config_for_bot_and_channel,
     MAX_TENANTS_PER_POD,
     TENANT_ACQUISITION_INTERVAL,
     TENANT_HEARTBEAT_EXPIRATION,
     TENANT_HEARTBEAT_INTERVAL,
     TENANT_LOCK_EXPIRATION,
+    get_slack_channel_config_for_bot_and_channel,
 )
 from onyx.onyxbot.slack.constants import (
     DISLIKE_BLOCK_ACTION_ID,
@@ -79,6 +79,7 @@ from onyx.onyxbot.slack.handlers.handle_message import (
 )
 from onyx.onyxbot.slack.models import SlackContext, SlackMessageInfo, ThreadMessage
 from onyx.onyxbot.slack.utils import (
+    TenantSocketModeClient,
     check_message_limit,
     decompose_action_id,
     get_channel_name_from_id,
@@ -87,7 +88,6 @@ from onyx.onyxbot.slack.utils import (
     read_slack_thread,
     remove_onyx_bot_tag,
     respond_in_thread_or_channel,
-    TenantSocketModeClient,
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens

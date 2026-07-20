@@ -3,10 +3,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from ee.onyx.server.scim.auth import (
-    _hash_scim_token,
-    generate_scim_token,
     SCIM_TOKEN_PREFIX,
     ScimAuthError,
+    _hash_scim_token,
+    generate_scim_token,
     verify_scim_token,
 )
 

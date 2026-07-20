@@ -17,10 +17,10 @@ from onyx.sandbox_proxy.credential_injection import (
     InjectionOutcome,
 )
 from tests.unit.sandbox_proxy.conftest import (
+    RecordingCredentialResolver,
     make_flow,
     make_matched_actions,
     make_resolved_sandbox,
-    RecordingCredentialResolver,
 )
 
 

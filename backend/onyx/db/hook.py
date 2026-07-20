@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import HookFailStrategy, HookPoint

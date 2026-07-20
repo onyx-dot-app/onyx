@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.llm.models import UserMessage
-from onyx.secondary_llm_flows.source_filter import decide_search_scope, SearchCycle
+from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_scope
 from onyx.tools.models import ChatMinimalTextMessage
 
 A = DocumentSource.ZENDESK

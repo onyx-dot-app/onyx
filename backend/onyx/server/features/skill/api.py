@@ -12,6 +12,7 @@ from onyx.configs.app_configs import MAX_PERSONAL_SKILLS_PER_USER
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
+    SkillPatch,
     affected_user_ids_for_skill,
     count_personal_skills_for_user,
     create_skill__no_commit,
@@ -27,7 +28,6 @@ from onyx.db.skill import (
     replace_skill_bundle,
     replace_skill_grants,
     skill_ids_with_grants,
-    SkillPatch,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError

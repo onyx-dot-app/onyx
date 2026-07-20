@@ -1,10 +1,10 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import asc, BinaryExpression, ColumnElement, desc, distinct
-from sqlalchemy.orm import contains_eager, joinedload, Session
+from sqlalchemy import BinaryExpression, ColumnElement, asc, desc, distinct
+from sqlalchemy.orm import Session, contains_eager, joinedload
 from sqlalchemy.sql import case, func, select
-from sqlalchemy.sql.expression import literal, UnaryExpression
+from sqlalchemy.sql.expression import UnaryExpression, literal
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.configs.constants import QAFeedbackType

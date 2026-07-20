@@ -232,8 +232,8 @@ class MCPTool(Tool[None]):
                     )
                 else:
                     from onyx.server.features.mcp.api import (
-                        make_oauth_provider,
                         UNUSED_RETURN_PATH,
+                        make_oauth_provider,
                     )
 
                     # user_id is the requesting user's UUID; safe here because

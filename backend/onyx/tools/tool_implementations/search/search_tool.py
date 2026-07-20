@@ -96,7 +96,7 @@ from onyx.secondary_llm_flows.query_expansion import (
     keyword_query_expansion,
     semantic_query_rephrase,
 )
-from onyx.secondary_llm_flows.source_filter import decide_search_scope, SearchCycle
+from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_scope
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     Packet,

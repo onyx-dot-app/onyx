@@ -1,7 +1,7 @@
 import os
 from collections.abc import Generator
 from datetime import datetime, timezone
-from typing import Any, cast, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from pydantic import BaseModel
 

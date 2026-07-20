@@ -4,6 +4,11 @@ from collections.abc import Callable
 from uuid import UUID, uuid4
 
 from onyx.server.features.build.interactive_turns.state import (
+    REQUEST_ID_TTL_SECONDS,
+    TURN_STATUS_FAILED,
+    TURN_STATUS_QUEUED,
+    TURN_STATUS_RUNNING,
+    InteractiveTurn,
     acquire_active_turn_lock,
     claim_turn_for_runner,
     create_interactive_turn,
@@ -11,12 +16,7 @@ from onyx.server.features.build.interactive_turns.state import (
     get_active_turn,
     get_turn,
     get_turn_for_request,
-    InteractiveTurn,
-    REQUEST_ID_TTL_SECONDS,
     touch_turn,
-    TURN_STATUS_FAILED,
-    TURN_STATUS_QUEUED,
-    TURN_STATUS_RUNNING,
 )
 from tests.unit.fakes import FakeCache
 

@@ -33,9 +33,9 @@ from onyx.configs.app_configs import (
     WEB_DOMAIN,
 )
 from onyx.configs.constants import (
-    AuthType,
     ONYX_DEFAULT_APPLICATION_NAME,
     ONYX_DISCORD_URL,
+    AuthType,
 )
 from onyx.db.models import User
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
