@@ -113,6 +113,9 @@ class SecuritySettingsOverrides(BaseModel):
     mask_credential_prefix: bool | None = Field(
         default=None, json_schema_extra=_operator_locked()
     )
+    llm_custom_config_env_injection: bool | None = Field(
+        default=None, json_schema_extra=_operator_locked()
+    )
     valid_email_domains: list[str] | None = Field(
         default=None, json_schema_extra=_operator_locked()
     )
@@ -181,6 +184,7 @@ class SecuritySettings(BaseModel):
     track_external_idp_expiry: bool
     ssrf_protection_level: SSRFProtectionLevel
     mask_credential_prefix: bool
+    llm_custom_config_env_injection: bool
     valid_email_domains: tuple[str, ...]
     password_min_length: int
     password_max_length: int

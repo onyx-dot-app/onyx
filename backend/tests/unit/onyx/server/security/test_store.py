@@ -7,6 +7,7 @@ derivation reads controlled values instead of the process environment.
 import pytest
 
 from onyx.server.security import store
+from onyx.server.security.models import SecuritySettingsOverrides
 from onyx.server.security.models import SSRFProtectionLevel
 
 
@@ -58,3 +59,22 @@ def test_mcp_private_and_loopback_disables(monkeypatch: pytest.MonkeyPatch) -> N
     """Loopback opt-in wins over the private-network opt-in — it needs DISABLED."""
     _set_env(monkeypatch, mcp_allow_private_network=True, mcp_allow_loopback=True)
     assert store._derive_ssrf_level_from_env() == SSRFProtectionLevel.DISABLED
+
+
+def test_llm_env_injection_forced_off_on_multi_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """merge_with_env forces injection off on multi-tenant even when a stored
+    override says enabled."""
+    monkeypatch.setattr(store, "MULTI_TENANT", True)
+    overrides = SecuritySettingsOverrides(llm_custom_config_env_injection=True)
+    assert store.merge_with_env(overrides).llm_custom_config_env_injection is False
+
+
+def test_llm_env_injection_defaults_on_for_single_tenant() -> None:
+    assert (
+        store.merge_with_env(
+            SecuritySettingsOverrides()
+        ).llm_custom_config_env_injection
+        is True
+    )

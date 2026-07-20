@@ -41,6 +41,7 @@ interface SecuritySettings {
   track_external_idp_expiry: boolean;
   ssrf_protection_level: SSRFProtectionLevel;
   mask_credential_prefix: boolean;
+  llm_custom_config_env_injection: boolean;
   valid_email_domains: string[];
   password_min_length: number;
   password_max_length: number;
@@ -63,6 +64,7 @@ interface ToggleRowProps {
   description?: string | RichStr;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
 }
 
 function ToggleRow({
@@ -70,10 +72,15 @@ function ToggleRow({
   description,
   checked,
   onCheckedChange,
+  disabled,
 }: ToggleRowProps) {
   return (
     <InputHorizontal title={title} description={description} withLabel>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        disabled={disabled}
+      />
     </InputHorizontal>
   );
 }
@@ -438,18 +445,35 @@ export default function SecurityHardeningPage() {
           </Card>
         </div>
 
-        {/* Network Safety (single-tenant only — SSRF policy is operator-controlled,
-            so it stays env-driven in multi-tenant cloud). */}
-        {!isMultiTenant && (
-          <div className="flex w-full flex-col gap-3">
-            <Content
-              title="Network Safety"
-              sizePreset="main-content"
-              variant="section"
-            />
+        {/* Network Safety. The env-injection toggle is always shown but locked
+            off in multi-tenant cloud; the SSRF policy is single-tenant only
+            (operator-controlled, env-driven in multi-tenant cloud). */}
+        <div className="flex w-full flex-col gap-3">
+          <Content
+            title="Network Safety"
+            sizePreset="main-content"
+            variant="section"
+          />
 
-            <Card border="solid" rounding="lg">
-              <Section>
+          <Card border="solid" rounding="lg">
+            <Section>
+              <ToggleRow
+                title="LLM Environment Variable Injection"
+                description={
+                  isMultiTenant
+                    ? "Custom LLM provider configurations can never set process environment variables on multi-tenant deployments."
+                    : "Allow custom LLM provider configurations to temporarily set process environment variables during calls. Disable to require all provider settings to have a LiteLLM parameter equivalent."
+                }
+                checked={draft.llm_custom_config_env_injection}
+                onCheckedChange={(checked) =>
+                  void saveSettings({
+                    llm_custom_config_env_injection: checked,
+                  })
+                }
+                disabled={isMultiTenant}
+              />
+
+              {!isMultiTenant && (
                 <InputHorizontal
                   title="SSRF Protection"
                   description="Validate outbound requests against private or internal IPs for Server-Side Request Forgery (SSRF) protection."
@@ -498,10 +522,10 @@ export default function SecurityHardeningPage() {
                     </InputSelect>
                   </div>
                 </InputHorizontal>
-              </Section>
-            </Card>
-          </div>
-        )}
+              )}
+            </Section>
+          </Card>
+        </div>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
