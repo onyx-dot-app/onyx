@@ -76,8 +76,10 @@ def _get_app_or_404(db_session: Session, external_app_id: int) -> ExternalApp:
     return app
 
 
-def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
-    stored = {policy.action_id: policy.policy for policy in app.policies}
+def _to_admin_response(
+    db_session: Session, app: ExternalApp
+) -> ExternalAppAdminResponse:
+    stored = get_policies(db_session, app.id)
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
     return ExternalAppAdminResponse(
         id=app.id,
@@ -182,7 +184,7 @@ def create_built_in_external_app(
     # Push before commit so a push failure rolls back the create.
     push_skill_to_affected_sandboxes(app.skill, db_session)
     db_session.commit()
-    return _to_admin_response(app)
+    return _to_admin_response(db_session, app)
 
 
 @admin_router.patch("/apps/{external_app_id}")
@@ -235,7 +237,7 @@ def update_external_app_admin(
     # Push before commit so a push failure rolls back the change.
     push_skill_to_affected_sandboxes(app.skill, db_session)
     db_session.commit()
-    return _to_admin_response(app)
+    return _to_admin_response(db_session, app)
 
 
 @admin_router.post("/apps/custom")
@@ -311,7 +313,7 @@ def create_custom_external_app(
         push_skill_to_affected_sandboxes(app.skill, db_session)
         db_session.commit()
 
-    return _to_admin_response(app)
+    return _to_admin_response(db_session, app)
 
 
 @admin_router.put("/apps/{external_app_id}/bundle")
@@ -354,7 +356,7 @@ def replace_custom_app_bundle(
     if old_bundle_file_id:
         delete_bundle_blob(file_store, old_bundle_file_id)
 
-    return _to_admin_response(app)
+    return _to_admin_response(db_session, app)
 
 
 @admin_router.get("/apps")
@@ -364,7 +366,7 @@ def list_external_apps_admin(
 ) -> list[ExternalAppAdminResponse]:
     """List all external apps with admin-only fields (org credentials, auth template)."""
     apps = get_external_apps(db_session=db_session)
-    return [_to_admin_response(app) for app in apps]
+    return [_to_admin_response(db_session, app) for app in apps]
 
 
 @admin_router.get("/apps/built-in/options")

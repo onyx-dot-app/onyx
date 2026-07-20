@@ -728,8 +728,9 @@ class GateAddon:
         grants = self._live_grants(db, ctx.session_id)
         if grants is None:
             return None
-        run_id, granted_app_ids = grants
-        if matched_actions.external_app_id not in granted_app_ids:
+        run_id, granted_targets = grants
+        target = matched_actions.target
+        if (target.kind, target.id) not in granted_targets:
             return None
         return _ApprovalGrant(
             decided_via=ApprovalDecidedVia.PRE_APPROVAL,
@@ -737,7 +738,8 @@ class GateAddon:
             notification_title=f"Scheduled task used {matched_actions.app_name} (pre-approved)",
             notification_data={
                 "run_id": str(run_id),
-                "external_app_id": matched_actions.external_app_id,
+                "target_kind": target.kind.value,
+                "target_id": target.id,
             },
         )
 
@@ -748,12 +750,14 @@ class GateAddon:
         action_types = actions_requiring_approval(matched_actions.actions)
         if not action_types:
             return None
+        target = matched_actions.target
         cache: CacheBackend | None = None
         try:
             cache = self._cache_factory(ctx.tenant_id)
             if approval_cache.cached_session_grants_cover(
                 session_id=ctx.session_id,
-                external_app_id=matched_actions.external_app_id,
+                kind=target.kind,
+                target_id=target.id,
                 action_types=action_types,
                 cache=cache,
             ):
@@ -761,10 +765,11 @@ class GateAddon:
         except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
                 "approval_grant_cache_error tenant=%s session=%s "
-                "external_app_id=%s operation=%s error=%r",
+                "target=%s:%s operation=%s error=%r",
                 ctx.tenant_id,
                 short_log_id(ctx.session_id),
-                matched_actions.external_app_id,
+                target.kind.value,
+                target.id,
                 "check",
                 str(e),
             )
@@ -772,7 +777,8 @@ class GateAddon:
         grant_source_rows = action_approval.list_session_grant_action_approvals(
             db,
             session_id=ctx.session_id,
-            external_app_id=matched_actions.external_app_id,
+            kind=target.kind,
+            target_id=target.id,
         )
         granted_action_types: set[str] = set()
         for grant_source_row in grant_source_rows:
@@ -787,7 +793,8 @@ class GateAddon:
                 for grant_source_row in grant_source_rows:
                     approval_cache.cache_session_grant_actions(
                         session_id=ctx.session_id,
-                        external_app_id=matched_actions.external_app_id,
+                        kind=target.kind,
+                        target_id=target.id,
                         action_types=actions_requiring_approval(
                             grant_source_row.actions
                         ),
@@ -797,10 +804,11 @@ class GateAddon:
             except CACHE_TRANSIENT_ERRORS as e:
                 logger.warning(
                     "approval_grant_cache_error tenant=%s session=%s "
-                    "external_app_id=%s operation=%s error=%r",
+                    "target=%s:%s operation=%s error=%r",
                     ctx.tenant_id,
                     short_log_id(ctx.session_id),
-                    matched_actions.external_app_id,
+                    target.kind.value,
+                    target.id,
                     "hydrate",
                     str(e),
                 )
@@ -856,7 +864,8 @@ class GateAddon:
                     ],
                     app_name=matched_actions.app_name,
                     payload=matched_actions.payload,
-                    external_app_id=matched_actions.external_app_id,
+                    kind=matched_actions.target.kind,
+                    target_id=matched_actions.target.id,
                     decision=ApprovalDecision.APPROVED,
                     decided_via=grant.decided_via,
                 )
@@ -912,7 +921,8 @@ class GateAddon:
                 actions=actions_payload,
                 app_name=matched_actions.app_name,
                 payload=matched_actions.payload,
-                external_app_id=matched_actions.external_app_id,
+                kind=matched_actions.target.kind,
+                target_id=matched_actions.target.id,
             )
             approval_id = row.approval_id
             db.commit()

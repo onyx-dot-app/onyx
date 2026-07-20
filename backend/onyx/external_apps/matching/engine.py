@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, ExternalAppType
+from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, ExternalAppType, GatedAppKind
 from onyx.db.external_app import get_policies
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
@@ -34,19 +34,35 @@ class MatchedAction(BaseModel):
     policy: EndpointPolicy
 
 
+class GatedTarget(BaseModel):
+    """The connected app/server a gated request is attributed to.
+
+    ``id`` indexes the table named by ``kind`` — ``external_app`` or
+    ``mcp_server``. Lookups key off ``(kind, id)``, never ``app_name``: the
+    latter isn't unique across instances (self-hosted GitLab/Jira share an
+    app_type, and two MCP servers can share a display name).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: GatedAppKind
+    id: int
+    app_name: str
+
+
 class AllMatchedActions(BaseModel):
     """Every catalog action the request matched within the resolved app.
 
     ``actions`` is sorted strictest-policy-first; ``governing_action`` returns the
     head, whose policy drives the gate's verdict. A batched GraphQL POST is
-    the canonical multi-action case.
+    the canonical multi-action case. ``target`` names the connected app/server
+    the whole approval pipeline attributes the request to.
     """
 
     model_config = ConfigDict(frozen=True)
 
     actions: tuple[MatchedAction, ...]
-    app_name: str
-    external_app_id: int
+    target: GatedTarget
     payload: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -59,6 +75,24 @@ class AllMatchedActions(BaseModel):
     def governing_action(self) -> MatchedAction:
         """The action whose policy drove the verdict (head of the sorted list)."""
         return self.actions[0]
+
+    @property
+    def app_name(self) -> str:
+        return self.target.app_name
+
+    @property
+    def external_app_id(self) -> int | None:
+        """The external-app row id, or ``None`` for a non-external-app target."""
+        if self.target.kind is GatedAppKind.EXTERNAL_APP:
+            return self.target.id
+        return None
+
+    @property
+    def mcp_server_id(self) -> int | None:
+        """The mcp_server row id, or ``None`` for a non-MCP target."""
+        if self.target.kind is GatedAppKind.MCP_SERVER:
+            return self.target.id
+        return None
 
 
 PersistedMatchedAction = Mapping[str, Any]
@@ -135,8 +169,9 @@ def recognize_actions(
     matched.sort(key=lambda a: POLICY_SEVERITY[a.policy], reverse=True)
     return AllMatchedActions(
         actions=tuple(matched),
-        app_name=_app_name(app),
-        external_app_id=app.id,
+        target=GatedTarget(
+            kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)
+        ),
     )
 
 
@@ -174,6 +209,7 @@ def apply_credential_gate(
                 policy=EndpointPolicy.ASK,
             ),
         ),
-        app_name=_app_name(app),
-        external_app_id=app.id,
+        target=GatedTarget(
+            kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)
+        ),
     )

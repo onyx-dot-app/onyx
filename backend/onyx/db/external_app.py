@@ -6,14 +6,18 @@ from sqlalchemy import and_, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType, SkillSharePermission
-from onyx.db.models import (
-    ExternalApp,
-    ExternalAppPolicy,
-    ExternalAppUserCredential,
-    Skill,
-    User,
+from onyx.db.enums import (
+    EndpointPolicy,
+    ExternalAppType,
+    GatedAppKind,
+    SkillSharePermission,
 )
+from onyx.db.gated_app import (
+    get_action_policies,
+    get_or_create_gated_app_id,
+    replace_action_policies__no_commit,
+)
+from onyx.db.models import ExternalApp, ExternalAppUserCredential, Skill, User
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -124,10 +128,7 @@ def get_external_app_by_id(
 ) -> ExternalApp | None:
     stmt = (
         select(ExternalApp)
-        .options(
-            selectinload(ExternalApp.skill),
-            selectinload(ExternalApp.policies),
-        )
+        .options(selectinload(ExternalApp.skill))
         .where(ExternalApp.id == external_app_id)
     )
     return db_session.scalar(stmt)
@@ -201,10 +202,7 @@ def get_external_apps(
 ) -> list[ExternalApp]:
     stmt = (
         select(ExternalApp)
-        .options(
-            selectinload(ExternalApp.skill),
-            selectinload(ExternalApp.policies),
-        )
+        .options(selectinload(ExternalApp.skill))
         .order_by(ExternalApp.id)
     )
     if enabled_only:
@@ -231,10 +229,7 @@ def get_built_in_external_app(
         )
     stmt = (
         select(ExternalApp)
-        .options(
-            selectinload(ExternalApp.skill),
-            selectinload(ExternalApp.policies),
-        )
+        .options(selectinload(ExternalApp.skill))
         .where(ExternalApp.app_type == app_type)
     )
     return db_session.scalars(stmt).one_or_none()
@@ -437,12 +432,7 @@ def get_policies(
 ) -> dict[str, EndpointPolicy]:
     """Return the app's stored per-action policy overrides as
     ``{action_id: policy}``. Sparse — only actions the admin has set."""
-    rows = db_session.scalars(
-        select(ExternalAppPolicy).where(
-            ExternalAppPolicy.external_app_id == external_app_id
-        )
-    ).all()
-    return {row.action_id: row.policy for row in rows}
+    return get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app_id)
 
 
 def _write_policies__no_commit(
@@ -450,19 +440,14 @@ def _write_policies__no_commit(
     app: ExternalApp,
     policies: dict[str, EndpointPolicy],
 ) -> None:
-    """Replace ``app``'s per-action policy rows with exactly ``policies``.
-
-    Clears the existing rows and flushes the DELETEs before inserting the new
-    set. The flush is required: within a single flush the ORM emits INSERTs
-    before DELETEs, so a re-inserted ``action_id`` would collide with its
-    not-yet-deleted row on the ``(external_app_id, action_id)`` unique
-    constraint. No commit — runs inside the caller's transaction. ``action_id``
-    validation is the caller's responsibility.
+    """Replace ``app``'s per-action policy rows with exactly ``policies``. No
+    commit — runs inside the caller's transaction. ``action_id`` validation is
+    the caller's responsibility.
     """
-    app.policies.clear()  # delete-orphan cascade deletes the rows on flush
-    db_session.flush()
-    for action_id, policy in policies.items():
-        app.policies.append(ExternalAppPolicy(action_id=action_id, policy=policy))
+    gated_app_id = get_or_create_gated_app_id(
+        db_session, GatedAppKind.EXTERNAL_APP, app.id
+    )
+    replace_action_policies__no_commit(db_session, gated_app_id, policies)
 
 
 def delete_external_app(

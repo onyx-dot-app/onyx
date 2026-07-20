@@ -212,7 +212,7 @@ def test_self_hosted_built_in_response_shows_config_and_masked_creds(
     assert gmail is not None
 
     monkeypatch.setattr(api, "MULTI_TENANT", False)
-    resp = api._to_admin_response(gmail)
+    resp = api._to_admin_response(db_session, gmail)
 
     assert resp.upstream_url_patterns  # config visible
     # Creds are present but masked — not the same raw values, not blanked away.

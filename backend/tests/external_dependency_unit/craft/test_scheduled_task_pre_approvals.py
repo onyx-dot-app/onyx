@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import (
     ApprovalDecidedVia,
     ApprovalDecision,
+    GatedAppKind,
     ScheduledTaskRunStatus,
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
@@ -106,9 +107,12 @@ def test_grants_returned_for_running_run(
     grants = get_live_scheduled_run_grants(db_session=db_session, session_id=bs.id)
 
     assert grants is not None
-    run_id, app_ids = grants
+    run_id, granted = grants
     assert run_id == run.id
-    assert app_ids == [app_a, app_b]
+    assert granted == {
+        (GatedAppKind.EXTERNAL_APP, app_a),
+        (GatedAppKind.EXTERNAL_APP, app_b),
+    }
 
 
 @pytest.mark.parametrize(
@@ -174,6 +178,7 @@ def test_insert_pre_decided_row(
 ) -> None:
     user = make_user(db_session)
     bs = build_session_with_user(user=user)
+    app_id = _make_app(db_session)
 
     row = insert_action_approval(
         db_session,
@@ -181,6 +186,8 @@ def test_insert_pre_decided_row(
         actions=default_action_entries(),
         app_name="Slack",
         payload={"text": "hi"},
+        kind=GatedAppKind.EXTERNAL_APP,
+        target_id=app_id,
         decision=ApprovalDecision.APPROVED,
         decided_via=ApprovalDecidedVia.PRE_APPROVAL,
     )
@@ -200,6 +207,7 @@ def test_insert_default_row_stays_pending(
 ) -> None:
     user = make_user(db_session)
     bs = build_session_with_user(user=user)
+    app_id = _make_app(db_session)
 
     row = insert_action_approval(
         db_session,
@@ -207,6 +215,8 @@ def test_insert_default_row_stays_pending(
         actions=default_action_entries(),
         app_name="Slack",
         payload={},
+        kind=GatedAppKind.EXTERNAL_APP,
+        target_id=app_id,
     )
     db_session.commit()
     db_session.refresh(row)
@@ -214,7 +224,7 @@ def test_insert_default_row_stays_pending(
     assert row.decision is None
     assert row.decided_at is None
     assert row.decided_via is None
-    assert row.external_app_id is None
+    assert row.gated_app_id is not None
 
 
 # ---------------------------------------------------------------------------
@@ -337,8 +347,9 @@ def test_deleting_app_nulls_action_approval_fk(
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
-    """``action_approval.external_app_id`` is ``ON DELETE SET NULL``: an audit
-    row survives app deletion with the FK cleared, not cascaded away."""
+    """``action_approval.gated_app_id`` is ``ON DELETE SET NULL``: an audit row
+    survives app deletion with the FK cleared, not cascaded away. Deleting the
+    app cascades its gated_app row away, which nulls the approval's FK."""
     user = make_user(db_session)
     bs = build_session_with_user(user=user)
     app_id = _make_app(db_session)
@@ -348,18 +359,19 @@ def test_deleting_app_nulls_action_approval_fk(
         actions=default_action_entries(),
         app_name="Slack",
         payload={},
-        external_app_id=app_id,
+        kind=GatedAppKind.EXTERNAL_APP,
+        target_id=app_id,
         decision=ApprovalDecision.APPROVED,
         decided_via=ApprovalDecidedVia.PRE_APPROVAL,
     )
     db_session.commit()
-    assert row.external_app_id == app_id
+    assert row.gated_app_id is not None
 
     db_session.execute(delete(ExternalApp).where(ExternalApp.id == app_id))
     db_session.commit()
     db_session.refresh(row)
 
-    assert row.external_app_id is None
+    assert row.gated_app_id is None
 
 
 # ---------------------------------------------------------------------------

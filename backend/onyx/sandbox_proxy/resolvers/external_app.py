@@ -31,16 +31,19 @@ class ExternalAppResolver(CredentialResolver):
         request: http.Request,  # noqa: ARG002
         ctx: InjectionContext,
     ) -> bool:
-        # The matcher has already proven URL→app attribution; host is unused.
-        return ctx.matched_actions is not None
+        # The matcher has already proven URL→app attribution; host is unused. An
+        # MCP-server target is another resolver's — external app only here.
+        actions = ctx.matched_actions
+        return actions is not None and actions.external_app_id is not None
 
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
         matched_actions = ctx.matched_actions
-        if matched_actions is None:
+        external_app_id = matched_actions.external_app_id if matched_actions else None
+        if external_app_id is None:
             # `claims` guarantees this is unreachable; explicit raise so a
             # broken Protocol contract surfaces as a 403, not a NoneType crash.
             raise CredentialUnavailableError(
-                "ExternalAppResolver invoked without a matched request"
+                "ExternalAppResolver invoked without an external-app request"
             )
 
         # Lazily refresh an expired/expiring OAuth token before rendering, so the
@@ -50,13 +53,13 @@ class ExternalAppResolver(CredentialResolver):
         # clears the credential, which renders as empty headers below).
         ensure_fresh_credentials(
             ctx.sandbox.tenant_id,
-            matched_actions.external_app_id,
+            external_app_id,
             ctx.sandbox.user_id,
         )
 
         with get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id) as db:
             headers = resolve_injection_headers(
-                db, matched_actions.external_app_id, ctx.sandbox.user_id
+                db, external_app_id, ctx.sandbox.user_id
             )
 
         # Per-app debug line so `external_app_id` survives in logs even when
@@ -67,7 +70,7 @@ class ExternalAppResolver(CredentialResolver):
         logger.debug(
             "external_app_resolver.resolved external_app_id=%s host=%s "
             "header_count=%s header_names=%s",
-            matched_actions.external_app_id,
+            external_app_id,
             request.host,
             len(headers),
             header_names,

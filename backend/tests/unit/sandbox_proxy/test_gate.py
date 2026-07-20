@@ -27,8 +27,17 @@ from mitmproxy import connection, http
 from mitmproxy.proxy import server_hooks
 from redis.exceptions import RedisError
 
-from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
-from onyx.external_apps.matching.engine import AllMatchedActions, MatchedAction
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    EndpointPolicy,
+    GatedAppKind,
+)
+from onyx.external_apps.matching.engine import (
+    AllMatchedActions,
+    GatedTarget,
+    MatchedAction,
+)
 from onyx.sandbox_proxy.addons import gate
 from onyx.sandbox_proxy.addons.gate import GateAddon, ParkedApprovals
 from onyx.sandbox_proxy.credential_injection import (
@@ -105,7 +114,7 @@ def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         gate.action_approval,
         "list_session_grant_action_approvals",
-        lambda _db, *, session_id, external_app_id: [],  # noqa: ARG005
+        lambda _db, *, session_id, kind, target_id: [],  # noqa: ARG005
     )
 
 
@@ -153,8 +162,7 @@ _MATCH_MULTI_ASK = AllMatchedActions(
             policy=EndpointPolicy.ASK,
         ),
     ),
-    app_name="Slack",
-    external_app_id=42,
+    target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=42, app_name="Slack"),
     payload={"text": "hi"},
 )
 _MATCH_ALWAYS = make_matched_actions(
@@ -552,14 +560,24 @@ def _stub_grants(
     monkeypatch: pytest.MonkeyPatch,
     result: tuple[UUID, list[int]] | None | Exception,
 ) -> list[UUID]:
-    """Stub the gate's grant lookup; returns the recorded session_ids."""
+    """Stub the gate's grant lookup; returns the recorded session_ids.
+
+    Callers pass granted external-app ids; the stub wraps them as the
+    ``(kind, id)`` targets the real lookup now returns."""
     calls: list[UUID] = []
 
-    def _lookup(*, db_session: Any, session_id: UUID) -> tuple[UUID, list[int]] | None:  # noqa: ARG001
+    def _lookup(
+        *,
+        db_session: Any,  # noqa: ARG001
+        session_id: UUID,
+    ) -> tuple[UUID, set[tuple[GatedAppKind, int]]] | None:
         calls.append(session_id)
         if isinstance(result, Exception):
             raise result
-        return result
+        if result is None:
+            return None
+        run_id, app_ids = result
+        return run_id, {(GatedAppKind.EXTERNAL_APP, app_id) for app_id in app_ids}
 
     monkeypatch.setattr(gate, "get_live_scheduled_run_grants", _lookup)
     return calls
@@ -643,12 +661,14 @@ async def test_pre_approved_scheduled_run_skips_park(
     assert len(inserted) == 1
     assert inserted[0]["decision"] == ApprovalDecision.APPROVED
     assert inserted[0]["decided_via"] == ApprovalDecidedVia.PRE_APPROVAL
-    assert inserted[0]["external_app_id"] == _GRANTED_APP_ID
+    assert inserted[0]["kind"] == GatedAppKind.EXTERNAL_APP
+    assert inserted[0]["target_id"] == _GRANTED_APP_ID
     # Dedup contract: additional_data is exactly the stable (run, app) pair.
     assert len(notified) == 1
     assert notified[0]["additional_data"] == {
         "run_id": str(_RUN_ID),
-        "external_app_id": _GRANTED_APP_ID,
+        "target_kind": GatedAppKind.EXTERNAL_APP.value,
+        "target_id": _GRANTED_APP_ID,
     }
 
 
@@ -710,7 +730,7 @@ async def test_session_grant_db_fallback_hydrates_cache(
     monkeypatch.setattr(
         gate.action_approval,
         "list_session_grant_action_approvals",
-        lambda _db, *, session_id, external_app_id: [grant_source],  # noqa: ARG005
+        lambda _db, *, session_id, kind, target_id: [grant_source],  # noqa: ARG005
     )
     flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
 
@@ -1516,7 +1536,8 @@ def test_persist_approval_row_commits_announces_notifies(
         "actions": [a.model_dump(mode="json") for a in _MATCH.actions],
         "app_name": _MATCH.app_name,
         "payload": _MATCH.payload,
-        "external_app_id": _MATCH.external_app_id,
+        "kind": _MATCH.target.kind,
+        "target_id": _MATCH.target.id,
     }
 
     # insert -> commit -> rpush: announce must not precede the commit,

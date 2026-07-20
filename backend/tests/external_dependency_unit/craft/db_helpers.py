@@ -31,17 +31,19 @@ from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     EndpointPolicy,
     ExternalAppType,
+    GatedAppKind,
     SandboxStatus,
     SkillSharePermission,
 )
+from onyx.db.gated_app import get_or_create_gated_app_id
 from onyx.db.models import (
     ActionApproval,
     Connector,
     ConnectorCredentialPair,
     Credential,
     ExternalApp,
-    ExternalAppPolicy,
     ExternalAppUserCredential,
+    GatedActionPolicy,
     Sandbox,
     Skill,
     Skill__User,
@@ -235,15 +237,19 @@ def make_external_app(
     )
     db_session.add(app)
     db_session.flush()
-    for action_id, policy in (action_policies or {}).items():
-        db_session.add(
-            ExternalAppPolicy(
-                external_app_id=app.id,
-                action_id=action_id,
-                policy=policy,
-            )
+    if action_policies:
+        gated_app_id = get_or_create_gated_app_id(
+            db_session, GatedAppKind.EXTERNAL_APP, app.id
         )
-    db_session.flush()
+        for action_id, policy in action_policies.items():
+            db_session.add(
+                GatedActionPolicy(
+                    gated_app_id=gated_app_id,
+                    action_id=action_id,
+                    policy=policy,
+                )
+            )
+        db_session.flush()
     return app
 
 
