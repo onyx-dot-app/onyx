@@ -1343,9 +1343,9 @@ langchain-protocol==0.0.15 \
 langdetect==1.0.9 \
     --hash=sha256:cbc1fef89f8d062739774bd51eda3da3274006b3661d199c2655f6b3f6d605a0
     # via unstructured
-langfuse==3.10.0 \
-    --hash=sha256:7a9254103da50cabcf46a7e7ae9d2cf1f8267f09b6036abdb4a9c6f2f3d15104 \
-    --hash=sha256:c7c10607c6fe560990d0973566afd3c5513f7ff97cc31691af72711ad5441d8c
+langfuse==4.14.0 \
+    --hash=sha256:31b875c8d09eee39c558584b9424bbd5ed014965c5944c4528a37947ae4b7787 \
+    --hash=sha256:632b74abfa14d9ad3dccbe3322bf7e11b0dce9be0de451b0d134db9bff246d44
 langsmith==0.8.18 \
     --hash=sha256:32dde9c0e67e053e0fb738921fc8ced768af7b8fa83d7a0e3fd63597cf8776dd \
     --hash=sha256:3940183349993faef48e6c7d08e4822ee9cefd906b362d0e3c2d650314d2f282
@@ -1795,7 +1795,6 @@ openai==2.38.0 \
     --hash=sha256:ec6661c57b2dcc47414a767e6e3335c7ed3d19c9696999283a3c82e95c756a3c
     # via
     #   exa-py
-    #   langfuse
     #   litellm
     #   onyx
 openapi-pydantic==0.5.1 \
@@ -2644,7 +2643,6 @@ requests==2.33.0 \
     #   huggingface-hub
     #   jira
     #   kubernetes
-    #   langfuse
     #   langsmith
     #   markitdown
     #   matrix-client
