@@ -615,6 +615,12 @@ def main() -> None:
         print(
             "  --control-plane-context CTX Kubectl context for control plane cluster (required)"
         )
+        print(
+            "  --data-plane-pod POD        Pin the data plane pod instead of picking one"
+        )
+        print(
+            "  --control-plane-pod POD     Pin the control plane pod instead of picking one"
+        )
         sys.exit(1)
 
     # Parse arguments
@@ -674,6 +680,24 @@ def main() -> None:
             control_plane_context = sys.argv[idx + 1]
         except ValueError:
             pass
+
+    # Pinning pods lets several batches run against different pods instead of all
+    # piling onto whichever one the random pick returns.
+    data_plane_pod_override = None
+    control_plane_pod_override = None
+    for flag, target in (
+        ("--data-plane-pod", "data"),
+        ("--control-plane-pod", "control"),
+    ):
+        if flag in sys.argv:
+            idx = sys.argv.index(flag)
+            if idx + 1 >= len(sys.argv):
+                print(f"Error: {flag} requires a pod name", file=sys.stderr)
+                sys.exit(1)
+            if target == "data":
+                data_plane_pod_override = sys.argv[idx + 1]
+            else:
+                control_plane_pod_override = sys.argv[idx + 1]
 
     # Validate required contexts
     if not data_plane_context:
@@ -747,13 +771,21 @@ def main() -> None:
 
     # Find pods in both clusters before processing
     try:
-        print("Finding data plane worker pod...")
-        data_plane_pod = find_worker_pod(data_plane_context)
-        print(f"✓ Using data plane worker pod: {data_plane_pod}")
+        if data_plane_pod_override:
+            data_plane_pod = data_plane_pod_override
+            print(f"✓ Using pinned data plane worker pod: {data_plane_pod}")
+        else:
+            print("Finding data plane worker pod...")
+            data_plane_pod = find_worker_pod(data_plane_context)
+            print(f"✓ Using data plane worker pod: {data_plane_pod}")
 
-        print("Finding control plane pod...")
-        control_plane_pod = find_background_pod(control_plane_context)
-        print(f"✓ Using control plane pod: {control_plane_pod}\n")
+        if control_plane_pod_override:
+            control_plane_pod = control_plane_pod_override
+            print(f"✓ Using pinned control plane pod: {control_plane_pod}\n")
+        else:
+            print("Finding control plane pod...")
+            control_plane_pod = find_background_pod(control_plane_context)
+            print(f"✓ Using control plane pod: {control_plane_pod}\n")
 
         # Copy all scripts to data plane pod once
         setup_scripts_on_pod(data_plane_pod, data_plane_context)

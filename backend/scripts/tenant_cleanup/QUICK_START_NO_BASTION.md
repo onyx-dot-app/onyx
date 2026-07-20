@@ -68,6 +68,25 @@ kubectl get po | grep celery-worker-user-file-processing | grep Running
 8. **Search indices are not cleaned up.** In multi-tenant deployments all tenants share indices
    and are separated by a `tenant_id` field, so dropping a schema leaves that tenant's chunks
    behind. They can be swept later by selecting on `tenant_id` - keep `cleaned_tenants.csv`.
+9. **To go faster, spread across pods - do not just raise `--concurrency`.** Every operation is a
+   `kubectl exec` against the one pod the run picked, so that pod is the bottleneck. Running two
+   batches at once without pinning gains nothing: pod selection is random over a small set, so
+   both runs usually land on the same pod, and it ends up saturated while its replicas idle.
+   Pin distinct pods per run instead:
+
+   ```bash
+   # terminal 1
+   ... --csv batch_a.csv --concurrency 8 \
+       --data-plane-pod <worker-pod-1> --control-plane-pod <control-pod-1>
+   # terminal 2
+   ... --csv batch_b.csv --concurrency 8 \
+       --data-plane-pod <worker-pod-2> --control-plane-pod <control-pod-2>
+   ```
+
+   Measured on a real cleanup: one run at `--concurrency 12` reached ~34 tenants/min and pinned a
+   worker at ~2 cores while its replica sat idle. Two pinned runs at `--concurrency 8` reached
+   ~67 tenants/min with neither worker above ~1.2 cores. Remember these are live workers doing
+   real work, so prefer spreading load over concentrating it.
 
 ## Files Generated
 
