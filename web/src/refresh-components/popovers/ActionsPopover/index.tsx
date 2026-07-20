@@ -47,7 +47,11 @@ import {
   SvgSliders,
   SvgSimpleLoader,
 } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, Tag, Text } from "@opal/components";
+import {
+  useChatSessionStore,
+  useCurrentMcpServersNeedingReauth,
+} from "@/app/app/stores/useChatSessionStore";
 
 function buildTooltipMessage(
   actionDescription: string,
@@ -258,6 +262,12 @@ export default function ActionsPopover({
     onSuccess: undefined,
     isAuthenticated: false,
   });
+
+  // Session-scoped MCP servers that hit a 401 this chat session.
+  const mcpServersNeedingReauth = useCurrentMcpServersNeedingReauth();
+  const clearMcpServerNeedingReauth = useChatSessionStore(
+    (state) => state.clearCurrentMcpServerNeedingReauth
+  );
 
   // Get the agent preference for this assistant
   const { agentPreferences, setSpecificAgentPreferences } =
@@ -620,6 +630,7 @@ export default function ActionsPopover({
               isLoading: false,
             },
           }));
+          clearMcpServerNeedingReauth(server.id);
         },
         isAuthenticated: server.user_authenticated,
         existingCredentials: server.user_credentials,
@@ -644,6 +655,18 @@ export default function ActionsPopover({
     const searchLower = searchTerm.toLowerCase();
     return server.name.toLowerCase().includes(searchLower);
   });
+
+  // Servers flagged by a session 401 that the user can actually re-auth.
+  const serversNeedingReauth = useMemo(
+    () =>
+      mcpServers.filter(
+        (server) =>
+          mcpServersNeedingReauth.has(server.id) &&
+          server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+          server.auth_type !== MCPAuthenticationType.NONE
+      ),
+    [mcpServers, mcpServersNeedingReauth]
+  );
 
   const selectedMcpServerId =
     secondaryView?.type === "mcp" ? secondaryView.serverId : null;
@@ -841,6 +864,32 @@ export default function ActionsPopover({
           variant="internal"
         />,
 
+        // Needs re-authentication: servers that 401'd this session.
+        serversNeedingReauth.length > 0 ? (
+          <div key="reauth-section" className="flex flex-col gap-1 px-2 pt-1">
+            <Text font="secondary-body" color="text-03">
+              Needs re-authentication
+            </Text>
+          </div>
+        ) : undefined,
+        ...serversNeedingReauth.map((server) => (
+          <LineItem
+            key={`reauth-${server.id}`}
+            icon={SvgKey}
+            rightChildren={
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => handleServerAuthentication(server)}
+              >
+                Re-authenticate
+              </Button>
+            }
+          >
+            {server.name}
+          </LineItem>
+        )),
+
         // Actions
         ...filteredTools.map((tool) =>
           (() => {
@@ -971,7 +1020,7 @@ export default function ActionsPopover({
     <>
       <Popover open={open} onOpenChange={handleOpenChange}>
         <Popover.Trigger asChild>
-          <div data-testid="action-management-toggle">
+          <div className="relative" data-testid="action-management-toggle">
             <Button
               disabled={disabled}
               icon={SvgSliders}
@@ -979,6 +1028,11 @@ export default function ActionsPopover({
               prominence="tertiary"
               tooltip="Manage Actions"
             />
+            {serversNeedingReauth.length > 0 && (
+              <div className="absolute -right-1 -top-1 pointer-events-none">
+                <Tag color="red" title={String(serversNeedingReauth.length)} />
+              </div>
+            )}
           </div>
         </Popover.Trigger>
         <Popover.Content side="bottom" align="start" width="lg">
