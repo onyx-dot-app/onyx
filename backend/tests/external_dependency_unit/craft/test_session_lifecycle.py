@@ -956,7 +956,7 @@ class TestConcurrentCreateLock:
 
         monkeypatch.setattr(
             session_locks,
-            "SESSION_CREATE_LOCK_TIMEOUT_SECONDS",
+            "SESSION_CREATE_LOCK_WAIT_SECONDS",
             0.05,
         )
         try:

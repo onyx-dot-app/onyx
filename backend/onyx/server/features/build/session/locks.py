@@ -7,7 +7,10 @@ from redis.lock import Lock as RedisLock
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.server.features.build.configs import SESSION_CREATE_LOCK_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import (
+    SESSION_CREATE_LOCK_LEASE_SECONDS,
+    SESSION_CREATE_LOCK_WAIT_SECONDS,
+)
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -21,7 +24,7 @@ def get_session_creation_lock(
 ) -> RedisLock:
     return redis_client.lock(
         f"{OnyxRedisLocks.SESSION_CREATE_LOCK_PREFIX}:{user_id}",
-        timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS,
+        timeout=SESSION_CREATE_LOCK_LEASE_SECONDS,
     )
 
 
@@ -32,7 +35,7 @@ def session_creation_lock(user_id: UUID) -> Generator[None, None, None]:
     lock = get_session_creation_lock(redis_client, user_id)
     if not lock.acquire(
         blocking=True,
-        blocking_timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS,
+        blocking_timeout=SESSION_CREATE_LOCK_WAIT_SECONDS,
     ):
         raise SessionCreationLockAcquisitionError(
             f"Timed out waiting to create a session for user {user_id}"
