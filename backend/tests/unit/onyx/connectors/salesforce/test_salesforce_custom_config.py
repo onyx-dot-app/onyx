@@ -10,8 +10,8 @@ import json
 from typing import Any
 
 from onyx.connectors.salesforce.connector import (
-    _validate_custom_query_config,
     SalesforceConnector,
+    _validate_custom_query_config,
 )
 from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE, MODIFIED_FIELD
 

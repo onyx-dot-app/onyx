@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from uuid import uuid4
 
-from celery import Celery, shared_task, Task
+from celery import Celery, Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import ValidationError
 from redis import Redis
@@ -73,12 +73,12 @@ from onyx.redis.redis_connector_prune import (
     RedisConnectorPrunePayload,
 )
 from onyx.redis.redis_hierarchy import (
+    HierarchyNodeCacheEntry,
     cache_hierarchy_nodes_batch,
     ensure_source_node_exists,
     evict_hierarchy_nodes_from_cache,
     get_node_id_from_raw_id,
     get_source_node_id_from_cache,
-    HierarchyNodeCacheEntry,
 )
 from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
@@ -87,8 +87,8 @@ from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import (
-    format_error_for_logging,
     LoggerContextVars,
+    format_error_for_logging,
     pruning_ctx,
     setup_logger,
 )

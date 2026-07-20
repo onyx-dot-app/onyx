@@ -4,11 +4,11 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.canvas.access import build_course_permission_context
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.connectors.canvas.connector import (
+    CanvasConnector,
     canvas_all_users_group_id,
     canvas_course_group_id,
     canvas_group_group_id,
     canvas_section_group_id,
-    CanvasConnector,
 )
 from onyx.db.models import ConnectorCredentialPair
 from onyx.error_handling.exceptions import OnyxError

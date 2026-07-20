@@ -5,7 +5,7 @@ import pytest
 from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import AccountType
 from onyx.db.models import User, UserRole
 from onyx.file_store.file_store import get_default_file_store

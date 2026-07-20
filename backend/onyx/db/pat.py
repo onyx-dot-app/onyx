@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import contains_eager, Session
+from sqlalchemy.orm import Session, contains_eager
 
 from onyx.auth.pat import (
     build_displayable_pat,

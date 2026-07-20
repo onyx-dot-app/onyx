@@ -14,9 +14,9 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import UserRole
 from onyx.onyxbot.discord.cache import DiscordCacheManager
 from onyx.server.manage.discord_bot.utils import (
+    REGISTRATION_KEY_PREFIX,
     generate_discord_registration_key,
     parse_discord_registration_key,
-    REGISTRATION_KEY_PREFIX,
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client

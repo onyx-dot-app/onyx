@@ -19,8 +19,8 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.background.indexing.index_attempt_utils import (
-    get_old_index_attempt_ids,
     NUM_RECENT_INDEX_ATTEMPTS_TO_KEEP,
+    get_old_index_attempt_ids,
 )
 from onyx.configs.constants import NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS
 from onyx.db.engine.time_utils import get_db_current_time

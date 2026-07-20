@@ -1,6 +1,6 @@
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import load_only, selectinload, Session
+from sqlalchemy.orm import Session, load_only, selectinload
 
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import LLMModelFlowType

@@ -6,12 +6,12 @@ from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from sqlalchemy import create_engine, DateTime, Enum, String
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session, sessionmaker
+from sqlalchemy import DateTime, Enum, String, create_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.sql import func
 
 from onyx.configs.constants import FileOrigin
-from onyx.file_store.file_store import get_default_file_store, S3BackedFileStore
+from onyx.file_store.file_store import S3BackedFileStore, get_default_file_store
 from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
 

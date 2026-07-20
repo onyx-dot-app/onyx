@@ -8,8 +8,8 @@ sys.path.append(parent_dir)
 
 from onyx.db.chat import delete_chat_session  # noqa: E402
 from onyx.db.engine.sql_engine import (  # noqa: E402
-    get_session_with_current_tenant,
     SqlEngine,
+    get_session_with_current_tenant,
 )
 from onyx.db.models import ChatSession  # noqa: E402
 

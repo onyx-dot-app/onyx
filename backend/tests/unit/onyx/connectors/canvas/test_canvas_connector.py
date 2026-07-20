@@ -19,13 +19,6 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.client import CanvasApiClient
 from onyx.connectors.canvas.connector import (
-    _in_time_window,
-    _parse_canvas_dt,
-    _unix_to_canvas_time,
-    canvas_all_users_group_id,
-    canvas_course_group_id,
-    canvas_group_group_id,
-    canvas_section_group_id,
     CanvasAnnouncement,
     CanvasAnnouncementSection,
     CanvasAssignment,
@@ -34,6 +27,13 @@ from onyx.connectors.canvas.connector import (
     CanvasConnectorCheckpoint,
     CanvasPage,
     CanvasStage,
+    _in_time_window,
+    _parse_canvas_dt,
+    _unix_to_canvas_time,
+    canvas_all_users_group_id,
+    canvas_course_group_id,
+    canvas_group_group_id,
+    canvas_section_group_id,
 )
 from onyx.connectors.exceptions import (
     CredentialExpiredError,

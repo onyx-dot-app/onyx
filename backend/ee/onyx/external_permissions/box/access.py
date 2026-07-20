@@ -13,10 +13,10 @@ from pydantic import BaseModel, Field
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.box.connector import (
+    BOX_ROOT_FOLDER_ID,
     box_all_enterprise_users_group_id,
     box_api_status_code,
     box_group_id,
-    BOX_ROOT_FOLDER_ID,
     normalize_box_login,
 )
 from onyx.utils.logger import setup_logger

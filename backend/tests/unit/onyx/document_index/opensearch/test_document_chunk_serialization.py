@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 
 from onyx.document_index.opensearch.schema import (
     CREATED_AT_FIELD_NAME,
-    DocumentChunkWithoutVectors,
     LAST_UPDATED_FIELD_NAME,
+    DocumentChunkWithoutVectors,
 )
 
 

@@ -2,7 +2,7 @@ from typing import Any
 
 from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import aliased, Session
+from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import Document, Document__Tag, Tag

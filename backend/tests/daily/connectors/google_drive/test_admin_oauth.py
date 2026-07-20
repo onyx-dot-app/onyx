@@ -5,15 +5,11 @@ import pytest
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from tests.daily.connectors.google_drive.consts_and_utils import (
-    _pick,
     ADMIN_EMAIL,
     ADMIN_FILE_IDS,
     ADMIN_FOLDER_3_FILE_IDS,
     ADMIN_MY_DRIVE_ID,
     ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
-    assert_expected_docs_in_retrieved_docs,
-    assert_hierarchy_nodes_match_expected,
-    assert_resource_key_shortcut_target_in_retrieved_docs,
     FOLDER_1_1_FILE_IDS,
     FOLDER_1_1_URL,
     FOLDER_1_2_FILE_IDS,
@@ -27,8 +23,6 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     FOLDER_2_URL,
     FOLDER_3_ID,
     FOLDER_3_URL,
-    get_expected_hierarchy_for_shared_drives,
-    load_connector_outputs,
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
     PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
@@ -42,6 +36,12 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_DRIVE_1_ID,
     TEST_USER_1_EXTRA_DRIVE_2_ID,
     TEST_USER_1_EXTRA_FOLDER_ID,
+    _pick,
+    assert_expected_docs_in_retrieved_docs,
+    assert_hierarchy_nodes_match_expected,
+    assert_resource_key_shortcut_target_in_retrieved_docs,
+    get_expected_hierarchy_for_shared_drives,
+    load_connector_outputs,
 )
 from tests.utils.secret_names import TestSecret
 

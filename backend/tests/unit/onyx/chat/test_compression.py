@@ -4,12 +4,12 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from onyx.chat.compression import (
+    SummaryContent,
     _build_llm_messages_for_summarization,
     find_summary_for_branch,
     generate_summary,
     get_compression_params,
     get_messages_to_summarize,
-    SummaryContent,
 )
 from onyx.configs.constants import MessageType
 from onyx.llm.models import AssistantMessage, SystemMessage, UserMessage

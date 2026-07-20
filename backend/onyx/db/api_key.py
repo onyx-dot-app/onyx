@@ -3,7 +3,7 @@ import uuid
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, Session
+from sqlalchemy.orm import Session, joinedload
 
 from onyx.auth.api_key import (
     ApiKeyDescriptor,

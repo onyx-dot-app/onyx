@@ -1,4 +1,4 @@
-from typing import Any, cast, IO, TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, Any, cast
 
 from onyx.configs.constants import KV_UNSTRUCTURED_API_KEY
 from onyx.key_value_store.factory import get_kv_store

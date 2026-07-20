@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from celery import shared_task, Task
+from celery import Task, shared_task
 
 from onyx.configs.app_configs import (
     BRAINTRUST_API_KEY,

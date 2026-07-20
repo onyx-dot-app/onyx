@@ -18,7 +18,7 @@ from onyx.server.features.build.configs import (
     SANDBOX_NAMESPACE,
     SandboxBackend,
 )
-from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec, PoolSession
+from tests.integration.tests.craft.k8s.k8s_fixtures import PoolSession, pod_exec
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,

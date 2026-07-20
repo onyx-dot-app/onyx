@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User
-from onyx.db.skill import fetch_skill, list_skills, SkillAccessPolicy
+from onyx.db.skill import SkillAccessPolicy, fetch_skill, list_skills
 from onyx.skills.built_in import BUILT_IN_SKILLS, BuiltInSkillDefinition
 from tests.external_dependency_unit.craft.db_helpers import (
     make_built_in_skill_row,

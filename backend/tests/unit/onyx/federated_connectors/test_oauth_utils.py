@@ -11,9 +11,9 @@ import pytest
 
 from onyx.cache.interface import CacheBackend, CacheLock
 from onyx.federated_connectors.oauth_utils import (
-    generate_oauth_state,
     OAUTH_STATE_TTL,
     OAuthSession,
+    generate_oauth_state,
     verify_oauth_state,
 )
 

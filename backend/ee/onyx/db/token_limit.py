@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 
-from sqlalchemy import exists, Row, Select, select
-from sqlalchemy.orm import aliased, Session
+from sqlalchemy import Row, Select, exists, select
+from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.models import (

@@ -4,9 +4,9 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import case, func, Select, select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
 from sqlalchemy.sql.expression import or_

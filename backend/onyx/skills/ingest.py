@@ -10,10 +10,10 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
+    SKILL_MD_NAME,
     build_single_file_bundle,
     compute_bundle_sha256,
     normalize_custom_bundle,
-    SKILL_MD_NAME,
 )
 from onyx.skills.metadata import parse_skill_document
 from onyx.utils.logger import setup_logger

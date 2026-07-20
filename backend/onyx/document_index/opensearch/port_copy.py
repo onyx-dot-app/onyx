@@ -27,8 +27,8 @@ from onyx.indexing.chunker import DEFAULT_CONTEXTUAL_RAG_RESERVED_TOKENS
 from onyx.indexing.embedder import DefaultIndexingEmbedder, IndexingEmbedder
 from onyx.indexing.port_reembed import (
     AugmentationReembedContext,
-    re_embed_chunks,
     ReembedStrategy,
+    re_embed_chunks,
     select_reembed_strategy,
 )
 from onyx.llm.factory import get_contextual_rag_llm_for_search_settings

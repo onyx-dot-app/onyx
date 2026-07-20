@@ -3,7 +3,7 @@ import copy
 import itertools
 import re
 from collections.abc import Callable, Generator
-from concurrent.futures import as_completed, Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from enum import Enum
 from http.client import IncompleteRead, RemoteDisconnected
@@ -60,11 +60,11 @@ from onyx.connectors.slack.models import ChannelType, MessageType, ThreadType
 from onyx.connectors.slack.onyx_retry_handler import OnyxRedisSlackRetryHandler
 from onyx.connectors.slack.onyx_slack_web_client import OnyxSlackWebClient
 from onyx.connectors.slack.utils import (
+    SlackTextCleaner,
     expert_info_from_slack_id,
     fetch_team_user_emails,
     get_message_link,
     make_paginated_slack_api_call,
-    SlackTextCleaner,
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface

@@ -7,8 +7,8 @@ import pytest
 from docker import DockerClient
 
 from onyx.sandbox_proxy.identity_docker import (
-    _identity_from_container,
     DockerEventsLookup,
+    _identity_from_container,
 )
 
 _DEFAULT_NETWORK = "onyx_craft_sandbox"

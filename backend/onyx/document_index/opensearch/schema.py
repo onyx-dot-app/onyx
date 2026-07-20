@@ -5,12 +5,12 @@ from typing import Any, Self
 from pydantic import (
     BaseModel,
     Field,
+    SerializerFunctionWrapHandler,
+    ValidationInfo,
     field_serializer,
     field_validator,
     model_serializer,
     model_validator,
-    SerializerFunctionWrapHandler,
-    ValidationInfo,
 )
 
 from onyx.configs.app_configs import (
@@ -27,9 +27,9 @@ from onyx.document_index.opensearch.constants import (
     M,
 )
 from onyx.document_index.opensearch.string_filtering import (
+    MAX_DOCUMENT_ID_ENCODED_LENGTH,
     DocumentIDTooLongError,
     filter_and_validate_document_id,
-    MAX_DOCUMENT_ID_ENCODED_LENGTH,
 )
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.tenant import get_tenant_id_short_string

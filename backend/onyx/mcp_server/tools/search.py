@@ -28,11 +28,11 @@ from onyx.server.features.web_search.models import (
 )
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.server.metrics.mcp_server import (
+    UNKNOWN_SOURCE_LABEL,
     MCPServerToolName,
     record_mcp_search_results,
     record_mcp_search_source,
     record_mcp_server_tool_outcome,
-    UNKNOWN_SOURCE_LABEL,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import build_api_server_url_for_http_requests

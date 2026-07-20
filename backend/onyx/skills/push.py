@@ -15,11 +15,11 @@ from onyx.db.external_app import (
 )
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
+    SkillAccessPolicy,
+    SkillValidityUpdate,
     affected_user_ids_for_skill,
     list_skills,
     persist_skill_validity,
-    SkillAccessPolicy,
-    SkillValidityUpdate,
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import (
@@ -35,9 +35,9 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 )
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
-    BuiltInSkillDefinition,
     COMPANY_SEARCH,
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
+    BuiltInSkillDefinition,
 )
 from onyx.skills.rendering import render_company_search_skill, render_external_app_skill
 from onyx.skills.validation import (

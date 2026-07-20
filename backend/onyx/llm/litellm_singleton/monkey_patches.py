@@ -61,7 +61,7 @@ Status checked against LiteLLM v1.85.1 (2026-05-26):
 
 import time
 import uuid
-from typing import Any, cast, List, Optional
+from typing import Any, List, Optional, cast
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,

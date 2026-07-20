@@ -10,8 +10,8 @@ from httpx_oauth.exceptions import GetIdEmailError
 
 from onyx.auth.oidc_client import (
     OpenIDConfigurationIssuerMismatch,
-    validate_issuer_owns_config_url,
     VerifiedEmailOpenID,
+    validate_issuer_owns_config_url,
 )
 
 _ISSUER = "https://idp.companyb.com"

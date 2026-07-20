@@ -7,10 +7,10 @@ import pytest
 
 from onyx.auth import captcha as captcha_module
 from onyx.auth.captcha import (
-    _replay_cache_key,
-    _reserve_token_or_raise,
     CaptchaAction,
     CaptchaVerificationError,
+    _replay_cache_key,
+    _reserve_token_or_raise,
     verify_captcha_token,
 )
 

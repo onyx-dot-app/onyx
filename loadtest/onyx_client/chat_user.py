@@ -23,7 +23,7 @@ import time
 import uuid
 from typing import Any
 
-from locust import constant, HttpUser, task
+from locust import HttpUser, constant, task
 
 from onyx_client.env import env_float, env_int
 from onyx_client.stream_parser import ChatStreamAnalyzer

@@ -1,10 +1,10 @@
 import struct
 
 from onyx.voice.providers.elevenlabs import (
-    _http_to_ws_url,
     DEFAULT_ELEVENLABS_API_BASE,
     ElevenLabsSTTMessageType,
     ElevenLabsVoiceProvider,
+    _http_to_ws_url,
 )
 
 # --- _http_to_ws_url ---

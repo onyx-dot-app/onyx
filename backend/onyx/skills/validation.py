@@ -12,10 +12,10 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
-    normalize_custom_bundle,
-    NormalizedSkillBundle,
-    read_bundle_file,
     SKILL_MD_NAME,
+    NormalizedSkillBundle,
+    normalize_custom_bundle,
+    read_bundle_file,
 )
 from onyx.skills.metadata import parse_skill_document
 from onyx.skills.models import SKILL_NAME_PATTERN

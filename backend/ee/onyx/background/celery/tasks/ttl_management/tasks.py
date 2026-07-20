@@ -1,6 +1,6 @@
 import uuid
 
-from celery import shared_task, Task
+from celery import Task, shared_task
 
 from ee.onyx.background.celery_utils import should_perform_chat_ttl_check
 from onyx.configs.app_configs import JOB_TIMEOUT

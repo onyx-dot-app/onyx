@@ -20,9 +20,9 @@ from onyx.connectors.confluence.access import (
 )
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.confluence.onyx_confluence import (
-    _is_confcloud_77618_response,
     Confcloud77618Error,
     OnyxConfluence,
+    _is_confcloud_77618_response,
 )
 from onyx.connectors.interfaces import CredentialsProviderInterface
 

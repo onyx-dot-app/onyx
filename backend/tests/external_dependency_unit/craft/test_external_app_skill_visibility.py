@@ -9,10 +9,10 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import User, UserRole
 from onyx.db.skill import (
+    SkillAccessPolicy,
     fetch_skill,
     list_skills,
     set_skill_enabled_for_user,
-    SkillAccessPolicy,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError

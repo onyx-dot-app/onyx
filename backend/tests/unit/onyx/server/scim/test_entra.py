@@ -16,6 +16,7 @@ import pytest
 from fastapi import Response
 
 from ee.onyx.server.scim.api import (
+    ScimJSONResponse,
     create_user,
     delete_user,
     get_group,
@@ -28,7 +29,6 @@ from ee.onyx.server.scim.api import (
     patch_group,
     patch_user,
     replace_user,
-    ScimJSONResponse,
 )
 from ee.onyx.server.scim.models import (
     SCIM_ENTERPRISE_USER_SCHEMA,

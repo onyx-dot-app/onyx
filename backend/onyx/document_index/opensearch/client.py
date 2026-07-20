@@ -43,11 +43,11 @@ from onyx.document_index.opensearch.schema import (
     CHUNK_INDEX_FIELD_NAME,
     CONTENT_VECTOR_FIELD_NAME,
     DOCUMENT_ID_FIELD_NAME,
+    MAX_CHUNK_SIZE_FIELD_NAME,
+    TITLE_VECTOR_FIELD_NAME,
     DocumentChunk,
     DocumentChunkWithoutVectors,
     get_opensearch_doc_chunk_id,
-    MAX_CHUNK_SIZE_FIELD_NAME,
-    TITLE_VECTOR_FIELD_NAME,
 )
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
 from onyx.server.metrics.opensearch_search import (
