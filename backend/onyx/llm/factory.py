@@ -403,9 +403,8 @@ def get_llm(
 
     extra_headers = build_llm_extra_headers(additional_headers)
 
-    # NOTE: this is needed since Ollama API key is optional
-    # User may access Ollama cloud via locally hosted instance (logged in)
-    # or just via the cloud API (not logged in, using API key)
+    # Some providers (e.g. LM Studio) carry an optional Bearer token in
+    # custom_config that must be turned into an Authorization header.
     provider_extra_headers = _build_provider_extra_headers(provider, custom_config)
     if provider_extra_headers:
         extra_headers.update(provider_extra_headers)

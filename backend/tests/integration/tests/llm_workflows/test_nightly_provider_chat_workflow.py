@@ -153,9 +153,6 @@ def _load_provider_config() -> NightlyProviderConfig:
             provider=provider, raw_custom_config=parsed
         )
 
-    if provider == "ollama_chat" and api_key and not custom_config:
-        custom_config = {"OLLAMA_API_KEY": api_key}
-
     return NightlyProviderConfig(
         provider=provider,
         model_names=model_names,

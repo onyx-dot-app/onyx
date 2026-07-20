@@ -45,7 +45,6 @@ from onyx.llm.well_known_providers.constants import (
     AWS_SECRET_ACCESS_KEY_KWARG,
     AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
     LM_STUDIO_API_KEY_CONFIG_KEY,
-    OLLAMA_API_KEY_CONFIG_KEY,
     VERTEX_AUTH_METHOD_KWARG,
     VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY,
     VERTEX_CREDENTIALS_FILE_KWARG,
@@ -374,9 +373,6 @@ class LitellmLLM(LLM):
                         model_kwargs[k] = v
                     elif k == VERTEX_PROJECT_KWARG:
                         model_kwargs[k] = v
-                elif model_provider == LlmProviderNames.OLLAMA_CHAT:
-                    if k == OLLAMA_API_KEY_CONFIG_KEY:
-                        model_kwargs["api_key"] = v
                 elif model_provider == LlmProviderNames.LM_STUDIO:
                     if k == LM_STUDIO_API_KEY_CONFIG_KEY:
                         model_kwargs["api_key"] = v
