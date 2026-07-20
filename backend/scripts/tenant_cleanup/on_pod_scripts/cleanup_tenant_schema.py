@@ -48,9 +48,11 @@ def drop_data_plane_schema(tenant_id: str) -> dict[str, str]:
 
             print(f"Successfully dropped schema: {tenant_id}", file=sys.stderr)
 
-            # Delete the tenant mapping from user_tenant_mapping table
+            # Schema-qualified on purpose: schema_translate_map only rewrites SQLAlchemy
+            # Table constructs, not raw text(), so an unqualified name resolves against
+            # whatever search_path the pooled backend happens to carry.
             delete_mapping_query = text("""
-                DELETE FROM user_tenant_mapping
+                DELETE FROM public.user_tenant_mapping
                 WHERE tenant_id = :tenant_id
                 """)
             session.execute(delete_mapping_query, {"tenant_id": tenant_id})

@@ -12,8 +12,10 @@ Usage:
         --data-plane-context <context> --control-plane-context <context> [--force] [--concurrency N]
 """
 
+import json
 import subprocess
 import sys
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
@@ -38,6 +40,49 @@ def safe_print(*args: Any, **kwargs: Any) -> None:
         print(*args, **kwargs)
 
 
+def _last_json_object(stdout: str) -> Any | None:
+    """Return the last JSON object in stdout, or None if there is none.
+
+    The on-pod script pretty-prints its payload across multiple lines, so this cannot
+    be done line by line.
+    """
+    text = stdout.strip()
+    if not text:
+        return None
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Fall back to scanning, in case anything else ever shares stdout.
+    decoder = json.JSONDecoder()
+    found: Any | None = None
+    for idx, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            payload, _ = decoder.raw_decode(text, idx)
+        except json.JSONDecodeError:
+            continue
+        found = payload
+    return found
+
+
+def _raise_on_reported_failure(stdout: str, tenant_id: str) -> None:
+    """Raise if the on-pod script reported an error in its JSON payload.
+
+    The on-pod script exits 0 even when it fails, so its payload is the only signal.
+    Unparseable output is left alone - the exit code has already been checked.
+    """
+    payload = _last_json_object(stdout)
+    if isinstance(payload, dict) and payload.get("status") == "error":
+        raise RuntimeError(
+            f"Connector deletion reported failure for {tenant_id}: "
+            f"{payload.get('message', 'no message')}"
+        )
+
+
 def run_connector_deletion(pod_name: str, tenant_id: str, context: str) -> None:
     """Mark all connector credential pairs for deletion.
 
@@ -59,13 +104,17 @@ def run_connector_deletion(pod_name: str, tenant_id: str, context: str) -> None:
             f"execute_connector_deletion.py not found at {mark_deletion_script}"
         )
 
+    # Unique per call: this runs concurrently against a single pod, and concurrent
+    # copies to a shared path can interleave into a corrupt script.
+    remote_script = f"/tmp/execute_connector_deletion_{uuid.uuid4().hex}.py"
+
     try:
         # Copy script to pod
         cmd_cp = ["kubectl", "cp", "--context", context]
         cmd_cp.extend(
             [
                 str(mark_deletion_script),
-                f"{pod_name}:/tmp/execute_connector_deletion.py",
+                f"{pod_name}:{remote_script}",
             ]
         )
 
@@ -81,16 +130,20 @@ def run_connector_deletion(pod_name: str, tenant_id: str, context: str) -> None:
             [
                 "--",
                 "python",
-                "/tmp/execute_connector_deletion.py",
+                remote_script,
                 tenant_id,
                 "--all",
             ]
         )
 
-        result = subprocess.run(cmd_exec)
+        result = subprocess.run(cmd_exec, capture_output=True, text=True)
 
         if result.returncode != 0:
-            raise RuntimeError(result.stderr)
+            raise RuntimeError(result.stderr or result.stdout or "unknown error")
+
+        # The on-pod script reports failures in its JSON payload while still exiting 0,
+        # so a non-zero return code alone is not enough to detect a failed tenant.
+        _raise_on_reported_failure(result.stdout, tenant_id)
 
     except subprocess.CalledProcessError as e:
         safe_print(
@@ -106,6 +159,23 @@ def run_connector_deletion(pod_name: str, tenant_id: str, context: str) -> None:
             file=sys.stderr,
         )
         raise
+
+    finally:
+        # Otherwise a large batch leaves one file per tenant behind on the pod.
+        subprocess.run(
+            [
+                "kubectl",
+                "exec",
+                "--context",
+                context,
+                pod_name,
+                "--",
+                "rm",
+                "-f",
+                remote_script,
+            ],
+            capture_output=True,
+        )
 
 
 def mark_tenant_connectors_for_deletion(
