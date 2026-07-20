@@ -17,8 +17,8 @@ import os
 import socket
 import threading
 from socketserver import ThreadingMixIn
-from typing import Any
-from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
+from typing import Any, cast
+from wsgiref.simple_server import WSGIRequestHandler, WSGIServer
 
 from prometheus_client import make_wsgi_app
 
@@ -74,8 +74,16 @@ class _DualStackWSGIServer(ThreadingMixIn, WSGIServer):
             try:
                 self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
             except OSError as e:
-                # Kernel refuses dual-stack; the IPv4 candidate covers this host.
-                logger.debug("Could not clear IPV6_V6ONLY on metrics socket: %s", e)
+                # Some kernels pin IPv6 sockets to v6-only and refuse this. Keep
+                # the listener rather than failing over to 0.0.0.0: on an
+                # IPv6-only cluster that fallback binds successfully but no
+                # scraper can route to it, which is strictly worse than serving
+                # IPv6 alone. Warn so the reduced reachability is not silent.
+                logger.warning(
+                    "Metrics socket could not be made dual-stack (%s); this "
+                    "listener will serve IPv6 scrapes only.",
+                    e,
+                )
         super().server_bind()
 
 
@@ -92,15 +100,18 @@ def _start_wsgi_server(addr: str, port: int) -> WSGIServer:
         addr, port, type=socket.SOCK_STREAM, flags=socket.AI_PASSIVE
     )
     family, _, _, _, sockaddr = next(iter(infos))
-    # sockaddr is 2-tuple for AF_INET and 4-tuple for AF_INET6; host is first in both.
-    host = str(sockaddr[0])
 
     class _Server(_DualStackWSGIServer):
         address_family = family
 
-    httpd = make_server(
-        host, port, make_wsgi_app(), _Server, handler_class=_SilentHandler
-    )
+    # Bind the sockaddr getaddrinfo produced rather than just its host part, so a
+    # scoped IPv6 address (fe80::1%eth0) keeps the scope id it needs to bind.
+    # This is make_server() inlined; it accepts only a (host, port) pair.
+    # The cast drops getaddrinfo's link-layer sockaddr form, which SOCK_STREAM
+    # over an IP address cannot return.
+    address = cast("tuple[str, int] | tuple[str, int, int, int]", sockaddr)
+    httpd = _Server(address, _SilentHandler)
+    httpd.set_app(make_wsgi_app())
     threading.Thread(
         target=httpd.serve_forever, daemon=True, name=f"prometheus-metrics-{port}"
     ).start()

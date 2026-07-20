@@ -3,6 +3,7 @@
 import socket
 import urllib.request
 from collections.abc import Iterator
+from typing import Any
 from unittest.mock import MagicMock, patch
 from wsgiref.simple_server import WSGIServer
 
@@ -151,6 +152,28 @@ class TestDualStackListener:
             socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0
         )
 
+    def test_server_bind_keeps_listener_when_v6only_cannot_be_cleared(self) -> None:
+        """A kernel that pins v6-only must not cost us the IPv6 listener.
+
+        Failing over to 0.0.0.0 here would bind successfully on an IPv6-only
+        cluster while being unroutable for every scraper, so the bind proceeds
+        and the reduced reachability is warned about instead.
+        """
+        import onyx.server.metrics.metrics_server as mod
+
+        server = object.__new__(mod._DualStackWSGIServer)
+        server.address_family = socket.AF_INET6
+        server.socket = MagicMock()
+        server.socket.setsockopt.side_effect = OSError("Protocol not available")
+
+        bound = MagicMock()
+        with patch.object(WSGIServer, "server_bind", bound):
+            with patch.object(mod.logger, "warning") as warn:
+                server.server_bind()  # must not raise
+
+        bound.assert_called_once()
+        assert warn.call_count == 1
+
     def test_server_bind_leaves_ipv4_socket_alone(self) -> None:
         """An AF_INET listener has no IPV6_V6ONLY option to set."""
         import onyx.server.metrics.metrics_server as mod
@@ -182,6 +205,35 @@ class TestDualStackListener:
         )
 
         assert _scrape("127.0.0.1", port) == 200
+        assert _scrape("[::1]", port) == 200
+
+    @pytest.mark.skipif(
+        not _ipv6_loopback_available(), reason="IPv6 loopback unavailable"
+    )
+    def test_scoped_ipv6_address_keeps_its_scope_id(self) -> None:
+        """A scoped bind address must reach bind() with its scope id intact."""
+        import onyx.server.metrics.metrics_server as mod
+
+        captured: list[tuple[object, ...]] = []
+        real_init = mod._DualStackWSGIServer.__init__
+
+        def spy(self: Any, server_address: Any, *rest: Any) -> None:
+            captured.append(tuple(server_address))
+            real_init(self, server_address, *rest)
+
+        port = _free_port()
+        env = {
+            "PROMETHEUS_METRICS_PORT": str(port),
+            "PROMETHEUS_METRICS_BIND_ADDR": "::1",
+        }
+        with patch.object(mod._DualStackWSGIServer, "__init__", spy):
+            with patch.dict("os.environ", env):
+                assert start_metrics_server("monitoring") == port
+
+        # getaddrinfo yields the 4-tuple (host, port, flowinfo, scope_id) for
+        # IPv6; all four must survive to the socket rather than just the host.
+        assert len(captured) == 1
+        assert len(captured[0]) == 4
         assert _scrape("[::1]", port) == 200
 
     def test_pinned_ipv4_bind_stays_ipv4(self) -> None:
