@@ -1520,10 +1520,6 @@ configMap:
   GEN_AI_MAX_TOKENS: ""
   LLM_SOCKET_READ_TIMEOUT: "60"
   MAX_CHUNKS_FED_TO_CHAT: ""
-  # Set to "true" to never inject LLM provider custom config keys into the
-  # process environment during calls (keys with no LiteLLM parameter
-  # equivalent are then dropped).
-  DISABLE_LLM_CUSTOM_CONFIG_ENV_INJECTION: ""
   # Query Options
   DOC_TIME_DECAY: ""
   HYBRID_ALPHA: ""
