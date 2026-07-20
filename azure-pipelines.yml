@@ -112,7 +112,7 @@ stages:
                 -f web/Dockerfile \
                 -t data-onyx/onyx-web-server:latest \
                 -t data-onyx/onyx-web-server:$(short_hash) \
-                .
+                web/
             displayName: "Build web server image"
 
           - task: ECRPushImage@1
