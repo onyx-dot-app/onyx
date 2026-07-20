@@ -260,3 +260,12 @@ class TestExportEndpoint:
         resp = client.get("/admin/usage/export")
         assert resp.status_code == 403
         assert resp.json()["error_code"] == "INSUFFICIENT_PERMISSIONS"
+
+    def test_start_after_end_rejected(self, db_session: Session) -> None:
+        client = TestClient(_make_app(db_session, _ADMIN))
+        resp = client.get(
+            "/admin/usage/export",
+            params={"start": "2026-06-14", "end": "2026-06-01"},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error_code"] == "INVALID_INPUT"
