@@ -71,9 +71,9 @@ import {
   disconnectEmbeddingProvider,
   setNewSearchSettings,
 } from "@/lib/indexing/svc";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { Settings, toSettings } from "@/lib/settings/types";
 import {

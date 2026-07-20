@@ -1,16 +1,14 @@
 # These are helper objects for tracking the keys we need to write in redis
 import json
 import threading
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from celery import Celery
 from redis import Redis
 
 from onyx.background.celery.configs.base import CELERY_SEPARATOR
 from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
+from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS, OnyxCeleryPriority
 
 _broker_client: Redis | None = None
 _broker_url: str | None = None

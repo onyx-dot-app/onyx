@@ -6,8 +6,7 @@ behind :func:`ensure_fresh_credentials`. Each step takes its own short session, 
 no connection is held across the lock wait or the POST.
 """
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -16,19 +15,21 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.external_app import delete_external_app_user_credential
-from onyx.db.external_app import get_external_app_by_id
-from onyx.db.external_app import get_external_app_user_credential
-from onyx.db.external_app import upsert_external_app_user_credential
+from onyx.db.external_app import (
+    delete_external_app_user_credential,
+    get_external_app_by_id,
+    get_external_app_user_credential,
+    upsert_external_app_user_credential,
+)
 from onyx.db.models import ExternalApp
-from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.base import TokenRefreshTerminalError
-from onyx.external_apps.providers.base import TokenRefreshTransientError
+from onyx.external_apps.providers.base import (
+    OAuthExternalAppProvider,
+    TokenRefreshTerminalError,
+    TokenRefreshTransientError,
+)
 from onyx.external_apps.providers.registry import get_provider_for_app
-from onyx.external_apps.token_utils import needs_refresh
-from onyx.external_apps.token_utils import stamp_expires_at
-from onyx.redis.lock_context import redis_shared_lock
-from onyx.redis.lock_context import RedisSharedLockAcquisitionError
+from onyx.external_apps.token_utils import needs_refresh, stamp_expires_at
+from onyx.redis.lock_context import RedisSharedLockAcquisitionError, redis_shared_lock
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

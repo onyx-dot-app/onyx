@@ -2,21 +2,24 @@ import io
 
 from PIL import Image
 
-from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.beat_schedule import (
+    CLOUD_BEAT_MULTIPLIER_DEFAULT,
     CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
 )
-from onyx.configs.app_configs import ENABLE_TENANT_WORK_GATING
-from onyx.configs.app_configs import TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS
-from onyx.configs.app_configs import TENANT_WORK_GATING_TTL_SECONDS
-from onyx.configs.constants import CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT
-from onyx.configs.constants import ONYX_CLOUD_REDIS_RUNTIME
-from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
-from onyx.configs.constants import ONYX_EMAILABLE_LOGO_MAX_DIM
+from onyx.configs.app_configs import (
+    ENABLE_TENANT_WORK_GATING,
+    TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS,
+    TENANT_WORK_GATING_TTL_SECONDS,
+)
+from onyx.configs.constants import (
+    CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT,
+    ONYX_CLOUD_REDIS_RUNTIME,
+    ONYX_CLOUD_TENANT_ID,
+    ONYX_EMAILABLE_LOGO_MAX_DIM,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_replica_client
-from onyx.utils.file import FileWithMimeType
-from onyx.utils.file import OnyxStaticFileManager
+from onyx.utils.file import FileWithMimeType, OnyxStaticFileManager
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 

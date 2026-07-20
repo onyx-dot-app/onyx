@@ -14,9 +14,7 @@ Environment variables required:
 import json
 import os
 import sys
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 import jwt
 import requests

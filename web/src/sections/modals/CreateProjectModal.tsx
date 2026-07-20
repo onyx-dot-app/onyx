@@ -6,9 +6,9 @@ import { Button } from "@opal/components";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { InputVertical, toast } from "@opal/layouts";
 import { useAppRouter } from "@/hooks/appNavigation";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { useModal } from "@opal/components";
 import { SvgFolderPlus } from "@opal/icons";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
 const validationSchema = Yup.object({

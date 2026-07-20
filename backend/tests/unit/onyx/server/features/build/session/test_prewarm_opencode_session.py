@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.db.models import BuildSession
+from onyx.db.models import BuildSession, Sandbox
 from onyx.server.features.build.session.manager import SessionManager
 
 
@@ -50,6 +49,10 @@ def _build_session(opencode_session_id: str | None = None) -> BuildSession:
     )
 
 
+def _sandbox() -> Sandbox:
+    return Sandbox(id=uuid4(), user_id=uuid4(), skills_hash="skills-hash")
+
+
 @pytest.mark.parametrize(
     ("initial_id", "resolved_id", "flush_count"),
     [
@@ -63,57 +66,64 @@ def test_prewarm_opencode_session_persists_resolved_id(
     resolved_id: str,
     flush_count: int,
 ) -> None:
-    sandbox_id = uuid4()
+    sandbox = _sandbox()
     session = _build_session(initial_id)
     sandbox_manager = _FakeSandboxManager(resolved_id)
     db_session = _FakeDbSession()
 
-    _manager(sandbox_manager, db_session)._prewarm_opencode_session(sandbox_id, session)
+    _manager(sandbox_manager, db_session)._prewarm_opencode_session(sandbox, session)
 
     assert session.opencode_session_id == resolved_id
+    assert session.skills_hash == (
+        sandbox.skills_hash if initial_id != resolved_id else None
+    )
     assert db_session.flush_count == flush_count
-    assert sandbox_manager.calls == [(sandbox_id, session.id, initial_id)]
+    assert sandbox_manager.calls == [(sandbox.id, session.id, initial_id)]
 
 
 def test_prewarm_reuses_existing_id_for_non_empty_session() -> None:
-    sandbox_id = uuid4()
+    sandbox = _sandbox()
     session = _build_session("persisted-opencode")
+    session.skills_hash = "existing-hash"
     sandbox_manager = _FakeSandboxManager("persisted-opencode")
     sandbox_manager.supports_opencode_history_persistence = True
     db_session = _FakeDbSession()
 
-    _manager(sandbox_manager, db_session)._prewarm_opencode_session(sandbox_id, session)
+    _manager(sandbox_manager, db_session)._prewarm_opencode_session(sandbox, session)
 
     assert session.opencode_session_id == "persisted-opencode"
+    assert session.skills_hash == "existing-hash"
     assert db_session.flush_count == 0
-    assert sandbox_manager.calls == [(sandbox_id, session.id, "persisted-opencode")]
+    assert sandbox_manager.calls == [(sandbox.id, session.id, "persisted-opencode")]
 
 
 def test_prewarm_mints_id_for_non_empty_session_without_opencode_id() -> None:
-    sandbox_id = uuid4()
+    sandbox = _sandbox()
     session = _build_session(None)
     sandbox_manager = _FakeSandboxManager("replacement-opencode")
     sandbox_manager.supports_opencode_history_persistence = True
     db_session = _FakeDbSession()
 
-    _manager(sandbox_manager, db_session)._prewarm_opencode_session(sandbox_id, session)
+    _manager(sandbox_manager, db_session)._prewarm_opencode_session(sandbox, session)
 
     assert session.opencode_session_id == "replacement-opencode"
+    assert session.skills_hash == sandbox.skills_hash
     assert db_session.flush_count == 1
-    assert sandbox_manager.calls == [(sandbox_id, session.id, None)]
+    assert sandbox_manager.calls == [(sandbox.id, session.id, None)]
 
 
 def test_prewarm_opencode_session_raises_when_runtime_returns_no_id() -> None:
-    sandbox_id = uuid4()
+    sandbox = _sandbox()
     session = _build_session()
     sandbox_manager = _FakeSandboxManager(None)
     db_session = _FakeDbSession()
 
     with pytest.raises(RuntimeError, match="Failed to prewarm opencode session"):
         _manager(sandbox_manager, db_session)._prewarm_opencode_session(
-            sandbox_id, session
+            sandbox, session
         )
 
     assert session.opencode_session_id is None
+    assert session.skills_hash is None
     assert db_session.flush_count == 0
-    assert sandbox_manager.calls == [(sandbox_id, session.id, None)]
+    assert sandbox_manager.calls == [(sandbox.id, session.id, None)]

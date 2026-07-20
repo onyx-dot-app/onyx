@@ -22,7 +22,7 @@ import { useUser } from "@/providers/UserProvider";
 import { useCurrentUser } from "@/lib/users/hooks";
 import NoAgentModal from "@/sections/modals/NoAgentModal";
 import PreviewModal from "@/sections/modals/PreviewModal";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
@@ -719,31 +719,29 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       <AppPopup />
 
       {retrievalEnabled && documentSidebarVisible && isMobile && (
-        <div className="md:hidden">
-          <Modal
-            open
-            onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
-          >
-            <Modal.Content>
-              <Modal.Header
-                icon={SvgFileText}
-                title="Sources"
-                onClose={() => updateCurrentDocumentSidebarVisible(false)}
+        <Modal
+          open
+          onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
+        >
+          <Modal.Content>
+            <Modal.Header
+              icon={SvgFileText}
+              title="Sources"
+              onClose={() => updateCurrentDocumentSidebarVisible(false)}
+            />
+            <Modal.Body>
+              {/* IMPORTANT: this is a memoized component, and it's very important
+              for performance reasons that this stays true. MAKE SURE that all function
+              props are wrapped in useCallback. */}
+              <DocumentsSidebar
+                setPresentingDocument={setPresentingDocument}
+                modal
+                closeSidebar={handleMobileDocumentSidebarClose}
+                selectedDocuments={selectedDocuments}
               />
-              <Modal.Body>
-                {/* IMPORTANT: this is a memoized component, and it's very important
-                for performance reasons that this stays true. MAKE SURE that all function
-                props are wrapped in useCallback. */}
-                <DocumentsSidebar
-                  setPresentingDocument={setPresentingDocument}
-                  modal
-                  closeSidebar={handleMobileDocumentSidebarClose}
-                  selectedDocuments={selectedDocuments}
-                />
-              </Modal.Body>
-            </Modal.Content>
-          </Modal>
-        </div>
+            </Modal.Body>
+          </Modal.Content>
+        </Modal>
       )}
 
       {presentingDocument && (

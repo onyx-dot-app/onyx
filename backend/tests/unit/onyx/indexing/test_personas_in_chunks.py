@@ -4,17 +4,12 @@ Covers Phase 1 (schema plumbing) and Phase 2 (write at index time) of the
 unify-assistant-project-files plan.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from onyx.access.models import DocumentAccess
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import TextSection
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import IndexChunk
+from onyx.connectors.models import Document, DocumentSource, TextSection
+from onyx.indexing.models import ChunkEmbedding, DocMetadataAwareIndexChunk, IndexChunk
 
 
 def _make_index_chunk(

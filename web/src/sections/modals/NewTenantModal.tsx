@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
+import { BasicModalFooter, Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgArrowRight, SvgUsers, SvgX } from "@opal/icons";
 import { logout } from "@/lib/users/svc";

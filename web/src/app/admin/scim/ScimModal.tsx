@@ -5,8 +5,8 @@ import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { CopyButton } from "@opal/components";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { BasicModalFooter, Modal } from "@opal/components";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { toast } from "@opal/layouts";
 import { downloadFile } from "@/lib/download";
 

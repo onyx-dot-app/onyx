@@ -1,29 +1,31 @@
 import copy
 import re
-from collections.abc import Callable
-from collections.abc import Iterable
-from typing import Any
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterable
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
-from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
-from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
-from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
-from onyx.configs.app_configs import USE_CHUNK_SUMMARY
-from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
+from onyx.configs.app_configs import (
+    LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    MAX_TOKENS_FOR_FULL_INCLUSION,
+    SEND_USER_METADATA_TO_LLM_PROVIDER,
+    USE_CHUNK_SUMMARY,
+    USE_DOCUMENT_SUMMARY,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
-from onyx.db.models import LLMProvider
-from onyx.db.models import ModelConfiguration
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.model_capabilities import litellm_thinks_model_supports_image_input
+from onyx.db.models import LLMProvider, ModelConfiguration
+from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.model_capabilities import (
+    get_max_input_tokens,
+    litellm_thinks_model_supports_image_input,
+)
 from onyx.llm.model_response import ModelResponse
-from onyx.llm.models import UserMessage
-from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
-from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
+from onyx.llm.models import LLMErrorInfo, UserMessage
+from onyx.prompts.contextual_retrieval import (
+    CONTEXTUAL_RAG_TOKEN_ESTIMATE,
+    DOCUMENT_SUMMARY_TOKEN_ESTIMATE,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
@@ -126,19 +128,21 @@ def litellm_exception_to_error_msg(
             - error_code: Categorized error code for frontend display
             - is_retryable: Whether the user should try again
     """
-    from litellm.exceptions import APIConnectionError
-    from litellm.exceptions import APIError
-    from litellm.exceptions import AuthenticationError
-    from litellm.exceptions import BadRequestError
-    from litellm.exceptions import BudgetExceededError
-    from litellm.exceptions import ContentPolicyViolationError
-    from litellm.exceptions import ContextWindowExceededError
-    from litellm.exceptions import NotFoundError
-    from litellm.exceptions import PermissionDeniedError
-    from litellm.exceptions import RateLimitError
-    from litellm.exceptions import ServiceUnavailableError
-    from litellm.exceptions import Timeout
-    from litellm.exceptions import UnprocessableEntityError
+    from litellm.exceptions import (
+        APIConnectionError,
+        APIError,
+        AuthenticationError,
+        BadRequestError,
+        BudgetExceededError,
+        ContentPolicyViolationError,
+        ContextWindowExceededError,
+        NotFoundError,
+        PermissionDeniedError,
+        RateLimitError,
+        ServiceUnavailableError,
+        Timeout,
+        UnprocessableEntityError,
+    )
 
     core_exception = _unwrap_nested_exception(e)
     error_msg = str(core_exception)
@@ -359,9 +363,8 @@ def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
     already maps known LiteLLM exception types to friendly messages and
     swallows unknown ones, but a few branches (`RateLimitError`, `APIError`,
     `ServiceUnavailableError`) still embed `str(core_exception)`. This pass
-    strips any credential we already know about (typically the values pulled
-    off `llm.config` via `collect_llm_credential_values`) before the message
-    is surfaced to a client.
+    strips any credential we already know about before the message is surfaced
+    to a client.
 
     Short / empty secrets are ignored so we don't accidentally eat common
     substrings.
@@ -371,28 +374,52 @@ def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
 
     scrubbed = message
     for secret in secrets:
-        if not secret or len(secret) < 4:
+        if not secret or len(secret) < 3:
             continue
         scrubbed = scrubbed.replace(secret, _SCRUB_PLACEHOLDER)
 
     return scrubbed
 
 
-def collect_llm_credential_values(llm: LLM | None) -> list[str]:
-    """Pull every credential-looking value out of an LLM's config.
+def collect_credential_values(
+    api_key: str | None, custom_config: dict[str, str] | None
+) -> list[str]:
+    """Collect credential-bearing values from a provider configuration."""
+    credential_values = [api_key] if api_key else []
+    for key, value in (custom_config or {}).items():
+        if value and is_sensitive_custom_config_key(key):
+            credential_values.append(value)
+    return credential_values
 
-    Used to build the `secrets` argument for `scrub_sensitive_values`.
-    """
-    if llm is None:
-        return []
-    config_secrets: list[str] = []
-    if llm.config.api_key:
-        config_secrets.append(llm.config.api_key)
-    custom_config = llm.config.custom_config or {}
-    for key, value in custom_config.items():
-        if isinstance(value, str) and value and is_sensitive_custom_config_key(key):
-            config_secrets.append(value)
-    return config_secrets
+
+def litellm_exception_to_safe_error(
+    e: Exception,
+    llm: LLM | None = None,
+    *,
+    fallback_to_error_msg: bool = False,
+    custom_error_msg_mappings: (
+        dict[str, str] | None
+    ) = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    secrets: Iterable[str | None] = (),
+) -> LLMErrorInfo:
+    """Classify a LiteLLM exception and redact secrets from its message."""
+    message, error_code, is_retryable = litellm_exception_to_error_msg(
+        e,
+        llm,
+        fallback_to_error_msg=fallback_to_error_msg,
+        custom_error_msg_mappings=custom_error_msg_mappings,
+    )
+    llm_secrets = (
+        collect_credential_values(llm.config.api_key, llm.config.custom_config)
+        if llm is not None
+        else []
+    )
+    safe_message = scrub_sensitive_values(message, [*llm_secrets, *secrets])
+    return LLMErrorInfo(
+        message=safe_message,
+        error_code=error_code,
+        is_retryable=is_retryable,
+    )
 
 
 def test_llm(llm: LLM) -> str | None:
@@ -407,7 +434,6 @@ def test_llm(llm: LLM) -> str | None:
 
     The full raw error is still logged at WARNING for ops debugging.
     """
-    secrets = collect_llm_credential_values(llm)
     error_msg: str | None = None
     # try for up to 2 timeouts (e.g. 10 seconds in total)
     for _ in range(2):
@@ -416,10 +442,7 @@ def test_llm(llm: LLM) -> str | None:
             return None
         except Exception as e:
             logger.warning("Failed to call LLM with the following error: %s", e)
-            safe_msg, _, _ = litellm_exception_to_error_msg(
-                e, llm, fallback_to_error_msg=False
-            )
-            error_msg = scrub_sensitive_values(safe_msg, secrets)
+            error_msg = litellm_exception_to_safe_error(e, llm).message
 
     return error_msg
 

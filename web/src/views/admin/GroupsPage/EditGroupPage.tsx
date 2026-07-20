@@ -21,7 +21,7 @@ import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";

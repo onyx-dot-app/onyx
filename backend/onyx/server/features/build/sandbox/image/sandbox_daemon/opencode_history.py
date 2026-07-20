@@ -8,8 +8,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from sandbox_daemon.snapshot import SESSIONS_ROOT
-from sandbox_daemon.snapshot import SnapshotError
+from sandbox_daemon.snapshot import SESSIONS_ROOT, SnapshotError
 
 # Opencode's data home. Defaults to the K8s shared-volume mount; the Docker
 # backend execs this module with OPENCODE_DATA_HOME set to its own data home.

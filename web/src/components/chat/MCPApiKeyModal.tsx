@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { Input } from "@/components/ui/input";
 import { Label } from "@opal/layouts";

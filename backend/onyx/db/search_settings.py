@@ -1,17 +1,19 @@
-from sqlalchemy import and_
-from sqlalchemy import delete
+from sqlalchemy import and_, delete, select
 from sqlalchemy import inspect as sa_inspect
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.configs.model_configs import DEFAULT_DOCUMENT_ENCODER_MODEL
-from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
+from onyx.configs.model_configs import (
+    DEFAULT_DOCUMENT_ENCODER_MODEL,
+    DOCUMENT_ENCODER_MODEL,
+)
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.llm import fetch_embedding_provider
-from onyx.db.models import CloudEmbeddingProvider
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexModelStatus
-from onyx.db.models import SearchSettings
+from onyx.db.models import (
+    CloudEmbeddingProvider,
+    IndexAttempt,
+    IndexModelStatus,
+    SearchSettings,
+)
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider as ServerCloudEmbeddingProvider,
 )

@@ -7,17 +7,14 @@ enum drift, ordering change) actually fails the test.
 
 import datetime as dt
 from collections.abc import Generator
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import BuildSessionStatus
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.sandbox_proxy.identity import IdentityResolver
-from onyx.sandbox_proxy.identity import SandboxIdentity
+from onyx.db.models import BuildSession, Sandbox
+from onyx.sandbox_proxy.identity import IdentityResolver, SandboxIdentity
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.unit.sandbox_proxy.conftest import StaticLookup

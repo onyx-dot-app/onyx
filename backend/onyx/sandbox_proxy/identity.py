@@ -20,8 +20,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
+from onyx.db.models import BuildSession, Sandbox
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

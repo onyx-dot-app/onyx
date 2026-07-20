@@ -1,33 +1,35 @@
 import hashlib
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import Self
+from datetime import datetime, timezone
+from typing import Any, Self
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_serializer
-from pydantic import field_validator
-from pydantic import model_serializer
-from pydantic import model_validator
-from pydantic import SerializerFunctionWrapHandler
-from pydantic import ValidationInfo
+from pydantic import (
+    BaseModel,
+    Field,
+    SerializerFunctionWrapHandler,
+    ValidationInfo,
+    field_serializer,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
-from onyx.configs.app_configs import OPENSEARCH_INDEX_NUM_REPLICAS
-from onyx.configs.app_configs import OPENSEARCH_INDEX_NUM_SHARDS
-from onyx.configs.app_configs import OPENSEARCH_TEXT_ANALYZER
-from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
+from onyx.configs.app_configs import (
+    OPENSEARCH_INDEX_NUM_REPLICAS,
+    OPENSEARCH_INDEX_NUM_SHARDS,
+    OPENSEARCH_TEXT_ANALYZER,
+    USING_AWS_MANAGED_OPENSEARCH,
+)
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
-from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
-from onyx.document_index.opensearch.constants import EF_SEARCH
-from onyx.document_index.opensearch.constants import M
-from onyx.document_index.opensearch.string_filtering import DocumentIDTooLongError
-from onyx.document_index.opensearch.string_filtering import (
-    filter_and_validate_document_id,
+from onyx.document_index.opensearch.constants import (
+    DEFAULT_MAX_CHUNK_SIZE,
+    EF_CONSTRUCTION,
+    EF_SEARCH,
+    M,
 )
 from onyx.document_index.opensearch.string_filtering import (
     MAX_DOCUMENT_ID_ENCODED_LENGTH,
+    DocumentIDTooLongError,
+    filter_and_validate_document_id,
 )
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.tenant import get_tenant_id_short_string

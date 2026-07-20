@@ -14,8 +14,7 @@ so they stream PIT pages.
 """
 
 from collections import defaultdict
-from collections.abc import Callable
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from onyx.db.models import SearchSettings
 from onyx.document_index.factory import build_opensearch_document_index
@@ -25,15 +24,15 @@ from onyx.document_index.opensearch.opensearch_document_index import (
 )
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.indexing.chunker import DEFAULT_CONTEXTUAL_RAG_RESERVED_TOKENS
-from onyx.indexing.embedder import DefaultIndexingEmbedder
-from onyx.indexing.embedder import IndexingEmbedder
-from onyx.indexing.port_reembed import AugmentationReembedContext
-from onyx.indexing.port_reembed import re_embed_chunks
-from onyx.indexing.port_reembed import ReembedStrategy
-from onyx.indexing.port_reembed import select_reembed_strategy
+from onyx.indexing.embedder import DefaultIndexingEmbedder, IndexingEmbedder
+from onyx.indexing.port_reembed import (
+    AugmentationReembedContext,
+    ReembedStrategy,
+    re_embed_chunks,
+    select_reembed_strategy,
+)
 from onyx.llm.factory import get_contextual_rag_llm_for_search_settings
-from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.natural_language_processing.utils import BaseTokenizer, get_tokenizer
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
 # Cap per bulk write so it can't run long unheartbeated and get a live port stall-failed.

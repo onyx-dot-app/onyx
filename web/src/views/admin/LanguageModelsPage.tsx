@@ -25,8 +25,8 @@ import {
   setDefaultLlmModel,
 } from "@/lib/languageModels/svc";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { ConfirmationModalLayout } from "@opal/layouts";
+import { useCreateModal } from "@opal/components";
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";

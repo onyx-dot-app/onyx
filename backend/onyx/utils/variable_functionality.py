@@ -2,16 +2,17 @@ import functools
 import importlib
 import inspect
 import os
-from typing import Any
-from typing import TypeVar
+from typing import Any, TypeVar
 
-from onyx.configs.app_configs import API_SERVER_HOST
-from onyx.configs.app_configs import API_SERVER_PROTOCOL
-from onyx.configs.app_configs import API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS
-from onyx.configs.app_configs import APP_API_PREFIX
-from onyx.configs.app_configs import APP_PORT
-from onyx.configs.app_configs import DEV_MODE
-from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
+from onyx.configs.app_configs import (
+    API_SERVER_HOST,
+    API_SERVER_PROTOCOL,
+    API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS,
+    APP_API_PREFIX,
+    APP_PORT,
+    DEV_MODE,
+    ENTERPRISE_EDITION_ENABLED,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

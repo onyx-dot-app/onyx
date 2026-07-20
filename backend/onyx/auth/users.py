@@ -5,72 +5,58 @@ import random
 import secrets
 import string
 import uuid
-from collections.abc import AsyncGenerator
-from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from collections.abc import AsyncGenerator, Sequence
+from datetime import datetime, timedelta, timezone
 from functools import partial
-from typing import Any
-from typing import cast
-from typing import Dict
-from typing import List
-from typing import Literal
-from typing import Optional
-from typing import Protocol
-from typing import Tuple
-from typing import TypeVar
+from typing import Any, Dict, List, Literal, Optional, Protocol, Tuple, TypeVar, cast
 from urllib.parse import urlparse
 
 import jwt
-from email_validator import EmailNotValidError
-from email_validator import EmailUndeliverableError
-from email_validator import validate_email
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
-from fastapi import Response
-from fastapi import status
-from fastapi import WebSocket
-from fastapi.responses import JSONResponse
-from fastapi.responses import RedirectResponse
+from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    WebSocket,
+    status,
+)
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.routing import APIRoute
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi_users import BaseUserManager
-from fastapi_users import exceptions
-from fastapi_users import FastAPIUsers
-from fastapi_users import models
-from fastapi_users import schemas
-from fastapi_users import UUIDIDMixin
-from fastapi_users.authentication import AuthenticationBackend
-from fastapi_users.authentication import BearerTransport
-from fastapi_users.authentication import CookieTransport
-from fastapi_users.authentication import JWTStrategy
-from fastapi_users.authentication import (
-    RedisStrategy,  # ty: ignore[possibly-missing-import]
+from fastapi_users import (
+    BaseUserManager,
+    FastAPIUsers,
+    UUIDIDMixin,
+    exceptions,
+    models,
+    schemas,
 )
-from fastapi_users.authentication import Strategy
-from fastapi_users.authentication.strategy.db import AccessTokenDatabase
-from fastapi_users.authentication.strategy.db import DatabaseStrategy
+from fastapi_users.authentication import (
+    AuthenticationBackend,
+    BearerTransport,
+    CookieTransport,
+    JWTStrategy,
+    RedisStrategy,  # ty: ignore[possibly-missing-import]
+    Strategy,
+)
+from fastapi_users.authentication.strategy.db import (
+    AccessTokenDatabase,
+    DatabaseStrategy,
+)
 from fastapi_users.exceptions import UserAlreadyExists
-from fastapi_users.jwt import decode_jwt
-from fastapi_users.jwt import generate_jwt
-from fastapi_users.jwt import SecretType
+from fastapi_users.jwt import SecretType, decode_jwt, generate_jwt
 from fastapi_users.manager import UserManagerDependency
 from fastapi_users.openapi import OpenAPIResponseType
-from fastapi_users.router.common import ErrorCode
-from fastapi_users.router.common import ErrorModel
+from fastapi_users.router.common import ErrorCode, ErrorModel
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
-from httpx_oauth.oauth2 import BaseOAuth2
-from httpx_oauth.oauth2 import GetAccessTokenError
-from httpx_oauth.oauth2 import OAuth2Token
+from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
 from pydantic import BaseModel
-from sqlalchemy import nulls_last
-from sqlalchemy import select
+from sqlalchemy import nulls_last, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -78,98 +64,112 @@ from starlette.routing import BaseRoute
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.disposable_email_validator import is_disposable_email
-from onyx.auth.email_utils import send_forgot_password_email
-from onyx.auth.email_utils import send_user_verification_email
-from onyx.auth.invited_users import get_invited_users
-from onyx.auth.invited_users import remove_user_from_invited_users
+from onyx.auth.email_utils import (
+    send_forgot_password_email,
+    send_user_verification_email,
+)
+from onyx.auth.invited_users import get_invited_users, remove_user_from_invited_users
 from onyx.auth.jwt import verify_jwt_token
-from onyx.auth.mobile_sso.sso_completion import apply_mobile_state
-from onyx.auth.mobile_sso.sso_completion import complete_mobile_sso
-from onyx.auth.mobile_sso.sso_completion import is_mobile_sso
+from onyx.auth.mobile_sso.sso_completion import (
+    apply_mobile_state,
+    complete_mobile_sso,
+    is_mobile_sso,
+)
 from onyx.auth.oauth_claims_capture import capture_oauth_login_claims
 from onyx.auth.pat import get_hashed_pat_from_request
-from onyx.auth.schemas import AuthBackend
-from onyx.auth.schemas import UserCreate
-from onyx.auth.schemas import UserRole
-from onyx.auth.session_tokens import build_session_rejection_error
-from onyx.auth.session_tokens import build_session_token_value
-from onyx.auth.session_tokens import build_session_tombstone_value
-from onyx.auth.session_tokens import classify_session_token_value
-from onyx.auth.session_tokens import compute_session_expires_at
-from onyx.auth.session_tokens import may_be_session_token
-from onyx.auth.session_tokens import physical_session_ttl_seconds
-from onyx.auth.session_tokens import record_session_rejection
-from onyx.auth.session_tokens import SESSION_TOKEN_GRACE_PERIOD_SECONDS
-from onyx.auth.session_tokens import SessionRejection
+from onyx.auth.schemas import AuthBackend, UserCreate, UserRole
+from onyx.auth.session_tokens import (
+    SESSION_TOKEN_GRACE_PERIOD_SECONDS,
+    SessionRejection,
+    build_session_rejection_error,
+    build_session_token_value,
+    build_session_tombstone_value,
+    classify_session_token_value,
+    compute_session_expires_at,
+    may_be_session_token,
+    physical_session_ttl_seconds,
+    record_session_rejection,
+)
 from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
-from onyx.configs.app_configs import AUTH_BACKEND
-from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
-from onyx.configs.app_configs import DEV_MODE
-from onyx.configs.app_configs import EMAIL_CONFIGURED
-from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
-from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
-from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
-from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
-from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
-from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
-from onyx.configs.constants import ANONYMOUS_USER_EMAIL
-from onyx.configs.constants import ANONYMOUS_USER_UUID
-from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
-from onyx.configs.constants import DANSWER_API_KEY_PREFIX
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import PASSWORD_SPECIAL_CHARS
-from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
+from onyx.configs.app_configs import (
+    AUTH_BACKEND,
+    AUTH_COOKIE_EXPIRE_TIME_SECONDS,
+    DEV_MODE,
+    EMAIL_CONFIGURED,
+    INTEGRATION_TESTS_MODE,
+    JWT_PUBLIC_KEY_URL,
+    REDIS_AUTH_KEY_PREFIX,
+    REQUIRE_EMAIL_VERIFICATION,
+    SESSION_EXPIRE_TIME_SECONDS,
+    USER_AUTH_SECRET,
+    WEB_DOMAIN,
+)
+from onyx.configs.constants import (
+    ANONYMOUS_USER_COOKIE_NAME,
+    ANONYMOUS_USER_EMAIL,
+    ANONYMOUS_USER_UUID,
+    DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
+    DANSWER_API_KEY_PREFIX,
+    FASTAPI_USERS_AUTH_COOKIE_NAME,
+    PASSWORD_SPECIAL_CHARS,
+    UNNAMED_KEY_PLACEHOLDER,
+    MilestoneRecordType,
+    OnyxRedisLocks,
+)
 from onyx.db.api_key import fetch_user_for_api_key
-from onyx.db.auth import get_access_token_db
-from onyx.db.auth import get_default_admin_user_emails
-from onyx.db.auth import get_user_count
-from onyx.db.auth import get_user_db
-from onyx.db.auth import SQLAlchemyUserAdminDB
-from onyx.db.engine.async_sql_engine import get_async_session
-from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import AccountType
-from onyx.db.enums import Permission
-from onyx.db.models import AccessToken
-from onyx.db.models import OAuthAccount
-from onyx.db.models import Persona
-from onyx.db.models import User
+from onyx.db.auth import (
+    SQLAlchemyUserAdminDB,
+    get_access_token_db,
+    get_default_admin_user_emails,
+    get_user_count,
+    get_user_db,
+)
+from onyx.db.engine.async_sql_engine import (
+    get_async_session,
+    get_async_session_context_manager,
+)
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_tenant,
+)
+from onyx.db.enums import AccountType, Permission
+from onyx.db.models import AccessToken, OAuthAccount, Persona, User
 from onyx.db.pat import resolve_pat
-from onyx.db.users import assign_user_to_default_groups__no_commit
-from onyx.db.users import get_user_by_email
-from onyx.db.users import is_limited_user
+from onyx.db.users import (
+    assign_user_to_default_groups__no_commit,
+    get_user_by_email,
+    is_limited_user,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import log_onyx_error
-from onyx.error_handling.exceptions import onyx_error_to_json_response
-from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_async_redis_connection
-from onyx.redis.redis_pool import retrieve_ws_token_data
+from onyx.error_handling.exceptions import (
+    OnyxError,
+    log_onyx_error,
+    onyx_error_to_json_response,
+)
+from onyx.redis.redis_pool import get_async_redis_connection, retrieve_ws_token_data
 from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
-from onyx.utils.audit import AuditAction
-from onyx.utils.audit import AuditActor
-from onyx.utils.audit import AuditOutcome
-from onyx.utils.audit import emit_audit_event
+from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import mt_cloud_identify_user
-from onyx.utils.telemetry import mt_cloud_telemetry
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import (
+    RecordType,
+    mt_cloud_identify_user,
+    mt_cloud_telemetry,
+    optional_telemetry,
+)
 from onyx.utils.timing import log_function_time
-from onyx.utils.url import add_url_params
-from onyx.utils.url import sanitize_next_url
+from onyx.utils.url import add_url_params, sanitize_next_url
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-from shared_configs.configs import async_return_default_schema
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.configs import (
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    async_return_default_schema,
+)
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 logger = setup_logger()
 
@@ -590,10 +590,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             await enforce_signup_rate_limit(request)
 
         # Verify captcha if enabled (for cloud signup protection)
-        from onyx.auth.captcha import CaptchaAction
-        from onyx.auth.captcha import CaptchaVerificationError
-        from onyx.auth.captcha import is_captcha_enabled
-        from onyx.auth.captcha import verify_captcha_token
+        from onyx.auth.captcha import (
+            CaptchaAction,
+            CaptchaVerificationError,
+            is_captcha_enabled,
+            verify_captcha_token,
+        )
 
         if is_captcha_enabled() and request is not None:
             # Get captcha token from request body or headers
@@ -1395,8 +1397,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         if not verified:
             # Raise some HTTPException (or your custom exception) if old password is invalid:
-            from fastapi import HTTPException
-            from fastapi import status
+            from fastapi import HTTPException, status
 
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -1417,8 +1418,11 @@ async def get_user_manager(
     yield UserManager(user_db)
 
 
+# The cookie outlives the logical expiry by the grace window so a dead token is
+# still presented and can be classified (expired/terminated) instead of the
+# browser silently dropping it.
 cookie_transport = CookieTransport(
-    cookie_max_age=SESSION_EXPIRE_TIME_SECONDS,
+    cookie_max_age=SESSION_EXPIRE_TIME_SECONDS + SESSION_TOKEN_GRACE_PERIOD_SECONDS,
     cookie_secure=WEB_DOMAIN.startswith("https"),
     cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
 )
@@ -1933,22 +1937,21 @@ async def _maybe_refresh_oauth_tokens(
 ) -> None:
     """Best-effort refresh of any near-expiry OAuth access tokens.
 
-    PT_OAUTH MCP tools and any custom HTTP tool with bearer pass-through
-    forward `user.oauth_accounts[0].access_token` directly to the upstream
-    service. The web client's /auth/refresh ticker is gated off for
-    OIDC/SAML (see `web/src/hooks/useTokenRefresh.ts`), so without this hook
-    the stored access_token would rot at the IdP's lifetime (~1 h on
-    Microsoft Entra default) and downstream calls would 401 until the user
-    signs out and back in.
+    PT_OAUTH MCP tools and any custom HTTP tool with bearer pass-through forward
+    `user.oauth_accounts[0].access_token` directly to the upstream service. The
+    web client's /auth/refresh ticker (``useTokenRefresh`` in
+    `web/src/lib/auth/hooks.ts`) only fires for visible tabs, so without this
+    hook the stored access_token could rot at the IdP's lifetime (~1 h on
+    Microsoft Entra default) and downstream calls would 401 until the user signs
+    out and back in.
 
     Refreshing here on every authenticated request is cheap — the underlying
-    `check_and_refresh_oauth_tokens` short-circuits when no account is
-    within the 5-minute renewal buffer. Failures log and return, so a
-    misconfigured IdP can never break authentication of an otherwise-valid
-    request.
+    `check_and_refresh_oauth_tokens` short-circuits when no account is within
+    the 5-minute renewal buffer. Failures log and return, so a misconfigured IdP
+    can never break authentication of an otherwise-valid request.
     """
-    # Local import mirrors the pattern at `get_refresh_router` to keep the
-    # auth module's load order resilient.
+    # Local import mirrors the pattern at `get_refresh_router` to keep the auth
+    # module's load order resilient.
     from onyx.auth.oauth_refresher import check_and_refresh_oauth_tokens
 
     try:

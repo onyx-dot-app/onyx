@@ -1,40 +1,39 @@
 import functools
 from collections.abc import Callable
-from typing import Any
-from typing import Optional
-from typing import TypeVar
+from typing import Any, Optional, TypeVar
 
 from slack_sdk import WebClient
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import get_anonymous_user
 from onyx.chat.models import ChatBasicResponse
-from onyx.chat.process_message import gather_stream
-from onyx.chat.process_message import handle_stream_message_objects
-from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.constants import MessageType
-from onyx.configs.onyxbot_configs import ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER
-from onyx.configs.onyxbot_configs import ONYX_BOT_DISPLAY_ERROR_MSGS
-from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
-from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import Tag
-from onyx.db.models import SlackChannelConfig
-from onyx.db.models import User
+from onyx.chat.process_message import gather_stream, handle_stream_message_objects
+from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.configs.onyxbot_configs import (
+    ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER,
+    ONYX_BOT_DISPLAY_ERROR_MSGS,
+    ONYX_BOT_NUM_RETRIES,
+    ONYX_BOT_REACT_EMOJI,
+)
+from onyx.context.search.models import BaseFilters, Tag
+from onyx.db.models import SlackChannelConfig, User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
-from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.onyxbot.slack.models import ThreadMessage
-from onyx.onyxbot.slack.utils import get_channel_from_id
-from onyx.onyxbot.slack.utils import get_channel_name_from_id
-from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
-from onyx.onyxbot.slack.utils import SlackRateLimiter
-from onyx.onyxbot.slack.utils import update_emote_react
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.models import MessageOrigin
-from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.onyxbot.slack.models import SlackMessageInfo, ThreadMessage
+from onyx.onyxbot.slack.utils import (
+    SlackRateLimiter,
+    get_channel_from_id,
+    get_channel_name_from_id,
+    respond_in_thread_or_channel,
+    update_emote_react,
+)
+from onyx.server.query_and_chat.models import (
+    ChatSessionCreationRequest,
+    MessageOrigin,
+    SendMessageRequest,
+)
 from onyx.utils.logger import OnyxLoggingAdapter
 from onyx.utils.retry_wrapper import retry_builder
 

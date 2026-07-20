@@ -1,8 +1,7 @@
 import base64
 import binascii
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from onyx.auth.permissions import require_permission
@@ -12,8 +11,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.image_gen.exceptions import ImageGenerationNotConfiguredError
 from onyx.image_gen.generation import generate_images_with_default_config
-from onyx.image_gen.interfaces import ImageShape
-from onyx.image_gen.interfaces import ReferenceImage
+from onyx.image_gen.interfaces import ImageShape, ReferenceImage
 from onyx.utils.b64 import get_image_type
 from onyx.utils.logger import setup_logger
 

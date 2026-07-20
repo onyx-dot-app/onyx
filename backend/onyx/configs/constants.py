@@ -2,8 +2,7 @@ import os
 import platform
 import re
 import socket
-from enum import auto
-from enum import Enum
+from enum import Enum, auto
 
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"
@@ -244,6 +243,7 @@ class DocumentSource(str, Enum):
     GOOGLE_SITES = "google_sites"
     ZENDESK = "zendesk"
     LOOPIO = "loopio"
+    BOX = "box"
     DROPBOX = "dropbox"
     SHAREPOINT = "sharepoint"
     TEAMS = "teams"
@@ -732,6 +732,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.GOOGLE_SITES: "Website pages and content",
     DocumentSource.ZENDESK: "Support tickets and help articles",
     DocumentSource.LOOPIO: "RFP responses and content library",
+    DocumentSource.BOX: "Cloud-stored files and folders",
     DocumentSource.DROPBOX: "Cloud-stored files and folders",
     DocumentSource.SHAREPOINT: "Documents and team sites",
     DocumentSource.TEAMS: "Chat messages and channels",

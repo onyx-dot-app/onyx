@@ -5,8 +5,7 @@ from __future__ import annotations
 import pytest
 
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.metadata import parse_skill_document
-from onyx.skills.metadata import serialize_skill_md
+from onyx.skills.metadata import parse_skill_document, serialize_skill_md
 
 
 def _skill_md(frontmatter: str, body: str = "Do the work.") -> bytes:

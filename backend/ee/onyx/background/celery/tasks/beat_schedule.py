@@ -3,19 +3,19 @@ from typing import Any
 
 from ee.onyx.configs.app_configs import CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS
 from onyx.background.celery.tasks.beat_schedule import (
+    BEAT_EXPIRES_DEFAULT,
+    generate_cloud_tasks,
+)
+from onyx.background.celery.tasks.beat_schedule import (
     beat_cloud_tasks as base_beat_system_tasks,
 )
-from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.tasks.beat_schedule import (
     beat_task_templates as base_beat_task_templates,
 )
-from onyx.background.celery.tasks.beat_schedule import generate_cloud_tasks
 from onyx.background.celery.tasks.beat_schedule import (
     get_tasks_to_schedule as base_get_tasks_to_schedule,
 )
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
 from shared_configs.configs import MULTI_TENANT
 
 ee_beat_system_tasks: list[dict] = []

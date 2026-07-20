@@ -16,7 +16,6 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.server.features.skill.models import SkillPatchRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import SkillManager
@@ -38,19 +37,29 @@ def test_get_skills_returns_builtins_plus_accessible_customs(
     # least one entry for an out-of-the-box install.
     assert len(user_skills.builtins) >= 1
     assert len(user_skills.customs) >= 1
+    native_builtin = user_skills.builtins[0]
+    assert native_builtin.enabled is True
+    assert native_builtin.can_toggle is False
+
+    response = client.put(
+        f"{API_SERVER_URL}/skills/{native_builtin.id}/enabled",
+        json={"enabled": False},
+        headers=basic_user.headers,
+    )
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "INVALID_INPUT"
 
 
-def test_user_does_not_see_disabled_skill(
+def test_newly_shared_skill_is_visible_but_disabled(
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
     slug = f"disabled-{uuid4().hex[:6]}"
-    skill = SkillManager.create_custom(admin_user, slug=slug, is_public=True)
-    SkillManager.patch_custom(skill, admin_user, SkillPatchRequest(enabled=False))
-
+    SkillManager.create_custom(admin_user, slug=slug, is_public=True)
     user_skills = SkillManager.list_for_user(basic_user)
-    custom_slugs = [skill.slug for skill in user_skills.customs]
-    assert slug not in custom_slugs
+    [shared_skill] = [skill for skill in user_skills.customs if skill.slug == slug]
+    assert shared_skill.enabled is False
+    assert shared_skill.can_toggle is True
 
 
 def test_user_does_not_see_private_skill_without_share(
@@ -63,18 +72,6 @@ def test_user_does_not_see_private_skill_without_share(
     user_skills = SkillManager.list_for_user(basic_user)
     custom_slugs = [skill.slug for skill in user_skills.customs]
     assert slug not in custom_slugs
-
-
-def test_user_sees_public_skill(
-    admin_user: DATestUser,
-    basic_user: DATestUser,
-) -> None:
-    slug = f"public-{uuid4().hex[:6]}"
-    SkillManager.create_custom(admin_user, slug=slug, is_public=True)
-
-    user_skills = SkillManager.list_for_user(basic_user)
-    custom_slugs = [skill.slug for skill in user_skills.customs]
-    assert slug in custom_slugs
 
 
 @pytest.mark.skipif(
@@ -106,8 +103,9 @@ def test_user_sees_private_skill_with_group_share(
     )
 
     user_skills = SkillManager.list_for_user(basic_user)
-    custom_slugs = [skill.slug for skill in user_skills.customs]
-    assert slug in custom_slugs
+    [shared_skill] = [skill for skill in user_skills.customs if skill.slug == slug]
+    assert shared_skill.enabled is False
+    assert shared_skill.can_toggle is True
 
 
 def test_get_skill_by_id_404_when_not_visible(

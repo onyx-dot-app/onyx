@@ -18,41 +18,41 @@ declared but unused — hence the `ARG002` suppression at the file level.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
-from typing import Any
-from typing import cast
+from collections.abc import Callable, Generator, Iterator
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
 
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.model_response import ChatCompletionDeltaToolCall
-from onyx.llm.model_response import Choice
-from onyx.llm.model_response import Delta
+from onyx.llm.interfaces import LLM, LLMConfig, LLMUserIdentity
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
+    Choice,
+    Delta,
+    Message,
+    ModelResponse,
+    ModelResponseStream,
+    StreamingChoice,
+    Usage,
+)
 from onyx.llm.model_response import FunctionCall as DeltaFunctionCall
-from onyx.llm.model_response import Message
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.model_response import StreamingChoice
-from onyx.llm.model_response import Usage
-from onyx.llm.models import LanguageModelInput
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import ToolChoiceOptions
-from onyx.llm.models import UserMessage
-from onyx.llm.tracing_wrap import _ALREADY_WRAPPED_ATTR
-from onyx.llm.tracing_wrap import _extract_prompt_and_tools
-from onyx.llm.tracing_wrap import _finalize_tool_calls
-from onyx.llm.tracing_wrap import _merge_tool_call_delta
-from onyx.llm.tracing_wrap import _outer_generation_span_active
-from onyx.llm.tracing_wrap import _validate_prompt_param
-from onyx.llm.tracing_wrap import wrap_invoke
-from onyx.llm.tracing_wrap import wrap_stream
-from onyx.tracing.framework.create import generation_span
-from onyx.tracing.framework.create import trace
+from onyx.llm.models import (
+    LanguageModelInput,
+    ReasoningEffort,
+    ToolChoiceOptions,
+    UserMessage,
+)
+from onyx.llm.tracing_wrap import (
+    _ALREADY_WRAPPED_ATTR,
+    _extract_prompt_and_tools,
+    _finalize_tool_calls,
+    _merge_tool_call_delta,
+    _outer_generation_span_active,
+    _validate_prompt_param,
+    wrap_invoke,
+    wrap_stream,
+)
+from onyx.tracing.framework.create import generation_span, trace
 
 _TEST_MODEL_RESPONSE = ModelResponse(
     id="test-id",

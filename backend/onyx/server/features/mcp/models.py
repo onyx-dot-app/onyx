@@ -1,23 +1,19 @@
 import datetime
 import re
 from enum import Enum
-from typing import Any
-from typing import List
-from typing import NotRequired
-from typing import Optional
-from typing import TypedDict
+from typing import Any, List, NotRequired, Optional, TypedDict
 from uuid import UUID
 
 from mcp.types import Tool as MCPLibTool
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import BaseModel, Field, model_validator
 
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPOAuthProviderMode
-from onyx.db.enums import MCPServerStatus
-from onyx.db.enums import MCPTransport
+from onyx.db.enums import (
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPOAuthProviderMode,
+    MCPServerStatus,
+    MCPTransport,
+)
 
 # Matches `{placeholder_name}` inside header value templates.
 _PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
@@ -51,6 +47,14 @@ def apply_auto_substitutions(value: str, *, user_email: str) -> str:
     for key, replacement in subst.items():
         value = value.replace(f"{{{key}}}", replacement)
     return value
+
+
+# Headers that must never be sourced from stored MCP credentials or request
+# templates. Host is particularly critical — it can be used for Host Header
+# Injection attacks to route requests to unintended internal servers.
+DENYLISTED_MCP_HEADERS = {
+    "host",
+}
 
 
 # This should be updated along with MCPConnectionData

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 
-from onyx.db.enums import SkillAccessLevel
-from onyx.db.enums import SkillSharePermission
-from onyx.server.features.skill.models import SkillPatchRequest
-from onyx.server.features.skill.models import SkillResponse
-from onyx.server.features.skill.models import SkillUserShareRequest
+from onyx.db.enums import SkillAccessLevel, SkillSharePermission
+from onyx.server.features.skill.models import (
+    SkillPatchRequest,
+    SkillResponse,
+    SkillUserShareRequest,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import SkillManager
@@ -200,31 +200,31 @@ def test_direct_viewer_share_grants_view_not_edit(
     _assert_edit_hidden(skill_id, viewer)
 
 
-def test_direct_editor_share_grants_edit(
+def test_direct_share_restores_existing_enabled_preference(
     basic_user: DATestUser,
     admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
-    editor = UserManager.create(name=f"skill_direct_editor_{uuid4().hex[:8]}")
+    recipient = UserManager.create(name=f"skill_recipient_{uuid4().hex[:8]}")
     skill = SkillManager.create_custom(
         basic_user,
-        slug=f"direct-editor-{uuid4().hex[:6]}",
+        slug=f"preference-restore-{uuid4().hex[:6]}",
     )
-    skill_id = _skill_id(skill)
-
-    SkillManager.share(
-        skill,
-        basic_user,
-        user_shares=[
-            SkillUserShareRequest(
-                user_id=UUID(editor.id),
-                permission=SkillSharePermission.EDITOR,
-            )
-        ],
+    share = SkillUserShareRequest(
+        user_id=UUID(recipient.id),
+        permission=SkillSharePermission.VIEWER,
     )
 
-    editable = SkillManager.get_editable(skill_id, editor)
-    assert editable.user_permission == SkillAccessLevel.EDITOR
-    assert editable.instructions_markdown == "Skill instructions."
+    SkillManager.share(skill, basic_user, user_shares=[share])
+    initially_shared = SkillManager.get_for_user(skill.id, recipient)
+    assert initially_shared.enabled is False
+    assert SkillManager.set_enabled(skill, recipient, True).enabled is True
+
+    SkillManager.share(skill, basic_user, user_shares=[])
+    _assert_skill_hidden(skill.id, recipient)
+
+    SkillManager.share(skill, basic_user, user_shares=[share])
+    reshared = SkillManager.get_for_user(skill.id, recipient)
+    assert reshared.enabled is True
 
 
 def test_org_wide_editor_permission_grants_edit(
@@ -332,6 +332,7 @@ def test_owner_transfer_demotes_previous_owner_and_promotes_new_owner(
     new_owner_response = SkillManager.get_for_user(str(skill_id), new_owner)
     assert new_owner_response.author_user_id == UUID(new_owner.id)
     assert new_owner_response.user_permission == SkillAccessLevel.OWNER
+    assert new_owner_response.enabled is True
 
 
 @pytest.mark.parametrize(

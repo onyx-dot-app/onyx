@@ -11,12 +11,14 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
-from onyx.db.sso_provider import create_sso_provider
-from onyx.db.sso_provider import fetch_sso_provider_by_name
-from onyx.db.sso_provider import fetch_sso_providers
-from onyx.db.sso_provider import set_sso_provider_enabled
-from onyx.db.sso_provider import update_sso_provider
-from onyx.db.sso_provider import validate_sso_provider_name
+from onyx.db.sso_provider import (
+    create_sso_provider,
+    fetch_sso_provider_by_name,
+    fetch_sso_providers,
+    set_sso_provider_enabled,
+    update_sso_provider,
+    validate_sso_provider_name,
+)
 
 _NAME_PREFIX = "testsso"
 _GOOGLE_CONFIG = {"client_id": "client-id", "client_secret": "super-secret"}
@@ -63,7 +65,10 @@ def test_create_and_fetch_roundtrip(db_session: Session, provider_name: str) -> 
     assert fetched.allowed_email_domains == ["companya.com"]
     # config decrypts to the original and masks the secret by default
     assert fetched.config is not None
-    assert fetched.config.get_value(apply_mask=False) == _GOOGLE_CONFIG
+    assert fetched.config.get_value(apply_mask=False) == {
+        **_GOOGLE_CONFIG,
+        "legacy_callback": False,
+    }
     assert fetched.config.get_value(apply_mask=True)["client_secret"] != "super-secret"
 
 
@@ -171,7 +176,10 @@ def test_partial_update_preserves_config(
     updated = update_sso_provider(db_session, created.id, display_name="Renamed")
     assert updated.display_name == "Renamed"
     assert updated.config is not None
-    assert updated.config.get_value(apply_mask=False) == _GOOGLE_CONFIG
+    assert updated.config.get_value(apply_mask=False) == {
+        **_GOOGLE_CONFIG,
+        "legacy_callback": False,
+    }
 
 
 def test_disable_keeps_row_and_filters(db_session: Session, provider_name: str) -> None:

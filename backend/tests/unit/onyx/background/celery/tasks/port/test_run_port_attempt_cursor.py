@@ -9,8 +9,7 @@ and permanently skips the un-ported tail (silent corpus drop after the swap).
 
 from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.background.celery.tasks.port import tasks as port_tasks
 from onyx.db.enums import PortAttemptStatus

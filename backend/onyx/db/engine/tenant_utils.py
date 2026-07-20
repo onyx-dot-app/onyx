@@ -2,11 +2,12 @@ import re
 
 from sqlalchemy import text
 
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
-from onyx.db.engine.sql_engine import SqlEngine
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import TENANT_ID_PREFIX
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_shared_schema
+from shared_configs.configs import (
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    TENANT_ID_PREFIX,
+)
 
 # Regex pattern for valid tenant IDs:
 # - UUID format: tenant_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx

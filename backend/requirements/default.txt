@@ -375,6 +375,9 @@ botocore==1.39.11 \
     #   aiobotocore
     #   boto3
     #   s3transfer
+boxsdk==10.12.0 \
+    --hash=sha256:0563eb38ec26a7f500318e8d98e190156912626f52c68e7d60e30ef43bebd467 \
+    --hash=sha256:92e08a961d5203da0e9995ef7725d02331200b1677b6a09045c9c7e6becc3c86
 braintrust==0.3.9 \
     --hash=sha256:2b903671837dea85d74e984403f154b60b77a3dde4c0bffa17121fdcb24f18d0 \
     --hash=sha256:8c56ccb214bb102291968cdda67d7bf36a4b01fefc6b1998e53c272379eacab3
@@ -2627,6 +2630,7 @@ requests==2.33.0 \
     # via
     #   atlassian-python-api
     #   azure-core
+    #   boxsdk
     #   braintrust
     #   cohere
     #   docker
@@ -2678,6 +2682,7 @@ requests-toolbelt==1.0.0 \
     --hash=sha256:7681a0a3d047012b5bdc0ee37d7f8f07ebe76ab08caeccfc3921ce23c88d5bc6 \
     --hash=sha256:cccfdd665f0a24fcf4726e690f65639d272bb0637b9b92dfd91a5568ccf6bd06
     # via
+    #   boxsdk
     #   jira
     #   langsmith
     #   python-gitlab

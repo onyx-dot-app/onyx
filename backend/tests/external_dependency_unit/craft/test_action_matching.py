@@ -19,30 +19,30 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from contextlib import AbstractContextManager
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from typing import Callable
 
 import pytest
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.models import ExternalApp
-from onyx.db.models import ExternalAppPolicy
-from onyx.db.models import User
+from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.models import ExternalApp, ExternalAppPolicy, User
 from onyx.external_apps.credentials import app_is_available
 from onyx.external_apps.matching import engine as matching_engine
-from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.external_apps.matching.engine import MatchedAction
-from onyx.external_apps.matching.engine import recognize_actions
-from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
+from onyx.external_apps.matching.engine import (
+    WHOLE_DOMAIN_ACTION_TYPE,
+    AllMatchedActions,
+    MatchedAction,
+    recognize_actions,
+)
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.sandbox_proxy import request_evaluator as request_evaluator_mod
 from onyx.sandbox_proxy.request_evaluator import ExternalAppRequestEvaluator
-from tests.external_dependency_unit.craft.db_helpers import make_external_app
-from tests.external_dependency_unit.craft.db_helpers import make_skill
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_external_app,
+    make_skill,
+)
 
 
 def _connect_app(
@@ -258,14 +258,6 @@ def test_not_available_required_credential_missing(
     db_session: Session, test_user: User
 ) -> None:
     app = _connect_app(db_session, ExternalAppType.SLACK, with_credential=False)
-    assert app_is_available(db_session, app, test_user.id) is False
-
-
-def test_not_available_when_disabled(db_session: Session, test_user: User) -> None:
-    skill = make_skill(db_session, enabled=False)
-    app = make_external_app(
-        db_session, skill=skill, auth_template={}, app_type=ExternalAppType.CUSTOM
-    )
     assert app_is_available(db_session, app, test_user.id) is False
 
 

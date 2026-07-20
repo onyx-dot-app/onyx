@@ -1,22 +1,19 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi_users import exceptions
 
 from ee.onyx.auth.users import current_cloud_superuser
 from ee.onyx.server.tenants.models import ImpersonateRequest
 from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
-from onyx.auth.users import auth_backend
-from onyx.auth.users import get_redis_strategy
-from onyx.auth.users import User
+from onyx.auth.users import User, auth_backend, get_redis_strategy
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.users import get_user_by_email
-from onyx.utils.audit import actor_from_user
-from onyx.utils.audit import AuditAction
-from onyx.utils.audit import AuditOutcome
-from onyx.utils.audit import emit_audit_event
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -18,38 +18,40 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import delete
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.enums import AccessType
-from onyx.db.enums import AccountType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SkillSharePermission
-from onyx.db.models import ActionApproval
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import ExternalApp
-from onyx.db.models import ExternalAppPolicy
-from onyx.db.models import ExternalAppUserCredential
-from onyx.db.models import Sandbox
-from onyx.db.models import Skill
-from onyx.db.models import Skill__User
-from onyx.db.models import Skill__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.models import UserRole
+from onyx.db.enums import (
+    AccessType,
+    AccountType,
+    ConnectorCredentialPairStatus,
+    EndpointPolicy,
+    ExternalAppType,
+    SandboxStatus,
+    SkillSharePermission,
+)
+from onyx.db.models import (
+    ActionApproval,
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    ExternalApp,
+    ExternalAppPolicy,
+    ExternalAppUserCredential,
+    Sandbox,
+    Skill,
+    Skill__User,
+    Skill__UserGroup,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserGroup__ConnectorCredentialPair,
+    UserRole,
+)
 
 
 def force_approval_created_at(
@@ -130,7 +132,6 @@ def make_skill(
     slug: str | None = None,
     is_public: bool = False,
     public_permission: SkillSharePermission = SkillSharePermission.VIEWER,
-    enabled: bool = True,
     author_user_id: UUID | None = None,
 ) -> Skill:
     """Create a single custom ``Skill`` row.
@@ -147,7 +148,6 @@ def make_skill(
         bundle_file_id=f"bundle-{uuid4().hex[:8]}",
         bundle_sha256="0" * 64,
         public_permission=public_permission if is_public else None,
-        enabled=enabled,
         author_user_id=author_user_id,
     )
     db_session.add(skill)
@@ -163,7 +163,6 @@ def make_built_in_skill_row(
     name: str | None = None,
     description: str = "test built-in",
     is_public: bool = True,
-    enabled: bool = True,
 ) -> Skill:
     """Insert a built-in-style ``Skill`` row pointing at a
     ``built_in_skill_id``. Slug defaults to ``built_in_skill_id`` (the
@@ -179,7 +178,6 @@ def make_built_in_skill_row(
         bundle_file_id=None,
         bundle_sha256=None,
         public_permission=SkillSharePermission.VIEWER if is_public else None,
-        enabled=enabled,
     )
     db_session.add(skill)
     db_session.flush()
@@ -194,7 +192,6 @@ def reset_built_in_skill_row(
     name: str | None = None,
     description: str = "test built-in",
     is_public: bool = True,
-    enabled: bool = True,
 ) -> Skill:
     """Idempotently (re)create a built-in row for ``built_in_skill_id``.
 
@@ -212,7 +209,6 @@ def reset_built_in_skill_row(
         name=name,
         description=description,
         is_public=is_public,
-        enabled=enabled,
     )
 
 

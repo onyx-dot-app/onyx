@@ -1,14 +1,11 @@
 """Module with custom fields processing functions"""
 
 import os
-from typing import Any
-from typing import List
+from typing import Any, List
 from urllib.parse import urlparse
 
 from jira import JIRA
-from jira.resources import CustomFieldOption
-from jira.resources import Issue
-from jira.resources import User
+from jira.resources import CustomFieldOption, Issue, User
 
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
 from onyx.connectors.models import BasicExpertInfo

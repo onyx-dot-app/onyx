@@ -48,6 +48,12 @@ export {
   type LinkButtonProps,
 } from "@opal/components/buttons/link-button/components";
 
+/* TextButton */
+export {
+  TextButton,
+  type TextButtonProps,
+} from "@opal/components/buttons/text-button/components";
+
 /* Text */
 export {
   Text,
@@ -141,6 +147,26 @@ export {
   type PopoverMenuProps,
 } from "@opal/components/popover/components";
 
+/* Modal */
+export {
+  Modal,
+  BasicModalFooter,
+  type ModalContentProps,
+  type ModalHeaderProps,
+  type ModalBodyProps,
+  type BasicModalFooterProps,
+} from "@opal/components/modal/components";
+
+/* ModalContext */
+export {
+  useCreateModal,
+  useModal,
+  useModalClose,
+  type ModalInterface,
+  type ModalCreationInterface,
+  type ModalProviderProps,
+} from "@opal/components/modal/context";
+
 /* InputTypeIn */
 export {
   default as InputTypeIn,
@@ -152,6 +178,15 @@ export {
   InputDatePicker,
   type InputDatePickerProps,
 } from "@opal/components/inputs/input-date-picker/components";
+
+/* InputSelect */
+export {
+  InputSelect,
+  type InputSelectRootProps,
+  type InputSelectTriggerProps,
+  type InputSelectItemProps,
+  type InputSelectSearchProps,
+} from "@opal/components/inputs/input-select/components";
 
 /* InputTags */
 export {
@@ -171,6 +206,13 @@ export {
   InputTextArea,
   type InputTextAreaProps,
 } from "@opal/components/inputs/input-text-area/components";
+
+/* InputTime */
+export {
+  InputTime,
+  type InputTimeProps,
+  type TimeValue,
+} from "@opal/components/inputs/input-time/components";
 
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";

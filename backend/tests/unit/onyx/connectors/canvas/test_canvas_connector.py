@@ -1,45 +1,51 @@
 """Tests for Canvas connector — client, credentials, conversion."""
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ee.onyx.external_permissions.canvas.access import CanvasCoursePermissionContext
-from ee.onyx.external_permissions.canvas.access import get_announcement_permissions
-from ee.onyx.external_permissions.canvas.access import get_assignment_permissions
-from ee.onyx.external_permissions.canvas.access import get_page_permissions
+from ee.onyx.external_permissions.canvas.access import (
+    CanvasCoursePermissionContext,
+    get_announcement_permissions,
+    get_assignment_permissions,
+    get_page_permissions,
+)
 from ee.onyx.external_permissions.canvas.group_sync import (
     _referenced_group_and_section_ids,
 )
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.client import CanvasApiClient
-from onyx.connectors.canvas.connector import _in_time_window
-from onyx.connectors.canvas.connector import _parse_canvas_dt
-from onyx.connectors.canvas.connector import _unix_to_canvas_time
-from onyx.connectors.canvas.connector import canvas_all_users_group_id
-from onyx.connectors.canvas.connector import canvas_course_group_id
-from onyx.connectors.canvas.connector import canvas_group_group_id
-from onyx.connectors.canvas.connector import canvas_section_group_id
-from onyx.connectors.canvas.connector import CanvasAnnouncement
-from onyx.connectors.canvas.connector import CanvasAnnouncementSection
-from onyx.connectors.canvas.connector import CanvasAssignment
-from onyx.connectors.canvas.connector import CanvasAssignmentOverride
-from onyx.connectors.canvas.connector import CanvasConnector
-from onyx.connectors.canvas.connector import CanvasConnectorCheckpoint
-from onyx.connectors.canvas.connector import CanvasPage
-from onyx.connectors.canvas.connector import CanvasStage
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.canvas.connector import (
+    CanvasAnnouncement,
+    CanvasAnnouncementSection,
+    CanvasAssignment,
+    CanvasAssignmentOverride,
+    CanvasConnector,
+    CanvasConnectorCheckpoint,
+    CanvasPage,
+    CanvasStage,
+    _in_time_window,
+    _parse_canvas_dt,
+    _unix_to_canvas_time,
+    canvas_all_users_group_id,
+    canvas_course_group_id,
+    canvas_group_group_id,
+    canvas_section_group_id,
+)
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 

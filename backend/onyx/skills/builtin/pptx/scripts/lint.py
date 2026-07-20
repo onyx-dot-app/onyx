@@ -4,7 +4,8 @@ Statically checks a .pptx for mechanical layout defects that vision QA is
 slow and unreliable at catching:
 
     BOUNDS    shape partially or fully off the slide canvas
-    MARGIN    text content closer than 0.5" to a slide edge
+    MARGIN    text content closer than the profile margin (0.5" standard /
+              0.25" dense) to a slide edge
     OVERFLOW  estimated text height/width exceeds its box (PIL font metrics)
     OVERLAP   two text frames intersect, or text spills past its container
     CONTRAST  explicit text color vs. resolved solid background below WCAG-ish
@@ -24,7 +25,7 @@ Output protocol (stdout):
 Exit code: 1 if any ERROR finding, 0 otherwise (2 on usage error).
 
 Usage:
-    python lint.py /path/to/file.pptx
+    python lint.py /path/to/file.pptx [--profile {standard,dense}]
 """
 
 import shutil
@@ -35,8 +36,7 @@ from pathlib import Path
 
 from PIL import ImageFont
 from pptx import Presentation
-from pptx.enum.dml import MSO_COLOR_TYPE
-from pptx.enum.dml import MSO_FILL
+from pptx.enum.dml import MSO_COLOR_TYPE, MSO_FILL
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.shapes.base import BaseShape
@@ -46,7 +46,12 @@ EMU_PER_INCH = 914400
 EMU_PER_PT = 12700
 
 # --- Thresholds (lenient by design) ---
-MARGIN_MIN_EMU = int(0.45 * EMU_PER_INCH)  # nominal 0.5", tolerance for rounding
+MARGIN_MIN_EMU_BY_PROFILE = {
+    "standard": int(0.45 * EMU_PER_INCH),  # nominal 0.5"
+    "dense": int(0.22 * EMU_PER_INCH),  # nominal 0.25"
+}
+MARGIN_NOMINAL_IN_BY_PROFILE = {"standard": 0.5, "dense": 0.25}
+DEFAULT_PROFILE = "standard"
 FULL_BLEED_FRACTION = 0.9  # shape covering >=90% of a slide dimension is exempt
 BOUNDS_OVERSHOOT_EMU = int(0.1 * EMU_PER_INCH)  # ignore bleed smaller than this
 BOUNDS_ERROR_FRACTION = 0.35  # >35% of shape area off-slide is an ERROR
@@ -496,7 +501,12 @@ def check_bounds(
 
 
 def check_margins(
-    slide_no: int, shapes: list[tuple[BaseShape, Box]], slide_w: int, slide_h: int
+    slide_no: int,
+    shapes: list[tuple[BaseShape, Box]],
+    slide_w: int,
+    slide_h: int,
+    margin_min_emu: int,
+    margin_nominal_in: float,
 ) -> list[Finding]:
     findings: list[Finding] = []
     for shape, box in shapes:
@@ -519,7 +529,7 @@ def check_margins(
         bad = [
             (name, dist)
             for name, dist in edges.items()
-            if 0 <= dist < MARGIN_MIN_EMU
+            if 0 <= dist < margin_min_emu
             and not (exempt_h and name in ("left", "right"))
             and not (exempt_v and name in ("top", "bottom"))
         ]
@@ -532,7 +542,7 @@ def check_margins(
                     shape.shape_id,
                     "WARN",
                     "MARGIN",
-                    f'text within 0.5" of slide edge ({desc})',
+                    f'text within {margin_nominal_in:g}" of slide edge ({desc})',
                     text,
                 )
             )
@@ -797,8 +807,13 @@ def check_fonts(prs) -> list[Finding]:
 # --- Driver -------------------------------------------------------------------
 
 
-def lint_presentation(prs) -> tuple[list[Finding], int]:
+def lint_presentation(prs, profile: str = DEFAULT_PROFILE) -> tuple[list[Finding], int]:
     """Lint an open Presentation. Returns (findings, contrast_skipped_runs)."""
+    if profile not in MARGIN_MIN_EMU_BY_PROFILE:
+        valid = ", ".join(sorted(MARGIN_MIN_EMU_BY_PROFILE))
+        raise ValueError(f"unknown profile {profile!r}; valid profiles: {valid}")
+    margin_min_emu = MARGIN_MIN_EMU_BY_PROFILE[profile]
+    margin_nominal_in = MARGIN_NOMINAL_IN_BY_PROFILE[profile]
     slide_w = int(prs.slide_width or Emu(int(10 * EMU_PER_INCH)))
     slide_h = int(prs.slide_height or Emu(int(7.5 * EMU_PER_INCH)))
 
@@ -813,7 +828,11 @@ def lint_presentation(prs) -> tuple[list[Finding], int]:
             shapes.append((shape, box))
 
         findings.extend(check_bounds(slide_no, shapes, slide_w, slide_h))
-        findings.extend(check_margins(slide_no, shapes, slide_w, slide_h))
+        findings.extend(
+            check_margins(
+                slide_no, shapes, slide_w, slide_h, margin_min_emu, margin_nominal_in
+            )
+        )
         findings.extend(check_overflow(slide_no, shapes))
         findings.extend(check_overlap(slide_no, shapes, slide_w, slide_h))
         contrast_findings, skipped = check_contrast(slide_no, slide, shapes)
@@ -825,21 +844,31 @@ def lint_presentation(prs) -> tuple[list[Finding], int]:
     return findings, total_skipped
 
 
-def lint_file(path: Path) -> tuple[list[Finding], int]:
-    return lint_presentation(Presentation(str(path)))
+def lint_file(path: Path, profile: str = DEFAULT_PROFILE) -> tuple[list[Finding], int]:
+    return lint_presentation(Presentation(str(path)), profile=profile)
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <pptx_path>", file=sys.stderr)
-        sys.exit(2)
+    import argparse
 
-    pptx_path = Path(sys.argv[1])
+    parser = argparse.ArgumentParser(description="Lint a .pptx for layout defects.")
+    parser.add_argument("pptx_path", type=Path)
+    parser.add_argument(
+        "--profile",
+        choices=sorted(MARGIN_MIN_EMU_BY_PROFILE),
+        default=DEFAULT_PROFILE,
+        help="Density profile: 'standard' (0.5\" margins) or 'dense' (0.25\", "
+        "for intentionally content-dense analytical/consulting decks). Only the "
+        "MARGIN warning threshold changes; error-level checks are unaffected.",
+    )
+    args = parser.parse_args()
+
+    pptx_path = args.pptx_path
     if not pptx_path.is_file():
         print("ERROR_NOT_FOUND")
         sys.exit(1)
 
-    findings, contrast_skipped = lint_file(pptx_path)
+    findings, contrast_skipped = lint_file(pptx_path, profile=args.profile)
     errors = sum(1 for f in findings if f.severity == "ERROR")
     warnings = sum(1 for f in findings if f.severity == "WARN")
 

@@ -2,19 +2,18 @@ import copy
 import datetime
 import json
 import os
-from typing import Any
-from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.gmail.connector import _build_time_range_query
-from onyx.connectors.gmail.connector import GmailCheckpoint
-from onyx.connectors.gmail.connector import GmailConnector
-from onyx.connectors.gmail.connector import thread_to_document
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.gmail.connector import (
+    GmailCheckpoint,
+    GmailConnector,
+    _build_time_range_query,
+    thread_to_document,
+)
+from onyx.connectors.models import Document, TextSection
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector_from_checkpoint,
 )

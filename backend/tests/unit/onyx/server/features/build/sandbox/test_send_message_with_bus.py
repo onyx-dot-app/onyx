@@ -28,16 +28,21 @@ from typing import Any
 import httpx
 import pytest
 
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TRANSPORT
+from onyx.server.features.build.sandbox.event_schema import (
+    TURN_ERROR_CODE_TIMEOUT,
+    TURN_ERROR_CODE_TRANSPORT,
+    ActivityTimeoutError,
+    AgentMessageChunk,
+    AgentThoughtChunk,
+    Error,
+    PromptResponse,
+)
 from onyx.server.features.build.sandbox.opencode import serve_client
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
-from onyx.server.features.build.sandbox.opencode.serve_client import ClientTimeouts
-from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
+from onyx.server.features.build.sandbox.opencode.serve_client import (
+    ClientTimeouts,
+    OpencodeServeClient,
+)
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 
 _SESSION = "ses_test_123"
@@ -621,9 +626,8 @@ def test_send_message_inactivity_timeout_aborts(bus: PodEventBus) -> None:
     events = list(
         client.send_message(_SESSION, "hi", directory=_DIRECTORY, timeout=0.3)
     )
-    assert any(
-        isinstance(e, Error) and e.code == TURN_ERROR_CODE_TIMEOUT for e in events
-    )
+    # Inactivity timeout is the recoverable subtype so the executor can re-prompt.
+    assert any(isinstance(e, ActivityTimeoutError) for e in events)
     assert any("/abort" in p for p in aborts)
 
 
@@ -727,6 +731,9 @@ def test_send_message_absolute_timeout_is_not_renewed(bus: PodEventBus) -> None:
     assert len(errors) == 1
     assert errors[0].code == TURN_ERROR_CODE_TIMEOUT
     assert errors[0].message == "Turn exceeded maximum duration"
+    # The hard budget timeout is NOT the recoverable subtype — it must not be
+    # re-prompted by the executor.
+    assert not isinstance(errors[0], ActivityTimeoutError)
 
 
 def test_send_message_aborts_on_generator_exit(bus: PodEventBus) -> None:

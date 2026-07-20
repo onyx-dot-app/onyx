@@ -3,23 +3,13 @@
 import datetime
 from uuid import UUID
 
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import PatType
-from onyx.db.enums import Permission
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import BuildSession
-from onyx.db.models import PersonalAccessToken
-from onyx.db.models import Sandbox
-from onyx.db.models import Snapshot
-from onyx.db.models import User
-from onyx.db.pat import create_pat
-from onyx.db.pat import revoke_pat
+from onyx.db.enums import BuildSessionStatus, PatType, Permission, SandboxStatus
+from onyx.db.models import BuildSession, PersonalAccessToken, Sandbox, Snapshot, User
+from onyx.db.pat import create_pat, revoke_pat
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -103,6 +93,37 @@ def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     """Get sandbox by its ID."""
     stmt = select(Sandbox).where(Sandbox.id == sandbox_id)
     return db_session.execute(stmt).scalar_one_or_none()
+
+
+def set_sandbox_skills_hashes__no_commit(
+    db_session: Session,
+    skills_hashes: dict[UUID, str],
+) -> None:
+    """Record the contents successfully hydrated into each sandbox."""
+    if not skills_hashes:
+        return
+    sandboxes = db_session.scalars(
+        select(Sandbox).where(Sandbox.id.in_(skills_hashes))
+    ).all()
+    for sandbox in sandboxes:
+        sandbox.skills_hash = skills_hashes[sandbox.id]
+    db_session.flush()
+
+
+def lock_sandbox_skills_hashes(
+    db_session: Session,
+    sandbox_ids: set[UUID],
+) -> dict[UUID, str | None]:
+    """Lock sandboxes while their managed skill files and hashes are updated."""
+    if not sandbox_ids:
+        return {}
+    rows = db_session.execute(
+        select(Sandbox.id, Sandbox.skills_hash)
+        .where(Sandbox.id.in_(sandbox_ids))
+        .order_by(Sandbox.id)
+        .with_for_update()
+    )
+    return {sandbox_id: skills_hash for sandbox_id, skills_hash in rows}
 
 
 def update_sandbox_status__no_commit(

@@ -4,11 +4,9 @@ verified, and the discovery document's issuer must own the configured
 discovery URL, so one provider's tokens cannot be replayed against another
 provider's callback (OIDC mix-up defense)."""
 
-from urllib.parse import unquote
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
-from httpx_oauth.clients.openid import BASE_SCOPES
-from httpx_oauth.clients.openid import OpenID
+from httpx_oauth.clients.openid import BASE_SCOPES, OpenID
 from httpx_oauth.exceptions import GetIdEmailError
 
 

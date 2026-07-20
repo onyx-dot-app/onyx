@@ -1,11 +1,12 @@
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.connectors.airtable.airtable_connector import AirtableConnector
-from onyx.connectors.airtable.airtable_connector import parse_airtable_url
+from onyx.connectors.airtable.airtable_connector import (
+    AirtableConnector,
+    parse_airtable_url,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import Document
 

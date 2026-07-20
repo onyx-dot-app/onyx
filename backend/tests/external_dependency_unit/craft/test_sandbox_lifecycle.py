@@ -14,36 +14,37 @@ from __future__ import annotations
 
 import datetime
 from typing import Callable
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.db.models import User
-from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
-from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
-from onyx.server.features.build.db.sandbox import get_running_sandboxes
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import SandboxInfo
+from onyx.db.enums import BuildSessionStatus, SandboxStatus
+from onyx.db.models import BuildSession, Sandbox, User
+from onyx.server.features.build.db.sandbox import (
+    create_sandbox__no_commit,
+    create_snapshot__no_commit,
+    get_running_sandboxes,
+)
+from onyx.server.features.build.sandbox.models import (
+    FileSet,
+    FilesystemEntry,
+    LLMProviderConfig,
+    SandboxInfo,
+)
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
 from onyx.server.features.build.session.api import restore_session
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.features.build.session.sandbox_lifecycle import is_sandbox_idle
-from onyx.server.features.build.session.sandbox_lifecycle import provision_sandbox
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    is_sandbox_idle,
+    provision_sandbox,
+)
 from onyx.skills.push import SKILLS_MOUNT_PATH
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import default_llm_config
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.craft.db_helpers import make_sandbox
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
 
 class TestProvisionTransitions:
@@ -480,7 +481,6 @@ class _PushRecordingStub(StubSandboxManager):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
@@ -490,7 +490,6 @@ class _PushRecordingStub(StubSandboxManager):
             session_id,
             llm_config,
             nextjs_port,
-            skills_section,
             connectable_apps_section,
             user_name,
         )
@@ -502,7 +501,6 @@ class _PushRecordingStub(StubSandboxManager):
         snapshot_storage_path: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
-        skills_section: str,
         connectable_apps_section: str,
     ) -> None:
         self.ops.append("render_workspace")
@@ -512,7 +510,6 @@ class _PushRecordingStub(StubSandboxManager):
             snapshot_storage_path,
             nextjs_port,
             llm_config,
-            skills_section,
             connectable_apps_section,
         )
 
@@ -631,8 +628,8 @@ class TestManagedContentPushOrdering:
         assert stub.setup_session_workspace_count == (0 if has_snapshot else 1)
         # First pair lands while the committed status is still PROVISIONING
         # (no turn can dispatch against an unhydrated pod); the second pair is
-        # the fileset AGENTS.md is rendered from, pushed before the render so
-        # AGENTS.md can never land ahead of disk.
+        # a fresh managed-content push for the restored workspace, completed
+        # before the workspace is rendered.
         assert stub.ops == [
             f"push:{SKILLS_MOUNT_PATH}",
             f"push:{USER_LIBRARY_MOUNT_PATH}",

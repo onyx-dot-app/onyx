@@ -103,8 +103,7 @@ function AppConnections({ query }: AppConnectionsProps) {
     return (
       <Card background="none" border="dashed" rounding="lg">
         <Text font="main-content-body" color="text-03">
-          No external apps are enabled for your org yet. Ask an admin to enable
-          one.
+          No external apps are configured for your organization yet.
         </Text>
       </Card>
     );

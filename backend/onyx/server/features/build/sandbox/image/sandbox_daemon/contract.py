@@ -8,8 +8,7 @@ api-server imports the full module path.
 
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 SIDECAR_HEALTH_PATH = "/health"
 SIDECAR_READY_PATH = "/ready"

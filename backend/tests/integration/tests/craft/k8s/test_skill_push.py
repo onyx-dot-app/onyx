@@ -4,46 +4,46 @@ from __future__ import annotations
 
 import io
 import zipfile
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from pathlib import Path
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import Sandbox
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.skill.models import SkillPatchRequest
-from onyx.server.features.skill.models import SkillResponse
-from onyx.server.features.skill.models import SkillUserShareRequest
-from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.push import build_skills_fileset_for_user
-from onyx.skills.push import push_skill_to_affected_sandboxes
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    ExternalAppType,
+    SandboxStatus,
+    SkillSharePermission,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    Sandbox,
+    Skill,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserGroup__ConnectorCredentialPair,
+)
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
+from onyx.server.features.skill.models import SkillResponse, SkillUserShareRequest
+from onyx.skills.built_in import BUILT_IN_SKILLS, BuiltInSkillDefinition
+from onyx.skills.push import (
+    build_skills_fileset_for_user,
+    push_skill_to_affected_sandboxes,
+)
+from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import DATestUserGroup
-from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
-from tests.integration.tests.craft.k8s.k8s_fixtures import WorkspaceProxy
+from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
+from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle, WorkspaceProxy
 
 pytestmark = [
     pytest.mark.skipif(
@@ -218,7 +218,6 @@ def _make_built_in_skill_row(db_session: Session, *, built_in_skill_id: str) -> 
         bundle_file_id=None,
         bundle_sha256=None,
         public_permission=SkillSharePermission.VIEWER,
-        enabled=True,
     )
     db_session.add(skill)
     db_session.flush()
@@ -263,7 +262,6 @@ def _seed_custom_skill(
         bundle_file_id=bundle_file_id,
         bundle_sha256=hashlib.sha256(bundle_bytes).hexdigest(),
         public_permission=SkillSharePermission.VIEWER if public else None,
-        enabled=True,
     )
     db_session.add(skill)
     db_session.flush()
@@ -336,7 +334,39 @@ def _rendered_company_search_lines(db_session: Session, user: User) -> list[str]
 
 
 class TestSkillPush:
-    def test_public_skill_lands_in_every_running_sandbox(
+    def test_external_app_skill_lands_after_user_authenticates(
+        self,
+        k8s_admin_user: DATestUser,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        handle = running_sandbox()
+        user = handle.api_user
+        workspace = handle.workspace_path
+        app = ExternalAppManager.create(
+            user_performing_action=k8s_admin_user,
+            name=f"Credential-gated app {uuid4().hex[:8]}",
+            description="External app hydration integration test",
+            upstream_url_patterns=["https://api.example.com/*"],
+            auth_template={"Authorization": "Bearer {access_token}"},
+            organization_credentials={},
+            app_type=ExternalAppType.CUSTOM,
+        )
+        try:
+            user_app = ExternalAppManager.get_for_user(user, app.id)
+            skill_file = _skill_file_path(workspace, user_app.slug)
+            skill_file.wait_for_absent()
+
+            ExternalAppManager.upsert_user_credentials(
+                user_performing_action=user,
+                app_id=app.id,
+                credentials={"access_token": "integration-test-token"},
+            )
+
+            skill_file.wait_for_file()
+        finally:
+            ExternalAppManager.delete(k8s_admin_user, app.id)
+
+    def test_public_skill_lands_only_after_each_user_enables_it(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
@@ -353,12 +383,14 @@ class TestSkillPush:
             body="public skill body\n",
         )
 
-        for workspace in workspaces:
+        for user, workspace in zip(users, workspaces, strict=True):
+            _skill_file_path(workspace, skill.slug).wait_for_absent()
+            SkillManager.set_enabled(skill, user, True)
             _skill_file_path(workspace, skill.slug).wait_for_bytes(
                 b"public skill body\n",
             )
 
-    def test_private_skill_only_lands_in_shared_users_sandboxes(
+    def test_private_skill_only_lands_for_enabled_shared_user(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
@@ -381,9 +413,11 @@ class TestSkillPush:
             body="engineering only\n",
         )
 
-        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"engineering only\n")
+        _skill_file_path(ws_a, skill.slug).wait_for_absent()
         _skill_file_path(ws_b, skill.slug).wait_for_absent()
         _skill_file_path(ws_c, skill.slug).wait_for_absent()
+        SkillManager.set_enabled(skill, user_a, True)
+        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"engineering only\n")
 
     def test_disable_skill_removes_files_from_affected_sandboxes(
         self,
@@ -407,15 +441,14 @@ class TestSkillPush:
             group_ids=[group.id],
             body="to be disabled\n",
         )
+        SkillManager.set_enabled(skill, user, True)
         _skill_file_path(workspace, skill.slug).wait_for_bytes(b"to be disabled\n")
 
-        SkillManager.patch_custom(
-            skill, k8s_admin_user, SkillPatchRequest(enabled=False)
-        )
+        SkillManager.set_enabled(skill, user, False)
 
         (_skills_dir(workspace) / skill.slug).wait_for_absent()
 
-    def test_share_change_adds_to_newly_shared_and_removes_from_revoked(
+    def test_group_share_change_revokes_old_user_and_new_user_starts_disabled(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
@@ -441,15 +474,19 @@ class TestSkillPush:
             group_ids=[group_x.id],
             body="shifting shares\n",
         )
-        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"shifting shares\n")
+        _skill_file_path(ws_a, skill.slug).wait_for_absent()
         _skill_file_path(ws_b, skill.slug).wait_for_absent()
+        SkillManager.set_enabled(skill, user_a, True)
+        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"shifting shares\n")
 
         SkillManager.replace_group_shares(skill, [group_y.id], k8s_admin_user)
 
         _skill_file_path(ws_a, skill.slug).wait_for_absent()
+        _skill_file_path(ws_b, skill.slug).wait_for_absent()
+        SkillManager.set_enabled(skill, user_b, True)
         _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"shifting shares\n")
 
-    def test_direct_user_share_change_adds_to_newly_shared_and_removes_from_revoked(
+    def test_direct_share_change_revokes_old_user_and_new_user_starts_disabled(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
@@ -479,8 +516,10 @@ class TestSkillPush:
             ],
         )
         assert [str(share.user.id) for share in skill.user_shares] == [user_a.id]
-        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"direct shifting shares\n")
+        _skill_file_path(ws_a, skill.slug).wait_for_absent()
         _skill_file_path(ws_b, skill.slug).wait_for_absent()
+        SkillManager.set_enabled(skill, user_a, True)
+        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"direct shifting shares\n")
 
         skill = SkillManager.share(
             skill,
@@ -495,6 +534,8 @@ class TestSkillPush:
         assert [str(share.user.id) for share in skill.user_shares] == [user_b.id]
 
         _skill_file_path(ws_a, skill.slug).wait_for_absent()
+        _skill_file_path(ws_b, skill.slug).wait_for_absent()
+        SkillManager.set_enabled(skill, user_b, True)
         _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"direct shifting shares\n")
 
     def test_replace_bundle_propagates_new_content(
@@ -513,6 +554,7 @@ class TestSkillPush:
             is_public=True,
             body="version one\n",
         )
+        SkillManager.set_enabled(skill, user, True)
         _skill_file_path(workspace, skill.slug).wait_for_bytes(b"version one\n")
 
         _replace_bundle(k8s_admin_user, skill, body="version two\n")
@@ -539,6 +581,7 @@ class TestSkillPush:
             filename=f"{slug}.zip",
         )
         skill = _share_directly(owner, skill, shared_user)
+        SkillManager.set_enabled(skill, shared_user, True)
 
         skill_md = _skill_file_path(workspace, skill.slug)
         context_file = _skill_file_path(workspace, skill.slug, "references/context.md")
@@ -561,6 +604,7 @@ class TestSkillPush:
         slug = f"upload-file-{uuid4().hex[:6]}"
         skill = _create_skill(owner, slug, body="keep these instructions\n")
         skill = _share_directly(owner, skill, shared_user)
+        SkillManager.set_enabled(skill, shared_user, True)
 
         skill_md = _skill_file_path(workspace, skill.slug)
         context_file = _skill_file_path(workspace, skill.slug, "references/context.md")
@@ -597,6 +641,7 @@ class TestSkillPush:
             filename=f"{slug}.zip",
         )
         skill = _share_directly(owner, skill, shared_user)
+        SkillManager.set_enabled(skill, shared_user, True)
 
         skill_md = _skill_file_path(workspace, skill.slug)
         stale_file = _skill_file_path(workspace, skill.slug, "references/stale.md")
@@ -633,6 +678,8 @@ class TestSkillPush:
             is_public=True,
             body="will be deleted\n",
         )
+        SkillManager.set_enabled(skill, user_a, True)
+        SkillManager.set_enabled(skill, user_b, True)
         _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"will be deleted\n")
         _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"will be deleted\n")
 
@@ -668,6 +715,7 @@ class TestSkillPush:
             body="dedup\n",
         )
 
+        SkillManager.set_enabled(skill, user, True)
         _skill_file_path(workspace, skill.slug).wait_for_bytes(b"dedup\n")
         skill_dir = _skills_dir(workspace) / skill.slug
         skill_files = [p for p in skill_dir.rglob("*") if p.is_file()]

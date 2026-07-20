@@ -5,61 +5,65 @@ from typing import Any
 from opensearchpy.helpers.errors import BulkIndexError
 
 from onyx.access.models import DocumentAccess
-from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
-from onyx.configs.app_configs import VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import PUBLIC_DOC_PAT
+from onyx.configs.app_configs import (
+    MAX_CHUNKS_PER_DOC_BATCH,
+    VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT,
+)
+from onyx.configs.constants import PUBLIC_DOC_PAT, OnyxRedisLocks
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
 from onyx.connectors.models import convert_metadata_list_of_strings_to_dict
 from onyx.context.search.enums import QueryType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.models import (
+    IndexFilters,
+    InferenceChunk,
+    InferenceChunkUncleaned,
+)
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.models import DocumentSource
-from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.chunk_content_enrichment import (
+    cleanup_content_for_chunks,
     generate_enriched_content_for_chunk_text,
 )
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentInsertionRecord
-from onyx.document_index.interfaces_new import DocumentSectionRequest
-from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
-from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
-from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.client import OpenSearchClient
-from onyx.document_index.opensearch.client import OpenSearchDocumentMissingError
-from onyx.document_index.opensearch.client import OpenSearchIndexClient
-from onyx.document_index.opensearch.client import SearchHit
+from onyx.document_index.interfaces_new import (
+    DocumentIndex,
+    DocumentInsertionRecord,
+    DocumentSectionRequest,
+    IndexingMetadata,
+    MetadataUpdateRequest,
+    SecondaryIndexDocumentMissingError,
+    TenantState,
+)
+from onyx.document_index.opensearch.client import (
+    OpenSearchClient,
+    OpenSearchDocumentMissingError,
+    OpenSearchIndexClient,
+    SearchHit,
+)
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
-from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
-from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
-from onyx.document_index.opensearch.schema import CREATED_AT_FIELD_NAME
-from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
-from onyx.document_index.opensearch.schema import DocumentChunk
-from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
-from onyx.document_index.opensearch.schema import DocumentSchema
-from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
-from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
-from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
-from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
-from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
-from onyx.document_index.opensearch.search import DocumentQuery
+from onyx.document_index.opensearch.schema import (
+    ACCESS_CONTROL_LIST_FIELD_NAME,
+    CONTENT_FIELD_NAME,
+    CREATED_AT_FIELD_NAME,
+    DOCUMENT_SETS_FIELD_NAME,
+    GLOBAL_BOOST_FIELD_NAME,
+    HIDDEN_FIELD_NAME,
+    PERSONAS_FIELD_NAME,
+    USER_PROJECTS_FIELD_NAME,
+    DocumentChunk,
+    DocumentChunkWithoutVectors,
+    DocumentSchema,
+    get_opensearch_doc_chunk_id,
+)
 from onyx.document_index.opensearch.search import (
+    DocumentQuery,
     get_min_max_normalization_pipeline_name_and_config,
-)
-from onyx.document_index.opensearch.search import (
     get_normalization_pipeline_name_and_config,
-)
-from onyx.document_index.opensearch.search import (
     get_zscore_normalization_pipeline_name_and_config,
 )
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import Document
+from onyx.indexing.models import DocMetadataAwareIndexChunk, Document
 from onyx.redis.lock_context import redis_shared_lock
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger

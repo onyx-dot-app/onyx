@@ -33,7 +33,7 @@ import {
   ConnectorBase,
 } from "@/lib/connectors/connectors";
 import { useSettings } from "@/lib/settings/hooks";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import {
   useGmailCredentials,
   useGoogleDriveCredentials,

@@ -1,36 +1,34 @@
-from collections.abc import Callable
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import case
-from sqlalchemy import func
-from sqlalchemy import Select
-from sqlalchemy import select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql import expression
-from sqlalchemy.sql.elements import ColumnElement
-from sqlalchemy.sql.elements import KeyedColumnElement
+from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
 from sqlalchemy.sql.expression import or_
 
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import ANONYMOUS_USER_EMAIL
-from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
-from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_EMAIL
+from onyx.configs.constants import (
+    ANONYMOUS_USER_EMAIL,
+    DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
+    NO_AUTH_PLACEHOLDER_USER_EMAIL,
+)
 from onyx.db.enums import AccountType
-from onyx.db.models import DocumentSet
-from onyx.db.models import DocumentSet__User
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import SamlAccount
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
+from onyx.db.models import (
+    DocumentSet,
+    DocumentSet__User,
+    Persona,
+    Persona__User,
+    SamlAccount,
+    User,
+    User__UserGroup,
+    UserGroup,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 

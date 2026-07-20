@@ -11,45 +11,47 @@ import uuid
 from typing import Any
 
 from cachetools import TTLCache
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Request
-from fastapi import Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from fastapi_users.authentication import Strategy
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES
-from httpx_oauth.oauth2 import BaseOAuth2
-from httpx_oauth.oauth2 import GetAccessTokenError
+from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError
 from sqlalchemy.orm import Session
 
 from onyx.auth.oidc_client import VerifiedEmailOpenID
-from onyx.auth.users import auth_backend
-from onyx.auth.users import complete_login_flow
-from onyx.auth.users import CSRF_TOKEN_COOKIE_NAME
-from onyx.auth.users import CSRF_TOKEN_KEY
-from onyx.auth.users import decode_and_validate_oauth_state
-from onyx.auth.users import generate_csrf_token
-from onyx.auth.users import generate_pkce_pair
-from onyx.auth.users import generate_state_token
-from onyx.auth.users import get_pkce_cookie_name
-from onyx.auth.users import get_user_manager
-from onyx.auth.users import OAuth2AuthorizeResponse
-from onyx.auth.users import STATE_TOKEN_LIFETIME_SECONDS
-from onyx.auth.users import UserManager
-from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
-from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
-from onyx.configs.app_configs import OIDC_PKCE_ENABLED
-from onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
-from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.auth.users import (
+    CSRF_TOKEN_COOKIE_NAME,
+    CSRF_TOKEN_KEY,
+    STATE_TOKEN_LIFETIME_SECONDS,
+    OAuth2AuthorizeResponse,
+    UserManager,
+    auth_backend,
+    complete_login_flow,
+    decode_and_validate_oauth_state,
+    generate_csrf_token,
+    generate_pkce_pair,
+    generate_state_token,
+    get_pkce_cookie_name,
+    get_user_manager,
+)
+from onyx.configs.app_configs import (
+    GOOGLE_LOGIN_BASE_SCOPES,
+    GOOGLE_OAUTH_SCOPE_OVERRIDE,
+    OIDC_PKCE_ENABLED,
+    OIDC_SCOPE_OVERRIDE,
+    USER_AUTH_SECRET,
+    WEB_DOMAIN,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import SSOProviderType
-from onyx.db.models import SSOProvider
-from onyx.db.models import User
-from onyx.db.sso_provider import fetch_sso_provider_by_name
-from onyx.db.sso_provider import validate_sso_config
+from onyx.db.models import SSOProvider, User
+from onyx.db.sso_provider import (
+    fetch_sso_provider_by_name,
+    sso_login_callback_uri,
+    validate_sso_config,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.url import sanitize_next_url
@@ -173,10 +175,11 @@ def _delete_pkce_cookie(response: Response, state: str) -> None:
     )
 
 
-def _callback_uri(provider_name: str) -> str:
-    # The IdP redirects the browser here, so route it through /api to reach
-    # FastAPI. The bare /auth/oidc path is served by the web app, not the API.
-    return f"{WEB_DOMAIN}/api/auth/oidc/{provider_name}/callback"
+def _callback_uri(provider: SSOProvider, config: dict[str, Any]) -> str:
+    # Legacy-callback rows land on the web wrappers at the legacy paths, which
+    # forward to this router. The fixed /callback below resolves the row from
+    # the signed state.
+    return sso_login_callback_uri(provider, config, WEB_DOMAIN)
 
 
 @router.get("/{provider_name}/authorize")
@@ -187,7 +190,7 @@ async def oidc_login_for_provider(
 ) -> Response:
     provider, config = _resolve_oidc_provider(db_session, provider_name)
     client = await _get_oauth_client(provider, config)
-    redirect_uri = _callback_uri(provider_name)
+    redirect_uri = _callback_uri(provider, config)
     next_url = sanitize_next_url(request.query_params.get("next"))
     csrf_token = generate_csrf_token()
     state = generate_state_token(
@@ -240,6 +243,47 @@ async def oidc_login_for_provider(
     return response
 
 
+@router.get("/callback")
+async def oidc_login_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    db_session: Session = Depends(get_session),
+    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
+    user_manager: UserManager = Depends(get_user_manager),
+) -> Response:
+    """Fixed callback for rows whose IdP client allowlists a legacy redirect
+    URI. The row is resolved from the signed state, the same per-request
+    routing the SAML callback does with issuers."""
+    if state is None:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Missing state parameter in OAuth callback",
+        )
+    state_data = decode_and_validate_oauth_state(
+        request=request,
+        state_value=state,
+        state_secret=USER_AUTH_SECRET,
+    )
+    provider_name = state_data.get("provider_name")
+    if not provider_name:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "OAuth state does not identify a provider",
+        )
+    return await oidc_login_callback_for_provider(
+        provider_name=provider_name,
+        request=request,
+        code=code,
+        state=state,
+        error=error,
+        db_session=db_session,
+        strategy=strategy,
+        user_manager=user_manager,
+    )
+
+
 @router.get("/{provider_name}/callback")
 async def oidc_login_callback_for_provider(
     provider_name: str,
@@ -253,7 +297,7 @@ async def oidc_login_callback_for_provider(
 ) -> Response:
     provider, config = _resolve_oidc_provider(db_session, provider_name)
     client = await _get_oauth_client(provider, config)
-    redirect_uri = _callback_uri(provider_name)
+    redirect_uri = _callback_uri(provider, config)
 
     if error is not None:
         raise OnyxError(

@@ -8,9 +8,11 @@ import pytest
 
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
-from onyx.skills.ingest import ingest_skill_bundle
-from onyx.skills.ingest import ingested_skill_bundle
-from onyx.skills.ingest import IngestedBundle
+from onyx.skills.ingest import (
+    IngestedBundle,
+    ingest_skill_bundle,
+    ingested_skill_bundle,
+)
 
 
 def test_ingest_normalizes_wrapped_bundle_before_hashing_and_storage() -> None:
@@ -74,6 +76,16 @@ def test_ingest_rejects_noncanonical_frontmatter_name() -> None:
 
     with pytest.raises(OnyxError, match="field 'name'"):
         ingest_skill_bundle(skill_md, "skill.MD", file_store)
+
+
+def test_ingest_rejects_missing_frontmatter() -> None:
+    file_store = MagicMock(spec=FileStore)
+
+    with pytest.raises(OnyxError, match="must start with YAML frontmatter") as exc_info:
+        ingest_skill_bundle(b"No frontmatter.\n", "SKILL.md", file_store)
+
+    assert exc_info.value.status_code == 400
+    file_store.save_file.assert_not_called()
 
 
 def test_ingest_rejects_built_in_name() -> None:

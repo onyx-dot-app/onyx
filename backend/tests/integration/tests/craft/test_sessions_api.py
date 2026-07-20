@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from onyx.db.enums import SharingScope
 from onyx.redis.redis_pool import get_redis_client
@@ -14,9 +13,11 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestSettings
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestLLMProvider,
+    DATestSettings,
+    DATestUser,
+)
 from tests.integration.tests.craft.conftest import SharedSession
 
 

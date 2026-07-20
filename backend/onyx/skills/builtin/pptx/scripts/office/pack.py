@@ -18,9 +18,7 @@ import zipfile
 from pathlib import Path
 
 import defusedxml.minidom
-from validators import DOCXSchemaValidator
-from validators import PPTXSchemaValidator
-from validators import RedliningValidator
+from validators import DOCXSchemaValidator, PPTXSchemaValidator, RedliningValidator
 
 
 def pack(

@@ -1,53 +1,58 @@
 from typing import cast
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from onyx import __version__ as onyx_version
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import is_user_admin
-from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
-from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
-from onyx.configs.app_configs import POSTHOG_API_KEY
-from onyx.configs.app_configs import POSTHOG_HOST
-from onyx.configs.constants import KV_REINDEX_KEY
-from onyx.configs.constants import NotificationType
+from onyx.configs.app_configs import (
+    DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
+    DISABLE_VECTOR_DB,
+    MAX_ALLOWED_UPLOAD_SIZE_MB,
+    POSTHOG_API_KEY,
+    POSTHOG_HOST,
+)
+from onyx.configs.constants import KV_REINDEX_KEY, NotificationType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.db.notification import dismiss_all_notifications
-from onyx.db.notification import get_notifications
-from onyx.db.notification import update_notification_last_shown
+from onyx.db.notification import (
+    dismiss_all_notifications,
+    get_notifications,
+    update_notification_last_shown,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.server.features.build.utils import is_craft_available_for_deployment
-from onyx.server.features.build.utils import is_craft_enabled_for_user
+from onyx.server.features.build.utils import (
+    is_craft_available_for_deployment,
+    is_craft_enabled_for_user,
+)
 from onyx.server.features.notifications.models import NotificationResponse
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
+    DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB,
+    Settings,
+    Tier,
+    UserSettings,
 )
-from onyx.server.settings.models import DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
-from onyx.server.settings.models import Settings
-from onyx.server.settings.models import Tier
-from onyx.server.settings.models import UserSettings
-from onyx.server.settings.store import load_settings
-from onyx.server.settings.store import store_settings
+from onyx.server.settings.store import load_settings, store_settings
 from onyx.server.settings.tier_order import tier_at_least
-from onyx.utils.audit import actor_from_user
-from onyx.utils.audit import AuditAction
-from onyx.utils.audit import AuditOutcome
-from onyx.utils.audit import emit_audit_event
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.platform_utils import is_running_in_container
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
+    global_version,
 )
-from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()

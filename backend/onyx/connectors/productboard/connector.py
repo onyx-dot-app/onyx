@@ -1,22 +1,19 @@
 from collections.abc import Generator
 from itertools import chain
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import requests
 from bs4 import BeautifulSoup
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import BasicExpertInfo, Document, HierarchyNode, TextSection
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 

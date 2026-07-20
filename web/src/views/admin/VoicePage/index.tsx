@@ -13,7 +13,7 @@ import { Content } from "@opal/layouts";
 import { MessageCard, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import {
   VoiceProviderSetupModal,
   VoiceDisconnectModal,

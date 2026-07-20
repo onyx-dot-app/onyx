@@ -3,21 +3,24 @@ from __future__ import annotations
 import base64
 import json
 from datetime import datetime
-from typing import Any
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
 from onyx.image_gen.exceptions import ImageProviderCredentialsError
-from onyx.image_gen.interfaces import ImageGenerationProvider
-from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
-from onyx.image_gen.interfaces import ReferenceImage
-from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_SERVICE_ACCOUNT
-from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
-from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
+from onyx.image_gen.interfaces import (
+    ImageGenerationProvider,
+    ImageGenerationProviderCredentials,
+    ReferenceImage,
+)
+from onyx.llm.well_known_providers.constants import (
+    VERTEX_AUTH_METHOD_KWARG,
+    VERTEX_AUTH_METHOD_SERVICE_ACCOUNT,
+    VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY,
+    VERTEX_CREDENTIALS_FILE_KWARG,
+    VERTEX_LOCATION_KWARG,
+    VERTEX_PROJECT_KWARG,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 
@@ -129,8 +132,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
     ) -> ImageGenerationResponse:
         from google import genai
         from google.genai import types as genai_types
-        from litellm.types.utils import ImageObject
-        from litellm.types.utils import ImageResponse
+        from litellm.types.utils import ImageObject, ImageResponse
 
         credentials: Any
         if self._use_workload_identity:

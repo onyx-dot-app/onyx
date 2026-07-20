@@ -9,13 +9,13 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import Skill
+from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
+from onyx.db.models import BuildSession, Skill, User
+from onyx.server.features.build.db.build_session import skills_are_stale
 from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.skills.push import push_skills_for_users
+from onyx.skills.push import compute_skills_hash, push_skills_for_users
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.craft.db_helpers import make_sandbox
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
 
 def test_one_failing_sandbox_does_not_abort_push_to_others(
@@ -29,9 +29,32 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
     user_a = make_user(db_session)
     user_b = make_user(db_session)
     user_c = make_user(db_session)
-    make_sandbox(db_session, user_a, status=SandboxStatus.RUNNING)
+    sandbox_a = make_sandbox(db_session, user_a, status=SandboxStatus.RUNNING)
     sandbox_b = make_sandbox(db_session, user_b, status=SandboxStatus.RUNNING)
-    make_sandbox(db_session, user_c, status=SandboxStatus.RUNNING)
+    sandbox_c = make_sandbox(db_session, user_c, status=SandboxStatus.RUNNING)
+    sessions = {
+        user.id: BuildSession(
+            user_id=user.id,
+            status=BuildSessionStatus.ACTIVE,
+            opencode_session_id=(
+                None if user.id == user_c.id else f"opencode-{user.id}"
+            ),
+        )
+        for user in (user_a, user_b, user_c)
+    }
+    idle_session = BuildSession(
+        user_id=user_a.id,
+        status=BuildSessionStatus.IDLE,
+        opencode_session_id="stopped-opencode",
+    )
+    scheduled_session = BuildSession(
+        user_id=user_a.id,
+        status=BuildSessionStatus.ACTIVE,
+        origin=SessionOrigin.SCHEDULED,
+        opencode_session_id="scheduled-opencode",
+    )
+    db_session.add_all(sessions.values())
+    db_session.add_all([idle_session, scheduled_session])
     db_session.commit()
 
     stub = failing_sandbox_manager(
@@ -53,6 +76,14 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
         push_skills_for_users({user_a.id, user_b.id, user_c.id}, db_session)
 
     assert stub.write_files_to_sandbox_count == 3
+    assert skills_are_stale(sessions[user_a.id], sandbox_a)
+    assert not skills_are_stale(sessions[user_b.id], sandbox_b)
+    assert not skills_are_stale(sessions[user_c.id], sandbox_c)
+    assert not skills_are_stale(idle_session, sandbox_a)
+    assert not skills_are_stale(scheduled_session, sandbox_a)
+    assert sandbox_a.skills_hash is not None
+    assert sandbox_b.skills_hash is None
+    assert sandbox_c.skills_hash is not None
 
     warning_messages = [
         r.getMessage() for r in caplog.records if r.levelno == logging.WARNING
@@ -60,3 +91,79 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
     assert any("1/3 targets failed" in m for m in warning_messages), (
         f"Expected a '1/3 targets failed' partial-failure warning; got: {warning_messages!r}"
     )
+
+    db_session.rollback()
+    for sandbox in (sandbox_a, sandbox_b, sandbox_c):
+        db_session.refresh(sandbox)
+        assert sandbox.skills_hash is None
+    for session, sandbox in (
+        (sessions[user_a.id], sandbox_a),
+        (sessions[user_b.id], sandbox_b),
+        (sessions[user_c.id], sandbox_c),
+    ):
+        assert not skills_are_stale(session, sandbox)
+
+
+def test_only_changed_skill_files_are_pushed_and_hashes_self_heal(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unchanged_user = make_user(db_session)
+    changed_user = make_user(db_session)
+    unchanged_sandbox = make_sandbox(
+        db_session, unchanged_user, status=SandboxStatus.RUNNING
+    )
+    changed_sandbox = make_sandbox(
+        db_session, changed_user, status=SandboxStatus.RUNNING
+    )
+    unchanged_session = BuildSession(
+        user_id=unchanged_user.id,
+        status=BuildSessionStatus.ACTIVE,
+        opencode_session_id="unchanged-runtime",
+    )
+    changed_session = BuildSession(
+        user_id=changed_user.id,
+        status=BuildSessionStatus.ACTIVE,
+        opencode_session_id="changed-runtime",
+    )
+
+    contents = {
+        unchanged_user.id: b"content",
+        changed_user.id: b"changed",
+    }
+
+    def files_for(user: User, _db_session: Session) -> dict[str, bytes]:
+        return {f"{user.id}/SKILL.md": contents[user.id]}
+
+    unchanged_sandbox.skills_hash = compute_skills_hash(
+        files_for(unchanged_user, db_session)
+    )
+    changed_sandbox.skills_hash = compute_skills_hash(
+        {f"{changed_user.id}/SKILL.md": b"original"}
+    )
+    unchanged_session.skills_hash = unchanged_sandbox.skills_hash
+    changed_session.skills_hash = changed_sandbox.skills_hash
+    db_session.add_all([unchanged_session, changed_session])
+    db_session.commit()
+
+    stub = StubSandboxManager()
+    stub.write_files_to_sandbox_silent = True
+    monkeypatch.setattr("onyx.skills.push.get_sandbox_manager", lambda: stub)
+    monkeypatch.setattr("onyx.skills.push.build_skills_fileset_for_user", files_for)
+
+    push_skills_for_users({unchanged_user.id, changed_user.id}, db_session)
+
+    db_session.refresh(unchanged_sandbox)
+    db_session.refresh(changed_sandbox)
+    assert stub.write_files_to_sandbox_count == 1
+    assert stub.last_write_files_to_sandbox_payload is not None
+    assert stub.last_write_files_to_sandbox_payload["sandbox_id"] == changed_sandbox.id
+    assert not skills_are_stale(unchanged_session, unchanged_sandbox)
+    assert skills_are_stale(changed_session, changed_sandbox)
+
+    contents[changed_user.id] = b"original"
+    push_skills_for_users({changed_user.id}, db_session)
+
+    db_session.refresh(changed_sandbox)
+    assert stub.write_files_to_sandbox_count == 2
+    assert not skills_are_stale(changed_session, changed_sandbox)

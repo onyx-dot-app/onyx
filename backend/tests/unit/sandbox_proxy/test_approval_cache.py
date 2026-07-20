@@ -2,13 +2,14 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
+from onyx.cache.interface import CacheBackend, CacheLock
 from onyx.db.enums import ApprovalDecision
-from onyx.sandbox_proxy.approval_cache import _wake_key
-from onyx.sandbox_proxy.approval_cache import cache_session_grant_actions
-from onyx.sandbox_proxy.approval_cache import cached_session_grants_cover
-from onyx.sandbox_proxy.approval_cache import wait_for_wake
+from onyx.sandbox_proxy.approval_cache import (
+    _wake_key,
+    cache_session_grant_actions,
+    cached_session_grants_cover,
+    wait_for_wake,
+)
 
 
 class _MemoryCache(CacheBackend):
