@@ -149,22 +149,30 @@ class TestBindAddressSelection:
 class TestDualStackListener:
     """Exercises a real socket rather than asserting on call arguments."""
 
-    def test_server_bind_clears_v6only_explicitly(self) -> None:
+    def test_server_bind_clears_v6only_before_binding(self) -> None:
         """Dual-stack must be set by us, not inherited from net.ipv6.bindv6only.
 
-        Asserted against a stub socket so the check holds on hosts that already
-        default the sysctl to 0 and would mask a missing setsockopt.
+        Ordering is the load-bearing part: setsockopt(IPV6_V6ONLY) on an
+        already-bound socket fails with EINVAL, so clearing it after the bind
+        would silently leave the listener v6-only. Asserted against a stub
+        socket so this holds on hosts whose sysctl already defaults to 0 and
+        would otherwise mask both mistakes.
         """
         import onyx.server.metrics.metrics_server as mod
 
+        parent = MagicMock()
         server = object.__new__(mod._DualStackWSGIServer)
         server.address_family = socket.AF_INET6
-        server.socket = MagicMock()
+        server.socket = parent.socket
 
-        with patch.object(WSGIServer, "server_bind", lambda _self: None):
+        with patch.object(WSGIServer, "server_bind", parent.server_bind):
             server.server_bind()
 
-        server.socket.setsockopt.assert_called_once_with(
+        assert [call[0] for call in parent.mock_calls] == [
+            "socket.setsockopt",
+            "server_bind",
+        ]
+        parent.socket.setsockopt.assert_called_once_with(
             socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0
         )
 
@@ -226,8 +234,13 @@ class TestDualStackListener:
     @pytest.mark.skipif(
         not _ipv6_loopback_available(), reason="IPv6 loopback unavailable"
     )
-    def test_scoped_ipv6_address_keeps_its_scope_id(self) -> None:
-        """A scoped bind address must reach bind() with its scope id intact."""
+    def test_full_sockaddr_reaches_bind(self) -> None:
+        """The whole getaddrinfo sockaddr must reach bind(), not just the host.
+
+        Binding ::1 here, whose scope id is 0, so this checks the 4-tuple shape
+        rather than a live scope id; passing the tuple through is what lets a
+        scoped address like fe80::1%eth0 bind at all.
+        """
         import onyx.server.metrics.metrics_server as mod
 
         captured: list[tuple[object, ...]] = []

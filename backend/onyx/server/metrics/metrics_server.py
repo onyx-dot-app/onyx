@@ -41,8 +41,10 @@ _DEFAULT_PORTS: dict[str, int] = {
 }
 
 # Tried in order. The IPv6 wildcard is dual-stack (see _DualStackWSGIServer) and
-# serves both families; the IPv4 wildcard is the fallback for hosts where IPv6 is
-# disabled outright.
+# serves both families, including on hosts where net.ipv6.conf.all.disable_ipv6=1
+# (binding "::" still succeeds there). The IPv4 wildcard is insurance for the
+# narrower case of a kernel built or booted without AF_INET6 at all, where
+# creating the socket fails outright.
 # Binding all interfaces is intended: /metrics is scraped from off-pod.
 _BIND_ADDRESS_CANDIDATES: tuple[str, ...] = ("::", "0.0.0.0")  # noqa: S104
 
@@ -115,10 +117,16 @@ def _start_wsgi_server(addr: str, port: int) -> WSGIServer:
     # over an IP address cannot return.
     address = cast("tuple[str, int] | tuple[str, int, int, int]", sockaddr)
     httpd = _Server(address, _SilentHandler)
-    httpd.set_app(make_wsgi_app())
-    threading.Thread(
-        target=httpd.serve_forever, daemon=True, name=f"prometheus-metrics-{port}"
-    ).start()
+    try:
+        httpd.set_app(make_wsgi_app())
+        threading.Thread(
+            target=httpd.serve_forever, daemon=True, name=f"prometheus-metrics-{port}"
+        ).start()
+    except BaseException:
+        # The socket is already listening by the time _Server() returns, and
+        # TCPServer only cleans up failures raised inside its own bind/activate.
+        httpd.server_close()
+        raise
     return httpd
 
 
@@ -171,7 +179,7 @@ def start_metrics_server(worker_type: str) -> int | None:
         bind_override = os.environ.get("PROMETHEUS_METRICS_BIND_ADDR", "").strip()
         candidates = (bind_override,) if bind_override else _BIND_ADDRESS_CANDIDATES
 
-        last_error: OSError | None = None
+        last_error: Exception | None = None
         for index, addr in enumerate(candidates):
             try:
                 _httpd = _start_wsgi_server(addr, port)
@@ -187,14 +195,17 @@ def start_metrics_server(worker_type: str) -> int | None:
                         _format_endpoint(remaining[0], port),
                     )
                 continue
-            except Exception:
+            except Exception as e:
                 # Workers call this from worker_ready without guarding it, and
                 # metrics are best-effort, so an unexpected failure here must not
                 # stop the worker from starting.
+                last_error = e
                 logger.exception(
-                    "Unexpected error starting metrics server for %s", worker_type
+                    "Unexpected error starting metrics server for %s on %s",
+                    worker_type,
+                    _format_endpoint(addr, port),
                 )
-                return None
+                continue
 
             _server_started = True
             logger.info(
