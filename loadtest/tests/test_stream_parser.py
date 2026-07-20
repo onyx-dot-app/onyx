@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 
 from onyx_client.stream_parser import (
-    ChatStreamAnalyzer,
     FIRST_ANSWER_TOKEN,
     FIRST_PACKET,
+    ChatStreamAnalyzer,
 )
 
 

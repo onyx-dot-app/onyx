@@ -13,10 +13,10 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
 from onyx.tools.tool_implementations.python.python_tool import (
+    PythonTool,
     _build_staging_notice,
     _code_references_file,
     _select_files_for_staging,
-    PythonTool,
 )
 
 TOOL_MODULE = "onyx.tools.tool_implementations.python.python_tool"

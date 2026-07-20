@@ -1,4 +1,4 @@
-from fastapi import Depends, params, Request, Response
+from fastapi import Depends, Request, Response, params
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 

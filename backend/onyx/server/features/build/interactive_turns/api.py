@@ -27,9 +27,9 @@ from onyx.server.features.build.interactive_turns.executor import (
 )
 from onyx.server.features.build.interactive_turns.models import InteractiveTurnResponse
 from onyx.server.features.build.interactive_turns.state import (
+    TURN_STATUS_FAILED,
     get_active_turn,
     get_turn,
-    TURN_STATUS_FAILED,
 )
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import SSE_KEEPALIVE

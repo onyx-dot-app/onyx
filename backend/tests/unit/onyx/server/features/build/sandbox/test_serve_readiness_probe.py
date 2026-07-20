@@ -15,8 +15,8 @@ import pytest
 
 from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
 from onyx.server.features.build.sandbox.serve_transport import (
-    _ServeMixin,
     ServeConnectionInfo,
+    _ServeMixin,
 )
 
 _SBX = UUID("12345678-1234-1234-1234-1234567890ab")

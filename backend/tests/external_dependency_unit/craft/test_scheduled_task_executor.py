@@ -21,7 +21,7 @@ import datetime
 import threading
 from collections.abc import Callable
 from typing import Any
-from unittest.mock import patch, PropertyMock
+from unittest.mock import PropertyMock, patch
 from uuid import UUID
 
 import pytest
@@ -40,10 +40,10 @@ from onyx.db.enums import (
 )
 from onyx.db.models import Sandbox, ScheduledTask, ScheduledTaskRun, User
 from onyx.server.features.build.sandbox.event_schema import (
-    Error,
-    PromptResponse,
     TURN_ERROR_CODE_TIMEOUT,
     TURN_ERROR_CODE_TRANSPORT,
+    Error,
+    PromptResponse,
 )
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
 from onyx.server.features.build.session.manager import SessionManager

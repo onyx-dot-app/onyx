@@ -2,7 +2,7 @@ import time
 from collections.abc import Generator, Iterator, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, cast, TypeVar
+from typing import Any, TypeVar, cast
 
 import httpx
 from pydantic import BaseModel

@@ -79,18 +79,18 @@ from onyx.file_store.document_batch_storage import (
     get_document_batch_storage,
 )
 from onyx.file_store.staging import (
-    build_raw_file_callback,
     RawFileCallback,
+    build_raw_file_callback,
     reap_prior_attempt_staged_files,
 )
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_hierarchy import (
+    HierarchyNodeCacheEntry,
     cache_hierarchy_nodes_batch,
     ensure_source_node_exists,
     get_node_id_from_raw_id,
     get_source_node_id_from_cache,
-    HierarchyNodeCacheEntry,
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger

@@ -22,23 +22,23 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     CHAT_SESSION_ID_PLACEHOLDER,
+    MESSAGE_ID_PLACEHOLDER,
+    USER_EMAIL_PLACEHOLDER,
+    USER_ID_PLACEHOLDER,
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     DynamicSchemaInfo,
-    MESSAGE_ID_PLACEHOLDER,
     ToolCallException,
     ToolResponse,
-    USER_EMAIL_PLACEHOLDER,
-    USER_ID_PLACEHOLDER,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    REQUEST_BODY,
     MethodSpec,
     openapi_to_method_specs,
     openapi_to_url,
-    REQUEST_BODY,
     validate_openapi_schema,
 )
-from onyx.utils.headers import header_list_to_header_dict, HeaderItemDict
+from onyx.utils.headers import HeaderItemDict, header_list_to_header_dict
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

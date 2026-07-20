@@ -1,6 +1,6 @@
 from typing import Any, cast
 
-from celery import Celery, signals, Task
+from celery import Celery, Task, signals
 from celery.apps.worker import Worker
 from celery.signals import (
     celeryd_init,

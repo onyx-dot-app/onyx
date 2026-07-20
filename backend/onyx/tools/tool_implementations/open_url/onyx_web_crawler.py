@@ -15,11 +15,11 @@ from onyx.tools.tool_implementations.open_url.models import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.playwright_fetch import (
+    RenderedPage,
     fetch_rendered_html,
     looks_like_cloudflare_challenge,
-    RenderedPage,
 )
-from onyx.utils.url import ssrf_safe_get, SSRFException
+from onyx.utils.url import SSRFException, ssrf_safe_get
 from onyx.utils.web_content import (
     decode_html_bytes,
     extract_pdf_text,

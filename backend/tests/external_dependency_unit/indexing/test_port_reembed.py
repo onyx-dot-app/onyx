@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.configs.constants import DocumentSource, RETURN_SEPARATOR
+from onyx.configs.constants import RETURN_SEPARATOR, DocumentSource
 from onyx.configs.model_configs import (
     ASYM_PASSAGE_PREFIX,
     ASYM_QUERY_PREFIX,
@@ -38,14 +38,14 @@ from onyx.indexing.chunker import get_metadata_suffix_for_document_index
 from onyx.indexing.embedder import DefaultIndexingEmbedder, IndexingEmbedder
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
 from onyx.indexing.port_reembed import (
+    AugmentationReembedContext,
+    ReembedStrategy,
     _bare_contents,
     _reconstruct_source_document,
     _stored_chunk_to_doc_aware,
-    AugmentationReembedContext,
     re_embed_chunks,
     rebuild_semantic_tail,
     recover_embedding_input,
-    ReembedStrategy,
     select_reembed_strategy,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer

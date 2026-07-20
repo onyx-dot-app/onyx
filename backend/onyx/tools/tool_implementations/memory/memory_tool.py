@@ -6,7 +6,7 @@ The memories are passed in via override_kwargs which contains the current list o
 memories that exist for the user.
 """
 
-from typing import Any, cast, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel
 from typing_extensions import override

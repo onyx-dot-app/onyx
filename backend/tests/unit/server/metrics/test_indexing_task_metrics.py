@@ -6,12 +6,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.server.metrics.indexing_task_metrics import (
-    _connector_cache,
-    _indexing_start_times,
-    ConnectorInfo,
     INDEXING_TASK_COMPLETED,
     INDEXING_TASK_DURATION,
     INDEXING_TASK_STARTED,
+    ConnectorInfo,
+    _connector_cache,
+    _indexing_start_times,
     on_indexing_task_postrun,
     on_indexing_task_prerun,
 )

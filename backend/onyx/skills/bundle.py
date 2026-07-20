@@ -11,7 +11,7 @@ import zipfile
 from contextlib import ExitStack
 from copy import copy
 from dataclasses import dataclass
-from typing import Final, IO
+from typing import IO, Final
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError

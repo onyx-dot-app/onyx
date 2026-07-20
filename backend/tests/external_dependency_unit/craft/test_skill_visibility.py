@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import User, UserRole
 from onyx.db.skill import (
+    SkillAccessPolicy,
     fetch_skill,
     list_skills,
     set_skill_public_permission,
-    SkillAccessPolicy,
 )
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,

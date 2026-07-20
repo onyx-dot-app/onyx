@@ -20,7 +20,7 @@ from onyx.cache.postgres_backend import PostgresCacheBackend
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import CacheStore, KVStore
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.key_value_store.store import PgRedisKVStore, REDIS_KEY_PREFIX
+from onyx.key_value_store.store import REDIS_KEY_PREFIX, PgRedisKVStore
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 

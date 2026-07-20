@@ -6,14 +6,14 @@ import time
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any, cast, Generic, Literal, TypeVar
+from typing import Any, Generic, Literal, TypeVar, cast
 from unittest.mock import patch
 
 from pydantic import BaseModel
 
 from onyx.llm.interfaces import (
-    LanguageModelInput,
     LLM,
+    LanguageModelInput,
     LLMConfig,
     LLMUserIdentity,
     ReasoningEffort,

@@ -4,7 +4,7 @@ import re
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, cast, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Union, cast
 
 from readerwriterlock import rwlock
 
@@ -20,8 +20,8 @@ from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.cost import calculate_llm_cost_cents
 from onyx.llm.interfaces import (
-    LanguageModelInput,
     LLM,
+    LanguageModelInput,
     LLMConfig,
     LLMUserIdentity,
     ReasoningEffort,
@@ -479,7 +479,7 @@ class LitellmLLM(LLM):
             return
         # Import here to avoid circular imports
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
-        from onyx.db.usage import increment_usage, UsageType
+        from onyx.db.usage import UsageType, increment_usage
 
         # Calculate cost in cents
         cost_cents = calculate_llm_cost_cents(

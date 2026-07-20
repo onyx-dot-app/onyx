@@ -9,7 +9,7 @@ from typing import Any, cast
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource, KV_CRED_KEY
+from onyx.configs.constants import KV_CRED_KEY, DocumentSource
 from onyx.connectors.google_utils.google_kv import (
     build_service_account_creds,
     get_auth_url,

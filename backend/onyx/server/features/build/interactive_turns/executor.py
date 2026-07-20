@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
-from enum import auto, Enum
+from enum import Enum, auto
 from uuid import UUID
 
 from onyx.cache.factory import get_cache_backend
@@ -16,14 +16,14 @@ from onyx.server.features.build.configs import (
 )
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.interactive_turns.state import (
-    claim_turn_for_runner,
-    finish_turn,
-    get_active_turn,
-    InteractiveTurn,
-    touch_turn,
     TURN_STATUS_CANCELLED,
     TURN_STATUS_FAILED,
     TURN_STATUS_SUCCEEDED,
+    InteractiveTurn,
+    claim_turn_for_runner,
+    finish_turn,
+    get_active_turn,
+    touch_turn,
 )
 from onyx.server.features.build.sandbox.event_schema import (
     ActivityTimeoutError,

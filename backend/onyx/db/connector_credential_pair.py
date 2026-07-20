@@ -3,8 +3,8 @@ from enum import Enum
 from typing import TypeVarTuple
 
 from fastapi import HTTPException
-from sqlalchemy import delete, desc, exists, Select, select, update
-from sqlalchemy.orm import aliased, joinedload, selectinload, Session
+from sqlalchemy import Select, delete, desc, exists, select, update
+from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id

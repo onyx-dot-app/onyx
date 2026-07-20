@@ -38,6 +38,9 @@ from onyx.server.features.build.packets import (
     SubagentStartedPacket,
 )
 from onyx.server.features.build.sandbox.event_schema import (
+    TURN_ERROR_CODE_SESSION,
+    TURN_ERROR_CODE_TIMEOUT,
+    TURN_ERROR_CODE_TRANSPORT,
     ActivityTimeoutError,
     AgentMessageChunk,
     AgentThoughtChunk,
@@ -45,14 +48,11 @@ from onyx.server.features.build.sandbox.event_schema import (
     PromptResponse,
     ToolCallProgress,
     ToolCallStart,
-    TURN_ERROR_CODE_SESSION,
-    TURN_ERROR_CODE_TIMEOUT,
-    TURN_ERROR_CODE_TRANSPORT,
 )
 from onyx.server.features.build.sandbox.opencode.event_bus import (
-    _Subscription,
     BUS_CLOSED_SENTINEL,
     PodEventBus,
+    _Subscription,
 )
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger

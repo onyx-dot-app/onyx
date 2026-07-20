@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from onyx.secondary_llm_flows.time_filter import (
-    decide_time_filter,
     DocumentTimeField,
     TimeFilter,
+    decide_time_filter,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 

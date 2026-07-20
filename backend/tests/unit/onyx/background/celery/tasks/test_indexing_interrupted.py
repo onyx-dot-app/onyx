@@ -6,8 +6,8 @@ trips the repeated-error auto-pause, while genuine consecutive FAILED still does
 from unittest.mock import MagicMock, patch
 
 from onyx.background.celery.tasks.docprocessing.utils import (
-    is_in_repeated_error_state,
     NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE,
+    is_in_repeated_error_state,
 )
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import mark_attempt_interrupted

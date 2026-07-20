@@ -10,7 +10,7 @@ Usage:
 import json
 import sys
 
-from onyx.db.engine.sql_engine import get_session_with_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.search_settings import get_current_search_settings
 
 

@@ -14,7 +14,7 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.models import BasicExpertInfo, Document, ImageSection, TextSection
-from onyx.connectors.salesforce.doc_conversion import _extract_section, ID_PREFIX
+from onyx.connectors.salesforce.doc_conversion import ID_PREFIX, _extract_section
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import (
     _bulk_retrieve_from_salesforce,

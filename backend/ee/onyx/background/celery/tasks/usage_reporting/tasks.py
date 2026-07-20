@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from celery import shared_task, Task
+from celery import Task, shared_task
 
 from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
 from onyx.configs.app_configs import JOB_TIMEOUT

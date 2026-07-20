@@ -5,14 +5,14 @@ the dispatch in ``rule_matches`` never changes (open/closed).
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Generic, get_args, TypeVar
+from typing import Any, ClassVar, Generic, TypeVar, get_args
 
 from onyx.external_apps.matching.request import MatchContext
 from onyx.external_apps.providers.actions import (
     GraphQLOp,
     MatchRule,
-    path_matches,
     RestRoute,
+    path_matches,
 )
 
 RuleT = TypeVar("RuleT")

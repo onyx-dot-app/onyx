@@ -2,7 +2,7 @@ import re
 import time
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
-from typing import Any, IO
+from typing import IO, Any
 from unittest.mock import patch
 
 import pytest

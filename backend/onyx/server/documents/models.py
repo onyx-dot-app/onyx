@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime, timezone
 from enum import Enum
 from typing import Any, Generic, TypeVar
 from uuid import UUID
@@ -15,8 +15,8 @@ from onyx.db.enums import (
     ProcessingMode,
 )
 from onyx.db.index_attempt_metrics_models import (
-    IndexAttemptStage,
     STAGE_SCOPE,
+    IndexAttemptStage,
     StageScope,
 )
 from onyx.db.models import (

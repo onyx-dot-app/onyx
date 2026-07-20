@@ -8,7 +8,7 @@ import pytest
 
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.providers.base import OnyxManagedExtApp
-from onyx.external_apps.providers.registry import get_onyx_managed_provider, PROVIDERS
+from onyx.external_apps.providers.registry import PROVIDERS, get_onyx_managed_provider
 
 
 def _gmail() -> OnyxManagedExtApp:

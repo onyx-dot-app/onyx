@@ -10,9 +10,9 @@ from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.server.features.mcp.client import call_mcp_tool
 from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS
 from onyx.server.features.mcp.oauth import (
+    UNUSED_RETURN_PATH,
     make_oauth_provider,
     refresh_mcp_oauth_token_if_expired,
-    UNUSED_RETURN_PATH,
 )
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (

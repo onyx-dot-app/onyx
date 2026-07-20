@@ -40,7 +40,7 @@ from onyx.configs.constants import DocumentSource, MessageType
 from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.memory import add_memory, update_memory_at_index, UserMemoryContext
+from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
 from onyx.db.models import Persona
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions

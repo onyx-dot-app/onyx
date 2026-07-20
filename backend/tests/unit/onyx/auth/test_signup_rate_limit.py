@@ -7,9 +7,9 @@ from fastapi import Request
 
 from onyx.auth import signup_rate_limit as rl
 from onyx.auth.signup_rate_limit import (
+    _PER_IP_PER_HOUR,
     _bucket_key,
     _client_ip,
-    _PER_IP_PER_HOUR,
     enforce_signup_rate_limit,
 )
 from onyx.error_handling.exceptions import OnyxError

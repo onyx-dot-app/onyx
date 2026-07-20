@@ -6,8 +6,8 @@ import pytest
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from tests.daily.connectors.google_drive.consts_and_utils import (
     ADMIN_EMAIL,
-    load_connector_outputs,
     SECTIONS_FOLDER_URL,
+    load_connector_outputs,
 )
 from tests.utils.secret_names import TestSecret
 

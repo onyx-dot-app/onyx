@@ -41,11 +41,11 @@ from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from tests.unit.sandbox_proxy.conftest import (
+    RecordingCredentialResolver,
+    StubResolver,
     make_flow,
     make_matched_actions,
     make_resolved_sandbox,
-    RecordingCredentialResolver,
-    StubResolver,
 )
 
 # ---------------------------------------------------------------------------

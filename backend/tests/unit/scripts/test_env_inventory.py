@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 from scripts.env_inventory import (
+    EnvVisitor,
     classify_var,
     diff_baseline,
-    EnvVisitor,
     format_baseline,
     is_sensitive,
     read_baseline,

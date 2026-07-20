@@ -25,8 +25,8 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.llm.multi_llm import (
-    _parse_anthropic_model_version,
     LitellmLLM,
+    _parse_anthropic_model_version,
     temporary_env_and_lock,
 )
 

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.lumapps.connector import _parse_dt, LumAppsConnector
+from onyx.connectors.lumapps.connector import LumAppsConnector, _parse_dt
 from onyx.connectors.models import Document, SlimDocument
 
 

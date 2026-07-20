@@ -48,8 +48,8 @@ from onyx.tools.tool_implementations.web_search.providers import (
     get_default_content_provider,
 )
 from onyx.tools.tool_implementations.web_search.utils import (
-    inference_section_from_internet_page_scrape,
     MAX_CHARS_PER_URL,
+    inference_section_from_internet_page_scrape,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel

@@ -3,8 +3,8 @@ from typing import cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import and_, delete, Select, select
-from sqlalchemy.orm import aliased, Session
+from sqlalchemy import Select, and_, delete, select
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy.orm.attributes import flag_modified
 
 from onyx.db.constants import UNSET, UnsetType

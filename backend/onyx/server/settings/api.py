@@ -42,9 +42,9 @@ from onyx.server.settings.models import (
 from onyx.server.settings.store import load_settings, store_settings
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.audit import (
-    actor_from_user,
     AuditAction,
     AuditOutcome,
+    actor_from_user,
     emit_audit_event,
 )
 from onyx.utils.logger import setup_logger

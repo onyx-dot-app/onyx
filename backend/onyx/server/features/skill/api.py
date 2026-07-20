@@ -13,6 +13,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccountType, Permission, SkillSharePermission
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
+    SkillAccessPolicy,
     affected_user_ids_for_skill,
     create_skill__no_commit,
     delete_skill,
@@ -23,7 +24,6 @@ from onyx.db.skill import (
     replace_skill_shares,
     set_skill_enabled_for_user,
     set_skill_public_permission,
-    SkillAccessPolicy,
     transfer_skill_ownership,
 )
 from onyx.db.users import fetch_user_by_id
@@ -48,6 +48,7 @@ from onyx.server.features.skill.response_helpers import (
     skills_list_response_for_user,
 )
 from onyx.skills.bundle import (
+    SKILL_MD_NAME,
     build_single_file_bundle,
     build_skill_md,
     compute_bundle_sha256,
@@ -56,7 +57,6 @@ from onyx.skills.bundle import (
     read_bundle_file,
     read_custom_bundle_instructions,
     rewrite_custom_bundle_skill_md,
-    SKILL_MD_NAME,
     update_custom_bundle_files,
 )
 from onyx.skills.content import read_custom_skill_bundle_bytes
