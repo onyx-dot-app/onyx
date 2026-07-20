@@ -19,6 +19,20 @@ OPENAI_COMPATIBLE_PROVIDER_NAME = "openai_compatible"
 
 NEBIUS_TOKENFACTORY_PROVIDER_NAME = "nebius_tokenfactory"
 
+PORTKEY_PROVIDER_NAME = "portkey"
+# custom_config key that records which Portkey API surface a provider targets.
+PORTKEY_API_MODE_CONFIG_KEY = "portkey_api_mode"
+# OpenAI-compatible Chat Completions surface (default). Base ends in /v1.
+PORTKEY_API_MODE_CHAT_COMPLETIONS = "chat_completions"
+# OpenAI-compatible Responses surface. Base ends in /v1; model gets a responses/ prefix.
+PORTKEY_API_MODE_RESPONSES = "responses"
+# Anthropic-compatible Messages surface. Base stays bare; litellm appends /v1/messages.
+PORTKEY_API_MODE_MESSAGES = "messages"
+PORTKEY_DEFAULT_API_MODE = PORTKEY_API_MODE_CHAT_COMPLETIONS
+# Base URLs differ by surface: OpenAI-compat modes use /v1, Messages uses the bare host.
+PORTKEY_DEFAULT_API_BASE_OPENAI = "https://api.portkey.ai/v1"
+PORTKEY_DEFAULT_API_BASE_ANTHROPIC = "https://api.portkey.ai"
+
 # Providers that use optional Bearer auth from custom_config
 PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING: dict[str, str] = {
     LlmProviderNames.OLLAMA_CHAT: OLLAMA_API_KEY_CONFIG_KEY,

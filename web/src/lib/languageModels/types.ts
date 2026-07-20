@@ -45,8 +45,13 @@ export enum LLMProviderName {
   BIFROST = "bifrost",
   OPENAI_COMPATIBLE = "openai_compatible",
   NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
+  PORTKEY = "portkey",
   CUSTOM = "custom",
 }
+
+// Which Portkey API surface a provider targets. Persisted in custom_config
+// under `portkey_api_mode`.
+export type PortkeyApiMode = "chat_completions" | "responses" | "messages";
 
 export interface SimpleKnownModel {
   name: string;
@@ -232,6 +237,21 @@ export interface NebiusTokenfactoryModelResponse {
   country_code: string | null;
   requests_per_minute: number | null;
   supported_features: string[];
+}
+
+export interface PortkeyFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_id?: number;
+  signal?: AbortSignal;
+}
+
+export interface PortkeyModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
 }
 
 export interface VertexAIFetchParams {

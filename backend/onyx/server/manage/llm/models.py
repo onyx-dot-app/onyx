@@ -658,3 +658,22 @@ class OpenAICompatibleFinalModelResponse(BaseModel):
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool
+
+
+# Portkey dynamic models fetch
+class PortkeyModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+    # Selected Portkey API surface (chat_completions | responses | messages).
+    # The model-listing endpoint is the same across surfaces; carried for clarity.
+    api_mode: str | None = None
+
+
+class PortkeyFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "gpt-4o", "claude-sonnet-5")
+    display_name: str  # Human-readable name from API
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
