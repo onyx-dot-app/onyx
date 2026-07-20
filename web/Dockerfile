@@ -5,7 +5,7 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 
 # bun binary source, in its own stage because buildx only expands the registry ARG in a FROM,
 # not in `COPY --from=`. Use the glibc (Debian) build so it runs on the glibc DHI node images.
-FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
+FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1 AS bun_source
 
 # Build stage. The DHI "-dev" variant runs as root and ships a shell, apt, and npm/npx.
 # Refresh the digest with: docker buildx imagetools inspect dhi.io/node:24-debian13-dev
