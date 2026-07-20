@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 from onyx.chat.llm_loop import _build_empty_llm_response_error
+from onyx.chat.llm_loop import build_post_cycle_reminder
 from onyx.chat.llm_loop import _try_fallback_tool_extraction
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_loop import EmptyLLMResponseError
@@ -1343,3 +1344,49 @@ class TestSelectReminderText:
             ran_image_gen=True, just_ran_web_search=True, has_open_url_tool=True
         )
         assert result == IMAGE_GEN_REMINDER
+
+
+class TestBuildPostCycleReminder:
+    """Tests for build_post_cycle_reminder, which must not place a user-role
+    reminder directly after a tool response (invalid for strict tool-message
+    ordering, e.g. the native Mistral protocol)."""
+
+    @staticmethod
+    def _token_counter(text: str) -> int:
+        return max(1, len(text) // 4)
+
+    def test_no_reminder_when_last_message_is_tool_response(self) -> None:
+        history = [
+            create_message("Search the web for X", MessageType.USER, 5),
+            create_assistant_with_tool_call("call_1", "web_search", 5),
+            create_tool_response("call_1", "results", 5),
+        ]
+        result = build_post_cycle_reminder(
+            reminder_message_text="Remember to cite your sources.",
+            simple_chat_history=history,
+            token_counter=self._token_counter,
+        )
+        assert result is None
+
+    def test_reminder_added_when_last_message_is_not_tool_response(self) -> None:
+        history = [
+            create_message("Hello", MessageType.USER, 5),
+            create_message("Hi there!", MessageType.ASSISTANT, 5),
+        ]
+        result = build_post_cycle_reminder(
+            reminder_message_text="Remember to cite your sources.",
+            simple_chat_history=history,
+            token_counter=self._token_counter,
+        )
+        assert result is not None
+        assert result.message_type == MessageType.USER_REMINDER
+        assert result.message == "Remember to cite your sources."
+
+    def test_no_reminder_when_text_is_empty(self) -> None:
+        history = [create_message("Hello", MessageType.USER, 5)]
+        result = build_post_cycle_reminder(
+            reminder_message_text=None,
+            simple_chat_history=history,
+            token_counter=self._token_counter,
+        )
+        assert result is None

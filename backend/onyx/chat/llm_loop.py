@@ -635,6 +635,34 @@ def select_reminder_text(
     )
 
 
+def build_post_cycle_reminder(
+    *,
+    reminder_message_text: str | None,
+    simple_chat_history: list[ChatMessageSimple],
+    token_counter: Callable[[str], int],
+) -> ChatMessageSimple | None:
+    """Build the USER_REMINDER to append after a tool cycle, if any.
+
+    A USER_REMINDER is translated into a user-role message. Placing it directly
+    after a tool response yields a user-after-tool sequence that providers
+    enforcing strict tool-message ordering (e.g. the native Mistral protocol)
+    reject before inference. When the last message is a tool result, no reminder
+    is attached for the continuation cycle.
+    """
+    if not reminder_message_text:
+        return None
+    if (
+        simple_chat_history
+        and simple_chat_history[-1].message_type == MessageType.TOOL_CALL_RESPONSE
+    ):
+        return None
+    return ChatMessageSimple(
+        message=reminder_message_text,
+        token_count=token_counter(reminder_message_text),
+        message_type=MessageType.USER_REMINDER,
+    )
+
+
 def run_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -896,14 +924,10 @@ def run_llm_loop(
                 include_file_reminder=code_interpreter_file_generated,
             )
 
-            reminder_msg = (
-                ChatMessageSimple(
-                    message=reminder_message_text,
-                    token_count=token_counter(reminder_message_text),
-                    message_type=MessageType.USER_REMINDER,
-                )
-                if reminder_message_text
-                else None
+            reminder_msg = build_post_cycle_reminder(
+                reminder_message_text=reminder_message_text,
+                simple_chat_history=simple_chat_history,
+                token_counter=token_counter,
             )
 
             tool_token_budget = compute_all_tool_tokens(final_tools, token_counter)
