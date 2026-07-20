@@ -19,6 +19,7 @@ from onyx.server.metrics.mcp_client import record_mcp_client_tool_outcome
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
+from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
@@ -212,6 +213,15 @@ class MCPTool(Tool[None]):
 
                 error_result = {"error": auth_error_msg}
                 llm_facing_response = json.dumps(error_result)
+                # Tag as an auth error so the chat UI can prompt re-auth (mirrors
+                # custom_tool.py); covers the never-authenticated case. message is
+                # the user-facing label the re-auth UI renders, not the verbose
+                # LLM instruction above.
+                auth_error_info = CustomToolErrorInfo(
+                    is_auth_error=True,
+                    status_code=401,
+                    message=f"Authentication required for {self.mcp_server.name}",
+                )
 
                 # Emit CustomToolDelta packet
                 self.emitter.emit(
@@ -221,6 +231,7 @@ class MCPTool(Tool[None]):
                             tool_name=self._name,
                             response_type="json",
                             data=error_result,
+                            error=auth_error_info,
                         ),
                     )
                 )
@@ -231,6 +242,7 @@ class MCPTool(Tool[None]):
                         tool_name=self._name,
                         response_type="json",
                         tool_result=error_result,
+                        error=auth_error_info,
                     ),
                     llm_facing_response=llm_facing_response,
                 )
@@ -317,6 +329,7 @@ class MCPTool(Tool[None]):
                 indicator in error_str for indicator in _AUTH_ERROR_INDICATORS
             )
 
+            error_info: CustomToolErrorInfo | None = None
             if is_auth_error:
                 outcome = MCPToolCallStatus.AUTH_ERROR
                 auth_error_msg = (
@@ -325,6 +338,21 @@ class MCPTool(Tool[None]):
                     f"for the {self.mcp_server.name} server. Original error: {str(e)}"
                 )
                 error_result = {"error": auth_error_msg}
+                # Tag as an auth error so the chat UI can prompt re-auth (mirrors
+                # custom_tool.py); a bare message string never reaches that path.
+                # message is the user-facing label the re-auth UI renders, not the
+                # verbose LLM instruction above.
+                error_info = CustomToolErrorInfo(
+                    is_auth_error=True,
+                    status_code=(
+                        403
+                        if "403" in error_str
+                        or "forbidden" in error_str
+                        or "access denied" in error_str
+                        else 401
+                    ),
+                    message=f"Re-authentication required for {self.mcp_server.name}",
+                )
             else:
                 error_result = {"error": f"Tool execution failed: {str(e)}"}
 
@@ -338,6 +366,7 @@ class MCPTool(Tool[None]):
                         tool_name=self._name,
                         response_type="json",
                         data=error_result,
+                        error=error_info,
                     ),
                 )
             )
@@ -347,6 +376,7 @@ class MCPTool(Tool[None]):
                     tool_name=self._name,
                     response_type="json",
                     tool_result=error_result,
+                    error=error_info,
                 ),
                 llm_facing_response=llm_facing_response,
             )
