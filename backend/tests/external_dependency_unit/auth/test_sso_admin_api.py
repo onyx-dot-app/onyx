@@ -282,8 +282,9 @@ def test_create_saml_provider(
     provider_names.append(name)
     body = response.json()
     assert body["provider_type"] == SSOProviderType.SAML.value
-    # Single issuer-resolved ACS for every SAML row.
-    assert body["redirect_uri"] == f"{WEB_DOMAIN}/api/auth/saml/callback"
+    # Single issuer-resolved ACS for every SAML row, no /api prefix (the
+    # AuthnRequest advertises this exact URL).
+    assert body["redirect_uri"] == f"{WEB_DOMAIN}/auth/saml/callback"
     assert is_masked_credential(body["config"]["sp_private_key"]) is True
 
     raw = _stored_config(db_session, body["id"])
