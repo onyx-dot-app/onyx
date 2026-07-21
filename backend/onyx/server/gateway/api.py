@@ -89,15 +89,6 @@ def resolve_gateway_model(
     return provider, model
 
 
-def _parse_messages(raw: list[dict[str, Any]]) -> list[ChatCompletionMessage]:
-    try:
-        return _MESSAGES_ADAPTER.validate_python(raw)
-    except ValidationError as e:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT, f"Invalid messages: {e.error_count()} errors"
-        ) from e
-
-
 def _parse_reasoning_effort(
     raw: str | None, supports_reasoning: bool, default: ReasoningEffort
 ) -> ReasoningEffort:
@@ -110,8 +101,14 @@ def _parse_reasoning_effort(
 
 
 def _prepare_messages(
-    llm: LLM, messages: list[ChatCompletionMessage]
+    llm: LLM, raw_messages: list[dict[str, Any]]
 ) -> list[ChatCompletionMessage]:
+    try:
+        messages = _MESSAGES_ADAPTER.validate_python(raw_messages)
+    except ValidationError as e:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, f"Invalid messages: {e.error_count()} errors"
+        ) from e
     if not messages:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "messages must not be empty")
     cacheable_prefix = messages[:-1] or None
@@ -417,7 +414,7 @@ def handle_chat_completion(
         llm_provider=provider,
         temperature=request.temperature,
     )
-    messages = _prepare_messages(llm, _parse_messages(request.messages))
+    messages = _prepare_messages(llm, request.messages)
     tool_choice = _parse_tool_choice(request.tool_choice)
     reasoning_effort = _parse_reasoning_effort(
         request.reasoning_effort,

@@ -299,6 +299,10 @@ def test_prepare_messages_marks_stable_prefix_for_prompt_cache() -> None:
         SystemMessage(content="stable instructions"),
         UserMessage(content="new request"),
     ]
+    raw_messages = [
+        {"role": "system", "content": "stable instructions"},
+        {"role": "user", "content": "new request"},
+    ]
     processed = [*messages]
 
     with patch.object(
@@ -306,7 +310,7 @@ def test_prepare_messages_marks_stable_prefix_for_prompt_cache() -> None:
         "process_with_prompt_cache",
         return_value=(processed, None),
     ) as process_prompt:
-        result = gateway_api._prepare_messages(llm, messages)
+        result = gateway_api._prepare_messages(llm, raw_messages)
 
     assert result is processed
     process_prompt.assert_called_once_with(
@@ -333,10 +337,26 @@ def test_prepare_messages_uses_no_cacheable_prefix_for_single_message() -> None:
         "process_with_prompt_cache",
         return_value=(messages, None),
     ) as process_prompt:
-        gateway_api._prepare_messages(llm, messages)
+        gateway_api._prepare_messages(
+            llm, [{"role": "user", "content": "only message"}]
+        )
 
     assert process_prompt.call_args.kwargs["cacheable_prefix"] is None
     assert process_prompt.call_args.kwargs["suffix"] == messages
+
+
+def test_prepare_messages_rejects_invalid_messages() -> None:
+    llm = _ConfigOnlyLLM(
+        LLMConfig(
+            model_provider="openai",
+            model_name="test",
+            temperature=0,
+            max_input_tokens=1_000,
+        )
+    )
+    with pytest.raises(OnyxError) as exc_info:
+        gateway_api._prepare_messages(llm, [{"role": "not-a-role"}])
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
 
 
 def _wire_usage() -> Usage:
