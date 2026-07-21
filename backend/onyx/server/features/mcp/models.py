@@ -18,6 +18,8 @@ from onyx.db.enums import (
 
 # Matches `{placeholder_name}` inside header value templates.
 _PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
+# RFC 9110 field-name syntax: a non-empty sequence of HTTP token characters.
+_HTTP_FIELD_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
 
 
 def _build_auto_substitution_map(*, user_email: str) -> dict[str, str]:
@@ -251,12 +253,12 @@ class MCPToolCreateRequest(BaseModel):
             # server is created. Do not materialize that default here, since
             # doing so makes an omitted template look like an explicit edit.
             if self.auth_template is not None:
-                placeholders = {
+                placeholders: set[str] = {
                     match
                     for value in self.auth_template.headers.values()
                     for match in _PLACEHOLDER_RE.findall(value)
                 }
-                unsupported_placeholders = placeholders - {"api_key"}
+                unsupported_placeholders: set[str] = placeholders - {"api_key"}
                 if unsupported_placeholders:
                     raise ValueError(
                         "Shared API-token header templates only support the "
@@ -271,8 +273,7 @@ class MCPToolCreateRequest(BaseModel):
                         "Shared API-token header templates must include the {api_key} placeholder"
                     )
                 if any(
-                    not name.strip()
-                    or any(char in name for char in "\r\n")
+                    _HTTP_FIELD_NAME_RE.fullmatch(name) is None
                     or name.strip().lower() in DENYLISTED_MCP_HEADERS
                     for name in self.auth_template.headers
                 ):

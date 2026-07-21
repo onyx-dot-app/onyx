@@ -73,11 +73,22 @@ def test_shared_api_token_template_rejects_non_api_key_placeholders() -> None:
         )
 
 
-def test_shared_api_token_template_rejects_crlf_in_header_name() -> None:
+@pytest.mark.parametrize(
+    "header_name",
+    [
+        "X-API-Key\r\nInjected",
+        "X API-Key",
+        "X:API-Key",
+        "X-API-Kéy",
+    ],
+)
+def test_shared_api_token_template_rejects_invalid_header_name(
+    header_name: str,
+) -> None:
     with pytest.raises(ValueError, match="invalid header name"):
         _shared_request(
             MCPAuthTemplate(
-                headers={"X-API-Key\r\nInjected": "{api_key}"},
+                headers={header_name: "{api_key}"},
                 required_fields=[],
             )
         )
