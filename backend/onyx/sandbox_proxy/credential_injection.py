@@ -15,8 +15,7 @@ from enum import Enum
 from typing import Protocol
 
 from mitmproxy import http
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy.identity import ResolvedSandbox

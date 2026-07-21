@@ -10,8 +10,7 @@ credentials fail closed with agent-facing prose naming the server.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Any
 from unittest.mock import MagicMock
 from urllib.parse import parse_qsl
@@ -22,24 +21,27 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheLockAcquisitionError
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPOAuthProviderMode
-from onyx.db.enums import MCPTransport
-from onyx.db.mcp import create_connection_config
-from onyx.db.mcp import create_mcp_server__no_commit
-from onyx.db.mcp import extract_connection_data
-from onyx.db.mcp import get_connection_config_by_id
-from onyx.db.mcp import update_mcp_server__no_commit
-from onyx.db.models import MCPServer
-from onyx.db.models import OAuthAccount
-from onyx.db.models import User
-from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
-from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.db.enums import (
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPOAuthProviderMode,
+    MCPTransport,
+)
+from onyx.db.mcp import (
+    create_connection_config,
+    create_mcp_server__no_commit,
+    extract_connection_data,
+    get_connection_config_by_id,
+    update_mcp_server__no_commit,
+)
+from onyx.db.models import MCPServer, OAuthAccount, User
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialUnavailableError,
+    InjectionContext,
+)
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
-from onyx.server.features.mcp.models import MCPConnectionData
-from onyx.server.features.mcp.models import MCPOAuthKeys
+from onyx.server.features.mcp.models import MCPConnectionData, MCPOAuthKeys
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
 

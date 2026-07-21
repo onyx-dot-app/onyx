@@ -12,8 +12,7 @@ from __future__ import annotations
 
 import posixpath
 import threading
-from urllib.parse import unquote
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from uuid import UUID
 
 from cachetools import TTLCache
@@ -21,21 +20,26 @@ from mitmproxy import http
 from pydantic import BaseModel
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.mcp import extract_connection_data
-from onyx.db.mcp import get_craft_enabled_mcp_servers
-from onyx.db.mcp import get_mcp_server_by_id
-from onyx.db.mcp import MCPCredentialsError
-from onyx.db.mcp import resolve_mcp_credentials
+from onyx.db.enums import MCPAuthenticationPerformer, MCPAuthenticationType
+from onyx.db.mcp import (
+    MCPCredentialsError,
+    extract_connection_data,
+    get_craft_enabled_mcp_servers,
+    get_mcp_server_by_id,
+    resolve_mcp_credentials,
+)
 from onyx.db.models import MCPServer
 from onyx.db.users import fetch_user_by_id
-from onyx.sandbox_proxy.credential_injection import CredentialResolver
-from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
-from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialResolver,
+    CredentialUnavailableError,
+    InjectionContext,
+)
 from onyx.sandbox_proxy.logging_utils import short_log_id
-from onyx.server.features.mcp.oauth import mcp_token_expired
-from onyx.server.features.mcp.oauth import refresh_mcp_oauth_token_if_expired
+from onyx.server.features.mcp.oauth import (
+    mcp_token_expired,
+    refresh_mcp_oauth_token_if_expired,
+)
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
