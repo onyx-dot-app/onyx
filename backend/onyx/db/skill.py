@@ -486,6 +486,7 @@ def set_skill_enabled_for_user(
         policy=SkillAccessPolicy.VIEW,
         user=user,
         db_session=db_session,
+        lock_for_update=True,
     )
     if skill is None:
         raise OnyxError(

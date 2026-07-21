@@ -114,6 +114,7 @@ export default function SkillsPage() {
         enabled,
         replaceConflict
       );
+      if (replaceConflict) setPendingSwitchTarget(null);
       await refresh(
         (current) => {
           if (!current) return current;
@@ -236,6 +237,8 @@ export default function SkillsPage() {
       ? (previewTarget.unavailable_reason ??
         "This skill is currently unavailable.")
       : null;
+  const switchPending =
+    pendingSwitchTarget !== null && pendingSkillIds.has(pendingSwitchTarget.id);
 
   return (
     <SettingsLayouts.Root data-testid="SkillsPage/container">
@@ -366,16 +369,18 @@ export default function SkillsPage() {
           icon={SvgAlertTriangle}
           title="Switch active skill?"
           description={`Only one skill named “${pendingSwitchTarget.name}” can be active at a time.`}
-          onClose={() => setPendingSwitchTarget(null)}
+          onClose={
+            switchPending ? undefined : () => setPendingSwitchTarget(null)
+          }
           submit={
             <Button
+              disabled={switchPending}
               onClick={() => {
                 const target = pendingSwitchTarget;
-                setPendingSwitchTarget(null);
                 void updateSkillEnabled(target, true, true);
               }}
             >
-              Switch skill
+              {switchPending ? "Switching..." : "Switch skill"}
             </Button>
           }
         >

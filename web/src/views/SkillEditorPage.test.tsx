@@ -1,9 +1,31 @@
-import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+import {
+  act,
+  deferred,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+} from "@tests/setup/test-utils";
 import SkillEditorPage from "@/views/SkillEditorPage";
 import type { SkillEditableDetail } from "@/lib/skills/types";
 
 const mockCreateCustomSkillFromEditor = jest.fn();
 const mockRouterReplace = jest.fn();
+
+async function fillRequiredFields(user: ReturnType<typeof setupUser>) {
+  await user.type(
+    screen.getByPlaceholderText("Name your skill"),
+    "report-writer"
+  );
+  await user.type(
+    screen.getByPlaceholderText("What does this skill help with?"),
+    "Writes reports"
+  );
+  await user.type(
+    screen.getByPlaceholderText("Write the skill instructions."),
+    "Write the requested report."
+  );
+}
 
 jest.mock("next/navigation", () => ({
   usePathname: () => "/craft/v1/skills/new",
@@ -50,18 +72,7 @@ describe("SkillEditorPage creation", () => {
       .mockResolvedValueOnce(created);
 
     render(<SkillEditorPage />);
-    await user.type(
-      screen.getByPlaceholderText("Name your skill"),
-      "report-writer"
-    );
-    await user.type(
-      screen.getByPlaceholderText("What does this skill help with?"),
-      "Writes reports"
-    );
-    await user.type(
-      screen.getByPlaceholderText("Write the skill instructions."),
-      "Write the requested report."
-    );
+    await fillRequiredFields(user);
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(
@@ -92,5 +103,46 @@ describe("SkillEditorPage creation", () => {
         "/craft/v1/skills/edit/created-id"
       );
     });
+    expect(
+      screen.queryByText("Create another “report-writer” skill?")
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the confirmation open when disabled creation fails", async () => {
+    const user = setupUser();
+    const conflict = Object.assign(new Error("Name conflict"), {
+      errorCode: "SKILL_NAME_CONFLICT",
+    });
+    const retry = deferred<SkillEditableDetail>();
+    mockCreateCustomSkillFromEditor
+      .mockRejectedValueOnce(conflict)
+      .mockReturnValueOnce(retry.promise);
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Create anyway" })
+    );
+
+    expect(screen.getByRole("button", { name: "Creating..." })).toBeDisabled();
+    expect(
+      screen.getByText("Create another “report-writer” skill?")
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      retry.reject(new Error("Creation failed"));
+      await retry.promise.catch(() => undefined);
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create anyway" })
+      ).toBeEnabled()
+    );
+    expect(
+      screen.getByText("Create another “report-writer” skill?")
+    ).toBeInTheDocument();
+    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(2);
   });
 });

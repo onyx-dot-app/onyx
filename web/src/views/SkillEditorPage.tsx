@@ -211,6 +211,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
           },
           pendingFilesUpload?.file
         );
+        setConflictingSkillName(null);
         await refreshSkillList();
         toast.success(`Created "${created.name}"`);
         router.replace(`/craft/v1/skills/edit/${created.id}` as Route);
@@ -236,7 +237,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
         setConflictingSkillName(name.trim());
         return;
       }
-      if (createDisabled) setConflictingSkillName(null);
       console.error("Failed to save skill", err);
       toast.error(err instanceof Error ? err.message : "Failed to save skill");
     } finally {
@@ -735,10 +735,8 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
         <SkillNameConflictModal
           skillName={conflictingSkillName}
           onClose={() => setConflictingSkillName(null)}
-          onConfirm={() => {
-            setConflictingSkillName(null);
-            void handleSave(undefined, true);
-          }}
+          onConfirm={() => void handleSave(undefined, true)}
+          pending={isSaving}
         />
       )}
 

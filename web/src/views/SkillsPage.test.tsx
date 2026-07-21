@@ -1,5 +1,6 @@
 import {
   act,
+  deferred,
   render,
   screen,
   setupUser,
@@ -92,16 +93,6 @@ function customSkill(id: string, name: string): CustomSkill {
     public_permission: "VIEWER",
     user_permission: "VIEWER",
   };
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
 }
 
 describe("SkillsPage preference toggles", () => {
@@ -279,6 +270,39 @@ describe("SkillsPage preference toggles", () => {
       expect(switches[0]).toHaveAttribute("aria-checked", "false");
       expect(switches[1]).toHaveAttribute("aria-checked", "true");
     });
+    expect(screen.queryByText("Switch active skill?")).not.toBeInTheDocument();
+  });
+
+  it("keeps the switch confirmation open when replacement fails", async () => {
+    const user = setupUser();
+    const first = {
+      ...customSkill("first-id", "report-writer"),
+      enabled: true,
+    };
+    const second = customSkill("second-id", "report-writer");
+    const mutation = deferred<CustomSkill>();
+    skillsData = { builtins: [], customs: [first, second] };
+    mockSetSkillEnabled.mockReturnValueOnce(mutation.promise);
+    render(<SkillsPage />);
+
+    await user.click(
+      screen.getAllByRole("switch", { name: "report-writer" })[1]!
+    );
+    await user.click(screen.getByRole("button", { name: "Switch skill" }));
+
+    expect(screen.getByRole("button", { name: "Switching..." })).toBeDisabled();
+    expect(screen.getByText("Switch active skill?")).toBeInTheDocument();
+
+    await act(async () => {
+      mutation.reject(new Error("Replacement failed"));
+      await mutation.promise.catch(() => undefined);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Switch skill" })).toBeEnabled()
+    );
+    expect(screen.getByText("Switch active skill?")).toBeInTheDocument();
+    expect(mockToastError).toHaveBeenCalledWith("Replacement failed");
   });
 
   it("confirms a conflict reported by the server", async () => {
@@ -303,6 +327,9 @@ describe("SkillsPage preference toggles", () => {
         true,
         true
       )
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Switch active skill?")).not.toBeInTheDocument()
     );
   });
 });

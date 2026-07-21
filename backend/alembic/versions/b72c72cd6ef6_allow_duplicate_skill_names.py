@@ -102,6 +102,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    duplicate_names = op.get_bind().scalar(
+        sa.text("SELECT count(*) != count(DISTINCT name) FROM skill")
+    )
+    if duplicate_names:
+        raise RuntimeError("Cannot downgrade while multiple skills share a name.")
+
     op.add_column(
         "skill",
         sa.Column("slug", sa.String(length=64), nullable=True),
