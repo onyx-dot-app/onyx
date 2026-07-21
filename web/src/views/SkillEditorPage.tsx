@@ -4,7 +4,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -54,12 +53,14 @@ import {
   discardSkillCreationDraft,
   getSkillCreationDraft,
 } from "@/lib/skills/creationDraft";
+import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import SkillNameConflictModal from "@/sections/modals/skills/SkillNameConflictModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
+import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 import SkillFileTree from "@/sections/skills/SkillFileTree";
 import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -148,8 +149,6 @@ export default function SkillEditorPage({
   const [conflictingSkillName, setConflictingSkillName] = useState<
     string | null
   >(null);
-  const [discardOpen, setDiscardOpen] = useState(false);
-  const restoringHistory = useRef(false);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
     setName(nextSkill.name);
@@ -183,6 +182,14 @@ export default function SkillEditorPage({
     skill,
   ]);
 
+  const discardCreationDraft = useCallback(() => {
+    if (draftId) discardSkillCreationDraft(draftId);
+  }, [draftId]);
+  const unsavedChanges = useUnsavedChangesGuard({
+    isDirty: isCreating && isDirty,
+    onDiscard: discardCreationDraft,
+  });
+
   const canManageSkill =
     isCreating ||
     skill?.user_permission === "OWNER" ||
@@ -205,46 +212,13 @@ export default function SkillEditorPage({
     !!instructionsMarkdown.trim() &&
     !isSaving;
 
-  useEffect(() => {
-    if (!isCreating || !isDirty) return;
-
-    function warnBeforeUnload(event: BeforeUnloadEvent) {
-      event.preventDefault();
-    }
-
-    function confirmBrowserBack() {
-      if (restoringHistory.current) {
-        restoringHistory.current = false;
-        return;
-      }
-      if (window.confirm("Discard unsaved changes?")) {
-        if (draftId) discardSkillCreationDraft(draftId);
-        return;
-      }
-      restoringHistory.current = true;
-      window.history.forward();
-    }
-
-    window.addEventListener("beforeunload", warnBeforeUnload);
-    window.addEventListener("popstate", confirmBrowserBack);
-    return () => {
-      window.removeEventListener("beforeunload", warnBeforeUnload);
-      window.removeEventListener("popstate", confirmBrowserBack);
-    };
-  }, [draftId, isCreating, isDirty]);
-
   function leaveEditor() {
-    if (draftId) discardSkillCreationDraft(draftId);
     router.push("/craft/v1/skills" as Route);
   }
 
   function handleCancel() {
     if (isSaving || isPreparingFiles || isUploadingFiles) return;
-    if (isCreating && isDirty) {
-      setDiscardOpen(true);
-      return;
-    }
-    leaveEditor();
+    unsavedChanges.requestLeave(leaveEditor);
   }
 
   async function refreshSkillList() {
@@ -796,21 +770,11 @@ export default function SkillEditorPage({
         />
       )}
 
-      {discardOpen && (
-        <ConfirmationModalLayout
-          icon={SvgAlertTriangle}
-          title="Discard unsaved changes?"
-          onClose={() => setDiscardOpen(false)}
-          submit={
-            <Button type="button" variant="danger" onClick={leaveEditor}>
-              Discard changes
-            </Button>
-          }
-        >
-          This skill has not been saved. If you leave now, your changes will be
-          lost.
-        </ConfirmationModalLayout>
-      )}
+      <UnsavedChangesModal
+        open={unsavedChanges.confirmationOpen}
+        onCancel={unsavedChanges.cancelLeave}
+        onDiscard={unsavedChanges.discardAndLeave}
+      />
 
       {skill && deleteOpen && (
         <ConfirmEntityModal

@@ -181,38 +181,6 @@ describe("SkillEditorPage creation", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/skills");
   });
 
-  it("warns before unloading a create page with unsaved changes", async () => {
-    const user = setupUser();
-    render(<SkillEditorPage />);
-    await user.type(screen.getByPlaceholderText("Name your skill"), "draft");
-
-    const event = new Event("beforeunload", { cancelable: true });
-    act(() => window.dispatchEvent(event));
-
-    expect(event.defaultPrevented).toBe(true);
-  });
-
-  it("restores browser history when discarding is canceled", async () => {
-    const user = setupUser();
-    const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
-    const forward = jest
-      .spyOn(window.history, "forward")
-      .mockImplementation(() => undefined);
-    render(<SkillEditorPage />);
-    await user.type(screen.getByPlaceholderText("Name your skill"), "draft");
-
-    act(() => window.dispatchEvent(new PopStateEvent("popstate")));
-
-    expect(confirm).toHaveBeenCalledWith("Discard unsaved changes?");
-    expect(forward).toHaveBeenCalledTimes(1);
-
-    act(() => window.dispatchEvent(new PopStateEvent("popstate")));
-    expect(confirm).toHaveBeenCalledTimes(1);
-
-    confirm.mockRestore();
-    forward.mockRestore();
-  });
-
   it("requires confirmation before retrying a same-name creation disabled", async () => {
     const user = setupUser();
     const conflict = Object.assign(new Error("Name conflict"), {
