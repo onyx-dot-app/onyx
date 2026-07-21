@@ -39,7 +39,7 @@ import {
   PREVIOUS_CSV_TASK_BUTTON_NAME,
 } from "@/app/ee/admin/performance/query-history/constants";
 import { humanReadableFormatWithTime } from "@opal/time";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import {

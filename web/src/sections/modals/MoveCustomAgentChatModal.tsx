@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { Checkbox } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";

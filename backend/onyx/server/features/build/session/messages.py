@@ -1,47 +1,51 @@
 """API endpoints for Build Mode message management."""
 
 from collections.abc import Generator
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.build_session import count_user_messages
-from onyx.server.features.build.db.build_session import create_message
-from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.db.build_session import (
+    count_user_messages,
+    create_message,
+    get_build_session,
+    skills_are_stale,
+)
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+)
 from onyx.server.features.build.interactive_turns.executor import (
     start_interactive_turn_runner,
 )
 from onyx.server.features.build.interactive_turns.models import InteractiveTurnResponse
-from onyx.server.features.build.interactive_turns.state import acquire_active_turn_lock
-from onyx.server.features.build.interactive_turns.state import create_interactive_turn
-from onyx.server.features.build.interactive_turns.state import finish_turn
-from onyx.server.features.build.interactive_turns.state import get_active_turn
-from onyx.server.features.build.interactive_turns.state import get_turn_for_request
-from onyx.server.features.build.interactive_turns.state import InteractiveTurnLockError
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
+from onyx.server.features.build.interactive_turns.state import (
+    TURN_STATUS_FAILED,
+    InteractiveTurnLockError,
+    acquire_active_turn_lock,
+    create_interactive_turn,
+    finish_turn,
+    get_active_turn,
+    get_turn_for_request,
+)
 from onyx.server.features.build.session.errors import RateLimitError
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.features.build.session.models import MessageInterruptResponse
-from onyx.server.features.build.session.models import MessageListResponse
-from onyx.server.features.build.session.models import MessageRequest
-from onyx.server.features.build.session.models import MessageResponse
+from onyx.server.features.build.session.models import (
+    MessageInterruptResponse,
+    MessageListResponse,
+    MessageRequest,
+    MessageResponse,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -131,6 +135,10 @@ def send_message(
                 "This session is busy with a previous turn.",
             )
 
+        sandbox = get_sandbox_by_user_id(db_session, user.id)
+        if skills_are_stale(session, sandbox):
+            SessionManager(db_session).reload_session_skills(session_id, user)
+
         check_build_rate_limits(user=user, db_session=db_session)
 
         turn_index = count_user_messages(session_id, db_session)
@@ -218,6 +226,7 @@ def send_subagent_message(
                 sandbox = get_sandbox_by_user_id(db_session, user.id)
                 if sandbox and sandbox.status.is_active():
                     update_sandbox_heartbeat(db_session, sandbox.id)
+                    db_session.commit()
 
                 session_manager = SessionManager(db_session)
                 for chunk in session_manager.send_subagent_message(

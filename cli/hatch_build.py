@@ -43,7 +43,7 @@ class CustomBuildHook(BuildHookInterface):
             print(f"Reusing Go binary '{binary_name}'...")
         else:
             print(f"Building Go binary '{binary_name}'...")
-            ldflags = f"-X main.version={tag} -X main.commit={commit} -s -w"
+            ldflags = f"-X main.version={tag} -X main.commit={commit} -w"
             env = os.environ.copy()
             if goos == "linux":
                 env.setdefault("CGO_ENABLED", "0")

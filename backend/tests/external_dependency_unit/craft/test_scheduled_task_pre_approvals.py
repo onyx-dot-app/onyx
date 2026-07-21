@@ -11,33 +11,40 @@ from __future__ import annotations
 from typing import Callable
 
 import pytest
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskStatus
-from onyx.db.enums import ScheduledTaskTriggerSource
-from onyx.db.models import BuildSession
-from onyx.db.models import ExternalApp
-from onyx.db.models import ScheduledTask
-from onyx.db.models import ScheduledTaskPreApprovedApp
-from onyx.db.models import User
-from onyx.db.scheduled_task import create_scheduled_task
-from onyx.db.scheduled_task import get_live_scheduled_run_grants
-from onyx.db.scheduled_task import insert_run
-from onyx.db.scheduled_task import mark_run_status
-from onyx.db.scheduled_task import update_scheduled_task
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    ScheduledTaskRunStatus,
+    ScheduledTaskStatus,
+    ScheduledTaskTriggerSource,
+)
+from onyx.db.models import (
+    BuildSession,
+    ExternalApp,
+    ScheduledTask,
+    ScheduledTaskPreApprovedApp,
+    User,
+)
+from onyx.db.scheduled_task import (
+    create_scheduled_task,
+    get_live_scheduled_run_grants,
+    insert_run,
+    mark_run_status,
+    update_scheduled_task,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.db.action_approval import insert_action_approval
 from onyx.server.features.build.scheduled_tasks import api as scheduled_tasks_api
 from tests.common.craft.payloads import default_action_entries
-from tests.external_dependency_unit.craft.db_helpers import make_external_app
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_external_app,
+    make_skill,
+    make_user,
+)
 
 
 def _make_app(db_session: Session) -> int:

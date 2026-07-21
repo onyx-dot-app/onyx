@@ -6,6 +6,7 @@ import {
   ApiArtifactResponse,
   ApiUsageLimitsResponse,
   ApiWebappInfoResponse,
+  ApiSandboxStatusResponse,
   SessionHistoryItem,
   Artifact,
   BuildMessage,
@@ -13,6 +14,7 @@ import {
   UsageLimits,
   DirectoryListing,
   SharingScope,
+  ApiSessionSkillsState,
 } from "@/app/craft/types/streamingTypes";
 import {
   ApprovalListResponse,
@@ -127,12 +129,47 @@ export async function createSession(
 }
 
 export async function fetchSession(
-  sessionId: string
+  sessionId: string,
+  options?: { checkWorkspace?: boolean }
 ): Promise<ApiDetailedSessionResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}`);
+  const params = new URLSearchParams();
+  if (options?.checkWorkspace === false) {
+    params.set("check_workspace", "false");
+  }
+  const query = params.size > 0 ? `?${params}` : "";
+  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}${query}`);
 
   if (!res.ok) {
     throw new Error(`Failed to load session: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function reloadSessionSkills(
+  sessionId: string
+): Promise<ApiSessionSkillsState> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/skills/reload`,
+    { method: "POST" }
+  );
+
+  if (!res.ok) {
+    throw new Error(await errorDetail(res, "Failed to reload session"));
+  }
+
+  return res.json();
+}
+
+export async function fetchSandboxStatus(
+  sessionId: string
+): Promise<ApiSandboxStatusResponse> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/sandbox-status`
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch sandbox status: ${res.status}`);
   }
 
   return res.json();

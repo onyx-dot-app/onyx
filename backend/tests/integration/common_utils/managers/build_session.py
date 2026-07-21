@@ -8,22 +8,22 @@ Each method calls the API server through the same ``user.headers`` /
 
 from __future__ import annotations
 
-from typing import Any
-from typing import NamedTuple
+from typing import Any, NamedTuple
 from uuid import UUID
 
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SharingScope
+from onyx.db.enums import SandboxStatus, SharingScope
 from onyx.server.features.build.interactive_turns.models import InteractiveTurnResponse
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.models import DirectoryListing
-from onyx.server.features.build.session.models import DetailedSessionResponse
-from onyx.server.features.build.session.models import MessageListResponse
-from onyx.server.features.build.session.models import MessageResponse
-from onyx.server.features.build.session.models import OpencodeHistorySnapshotResponse
-from onyx.server.features.build.session.models import SessionListResponse
-from onyx.server.features.build.session.models import SessionResponse
-from onyx.server.features.build.session.models import SnapshotResponse
+from onyx.server.features.build.session.models import (
+    DetailedSessionResponse,
+    MessageListResponse,
+    MessageResponse,
+    OpencodeHistorySnapshotResponse,
+    SessionListResponse,
+    SessionResponse,
+    SnapshotResponse,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser

@@ -3,17 +3,11 @@ import json
 import os
 import sys
 import threading
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Callable, Generator, Iterator
 from datetime import datetime
 from enum import Enum
-from typing import Any
-from typing import cast
-from typing import Protocol
-from urllib.parse import parse_qs
-from urllib.parse import urlparse
-from urllib.parse import urlunparse
+from typing import Any, Protocol, cast
+from urllib.parse import ParseResult, parse_qs, urlparse
 
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
@@ -22,77 +16,96 @@ from googleapiclient.errors import HttpError
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import MAX_DRIVE_WORKERS
+from onyx.configs.app_configs import (
+    GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD,
+    INDEX_BATCH_SIZE,
+    MAX_DRIVE_WORKERS,
+)
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.google_drive.doc_conversion import build_slim_document
-from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
-from onyx.connectors.google_drive.doc_conversion import onyx_document_id_from_drive_file
-from onyx.connectors.google_drive.doc_conversion import PermissionSyncContext
-from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files
-from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
-from onyx.connectors.google_drive.file_retrieval import get_all_files_for_oauth
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.google_drive.doc_conversion import (
+    _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE,
+    _FALLBACK_WEB_VIEW_LINK_TEMPLATES,
+    WEB_VIEW_LINK_KEY,
+    PermissionSyncContext,
+    build_slim_document,
+    convert_drive_item_to_document,
+    onyx_document_id_from_drive_file,
+)
 from onyx.connectors.google_drive.file_retrieval import (
+    DriveFileFieldType,
+    crawl_folders_for_files,
+    get_all_files_for_oauth,
     get_all_files_in_my_drive_and_shared,
-)
-from onyx.connectors.google_drive.file_retrieval import get_external_access_for_folder
-from onyx.connectors.google_drive.file_retrieval import (
+    get_external_access_for_folder,
     get_files_by_web_view_links_batch,
+    get_files_in_shared_drive,
+    get_folder_metadata,
+    get_root_folder_id,
+    get_shared_drive_name,
+    has_link_only_permission,
 )
-from onyx.connectors.google_drive.file_retrieval import get_files_in_shared_drive
-from onyx.connectors.google_drive.file_retrieval import get_folder_metadata
-from onyx.connectors.google_drive.file_retrieval import get_root_folder_id
-from onyx.connectors.google_drive.file_retrieval import get_shared_drive_name
-from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
-from onyx.connectors.google_drive.models import DriveRetrievalStage
-from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
-from onyx.connectors.google_drive.models import GoogleDriveFileType
-from onyx.connectors.google_drive.models import RetrievedDriveFile
-from onyx.connectors.google_drive.models import StageCompletion
+from onyx.connectors.google_drive.models import (
+    DriveRetrievalStage,
+    GoogleDriveCheckpoint,
+    GoogleDriveFileType,
+    RetrievedDriveFile,
+    StageCompletion,
+)
 from onyx.connectors.google_utils.google_auth import get_google_creds
-from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
-from onyx.connectors.google_utils.google_utils import get_file_owners
-from onyx.connectors.google_utils.google_utils import GoogleFields
-from onyx.connectors.google_utils.resources import get_admin_service
-from onyx.connectors.google_utils.resources import get_drive_service
-from onyx.connectors.google_utils.resources import GoogleDriveService
-from onyx.connectors.google_utils.resources import ImpersonationError
-from onyx.connectors.google_utils.resources import make_user_removal_checker
+from onyx.connectors.google_utils.google_utils import (
+    GoogleFields,
+    execute_paginated_retrieval,
+    get_file_owners,
+)
+from onyx.connectors.google_utils.resources import (
+    GoogleDriveService,
+    ImpersonationError,
+    get_admin_service,
+    get_drive_service,
+    make_user_removal_checker,
+)
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+    MISSING_SCOPES_ERROR_STR,
+    ONYX_SCOPE_INSTRUCTIONS,
+    SLIM_BATCH_SIZE,
+    USER_FIELDS,
 )
-from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
-from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
-from onyx.connectors.google_utils.shared_constants import SLIM_BATCH_SIZE
-from onyx.connectors.google_utils.shared_constants import USER_FIELDS
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import NormalizationResult
-from onyx.connectors.interfaces import Resolver
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    NormalizationResult,
+    Resolver,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    EntityFailure,
+    HierarchyNode,
+    SlimDocument,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
-from onyx.utils.threadpool_concurrency import parallel_yield
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
-from onyx.utils.threadpool_concurrency import ThreadSafeSet
+from onyx.utils.threadpool_concurrency import (
+    ThreadSafeDict,
+    ThreadSafeSet,
+    parallel_yield,
+    run_functions_tuples_in_parallel,
+)
 
 logger = setup_logger()
 # TODO: Improve this by using the batch utility: https://googleapis.github.io/google-api-python-client/docs/batch.html
@@ -118,6 +131,42 @@ def _extract_str_list_from_comma_str(string: str | None) -> list[str]:
 
 def _extract_ids_from_urls(urls: list[str]) -> list[str]:
     return [urlparse(url).path.strip("/").split("/")[-1] for url in urls]
+
+
+def _extract_drive_file_id(parsed: ParseResult) -> str | None:
+    """Extract the file id from a Drive/Docs URL.
+
+    Covers `?id=<id>`, `/d/<id>/...`, and the multi-account `/u/<N>/d/<id>/...` form.
+    """
+    id_query_param = parse_qs(parsed.query).get("id", [None])[0]
+    if id_query_param:
+        return id_query_param
+
+    path_parts = parsed.path.split("/")
+    for i, part in enumerate(path_parts):
+        if part == "d" and i + 1 < len(path_parts):
+            return path_parts[i + 1]
+    return None
+
+
+def _candidate_document_ids_from_file_id(file_id: str) -> list[str]:
+    """Every canonical Document.id a Drive file id could have been indexed under.
+
+    A file id is globally unique, so at most one of the native Doc/Sheet/Slide forms
+    and the uploaded-binary form is ever indexed; the caller matches whichever exists.
+    """
+    native_doc_links = [
+        template.format(file_id)
+        for template in _FALLBACK_WEB_VIEW_LINK_TEMPLATES.values()
+    ]
+    uploaded_binary_link = _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE.format(file_id)
+
+    candidates: list[str] = []
+    for link in [*native_doc_links, uploaded_binary_link]:
+        doc_id = onyx_document_id_from_drive_file({WEB_VIEW_LINK_KEY: link}).rstrip("/")
+        if doc_id not in candidates:
+            candidates.append(doc_id)
+    return candidates
 
 
 def _clean_requested_drive_ids(
@@ -343,10 +392,12 @@ class GoogleDriveConnector(
     @classmethod
     @override
     def normalize_url(cls, url: str) -> NormalizationResult:
-        """Normalize a Google Drive URL to match the canonical Document.id format.
+        """Normalize a Google Drive URL to candidate Document.id values.
 
-        Reuses the connector's existing document ID creation logic from
-        onyx_document_id_from_drive_file.
+        The pasted URL often doesn't encode the file's type, so the canonical
+        Document.id could take any of several forms; emit them all as candidates and
+        let resolution match whichever is indexed. `normalized_url` is a single best
+        guess for callers that don't consult the candidate list.
         """
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
@@ -357,36 +408,27 @@ class GoogleDriveConnector(
         ):
             return NormalizationResult(normalized_url=None, use_default=False)
 
-        # Handle ?id= query parameter case
-        query_params = parse_qs(parsed.query)
-        doc_id = query_params.get("id", [None])[0]
-        if doc_id:
-            scheme = parsed.scheme or "https"
-            netloc = "drive.google.com"
-            path = f"/file/d/{doc_id}"
-            params = ""
-            query = ""
-            fragment = ""
-            normalized = urlunparse(
-                (scheme, netloc, path, params, query, fragment)
-            ).rstrip("/")
-            return NormalizationResult(normalized_url=normalized, use_default=False)
-
-        # Extract file ID and use connector's function
-        path_parts = parsed.path.split("/")
-        file_id = None
-        for i, part in enumerate(path_parts):
-            if part == "d" and i + 1 < len(path_parts):
-                file_id = path_parts[i + 1]
-                break
-
+        file_id = _extract_drive_file_id(parsed)
         if not file_id:
             return NormalizationResult(normalized_url=None, use_default=False)
 
-        # Create minimal file object for connector function
-        file_obj = {"webViewLink": url, "id": file_id}
-        normalized = onyx_document_id_from_drive_file(file_obj).rstrip("/")
-        return NormalizationResult(normalized_url=normalized, use_default=False)
+        # Best guess: keep the pasted URL's type if it has one; a ?id= link has none.
+        if parse_qs(parsed.query).get("id"):
+            normalized = onyx_document_id_from_drive_file(
+                {
+                    WEB_VIEW_LINK_KEY: _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE.format(
+                        file_id
+                    )
+                }
+            ).rstrip("/")
+        else:
+            normalized = onyx_document_id_from_drive_file(
+                {WEB_VIEW_LINK_KEY: url, "id": file_id}
+            ).rstrip("/")
+        return NormalizationResult(
+            normalized_url=normalized,
+            candidate_document_ids=_candidate_document_ids_from_file_id(file_id),
+        )
 
     # TODO: ensure returned new_creds_dict is actually persisted when this is called?
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, str] | None:

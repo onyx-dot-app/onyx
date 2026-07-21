@@ -16,7 +16,7 @@
 }
 
 .opal-input[data-variant="disabled"] .opal-input-field {
-  @apply text-text-02;
+  @apply text-text-02 cursor-not-allowed;
 }
 
 .opal-input-field::placeholder {

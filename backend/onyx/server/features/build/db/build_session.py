@@ -1,36 +1,27 @@
 """Database operations for Build Mode sessions."""
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import desc
-from sqlalchemy import exists
-from sqlalchemy import select
+from sqlalchemy import column, desc, exists, select, values
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.enums import SharingScope
-from onyx.db.llm import can_user_access_llm_provider
-from onyx.db.llm import fetch_user_group_ids
-from onyx.db.models import Artifact
-from onyx.db.models import BuildMessage
-from onyx.db.models import BuildSession
+from onyx.db.enums import BuildSessionStatus, SessionOrigin, SharingScope
+from onyx.db.llm import can_user_access_llm_provider, fetch_user_group_ids
+from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox, User
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import Sandbox
-from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
+from onyx.server.features.build.configs import (
+    BUILD_MODE_ALLOWED_PROVIDER_TYPES,
+    SANDBOX_NEXTJS_PORT_END,
+    SANDBOX_NEXTJS_PORT_START,
+)
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_json_like
@@ -77,13 +68,51 @@ def get_build_session(
     db_session: Session,
 ) -> BuildSession | None:
     """Get a build session by ID, ensuring it belongs to the user."""
-    return (
-        db_session.query(BuildSession)
-        .filter(
-            BuildSession.id == session_id,
-            BuildSession.user_id == user_id,
+    stmt = select(BuildSession).where(
+        BuildSession.id == session_id,
+        BuildSession.user_id == user_id,
+    )
+    return db_session.scalar(stmt)
+
+
+def get_orphan_build_session_ids(
+    session_ids: list[UUID],
+    user_id: UUID,
+    db_session: Session,
+) -> set[UUID]:
+    """Return input session IDs without a matching row owned by the user."""
+    if not session_ids:
+        return set()
+
+    workspace_ids = (
+        values(
+            column("session_id", PGUUID(as_uuid=True)),
+            name="workspace_ids",
         )
-        .one_or_none()
+        .data([(session_id,) for session_id in session_ids])
+        .cte()
+    )
+    stmt = (
+        select(workspace_ids.c.session_id)
+        .outerjoin(
+            BuildSession,
+            (BuildSession.id == workspace_ids.c.session_id)
+            & (BuildSession.user_id == user_id),
+        )
+        .where(BuildSession.id.is_(None))
+    )
+    return set(db_session.scalars(stmt).all())
+
+
+def skills_are_stale(session: BuildSession, sandbox: Sandbox | None) -> bool:
+    """Whether a live runtime predates the sandbox's managed content."""
+    return bool(
+        session.status == BuildSessionStatus.ACTIVE
+        and session.origin == SessionOrigin.INTERACTIVE
+        and session.opencode_session_id is not None
+        and sandbox is not None
+        and sandbox.skills_hash is not None
+        and session.skills_hash != sandbox.skills_hash
     )
 
 
@@ -126,8 +155,8 @@ def get_user_build_sessions(
     """Get a user's interactive build sessions that have at least one message.
 
     Sessions created by non-interactive callers (e.g. the scheduled-tasks
-    executor) are intentionally excluded from this listing so they don't
-    leak into the Craft sidebar. The covering composite index
+    executor or the Slack bot) are intentionally excluded from this listing
+    so they don't leak into the Craft sidebar. The covering composite index
     ``ix_build_session_user_origin_created`` is built for this exact query
     shape: ``(user_id, origin, created_at DESC)``.
     """
@@ -154,6 +183,8 @@ def get_empty_session_for_user(
     """Get an empty (pre-provisioned) session for the user if one exists.
 
     Returns a session with no messages, or None if all sessions have messages.
+    Only considers INTERACTIVE sessions — non-interactive origins (e.g. Slack)
+    skip port allocation and must not be handed to the Craft UI.
     """
     has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
 
@@ -161,6 +192,7 @@ def get_empty_session_for_user(
         db_session.query(BuildSession)
         .filter(
             BuildSession.user_id == user_id,
+            BuildSession.origin == SessionOrigin.INTERACTIVE,
             ~has_messages,
         )
         .first()
@@ -225,23 +257,6 @@ def delete_build_session__no_commit(
 # Sandbox operations
 # NOTE: Most sandbox operations have moved to sandbox.py
 # These remain here for convenience in session-related workflows
-
-
-def update_sandbox_status(
-    sandbox_id: UUID,
-    status: SandboxStatus,
-    db_session: Session,
-    container_id: str | None = None,
-) -> None:
-    """Update the status of a sandbox."""
-    sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
-    if sandbox:
-        sandbox.status = status
-        if container_id is not None:
-            sandbox.container_id = container_id
-        sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
-        db_session.commit()
-        logger.info("Updated sandbox %s status to %s", sandbox_id, status)
 
 
 def update_sandbox_heartbeat(
@@ -565,7 +580,11 @@ def mark_user_sessions_idle__no_commit(db_session: Session, user_id: UUID) -> in
             BuildSession.user_id == user_id,
             BuildSession.status == BuildSessionStatus.ACTIVE,
         )
-        .update({BuildSession.status: BuildSessionStatus.IDLE})
+        .update(
+            {
+                BuildSession.status: BuildSessionStatus.IDLE,
+            }
+        )
     )
     db_session.flush()
     logger.info("Marked %s sessions as IDLE for user %s", result, user_id)
@@ -602,10 +621,13 @@ def fetch_all_supported_build_llm_providers(
 ) -> list[LLMProviderView]:
     """Every provider of a Craft-supported type (anthropic, openai, openrouter)
     that the ``user`` can access. Respects is_public / group restrictions so a
-    user never gets a sandbox keyed with a provider they can't use."""
+    user never gets a sandbox keyed with a provider they can't use. Providers
+    are ordered by ID so provisioning and proxy credential selection agree on
+    the first provider of each type."""
     provider_models = db_session.scalars(
         select(LLMProviderModel)
         .where(LLMProviderModel.provider.in_(BUILD_MODE_ALLOWED_PROVIDER_TYPES))
+        .order_by(LLMProviderModel.id.asc())
         .options(
             selectinload(LLMProviderModel.model_configurations),
             selectinload(LLMProviderModel.groups),

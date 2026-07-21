@@ -1,17 +1,17 @@
 """Unit tests for the per-IP signup rate limiter."""
 
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import Request
 
 from onyx.auth import signup_rate_limit as rl
-from onyx.auth.signup_rate_limit import _bucket_key
-from onyx.auth.signup_rate_limit import _client_ip
-from onyx.auth.signup_rate_limit import _PER_IP_PER_HOUR
-from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
+from onyx.auth.signup_rate_limit import (
+    _PER_IP_PER_HOUR,
+    _bucket_key,
+    _client_ip,
+    enforce_signup_rate_limit,
+)
 from onyx.error_handling.exceptions import OnyxError
 
 

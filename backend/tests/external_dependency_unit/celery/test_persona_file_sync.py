@@ -20,27 +20,18 @@ since we only need to verify the arguments passed to update_single.
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from unittest.mock import PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.user_file_processing.tasks import (
     check_for_user_file_project_sync,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     process_single_user_file_project_sync,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     user_file_project_sync_lock_key,
 )
 from onyx.db.enums import UserFileStatus
-from onyx.db.models import Persona
-from onyx.db.models import Persona__UserFile
-from onyx.db.models import User
-from onyx.db.models import UserFile
+from onyx.db.models import Persona, Persona__UserFile, User, UserFile
 from onyx.db.persona import upsert_persona
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.redis.redis_pool import get_redis_client
@@ -308,8 +299,7 @@ class TestSyncTaskWritesPersonaIds:
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """A file linked to both a project and a persona gets both IDs."""
-        from onyx.db.models import Project__UserFile
-        from onyx.db.models import UserProject
+        from onyx.db.models import Project__UserFile, UserProject
 
         user = create_test_user(db_session, "sync_both")
         uf = _create_completed_user_file(

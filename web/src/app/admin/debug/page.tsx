@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { SettingsLayouts } from "@opal/layouts";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 import {
   Table,
   TableBody,

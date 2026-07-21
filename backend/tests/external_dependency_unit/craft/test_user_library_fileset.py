@@ -8,19 +8,20 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox
-from onyx.db.models import User
-from onyx.server.features.build.db.user_library import create_directory_record
-from onyx.server.features.build.db.user_library import fetch_user_file_for_user
-from onyx.server.features.build.db.user_library import get_or_create_craft_connector
-from onyx.server.features.build.db.user_library import set_sync_disabled
-from onyx.server.features.build.db.user_library import store_user_file
-from onyx.server.features.build.sandbox.user_library import build_user_library_fileset
-from onyx.server.features.build.sandbox.user_library import hydrate_user_library
+from onyx.db.models import Sandbox, User
+from onyx.server.features.build.db.user_library import (
+    create_directory_record,
+    fetch_user_file_for_user,
+    get_or_create_craft_connector,
+    set_sync_disabled,
+    store_user_file,
+)
 from onyx.server.features.build.sandbox.user_library import (
+    USER_LIBRARY_MOUNT_PATH,
+    build_user_library_fileset,
+    hydrate_user_library,
     sync_user_library_to_active_sandboxes,
 )
-from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
 from tests.common.craft.stubs import StubSandboxManager
 
 
@@ -106,7 +107,12 @@ class TestUserLibraryFileset:
         stub_sandbox_manager.write_files_to_sandbox_silent = True
         _patch_user_library_manager(monkeypatch, stub_sandbox_manager)
 
-        result = hydrate_user_library(sandbox_row.id, test_user.id, db_session)
+        result = hydrate_user_library(
+            sandbox_row.id,
+            test_user.id,
+            db_session,
+            sandbox_manager=stub_sandbox_manager,
+        )
 
         assert result.succeeded == 1
         assert stub_sandbox_manager.write_files_to_sandbox_count == 1

@@ -7,23 +7,22 @@ Verifies that:
 - celery_utils routing picks retrieve_all_slim_docs() for GoogleDriveConnector
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from google.auth.exceptions import RefreshError
 
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
-from onyx.connectors.google_drive.models import DriveRetrievalStage
-from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
-from onyx.connectors.google_drive.models import StageCompletion
+from onyx.connectors.google_drive.models import (
+    DriveRetrievalStage,
+    GoogleDriveCheckpoint,
+    StageCompletion,
+)
 from onyx.connectors.google_utils.resources import ImpersonationError
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.interfaces import SlimConnector, SlimConnectorWithPermSync
 from onyx.connectors.models import SlimDocument
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
-from onyx.utils.threadpool_concurrency import ThreadSafeSet
+from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
 
 
 def _make_done_checkpoint() -> GoogleDriveCheckpoint:
@@ -65,7 +64,10 @@ class TestRetrieveAllSlimDocs:
     def test_does_not_call_extract_when_checkpoint_is_done(self) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
 
         with patch.object(
@@ -85,7 +87,10 @@ class TestRetrieveAllSlimDocs:
     ) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
         # Checkpoint starts at START, _extract advances it to DONE
         with patch.object(connector, "build_dummy_checkpoint") as mock_build:
@@ -116,7 +121,10 @@ class TestRetrieveAllSlimDocs:
     def test_yields_slim_documents(self) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
         start_checkpoint = GoogleDriveCheckpoint(
             retrieved_folder_and_drive_ids=set(),
@@ -149,7 +157,10 @@ class TestRetrieveAllSlimDocsPermSync:
     def test_calls_extract_with_include_permissions_true(self) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
         start_checkpoint = GoogleDriveCheckpoint(
             retrieved_folder_and_drive_ids=set(),
@@ -188,7 +199,10 @@ class TestCeleryUtilsRouting:
         not retrieve_all_slim_docs_perm_sync, for GoogleDriveConnector."""
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
         with (
             patch.object(

@@ -7,7 +7,7 @@ import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgAlertCircle } from "@opal/icons";
 import { AnimatePresence, motion } from "motion/react";
-import Logo from "@/refresh-components/Logo";
+import { Logo } from "@/lib/app/components";
 import SetupCard from "@/app/craft/components/setup-requests/SetupCard";
 import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -16,6 +16,7 @@ import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
+import CompactionMarker from "@/app/craft/components/CompactionMarker";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import TodoListCard from "@/app/craft/components/TodoListCard";
@@ -233,6 +234,12 @@ export default function BuildMessageList({
                 reason={item.reason}
                 userApp={appsBySlug.get(item.appSlug)}
               />
+            </div>
+          );
+        case "compaction":
+          return (
+            <div key={item.id} className={cn(topMargin)}>
+              <CompactionMarker summary={item.summary} />
             </div>
           );
         case "error":

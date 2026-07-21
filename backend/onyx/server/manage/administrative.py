@@ -1,11 +1,7 @@
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import cast
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -13,32 +9,39 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import KV_GEN_AI_KEY_CHECK_TIME
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
-from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
+from onyx.configs.constants import (
+    KV_GEN_AI_KEY_CHECK_TIME,
+    PUBLIC_API_TAGS,
+    DocumentSource,
+    OnyxCeleryPriority,
+    OnyxCeleryTask,
+)
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair_for_user,
+    update_connector_credential_pair_from_id,
+)
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import Permission
-from onyx.db.feedback import fetch_docs_ranked_by_boost_for_user
-from onyx.db.feedback import update_document_boost_for_user
-from onyx.db.feedback import update_document_hidden_for_user
-from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
-from onyx.db.index_attempt import get_index_attempt_errors_across_connectors
+from onyx.db.enums import ConnectorCredentialPairStatus, Permission
+from onyx.db.feedback import (
+    fetch_docs_ranked_by_boost_for_user,
+    update_document_boost_for_user,
+    update_document_hidden_for_user,
+)
+from onyx.db.index_attempt import (
+    cancel_indexing_attempts_for_ccpair,
+    get_index_attempt_errors_across_connectors,
+)
 from onyx.db.models import User
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.llm.factory import get_default_llm
 from onyx.llm.utils import test_llm
-from onyx.server.documents.models import ConnectorCredentialPairIdentifier
-from onyx.server.documents.models import PaginatedReturn
-from onyx.server.manage.models import BoostDoc
-from onyx.server.manage.models import BoostUpdateRequest
-from onyx.server.manage.models import HiddenUpdateRequest
+from onyx.server.documents.models import (
+    ConnectorCredentialPairIdentifier,
+    PaginatedReturn,
+)
+from onyx.server.manage.models import BoostDoc, BoostUpdateRequest, HiddenUpdateRequest
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id

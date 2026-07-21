@@ -4,11 +4,14 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from onyx.db.models import ExternalApp
-from onyx.db.models import Skill
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+AGENT_INSTRUCTIONS_TEMPLATE_PATH = (
+    Path(__file__).parent.parent.parent / "AGENTS.template.md"
+)
 
 # Provider display name mapping
 PROVIDER_DISPLAY_NAMES = {
@@ -79,50 +82,50 @@ def _truncate(text: str) -> str:
     return text
 
 
-def build_skills_section_from_data(skills: Iterable[Skill]) -> str:
-    """Render the AGENTS.md skills section from one unified list of
-    ``Skill`` rows. Built-ins and customs are indistinguishable here —
-    both show up as ``- **slug**: description`` bullets."""
-    entries = [(s.slug, _truncate(s.description)) for s in skills]
-    if not entries:
-        return "No skills available."
-
-    entries.sort(key=lambda e: e[0])
-    return "\n".join(f"- **{slug}**: {desc}" for slug, desc in entries)
-
-
 def build_connectable_apps_list(apps: Iterable[ExternalApp]) -> str:
     """Render the connectable-apps bullet list — org apps the user hasn't set up
     yet. The heading and explanatory prose live in AGENTS.template.md; this only
-    supplies the dynamic ``{{CONNECTABLE_APPS_LIST}}`` value. Mirrors
-    ``build_skills_section_from_data``: a fallback line when there's nothing."""
+    supplies the dynamic ``{{CONNECTABLE_APPS_LIST}}`` value, with a fallback
+    line when there are no apps."""
     entries = sorted((app.skill.slug, _truncate(app.skill.description)) for app in apps)
     if not entries:
         return "No connectable apps available."
     return "\n".join(f"- **{slug}**: {desc}" for slug, desc in entries)
 
 
+def build_organization_instructions_section(instructions: str | None) -> str:
+    if not instructions or not instructions.strip():
+        return ""
+    return (
+        "\n## Organization instructions\n\n"
+        "Your organization's admins set these workspace-wide instructions. "
+        "Follow them in every session; the Hard rules above still win on any "
+        "conflict.\n\n"
+        f"{instructions.strip()}\n"
+    )
+
+
 def generate_agent_instructions(
     template_path: Path,
-    skills_section: str,
     connectable_apps_section: str,
     provider: str | None = None,
     model_name: str | None = None,
     nextjs_port: int | None = None,
     disabled_tools: list[str] | None = None,
     user_name: str | None = None,
+    organization_instructions: str | None = None,
 ) -> str:
     """Generate AGENTS.md content by populating the template with dynamic values.
 
     Args:
         template_path: Path to the AGENTS.template.md file
-        skills_section: Pre-rendered skills section
         connectable_apps_section: Pre-rendered connectable-apps list (may be empty)
         provider: LLM provider type (e.g., "openai", "anthropic")
         model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
         nextjs_port: Port for Next.js development server
         disabled_tools: List of disabled tools
         user_name: User's name for personalization
+        organization_instructions: Admin-set workspace-wide Craft instructions
 
     Returns:
         Generated AGENTS.md content with placeholders replaced
@@ -163,7 +166,12 @@ def generate_agent_instructions(
         str(SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 20),
     )
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
-    content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", skills_section)
     content = content.replace("{{CONNECTABLE_APPS_LIST}}", connectable_apps_section)
+    # Last, so admin-authored text containing literal {{...}} tokens (e.g.
+    # copy-pasted from the base template) is never expanded.
+    content = content.replace(
+        "{{ORGANIZATION_INSTRUCTIONS_SECTION}}",
+        build_organization_instructions_section(organization_instructions),
+    )
 
     return content

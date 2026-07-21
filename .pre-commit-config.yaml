@@ -60,7 +60,8 @@ repos:
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
         name: Check lazy imports
-        args: ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]
+        args:
+          ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
@@ -69,24 +70,37 @@ repos:
         args: ["ty", "check"]
         pass_filenames: true
         types_or: [python]
+        # Scope to backend/, matching `[tool.ty.src] include = ["backend"]` in
+        # pyproject. The full ty run only discovers backend/, but pre-commit
+        # passes explicit filenames, which bypass that discovery-time include —
+        # without this, a touched file outside backend/ (examples/, loadtest/,
+        # tools/, …) would get type-checked against the backend venv it was
+        # never meant to run in.
+        files: ^backend/
         # sandbox_daemon ships in the sandbox image (own runtime); skills/builtin
         # are sandbox-only scripts importing deps absent from the backend venv
-        # (lxml, PIL, office.*). loadtest/ imports locust/gevent, which live in
-        # the non-default `loadtest` dependency group and so aren't in the venv
-        # ty runs against. All are excluded from the full ty run via
-        # [tool.ty.src] in pyproject; repeat here because pre-commit passes
-        # explicit filenames, which bypass that discovery-time exclude.
-        exclude: ^(backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)|loadtest/)
+        # (lxml, PIL, office.*). Both are excluded from the full ty run via
+        # [tool.ty.src] in pyproject; repeat here because the explicit filenames
+        # bypass that discovery-time exclude too.
+        exclude: ^backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)
       - id: uv-run
         alias: ruff
         name: ruff
-        args: ["ruff", "check", "--fix"]
+        # Run ruff from an isolated overlay (`--no-project --with`) so the hook
+        # never syncs the dev `.venv` or pulls in the backend toolchain (torch,
+        # nvidia-*, etc.) — a full project sync on a cold CI runner installs
+        # 450+ packages just to lint. Same isolation goal as the zizmor hook
+        # below. ruff discovers `[tool.ruff]` from pyproject.toml independently
+        # of uv's project handling, so config still applies. Keep the pinned
+        # version in sync with `ruff` in the dev dependency group in
+        # pyproject.toml.
+        args: ["--no-project", "--with=ruff==0.15.21", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
         alias: ruff-format
         name: ruff format
-        args: ["ruff", "format"]
+        args: ["--no-project", "--with=ruff==0.15.21", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
@@ -98,8 +112,7 @@ repos:
         # uses `uv sync --only-group zizmor`). `--offline` keeps it fast and
         # token-free locally; CI runs the online audits. Keep the pinned version
         # in sync with the `zizmor` dependency group in pyproject.toml.
-        args:
-          ["--no-project", "--with=zizmor==1.25.2", "zizmor", "--offline"]
+        args: ["--no-project", "--with=zizmor==1.25.2", "zizmor", "--offline"]
         pass_filenames: true
         files: ^\.github/(workflows/.+\.ya?ml|actions/.+/action\.ya?ml)$
 
@@ -158,6 +171,21 @@ repos:
 
   - repo: local
     hooks:
+      # Regenerate the baseline with `env_inventory.py --write-baseline`.
+      - id: env-drift-baseline
+        name: env drift baseline
+        description: "Fail on new undocumented operator-facing env vars (drift gate)"
+        language: system
+        entry: python3 backend/scripts/env_inventory.py --check-baseline
+        pass_filenames: false
+        stages: [pre-commit]
+        files: >-
+          (?x)^(
+            backend/(onyx|ee|shared_configs|model_server)/.*\.py
+            |backend/scripts/env_inventory(\.py|_baseline\.txt)
+            |deployment/docker_compose/env\.(template|prod\.template)
+            |deployment/helm/charts/onyx/(values\.yaml|templates/configmap\.yaml)
+          )$
       - id: bun-install
         name: bun install
         description: "Automatically run 'bun install' after a checkout, pull or rebase"
@@ -234,13 +262,15 @@ repos:
         pass_filenames: false
         types_or: [javascript, ts, tsx]
 
-      # Uses tsgo (TypeScript's native Go compiler) for ~10x faster type checking.
-      # This is a preview package - if it breaks:
-      #   1. Try updating: cd web && bun update @typescript/native-preview
-      #   2. Or fallback to tsc: replace 'tsgo' with 'tsc' below
+      # Type checks with the native TypeScript compiler (~10x faster than classic
+      # tsc). web and web/lib/shared use the stable typescript@7 release (web
+      # aliases it as `typescript-7` since Next.js still needs typescript@5); the
+      # widget hooks below still use tsgo from @typescript/native-preview in the
+      # root workspace.
       - id: typescript-check
         name: TypeScript type check
-        entry: bash -c 'cd web && bunx tsgo --noEmit --project tsconfig.types.json'
+        entry: bash -c 'cd web && bun run types:check'
+
         language: system
         pass_filenames: false
         files: ^web/.*\.(ts|tsx)$
@@ -261,7 +291,7 @@ repos:
 
       - id: shared-typescript-check
         name: shared TypeScript type check
-        entry: bash -c 'cd web/lib/shared && bunx tsgo --noEmit'
+        entry: bash -c 'cd web/lib/shared && bun run typecheck'
         language: system
         pass_filenames: false
         files: ^web/lib/shared/(.*\.(ts|tsx)|package\.json|tsconfig.*\.json)$

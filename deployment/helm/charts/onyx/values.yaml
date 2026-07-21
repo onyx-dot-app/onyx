@@ -30,15 +30,30 @@ customCACerts:
   secretName: ""
   configMapName: ""
 
+# Uncomment to skip the bundled CNPG operator and its CRDs, and let an existing
+# cluster-managed CloudNativePG operator reconcile the Cluster CR below (keep
+# postgresql.enabled: true). Two operators/CRD copies on one cluster drift in
+# version and fight over ownership of the cluster-scoped postgresql.cnpg.io
+# CRDs and webhook configurations — see
+# https://github.com/onyx-dot-app/onyx/issues/12490. Unset = follow
+# postgresql.enabled. Mirrors redisOperator below.
+# postgresqlOperator:
+#   enabled: false
+
 postgresql:
   enabled: true
   # IMPORTANT: This nameOverride is required for the CloudNativePG operator to find itself.
   # The operator looks for a deployment with label app.kubernetes.io/name=cloudnative-pg,
   # but since the subchart is aliased as "postgresql", Helm defaults to that name.
   nameOverride: cloudnative-pg
-  # CRDs are shipped in our chart's crds/ directory (pre-installed before
-  # templates). Disable the subchart's own CRD template to avoid ownership
-  # conflicts between the two copies.
+  # Uncomment to override, independently of postgresqlOperator.enabled below,
+  # whether the bundled CNPG CRDs (onyx-cnpg-crds subchart) are installed.
+  # Unset = follow postgresqlOperator.enabled, then postgresql.enabled.
+  # installCRDs: false
+
+  # Disable the CNPG subchart's own templated CRD copy — the onyx-cnpg-crds
+  # subchart is the single source of the CRDs (its crds/ dir gets Helm's
+  # pre-install treatment, which templated CRDs don't).
   crds:
     create: false
   cluster:
@@ -297,7 +312,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "5"
+      onyx.app/nginx-config-version: "7"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -305,6 +320,11 @@ nginx:
         value: localhost
 
     config:
+      # Hide the nginx version in Server headers/error pages. Set via the
+      # controller's supported knob — do NOT put `server_tokens` in the
+      # http-snippet files: ingress-nginx already emits the directive in the
+      # http{} block, and a duplicate fails `nginx -t` (config reload/startup).
+      server-tokens: "false"
       # Expose DOMAIN to the nginx config and pull in our custom snippets
       main-snippet: |
         env DOMAIN;
@@ -1002,6 +1022,9 @@ mcpServer:
 celery_worker_docfetching:
   extraEnv: []
   replicaCount: 1
+  # Grace for the watchdog to mark its in-flight attempt INTERRUPTED and stop its
+  # subprocess on SIGTERM. Must exceed the watchdog poll interval + subprocess grace.
+  terminationGracePeriodSeconds: 60
   # Per-worker log level override. Empty (default) means use the global
   # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
   # this worker only — this becomes `--loglevel=<value>` on the celery worker
@@ -1397,15 +1420,14 @@ auth:
     values:
       user_auth_secret: ""
   metricsAuth:
-    # -- Bearer token guarding the API server's /metrics endpoint. /metrics
+    # -- Bearer token guarding the API and MCP servers' /metrics endpoints. /metrics
     # returns 401 by default until you either enable this (provide a token) or
     # explicitly opt out via configMap.DISABLE_METRICS_AUTH="true". When enabled,
     # scrapers must send the token as `Authorization: Bearer <token>` (Prometheus
-    # scrape config: `authorization`), and the api ServiceMonitor below is wired
+    # scrape config: `authorization`), and the ServiceMonitors are wired
     # to send it automatically.
     enabled: false
-    # -- Only inject the token into pods that serve the protected /metrics (the
-    # API server), not every backend pod. Routes through onyx.envSecretsRestricted.
+    # -- Only inject the token into pods that serve protected /metrics.
     allPods: false
     # -- Overwrite the default secret name, ignored if existingSecret is defined
     secretName: 'onyx-metrics-auth'
@@ -1458,6 +1480,13 @@ configMap:
   AUTH_TYPE: "basic"
   # Enable PKCE for OIDC login flow. Leave empty/false for backward compatibility.
   OIDC_PKCE_ENABLED: ""
+  # Opt-in: capture IdP directory claims at OAuth/OIDC login and use them to
+  # enrich chat prompts and resolve {{user.<key>}} agent placeholders. Sends
+  # directory data to the configured LLM, so off by default.
+  IDP_PROFILE_ENRICHMENT_ENABLED: ""
+  # Optional JSON overriding the directory claim aliases per profile field, e.g.
+  # '{"department": ["dept", "division"], "country": ["c"]}'.
+  IDP_PROFILE_CLAIM_MAP: ""
   # 1 Day Default
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
@@ -1491,6 +1520,15 @@ configMap:
   GEN_AI_MAX_TOKENS: ""
   LLM_SOCKET_READ_TIMEOUT: "60"
   MAX_CHUNKS_FED_TO_CHAT: ""
+  # Usage / cost accounting
+  # Records priced generation spans into the per-user usage ledger (default on).
+  # Set to "false" to disable the recording processor entirely.
+  USER_USAGE_TRACKING_ENABLED: ""
+  # Flat per-image cost in cents when litellm has no price for an image model (default 4).
+  DEFAULT_IMAGE_COST_CENTS: ""
+  # Fallback USD per million tokens when litellm can't price a model (default 0 = free).
+  DEFAULT_LLM_INPUT_COST_PER_MTOK: ""
+  DEFAULT_LLM_OUTPUT_COST_PER_MTOK: ""
   # Query Options
   DOC_TIME_DECAY: ""
   HYBRID_ALPHA: ""
@@ -1510,12 +1548,26 @@ configMap:
   INDEXING_WORKER_MEMORY_LIMIT_MB: ""
   INDEXING_WORKER_TRACEMALLOC: ""
   DISABLE_INDEX_UPDATE_ON_SWAP: ""
+  # OpenSearch Point-In-Time keep-alive for the reindex/port scan (default 5m)
+  PIT_KEEP_ALIVE: ""
   CONTINUE_ON_CONNECTOR_FAILURE: ""
   CONFLUENCE_CONNECTOR_LABELS_TO_SKIP: ""
   JIRA_CLOUD_API_VERSION: ""
   JIRA_SERVER_API_VERSION: ""
+  CANVAS_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  BOX_CONNECTOR_SIZE_THRESHOLD: ""
+  BOX_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  BOX_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   GONG_CONNECTOR_START_TIME: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
+  # Push every successfully indexed public-connector document to an external
+  # HTTP endpoint (failures never fail indexing). Intended for non-EE
+  # deployments — EE users should configure the Document Push hook in the
+  # admin UI instead. Not supported in multi-tenant deployments.
+  DOCUMENT_PUSH_ENDPOINT_URL: ""
+  DOCUMENT_PUSH_API_KEY: ""
+  DOCUMENT_PUSH_TIMEOUT_SECONDS: ""
   # Worker Parallelism
   CELERY_WORKER_DOCPROCESSING_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
@@ -1589,6 +1641,12 @@ sandboxPod:
 
 # -- Sandbox egress proxy.
 sandboxProxy:
+  # Allow IPv6 (::/0 minus link-local/IMDS) egress from the proxy. OFF by default: the AWS
+  # VPC CNI network-policy agent intermittently fails to program IPv6 ipBlocks into the
+  # egress eBPF map (EINVAL), leaving it empty and fail-closed (proxy pods crash-loop), and
+  # single-stack IPv4 clusters have no IPv6 egress to gate. Enable ONLY on dual-stack
+  # clusters, where an Egress policy without an IPv6 allow silently drops all IPv6 egress.
+  egressAllowIPv6: false
   replicaCount: 2
   terminationGracePeriodSeconds: 200
   progressDeadlineSeconds: 300
@@ -1607,10 +1665,10 @@ sandboxProxy:
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 512Mi
     limits:
       cpu: 1000m
-      memory: 1Gi
+      memory: 2Gi
   nodeSelector: {}
   tolerations: []
   affinity: {}

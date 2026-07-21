@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from onyx.db.enums import SharingScope
 from onyx.redis.redis_pool import get_redis_client
@@ -14,9 +13,11 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestSettings
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestLLMProvider,
+    DATestSettings,
+    DATestUser,
+)
 from tests.integration.tests.craft.conftest import SharedSession
 
 
@@ -111,6 +112,38 @@ def test_get_session_404_for_other_users_session(
     other_user = UserManager.create(name=f"other-{uuid4().hex[:8]}")
     response = client.get(
         f"{API_SERVER_URL}/build/sessions/{session_id}",
+        headers=other_user.headers,
+        cookies=other_user.cookies,
+    )
+    assert response.status_code == 404
+
+
+def test_get_sandbox_status_returns_status_fields(
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+) -> None:
+    body = BuildSessionManager.create(admin_user)
+    session_id = body.id
+
+    response = client.get(
+        f"{API_SERVER_URL}/build/sessions/{session_id}/sandbox-status",
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert "status" in payload
+    assert payload["status"] is not None
+
+
+def test_get_sandbox_status_404_for_other_users_session(
+    shared_session: SharedSession,
+) -> None:
+    _owner, session_id = shared_session
+
+    other_user = UserManager.create(name=f"other-{uuid4().hex[:8]}")
+    response = client.get(
+        f"{API_SERVER_URL}/build/sessions/{session_id}/sandbox-status",
         headers=other_user.headers,
         cookies=other_user.cookies,
     )

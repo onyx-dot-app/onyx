@@ -1,23 +1,41 @@
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
-from onyx.configs.app_configs import EXT_APP_HUBSPOT_CLIENT_ID
-from onyx.configs.app_configs import EXT_APP_HUBSPOT_CLIENT_SECRET
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.configs.app_configs import (
+    EXT_APP_HUBSPOT_CLIENT_ID,
+    EXT_APP_HUBSPOT_CLIENT_SECRET,
+)
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.actions import ExternalAppAction
-from onyx.external_apps.providers.actions import RestRoute
-from onyx.external_apps.providers.base import AdminDescriptorSpec
-from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.base import OAuthFlowSpec
-from onyx.external_apps.providers.base import OAuthProviderSpec
-from onyx.external_apps.providers.base import OnyxManagedExtApp
-from onyx.external_apps.providers.base import OrgCredentialField
-from onyx.external_apps.providers.base import token_response_error
+from onyx.external_apps.providers.actions import (
+    EndpointSpec,
+    ExternalAppAction,
+    RestRoute,
+)
+from onyx.external_apps.providers.base import (
+    AdminDescriptorSpec,
+    OAuthExternalAppProvider,
+    OAuthFlowSpec,
+    OAuthProviderSpec,
+    OnyxManagedExtApp,
+    OrgCredentialField,
+    parse_granted_scopes,
+    token_response_error,
+)
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+# HubSpot's token response omits the granted scopes, so the actual per-user
+# grant (which diverges under `optional_scope`) is read from the token-info
+# endpoint, which returns a `scopes` array.
+_TOKEN_INFO_URL = "https://api.hubapi.com/oauth/v1/access-tokens/{access_token}"
+
+# Bounded so a slow/hung token-info call can't pin the OAuth connect flow.
+_TOKEN_INFO_TIMEOUT_SECONDS = 15.0
 
 
 class HubspotAction(ExternalAppAction):
@@ -232,3 +250,29 @@ class HubspotProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         if response_data.get("expires_in"):
             creds["expires_in"] = response_data["expires_in"]
         return creds
+
+    def extract_granted_scopes(self, response_data: dict[str, Any]) -> list[str] | None:
+        """Reads the grant from the token-info endpoint. Best-effort: any
+        network/HTTP/JSON error returns ``None`` (grant unknown) rather than
+        breaking connect.
+        """
+        access_token = response_data.get("access_token")
+        if not access_token:
+            return None
+        try:
+            response = requests.get(
+                _TOKEN_INFO_URL.format(access_token=quote(access_token, safe="")),
+                timeout=_TOKEN_INFO_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            body = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning(
+                "Could not fetch HubSpot granted scopes from the token-info "
+                "endpoint; recording the grant as unknown: %s",
+                exc,
+            )
+            return None
+        return parse_granted_scopes(
+            body.get("scopes") if isinstance(body, dict) else None
+        )

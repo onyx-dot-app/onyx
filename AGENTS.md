@@ -7,8 +7,10 @@ This file provides guidance to AI agents when working with code in this reposito
 - Python deps live in a `uv`-managed virtualenv at `.venv` (repo root). If it doesn't exist yet, create it \
   with `uv sync --frozen`, then `source .venv/bin/activate`.
 - To make tests work, check the `.env` file at the root of the project to find an OpenAI key.
-- If using `playwright` to explore the frontend, you can usually log in with username `a@example.com` and password
-  `a`. The app can be accessed at `http://localhost:3000`.
+- If using `playwright` to explore the frontend, log in with username `admin_user@example.com` and password
+  `TestPassword123!` (the admin user created by the playwright global setup — see
+  `web/tests/e2e/constants.ts`). If it doesn't exist yet, register it via the signup page; the first user
+  registered automatically becomes admin. The app can be accessed at `http://localhost:3000`.
 - You should assume that all Onyx services are running. To verify, you can check the `backend/log` directory to
   make sure we see logs coming out from the relevant service.
 - To connect to the Postgres database, use: `docker exec -it onyx-relational_db-1 psql -U postgres -c "<SQL>"`
@@ -31,7 +33,7 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
    - Coordinates core background tasks and system-wide operations
    - Handles connector management, document sync, pruning, and periodic checks
    - Runs with 4 threads concurrency
-   - Tasks: connector deletion, vespa sync, pruning, LLM model updates, user file sync
+   - Tasks: connector deletion, document-index sync, pruning, LLM model updates, user file sync
 
 2. **Docfetching Worker** (`docfetching`)
 
@@ -46,14 +48,14 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
      - Upserts documents to PostgreSQL
      - Chunks documents and adds contextual information
      - Embeds chunks via model server
-     - Writes chunks to Vespa vector database
+     - Writes chunks to the OpenSearch-backed document index
      - Updates document metadata
    - Configurable concurrency (default from env)
 
 4. **Light Worker** (`light`)
 
    - Handles lightweight, fast operations
-   - Tasks: vespa metadata sync, connector deletion, doc permissions upsert, checkpoint cleanup, index attempt cleanup
+   - Tasks: document-index metadata sync, connector deletion, doc permissions upsert, checkpoint cleanup, index attempt cleanup
    - Higher concurrency for quick tasks
 
 5. **Heavy Worker** (`heavy`)
@@ -81,7 +83,7 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
    - Schedules tasks like:
      - Indexing checks (every 15 seconds)
      - Connector deletion checks (every 20 seconds)
-     - Vespa sync checks (every 20 seconds)
+     - Document-index metadata sync checks (every 20 seconds)
      - Pruning checks (every 20 seconds)
      - Monitoring tasks (every 5 minutes)
      - Cleanup tasks (hourly)
@@ -141,9 +143,14 @@ comments that only describe the instantaneous change (e.g. what was just added/r
 - **Backend**: Python 3.13, FastAPI, SQLAlchemy, Alembic, Celery
 - **Frontend**: Next.js 15+, React 18, TypeScript, Tailwind CSS
 - **Database**: PostgreSQL with Redis caching
-- **Search**: Vespa vector database
+- **Search**: OpenSearch-backed keyword and vector document index
 - **Auth**: OAuth2, SAML, multi-provider support
 - **AI/ML**: LangChain, LiteLLM, multiple embedding models
+
+OpenSearch is the current document index backend for search and indexing. Some
+legacy modules, Celery task names, and migration helpers still mention Vespa; treat
+those as compatibility or migration artifacts unless the active `DocumentIndex`
+factory/config path explicitly uses them.
 
 ### Directory Structure
 
@@ -154,7 +161,7 @@ backend/
 │   ├── chat/                    # Chat functionality & LLM interactions
 │   ├── connectors/              # Data source connectors
 │   ├── db/                      # Database models & operations
-│   ├── document_index/          # Vespa integration
+│   ├── document_index/          # OpenSearch-backed DocumentIndex integration
 │   ├── federated_connectors/    # External search connectors
 │   ├── llm/                     # LLM provider integrations
 │   └── server/                  # API endpoints & routers
@@ -230,7 +237,7 @@ pytest -xv backend/tests/unit
 ### External Dependency Unit Tests
 
 These tests assume that all external dependencies of Onyx are available and callable (e.g. Postgres, Redis,
-MinIO/S3, Vespa are running + OpenAI can be called + any request to the internet is fine + etc.).
+MinIO/S3, OpenSearch are running + OpenAI can be called + any request to the internet is fine + etc.).
 
 However, the actual Onyx containers are not running and with these tests we call the function to test directly.
 We can also mock components/calls at will.

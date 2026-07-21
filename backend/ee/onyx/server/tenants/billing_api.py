@@ -19,43 +19,51 @@ and are NOT part of this migration - they stay here.
 import asyncio
 
 import httpx
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.billing.api import update_seats as _admin_update_seats
-from ee.onyx.server.billing.models import SeatUpdateRequest
-from ee.onyx.server.billing.models import SeatUpdateResponse
+from ee.onyx.server.billing.models import SeatUpdateRequest, SeatUpdateResponse
 from ee.onyx.server.tenants.access import control_plane_dep
-from ee.onyx.server.tenants.billing import fetch_billing_information
-from ee.onyx.server.tenants.billing import fetch_customer_portal_session
-from ee.onyx.server.tenants.billing import fetch_stripe_checkout_session
-from ee.onyx.server.tenants.models import BillingInformation
-from ee.onyx.server.tenants.models import CreateCheckoutSessionRequest
-from ee.onyx.server.tenants.models import CreateSubscriptionSessionRequest
-from ee.onyx.server.tenants.models import ProductGatingFullSyncRequest
-from ee.onyx.server.tenants.models import ProductGatingRequest
-from ee.onyx.server.tenants.models import ProductGatingResponse
-from ee.onyx.server.tenants.models import StripePublishableKeyResponse
-from ee.onyx.server.tenants.models import SubscriptionSessionResponse
-from ee.onyx.server.tenants.models import SubscriptionStatusResponse
-from ee.onyx.server.tenants.models import TierUpdateRequest
-from ee.onyx.server.tenants.models import TierUpdateResponse
-from ee.onyx.server.tenants.product_gating import overwrite_full_gated_set
-from ee.onyx.server.tenants.product_gating import store_product_gating
+from ee.onyx.server.tenants.billing import (
+    fetch_billing_information,
+    fetch_customer_portal_session,
+    fetch_stripe_checkout_session,
+)
+from ee.onyx.server.tenants.models import (
+    BillingInformation,
+    CreateCheckoutSessionRequest,
+    CreateSubscriptionSessionRequest,
+    ProductGatingFullSyncRequest,
+    ProductGatingRequest,
+    ProductGatingResponse,
+    StripePublishableKeyResponse,
+    SubscriptionSessionResponse,
+    SubscriptionStatusResponse,
+    TierUpdateRequest,
+    TierUpdateResponse,
+)
+from ee.onyx.server.tenants.product_gating import (
+    overwrite_full_gated_set,
+    store_product_gating,
+)
 from ee.onyx.server.tenants.tier_management import update_tenant_tier
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
-from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
-from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_URL
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.app_configs import (
+    STRIPE_PUBLISHABLE_KEY_OVERRIDE,
+    STRIPE_PUBLISHABLE_KEY_URL,
+    WEB_DOMAIN,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 logger = setup_logger()
 

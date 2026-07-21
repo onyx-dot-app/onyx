@@ -1,34 +1,28 @@
 from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import TypeVarTuple
 
-from sqlalchemy import and_
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import func
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, and_, delete, desc, func, select, update
+from sqlalchemy.orm import Session, joinedload
 
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptError
-from onyx.db.models import SearchSettings
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    IndexingStatus,
+    IndexModelStatus,
+)
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    IndexAttemptError,
+    SearchSettings,
+)
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
 
 logger = setup_logger()
 
@@ -155,6 +149,35 @@ def create_index_attempt(
     db_session.commit()
 
     return new_attempt.id
+
+
+def create_synthetic_seed_attempt(
+    connector_credential_pair_id: int,
+    search_settings_id: int,
+    db_session: Session,
+    poll_range_end: float,
+) -> int:
+    """Insert a SUCCESS IndexAttempt with no connector run (the reindex port's
+    resume marker). It carries PRESENT's poll cursor so the FUTURE
+    connector-incremental resumes from there. time_started == time_created (both
+    func.now() in one statement) so the swap criterion's "real attempt after the
+    port" comparison is well-defined for the run that later supersedes the seed.
+    Excluded from the latest/count helpers via ignore_synthetic_seed. Flushes to
+    populate the returned id but does not commit; the caller commits."""
+    db_now = func.now()
+    seed = IndexAttempt(
+        connector_credential_pair_id=connector_credential_pair_id,
+        search_settings_id=search_settings_id,
+        from_beginning=True,
+        status=IndexingStatus.SUCCESS,
+        is_synthetic_seed=True,
+        time_started=db_now,
+        time_updated=db_now,
+        poll_range_end=datetime.fromtimestamp(poll_range_end, tz=timezone.utc),
+    )
+    db_session.add(seed)
+    db_session.flush()
+    return seed.id
 
 
 def delete_index_attempt(db_session: Session, index_attempt_id: int) -> None:
@@ -449,6 +472,57 @@ def mark_attempt_failed(
         raise
 
 
+def mark_attempt_interrupted(
+    index_attempt_id: int,
+    db_session: Session,
+    reason: str = "Unknown",
+) -> None:
+    """Terminal-but-resumable: worker stopped mid-run by infrastructure, not by an
+    error. Distinct from FAILED (so it doesn't trip the repeated-error auto-pause)
+    and from CANCELED (so the UI doesn't imply a user did it)."""
+    try:
+        attempt = db_session.execute(
+            select(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+        ).scalar_one()
+
+        # Re-check under the lock: another writer (e.g. the subprocess finishing
+        # SUCCESS) may have set a terminal status between the caller's pre-check
+        # and this lock. Don't overwrite it.
+        if attempt.status.is_terminal():
+            return
+
+        if not attempt.time_started:
+            attempt.time_started = datetime.now(timezone.utc)
+        attempt.status = IndexingStatus.INTERRUPTED
+        attempt.error_msg = reason
+        attempt.celery_task_id = None
+        db_session.commit()
+
+        optional_telemetry(
+            record_type=RecordType.INDEX_ATTEMPT_STATUS,
+            data={
+                "index_attempt_id": index_attempt_id,
+                "status": IndexingStatus.INTERRUPTED.value,
+                "cc_pair_id": attempt.connector_credential_pair_id,
+            },
+        )
+        # Stale counter keys left by a failed cleanup() are harmless: the monitor
+        # skips attempts that are already in a terminal state before reading Redis.
+        try:
+            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+        except Exception:
+            logger.debug(
+                "Failed to clean up docprocessing counters for attempt %s",
+                index_attempt_id,
+                exc_info=True,
+            )
+    except Exception:
+        db_session.rollback()
+        raise
+
+
 def update_docs_indexed(
     db_session: Session,
     index_attempt_id: int,
@@ -655,6 +729,7 @@ def get_latest_successful_index_attempt_for_cc_pair_id(
     connector_credential_pair_id: int,
     secondary_index: bool = False,
     ignore_targeted_reindex: bool = True,
+    ignore_synthetic_seed: bool = True,
 ) -> IndexAttempt | None:
     """Returns the most recent successful index attempt for the given cc pair,
     filtered to the current (or future) search settings.
@@ -668,6 +743,8 @@ def get_latest_successful_index_attempt_for_cc_pair_id(
     )
     if ignore_targeted_reindex:
         stmt = stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
+    if ignore_synthetic_seed:
+        stmt = stmt.where(IndexAttempt.is_synthetic_seed.is_(False))
     stmt = (
         stmt.join(SearchSettings)
         .where(SearchSettings.status == status)
@@ -680,6 +757,7 @@ def get_latest_successful_index_attempt_for_cc_pair_id(
 def get_latest_successful_index_attempts_parallel(
     secondary_index: bool = False,
     ignore_targeted_reindex: bool = True,
+    ignore_synthetic_seed: bool = True,
 ) -> Sequence[IndexAttempt]:
     """Batch version: returns the latest successful index attempt per cc pair.
     Covers both SUCCESS and COMPLETED_WITH_ERRORS (matching is_successful())."""
@@ -704,6 +782,8 @@ def get_latest_successful_index_attempts_parallel(
             latest_ids = latest_ids.where(
                 IndexAttempt.targeted_reindex_job_id.is_(None)
             )
+        if ignore_synthetic_seed:
+            latest_ids = latest_ids.where(IndexAttempt.is_synthetic_seed.is_(False))
         latest_ids = latest_ids.group_by(
             IndexAttempt.connector_credential_pair_id
         ).subquery()
@@ -857,6 +937,7 @@ def delete_index_attempts(
 def expire_index_attempts(
     search_settings_id: int,
     db_session: Session,
+    commit: bool = True,
 ) -> None:
     not_started_query = (
         update(IndexAttempt)
@@ -880,7 +961,8 @@ def expire_index_attempts(
     )
     db_session.execute(update_query)
 
-    db_session.commit()
+    if commit:
+        db_session.commit()
 
 
 def cancel_indexing_attempts_for_ccpair(
@@ -950,6 +1032,7 @@ def count_unique_cc_pairs_with_successful_index_attempts(
     search_settings_id: int | None,
     db_session: Session,
     ignore_targeted_reindex: bool = True,
+    ignore_synthetic_seed: bool = True,
 ) -> int:
     """Collect all of the Index Attempts that are successful and for the specified embedding model
     Then do distinct by connector_id and credential_id which is equivalent to the cc-pair. Finally,
@@ -964,6 +1047,8 @@ def count_unique_cc_pairs_with_successful_index_attempts(
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    if ignore_synthetic_seed:
+        query = query.filter(IndexAttempt.is_synthetic_seed.is_(False))
     return query.distinct().count()
 
 
@@ -971,6 +1056,7 @@ def count_unique_active_cc_pairs_with_successful_index_attempts(
     search_settings_id: int | None,
     db_session: Session,
     ignore_targeted_reindex: bool = True,
+    ignore_synthetic_seed: bool = True,
 ) -> int:
     """Collect all of the Index Attempts that are successful and for the specified embedding model,
     but only for non-paused connector-credential pairs. Then do distinct by connector_id and credential_id
@@ -987,6 +1073,8 @@ def count_unique_active_cc_pairs_with_successful_index_attempts(
     )
     if ignore_targeted_reindex:
         query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    if ignore_synthetic_seed:
+        query = query.filter(IndexAttempt.is_synthetic_seed.is_(False))
     return query.distinct().count()
 
 

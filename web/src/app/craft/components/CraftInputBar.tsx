@@ -17,6 +17,7 @@ import BaseInputBar, {
 import EntryInfoPopover from "@/sections/input/EntryInfoPopover";
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import InterruptHint from "@/app/craft/components/InterruptHint";
+import ContextRing from "@/app/craft/components/ContextRing";
 import { InputChipStrip } from "@/sections/input/InputChipStrip";
 import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
 import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
@@ -56,6 +57,10 @@ export interface CraftInputBarProps {
   onRemoveQueuedMessage?: (index: number) => void;
   onInterrupt?: () => void;
   isInterrupting?: boolean;
+  contextUsage?: {
+    usedTokens: number;
+    contextLimit: number | null;
+  } | null;
   /** Seed the active entry chips. For stories/tests; production callers leave unset. */
   initialEntries?: PickerEntry[];
 }
@@ -75,6 +80,7 @@ const CraftInputBar = memo(
         onRemoveQueuedMessage,
         onInterrupt,
         isInterrupting = false,
+        contextUsage,
         initialEntries,
       },
       ref
@@ -225,6 +231,13 @@ const CraftInputBar = memo(
         </>
       );
 
+      const bottomRightSlot = contextUsage ? (
+        <ContextRing
+          usedTokens={contextUsage.usedTokens}
+          contextLimit={contextUsage.contextLimit}
+        />
+      ) : undefined;
+
       return (
         <>
           <input
@@ -255,6 +268,7 @@ const CraftInputBar = memo(
             isInterrupting={isInterrupting}
             topSlot={topSlot}
             bottomLeftSlot={bottomLeftSlot}
+            bottomRightSlot={bottomRightSlot}
             onPasteText={onPasteText}
             onPasteFiles={uploadFiles}
             onInputCallback={slashPicker.onInput}

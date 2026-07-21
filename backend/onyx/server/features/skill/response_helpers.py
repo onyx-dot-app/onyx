@@ -1,22 +1,25 @@
-from uuid import UUID
-
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
-from onyx.db.enums import SkillAccessLevel
-from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.skill import get_group_ids_for_skill
-from onyx.db.skill import skill_ids_with_grants
+from onyx.db.enums import SkillAccessLevel, SkillSharePermission
+from onyx.db.models import Skill, User
+from onyx.db.persona_sharing import (
+    get_curated_user_group_ids_for_user,
+    get_user_group_ids_for_user,
+)
+from onyx.db.skill import SkillUserState, skill_user_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill.models import BuiltinSkillResponse
-from onyx.server.features.skill.models import CustomSkillResponse
-from onyx.server.features.skill.models import SkillPreviewResponse
+from onyx.server.features.skill.models import (
+    SkillPreviewResponse,
+    SkillResponse,
+    SkillsList,
+)
 from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.content import read_builtin_skill_instructions
-from onyx.skills.content import read_custom_skill_bundle_instructions
+from onyx.skills.content import (
+    read_builtin_skill_instructions,
+    read_custom_skill_bundle_instructions,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -73,66 +76,91 @@ def user_permission_for_skill(
     return None
 
 
-def split_skill_rows(
-    rows: list[Skill],
+def skill_response_for_user(
+    skill: Skill,
+    user: User,
     db_session: Session,
     *,
-    include_grants: bool,
-) -> tuple[list[BuiltinSkillResponse], list[CustomSkillResponse]]:
-    """Partition a flat row list into built-in + custom responses.
+    state: SkillUserState | None = None,
+    user_group_ids: set[int] | None = None,
+    curated_user_group_ids: set[int] | None = None,
+    include_share_details: bool = False,
+) -> SkillResponse:
+    if state is None:
+        state = skill_user_states(user, [skill.id], db_session)[skill.id]
+    if skill.built_in_skill_id is not None:
+        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
+        if definition is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+        return SkillResponse.from_builtin(
+            skill,
+            definition,
+            db_session,
+            enabled=state.enabled,
+            can_toggle=state.can_toggle,
+        )
 
-    A row with an unknown ``built_in_skill_id`` (definition was removed
-    in code without cleaning up the seeded row) is logged and dropped -
-    we don't surface a half-broken built-in to admins. ``include_grants``
-    only applies to custom skills; built-ins are not group-shareable.
-    """
-    builtins: list[BuiltinSkillResponse] = []
-    customs: list[CustomSkillResponse] = []
+    if user_group_ids is None:
+        user_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    if curated_user_group_ids is None and user.role == UserRole.CURATOR:
+        curated_user_group_ids = get_curated_user_group_ids_for_user(
+            db_session, user.id
+        )
+    return SkillResponse.from_custom(
+        skill,
+        enabled=state.enabled,
+        can_toggle=state.can_toggle,
+        user_permission=user_permission_for_skill(
+            skill,
+            user,
+            user_group_ids,
+            curated_user_group_ids,
+        ),
+        include_share_details=include_share_details,
+    )
 
-    # User paths withhold group ids but still need grant existence so a
-    # grants-shared skill isn't reported as personal.
-    custom_ids = [s.id for s in rows if s.built_in_skill_id is None]
-    granted_skill_ids: set[UUID] = set()
-    if custom_ids:
-        granted_skill_ids = skill_ids_with_grants(custom_ids, db_session)
+
+def skills_list_response_for_user(
+    rows: list[Skill],
+    user: User,
+    db_session: Session,
+) -> SkillsList:
+    builtins: list[SkillResponse] = []
+    customs: list[SkillResponse] = []
+    user_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    curated_user_group_ids = (
+        get_curated_user_group_ids_for_user(db_session, user.id)
+        if user.role == UserRole.CURATOR
+        else set()
+    )
+    states = skill_user_states(user, (skill.id for skill in rows), db_session)
 
     for skill in rows:
-        if skill.built_in_skill_id is not None:
-            definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
-            if definition is None:
-                logger.warning(
-                    "Skill row %s references unknown built-in %s; hiding from listing",
-                    skill.slug,
-                    skill.built_in_skill_id,
-                )
-                continue
-            builtins.append(
-                BuiltinSkillResponse.from_row(skill, definition, db_session)
+        if (
+            skill.built_in_skill_id is not None
+            and skill.built_in_skill_id not in BUILT_IN_SKILLS
+        ):
+            logger.warning(
+                "Skill row %s references unknown built-in %s; hiding from listing",
+                skill.slug,
+                skill.built_in_skill_id,
             )
-        elif include_grants:
-            group_ids = get_group_ids_for_skill(skill.id, db_session)
-            customs.append(
-                CustomSkillResponse.from_model(
-                    skill,
-                    group_ids=group_ids,
-                    has_grants=skill.id in granted_skill_ids,
-                )
-            )
-        else:
-            customs.append(
-                CustomSkillResponse.from_model(
-                    skill,
-                    group_ids=[],
-                    has_grants=skill.id in granted_skill_ids,
-                )
-            )
+            continue
 
-    return builtins, customs
+        response = skill_response_for_user(
+            skill,
+            user,
+            db_session,
+            state=states[skill.id],
+            user_group_ids=user_group_ids,
+            curated_user_group_ids=curated_user_group_ids,
+        )
+        (builtins if skill.built_in_skill_id is not None else customs).append(response)
+
+    return SkillsList(builtins=builtins, customs=customs)
 
 
-def preview_response_for_skill(
-    skill: Skill,
-) -> SkillPreviewResponse:
+def skill_preview_response(skill: Skill) -> SkillPreviewResponse:
     if skill.built_in_skill_id is not None:
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
         if definition is None:
@@ -142,8 +170,7 @@ def preview_response_for_skill(
             instructions_markdown=read_builtin_skill_instructions(definition),
         )
 
-    instructions_markdown = read_custom_skill_bundle_instructions(skill)
     return SkillPreviewResponse.from_custom(
         skill,
-        instructions_markdown=instructions_markdown,
+        instructions_markdown=read_custom_skill_bundle_instructions(skill),
     )

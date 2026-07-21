@@ -1,16 +1,13 @@
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import SearchSettings
-from onyx.indexing.models import BaseChunk
-from onyx.indexing.models import IndexingSetting
+from onyx.indexing.models import BaseChunk, IndexingSetting
 from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
 
 
@@ -36,6 +33,8 @@ class SearchSettingsCreationRequest(IndexingSetting):
 class SavedSearchSettings(IndexingSetting):
     # Previously this contained also Inference time settings. Keeping this wrapper class around
     # as there may again be inference time settings that may get added.
+    use_port_flow: bool | None = None
+
     @classmethod
     def from_db_model(cls, search_settings: SearchSettings) -> "SavedSearchSettings":
         return cls(
@@ -51,6 +50,7 @@ class SavedSearchSettings(IndexingSetting):
             embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
             switchover_type=search_settings.switchover_type,
+            use_port_flow=search_settings.use_port_flow,
             enable_contextual_rag=search_settings.enable_contextual_rag,
             contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         )
@@ -61,12 +61,59 @@ class Tag(BaseModel):
     tag_value: str
 
 
+class TimeRange(BaseModel):
+    """An inclusive [start, end] window; either bound may be None (open).
+    Naive (timezone-less) bounds are treated as UTC."""
+
+    start: datetime | None = None
+    end: datetime | None = None
+
+    @field_validator("start", "end")
+    @classmethod
+    def _assume_utc_when_naive(cls, value: datetime | None) -> datetime | None:
+        if value is None or value.tzinfo is not None:
+            return value
+        return value.replace(tzinfo=timezone.utc)
+
+    def has_bounds(self) -> bool:
+        return self.start is not None or self.end is not None
+
+    def is_empty(self) -> bool:
+        """True when the window cannot match anything (start after end)."""
+        return self.start is not None and self.end is not None and self.start > self.end
+
+    def intersect(self, other: "TimeRange | None") -> "TimeRange":
+        """The overlap of the two windows (later start, earlier end); None is
+        unbounded."""
+        if other is None:
+            return self
+        return TimeRange(
+            start=max(filter(None, (self.start, other.start)), default=None),
+            end=min(filter(None, (self.end, other.end)), default=None),
+        )
+
+
 class BaseFilters(BaseModel):
     source_type: list[DocumentSource] | None = None
     document_set: list[str] | None = None
-    time_cutoff: datetime | None = None
-    time_cutoff_upper: datetime | None = None
+    created_at_range: TimeRange | None = None
+    updated_at_range: TimeRange | None = None
     tags: list[Tag] | None = None
+
+    # Deprecated wire-compat alias for updated_at_range.start. Folded into
+    # updated_at_range on validation and cleared; internal code must never read
+    # it. Excluded from serialization so it doesn't propagate further.
+    time_cutoff: datetime | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def _fold_legacy_time_cutoff(self) -> "BaseFilters":
+        if self.time_cutoff is None:
+            return self
+        # An explicitly provided updated_at_range wins over the legacy alias.
+        if self.updated_at_range is None:
+            self.updated_at_range = TimeRange(start=self.time_cutoff)
+        self.time_cutoff = None
+        return self
 
 
 class UserFileFilters(BaseModel):

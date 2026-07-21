@@ -1,29 +1,31 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import ClassVar
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, ClassVar, Optional
 
 import requests
 from bs4 import BeautifulSoup
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_markdown_image_references
@@ -387,6 +389,13 @@ class TestRailConnector(LoadConnector, PollConnector):
             else None
         )
 
+        created = case.get("created_on")
+        created_dt = (
+            datetime.fromtimestamp(created, tz=timezone.utc)
+            if isinstance(created, (int, float))
+            else None
+        )
+
         text_lines: list[str] = []
         if case.get("title"):
             text_lines.append(f"Title: {case['title']}")
@@ -476,6 +485,8 @@ class TestRailConnector(LoadConnector, PollConnector):
             sections=[TextSection(link=link, text=full_text)],
             metadata=metadata,
             doc_updated_at=updated_dt,
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=created_dt,
         )
 
     def _generate_documents(
@@ -540,9 +551,11 @@ class TestRailConnector(LoadConnector, PollConnector):
 
 
 if __name__ == "__main__":
-    from onyx.configs.app_configs import TESTRAIL_API_KEY
-    from onyx.configs.app_configs import TESTRAIL_BASE_URL
-    from onyx.configs.app_configs import TESTRAIL_USERNAME
+    from onyx.configs.app_configs import (
+        TESTRAIL_API_KEY,
+        TESTRAIL_BASE_URL,
+        TESTRAIL_USERNAME,
+    )
 
     connector = TestRailConnector()
 

@@ -1,12 +1,10 @@
 import base64
 import uuid
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 import requests
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -14,19 +12,22 @@ from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.external_app import get_external_app_by_id
-from onyx.db.external_app import upsert_external_app_user_credential
-from onyx.db.models import ExternalApp
-from onyx.db.models import User
+from onyx.db.external_app import (
+    get_external_app_by_id,
+    upsert_external_app_user_credential,
+)
+from onyx.db.models import ExternalApp, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import get_provider_or_raise
 from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.external_apps.models import OAuthCallbackRequest
-from onyx.server.features.build.external_apps.models import OAuthCallbackResponse
-from onyx.server.features.build.external_apps.models import OAuthStartResponse
+from onyx.server.features.build.external_apps.models import (
+    OAuthCallbackRequest,
+    OAuthCallbackResponse,
+    OAuthStartResponse,
+)
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -92,7 +93,7 @@ def start_external_app_oauth(
             OnyxErrorCode.NOT_FOUND,
             f"External app with id {external_app_id} not found.",
         )
-    if not app.skill.enabled:
+    if not app.enabled:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "This app is currently disabled by an admin.",
@@ -168,26 +169,26 @@ def handle_external_app_oauth_callback(
             OnyxErrorCode.NOT_FOUND,
             f"External app with id {record.external_app_id} no longer exists.",
         )
+    if not app.enabled:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This app is currently disabled by an admin.",
+        )
 
     provider = _oauth_provider_or_raise(app)
     oauth = provider.spec.oauth
     # Re-read in case the admin rotated creds between /start and /callback.
     client_id, client_secret = _oauth_client_credentials(app)
 
+    token_request = provider.build_token_exchange_request(
+        request.code, client_id, client_secret, _frontend_callback_url()
+    )
     try:
         response = requests.post(
             oauth.token_url,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json",
-            },
-            data={
-                "grant_type": "authorization_code",
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code": request.code,
-                "redirect_uri": _frontend_callback_url(),
-            },
+            headers=token_request.headers,
+            data=None if token_request.json_encoded else token_request.body,
+            json=token_request.body if token_request.json_encoded else None,
             timeout=30,
         )
     except requests.RequestException as exc:
@@ -236,11 +237,16 @@ def handle_external_app_oauth_callback(
         provider.extract_credentials(response_data), datetime.now(timezone.utc)
     )
 
+    # The grant is authoritative and captured only here (a refresh can't change
+    # it); None when the provider gives no signal.
+    granted_scopes = provider.extract_granted_scopes(response_data)
+
     upsert_external_app_user_credential(
         db_session,
         external_app_id=app.id,
         user_id=user.id,
         user_credentials=stored_credentials,
+        granted_scopes=granted_scopes,
     )
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes so

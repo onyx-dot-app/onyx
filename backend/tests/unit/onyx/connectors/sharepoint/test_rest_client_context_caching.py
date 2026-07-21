@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.connectors.sharepoint.connector import _REST_CTX_MAX_AGE_S
-from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.connectors.sharepoint.connector import (
+    _REST_CTX_MAX_AGE_S,
+    SharepointConnector,
+)
 
 SITE_A = "https://tenant.sharepoint.com/sites/SiteA"
 SITE_B = "https://tenant.sharepoint.com/sites/SiteB"

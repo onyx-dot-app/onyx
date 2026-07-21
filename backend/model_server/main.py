@@ -13,21 +13,23 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from transformers import logging as transformer_logging
 
+from model_server.ca_certs import configure_trusted_ca_bundle
 from model_server.encoders import router as encoders_router
 from model_server.management_endpoints import router as management_router
-from model_server.utils import get_cgroup_cpu_limit
-from model_server.utils import get_gpu_type
+from model_server.utils import get_cgroup_cpu_limit, get_gpu_type
 from onyx import __version__
-from onyx.utils.logger import setup_logger
-from onyx.utils.logger import setup_uvicorn_logger
-from onyx.utils.middleware import add_onyx_request_id_middleware
-from onyx.utils.middleware import add_onyx_tenant_id_middleware
-from shared_configs.configs import INDEXING_ONLY
-from shared_configs.configs import MIN_THREADS_ML_MODELS
-from shared_configs.configs import MODEL_SERVER_ALLOWED_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
-from shared_configs.configs import SENTRY_DSN
-from shared_configs.configs import SENTRY_TRACES_SAMPLE_RATE
+from onyx.utils.logger import setup_logger, setup_uvicorn_logger
+from onyx.utils.middleware import (
+    add_onyx_request_id_middleware,
+    add_onyx_tenant_id_middleware,
+)
+from shared_configs.configs import (
+    INDEXING_ONLY,
+    MIN_THREADS_ML_MODELS,
+    MODEL_SERVER_PORT,
+    SENTRY_DSN,
+    SENTRY_TRACES_SAMPLE_RATE,
+)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -109,6 +111,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
 
 def get_model_app() -> FastAPI:
+    # Point the TLS trust store at any operator-supplied CA roots before the app
+    # (or Sentry, or the first outbound request) is created. Runs on every startup
+    # path since `app = get_model_app()` executes on import.
+    configure_trusted_ca_bundle()
+
     application = FastAPI(
         title="Onyx Model Server", version=__version__, lifespan=lifespan
     )
@@ -141,11 +148,20 @@ def get_model_app() -> FastAPI:
 app = get_model_app()
 
 
-if __name__ == "__main__":
+def run_server() -> None:
+    # Bind all interfaces (loopback included) so the container healthcheck's
+    # localhost probe reaches the server. Mirrors the old shell command's
+    # `--host 0.0.0.0`; MODEL_SERVER_HOST is a client-side address and must not
+    # drive the bind host.
+    host = "0.0.0.0"  # noqa: S104
     logger.notice(
         "Starting Onyx Model Server on http://%s:%s/",
-        MODEL_SERVER_ALLOWED_HOST,
+        host,
         str(MODEL_SERVER_PORT),
     )
     logger.notice("Model Server Version: %s", __version__)
-    uvicorn.run(app, host=MODEL_SERVER_ALLOWED_HOST, port=MODEL_SERVER_PORT)
+    uvicorn.run(app, host=host, port=MODEL_SERVER_PORT)
+
+
+if __name__ == "__main__":
+    run_server()

@@ -74,68 +74,69 @@ from typing import TypedDict
 from uuid import UUID
 
 from docker import DockerClient
-from docker.errors import APIError
-from docker.errors import NotFound
+from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 
 from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import ATTACHMENTS_DIRECTORY
-from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
-from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
-from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
-from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
-from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
-from onyx.server.features.build.configs import SANDBOX_DOCKER_CPU_LIMIT
-from onyx.server.features.build.configs import SANDBOX_DOCKER_MEMORY_LIMIT
-from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
-from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
-from onyx.server.features.build.configs import SANDBOX_DOCKER_VOLUME_PREFIX
-from onyx.server.features.build.configs import SANDBOX_PROXY_CA_VOLUME_NAME
-from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
-from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
-from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
-from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
-from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
-from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.configs import (
+    ATTACHMENTS_DIRECTORY,
+    OPENCODE_DISABLED_TOOLS,
+    OPENCODE_SERVE_PORT,
+    OPENCODE_SERVER_PASSWORD,
+    SANDBOX_API_SERVER_URL,
+    SANDBOX_CONTAINER_IMAGE,
+    SANDBOX_DOCKER_CPU_LIMIT,
+    SANDBOX_DOCKER_MEMORY_LIMIT,
+    SANDBOX_DOCKER_NETWORK,
+    SANDBOX_DOCKER_SOCKET,
+    SANDBOX_DOCKER_VOLUME_PREFIX,
+    SANDBOX_PROXY_CA_VOLUME_NAME,
+    SANDBOX_PROXY_HOST,
+    SANDBOX_PROXY_INJECTED_PLACEHOLDER,
+    SANDBOX_PROXY_PORT,
+)
+from onyx.server.features.build.sandbox.base import (
+    BUN_CACHE_DIR,
+    BUN_IMAGE_CACHE_DIR,
+    SandboxManager,
+)
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     opencode_serve_port_bindings,
-)
-from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     published_opencode_serve_base_url,
 )
-from onyx.server.features.build.sandbox.docker.internal.exec_helpers import ExecError
-from onyx.server.features.build.sandbox.docker.internal.exec_helpers import ExecResult
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
+    ExecError,
+    ExecResult,
     run_in_container,
-)
-from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdin_to_container,
-)
-from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdout_from_container,
 )
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
-from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
-from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.labels import (
+    LABEL_K8S_MANAGED_BY,
+    LABEL_K8S_MANAGED_BY_ONYX,
+    LABEL_SANDBOX_ID,
+    LABEL_TENANT_ID,
+)
+from onyx.server.features.build.sandbox.models import (
+    FileSet,
+    FilesystemEntry,
+    LLMProviderConfig,
+    SandboxInfo,
+    SnapshotResult,
+)
+from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
-)
-from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
 )
+from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -249,50 +250,6 @@ def _stream_stdout_from_container_as_sandbox_user(
         environment=SANDBOX_EXEC_ENV,
         chunk_size=chunk_size,
     )
-
-
-def _build_nextjs_start_script(
-    session_path: str,
-    nextjs_port: int,
-    check_node_modules: bool = False,
-) -> str:
-    """Shell script to spawn Next.js in the background and record its PID."""
-    install_check = ""
-    if check_node_modules:
-        install_check = f"""
-if [ ! -d "node_modules" ]; then
-    echo "Installing dependencies with bun..."
-    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \
-        bun install --frozen-lockfile --backend=hardlink
-fi
-"""
-
-    return f"""
-set -e
-cd {session_path}/outputs/web
-{install_check}
-export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/$(basename {session_path})/webapp"
-if grep -q "WEBAPP_ASSET_PREFIX" next.config.ts 2>/dev/null; then
-    cat > next.config.ts <<'EOF'
-import type {{ NextConfig }} from "next";
-
-const webappBasePath = process.env.ONYX_WEBAPP_BASE_PATH || undefined;
-
-const nextConfig: NextConfig = {{
-  ...(webappBasePath
-    ? {{ basePath: webappBasePath, assetPrefix: webappBasePath }}
-    : {{}}),
-}};
-
-export default nextConfig;
-EOF
-fi
-echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
-NEXTJS_PID=$!
-echo "Next.js server started with PID $NEXTJS_PID"
-echo $NEXTJS_PID > {session_path}/nextjs.pid
-"""
 
 
 def _sandbox_container_name(sandbox_id: str | UUID) -> str:
@@ -1102,22 +1059,22 @@ class DockerSandboxManager(SandboxManager):
     def _render_agents_md(
         self,
         *,
-        llm_config: LLMProviderConfig,
+        agent_provider: str | None,
+        agent_model: str | None,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
         user_name: str | None = None,
     ) -> str:
         """Shell-escaped AGENTS.md for ``printf '%s' '...'``."""
         agent_instructions = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
-            provider=llm_config.provider,
-            model_name=llm_config.model_name,
+            provider=agent_provider,
+            model_name=agent_model,
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
+            organization_instructions=load_settings().craft_instructions,
         )
         return agent_instructions.replace("'", "'\\''")
 
@@ -1127,22 +1084,21 @@ class DockerSandboxManager(SandboxManager):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         agents_md = self._render_agents_md(
-            llm_config=llm_config,
+            agent_provider=llm_config.provider,
+            agent_model=llm_config.model_name,
             nextjs_port=nextjs_port,
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
 
         nextjs_start = (
-            _build_nextjs_start_script(session_path, nextjs_port)
+            build_nextjs_start_script(session_path, nextjs_port)
             if nextjs_port is not None
             else ""
         )
@@ -1226,11 +1182,9 @@ echo "Session cleanup complete"
                 ["/bin/sh", "-c", cleanup_script],
             )
         except ExecError as e:
-            logger.warning(
-                "cleanup_session_workspace exec failed for session %s: %s",
-                session_id,
-                e,
-            )
+            raise RuntimeError(
+                f"Failed to clean up session workspace {session_id}"
+            ) from e
 
     def session_workspace_exists(
         self,
@@ -1478,7 +1432,6 @@ echo "Session cleanup complete"
         snapshot_storage_path: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
-        skills_section: str,
         connectable_apps_section: str,
     ) -> None:
         container = self._require_container(sandbox_id)
@@ -1540,17 +1493,17 @@ fi
         except ExecError as e:
             raise RuntimeError(f"Failed to reinstall deps after restore: {e}") from e
 
-        self._regenerate_session_config(
-            container=container,
-            session_path=session_path,
-            llm_config=llm_config,
+        self.regenerate_session_config(
+            sandbox_id=sandbox_id,
+            session_id=session_id,
+            agent_provider=llm_config.provider,
+            agent_model=llm_config.model_name,
             nextjs_port=nextjs_port,
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
         )
 
         if nextjs_port is not None:
-            start_script = _build_nextjs_start_script(
+            start_script = build_nextjs_start_script(
                 session_path, nextjs_port, check_node_modules=True
             )
             try:
@@ -1561,33 +1514,40 @@ fi
             except ExecError as e:
                 raise RuntimeError(f"Failed to start Next.js after restore: {e}") from e
 
-    def _regenerate_session_config(
+    def regenerate_session_config(
         self,
         *,
-        container: Container,
-        session_path: str,
-        llm_config: LLMProviderConfig,
+        sandbox_id: UUID,
+        session_id: UUID,
+        agent_provider: str | None,
+        agent_model: str | None,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
+        user_name: str | None = None,
     ) -> None:
-        """
-        Rewrite AGENTS.md and the skills symlink post-restore. opencode.json is
-        not written — config lives at container scope via
-        OPENCODE_CONFIG_CONTENT.
-        """
+        """Rewrite generated session configuration and managed symlinks."""
+        container = self._require_container(sandbox_id)
+        session_path = f"{SESSIONS_ROOT}/{session_id}"
         agents_md = self._render_agents_md(
-            llm_config=llm_config,
+            agent_provider=agent_provider,
+            agent_model=agent_model,
             nextjs_port=nextjs_port,
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
+            user_name=user_name,
         )
+        attachments_content_b64 = base64.b64encode(
+            ATTACHMENTS_SECTION_CONTENT.encode()
+        ).decode()
         script = f"""
 set -e
 mkdir -p {session_path}/.opencode
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
+if [ -n "$(find {session_path}/attachments -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+    printf '\n\n' >> {session_path}/AGENTS.md
+    echo '{attachments_content_b64}' | base64 -d >> {session_path}/AGENTS.md
+fi
 """
         try:
             _run_in_container_as_sandbox_user(
@@ -1806,12 +1766,12 @@ echo "$base"
         script = f"""
 if [ -f "{agents_md_path}" ]; then
     if ! grep -q "## Attachments (PRIORITY)" "{agents_md_path}" 2>/dev/null; then
-        if grep -q "## Skills" "{agents_md_path}" 2>/dev/null; then
+        if grep -q "## Connectable apps" "{agents_md_path}" 2>/dev/null; then
             awk -v content="$(echo "{attachments_b64}" | base64 -d)" '
-                /^## Skills/ {{ print content; print ""; }}
+                /^## Connectable apps/ {{ print content; print ""; }}
                 {{ print }}
             ' "{agents_md_path}" > "{agents_md_path}.tmp" && mv "{agents_md_path}.tmp" "{agents_md_path}"
-            echo "ADDED_BEFORE_SKILLS"
+            echo "ADDED_BEFORE_CONNECTABLE_APPS"
         else
             echo "" >> "{agents_md_path}"
             echo "" >> "{agents_md_path}"

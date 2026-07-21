@@ -10,13 +10,11 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import PersonaSharePermission
-from onyx.db.models import DocumentSet
-from onyx.db.models import Persona
-from onyx.db.models import User
+from onyx.db.models import DocumentSet, Persona, User
 from onyx.db.persona import upsert_persona
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.db.agent_sharing_helpers import create_test_persona
 from tests.external_dependency_unit.db.agent_sharing_helpers import (
+    create_test_persona,
     share_persona_with_user,
 )
 

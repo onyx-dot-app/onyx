@@ -5,20 +5,15 @@ the streaming logic, ID cleaning/mapping, and DocumentInsertionRecord
 construction.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
-from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import TenantState
+from onyx.connectors.models import Document, TextSection
+from onyx.document_index.interfaces_new import IndexingMetadata, TenantState
 from onyx.document_index.vespa.internal_types import EnrichedDocumentIndexingInfo
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import IndexChunk
+from onyx.indexing.models import ChunkEmbedding, DocMetadataAwareIndexChunk, IndexChunk
 
 
 def _make_chunk(

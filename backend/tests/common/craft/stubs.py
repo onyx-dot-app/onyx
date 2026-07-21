@@ -50,21 +50,22 @@ Usage
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterable
-from typing import Any
-from typing import cast
+from collections.abc import Callable, Generator, Iterable
+from typing import Any, cast
 from uuid import UUID
 
-from onyx.server.features.build.sandbox.base import SandboxEvent
-from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotResult
-from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
+from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
+from onyx.server.features.build.sandbox.models import (
+    FileSet,
+    FilesystemEntry,
+    LLMProviderConfig,
+    SandboxInfo,
+    SnapshotResult,
+)
+from onyx.server.features.build.sandbox.serve_transport import (
+    PromptSlot,
+    ServeConnectionInfo,
+)
 
 _UNSET = object()
 
@@ -74,6 +75,15 @@ def _not_configured(method_name: str) -> NotImplementedError:
         f"StubSandboxManager.{method_name} not configured for this test — "
         "set the corresponding attribute or override the method."
     )
+
+
+class RecordingPromptSlot(PromptSlot):
+    def __init__(self, *, acquired: bool) -> None:
+        super().__init__(acquired=acquired)
+        self.extend_calls = 0
+
+    def extend(self) -> None:
+        self.extend_calls += 1
 
 
 class StubSandboxManager(SandboxManager):
@@ -113,6 +123,7 @@ class StubSandboxManager(SandboxManager):
     - ``terminate_silent``
     - ``setup_session_workspace_silent``
     - ``cleanup_session_workspace_silent``
+    - ``dispose_opencode_instance_silent``
     - ``restore_snapshot_silent``
     - ``write_sandbox_file_silent``
     - ``write_files_to_sandbox_silent``
@@ -148,6 +159,7 @@ class StubSandboxManager(SandboxManager):
         self.delete_file_returns: bool | None = None
         self.delete_opencode_session_returns: bool | Exception = True
         self.prompt_slot_returns: bool = True
+        self.dispose_opencode_instance_raises: Exception | None = None
         self.get_upload_stats_returns: tuple[int, int] | None = None
         self.get_webapp_url_returns: str | None = None
         self.generate_pptx_preview_returns: tuple[list[str], bool] | None = None
@@ -160,6 +172,8 @@ class StubSandboxManager(SandboxManager):
         self.terminate_silent: bool = False
         self.setup_session_workspace_silent: bool = False
         self.cleanup_session_workspace_silent: bool = False
+        self.dispose_opencode_instance_silent: bool = False
+        self.regenerate_session_config_silent: bool = False
         self.restore_snapshot_silent: bool = False
         self.write_sandbox_file_silent: bool = False
         self.write_files_to_sandbox_silent: bool = False
@@ -178,6 +192,7 @@ class StubSandboxManager(SandboxManager):
         self.terminated_sandbox_ids: list[UUID] = []
         self.setup_session_workspace_count: int = 0
         self.cleanup_session_workspace_count: int = 0
+        self.regenerate_session_config_count: int = 0
         self.create_snapshot_count: int = 0
         self.create_opencode_history_snapshot_count: int = 0
         self.restore_snapshot_count: int = 0
@@ -197,6 +212,7 @@ class StubSandboxManager(SandboxManager):
         self.delete_file_count: int = 0
         self.delete_opencode_session_count: int = 0
         self.prompt_slot_count: int = 0
+        self.dispose_opencode_instance_count: int = 0
         self.write_sandbox_file_count: int = 0
         self.get_upload_stats_count: int = 0
         self.write_files_to_sandbox_count: int = 0
@@ -207,6 +223,7 @@ class StubSandboxManager(SandboxManager):
         self.last_terminate_sandbox_id: UUID | None = None
         self.last_setup_session_workspace_payload: dict[str, Any] | None = None
         self.last_cleanup_session_workspace_payload: dict[str, Any] | None = None
+        self.last_regenerate_session_config_payload: dict[str, Any] | None = None
         self.last_create_snapshot_payload: dict[str, Any] | None = None
         self.last_create_opencode_history_snapshot_payload: dict[str, Any] | None = None
         self.create_opencode_history_snapshot_payloads: list[dict[str, Any]] = []
@@ -222,11 +239,14 @@ class StubSandboxManager(SandboxManager):
         self.last_delete_file_payload: dict[str, Any] | None = None
         self.last_delete_opencode_session_payload: dict[str, Any] | None = None
         self.last_prompt_slot_payload: dict[str, Any] | None = None
+        self.last_dispose_opencode_instance_payload: dict[str, Any] | None = None
         self.last_write_sandbox_file_payload: dict[str, Any] | None = None
         self.last_get_upload_stats_payload: dict[str, Any] | None = None
         self.last_write_files_to_sandbox_payload: dict[str, Any] | None = None
         self.last_get_webapp_url_payload: dict[str, Any] | None = None
         self.last_generate_pptx_preview_payload: dict[str, Any] | None = None
+        self.last_prompt_slot: RecordingPromptSlot | None = None
+        self.abort_calls: list[tuple[UUID, UUID, str]] = []
 
     # ------------------------------------------------------------------
     # send_message_events property: snapshot iterables on assignment so
@@ -290,7 +310,6 @@ class StubSandboxManager(SandboxManager):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
@@ -300,7 +319,6 @@ class StubSandboxManager(SandboxManager):
             "session_id": session_id,
             "llm_config": llm_config,
             "nextjs_port": nextjs_port,
-            "skills_section": skills_section,
             "connectable_apps_section": connectable_apps_section,
             "user_name": user_name,
         }
@@ -319,6 +337,30 @@ class StubSandboxManager(SandboxManager):
         }
         if not self.cleanup_session_workspace_silent:
             raise _not_configured("cleanup_session_workspace")
+
+    def regenerate_session_config(
+        self,
+        *,
+        sandbox_id: UUID,
+        session_id: UUID,
+        agent_provider: str | None,
+        agent_model: str | None,
+        nextjs_port: int | None,
+        connectable_apps_section: str,
+        user_name: str | None = None,
+    ) -> None:
+        self.regenerate_session_config_count += 1
+        self.last_regenerate_session_config_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+            "agent_provider": agent_provider,
+            "agent_model": agent_model,
+            "nextjs_port": nextjs_port,
+            "connectable_apps_section": connectable_apps_section,
+            "user_name": user_name,
+        }
+        if not self.regenerate_session_config_silent:
+            raise _not_configured("regenerate_session_config")
 
     def create_snapshot(
         self,
@@ -368,7 +410,6 @@ class StubSandboxManager(SandboxManager):
         snapshot_storage_path: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
-        skills_section: str,
         connectable_apps_section: str,
     ) -> None:
         self.restore_snapshot_count += 1
@@ -378,7 +419,6 @@ class StubSandboxManager(SandboxManager):
             "snapshot_storage_path": snapshot_storage_path,
             "nextjs_port": nextjs_port,
             "llm_config": llm_config,
-            "skills_section": skills_section,
             "connectable_apps_section": connectable_apps_section,
         }
         if not self.restore_snapshot_silent:
@@ -423,13 +463,35 @@ class StubSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         build_session_id: UUID,
-    ) -> Generator[bool, None, None]:
+        acquire_timeout: float = 10.0,
+        *,
+        fail_open: bool = True,
+    ) -> Generator[PromptSlot, None, None]:
         self.prompt_slot_count += 1
         self.last_prompt_slot_payload = {
             "sandbox_id": sandbox_id,
             "build_session_id": build_session_id,
+            "acquire_timeout": acquire_timeout,
+            "fail_open": fail_open,
         }
-        yield self.prompt_slot_returns
+        slot = RecordingPromptSlot(acquired=self.prompt_slot_returns)
+        self.last_prompt_slot = slot
+        yield slot
+
+    def dispose_opencode_instance(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> None:
+        self.dispose_opencode_instance_count += 1
+        self.last_dispose_opencode_instance_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+        }
+        if self.dispose_opencode_instance_raises is not None:
+            raise self.dispose_opencode_instance_raises
+        if not self.dispose_opencode_instance_silent:
+            raise _not_configured("dispose_opencode_instance")
 
     def ensure_opencode_session(
         self,
@@ -458,6 +520,8 @@ class StubSandboxManager(SandboxManager):
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
+        should_abort_on_teardown: Callable[[], bool] | None = None,
+        turn_timeout_seconds: float | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         self.send_message_count += 1
         self.last_send_message_payload = {
@@ -469,11 +533,21 @@ class StubSandboxManager(SandboxManager):
             "agent_model": agent_model,
             "on_opencode_session_resolved": on_opencode_session_resolved,
             "should_interrupt": should_interrupt,
+            "should_abort_on_teardown": should_abort_on_teardown,
+            "turn_timeout_seconds": turn_timeout_seconds,
         }
         if self._send_message_events is None:
             raise _not_configured("send_message")
         # Iterate over the snapshot — re-driveable across calls.
         yield from self._send_message_events
+
+    def abort_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_session_id: str,
+    ) -> None:
+        self.abort_calls.append((sandbox_id, session_id, opencode_session_id))
 
     def subscribe_to_opencode_session(
         self,

@@ -1,36 +1,36 @@
 from collections.abc import Sequence
-from datetime import datetime
-from datetime import timezone
-from datetime import UTC
+from datetime import UTC, datetime, timezone
 from enum import Enum
-from typing import Any
-from typing import Generic
-from typing import TypeVar
+from typing import Any, Generic, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import PermissionSyncStatus
-from onyx.db.enums import ProcessingMode
-from onyx.db.index_attempt_metrics_models import IndexAttemptStage
-from onyx.db.index_attempt_metrics_models import STAGE_SCOPE
-from onyx.db.index_attempt_metrics_models import StageScope
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import DocPermissionSyncAttempt
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    PermissionSyncStatus,
+    ProcessingMode,
+)
+from onyx.db.index_attempt_metrics_models import (
+    STAGE_SCOPE,
+    IndexAttemptStage,
+    StageScope,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    DocPermissionSyncAttempt,
+    ExternalGroupPermissionSyncAttempt,
+    IndexAttempt,
+    IndexAttemptStageMetric,
+    IndexingStatus,
+    TaskStatus,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import ExternalGroupPermissionSyncAttempt
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptStageMetric
-from onyx.db.models import IndexingStatus
-from onyx.db.models import TaskStatus
 from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -770,6 +770,7 @@ class GoogleServiceAccountKey(BaseModel):
 
 class GoogleServiceAccountCredentialRequest(BaseModel):
     google_primary_admin: str | None = None  # email of user to impersonate
+    service_account_key: GoogleServiceAccountKey
 
 
 class FileUploadResponse(BaseModel):

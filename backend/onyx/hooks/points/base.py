@@ -1,10 +1,8 @@
-from typing import Any
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from pydantic import BaseModel
 
-from onyx.db.enums import HookFailStrategy
-from onyx.db.enums import HookPoint
+from onyx.db.enums import HookFailStrategy, HookPoint
 
 _REQUIRED_ATTRS = (
     "hook_point",

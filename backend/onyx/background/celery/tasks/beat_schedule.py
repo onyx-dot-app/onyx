@@ -4,18 +4,22 @@ from typing import Any
 
 from celery.schedules import crontab
 
-from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
-from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
-from onyx.configs.app_configs import DISABLE_OPENSEARCH_MIGRATION_TASK
-from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
-from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
-from onyx.configs.app_configs import ONYX_DISABLE_VESPA
-from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
-from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.app_configs import (
+    AUTO_LLM_CONFIG_URL,
+    AUTO_LLM_UPDATE_INTERVAL_SECONDS,
+    DISABLE_OPENSEARCH_MIGRATION_TASK,
+    DISABLE_VECTOR_DB,
+    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX,
+    ENTERPRISE_EDITION_ENABLED,
+    ONYX_DISABLE_VESPA,
+    SCHEDULED_EVAL_DATASET_NAMES,
+)
+from onyx.configs.constants import (
+    ONYX_CLOUD_CELERY_TASK_PREFIX,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
 from onyx.utils.variable_functionality import _LICENSE_ENFORCEMENT_ENABLED
 from shared_configs.configs import MULTI_TENANT
@@ -70,6 +74,18 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
+        },
+    },
+    {
+        "name": "check-for-port",
+        "task": OnyxCeleryTask.CHECK_FOR_PORT,
+        "schedule": timedelta(seconds=30),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            # Intentionally gated (skip_gated defaults True): don't run the port's
+            # expensive re-embed for non-paying tenants; it pauses and self-heals on un-gate.
             "work_gated": True,
         },
     },
@@ -282,6 +298,7 @@ if (
 # Beat task names that require a vector DB. Filtered out when DISABLE_VECTOR_DB.
 _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
     "check-for-indexing",
+    "check-for-port",
     "check-for-connector-deletion",
     "check-for-vespa-sync",
     "check-for-pruning",

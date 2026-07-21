@@ -2,8 +2,7 @@
 caches: the per-tenant Salesforce client and the email->user_id map must never let
 one tenant's org, credentials, or resolved user id serve another tenant's access check."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import ee.onyx.external_permissions.salesforce.utils as sf_utils
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

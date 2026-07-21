@@ -1,24 +1,20 @@
 import re
-from typing import Any
-from typing import cast
-from uuid import UUID
-from uuid import uuid4
+from typing import Any, cast
+from uuid import UUID, uuid4
 
-from sqlalchemy import delete
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, delete, func, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session, selectinload
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.models import ExternalApp
-from onyx.db.models import ExternalAppPolicy
-from onyx.db.models import ExternalAppUserCredential
-from onyx.db.models import User
-from onyx.db.utils import is_set
-from onyx.db.utils import UNSET
-from onyx.db.utils import UnsetType
+from onyx.db.enums import EndpointPolicy, ExternalAppType, SkillSharePermission
+from onyx.db.models import (
+    ExternalApp,
+    ExternalAppPolicy,
+    ExternalAppUserCredential,
+    Skill,
+    User,
+)
+from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
@@ -152,7 +148,7 @@ def get_connectable_apps_for_user(
     db_session: Session,
     user: User,
 ) -> list[ExternalApp]:
-    """Apps the user could connect but hasn't: enabled, visible to them (public /
+    """Apps the user could connect but hasn't: visible to them (public /
     group-granted / personal), requiring per-user credentials the org hasn't
     pre-filled, with no complete credential row yet.
 
@@ -160,20 +156,48 @@ def get_connectable_apps_for_user(
     even once connected. Org-credentialed apps (no user-required keys) are usable
     by everyone, so there's nothing to set up."""
     # Local import breaks the external_app <-> skill module cycle.
-    from onyx.db.skill import all_skills_for_user_incl_external_apps
+    from onyx.db.skill import skill_visible_to_user
 
-    visible_skill_ids = all_skills_for_user_incl_external_apps(user, db_session)
+    visible_skill_ids = set(
+        db_session.scalars(select(Skill.id).where(skill_visible_to_user(user)))
+    )
     user_creds_by_app = get_user_credentials_by_app_id(db_session, user.id)
     return [
         app
-        for app in get_external_apps(db_session)
+        for app in get_external_apps(db_session, enabled_only=True)
         if app.skill_id in visible_skill_ids
         and not is_user_authenticated_for_app(app, user_creds_by_app.get(app.id))
     ]
 
 
+def available_external_app_skill_ids_for_user(
+    db_session: Session,
+    user: User,
+) -> list[UUID]:
+    """Return app-backed skill IDs whose credentials are ready for this user."""
+    rows = db_session.execute(
+        select(ExternalApp, ExternalAppUserCredential)
+        .join(
+            ExternalAppUserCredential,
+            and_(
+                ExternalAppUserCredential.external_app_id == ExternalApp.id,
+                ExternalAppUserCredential.user_id == user.id,
+            ),
+            isouter=True,
+        )
+        .where(ExternalApp.enabled.is_(True))
+    ).all()
+    return [
+        app.skill_id
+        for app, credential in rows
+        if is_user_authenticated_for_app(app, credential)
+    ]
+
+
 def get_external_apps(
     db_session: Session,
+    *,
+    enabled_only: bool = False,
 ) -> list[ExternalApp]:
     stmt = (
         select(ExternalApp)
@@ -183,6 +207,8 @@ def get_external_apps(
         )
         .order_by(ExternalApp.id)
     )
+    if enabled_only:
+        stmt = stmt.where(ExternalApp.enabled.is_(True))
     return list(db_session.scalars(stmt).all())
 
 
@@ -251,7 +277,6 @@ def create_external_app(
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
     organization_credentials: dict[str, str],
-    enabled: bool = True,
     is_public: bool = False,
     author_user_id: UUID | None = None,
     slug: str | None = None,
@@ -259,7 +284,8 @@ def create_external_app(
 ) -> ExternalApp:
     """Create the backing Skill row and the ExternalApp that references it (flush
     only — the caller commits after pushing, so a push failure rolls back). The
-    skill owns display metadata + lifecycle; the external_app owns gateway state.
+    the linked skill currently owns display and bundle metadata; the external app
+    owns gateway state and availability.
 
     Built-in providers (``EXTERNAL_APP_BUILT_IN_SKILL_IDS``) get a built-in
     skill row whose slug is the provider id, so slug uniqueness means one
@@ -267,8 +293,10 @@ def create_external_app(
     CUSTOM apps get a bundle-backed skill using ``slug``, or a generated
     ``custom-<uuid>`` slug when omitted.
     """
-    from onyx.db.skill import create_built_in_skill_row__no_commit
-    from onyx.db.skill import create_skill__no_commit
+    from onyx.db.skill import (
+        create_built_in_skill_row__no_commit,
+        create_skill__no_commit,
+    )
 
     # No existing app to restore from on create, so a masked value is rejected.
     organization_credentials = resolve_masked_credentials(
@@ -281,14 +309,13 @@ def create_external_app(
             built_in_skill_id=built_in_skill_id,
             name=name,
             description=description,
-            is_public=is_public,
-            enabled=enabled,
+            public_permission=(SkillSharePermission.VIEWER if is_public else None),
             author_user_id=author_user_id,
             db_session=db_session,
         )
     else:
-        # CUSTOM: use the bundle's filename-derived slug, falling back to a
-        # generated one when no bundle is supplied (e.g. the JSON upsert path).
+        # CUSTOM: use the bundle's canonical name supplied by ingestion, falling
+        # back to a generated slug when no bundle is supplied.
         custom_slug = slug or f"{app_type.value.lower()}-{uuid4().hex[:8]}"
         skill = create_skill__no_commit(
             slug=custom_slug,
@@ -296,14 +323,10 @@ def create_external_app(
             description=description,
             bundle_file_id=bundle_file_id,
             bundle_sha256=bundle_sha256,
-            is_public=is_public,
+            public_permission=(SkillSharePermission.VIEWER if is_public else None),
             author_user_id=author_user_id,
             db_session=db_session,
         )
-        # `create_skill` hardcodes enabled=True; honour the caller's intent.
-        if not enabled:
-            skill.enabled = False
-
     app = ExternalApp(
         skill_id=skill.id,
         app_type=app_type,
@@ -322,9 +345,9 @@ def update_external_app(
     db_session: Session,
     external_app_id: int,
     app_type: ExternalAppType,
+    enabled: bool | UnsetType = UNSET,
     name: str | UnsetType = UNSET,
     description: str | UnsetType = UNSET,
-    enabled: bool | UnsetType = UNSET,
     upstream_url_patterns: list[str] | UnsetType = UNSET,
     auth_template: dict[str, Any] | UnsetType = UNSET,
     organization_credentials: dict[str, str] | UnsetType = UNSET,
@@ -361,19 +384,19 @@ def update_external_app(
             f"'{app.app_type.value}' to '{app_type.value}'.",
         )
 
+    if is_set(enabled):
+        app.enabled = enabled
     if is_set(name):
         app.skill.name = name
     if is_set(description):
         app.skill.description = description
-    if is_set(enabled):
-        app.skill.enabled = enabled
-
     old_bundle_file_id: str | None = None
     if new_bundle_file_id is not None:
         # Keep the slug; only the bundle bytes change.
         old_bundle_file_id = app.skill.bundle_file_id
         app.skill.bundle_file_id = new_bundle_file_id
         app.skill.bundle_sha256 = new_bundle_sha256
+        app.skill.is_valid = True
 
     if is_set(upstream_url_patterns):
         app.upstream_url_patterns = upstream_url_patterns
@@ -400,7 +423,7 @@ def set_external_app_organization_credentials(
 ) -> None:
     """Replace an app's organization credentials (flush only — the caller
     commits). Used by the Onyx-managed provisioning/rotation path — deliberately
-    touches nothing else (enabled state, policies, gateway config are left
+    touches nothing else (skill preferences, policies, gateway config are left
     untouched)."""
     # EncryptedJson column accepts a plain dict and encrypts on write (same
     # assignment shape as update_external_app's masked-credential restore).
@@ -469,6 +492,7 @@ def upsert_external_app_user_credential(
     external_app_id: int,
     user_id: UUID,
     user_credentials: dict[str, Any],
+    granted_scopes: list[str] | None | UnsetType = UNSET,
     resolve_masked_values: bool = False,
 ) -> ExternalAppUserCredential:
     """Create or replace the calling user's credentials for the app, and commit.
@@ -476,6 +500,11 @@ def upsert_external_app_user_credential(
     ``OnyxError(NOT_FOUND)`` if the app doesn't exist. ``resolve_masked_values``
     is for user form submissions that may echo masked display values; internal
     OAuth writers should store provider-returned values as-is.
+
+    ``granted_scopes`` is the connect-time OAuth grant: a list, or ``None`` when
+    a fresh authorize couldn't determine it — both overwrite the stored value
+    (``None`` clears a now-stale grant to "unknown"). The refresh and form paths
+    leave it ``UNSET`` to keep the stored grant untouched.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -497,17 +526,26 @@ def upsert_external_app_user_credential(
             else None,
         )
 
-    stmt = pg_insert(ExternalAppUserCredential).values(
+    stmt = insert(ExternalAppUserCredential).values(
         external_app_id=external_app_id,
         user_id=user_id,
         user_credentials=user_credentials,
+        granted_scopes=granted_scopes if is_set(granted_scopes) else None,
     )
+    # ON CONFLICT DO UPDATE doesn't fire the column's `onupdate`, so bump
+    # `updated_at` explicitly.
+    update_set: dict[str, Any] = {
+        "user_credentials": stmt.excluded.user_credentials,
+        "updated_at": func.now(),
+    }
+    if is_set(granted_scopes):
+        update_set["granted_scopes"] = stmt.excluded.granted_scopes
     stmt = stmt.on_conflict_do_update(
         index_elements=[
             ExternalAppUserCredential.external_app_id,
             ExternalAppUserCredential.user_id,
         ],
-        set_={"user_credentials": stmt.excluded.user_credentials},
+        set_=update_set,
     ).returning(ExternalAppUserCredential)
 
     cred = db_session.scalars(stmt).one()

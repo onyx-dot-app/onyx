@@ -9,7 +9,7 @@ import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
 import { Settings, Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
-import { Divider, InputTypeIn, Spacer, SidebarTab } from "@opal/components";
+import { Divider, InputTypeIn, SidebarTab } from "@opal/components";
 import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
@@ -21,12 +21,13 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { markdown } from "@opal/utils";
 
 const SECTIONS = {
   UNLABELED: null,
+  CRAFT: "Craft",
   AGENTS_AND_ACTIONS: "Agents & Actions",
   DOCUMENTS_AND_KNOWLEDGE: "Documents & Knowledge",
   INTEGRATIONS: "Integrations",
@@ -94,12 +95,19 @@ function buildItems(
     }
   }
 
-  // 2. Agents & Actions
+  // 2. Craft (admin only, deployment-gated)
+  if (!isCurator && settings?.onyx_craft_available === true) {
+    add(SECTIONS.CRAFT, ADMIN_ROUTES.CRAFT_ACCESS);
+    add(SECTIONS.CRAFT, ADMIN_ROUTES.CRAFT_APPS);
+    add(SECTIONS.CRAFT, ADMIN_ROUTES.CRAFT_INSTRUCTIONS);
+  }
+
+  // 3. Agents & Actions
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.AGENTS);
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.MCP_ACTIONS);
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.OPENAPI_ACTIONS);
 
-  // 3. Documents & Knowledge
+  // 4. Documents & Knowledge
   // Shown even in Lite mode; the pages themselves render a no-indexing notice.
   add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
   add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
@@ -112,7 +120,7 @@ function buildItems(
     });
   }
 
-  // 4. Integrations (admin only)
+  // 5. Integrations (admin only)
   if (!isCurator) {
     addGated(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.API_KEYS, Tier.BUSINESS);
     add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.SLACK_BOTS);
@@ -122,7 +130,7 @@ function buildItems(
     }
   }
 
-  // 5. Permissions
+  // 6. Permissions
   if (!isCurator) {
     add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.USERS);
     addGated(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, Tier.BUSINESS);
@@ -131,8 +139,12 @@ function buildItems(
     add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS);
   }
 
-  // 6. Usage (admin only)
+  // 7. Usage (admin only)
   if (!isCurator) {
+    // Tracing config is not supported on multi-tenant cloud.
+    if (!enableCloud) {
+      add(SECTIONS.USAGE, ADMIN_ROUTES.TRACING);
+    }
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.TOKEN_RATE_LIMITS, Tier.ENTERPRISE);
     if (
@@ -143,10 +155,11 @@ function buildItems(
     }
   }
 
-  // 7. Organization (admin only)
+  // 8. Organization (admin only)
   if (!isCurator) {
     addGated(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, Tier.BUSINESS);
     add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SECURITY_HARDENING);
+    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SSO_PROVIDERS);
     if (hasSubscription) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
     }
@@ -235,7 +248,7 @@ export default function AdminSidebar() {
   return (
     <SidebarLayouts.Root>
       <SidebarLayouts.Header
-        logo={renderAppLogo}
+        renderAppLogo={renderSidebarLogo}
         showLogoWhenFolded={showLogoWhenFolded}
       >
         {folded ? (
@@ -313,7 +326,7 @@ export default function AdminSidebar() {
         {!folded && <Divider paddingPerpendicular="sm" />}
         <SidebarTab
           icon={SvgX}
-          href="/app"
+          href={pathname?.startsWith("/admin/craft") ? "/craft/v1" : "/app"}
           variant="sidebar-light"
           folded={folded}
         >

@@ -6,6 +6,7 @@ import {
   SvgGoogleCalendar,
   SvgGoogleDrive,
   SvgHubspot,
+  SvgNotion,
 } from "@opal/logos";
 import { SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
@@ -19,6 +20,7 @@ export type ExternalAppType =
   | "LINEAR"
   | "GITHUB"
   | "HUBSPOT"
+  | "NOTION"
   | "CUSTOM";
 
 const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
@@ -30,6 +32,7 @@ const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
     LINEAR: SvgLinear,
     GITHUB: SvgGithub,
     HUBSPOT: SvgHubspot,
+    NOTION: SvgNotion,
   };
 
 /** Logo for a known `app_type`, with a generic fallback for CUSTOM /
@@ -92,7 +95,7 @@ export interface ExternalAppAdminResponse {
   enabled: boolean;
   actions: ActionPolicyView[];
   // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
-  // admin may only enable/disable + set policies (the UI hides the rest).
+  // admin may only set availability and policies (the UI hides the rest).
   is_onyx_managed: boolean;
 }
 

@@ -6,23 +6,22 @@ from typing import Any
 
 import requests
 
-from onyx.configs.app_configs import DISABLE_TELEMETRY
-from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
-from onyx.configs.constants import KV_CUSTOMER_UUID_KEY
-from onyx.configs.constants import KV_INSTANCE_DOMAIN_KEY
-from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.app_configs import DISABLE_TELEMETRY, ENTERPRISE_EDITION_ENABLED
+from onyx.configs.constants import (
+    KV_CUSTOMER_UUID_KEY,
+    KV_INSTANCE_DOMAIN_KEY,
+    MilestoneRecordType,
+)
+from onyx.db.encrypted_kv_store import load_encrypted_kv, upsert_encrypted_kv
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
-from onyx.key_value_store.factory import get_kv_store
-from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.key_value_store.interface import unwrap_str
+from onyx.key_value_store.interface import KvKeyNotFoundError, unwrap_str
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
+    noop_fallback,
 )
-from onyx.utils.variable_functionality import noop_fallback
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -66,13 +65,11 @@ def get_or_generate_uuid() -> str:
     if _CACHED_UUID is not None:
         return _CACHED_UUID
 
-    kv_store = get_kv_store()
-
     try:
-        _CACHED_UUID = unwrap_str(kv_store.load(KV_CUSTOMER_UUID_KEY))
+        _CACHED_UUID = unwrap_str(load_encrypted_kv(KV_CUSTOMER_UUID_KEY))
     except KvKeyNotFoundError:
         _CACHED_UUID = str(uuid.uuid4())
-        kv_store.store(KV_CUSTOMER_UUID_KEY, {"value": _CACHED_UUID}, encrypt=True)
+        upsert_encrypted_kv(KV_CUSTOMER_UUID_KEY, {"value": _CACHED_UUID})
 
     return _CACHED_UUID
 
@@ -83,19 +80,15 @@ def _get_or_generate_instance_domain() -> str | None:  #
     if _CACHED_INSTANCE_DOMAIN is not None:
         return _CACHED_INSTANCE_DOMAIN
 
-    kv_store = get_kv_store()
-
     try:
-        _CACHED_INSTANCE_DOMAIN = unwrap_str(kv_store.load(KV_INSTANCE_DOMAIN_KEY))
+        _CACHED_INSTANCE_DOMAIN = unwrap_str(load_encrypted_kv(KV_INSTANCE_DOMAIN_KEY))
     except KvKeyNotFoundError:
         with get_session_with_current_tenant() as db_session:
             first_user = db_session.query(User).first()
             if first_user:
                 _CACHED_INSTANCE_DOMAIN = first_user.email.split("@")[-1]
-                kv_store.store(
-                    KV_INSTANCE_DOMAIN_KEY,
-                    {"value": _CACHED_INSTANCE_DOMAIN},
-                    encrypt=True,
+                upsert_encrypted_kv(
+                    KV_INSTANCE_DOMAIN_KEY, {"value": _CACHED_INSTANCE_DOMAIN}
                 )
 
     return _CACHED_INSTANCE_DOMAIN

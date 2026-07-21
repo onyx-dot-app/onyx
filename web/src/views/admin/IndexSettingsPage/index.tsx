@@ -5,9 +5,9 @@ import { Formik } from "formik";
 import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { Content, IllustrationContent } from "@opal/layouts";
+import { Content, IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
@@ -71,12 +71,11 @@ import {
   disconnectEmbeddingProvider,
   setNewSearchSettings,
 } from "@/lib/indexing/svc";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { Settings, toSettings } from "@/lib/settings/types";
-import { toast } from "@/hooks/useToast";
 import {
   useConfiguredEmbeddingProviders,
   useCurrentEmbeddingModel,
@@ -845,6 +844,17 @@ export default function IndexSettingsPage() {
             enableReinitialize
             initialValues={initialFormValues}
             onSubmit={async (values) => {
+              // Contextual Retrieval re-embeds each chunk through an LLM; with
+              // the toggle on but no model chosen the port fails, so block here.
+              if (
+                values.enable_contextual_rag &&
+                values.contextual_rag_model_configuration_id === null
+              ) {
+                toast.error(
+                  "Select a Contextual Retrieval LLM before re-indexing."
+                );
+                return;
+              }
               // Custom self-hosted models live outside the static registry,
               // so the form carries their spec (`modelDim`, `normalize`, etc.)
               // in `custom_model` for submission. The provider, however, is
@@ -894,6 +904,10 @@ export default function IndexSettingsPage() {
                 !!values.model_name;
               const stagedModelName = isModelStaged ? values.model_name : null;
               const statusVariant = dirty ? "warning" : undefined;
+              // Block apply when Contextual Retrieval is on but no LLM is set.
+              const contextualRagModelMissing =
+                values.enable_contextual_rag &&
+                values.contextual_rag_model_configuration_id === null;
 
               return (
                 <>
@@ -955,11 +969,19 @@ export default function IndexSettingsPage() {
                   ) : (
                     !NEXT_PUBLIC_CLOUD_ENABLED && (
                       <MessageCard
-                        variant={statusVariant}
+                        variant={
+                          contextualRagModelMissing ? "error" : statusVariant
+                        }
                         headerPadding="sm"
-                        title="Changes require a full re-index."
+                        title={
+                          contextualRagModelMissing
+                            ? "Select a Contextual Retrieval LLM"
+                            : "Changes require a full re-index."
+                        }
                         description={markdown(
-                          "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
+                          contextualRagModelMissing
+                            ? "Contextual Retrieval is enabled but no model is selected. Pick a Contextual Retrieval LLM below before re-indexing — without one, the re-index cannot run."
+                            : "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
                         )}
                         bottomChildren={
                           dirty ? (
@@ -1010,7 +1032,10 @@ export default function IndexSettingsPage() {
                                 >
                                   Revert
                                 </Button>
-                                <Button onClick={() => void submitForm()}>
+                                <Button
+                                  onClick={() => void submitForm()}
+                                  disabled={contextualRagModelMissing}
+                                >
                                   Apply & Re-index
                                 </Button>
                               </div>

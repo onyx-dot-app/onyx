@@ -1,38 +1,36 @@
 import httpx
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
-from onyx.db.constants import UNSET
-from onyx.db.constants import UnsetType
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.constants import UNSET, UnsetType
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
-from onyx.db.hook import create_hook__no_commit
-from onyx.db.hook import delete_hook__no_commit
-from onyx.db.hook import get_hook_by_id
-from onyx.db.hook import get_hook_execution_logs
-from onyx.db.hook import get_hooks
-from onyx.db.hook import update_hook__no_commit
+from onyx.db.hook import (
+    create_hook__no_commit,
+    delete_hook__no_commit,
+    get_hook_by_id,
+    get_hook_execution_logs,
+    get_hooks,
+    update_hook__no_commit,
+)
 from onyx.db.models import Hook
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.api_dependencies import require_hook_enabled
-from onyx.hooks.models import HookCreateRequest
-from onyx.hooks.models import HookExecutionRecord
-from onyx.hooks.models import HookPointMetaResponse
-from onyx.hooks.models import HookResponse
-from onyx.hooks.models import HookUpdateRequest
-from onyx.hooks.models import HookValidateResponse
-from onyx.hooks.models import HookValidateStatus
-from onyx.hooks.registry import get_all_specs
-from onyx.hooks.registry import get_hook_point_spec
+from onyx.hooks.models import (
+    HookCreateRequest,
+    HookExecutionRecord,
+    HookPointMetaResponse,
+    HookResponse,
+    HookUpdateRequest,
+    HookValidateResponse,
+    HookValidateStatus,
+)
+from onyx.hooks.registry import get_all_specs, get_hook_point_spec
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException
-from onyx.utils.url import validate_outbound_http_url
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 

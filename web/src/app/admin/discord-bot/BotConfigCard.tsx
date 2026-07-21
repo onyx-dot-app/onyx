@@ -14,7 +14,7 @@ import {
   useDiscordGuilds,
 } from "@/app/admin/discord-bot/hooks";
 import { createBotConfig, deleteBotConfig } from "@/app/admin/discord-bot/lib";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import { getFormattedDateTime } from "@/lib/dateUtils";
 
