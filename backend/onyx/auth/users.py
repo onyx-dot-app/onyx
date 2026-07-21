@@ -288,7 +288,13 @@ def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
 
 
 def workspace_invite_only_enabled() -> bool:
-    settings = load_settings()
+    try:
+        settings = load_settings(raise_on_error=True)
+    except Exception:
+        # Fail closed: if the setting can't be read, treat the workspace as
+        # invite-only rather than silently admitting uninvited users.
+        logger.error("Could not load invite-only setting; failing closed (invite-only)")
+        return True
     return settings.invite_only_enabled
 
 

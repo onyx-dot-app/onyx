@@ -25,7 +25,7 @@ logger = setup_logger()
 SETTINGS_TTL = 30 * 24 * 60 * 60
 
 
-def load_settings() -> Settings:
+def load_settings(raise_on_error: bool = False) -> Settings:
     kv_store = get_kv_store()
     try:
         stored_settings = kv_store.load(KV_SETTINGS_KEY)
@@ -38,6 +38,10 @@ def load_settings() -> Settings:
         settings = Settings()
     except Exception as e:
         logger.error("Error loading settings from KV store: %s", str(e))
+        # Callers guarding access control (e.g. the invite-only check) opt in to
+        # re-raise so they can fail closed instead of trusting the default.
+        if raise_on_error:
+            raise
         settings = Settings()
 
     cache = get_cache_backend()
