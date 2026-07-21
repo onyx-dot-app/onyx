@@ -36,6 +36,11 @@ interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
    * overlays. Use over non-flat backgrounds the gradients can't match.
    */
   mask?: boolean;
+
+  /**
+   * Class for the outer wrapper (e.g. flex sizing within a parent column).
+   */
+  containerClassName?: string;
 }
 
 /**
@@ -66,6 +71,7 @@ function ShadowDiv({
   bottomOnly = false,
   topOnly = false,
   mask = false,
+  containerClassName,
   className,
   children,
   style,
@@ -117,7 +123,7 @@ function ShadowDiv({
   const maskImage = `linear-gradient(to bottom, transparent 0, black ${topFade}, black calc(100% - ${bottomFade}), transparent 100%)`;
 
   return (
-    <div className="relative min-h-0 flex flex-col">
+    <div className={cn("relative min-h-0 flex flex-col", containerClassName)}>
       <div
         ref={containerRef}
         className={cn("overflow-y-auto", className)}
