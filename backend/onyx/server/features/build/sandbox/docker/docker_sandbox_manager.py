@@ -70,6 +70,7 @@ import time
 from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict
+from urllib.parse import urlparse
 from uuid import UUID
 
 from docker import DockerClient
@@ -84,7 +85,6 @@ from onyx.server.features.build.configs import (
     OPENCODE_DISABLED_TOOLS,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
-    SANDBOX_API_PREFIX,
     SANDBOX_API_SERVER_URL,
     SANDBOX_CONTAINER_IMAGE,
     SANDBOX_DOCKER_CPU_LIMIT,
@@ -531,11 +531,22 @@ def build_container_create_kwargs(
             "Use the Craft overlay's onyx-craft-api alias or an externally reachable URL.",
             api_server_url,
         )
+    elif api_server_url.startswith("https://") and not urlparse(
+        api_server_url
+    ).path.strip("/"):
+        logger.warning(
+            "SANDBOX_API_SERVER_URL=%s has no path prefix. Public Onyx URLs "
+            "usually serve the API under /api — include it in the URL "
+            "(e.g. https://onyx.example/api) or Craft turns will 404.",
+            api_server_url,
+        )
 
     env: dict[str, str] = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
-        "ONYX_API_PREFIX": SANDBOX_API_PREFIX,
+        # The URL already carries any API path prefix; pin the CLI's prefix to
+        # empty so it doesn't append its "/api" default on top.
+        "ONYX_API_PREFIX": "",
         OPENCODE_SERVER_PASSWORD: opencode_password,
         "OPENCODE_CONFIG_CONTENT": opencode_config_json,
     }

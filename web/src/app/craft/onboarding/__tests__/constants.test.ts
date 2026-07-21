@@ -96,9 +96,28 @@ describe("getDefaultLlmSelection", () => {
     });
   });
 
-  it("returns null when no provider has a recommended model", () => {
+  it("falls back to the first visible model when nothing matches the curated list", () => {
     const result = getDefaultLlmSelection([
-      provider("openai", [model("gpt-5-mini")]),
+      {
+        ...provider(
+          "openai",
+          [model("hidden-model", { visible: false }), model("gpt-4o")],
+          7
+        ),
+        name: "Self-hosted OpenAI",
+      },
+    ]);
+    expect(result).toEqual({
+      providerId: 7,
+      providerName: "Self-hosted OpenAI",
+      provider: "openai",
+      modelName: "gpt-4o",
+    });
+  });
+
+  it("returns null when no provider has any visible model", () => {
+    const result = getDefaultLlmSelection([
+      provider("openai", [model("gpt-5-mini", { visible: false })]),
     ]);
     expect(result).toBeNull();
   });

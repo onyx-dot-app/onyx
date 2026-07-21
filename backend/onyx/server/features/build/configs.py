@@ -89,10 +89,13 @@ ENABLE_OPENCODE_DEBUGGING = (
     os.environ.get("ENABLE_OPENCODE_DEBUGGING", "false").lower() == "true"
 )
 
-# Must be set when SANDBOX_BACKEND=kubernetes (no default — varies per
-# deployment).
+# The full base URL a sandbox client uses to reach the Onyx API, path prefix
+# included — exactly the string `curl <URL>/build/...` would use. Examples:
+# "https://onyx.example/api" (through the public reverse proxy, which serves
+# the API under /api) or "http://onyx-api-service.onyx.svc.cluster.local:8080"
+# (directly at the API service, no prefix). Must be set when Craft is enabled
+# (no default — varies per deployment).
 SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
-SANDBOX_API_PREFIX = os.environ.get("SANDBOX_API_PREFIX", "/api")
 
 # ==============================================================================
 # Sandbox egress proxy

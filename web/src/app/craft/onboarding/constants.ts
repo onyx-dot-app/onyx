@@ -99,6 +99,21 @@ export function getDefaultLlmSelection(
     };
   }
 
+  // Must mirror the backend's _select_gateway_default fallback so the picker
+  // reflects the model a session would actually use.
+  for (const provider of candidates) {
+    const modelName = provider.model_configurations.find(
+      (model) => model.is_visible
+    )?.name;
+    if (!modelName) continue;
+    return {
+      providerId: provider.id,
+      providerName: provider.name ?? "",
+      provider: provider.provider,
+      modelName,
+    };
+  }
+
   return null;
 }
 

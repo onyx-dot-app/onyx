@@ -8,7 +8,6 @@ from onyx.llm.well_known_providers.llm_provider_options import (
 from onyx.server.features.build.configs import (
     ONYX_GATEWAY_PATH_PREFIX,
     ONYX_GATEWAY_PROVIDER_ID,
-    SANDBOX_API_PREFIX,
     SANDBOX_API_SERVER_URL,
     SANDBOX_PROXY_INJECTED_PLACEHOLDER,
 )
@@ -168,8 +167,6 @@ def build_onyx_gateway_config(
         )
 
     api_root = SANDBOX_API_SERVER_URL.rstrip("/")
-    if api_prefix := SANDBOX_API_PREFIX.strip("/"):
-        api_root = f"{api_root}/{api_prefix}"
     api_base = f"{api_root}{ONYX_GATEWAY_PATH_PREFIX}/v1"
     default_provider_id, default_model_name = default_selection
     return LLMProviderConfig(

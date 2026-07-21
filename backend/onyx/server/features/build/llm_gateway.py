@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import require_permission
+from onyx.auth.permissions import require_permission, resolve_effective_permissions
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -73,11 +73,21 @@ def _require_sandbox_gateway_access(
     request: Request,
     user: User,
 ) -> User:
+    """The gateway is token-gated: the caller must authenticate with a scoped
+    token whose scopes expand to ``USE_LLM_GATEWAY`` (today only the sandbox
+    PAT's ``CRAFT_SANDBOX`` scope does). Session/API-key auth carries no token
+    scopes and is rejected — ``require_permission`` alone can't express "a
+    gateway-capable scope must be present"."""
     token_scopes: list[Permission] | None = getattr(request.state, "token_scopes", None)
-    if token_scopes is None or Permission.CRAFT_SANDBOX not in token_scopes:
+    token_grants_gateway = (
+        token_scopes is not None
+        and Permission.USE_LLM_GATEWAY.value
+        in resolve_effective_permissions({s.value for s in token_scopes})
+    )
+    if not token_grants_gateway:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "This endpoint is only available to an Onyx Craft sandbox.",
+            "This endpoint requires a token scoped for the Onyx LLM gateway.",
         )
     if not is_craft_enabled_for_user(user):
         raise OnyxError(
@@ -148,6 +158,7 @@ def _prepare_messages(
         cacheable_prefix=cacheable_prefix,
         suffix=messages[-1:],
         continuation=False,
+        with_metadata=False,
     )
     if not isinstance(processed_messages, list):
         raise RuntimeError("Craft gateway message processing returned non-list input")
@@ -261,6 +272,7 @@ def _stream_worker(
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
     tool_choice: ToolChoiceOptions | None,
+    structured_response_format: dict[str, Any] | None,
     max_tokens: int | None,
     reasoning_effort: ReasoningEffort,
     model: str,
@@ -278,6 +290,7 @@ def _stream_worker(
             prompt=messages,
             tools=tools,
             tool_choice=tool_choice,
+            structured_response_format=structured_response_format,
             max_tokens=max_tokens,
             reasoning_effort=reasoning_effort,
         )
@@ -342,6 +355,7 @@ def _stream_sse(
     messages: list[ChatCompletionMessage],
     tools: list[dict[str, Any]] | None,
     tool_choice: ToolChoiceOptions | None,
+    structured_response_format: dict[str, Any] | None,
     max_tokens: int | None,
     reasoning_effort: ReasoningEffort,
     model: str,
@@ -362,6 +376,7 @@ def _stream_sse(
             "messages": messages,
             "tools": tools,
             "tool_choice": tool_choice,
+            "structured_response_format": structured_response_format,
             "max_tokens": max_tokens,
             "reasoning_effort": reasoning_effort,
             "model": model,
@@ -415,6 +430,7 @@ def gateway_chat_completions(
                 messages=messages,
                 tools=request.tools,
                 tool_choice=tool_choice,
+                structured_response_format=request.response_format,
                 max_tokens=max_tokens,
                 reasoning_effort=reasoning_effort,
                 model=request.model,

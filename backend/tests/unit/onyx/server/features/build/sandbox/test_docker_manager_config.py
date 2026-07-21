@@ -798,11 +798,9 @@ def test_compose_uses_internal_api_alias_for_craft() -> None:
     expected_url = (
         "SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-http://onyx-craft-api:8080}"
     )
-    expected_prefix = "SANDBOX_API_PREFIX=${SANDBOX_API_PREFIX-}"
     for service_name in ("api_server", "background"):
         environment = services[service_name]["environment"]
         assert expected_url in environment
-        assert expected_prefix in environment
         assert "SANDBOX_PROXY_HOST=${SANDBOX_PROXY_HOST-sandbox-proxy}" in environment
 
     proxy_environment = services["sandbox-proxy"]["environment"]

@@ -23,26 +23,38 @@ cp "$WT"/deployment/docker_compose/env.template                ~/onyx_data/deplo
 cp "$WT"/deployment/data/nginx/app.conf.template               ~/onyx_data/data/nginx/
 cp "$WT"/deployment/data/nginx/run-nginx.sh                    ~/onyx_data/data/nginx/
 
-# 2. Run installer in --local mode with craft. HOST_IP and HOST_PORT are
-# optional; this example avoids macOS services bound to localhost:5000.
-HOST_IP=127.0.0.1 HOST_PORT=5000 bash "$WT"/deployment/docker_compose/install.sh --local --include-craft
+# 2. Run installer in --local mode with craft.
+bash "$WT"/deployment/docker_compose/install.sh --local --include-craft
 
-# 3. If running an unreleased PR (e.g. opencode-serve), build the backend
+# 3. Fix the .env (existing-env install path skips these; see "Required env vars" below).
+cat >> ~/onyx_data/deployment/.env <<'ENV'
+ENABLE_CRAFT=true
+SANDBOX_BACKEND=docker
+SANDBOX_API_SERVER_URL=http://host.docker.internal:3001
+HOST_PORT=3001
+ENV
+
+# 4. If running an unreleased PR (e.g. opencode-serve), build the backend
 #    and sandbox images locally and point .env at them. See "Running an
 #    unreleased PR" below.
 
-# 4. Bring it up.
+# 5. Bring it up.
 (cd ~/onyx_data/deployment && docker compose -f docker-compose.yml -f docker-compose.craft.yml up -d)
 
-# 5. Configure an LLM provider via Admin UI at http://127.0.0.1:5000.
+# 6. Configure an LLM provider via Admin UI at http://localhost:3001
+#    (Craft will fail with "No default LLM model found" until you do this.)
 ```
 
 ---
 
 ## Prerequisites
 
-- Docker Desktop, OrbStack, or Docker Engine on Linux. The Craft overlay uses
-  the private `onyx-craft-api` network alias on every platform.
+- macOS with **Docker Desktop** (or OrbStack) — these provide `host.docker.internal`
+  resolution from inside the `onyx_craft_sandbox` bridge network, which the
+  sandbox container needs to reach api_server.
+- On Linux, replace `http://host.docker.internal:3001` with your machine's
+  reachable address (or use `--add-host` workarounds). Native Linux Docker
+  does *not* resolve `host.docker.internal` by default.
 - ~80 GB free Docker disk. Onyx's full stack pulls ~30 GB; local image
   builds add another 10–15 GB; build cache balloons to 40+ GB if you let
   it. See [OpenSearch read-only block](#opensearch-flipped-into-read-only-mode-disk-full) below.
@@ -58,8 +70,8 @@ These must end up in `~/onyx_data/deployment/.env` after install:
 |---|---|---|
 | `ENABLE_CRAFT=true` | yes | `--include-craft` sets this (fresh installs and existing `.env`). |
 | `SANDBOX_BACKEND=docker` | yes | `--include-craft` sets this alongside `ENABLE_CRAFT`. |
-| `SANDBOX_API_SERVER_URL` | no | Defaults to `http://onyx-craft-api:8080`, a private alias on the Craft bridge. If you override it with a public reverse-proxy URL, also set `SANDBOX_API_PREFIX=/api`. |
-| `HOST_PORT=5000` | optional | Sets the web app's host port. The installer starts at this value, selects the next available port if needed, and persists it to `.env`. |
+| `SANDBOX_API_SERVER_URL=http://host.docker.internal:3001` | yes | Provision raises `ValueError("SANDBOX_API_SERVER_URL must be set")` without it. Must be a URL the sandbox container can reach **from the `onyx_craft_sandbox` bridge** — compose-internal hostnames (`api_server`, `nginx`) won't resolve there. Match the port to `HOST_PORT`. |
+| `HOST_PORT=3001` | only if 3000 conflicts | Default is 3000; nginx binds this on the host. Free up 3000 or change here. |
 | `IMAGE_TAG` | optional | Uses the normal compose default (`latest`) unless set. Craft uses this same tag for the sandbox image, so do not set a separate sandbox image for normal deployments. There are **no** Craft-specific app/backend images — Craft is enabled at runtime via `ENABLE_CRAFT=true` (above). See [image architecture](../infra/image-architecture.md). |
 | `ONYX_BACKEND_IMAGE` | only when running unreleased PRs | Lets you override just the backend image without forcing model-server / web-server to the same tag. |
 | `AGENT_TRANSPORT=serve` | for serve transport | `docker-compose.craft.yml` defaults this to `serve` (post-#11402); override to `acp` for the rollback path. Reaches the sandbox container via env passthrough. |
@@ -107,17 +119,16 @@ adapt the prompts (Standard mode = `2`, keep existing env = blank).
 `--no-prompt` defaults to **Lite mode**, which is mutually exclusive with
 `--include-craft`. Don't combine them.
 
-### 3. Optional overrides
+### 3. Fix the .env
 
 On an existing `.env`, `--include-craft` writes `ENABLE_CRAFT=true` and
-`SANDBOX_BACKEND=docker` for you. The Compose overlay supplies the private API
-URL, so no platform-specific host address is required. To route through a
-public reverse proxy instead, set both values explicitly:
+`SANDBOX_BACKEND=docker` for you (on both the update and restart paths). It
+does **not** set the host-specific values, so append those yourself:
 
 ```bash
 cat >> ~/onyx_data/deployment/.env <<'ENV'
-SANDBOX_API_SERVER_URL=https://onyx.your-org.example
-SANDBOX_API_PREFIX=/api
+SANDBOX_API_SERVER_URL=http://host.docker.internal:3001
+HOST_PORT=3001
 ENV
 ```
 
@@ -132,8 +143,9 @@ docker compose -f docker-compose.yml -f docker-compose.craft.yml up -d
 ```
 
 The compose file references the `onyx_craft_sandbox` network as
-`external: true`. The installer creates it when `--include-craft` is used. If
-you launch Compose without the installer, create it manually:
+`external: true`. The installer creates it *only on the fresh-install
+path*. If you're updating an existing install with `--include-craft`,
+create it manually:
 
 ```bash
 docker network create onyx_craft_sandbox
@@ -141,9 +153,13 @@ docker network create onyx_craft_sandbox
 
 ### 5. Configure an LLM provider
 
-Open <http://localhost:5000>, log in, go to **Admin Panel → Language
-Models**, and add any supported provider with at least one visible model. Until
-you do this, Craft reports that no accessible model is configured.
+Open <http://localhost:3001>, log in, go to **Admin Panel → Language
+Models**, and add a provider (Anthropic / OpenAI / OpenRouter). Until you
+do this, every Craft prompt fails with:
+
+```
+ValueError: No default LLM model found
+```
 
 ### 6. Try a prompt in Craft
 
@@ -455,8 +471,8 @@ Fix:
 ```bash
 lsof -nP -iTCP:3000 -sTCP:LISTEN     # find PID
 # either kill it, or:
-echo "HOST_PORT=5000" >> ~/onyx_data/deployment/.env
-# then bring up the stack; access at http://localhost:5000
+echo "HOST_PORT=3001" >> ~/onyx_data/deployment/.env
+# then bring up the stack; access at http://localhost:3001
 ```
 
 ### Sandbox image apt build fails
