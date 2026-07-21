@@ -40,6 +40,113 @@ func TestGenerateImage_Success(t *testing.T) {
 	}
 }
 
+func TestGenerateImage_KeepaliveWhitespacePrefix(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`    {
+			"images": [{"data_base64": "YWJj", "mime_type": "image/png", "revised_prompt": "a cat"}]
+		}`))
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	resp, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Images) != 1 {
+		t.Fatalf("expected 1 image, got %d", len(resp.Images))
+	}
+}
+
+func TestGenerateImage_InBandErrorEnvelope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`  {"error_code": "LLM_PROVIDER_ERROR", "detail": "Image generation failed."}`))
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
+	if err == nil {
+		t.Fatal("expected error for in-band error envelope")
+	}
+	var apiErr *api.OnyxAPIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("want *OnyxAPIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 502 {
+		t.Errorf("status = %d, want 502", apiErr.StatusCode)
+	}
+	if apiErr.Detail != "Image generation failed." {
+		t.Errorf("detail = %q", apiErr.Detail)
+	}
+}
+
+func TestGenerateImage_InBandNotFoundEnvelope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"error_code": "NOT_FOUND", "detail": "no provider"}`))
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
+	var apiErr *api.OnyxAPIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("want *OnyxAPIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 404 {
+		t.Errorf("status = %d, want 404", apiErr.StatusCode)
+	}
+}
+
+func TestGenerateImage_EmptyBodyIsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
+	var apiErr *api.OnyxAPIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("want *OnyxAPIError for empty body, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 502 {
+		t.Errorf("status = %d, want 502", apiErr.StatusCode)
+	}
+}
+
+func TestGenerateImage_KeepaliveOnlyStreamIsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`   `))
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
+	if err == nil {
+		t.Fatal("expected error for whitespace-only body")
+	}
+}
+
+func TestGenerateImage_TruncatedStreamIsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`  {"images": [`))
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
+	if err == nil {
+		t.Fatal("expected error for truncated body")
+	}
+}
+
 func TestGenerateImage_404(t *testing.T) {
 	srv := testutil.StatusServer(404)
 	defer srv.Close()

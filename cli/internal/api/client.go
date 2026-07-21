@@ -155,12 +155,35 @@ func (c *Client) Search(ctx context.Context, req models.SearchRequest) (*models.
 // GenerateImage calls POST /image-generation/generate, which generates
 // image(s) using the workspace's default image-gen provider. Uses the 5min
 // client since high-res generation can be slow.
+//
+// The server streams keepalive whitespace before the JSON body (which
+// json.Decoder skips) and reports errors in-band on a 200, since the status
+// line is already committed when a slow generation fails.
 func (c *Client) GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error) {
-	var resp models.ImageGenerationResponse
+	var resp struct {
+		models.ImageGenerationResponse
+		ErrorCode string `json:"error_code"`
+		Detail    string `json:"detail"`
+	}
 	if err := c.doJSONWith(ctx, c.streamingHTTPClient, "POST", "/image-generation/generate", req, &resp); err != nil {
 		return nil, err
 	}
-	return &resp, nil
+	if resp.ErrorCode != "" {
+		var statusCode int
+		switch resp.ErrorCode {
+		case "NOT_FOUND":
+			statusCode = 404
+		case "INVALID_INPUT":
+			statusCode = 400
+		default:
+			statusCode = 502
+		}
+		return nil, &OnyxAPIError{StatusCode: statusCode, Detail: resp.Detail}
+	}
+	if len(resp.Images) == 0 {
+		return nil, &OnyxAPIError{StatusCode: 502, Detail: "server returned no images"}
+	}
+	return &resp.ImageGenerationResponse, nil
 }
 
 // TestConnection checks if the server is reachable and credentials are valid.
