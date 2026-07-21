@@ -62,7 +62,7 @@ def test_create_and_list_skill(admin_user: DATestUser) -> None:
     name = f"test-create-{uuid4().hex[:6]}"
     skill = SkillManager.create_custom(admin_user, name=name)
     assert skill.name == name
-    assert skill.enabled is True
+    assert skill.enabled is False
 
     skills_list = SkillManager.list_all(admin_user)
     custom_names = [skill.name for skill in skills_list.customs]
@@ -315,7 +315,7 @@ def test_curator_can_post_skill(
         skill = SkillManager.create_custom(
             curator, name=f"curator-create-{uuid4().hex[:6]}"
         )
-        assert skill.enabled is True
+        assert skill.enabled is False
     finally:
         # restore so module-shared basic_user fixture stays BASIC
         UserManager.set_role(

@@ -681,9 +681,8 @@ class UserSkillPreference(Base):
         PGUUID(as_uuid=True),
         primary_key=True,
     )
-    # Denormalized for the enabled-name index; the composite FK keeps it exact.
+    # Denormalized for name uniqueness; the composite FK keeps it exact.
     name: Mapped[str] = mapped_column(String(64), nullable=False)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
     __table_args__ = (
         ForeignKeyConstraint(
@@ -694,11 +693,10 @@ class UserSkillPreference(Base):
         ),
         Index("ix_user_skill_preference_skill_id", "skill_id"),
         Index(
-            "uq_user_skill_preference_enabled_name",
+            "uq_user_skill_preference_name",
             "user_id",
             "name",
             unique=True,
-            postgresql_where=enabled.is_(True),
         ),
     )
 

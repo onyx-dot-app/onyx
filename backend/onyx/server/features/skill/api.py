@@ -17,7 +17,6 @@ from onyx.db.skill import (
     affected_user_ids_for_skill,
     create_skill__no_commit,
     delete_skill,
-    enable_skill_for_user_if_unset__no_commit,
     fetch_skill,
     list_skills,
     replace_skill_bundle,
@@ -154,6 +153,7 @@ def set_skill_enabled_for_current_user(
     skill = set_skill_enabled_for_user(
         skill_id=skill_id,
         enabled=request.enabled,
+        replace_conflict=request.replace_conflict,
         user=user,
         db_session=db_session,
     )
@@ -217,11 +217,8 @@ def create_custom_skill(
             author_user_id=user.id,
             db_session=db_session,
         )
-        enable_skill_for_user_if_unset__no_commit(skill, user.id, db_session)
         db_session.commit()
 
-    push_skill_to_affected_sandboxes(skill, db_session)
-    db_session.commit()
     return skill_response_for_user(
         skill,
         user,
@@ -286,11 +283,8 @@ def create_custom_skill_from_editor(
             author_user_id=user.id,
             db_session=db_session,
         )
-        enable_skill_for_user_if_unset__no_commit(skill, user.id, db_session)
         db_session.commit()
 
-    push_skill_to_affected_sandboxes(skill, db_session)
-    db_session.commit()
     return _editable_skill_response(skill, user, db_session)
 
 

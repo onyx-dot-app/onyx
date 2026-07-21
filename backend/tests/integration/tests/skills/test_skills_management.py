@@ -332,7 +332,7 @@ def test_owner_transfer_demotes_previous_owner_and_promotes_new_owner(
     new_owner_response = SkillManager.get_for_user(str(skill_id), new_owner)
     assert new_owner_response.author_user_id == UUID(new_owner.id)
     assert new_owner_response.user_permission == SkillAccessLevel.OWNER
-    assert new_owner_response.enabled is True
+    assert new_owner_response.enabled is False
 
 
 @pytest.mark.parametrize(

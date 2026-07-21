@@ -189,6 +189,7 @@ class SkillBundleInspectResponse(BaseModel):
 
 class SkillEnableRequest(BaseModel):
     enabled: bool
+    replace_conflict: bool = False
 
 
 class SkillCreateRequest(BaseModel):

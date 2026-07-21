@@ -222,7 +222,7 @@ def test_transfer_skill_ownership_removes_new_owner_direct_share_and_upgrades_pr
     assert direct_shares == {previous_owner.id: SkillSharePermission.EDITOR}
 
 
-def test_transfer_skill_ownership_adds_previous_owner_editor_share(
+def test_transfer_skill_ownership_does_not_enable_skill_for_new_owner(
     db_session: Session,
 ) -> None:
     previous_owner = make_user(db_session)
@@ -242,11 +242,10 @@ def test_transfer_skill_ownership_adds_previous_owner_editor_share(
         UserSkillPreference,
         {"user_id": new_owner.id, "skill_id": skill.id},
     )
-    assert preference is not None
-    assert preference.enabled is True
+    assert preference is None
 
 
-def test_transfer_skill_ownership_preserves_new_owner_explicit_disable(
+def test_transfer_skill_ownership_preserves_new_owner_selection(
     db_session: Session,
 ) -> None:
     previous_owner = make_user(db_session)
@@ -260,7 +259,6 @@ def test_transfer_skill_ownership_preserves_new_owner_explicit_disable(
         user_id=new_owner.id,
         skill_id=skill.id,
         name=skill.name,
-        enabled=False,
     )
     db_session.add(preference)
     db_session.flush()
@@ -272,7 +270,13 @@ def test_transfer_skill_ownership_preserves_new_owner_explicit_disable(
     )
 
     assert skill.author_user_id == new_owner.id
-    assert preference.enabled is False
+    assert (
+        db_session.get(
+            UserSkillPreference,
+            {"user_id": new_owner.id, "skill_id": skill.id},
+        )
+        is preference
+    )
 
 
 def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> None:
@@ -314,9 +318,19 @@ def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> Non
         if skill.name == name
     } == {second_skill.id}
 
+    with pytest.raises(OnyxError) as exc_info:
+        set_skill_enabled_for_user(
+            skill_id=second_skill.id,
+            enabled=True,
+            user=first_user,
+            db_session=db_session,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.SKILL_NAME_CONFLICT
+
     set_skill_enabled_for_user(
         skill_id=second_skill.id,
         enabled=True,
+        replace_conflict=True,
         user=first_user,
         db_session=db_session,
     )
@@ -328,12 +342,36 @@ def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> Non
             .where(UserSkillPreference.name == name)
         )
     )
-    assert {
-        preference.skill_id for preference in preferences if preference.enabled
-    } == {second_skill.id}
+    assert {preference.skill_id for preference in preferences} == {second_skill.id}
 
 
-def test_database_rejects_two_enabled_same_name_preferences(
+def test_disabling_skill_deletes_selection(db_session: Session) -> None:
+    user = make_user(db_session)
+    skill = make_skill(db_session, is_public=True)
+    set_skill_enabled_for_user(
+        skill_id=skill.id,
+        enabled=True,
+        user=user,
+        db_session=db_session,
+    )
+
+    set_skill_enabled_for_user(
+        skill_id=skill.id,
+        enabled=False,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert (
+        db_session.get(
+            UserSkillPreference,
+            {"user_id": user.id, "skill_id": skill.id},
+        )
+        is None
+    )
+
+
+def test_database_rejects_two_same_name_preferences(
     db_session: Session,
 ) -> None:
     user = make_user(db_session)
@@ -345,7 +383,6 @@ def test_database_rejects_two_enabled_same_name_preferences(
             user_id=user.id,
             skill_id=first_skill.id,
             name=name,
-            enabled=True,
         )
     )
     db_session.flush()
@@ -357,7 +394,6 @@ def test_database_rejects_two_enabled_same_name_preferences(
                     user_id=user.id,
                     skill_id=second_skill.id,
                     name=name,
-                    enabled=True,
                 )
             )
             db_session.flush()
@@ -374,7 +410,6 @@ def test_preference_name_must_match_skill_name(db_session: Session) -> None:
                     user_id=user.id,
                     skill_id=skill.id,
                     name="different-name",
-                    enabled=True,
                 )
             )
             db_session.flush()

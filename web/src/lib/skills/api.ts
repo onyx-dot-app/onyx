@@ -14,21 +14,25 @@ import type {
   SkillSharePermission,
 } from "@/lib/skills/types";
 
-async function readErrorDetail(res: Response): Promise<string> {
-  try {
-    const body = await res.json();
-    if (typeof body?.detail === "string") return body.detail;
-    if (Array.isArray(body?.detail) && body.detail[0]?.msg)
-      return body.detail[0].msg;
-  } catch {
-    // fall through
-  }
-  return `Request failed (${res.status})`;
-}
-
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    throw new Error(await readErrorDetail(res));
+    let errorCode: string | undefined;
+    let detail = `Request failed (${res.status})`;
+    try {
+      const body = await res.json();
+      if (typeof body?.error_code === "string") errorCode = body.error_code;
+      if (typeof body?.detail === "string") detail = body.detail;
+      else if (Array.isArray(body?.detail) && body.detail[0]?.msg) {
+        detail = body.detail[0].msg;
+      }
+    } catch {
+      // Use the generic status message.
+    }
+    const error = new Error(detail) as Error & {
+      errorCode: string | undefined;
+    };
+    error.errorCode = errorCode;
+    throw error;
   }
   if (res.status === 204) {
     return undefined as T;
@@ -82,12 +86,13 @@ export interface PatchCustomSkillInput {
 
 export async function setSkillEnabled(
   skillId: string,
-  enabled: boolean
+  enabled: boolean,
+  replaceConflict = false
 ): Promise<Skill> {
   const res = await fetch(`/api/skills/${skillId}/enabled`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify({ enabled, replace_conflict: replaceConflict }),
   });
   return handle<Skill>(res);
 }

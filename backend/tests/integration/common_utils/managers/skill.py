@@ -282,10 +282,11 @@ class SkillManager:
         skill: SkillResponse,
         user_performing_action: DATestUser,
         enabled: bool,
+        replace_conflict: bool = False,
     ) -> SkillResponse:
         response = client.put(
             f"{API_SERVER_URL}/skills/{skill.id}/enabled",
-            json={"enabled": enabled},
+            json={"enabled": enabled, "replace_conflict": replace_conflict},
             headers=user_performing_action.headers,
         )
         response.raise_for_status()

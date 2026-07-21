@@ -72,11 +72,11 @@ export default function SkillsPage() {
   async function updateSkillEnabled(
     item: SkillCardItem,
     enabled: boolean,
-    confirmed = false
+    replaceConflict = false
   ) {
     if (
       enabled &&
-      !confirmed &&
+      !replaceConflict &&
       items.some(
         (candidate) =>
           candidate.id !== item.id &&
@@ -109,7 +109,11 @@ export default function SkillsPage() {
       return next;
     });
     try {
-      const updatedSkill = await setSkillEnabled(item.id, enabled);
+      const updatedSkill = await setSkillEnabled(
+        item.id,
+        enabled,
+        replaceConflict
+      );
       await refresh(
         (current) => {
           if (!current) return current;
@@ -149,6 +153,16 @@ export default function SkillsPage() {
         );
       });
     } catch (error) {
+      if (
+        enabled &&
+        !replaceConflict &&
+        error instanceof Error &&
+        "errorCode" in error &&
+        error.errorCode === "SKILL_NAME_CONFLICT"
+      ) {
+        setPendingSwitchTarget(item);
+        return;
+      }
       toast.error(
         error instanceof Error
           ? error.message

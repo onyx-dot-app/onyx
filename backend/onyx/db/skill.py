@@ -170,20 +170,13 @@ def _is_editable_by_user(user: User) -> ColumnElement[bool]:
 
 
 def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
-    explicit_preference = (
-        select(UserSkillPreference.enabled)
-        .where(
-            UserSkillPreference.user_id == user.id,
-            UserSkillPreference.skill_id == Skill.id,
-        )
-        .correlate(Skill)
-        .scalar_subquery()
-    )
     return or_(
-        explicit_preference.is_(True),
-        and_(
-            explicit_preference.is_(None),
-            Skill.built_in_skill_id.isnot(None),
+        Skill.built_in_skill_id.isnot(None),
+        exists(
+            select(UserSkillPreference.user_id).where(
+                UserSkillPreference.user_id == user.id,
+                UserSkillPreference.skill_id == Skill.id,
+            )
         ),
     )
 
@@ -487,25 +480,21 @@ def skill_user_states(
     }
 
 
-def _lock_user_skill_preferences(user_id: UUID, db_session: Session) -> None:
-    db_session.execute(
-        select(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .with_for_update()
-    )
-
-
 def set_skill_enabled_for_user(
     *,
     skill_id: UUID,
     enabled: bool,
+    replace_conflict: bool = False,
     user: User,
     db_session: Session,
 ) -> Skill:
-    # Serialize preference mutations for this user. This makes disabling the
-    # previous same-name selection and enabling the requested row one atomic
-    # switch even when requests arrive concurrently.
-    _lock_user_skill_preferences(user.id, db_session)
+    # Serialize selection changes so a confirmed same-name replacement is
+    # atomic even when requests arrive concurrently.
+    db_session.execute(
+        select(User)
+        .where(User.id == user.id)  # ty: ignore[invalid-argument-type]
+        .with_for_update()
+    )
     skill = fetch_skill(
         skill_id,
         policy=SkillAccessPolicy.VIEW,
@@ -525,70 +514,52 @@ def set_skill_enabled_for_user(
             "This skill cannot be enabled or disabled.",
         )
 
-    if enabled:
+    if not enabled:
         db_session.execute(
-            update(UserSkillPreference)
-            .where(
+            delete(UserSkillPreference).where(
+                UserSkillPreference.user_id == user.id,
+                UserSkillPreference.skill_id == skill.id,
+            )
+        )
+        return skill
+
+    conflicting_skill_id = db_session.scalar(
+        select(UserSkillPreference.skill_id)
+        .where(
+            UserSkillPreference.user_id == user.id,
+            UserSkillPreference.name == skill.name,
+            UserSkillPreference.skill_id != skill.id,
+        )
+        .limit(1)
+    )
+    if conflicting_skill_id is not None and not replace_conflict:
+        raise OnyxError(
+            OnyxErrorCode.SKILL_NAME_CONFLICT,
+            f"Another skill named '{skill.name}' is already enabled.",
+        )
+    if conflicting_skill_id is not None:
+        db_session.execute(
+            delete(UserSkillPreference).where(
                 UserSkillPreference.user_id == user.id,
                 UserSkillPreference.name == skill.name,
-                UserSkillPreference.skill_id != skill.id,
-                UserSkillPreference.enabled.is_(True),
             )
-            .values(enabled=False)
         )
 
-    preference_upsert = (
+    db_session.execute(
         insert(UserSkillPreference)
         .values(
             user_id=user.id,
             skill_id=skill.id,
             name=skill.name,
-            enabled=enabled,
-        )
-        .on_conflict_do_update(
-            index_elements=[
-                UserSkillPreference.user_id,
-                UserSkillPreference.skill_id,
-            ],
-            set_={"enabled": enabled},
-        )
-        .returning(UserSkillPreference)
-    )
-    db_session.scalars(
-        preference_upsert,
-        execution_options={"populate_existing": True},
-    ).one()
-    return skill
-
-
-def enable_skill_for_user_if_unset__no_commit(
-    skill: Skill, user_id: UUID, db_session: Session
-) -> None:
-    _lock_user_skill_preferences(user_id, db_session)
-    same_name_is_enabled = db_session.scalar(
-        select(UserSkillPreference.user_id)
-        .where(
-            UserSkillPreference.user_id == user_id,
-            UserSkillPreference.name == skill.name,
-            UserSkillPreference.enabled.is_(True),
-        )
-        .limit(1)
-    )
-    db_session.execute(
-        insert(UserSkillPreference)
-        .values(
-            user_id=user_id,
-            skill_id=skill.id,
-            name=skill.name,
-            enabled=same_name_is_enabled is None,
         )
         .on_conflict_do_nothing(
             index_elements=[
                 UserSkillPreference.user_id,
                 UserSkillPreference.skill_id,
-            ]
+            ],
         )
     )
+    return skill
 
 
 def _flush_shares(db_session: Session, fk_violation_detail: str) -> None:
@@ -648,11 +619,6 @@ def transfer_skill_ownership(
 
     try:
         skill.author_user_id = new_owner_user_id
-        enable_skill_for_user_if_unset__no_commit(
-            skill,
-            new_owner_user_id,
-            db_session,
-        )
         db_session.execute(
             delete(Skill__User).where(
                 Skill__User.skill_id == skill.id,

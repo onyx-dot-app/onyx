@@ -7,7 +7,6 @@ import {
 } from "@tests/setup/test-utils";
 import SkillsPage from "@/views/SkillsPage";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
-import { builtinFixture } from "@/lib/skills/__fixtures__/picker";
 
 const mockSetSkillEnabled = jest.fn();
 const mockRefresh = jest.fn();
@@ -246,14 +245,12 @@ describe("SkillsPage preference toggles", () => {
 
   it("confirms before switching between skills with the same name", async () => {
     const user = setupUser();
-    const first = builtinFixture({
-      id: "first-id",
-      name: "report-writer",
+    const first = {
+      ...customSkill("first-id", "report-writer"),
       enabled: true,
-      can_toggle: true,
-    });
+    };
     const second = customSkill("second-id", "report-writer");
-    skillsData = { builtins: [first], customs: [second] };
+    skillsData = { builtins: [], customs: [first, second] };
     mockSetSkillEnabled.mockResolvedValueOnce({ ...second, enabled: true });
     render(<SkillsPage />);
 
@@ -275,11 +272,36 @@ describe("SkillsPage preference toggles", () => {
     await user.click(screen.getByRole("button", { name: "Switch skill" }));
 
     await waitFor(() =>
-      expect(mockSetSkillEnabled).toHaveBeenCalledWith("second-id", true)
+      expect(mockSetSkillEnabled).toHaveBeenCalledWith("second-id", true, true)
     );
     await waitFor(() => {
       expect(switches[0]).toHaveAttribute("aria-checked", "false");
       expect(switches[1]).toHaveAttribute("aria-checked", "true");
     });
+  });
+
+  it("confirms a conflict reported by the server", async () => {
+    const user = setupUser();
+    const conflict = Object.assign(new Error("A conflict exists"), {
+      errorCode: "SKILL_NAME_CONFLICT",
+    });
+    mockSetSkillEnabled
+      .mockRejectedValueOnce(conflict)
+      .mockResolvedValueOnce(enabledCustomAt(0));
+    render(<SkillsPage />);
+
+    await user.click(screen.getByRole("switch", { name: "first-skill" }));
+
+    expect(await screen.findByText("Switch active skill?")).toBeInTheDocument();
+    expect(mockToastError).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Switch skill" }));
+    await waitFor(() =>
+      expect(mockSetSkillEnabled).toHaveBeenLastCalledWith(
+        "first-id",
+        true,
+        true
+      )
+    );
   });
 });

@@ -1,5 +1,17 @@
 """Allow duplicate skill names.
 
+Before this migration, ``Skill.slug`` was the unique canonical Agent Skills
+name, while ``Skill.name`` also held editable display metadata. External apps
+stored their display names on the linked skill, and user preferences identified
+skills by ``(user_id, skill_id)`` plus an ``enabled`` boolean.
+
+After the upgrade, ``Skill.name`` is the sole canonical skill name and may be
+shared by multiple skill rows. External-app display names live independently on
+``ExternalApp.name``. ``UserSkillPreference.name`` mirrors the referenced skill
+name through a composite foreign key. A preference row now means the skill is
+enabled, and a unique index enforces at most one selection per ``(user_id,
+name)`` while preserving UUID-based skill identity.
+
 Revision ID: b72c72cd6ef6
 Revises: eec4fc85ef28
 Create Date: 2026-07-20 16:32:40.354227
@@ -78,12 +90,13 @@ def upgrade() -> None:
         ["name", "id"],
         ondelete="CASCADE",
     )
+    op.execute("DELETE FROM user_skill_preference WHERE NOT enabled")
+    op.drop_column("user_skill_preference", "enabled")
     op.create_index(
-        "uq_user_skill_preference_enabled_name",
+        "uq_user_skill_preference_name",
         "user_skill_preference",
         ["user_id", "name"],
         unique=True,
-        postgresql_where=sa.column("enabled").is_(True),
     )
     op.drop_column("skill", "slug")
 
@@ -102,7 +115,7 @@ def downgrade() -> None:
     )
     op.create_unique_constraint("uq_skill_slug", "skill", ["slug"])
     op.drop_index(
-        "uq_user_skill_preference_enabled_name",
+        "uq_user_skill_preference_name",
         table_name="user_skill_preference",
     )
     op.drop_constraint(
@@ -119,6 +132,16 @@ def downgrade() -> None:
         ondelete="CASCADE",
     )
     op.drop_constraint("uq_skill_name_id", "skill", type_="unique")
+    op.add_column(
+        "user_skill_preference",
+        sa.Column(
+            "enabled",
+            sa.Boolean(),
+            server_default=sa.true(),
+            nullable=False,
+        ),
+    )
+    op.alter_column("user_skill_preference", "enabled", server_default=None)
     op.drop_column("user_skill_preference", "name")
     op.alter_column(
         "skill",
