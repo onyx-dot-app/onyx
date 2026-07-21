@@ -29,6 +29,8 @@ def get_gated_app_id(
 ) -> int | None:
     """The ``gated_app`` row id for ``(kind, target_id)``, or ``None`` when the
     target has no identity row yet (nothing has policied/approved it)."""
+    # A None id renders as IS NULL and would match a row of the *other* kind.
+    assert target_id is not None, "target must be flushed before gating"
     return db_session.scalar(
         select(GatedApp.id).where(_target_column(kind) == target_id)
     )

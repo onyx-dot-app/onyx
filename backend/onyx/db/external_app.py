@@ -331,9 +331,10 @@ def create_external_app(
         organization_credentials=organization_credentials,
     )
     db_session.add(app)
+    # Policies key off the gated_app identity row, which needs app.id.
+    db_session.flush()
     if action_policies is not None:
         _write_policies__no_commit(db_session, app, action_policies)
-    db_session.flush()
     return app
 
 
