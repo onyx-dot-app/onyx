@@ -299,6 +299,46 @@ class TestAzureBlobBackedFileStore:
         assert result.mime_type == "image/png"
         file_store.delete_file(file_id)
 
+    def test_delete_file_raises_when_container_missing(
+        self,
+        db_session: Session,  # noqa: ARG002
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """A missing container must raise and keep the DB record, not discard it."""
+        from azure.core.exceptions import ResourceNotFoundError
+
+        container_name = f"onyx-fs-test-{uuid.uuid4().hex[:12]}"
+        store = AzureBlobBackedFileStore(
+            container_name=container_name,
+            azure_prefix=f"test-files-{uuid.uuid4()}",
+            connection_string=_azurite_connection_string(),
+        )
+        store.initialize()
+        file_id = store.save_file(
+            content=BytesIO(b"container vanishes"),
+            display_name="container-gone.txt",
+            file_origin=FileOrigin.OTHER,
+            file_type="text/plain",
+        )
+
+        store._get_blob_service_client().delete_container(container_name)
+
+        with pytest.raises(ResourceNotFoundError):
+            store.delete_file(file_id)
+
+        # Record kept — the file stays resolvable once storage is fixed
+        assert store.has_file(
+            file_id=file_id, file_origin=FileOrigin.OTHER, file_type="text/plain"
+        )
+
+        # Restore the container; the blob is gone, so this now exercises the
+        # tolerated BlobNotFound path and cleans up the record
+        store.initialize()
+        store.delete_file(file_id)
+        assert not store.has_file(
+            file_id=file_id, file_origin=FileOrigin.OTHER, file_type="text/plain"
+        )
+
     def test_db_failure_on_fresh_save_cleans_up_blob(
         self, file_store: AzureBlobBackedFileStore
     ) -> None:

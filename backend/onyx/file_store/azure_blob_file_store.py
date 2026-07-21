@@ -346,7 +346,14 @@ class AzureBlobBackedFileStore(FileStore):
                 )
                 try:
                     blob_client.delete_blob()
-                except ResourceNotFoundError:
+                except ResourceNotFoundError as e:
+                    # Tolerate only a missing blob. A missing container means
+                    # storage is misconfigured or unavailable — keep the DB
+                    # record so the file is still resolvable once fixed.
+                    # (error_code is set at runtime but absent from the
+                    # azure-core stubs, hence getattr.)
+                    if getattr(e, "error_code", None) != "BlobNotFound":
+                        raise
                     logger.warning(
                         "delete_file: File %s not found in Azure Blob Storage "
                         "(key: %s), cleaning up database record.",
@@ -421,6 +428,11 @@ class AzureBlobBackedFileStore(FileStore):
                 mime_type = cast(str, matches[0].mime_type)
             return FileWithMimeType(data=file_content, mime_type=mime_type)
         except Exception:
+            logger.warning(
+                "Failed to read file %s from Azure Blob Storage",
+                file_id,
+                exc_info=True,
+            )
             return None
 
     def list_files_by_prefix(self, prefix: str) -> list[FileRecord]:
