@@ -241,9 +241,7 @@ class TestMultiTenantInviteLogic:
             pass
 
         # Verify invite check WAS called (user_count > 0)
-        mock_verify_invited.assert_called_once_with(
-            mock_user_create.email, sso_managed=False
-        )
+        mock_verify_invited.assert_called_once_with(mock_user_create.email)
 
 
 class TestSingleTenantInviteLogic:
@@ -293,9 +291,7 @@ class TestSingleTenantInviteLogic:
             pass
 
         # Verify invite check was called
-        mock_verify_invited.assert_called_once_with(
-            mock_user_create.email, sso_managed=False
-        )
+        mock_verify_invited.assert_called_once_with(mock_user_create.email)
 
 
 class TestWhitelistBehavior:
@@ -697,7 +693,6 @@ class TestOAuthPlaceholderPromotion:
             account_email="synced@corp.com",
             associate_by_email=False,
             is_verified_by_default=True,
-            sso_managed=True,
         )
 
         # The oauth account attaches instead of UserAlreadyExists, and the
@@ -742,7 +737,6 @@ class TestOAuthPlaceholderPromotion:
                 account_id="acct-2",
                 account_email="taken@corp.com",
                 associate_by_email=False,
-                sso_managed=True,
             )
 
         cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_not_awaited()

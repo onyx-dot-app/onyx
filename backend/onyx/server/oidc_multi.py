@@ -350,8 +350,6 @@ async def oidc_login_callback_for_provider(
         associate_by_email=_ALLOW_AUTO_LINK,
         is_verified_by_default=True,
         allowed_email_domains_override=provider.allowed_email_domains,
-        # Provider rows delegate membership to the IdP.
-        sso_managed=True,
     )
 
     if OIDC_PKCE_ENABLED:
