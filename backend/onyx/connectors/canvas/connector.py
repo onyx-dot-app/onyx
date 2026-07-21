@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any, NoReturn, cast
@@ -416,15 +417,25 @@ class CanvasConnector(
         return assignments
 
     @retry_builder(tries=3, delay=1, backoff=2)
-    def _list_announcements(self, course_id: int) -> list[CanvasAnnouncement]:
+    def _list_announcements(
+        self,
+        course_id: int,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> list[CanvasAnnouncement]:
         """Fetch all announcements for a given course."""
         logger.debug("Fetching announcements for course %s", course_id)
 
         announcements: list[CanvasAnnouncement] = []
         config = _STAGE_CONFIG[CanvasStage.ANNOUNCEMENTS]
+        params = _format_stage_params(config["params"], course_id)
+        params["start_date"] = _unix_to_canvas_time(start if start is not None else 0.0)
+        params["end_date"] = _unix_to_canvas_time(
+            end if end is not None else time.time()
+        )
         for page in self.canvas_client.paginate(
             config["endpoint"].format(course_id=course_id),
-            params=_format_stage_params(config["params"], course_id),
+            params=params,
         ):
             announcements.extend(
                 CanvasAnnouncement.from_api(a, course_id=course_id) for a in page
@@ -976,14 +987,18 @@ class CanvasConnector(
     @override
     def retrieve_all_slim_docs_perm_sync(
         self,
-        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
-        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         slim_doc_batch: list[SlimDocument | HierarchyNode] = []
 
         for course in self._list_courses():
-            for slim_doc in self._retrieve_course_slim_docs(course.id):
+            for slim_doc in self._retrieve_course_slim_docs(
+                course.id,
+                start,
+                end,
+            ):
                 slim_doc_batch.append(slim_doc)
                 if len(slim_doc_batch) < self.batch_size:
                     continue
@@ -1003,6 +1018,8 @@ class CanvasConnector(
     def _retrieve_course_slim_docs(
         self,
         course_id: int,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
     ) -> list[SlimDocument]:
         slim_docs: list[SlimDocument] = []
 
@@ -1024,7 +1041,7 @@ class CanvasConnector(
                 )
             )
 
-        for announcement in self._list_announcements(course_id):
+        for announcement in self._list_announcements(course_id, start, end):
             slim_docs.append(
                 SlimDocument(
                     id=f"canvas-announcement-{announcement.course_id}-{announcement.id}",
