@@ -1087,6 +1087,36 @@ class TestListAnnouncements:
         assert result[0].id == 30
         assert result[1].id == 31
 
+    @patch("onyx.connectors.canvas.connector.time.time", return_value=86400.0)
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_defaults_to_complete_time_range(
+        self,
+        mock_requests: MagicMock,
+        mock_time: MagicMock,
+    ) -> None:
+        mock_requests.get.return_value = _mock_response(json_data=[])
+        connector = _build_connector()
+
+        connector._list_announcements(course_id=1)
+
+        _, kwargs = mock_requests.get.call_args
+        assert kwargs["params"]["start_date"] == "1970-01-01T00:00:00Z"
+        assert kwargs["params"]["end_date"] == "1970-01-02T00:00:00Z"
+        mock_time.assert_called_once_with()
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_uses_explicit_time_range(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.return_value = _mock_response(json_data=[])
+        connector = _build_connector()
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 7, 1, tzinfo=timezone.utc).timestamp()
+
+        connector._list_announcements(course_id=1, start=start, end=end)
+
+        _, kwargs = mock_requests.get.call_args
+        assert kwargs["params"]["start_date"] == "2025-06-01T00:00:00Z"
+        assert kwargs["params"]["end_date"] == "2025-07-01T00:00:00Z"
+
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_empty_response(self, mock_requests: MagicMock) -> None:
         mock_requests.get.return_value = _mock_response(json_data=[])
@@ -1809,6 +1839,17 @@ class TestRetrieveAllSlimDocsPermSync:
             "canvas-assignment-1-20",
             "canvas-announcement-1-30",
         }
+        announcement_call = next(
+            call
+            for call in mock_requests.get.call_args_list
+            if call.args[0].endswith("/announcements")
+        )
+        assert announcement_call.kwargs["params"]["start_date"] == (
+            "2025-07-01T00:00:00Z"
+        )
+        assert announcement_call.kwargs["params"]["end_date"] == (
+            "2025-07-02T00:00:00Z"
+        )
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_permission_error_fails_sync(self, mock_requests: MagicMock) -> None:
@@ -1860,12 +1901,20 @@ class TestCanvasGroupSyncHelpers:
             )
         ]
 
-        group_ids, section_ids = _referenced_group_and_section_ids(connector, 1)
+        indexing_start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        group_ids, section_ids = _referenced_group_and_section_ids(
+            connector,
+            1,
+            indexing_start,
+        )
 
         assert group_ids == {99}
         assert section_ids == {10, 11}
         connector._list_assignments.assert_called_once_with(1)
-        connector._list_announcements.assert_called_once_with(1)
+        connector._list_announcements.assert_called_once_with(
+            1,
+            start=indexing_start,
+        )
 
 
 class TestCanvasPermissionMapping:

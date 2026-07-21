@@ -10,6 +10,7 @@ from onyx.connectors.canvas.connector import (
     canvas_group_group_id,
     canvas_section_group_id,
 )
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.db.models import ConnectorCredentialPair
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -47,6 +48,7 @@ def _fetch_canvas_group_emails(
 def _referenced_group_and_section_ids(
     connector: CanvasConnector,
     course_id: int,
+    indexing_start: SecondsSinceUnixEpoch | None,
 ) -> tuple[set[int], set[int]]:
     group_ids: set[int] = set()
     section_ids: set[int] = set()
@@ -57,7 +59,10 @@ def _referenced_group_and_section_ids(
             if override.course_section_id is not None:
                 section_ids.add(override.course_section_id)
 
-    for announcement in connector._list_announcements(course_id):
+    for announcement in connector._list_announcements(
+        course_id,
+        start=indexing_start,
+    ):
         for section in announcement.sections:
             section_ids.add(section.id)
 
@@ -70,6 +75,11 @@ def canvas_group_sync(
 ) -> Generator[ExternalUserGroup, None, None]:
     connector = CanvasConnector(**cc_pair.connector.connector_specific_config)
     connector.load_credentials(credential_json(cc_pair))
+    indexing_start = (
+        cc_pair.connector.indexing_start.timestamp()
+        if cc_pair.connector.indexing_start is not None
+        else None
+    )
 
     should_emit_all_users = False
     for course in connector._list_courses():
@@ -81,7 +91,9 @@ def canvas_group_sync(
         )
 
         group_ids, referenced_section_ids = _referenced_group_and_section_ids(
-            connector, course.id
+            connector,
+            course.id,
+            indexing_start,
         )
         section_ids = set(context.section_id_to_emails) | referenced_section_ids
         for section_id in section_ids:
