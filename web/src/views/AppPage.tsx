@@ -922,7 +922,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           />
                         )}
                     </Section>
-                    <Spacer rem={1} />
+                    <Spacer rem={1.5} />
                   </Fade>
                 </div>
 
@@ -971,9 +971,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       # Note (@raunakab)
 
                       `shadow-box-01` on AppInputBar extends ~14px below the element
-                      (2px offset + 12px blur). Because the content area in `Root`
-                      (app-layouts.tsx) uses `overflow-auto`, shadows that exceed
-                      the container bounds are clipped.
+                      (2px offset + 12px blur). Because the content area in
+                      `RootLayout` (@opal/layouts) uses `overflow-auto`, shadows
+                      that exceed the container bounds are clipped.
 
                       The animated spacer divs above and below the AppInputBar
                       provide 14px of breathing room so the shadow renders fully.
@@ -981,11 +981,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       the classification is "search" (spacer above) or "chat"
                       (spacer below).
 
-                      There is a corresponding note inside `app-layouts.tsx`
-                      (Footer) that explains why the Footer removes its top
-                      padding during chat to compensate for this extra space.
+                      There is a corresponding note inside the Footer in
+                      `AppChrome.tsx` that explains why the Footer removes its
+                      top padding during chat to compensate for this extra space.
                     */}
-                    <div className={cn(onboardingVisible && "shrink-0 pt-4")}>
+                    <div className={cn(onboardingVisible && "shrink-0 pt-6")}>
                       <div
                         className={cn(
                           "transition-all duration-150 ease-in-out overflow-hidden",
