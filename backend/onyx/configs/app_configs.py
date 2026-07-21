@@ -623,9 +623,16 @@ ONYX_DB_CATALOG_SHARD = os.environ.get("ONYX_DB_CATALOG_SHARD") or ONYX_DB_DEFAU
 # Operator escape hatch: JSON object of tenant_id -> shard name, consulted
 # before the catalog table. Intended for incident response, not routine use.
 ONYX_DB_SHARD_OVERRIDES_JSON = os.environ.get("ONYX_DB_SHARD_OVERRIDES", "").strip()
-# How long a resolved tenant -> shard mapping is cached in-process.
+# How long a resolved tenant -> shard mapping is cached in-process. This is the
+# backstop on staleness when the Redis version channel is unavailable.
 ONYX_DB_SHARD_MAP_TTL_SECONDS = int(
     os.environ.get("ONYX_DB_SHARD_MAP_TTL_SECONDS") or 60
+)
+# How often a process re-reads the shared shard-map version from Redis. Bounds
+# how long a migrator's map flip takes to reach every process, so it is also the
+# floor on how long a tenant must stay frozen after the flip.
+ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS = float(
+    os.environ.get("ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS") or 5
 )
 
 POSTGRES_API_SERVER_POOL_SIZE = int(

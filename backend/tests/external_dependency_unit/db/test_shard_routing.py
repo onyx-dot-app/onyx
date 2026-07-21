@@ -18,7 +18,7 @@ from sqlalchemy import Column, Integer, MetaData, String, Table, select, text
 from sqlalchemy.engine import Engine
 
 from onyx.configs.app_configs import POSTGRES_DB
-from onyx.db.engine import shard_registry, shard_routing
+from onyx.db.engine import shard_registry, shard_routing, shard_version
 from onyx.db.engine.shard_registry import (
     ShardConfigurationError,
     get_catalog_engine,
@@ -28,6 +28,12 @@ from onyx.db.engine.shard_routing import (
     get_engine_for_tenant,
     get_shard_for_tenant,
     invalidate_shard_cache,
+)
+from onyx.db.engine.shard_version import (
+    bump_shard_map_version,
+    poll_shard_map_version,
+    reset_shard_map_version_poller,
+    shard_map_propagation_seconds,
 )
 from onyx.db.engine.sql_engine import (
     SYNC_DB_API,
@@ -105,6 +111,7 @@ def two_shards(
     shard_registry.reset_shard_specs()
     shard_routing.reset_shard_overrides()
     invalidate_shard_cache()
+    reset_shard_map_version_poller()
 
     tenant_a = f"tenant_{uuid4()}"
     tenant_b = f"tenant_{uuid4()}"
@@ -154,6 +161,7 @@ def two_shards(
         conn.commit()
     shard_registry.reset_shard_specs()
     invalidate_shard_cache()
+    reset_shard_map_version_poller()
 
 
 def conn_with_schema(engine: Engine, tenant_id: str) -> Any:
@@ -314,3 +322,86 @@ def test_pool_budget_is_divided_not_multiplied(two_shards: dict[str, Any]) -> No
     """Adding a shard must not multiply the connection load on the database."""
     assert len(get_shard_specs()) == 2
     assert shard_registry.shard_pool_divisor() == 2
+
+
+def _poll_immediately(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Remove the poll throttle so a version bump is observed without waiting."""
+    monkeypatch.setattr(shard_version, "ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS", 0)
+
+
+def test_version_bump_invalidates_without_a_local_invalidate_call(
+    two_shards: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cross-process path: a flip published via Redis must be picked up here.
+
+    Nothing in this test calls `invalidate_shard_cache`, which is what makes it a
+    stand-in for a migrator running in some other pod.
+    """
+    tenant_a = two_shards["tenant_a"]
+    _poll_immediately(monkeypatch)
+
+    # Prime the cache with the pre-flip answer.
+    assert get_shard_for_tenant(tenant_a) == "default"
+
+    with get_catalog_engine().connect() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO public.tenant_shard (tenant_id, shard_name) VALUES (:t, :s) "
+                "ON CONFLICT (tenant_id) DO UPDATE SET shard_name = :s"
+            ),
+            {"t": tenant_a, "s": SECOND_SHARD},
+        )
+        conn.commit()
+
+    bump_shard_map_version()
+
+    assert get_shard_for_tenant(tenant_a) == SECOND_SHARD
+
+    with get_catalog_engine().connect() as conn:
+        conn.execute(
+            text("DELETE FROM public.tenant_shard WHERE tenant_id = :t"),
+            {"t": tenant_a},
+        )
+        conn.commit()
+    bump_shard_map_version()
+
+
+def test_poll_is_throttled_between_intervals(
+    two_shards: dict[str, Any],  # noqa: ARG001
+) -> None:
+    """Without the interval elapsing, a bump must not cost a Redis read per call."""
+    reset_shard_map_version_poller()
+    # First poll establishes the baseline and reports no change.
+    assert poll_shard_map_version() is False
+    bump_shard_map_version()
+    # The default interval has not elapsed, so the bump is not visible yet. This is
+    # the behavior `shard_map_propagation_seconds` exists to account for.
+    assert poll_shard_map_version() is False
+
+
+def test_redis_failure_leaves_cached_routing_intact(
+    two_shards: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Redis outage must degrade to the TTL, not flush or fail the hot path."""
+    tenant_b = two_shards["tenant_b"]
+    _poll_immediately(monkeypatch)
+    assert get_shard_for_tenant(tenant_b) == SECOND_SHARD
+
+    def _explode() -> str:
+        raise ConnectionError("redis is down")
+
+    monkeypatch.setattr(shard_version._VersionPoller, "_read_version", _explode)
+
+    # No raise, no invalidation — and routing still resolves.
+    assert poll_shard_map_version() is False
+    assert get_shard_for_tenant(tenant_b) == SECOND_SHARD
+
+
+def test_propagation_window_exceeds_the_poll_interval(
+    two_shards: dict[str, Any],  # noqa: ARG001
+) -> None:
+    """The migrator's post-flip freeze must outlast the worst-case poll."""
+    assert (
+        shard_map_propagation_seconds()
+        > shard_version.ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS
+    )

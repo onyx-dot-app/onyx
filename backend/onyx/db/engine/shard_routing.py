@@ -4,7 +4,8 @@ This sits on the request hot path, so it must not issue a catalog query per sess
 Resolution order:
 
 1. ``ONYX_DB_SHARD_OVERRIDES`` — static operator escape hatch, no I/O.
-2. In-process TTL cache.
+2. In-process TTL cache, invalidated across processes by the Redis version
+   counter in ``shard_version``.
 3. ``public.tenant_shard`` in the catalog database.
 4. The default shard.
 
@@ -35,6 +36,7 @@ from onyx.db.engine.shard_registry import (
     get_engine_for_shard,
     get_shard_specs,
 )
+from onyx.db.engine.shard_version import poll_shard_map_version
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -110,10 +112,10 @@ class _ShardCache:
 
 
 def invalidate_shard_cache(tenant_id: str | None = None) -> None:
-    """Drop cached routing for one tenant, or all of them.
+    """Drop cached routing for one tenant, or all of them, *in this process only*.
 
-    Called by the tenant migrator immediately after flipping a `tenant_shard` row so
-    this process picks the change up without waiting out the TTL.
+    To invalidate fleet-wide — which is what a migrator flip requires — call
+    ``shard_version.bump_shard_map_version`` instead.
     """
     _ShardCache.invalidate(tenant_id)
 
@@ -166,6 +168,10 @@ def get_shard_for_tenant(tenant_id: str) -> str:
     overrides = get_shard_overrides()
     if tenant_id in overrides:
         return overrides[tenant_id]
+
+    # Throttled; drops every cached mapping when a migrator has published a flip.
+    if poll_shard_map_version():
+        _ShardCache.invalidate()
 
     cached = _ShardCache.get(tenant_id)
     if cached is not None:
