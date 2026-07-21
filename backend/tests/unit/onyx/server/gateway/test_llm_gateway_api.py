@@ -36,9 +36,9 @@ from onyx.llm.models import (
 )
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.server.auth_check import check_router_auth
+from onyx.server.features.build.craft_gateway import is_craft_gateway_request
 from onyx.server.gateway import api as gateway_api
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
-from onyx.server.gateway.consumers import GatewayConsumer
 from onyx.server.gateway.models import ChatCompletionRequest
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
@@ -265,26 +265,20 @@ def test_stream_cleanup_failure_does_not_hang_response() -> None:
 
 
 @pytest.mark.parametrize(
-    ("raw", "supports_reasoning", "default", "expected"),
+    ("raw", "expected"),
     [
-        (None, True, ReasoningEffort.MEDIUM, ReasoningEffort.MEDIUM),
-        (None, True, ReasoningEffort.AUTO, ReasoningEffort.AUTO),
-        (None, False, ReasoningEffort.MEDIUM, ReasoningEffort.AUTO),
-        ("low", False, ReasoningEffort.AUTO, ReasoningEffort.LOW),
-        ("high", True, ReasoningEffort.AUTO, ReasoningEffort.HIGH),
-        ("invalid", True, ReasoningEffort.MEDIUM, ReasoningEffort.AUTO),
+        (None, ReasoningEffort.AUTO),
+        ("low", ReasoningEffort.LOW),
+        ("medium", ReasoningEffort.MEDIUM),
+        ("high", ReasoningEffort.HIGH),
+        ("invalid", ReasoningEffort.AUTO),
     ],
 )
-def test_reasoning_effort_defaults_from_consumer_and_model_capability(
+def test_reasoning_effort_defaults_to_auto(
     raw: str | None,
-    supports_reasoning: bool,
-    default: ReasoningEffort,
     expected: ReasoningEffort,
 ) -> None:
-    assert (
-        gateway_api._parse_reasoning_effort(raw, supports_reasoning, default)
-        is expected
-    )
+    assert gateway_api._parse_reasoning_effort(raw) is expected
 
 
 def test_prepare_messages_marks_stable_prefix_for_prompt_cache() -> None:
@@ -696,26 +690,23 @@ def test_gateway_route_has_single_permission_dependency() -> None:
     assert len(auth_dependencies) == 1
 
 
-def test_endpoint_applies_consumer_policy() -> None:
+def test_endpoint_applies_craft_policy() -> None:
     request = ChatCompletionRequest(
         model="1/test",
         messages=[{"role": "user", "content": "hi"}],
-    )
-    fetch_provider = MagicMock()
-    consumer = GatewayConsumer(
-        name="test",
-        flow=LLMFlow.CRAFT_LLM_GENERATION,
-        matches=lambda _http_request, _user: True,
-        authorize=lambda _http_request, _user: None,
-        fetch_provider=fetch_provider,
     )
     provider = _provider(1, "openai", [_model("test")])
     model_config = provider.model_configurations[0]
     db_session = cast(Session, MagicMock(spec=Session))
     user = cast(User, MagicMock(spec=User))
+    http_request = cast(Request, MagicMock(spec=Request))
 
+    check_access = MagicMock(return_value=True)
     with (
-        patch.object(gateway_api, "resolve_gateway_consumer", return_value=consumer),
+        patch.dict(
+            gateway_api._FLOW_ACCESS_CHECKS,
+            {LLMFlow.CRAFT_LLM_GENERATION: check_access},
+        ),
         patch.object(
             gateway_api,
             "resolve_gateway_model",
@@ -725,19 +716,50 @@ def test_endpoint_applies_consumer_policy() -> None:
     ):
         gateway_api.gateway_chat_completions(
             request=request,
-            http_request=cast(Request, MagicMock(spec=Request)),
+            http_request=http_request,
             user=user,
             db_session=db_session,
         )
 
+    check_access.assert_called_once_with(http_request, user)
     resolve_model.assert_called_once_with(
-        db_session, user, "1/test", fetch_provider=fetch_provider
+        db_session,
+        user,
+        "1/test",
+        fetch_provider=gateway_api.fetch_accessible_llm_provider_by_id,
     )
     handle.assert_called_once_with(
         request=request,
         db_session=db_session,
         provider=provider,
         model_config=model_config,
-        flow=consumer.flow,
-        default_reasoning_effort=consumer.default_reasoning_effort,
+        flow=LLMFlow.CRAFT_LLM_GENERATION,
     )
+
+
+def test_craft_flow_is_gated_by_craft_credential_check() -> None:
+    assert (
+        gateway_api._FLOW_ACCESS_CHECKS[LLMFlow.CRAFT_LLM_GENERATION]
+        is is_craft_gateway_request
+    )
+
+
+def test_endpoint_rejects_non_gateway_credentials() -> None:
+    request = ChatCompletionRequest(
+        model="1/test",
+        messages=[{"role": "user", "content": "hi"}],
+    )
+    with (
+        patch.dict(
+            gateway_api._FLOW_ACCESS_CHECKS,
+            {LLMFlow.CRAFT_LLM_GENERATION: MagicMock(return_value=False)},
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        gateway_api.gateway_chat_completions(
+            request=request,
+            http_request=cast(Request, MagicMock(spec=Request)),
+            user=cast(User, MagicMock(spec=User)),
+            db_session=cast(Session, MagicMock(spec=Session)),
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS

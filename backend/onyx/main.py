@@ -76,7 +76,6 @@ from onyx.server.documents.targeted_reindex import router as targeted_reindex_ro
 from onyx.server.features.admin_banner.api import admin_router as admin_banner_router
 from onyx.server.features.build.api import admin_router as build_admin_router
 from onyx.server.features.build.api import router as build_router
-from onyx.server.features.build.craft_gateway import CRAFT_GATEWAY_CONSUMER
 from onyx.server.features.build.webapp_proxy import public_build_router
 from onyx.server.features.default_assistant.api import (
     router as default_assistant_router,
@@ -110,7 +109,6 @@ from onyx.server.features.user_oauth_token.api import router as user_oauth_token
 from onyx.server.features.web_search.api import router as web_search_router
 from onyx.server.federated.api import router as federated_router
 from onyx.server.gateway.api import router as llm_gateway_router
-from onyx.server.gateway.consumers import register_gateway_consumer
 from onyx.server.kg.api import admin_router as kg_admin_router
 from onyx.server.manage.administrative import router as admin_router
 from onyx.server.manage.code_interpreter.api import (
@@ -539,7 +537,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, public_build_router)
     include_router_with_global_prefix_prepended(application, build_router)
     include_router_with_global_prefix_prepended(application, build_admin_router)
-    register_gateway_consumer(CRAFT_GATEWAY_CONSUMER)
     include_router_with_global_prefix_prepended(application, llm_gateway_router)
     include_router_with_global_prefix_prepended(application, image_generation_router)
     include_router_with_global_prefix_prepended(application, document_set_router)

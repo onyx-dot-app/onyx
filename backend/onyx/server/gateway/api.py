@@ -1,7 +1,7 @@
 import json
 import queue
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.llm import fetch_accessible_llm_provider_by_id
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -27,8 +28,8 @@ from onyx.llm.models import ChatCompletionMessage, ReasoningEffort, ToolChoiceOp
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tracing_wrap import _finalize_tool_calls, _merge_tool_call_delta
+from onyx.server.features.build.craft_gateway import is_craft_gateway_request
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
-from onyx.server.gateway.consumers import ProviderFetcher, resolve_gateway_consumer
 from onyx.server.gateway.models import ChatCompletionRequest
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
@@ -43,6 +44,14 @@ from onyx.utils.threadpool_concurrency import start_thread_with_context
 logger = setup_logger()
 
 router = APIRouter(prefix=GATEWAY_PATH_PREFIX)
+
+ProviderFetcher = Callable[[Session, User, int], LLMProviderView | None]
+
+# Callers never supply the flow; the endpoint picks it and this mapping
+# enforces the matching credential.
+_FLOW_ACCESS_CHECKS: dict[LLMFlow, Callable[[Request, User], bool]] = {
+    LLMFlow.CRAFT_LLM_GENERATION: is_craft_gateway_request,
+}
 
 _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
     list[ChatCompletionMessage]
@@ -89,11 +98,9 @@ def resolve_gateway_model(
     return provider, model
 
 
-def _parse_reasoning_effort(
-    raw: str | None, supports_reasoning: bool, default: ReasoningEffort
-) -> ReasoningEffort:
+def _parse_reasoning_effort(raw: str | None) -> ReasoningEffort:
     if raw is None:
-        return default if supports_reasoning else ReasoningEffort.AUTO
+        return ReasoningEffort.AUTO
     try:
         return ReasoningEffort(raw.lower())
     except ValueError:
@@ -407,7 +414,6 @@ def handle_chat_completion(
     provider: LLMProviderView,
     model_config: ModelConfigurationView,
     flow: LLMFlow,
-    default_reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
 ) -> Any:
     llm = llm_from_provider(
         model_name=model_config.name,
@@ -416,11 +422,7 @@ def handle_chat_completion(
     )
     messages = _prepare_messages(llm, request.messages)
     tool_choice = _parse_tool_choice(request.tool_choice)
-    reasoning_effort = _parse_reasoning_effort(
-        request.reasoning_effort,
-        model_config.supports_reasoning,
-        default_reasoning_effort,
-    )
+    reasoning_effort = _parse_reasoning_effort(request.reasoning_effort)
     max_tokens = request.max_completion_tokens or request.max_tokens
     db_session.close()
 
@@ -487,15 +489,22 @@ def gateway_chat_completions(
     user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> Any:
-    consumer = resolve_gateway_consumer(http_request, user)
+    flow = LLMFlow.CRAFT_LLM_GENERATION
+    if not _FLOW_ACCESS_CHECKS[flow](http_request, user):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "This credential is not authorized to use the Onyx LLM gateway.",
+        )
     provider, model_config = resolve_gateway_model(
-        db_session, user, request.model, fetch_provider=consumer.fetch_provider
+        db_session,
+        user,
+        request.model,
+        fetch_provider=fetch_accessible_llm_provider_by_id,
     )
     return handle_chat_completion(
         request=request,
         db_session=db_session,
         provider=provider,
         model_config=model_config,
-        flow=consumer.flow,
-        default_reasoning_effort=consumer.default_reasoning_effort,
+        flow=flow,
     )
