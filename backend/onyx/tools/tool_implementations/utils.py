@@ -34,10 +34,18 @@ def convert_inference_sections_to_llm_string(
     include_link: bool = False,
     include_document_id: bool = False,
     note: str | None = None,
+    search_query_id: int | None = None,
+    page: int | None = None,
+    automatic_semantic_expansion: str | None = None,
 ) -> tuple[str, dict[int, str]]:
     """Convert InferenceSection objects to a JSON string for LLM.
 
     Returns a JSON string with document results and a citation mapping.
+
+    ``search_query_id``, ``page``, and ``automatic_semantic_expansion`` are
+    internal-search specific: the id lets the model paginate this search via
+    ``paginate_search_results``, and the expansion surfaces the one automatic
+    semantic rephrase run on its behalf.
     """
     # Apply limit if specified
     if limit is not None:
@@ -115,7 +123,13 @@ def convert_inference_sections_to_llm_string(
         results.append(result)
 
     payload: dict[str, object] = {}
+    if search_query_id is not None:
+        payload["search_query_id"] = search_query_id
+    if page is not None:
+        payload["page"] = page
     payload["results"] = results
+    if automatic_semantic_expansion:
+        payload["automatic_semantic_expansion"] = automatic_semantic_expansion
     if note:
         payload["note"] = note
 

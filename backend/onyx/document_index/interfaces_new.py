@@ -378,6 +378,7 @@ class HybridCapable(abc.ABC):
         # TODO(andrei): Make this more strict w.r.t. acl, temporary for now.
         filters: IndexFilters,
         num_to_retrieve: int,
+        offset: int = 0,
     ) -> list[InferenceChunk]:
         """Runs hybrid search and returns a list of inference chunks.
 
@@ -393,6 +394,8 @@ class HybridCapable(abc.ABC):
             filters: Filters for things like permissions, source type, time,
                 etc.
             num_to_retrieve: Number of highest matching chunks to return.
+            offset: Number of top-ranked chunks to skip, for paginating deeper
+                into the results of a repeated query.
 
         Returns:
             Score-ranked (highest first) list of highest matching chunks.
@@ -406,6 +409,7 @@ class HybridCapable(abc.ABC):
         filters: IndexFilters,
         num_to_retrieve: int,
         include_hidden: bool = False,
+        offset: int = 0,
     ) -> list[InferenceChunk]:
         """Runs keyword-only search and returns a list of inference chunks.
 
@@ -418,6 +422,8 @@ class HybridCapable(abc.ABC):
                 marked hidden. Defaults to False (user-facing search). The admin
                 search UI passes True so admins can inspect/unhide documents
                 that ordinary users cannot see.
+            offset: Number of top-ranked chunks to skip, for paginating deeper
+                into the results of a repeated query.
 
         Returns:
             Score-ranked (highest first) list of highest matching chunks.

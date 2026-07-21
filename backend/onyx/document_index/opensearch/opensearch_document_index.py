@@ -2,6 +2,7 @@ import json
 from collections.abc import Iterable
 from typing import Any
 
+from opensearchpy.exceptions import RequestError
 from opensearchpy.helpers.errors import BulkIndexError
 
 from onyx.access.models import DocumentAccess
@@ -118,6 +119,17 @@ def set_cluster_state(client: OpenSearchClient) -> None:
         pipeline_id=zscore_normalization_pipeline_name,
         pipeline_body=zscore_normalization_pipeline_config,
     )
+
+
+def _is_hybrid_pagination_end_error(error: RequestError) -> bool:
+    """OpenSearch hybrid queries raise `search_phase_execution_exception` with a
+    "Reached end of search result" cause when `from` points past the fused
+    result set (regular queries return empty hits instead)."""
+    if error.status_code != 400:
+        return False
+    info = error.info if isinstance(error.info, dict) else {}
+    caused_by = (info.get("error") or {}).get("caused_by") or {}
+    return "Reached end of search result" in str(caused_by.get("reason", ""))
 
 
 def convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
@@ -744,12 +756,14 @@ class OpenSearchDocumentIndex(DocumentIndex):
         query_type: QueryType,  # noqa: ARG002
         filters: IndexFilters,
         num_to_retrieve: int,
+        offset: int = 0,
     ) -> list[InferenceChunk]:
         # TODO(andrei): There is some duplicated logic in this function with
         # others in this file.
         logger.debug(
-            "[OpenSearchDocumentIndex] Hybrid retrieving %s chunks for index %s.",
+            "[OpenSearchDocumentIndex] Hybrid retrieving %s chunks (offset %s) for index %s.",
             num_to_retrieve,
+            offset,
             self._index_name,
         )
         # TODO(andrei): This could be better, the caller should just make this
@@ -769,13 +783,30 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
             include_hidden=False,
+            offset=offset,
         )
         normalization_pipeline_name, _ = get_normalization_pipeline_name_and_config()
-        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
-            body=query_body,
-            search_pipeline_id=normalization_pipeline_name,
-            search_type=OpenSearchSearchType.HYBRID,
-        )
+        try:
+            search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = (
+                self._client.search(
+                    body=query_body,
+                    search_pipeline_id=normalization_pipeline_name,
+                    search_type=OpenSearchSearchType.HYBRID,
+                )
+            )
+        except RequestError as e:
+            # Unlike regular queries (which return empty hits), hybrid queries
+            # raise when `from` points past the fused result set. Treat that as
+            # "no more results" so pagination can end gracefully.
+            if offset > 0 and _is_hybrid_pagination_end_error(e):
+                logger.debug(
+                    "[OpenSearchDocumentIndex] Hybrid offset %s is past the end "
+                    "of results for index %s — returning no chunks.",
+                    offset,
+                    self._index_name,
+                )
+                return []
+            raise
 
         # Good place for a breakpoint to inspect the search hits if you have
         # "explain" enabled.
@@ -797,12 +828,14 @@ class OpenSearchDocumentIndex(DocumentIndex):
         filters: IndexFilters,
         num_to_retrieve: int,
         include_hidden: bool = False,
+        offset: int = 0,
     ) -> list[InferenceChunk]:
         # TODO(andrei): There is some duplicated logic in this function with
         # others in this file.
         logger.debug(
-            "[OpenSearchDocumentIndex] Keyword retrieving %s chunks for index %s.",
+            "[OpenSearchDocumentIndex] Keyword retrieving %s chunks (offset %s) for index %s.",
             num_to_retrieve,
+            offset,
             self._index_name,
         )
         query_body = DocumentQuery.get_keyword_search_query(
@@ -817,6 +850,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
             include_hidden=include_hidden,
+            offset=offset,
         )
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
@@ -1055,6 +1089,7 @@ class OpenSearchIndexPair(DocumentIndex):
         query_type: QueryType,
         filters: IndexFilters,
         num_to_retrieve: int,
+        offset: int = 0,
     ) -> list[InferenceChunk]:
         return self._primary.hybrid_retrieval(
             query,
@@ -1063,6 +1098,7 @@ class OpenSearchIndexPair(DocumentIndex):
             query_type,
             filters,
             num_to_retrieve,
+            offset=offset,
         )
 
     def keyword_retrieval(
@@ -1071,9 +1107,14 @@ class OpenSearchIndexPair(DocumentIndex):
         filters: IndexFilters,
         num_to_retrieve: int,
         include_hidden: bool = False,
+        offset: int = 0,
     ) -> list[InferenceChunk]:
         return self._primary.keyword_retrieval(
-            query, filters, num_to_retrieve, include_hidden=include_hidden
+            query,
+            filters,
+            num_to_retrieve,
+            include_hidden=include_hidden,
+            offset=offset,
         )
 
     def semantic_retrieval(

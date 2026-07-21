@@ -164,6 +164,10 @@ class BasicChunkRequest(BaseModel):
 
     limit: int | None = None
 
+    # Number of top-ranked hits to skip, for paginating deeper into the results
+    # of a repeated query.
+    offset: int = 0
+
 
 class ChunkSearchRequest(BasicChunkRequest):
     # Final filters are calculated from these

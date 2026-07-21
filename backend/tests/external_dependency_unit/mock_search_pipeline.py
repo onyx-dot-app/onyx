@@ -166,6 +166,10 @@ def use_mock_search_pipeline(
             new=override_search_pipeline,
         ),
         patch(
+            "onyx.tools.tool_implementations.search.paginate_search_results_tool.search_pipeline",
+            new=override_search_pipeline,
+        ),
+        patch(
             "onyx.tools.tool_implementations.search.search_tool.check_connectors_exist",
             new=mock_check_connectors_exist,
         ),
@@ -176,10 +180,6 @@ def use_mock_search_pipeline(
         patch(
             "onyx.tools.tool_implementations.search.search_tool.semantic_query_rephrase",
             return_value="",
-        ),
-        patch(
-            "onyx.tools.tool_implementations.search.search_tool.keyword_query_expansion",
-            return_value=[],
         ),
         patch(
             "onyx.tools.tool_runner.run_functions_tuples_in_parallel",

@@ -14,6 +14,7 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import OpenURLToolOverrideKwargs
+from onyx.tools.models import PaginateSearchResultsOverrideKwargs
 from onyx.tools.models import ParallelToolCallResponse
 from onyx.tools.models import PythonToolOverrideKwargs
 from onyx.tools.models import SearchToolOverrideKwargs
@@ -32,6 +33,9 @@ from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryToolOverrideKwargs
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.search.paginate_search_results_tool import (
+    PaginateSearchResultsTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tracing.framework.create import function_span
@@ -49,18 +53,20 @@ GENERIC_TOOL_ERROR_MESSAGE = "Tool failed with error: {error}"
 TOOL_EXECUTION_TIMEOUT_SECONDS = 10 * 60
 
 # Mapping of tool name to the field that should be merged when multiple calls exist
+# NOTE: SearchTool is deliberately NOT mergeable — each internal_search call gets its
+# own search_query_id (for pagination), and its two query-list fields don't merge
+# meaningfully. Parallel search calls run as separate branches instead.
 MERGEABLE_TOOL_FIELDS: dict[str, str] = {
-    SearchTool.NAME: QUERIES_FIELD,
     WebSearchTool.NAME: QUERIES_FIELD,
     OpenURLTool.NAME: URLS_FIELD,
 }
 
 
 def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff]:
-    """Merge multiple tool calls for SearchTool, WebSearchTool, or OpenURLTool into a single call.
+    """Merge multiple tool calls for WebSearchTool or OpenURLTool into a single call.
 
-    For SearchTool (internal_search) and WebSearchTool (web_search), if there are
-    multiple calls, their queries are merged into a single tool call.
+    For WebSearchTool (web_search), if there are multiple calls, their queries are
+    merged into a single tool call.
     For OpenURLTool (open_url), multiple calls have their urls merged.
     Other tool calls are left unchanged.
 
@@ -249,10 +255,12 @@ def run_tool_calls(
 ) -> ParallelToolCallResponse:
     """Run (optionally merged) tool calls in parallel and update citation mappings.
 
-    Before execution, tool calls for `SearchTool`, `WebSearchTool`, and `OpenURLTool`
-    are merged so repeated calls are collapsed into a single call per tool:
-    - `SearchTool` / `WebSearchTool`: merge the `queries` list
+    Before execution, tool calls for `WebSearchTool` and `OpenURLTool` are merged so
+    repeated calls are collapsed into a single call per tool:
+    - `WebSearchTool`: merge the `queries` list
     - `OpenURLTool`: merge the `urls` list
+    `SearchTool` calls are NOT merged — each call is its own search with its own
+    `search_query_id`.
 
     Tools are executed in parallel (threadpool). For tools that generate citations,
     each tool call is assigned a **distinct** `starting_citation_num` range to avoid
@@ -343,6 +351,7 @@ def run_tool_calls(
 
         override_kwargs: (
             SearchToolOverrideKwargs
+            | PaginateSearchResultsOverrideKwargs
             | WebSearchToolOverrideKwargs
             | OpenURLToolOverrideKwargs
             | PythonToolOverrideKwargs
@@ -374,6 +383,13 @@ def run_tool_calls(
             )
             # Increment citation number for next search tool to avoid conflicts
             # Estimate: reserve 100 citation slots per search tool
+            starting_citation_num += 100
+
+        elif isinstance(tool, PaginateSearchResultsTool):
+            override_kwargs = PaginateSearchResultsOverrideKwargs(
+                starting_citation_num=starting_citation_num,
+            )
+            # Increment citation number for next search tool to avoid conflicts
             starting_citation_num += 100
 
         elif isinstance(tool, WebSearchTool):

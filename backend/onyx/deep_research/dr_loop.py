@@ -64,6 +64,9 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.search.paginate_search_results_tool import (
+    PaginateSearchResultsTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tracing.framework.create import function_span
@@ -234,8 +237,14 @@ def run_deep_research_llm_loop(
 
         llm_step_result: LlmStepResult | None = None
 
-        # Filter tools to only allow web search, internal search, and open URL
-        allowed_tool_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
+        # Filter tools to only allow web search, internal search (+ its
+        # pagination companion), and open URL
+        allowed_tool_names = {
+            SearchTool.NAME,
+            PaginateSearchResultsTool.NAME,
+            WebSearchTool.NAME,
+            OpenURLTool.NAME,
+        }
         allowed_tools = [tool for tool in tools if tool.name in allowed_tool_names]
         include_internal_search_tunings = SearchTool.NAME in allowed_tool_names
         orchestrator_start_turn_index = 1

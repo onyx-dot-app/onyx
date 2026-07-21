@@ -30,6 +30,7 @@ def weighted_reciprocal_rank_fusion(
     weights: list[float],
     id_extractor: Callable[[T], str],
     k: int = RRF_K_VALUE,
+    rank_offset: int = 0,
 ) -> list[T]:
     """
     Merge multiple ranked result lists using weighted Reciprocal Rank Fusion (RRF).
@@ -50,6 +51,9 @@ def weighted_reciprocal_rank_fusion(
                      the same item and their scores are accumulated.
         k: Constant to prevent overemphasis on top-ranked items (default: RRF_K_VALUE).
            Typical values are 50-60. Lower values give more weight to top results.
+        rank_offset: Global rank of the first item in each list minus one. Used when the
+           input lists were fetched with a retrieval offset (pagination) so RRF scores
+           stay comparable to those of earlier windows of the same queries.
 
     Returns:
         List of items sorted by their weighted RRF score in descending order.
@@ -82,7 +86,7 @@ def weighted_reciprocal_rank_fusion(
 
     # Compute weighted RRF scores
     for source_idx, (result_list, weight) in enumerate(zip(ranked_results, weights)):
-        for rank, item in enumerate(result_list, start=1):
+        for rank, item in enumerate(result_list, start=rank_offset + 1):
             item_id = id_extractor(item)
 
             # Add weighted RRF score: weight / (k + rank)

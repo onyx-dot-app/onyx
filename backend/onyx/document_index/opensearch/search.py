@@ -323,6 +323,7 @@ class DocumentQuery:
         tenant_state: TenantState,
         index_filters: IndexFilters,
         include_hidden: bool,
+        offset: int = 0,
     ) -> dict[str, Any]:
         """Returns a final hybrid search query.
 
@@ -340,6 +341,7 @@ class DocumentQuery:
             tenant_state: Tenant state containing the tenant ID.
             index_filters: Filters for the hybrid search query.
             include_hidden: Whether to include hidden documents.
+            offset: Number of top-ranked hits to skip (pagination).
 
         Returns:
             A dictionary representing the final hybrid search query.
@@ -347,15 +349,19 @@ class DocumentQuery:
         # WARNING: Profiling does not work with hybrid search; do not add it at
         # this level. See https://github.com/opensearch-project/neural-search/issues/1255
 
-        if num_hits > DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
+        if offset + num_hits > DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
             raise ValueError(
-                f"Bug: num_hits ({num_hits}) is greater than the current maximum allowed "
-                f"result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
+                f"Bug: offset + num_hits ({offset + num_hits}) is greater than the current "
+                f"maximum allowed result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
             )
 
         # TODO(andrei, yuhong): We can tune this more dynamically based on
         # num_hits.
-        max_results_per_subquery = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES
+        # Hybrid pagination requires pagination_depth >= offset + num_hits so
+        # each subquery contributes enough candidates to cover the window.
+        max_results_per_subquery = max(
+            DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES, offset + num_hits
+        )
 
         hybrid_search_subqueries = DocumentQuery._get_hybrid_search_subqueries(
             query_text, query_vector, vector_candidates=max_results_per_subquery
@@ -412,6 +418,8 @@ class DocumentQuery:
                 "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
             },
         }
+        if offset > 0:
+            final_hybrid_search_body["from"] = offset
 
         if not OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED:
             final_hybrid_search_body["highlight"] = (
@@ -432,6 +440,7 @@ class DocumentQuery:
         tenant_state: TenantState,
         index_filters: IndexFilters,
         include_hidden: bool,
+        offset: int = 0,
     ) -> dict[str, Any]:
         """Returns a final keyword search query.
 
@@ -446,14 +455,15 @@ class DocumentQuery:
             tenant_state: Tenant state containing the tenant ID.
             index_filters: Filters for the keyword search query.
             include_hidden: Whether to include hidden documents.
+            offset: Number of top-ranked hits to skip (pagination).
 
         Returns:
             A dictionary representing the final keyword search query.
         """
-        if num_hits > DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
+        if offset + num_hits > DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
             raise ValueError(
-                f"Bug: num_hits ({num_hits}) is greater than the current maximum allowed "
-                f"result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
+                f"Bug: offset + num_hits ({offset + num_hits}) is greater than the current "
+                f"maximum allowed result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
             )
 
         keyword_search_filters = DocumentQuery._get_search_filters(
@@ -492,6 +502,8 @@ class DocumentQuery:
                 "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
             },
         }
+        if offset > 0:
+            final_keyword_search_query["from"] = offset
 
         if not OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED:
             final_keyword_search_query["highlight"] = (

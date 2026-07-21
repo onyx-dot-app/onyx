@@ -6,8 +6,6 @@ from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import SystemMessage
 from onyx.llm.models import UserMessage
 from onyx.prompts.prompt_utils import get_current_llm_day_time
-from onyx.prompts.search_prompts import KEYWORD_REPHRASE_SYSTEM_PROMPT
-from onyx.prompts.search_prompts import KEYWORD_REPHRASE_USER_PROMPT
 from onyx.prompts.search_prompts import REPHRASE_CONTEXT_PROMPT
 from onyx.prompts.search_prompts import SEMANTIC_QUERY_REPHRASE_SYSTEM_PROMPT
 from onyx.prompts.search_prompts import SEMANTIC_QUERY_REPHRASE_USER_PROMPT
@@ -145,83 +143,3 @@ def semantic_query_rephrase(
         raise RuntimeError("LLM failed to generate a rephrased query")
 
     return final_query
-
-
-def keyword_query_expansion(
-    history: list[ChatMinimalTextMessage],
-    llm: LLM,
-    user_info: str | None = None,
-    memories: list[str] | None = None,
-) -> list[str] | None:
-    """Expand a query into multiple keyword-only queries using chat history context.
-
-    Converts the user's query into a set of keyword-based search queries (max 3)
-    that incorporate relevant context from the chat history and optional user
-    information/memories. Returns a list of keyword queries.
-
-    Args:
-        history: Chat message history. Must contain at least one user message.
-        llm: Language model to use for keyword expansion
-        user_info: Optional user information for personalization
-        memories: Optional user memories for personalization
-
-    Returns:
-        List of keyword-only query strings (max 3), or empty list if generation fails
-
-    Raises:
-        ValueError: If history is empty or contains no user messages
-    """
-    if not history:
-        raise ValueError("History cannot be empty for keyword query expansion")
-
-    # Find the last user message in the history
-    last_user_message_idx = None
-    for i in range(len(history) - 1, -1, -1):
-        if history[i].message_type == MessageType.USER:
-            last_user_message_idx = i
-            break
-
-    if last_user_message_idx is None:
-        raise ValueError("History must contain at least one user message")
-
-    # Extract the last user query
-    user_query = history[last_user_message_idx].message
-
-    # Build additional context section
-    additional_context = _build_additional_context(user_info, memories)
-
-    current_datetime_str = get_current_llm_day_time(
-        include_day_of_week=True, full_sentence=False
-    )
-
-    # Build system message with current date
-    system_msg = SystemMessage(
-        content=KEYWORD_REPHRASE_SYSTEM_PROMPT.format(current_date=current_datetime_str)
-    )
-
-    # Convert chat history to message format (excluding the last user message and everything after it)
-    messages: list[ChatCompletionMessage] = [system_msg]
-    messages.extend(_build_message_history(history[:last_user_message_idx]))
-
-    # Add the last message as the user prompt with instructions
-    final_user_msg = UserMessage(
-        content=KEYWORD_REPHRASE_USER_PROMPT.format(
-            additional_context=additional_context, user_query=user_query
-        )
-    )
-    messages.append(final_user_msg)
-
-    # Call LLM and return result with Braintrust tracing
-    with llm_generation_span(
-        llm=llm, flow=LLMFlow.KEYWORD_QUERY_EXPANSION, input_messages=messages
-    ) as span_generation:
-        response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
-        record_llm_response(span_generation, response)
-        content = response.choice.message.content
-
-    # Parse the response - each line is a separate keyword query
-    if not content:
-        return []
-
-    queries = [line.strip() for line in content.strip().split("\n") if line.strip()]
-    return queries

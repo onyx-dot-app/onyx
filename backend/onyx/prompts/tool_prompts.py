@@ -26,7 +26,8 @@ Use the `internal_search` tool to search connected applications for information.
 - Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, team, process, etc.
 - Keyword Queries: queries that are heavily keyword based are often internal document search queries.
 - Ambiguity: questions about something that is not widely known or understood.
-Never provide more than 3 queries at once to `internal_search`.
+Provide an expanded set of queries in a single call — typically around 3 `semantic_queries` and 3 `keyword_queries`.
+To see more results for a search you already ran, call `paginate_search_results` with the returned `search_query_id` and the next page number instead of repeating the same queries.
 """.lstrip()
 
 

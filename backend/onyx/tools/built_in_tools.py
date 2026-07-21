@@ -14,6 +14,9 @@ from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.search.paginate_search_results_tool import (
+    PaginateSearchResultsTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.logger import setup_logger
@@ -48,6 +51,9 @@ BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
 STOPPING_TOOLS_NAMES: list[str] = [ImageGenerationTool.NAME]
 CITEABLE_TOOLS_NAMES: list[str] = [
     SearchTool.NAME,
+    # Companion to SearchTool (not in BUILT_IN_TOOL_MAP — it has no DB row and
+    # is constructed alongside the search tool, sharing its tool id).
+    PaginateSearchResultsTool.NAME,
     WebSearchTool.NAME,
     OpenURLTool.NAME,
 ]

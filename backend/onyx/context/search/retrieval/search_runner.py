@@ -71,6 +71,7 @@ def _embed_and_hybrid_search(
         query_type=query_type,
         filters=query_request.filters,
         num_to_retrieve=query_request.limit or NUM_RETURNED_HITS,
+        offset=query_request.offset,
     )
 
     return top_chunks
@@ -84,6 +85,7 @@ def _keyword_search(
         query=query_request.query,
         filters=query_request.filters,
         num_to_retrieve=query_request.limit or NUM_RETURNED_HITS,
+        offset=query_request.offset,
     )
 
 

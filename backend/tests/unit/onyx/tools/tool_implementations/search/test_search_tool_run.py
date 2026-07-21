@@ -1,28 +1,33 @@
 from __future__ import annotations
 
+import json
 from typing import Any
-from typing import cast
 from unittest.mock import MagicMock
 from unittest.mock import patch
+
+import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import ToolCallException
+from onyx.tools.tool_implementations.search.constants import KEYWORD_ONLY_HYBRID_ALPHA
+from onyx.tools.tool_implementations.search.constants import LLM_SEMANTIC_QUERY_WEIGHT
+from onyx.tools.tool_implementations.search.constants import MODEL_KEYWORD_QUERY_WEIGHT
+from onyx.tools.tool_implementations.search.constants import MODEL_SEMANTIC_QUERY_WEIGHT
+from onyx.tools.tool_implementations.search.constants import ORIGINAL_QUERY_WEIGHT
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.search.turn_state import SearchToolTurnState
 
 MODULE = "onyx.tools.tool_implementations.search.search_tool"
-
-# What decide_search_scope returns: the scope to apply now (or None for everything).
-ScopeDecision = list[DocumentSource] | None
 
 
 def _make_tool(
     user_selected_filters: BaseFilters | None = None,
-    auto_detect_filters: bool = True,
+    turn_state: SearchToolTurnState | None = None,
 ) -> SearchTool:
     """Instantiate SearchTool with non-DB deps mocked; DB/LLM calls are patched in _run."""
     return SearchTool(
@@ -35,48 +40,59 @@ def _make_tool(
         user_selected_filters=user_selected_filters,
         project_id_filter=None,
         enable_slack_search=False,
-        auto_detect_filters=auto_detect_filters,
+        turn_state=turn_state,
     )
 
 
 def _run(
     tool: SearchTool,
     *,
-    connected_sources: list[DocumentSource],
-    decision: ScopeDecision = None,
-    decide_mock: MagicMock | None = None,
+    # str is allowed to exercise the bare-string coercion the tool performs
+    semantic_queries: list[str] | str | None = None,
+    keyword_queries: list[str] | str | None = None,
     skip_query_expansion: bool = False,
-) -> MagicMock:
-    """Run tool.run() with all DB/LLM deps mocked; returns the search_pipeline mock.
+    rephrase_mock: MagicMock | None = None,
+) -> tuple[MagicMock, MagicMock, str]:
+    """Run tool.run() with all DB/LLM deps mocked.
 
-    decide_search_scope is replaced by `decide_mock` when given (so its call args
-    can be inspected), otherwise by a stub returning `decision`. search_pipeline
-    returns no chunks, so run() takes the empty-results early return.
+    Returns (search_pipeline mock, rrf mock, llm_facing_response). search_pipeline
+    returns no chunks, so run() takes the empty-results early return after the
+    fan-out — which still exercises query grouping, weights, and payload fields.
     """
     mock_search_pipeline = MagicMock(return_value=[])
-    decide = (
-        decide_mock if decide_mock is not None else MagicMock(return_value=decision)
+    mock_rrf = MagicMock(return_value=[])
+    rephrase = (
+        rephrase_mock
+        if rephrase_mock is not None
+        else MagicMock(return_value="rephrased query")
     )
+
+    def run_sequential(
+        functions_with_args: list[tuple[Any, tuple]], **_: Any
+    ) -> list[Any]:
+        # Deterministic ordering so mock call order matches submission order.
+        return [func(*args) for func, args in functions_with_args]
+
+    llm_kwargs: dict[str, Any] = {}
+    if semantic_queries is not None:
+        llm_kwargs["semantic_queries"] = semantic_queries
+    if keyword_queries is not None:
+        llm_kwargs["keyword_queries"] = keyword_queries
     with (
         patch(f"{MODULE}.get_session_with_current_tenant") as mock_session_ctx,
         patch(f"{MODULE}.build_access_filters_for_user", return_value=[]),
         patch(f"{MODULE}.get_current_search_settings", return_value=MagicMock()),
         patch(f"{MODULE}.EmbeddingModel"),
         patch(f"{MODULE}.get_federated_retrieval_functions", return_value=[]),
-        patch(
-            f"{MODULE}.fetch_unique_document_sources", return_value=connected_sources
-        ),
-        patch(f"{MODULE}.semantic_query_rephrase", return_value="rephrased query"),
-        patch(f"{MODULE}.keyword_query_expansion", return_value=[]),
-        patch(f"{MODULE}.decide_search_scope", decide),
-        patch(f"{MODULE}.decide_time_filter", MagicMock(return_value=None)),
-        patch(f"{MODULE}.weighted_reciprocal_rank_fusion", return_value=[]),
+        patch(f"{MODULE}.semantic_query_rephrase", rephrase),
+        patch(f"{MODULE}.weighted_reciprocal_rank_fusion", mock_rrf),
         patch(f"{MODULE}.merge_individual_chunks", return_value=[]),
         patch(f"{MODULE}.search_pipeline", mock_search_pipeline),
+        patch(f"{MODULE}.run_functions_tuples_in_parallel", run_sequential),
     ):
         mock_session_ctx.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
-        tool.run(
+        response = tool.run(
             placement=Placement(turn_index=0, tab_index=0),
             override_kwargs=SearchToolOverrideKwargs(
                 starting_citation_num=1,
@@ -89,262 +105,143 @@ def _run(
                 ],
                 skip_query_expansion=skip_query_expansion,
             ),
-            queries=["ticket"],
+            **llm_kwargs,
         )
-    return mock_search_pipeline
+    return mock_search_pipeline, mock_rrf, response.llm_facing_response
 
 
-def _filters_passed_to_search(mock_search_pipeline: MagicMock) -> list[Any]:
+def _requests_sent(mock_search_pipeline: MagicMock) -> list[Any]:
     return [
-        call.kwargs["chunk_search_request"].user_selected_filters
+        call.kwargs["chunk_search_request"]
         for call in mock_search_pipeline.call_args_list
     ]
 
 
-def _queries_sent(mock_search_pipeline: MagicMock) -> list[str]:
-    return [
-        call.kwargs["chunk_search_request"].query
-        for call in mock_search_pipeline.call_args_list
-    ]
-
-
-def _emitted_filter_sources(tool: SearchTool) -> list[list[str]]:
-    """Sources of each SearchToolFilterDelta the tool emitted to the UI."""
-    emit_mock = cast(MagicMock, tool.emitter.emit)
-    emitted = [call.args[0].obj for call in emit_mock.call_args_list]
-    return [obj.sources for obj in emitted if isinstance(obj, SearchToolFilterDelta)]
-
-
-def test_decided_scope_is_passed_to_search() -> None:
-    """When the filter flow decides a source, every search runs scoped to it."""
+def test_missing_both_query_lists_raises() -> None:
     tool = _make_tool()
-    mock_search_pipeline = _run(
+    with pytest.raises(ToolCallException):
+        _run(tool)
+
+
+def test_empty_query_lists_raise() -> None:
+    tool = _make_tool()
+    with pytest.raises(ToolCallException):
+        _run(tool, semantic_queries=[], keyword_queries=["  "])
+
+
+def test_one_list_is_enough() -> None:
+    tool = _make_tool()
+    mock_search_pipeline, _, _ = _run(tool, keyword_queries=["onboarding docs"])
+    queries = [req.query for req in _requests_sent(mock_search_pipeline)]
+    assert "onboarding docs" in queries
+
+
+def test_keyword_queries_run_pure_keyword_and_semantic_run_hybrid() -> None:
+    tool = _make_tool()
+    mock_search_pipeline, _, _ = _run(
         tool,
-        decision=[DocumentSource.CONFLUENCE],
-        connected_sources=[
-            DocumentSource.SLACK,
-            DocumentSource.CONFLUENCE,
-            DocumentSource.GITHUB,
-        ],
+        semantic_queries=["how do I resolve a ticket?"],
+        keyword_queries=["ticket resolution"],
     )
 
-    filters = _filters_passed_to_search(mock_search_pipeline)
-    assert filters, "search_pipeline was never called"
-    for applied in filters:
-        assert applied is not None
-        assert applied.source_type == [DocumentSource.CONFLUENCE]
+    requests_by_query = {req.query: req for req in _requests_sent(mock_search_pipeline)}
+    assert requests_by_query["how do I resolve a ticket?"].hybrid_alpha is None, (
+        "semantic queries should use the default hybrid search"
+    )
+    assert (
+        requests_by_query["ticket resolution"].hybrid_alpha == KEYWORD_ONLY_HYBRID_ALPHA
+    ), "keyword queries should route down the pure keyword (BM25) path"
+    # The automatic rephrase also runs as a semantic (hybrid) query.
+    assert requests_by_query["rephrased query"].hybrid_alpha is None
 
 
-def test_filter_delta_emitted_for_a_subset_scope() -> None:
-    """A scope narrower than the connected sources surfaces a filter to the UI."""
+def test_rrf_weights_per_query_group() -> None:
     tool = _make_tool()
+    mock_search_pipeline, mock_rrf, _ = _run(
+        tool,
+        semantic_queries=["how do I resolve a ticket?"],
+        keyword_queries=["ticket resolution"],
+    )
+
+    queries = [req.query for req in _requests_sent(mock_search_pipeline)]
+    weights = mock_rrf.call_args.kwargs["weights"]
+    weight_by_query = dict(zip(queries, weights))
+
+    assert weight_by_query["rephrased query"] == LLM_SEMANTIC_QUERY_WEIGHT
+    assert weight_by_query["how do I resolve a ticket?"] == MODEL_SEMANTIC_QUERY_WEIGHT
+    assert weight_by_query["ticket resolution"] == MODEL_KEYWORD_QUERY_WEIGHT
+    assert weight_by_query["resolve the ticket"] == ORIGINAL_QUERY_WEIGHT
+
+
+def test_search_query_id_increments_and_is_in_payload() -> None:
+    tool = _make_tool()
+    _, _, first_response = _run(tool, semantic_queries=["first search"])
+    _, _, second_response = _run(
+        tool, semantic_queries=["second search"], skip_query_expansion=True
+    )
+
+    assert json.loads(first_response)["search_query_id"] == 1
+    assert json.loads(second_response)["search_query_id"] == 2
+
+
+def test_automatic_expansion_surfaced_only_when_rephrase_runs() -> None:
+    tool = _make_tool()
+    _, _, first_response = _run(tool, semantic_queries=["first search"])
+    assert (
+        json.loads(first_response)["automatic_semantic_expansion"] == "rephrased query"
+    )
+
+    _, _, second_response = _run(
+        tool, semantic_queries=["second search"], skip_query_expansion=True
+    )
+    assert "automatic_semantic_expansion" not in json.loads(second_response)
+
+
+def test_rephrase_skipped_on_repeat_calls() -> None:
+    tool = _make_tool()
+    rephrase_mock = MagicMock(return_value="rephrased query")
+
+    _run(tool, semantic_queries=["first"], rephrase_mock=rephrase_mock)
     _run(
         tool,
-        decision=[DocumentSource.CONFLUENCE],
-        connected_sources=[DocumentSource.CONFLUENCE, DocumentSource.GITHUB],
-    )
-    assert _emitted_filter_sources(tool) == [["confluence"]]
-
-
-def test_no_filter_delta_when_scope_covers_all_sources() -> None:
-    """Scoping to every connected source is equivalent to an unscoped search, so
-    no filter is surfaced (the UI keeps its default 'internal documents' label)."""
-    tool = _make_tool()
-    connected = [DocumentSource.CONFLUENCE, DocumentSource.GITHUB]
-    _run(tool, decision=connected, connected_sources=connected)
-    assert _emitted_filter_sources(tool) == []
-
-
-def test_no_decided_scope_leaves_search_unscoped() -> None:
-    """A no-scope decision applies no source filter."""
-    tool = _make_tool()
-    mock_search_pipeline = _run(
-        tool,
-        decision=None,
-        connected_sources=[DocumentSource.SLACK, DocumentSource.CONFLUENCE],
+        semantic_queries=["second"],
+        skip_query_expansion=True,
+        rephrase_mock=rephrase_mock,
     )
 
-    filters = _filters_passed_to_search(mock_search_pipeline)
-    assert filters, "search_pipeline was never called"
-    for applied in filters:
-        assert applied is None or applied.source_type is None
+    assert rephrase_mock.call_count == 1
 
 
-def test_persona_restriction_is_refined_by_the_decision() -> None:
-    """A persona source restriction is the outer bound; the decision refines
-    WITHIN it (here, down to a single source)."""
-    tool = _make_tool(
-        BaseFilters(
-            source_type=[
-                DocumentSource.CONFLUENCE,
-                DocumentSource.GITHUB,
-                DocumentSource.SLACK,
-            ]
-        )
-    )
-    mock_search_pipeline = _run(
-        tool,
-        decision=[DocumentSource.CONFLUENCE],
-        connected_sources=[
-            DocumentSource.CONFLUENCE,
-            DocumentSource.GITHUB,
-            DocumentSource.SLACK,
-        ],
-    )
+def test_rephrase_computed_once_even_without_skip_flag() -> None:
+    """Parallel first-cycle calls both run without skip_query_expansion; the
+    shared turn state makes the rephrase run only once."""
+    turn_state = SearchToolTurnState()
+    tool = _make_tool(turn_state=turn_state)
+    rephrase_mock = MagicMock(return_value="rephrased query")
 
-    filters = _filters_passed_to_search(mock_search_pipeline)
-    assert filters, "search_pipeline was never called"
-    for applied in filters:
-        assert applied is not None
-        assert applied.source_type == [DocumentSource.CONFLUENCE]
+    _run(tool, semantic_queries=["first"], rephrase_mock=rephrase_mock)
+    _run(tool, semantic_queries=["second"], rephrase_mock=rephrase_mock)
+
+    assert rephrase_mock.call_count == 1
 
 
-def test_persona_restriction_applies_when_decision_does_not_route() -> None:
-    """With a persona restriction and a no-scope decision, the search stays scoped
-    to the restriction (never broadens to everything)."""
+def test_user_selected_filters_still_apply() -> None:
     restriction = [DocumentSource.CONFLUENCE, DocumentSource.GITHUB]
     tool = _make_tool(BaseFilters(source_type=restriction))
-    mock_search_pipeline = _run(
-        tool,
-        decision=None,
-        connected_sources=[
-            DocumentSource.CONFLUENCE,
-            DocumentSource.GITHUB,
-            DocumentSource.SLACK,
-        ],
-    )
+    mock_search_pipeline, _, _ = _run(tool, semantic_queries=["find the doc"])
 
-    filters = _filters_passed_to_search(mock_search_pipeline)
-    assert filters, "search_pipeline was never called"
-    for applied in filters:
-        assert applied is not None
-        assert applied.source_type == restriction
+    requests = _requests_sent(mock_search_pipeline)
+    assert requests, "search_pipeline was never called"
+    for req in requests:
+        assert req.user_selected_filters is not None
+        assert req.user_selected_filters.source_type == restriction
 
 
-def test_cached_expansion_is_reused_on_a_new_filter_not_a_repeat() -> None:
-    """The first call expands (and caches). A repeat call on a NOT-yet-searched
-    source reuses the cached expansion; a repeat on an already-searched source
-    does not (the agent is expected to vary terms there)."""
+def test_bare_string_queries_are_coerced() -> None:
     tool = _make_tool()
-    connected = [DocumentSource.ZENDESK, DocumentSource.ASANA]
-
-    # Call 1: first search (expansion runs) scoped to Zendesk -> caches expansion.
-    _run(tool, decision=[DocumentSource.ZENDESK], connected_sources=connected)
-
-    # Call 2: repeat call, walk advanced to Asana (new) -> reuse cached expansion.
-    new_filter = _run(
+    mock_search_pipeline, _, _ = _run(
         tool,
-        decision=[DocumentSource.ASANA],
-        connected_sources=connected,
-        skip_query_expansion=True,
+        semantic_queries="who owns the runbook?",
     )
-    assert "rephrased query" in _queries_sent(new_filter), (
-        "cached expansion should be reused when searching a new source"
-    )
-
-    # Call 3: repeat call on Asana again (already searched) -> no reuse.
-    repeat = _run(
-        tool,
-        decision=[DocumentSource.ASANA],
-        connected_sources=connected,
-        skip_query_expansion=True,
-    )
-    assert "rephrased query" not in _queries_sent(repeat), (
-        "a same-source repeat should not re-apply the cached expansion"
-    )
-
-
-def test_no_scope_decision_is_not_repeated_within_a_turn() -> None:
-    """Once a cycle's scope decision comes back unscoped, the conversation has no
-    source directive (which can't change this turn), so later cycles skip the
-    decision instead of burning another LLM call."""
-    tool = _make_tool()
-    connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
-    decide_mock = MagicMock(return_value=None)
-
-    _run(tool, decide_mock=decide_mock, connected_sources=connected)
-    _run(tool, decide_mock=decide_mock, connected_sources=connected)
-
-    assert decide_mock.call_count == 1, (
-        "decide_search_scope should run once, then latch off after a no-scope result"
-    )
-
-
-def test_scope_decision_keeps_running_while_a_directive_is_present() -> None:
-    """A routed decision does not latch the skip — the walk must keep deciding on
-    later cycles (e.g. to advance a backoff sequence to the next source)."""
-    tool = _make_tool()
-    connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
-    decide_mock = MagicMock(
-        side_effect=[[DocumentSource.ZENDESK], [DocumentSource.CONFLUENCE]]
-    )
-
-    _run(tool, decide_mock=decide_mock, connected_sources=connected)
-    _run(tool, decide_mock=decide_mock, connected_sources=connected)
-
-    assert decide_mock.call_count == 2
-
-
-def test_prior_cycles_accumulate_across_calls_for_the_walk() -> None:
-    """A backoff sequence advances: the first call's queries + resolved scope are
-    passed back to decide_search_scope as previous_cycles on the second."""
-    tool = _make_tool()
-    connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
-
-    # Mimic the walk: first call routes to Zendesk, second to Confluence.
-    decide_mock = MagicMock(
-        side_effect=[[DocumentSource.ZENDESK], [DocumentSource.CONFLUENCE]]
-    )
-    _run(tool, decide_mock=decide_mock, connected_sources=connected)
-    _run(tool, decide_mock=decide_mock, connected_sources=connected)
-
-    # previous_cycles is the 4th positional arg.
-    first_cycles = decide_mock.call_args_list[0].args[3]
-    second_cycles = decide_mock.call_args_list[1].args[3]
-    assert first_cycles == []
-    assert len(second_cycles) == 1
-    assert second_cycles[0].searched_sources == ["zendesk"]
-    assert second_cycles[0].queries == ["ticket"]
-    assert second_cycles[0].cycle_number == 1
-
-
-def test_auto_detect_disabled_skips_scope_decision() -> None:
-    """With auto-detect off, no scope decision runs and the search stays unscoped."""
-    tool = _make_tool(auto_detect_filters=False)
-    connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
-    decide_mock = MagicMock(return_value=[DocumentSource.ZENDESK])
-
-    mock_search_pipeline = _run(
-        tool, decide_mock=decide_mock, connected_sources=connected
-    )
-
-    decide_mock.assert_not_called()
-    assert _emitted_filter_sources(tool) == []
-    filters = _filters_passed_to_search(mock_search_pipeline)
-    assert filters, "search_pipeline was never called"
-    for applied in filters:
-        assert applied is None or applied.source_type is None
-
-
-def test_auto_detect_disabled_keeps_user_selected_filters() -> None:
-    """With auto-detect off, user/persona-selected filters are still applied."""
-    restriction = [DocumentSource.CONFLUENCE, DocumentSource.GITHUB]
-    tool = _make_tool(BaseFilters(source_type=restriction), auto_detect_filters=False)
-    decide_mock = MagicMock(return_value=[DocumentSource.CONFLUENCE])
-
-    mock_search_pipeline = _run(
-        tool,
-        decide_mock=decide_mock,
-        connected_sources=[
-            DocumentSource.CONFLUENCE,
-            DocumentSource.GITHUB,
-            DocumentSource.SLACK,
-        ],
-    )
-
-    decide_mock.assert_not_called()
-    filters = _filters_passed_to_search(mock_search_pipeline)
-    assert filters, "search_pipeline was never called"
-    for applied in filters:
-        assert applied is not None
-        assert applied.source_type == restriction
+    queries = [req.query for req in _requests_sent(mock_search_pipeline)]
+    assert "who owns the runbook?" in queries

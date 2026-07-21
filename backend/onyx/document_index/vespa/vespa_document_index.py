@@ -897,7 +897,12 @@ class VespaDocumentIndex(DocumentIndex):
         query_type: QueryType,
         filters: IndexFilters,
         num_to_retrieve: int,
+        offset: int = 0,
     ) -> list[InferenceChunk]:
+        if offset > 0:
+            raise NotImplementedError(
+                "Offset-based pagination is not supported for Vespa hybrid retrieval"
+            )
         vespa_where_clauses = build_vespa_filters(filters)
         # Avoid over-fetching a very large candidate set for global-phase reranking.
         # Keep enough headroom for quality while capping cost on larger indices.
@@ -953,7 +958,12 @@ class VespaDocumentIndex(DocumentIndex):
         filters: IndexFilters,
         num_to_retrieve: int,
         include_hidden: bool = False,
+        offset: int = 0,
     ) -> list[InferenceChunk]:
+        if offset > 0:
+            raise NotImplementedError(
+                "Offset-based pagination is not supported for Vespa keyword retrieval"
+            )
         # Ported from the legacy Vespa admin_retrieval: pure-keyword search over
         # weakAnd(userInput) plus a content_summary userInput pass for
         # highlighting (n-gram highlighting is broken / not behaving as
@@ -1309,6 +1319,7 @@ class VespaIndexPair(DocumentIndex):
         query_type: QueryType,
         filters: IndexFilters,
         num_to_retrieve: int,
+        offset: int = 0,
     ) -> list[InferenceChunk]:
         return self._primary.hybrid_retrieval(
             query,
@@ -1317,6 +1328,7 @@ class VespaIndexPair(DocumentIndex):
             query_type,
             filters,
             num_to_retrieve,
+            offset=offset,
         )
 
     def keyword_retrieval(
@@ -1325,9 +1337,14 @@ class VespaIndexPair(DocumentIndex):
         filters: IndexFilters,
         num_to_retrieve: int,
         include_hidden: bool = False,
+        offset: int = 0,
     ) -> list[InferenceChunk]:
         return self._primary.keyword_retrieval(
-            query, filters, num_to_retrieve, include_hidden=include_hidden
+            query,
+            filters,
+            num_to_retrieve,
+            include_hidden=include_hidden,
+            offset=offset,
         )
 
     def semantic_retrieval(

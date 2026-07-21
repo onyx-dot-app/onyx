@@ -55,35 +55,6 @@ Final user query:
 """.strip()
 
 
-KEYWORD_REPHRASE_SYSTEM_PROMPT = """
-You are an assistant that reformulates the last user message into a set of standalone keyword queries suitable for a keyword \
-search engine. Your goal is to output keyword queries that optimize finding relevant documents to answer the user query. \
-When relevant, you bring in context from the history or knowledge about the user.
-
-The current date is {current_date}.
-"""
-
-
-KEYWORD_REPHRASE_USER_PROMPT = """
-Given the chat history above (if any) and the final user query (provided below), provide a set of keyword only queries that can
-help find relevant documents. Provide a single query per line (where each query consists of one or more keywords). \
-The queries must be purely keywords and not contain any natural language. \
-Each query should have as few keywords as necessary to represent the user's search intent.
-
-Guidelines:
-- Do not provide more than 3 queries.
-- Do not replace or expand niche, proprietary, or obscure terms
-- Do not include source type scoping details (e.g. naming an app or tool like Zendesk, Google Drive, Slack) as keywords — scoping is applied automatically.
-- Focus on the last user message, in most cases the history and any extra context should be ignored.
-{additional_context}
-=========================
-CRITICAL: ONLY provide the keyword queries, one set of keywords per line and nothing else.
-
-Final user query:
-{user_query}
-""".strip()
-
-
 REPHRASE_CONTEXT_PROMPT = """
 In most cases the following additional context is not needed. If relevant, here is some information about the user:
 {user_info}

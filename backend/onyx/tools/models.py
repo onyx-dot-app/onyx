@@ -192,6 +192,16 @@ class SearchToolOverrideKwargs(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
+class PaginateSearchResultsOverrideKwargs(BaseModel):
+    # To know what citation number to start at for constructing the string to the LLM
+    starting_citation_num: int
+    # Page size — must match the search's num_hits so page windows line up
+    num_hits: int | None = NUM_RETURNED_HITS
+    # Number of chunks (token approx) to include in the string to the LLM
+    max_llm_chunks: int | None = MAX_CHUNKS_FED_TO_CHAT
+    include_link: bool = False
+
+
 class ChatFile(BaseModel):
     """File from a chat session that can be passed to tools."""
 

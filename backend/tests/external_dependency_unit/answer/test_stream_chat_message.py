@@ -771,7 +771,9 @@ def test_parallel_internal_and_web_search_tool_calls(
             LLMToolCallResponse(
                 tool_name="internal_search",
                 tool_call_id="123",
-                tool_call_argument_tokens=[json.dumps({"queries": INTERNAL_QUERIES_1})],
+                tool_call_argument_tokens=[
+                    json.dumps({"semantic_queries": INTERNAL_QUERIES_1})
+                ],
             ),
             LLMToolCallResponse(
                 tool_name="web_search",

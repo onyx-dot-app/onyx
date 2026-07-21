@@ -44,7 +44,6 @@ from onyx.server.features.search.models import SearchResponse
 from onyx.server.features.search.models import SearchResult
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
@@ -167,7 +166,6 @@ def search(
         bypass_acl=False,
         slack_context=None,
         enable_slack_search=True,
-        auto_detect_filters=load_settings().auto_detect_search_filters is not False,
     )
 
     # 7. Run search
@@ -186,7 +184,7 @@ def search(
                 ),
             ],
         ),
-        queries=[request.query],
+        semantic_queries=[request.query],
     )
 
     # 8. Map LLM-facing JSON entries to SearchResults (one per merged section).

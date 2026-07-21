@@ -50,6 +50,43 @@ class TestWeightedReciprocalRankFusion:
         assert result[1].document_id == "doc_b"
         assert result[2].document_id == "doc_c"
 
+    def test_rank_offset_shifts_ranks_globally(self) -> None:
+        """rank_offset makes items score as if at their global (offset) rank —
+        used by the pagination fallback so deeper windows merge consistently.
+
+        Setup: doc_a (weight 1.0, local rank 1) vs doc_b (weight 1.5, local
+        rank 30). At shallow ranks the rank term dominates and doc_a wins; at a
+        deep offset the scores approach pure weight ordering and doc_b wins.
+        """
+        doc_a = MockDocument("doc_a", "Content A")
+        doc_b = MockDocument("doc_b", "Content B")
+        fillers = [MockDocument(f"filler_{i}", "filler") for i in range(29)]
+
+        list_a = [doc_a]
+        list_b = [*fillers, doc_b]  # doc_b at local rank 30
+
+        def _position(results: list[MockDocument], document_id: str) -> int:
+            return [doc.document_id for doc in results].index(document_id)
+
+        base = weighted_reciprocal_rank_fusion(
+            ranked_results=[list_a, list_b],
+            weights=[1.0, 1.5],
+            id_extractor=lambda doc: doc.document_id,
+            k=50,
+        )
+        # 1.0/(50+1) > 1.5/(50+30) — the rank difference dominates.
+        assert _position(base, "doc_a") < _position(base, "doc_b")
+
+        deep = weighted_reciprocal_rank_fusion(
+            ranked_results=[list_a, list_b],
+            weights=[1.0, 1.5],
+            id_extractor=lambda doc: doc.document_id,
+            k=50,
+            rank_offset=10_000,
+        )
+        # 1.0/(50+10001) < 1.5/(50+10030) — ranks compress at depth, weight wins.
+        assert _position(deep, "doc_b") < _position(deep, "doc_a")
+
     def test_two_identical_lists_equal_weights(self) -> None:
         """Test RRF with two identical lists and equal weights."""
         doc_a = MockDocument("doc_a", "Content A")

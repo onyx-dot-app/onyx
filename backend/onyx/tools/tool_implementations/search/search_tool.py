@@ -2,19 +2,23 @@
 An explanation of the search tool found below:
 
 Step 1: Queries
-- The LLM will generate some queries based on the chat history for what it thinks are the best things to search for.
-This has a pretty generic prompt so it's not perfectly tuned for search but provides breadth and also the LLM can often break up
-the query into multiple searches which the other flows do not do. Exp: Compare the sales process between company X and Y can be
-broken up into "sales process company X" and "sales process company Y".
-- A specifial prompt and history is used to generate another query which is best tuned for a semantic/hybrid search pipeline.
-- A small set of keyword emphasized queries are also generated to cover additional breadth. This is important for cases where
-the query is short, keyword heavy, or has a lot of model unseen terminology.
+- The LLM provides the queries directly in the tool call as two lists: `semantic_queries` (full
+natural-language standalone questions) and `keyword_queries` (keyword-only variations/expansions).
+At least one of the two must be non-empty. Semantic queries run through the default hybrid search;
+keyword queries run as pure keyword (BM25) searches with no embedding step.
+- On the first search call of each user turn, a custom-prompted semantic rephrase of the user's
+message is additionally generated, used as an extra (highest-weighted) semantic query, and surfaced
+back to the LLM as `automatic_semantic_expansion` so it knows no further automatic expansion will
+happen on repeat calls.
 
 Step 2: Recombination
-We use a weighted RRF to combine the search results from the queries above. Each query will have a list of search results with
-some scores however these are downstream of a normalization step so they cannot easily be compared with one another on an
-absolute scale. RRF is a good way to combine these and allows us to give some custom weightings. We also merge document chunks
-that are adjacent to provide more continuous context to the LLM.
+We use a weighted RRF to combine the search results from the queries above. Each query will have a
+list of search results with some scores however these are downstream of a normalization step so
+they cannot easily be compared with one another on an absolute scale. RRF is a good way to combine
+these and allows us to give some custom weightings. We also merge document chunks that are adjacent
+to provide more continuous context to the LLM. The merged list beyond the returned window is cached
+(per `search_query_id`) for the duration of the request so the `paginate_search_results` companion
+tool can serve deeper pages — re-querying the document index with an offset when the cache runs out.
 
 Step 3: Selection
 We pass the recombined results (truncated set) to the LLM to select the most promising ones to read. This is to reduce noise and
@@ -31,20 +35,19 @@ reliable performance.
 Step 5: Prompt Building
 We construct a response string back to the LLM as the result of the tool call. We also pass relevant richer objects back
 so that the rest of the code can persist it, render it in the UI, etc. The response is a json that makes it easy for the LLM to
-refer to by using matching keywords to other parts of the prompt and reminders.
+refer to by using matching keywords to other parts of the prompt and reminders. The payload carries the `search_query_id` the
+LLM needs for pagination.
 """
 
 import time
 from collections.abc import Callable
 from typing import Any
-from typing import cast
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from onyx.configs.constants import DocumentSource
+from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import BaseFilters
@@ -64,7 +67,6 @@ from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.context.search.utils import populate_file_ids_on_sections
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import check_federated_connectors_exist
-from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.federated import (
@@ -88,28 +90,21 @@ from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.document_filter import select_chunks_for_relevance
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
-from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
 from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
-from onyx.secondary_llm_flows.source_filter import decide_search_scope
-from onyx.secondary_llm_flows.source_filter import SearchCycle
-from onyx.secondary_llm_flows.time_filter import decide_time_filter
-from onyx.secondary_llm_flows.time_filter import TimeFilter
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.search.constants import KEYWORD_QUERY_HYBRID_ALPHA
-from onyx.tools.tool_implementations.search.constants import LLM_KEYWORD_QUERY_WEIGHT
-from onyx.tools.tool_implementations.search.constants import LLM_NON_CUSTOM_QUERY_WEIGHT
+from onyx.tools.tool_implementations.search.constants import KEYWORD_ONLY_HYBRID_ALPHA
 from onyx.tools.tool_implementations.search.constants import LLM_SEMANTIC_QUERY_WEIGHT
 from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELEVANCE
+from onyx.tools.tool_implementations.search.constants import MODEL_KEYWORD_QUERY_WEIGHT
+from onyx.tools.tool_implementations.search.constants import MODEL_SEMANTIC_QUERY_WEIGHT
 from onyx.tools.tool_implementations.search.constants import ORIGINAL_QUERY_WEIGHT
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
@@ -120,6 +115,9 @@ from onyx.tools.tool_implementations.search.search_utils import (
 from onyx.tools.tool_implementations.search.search_utils import (
     weighted_reciprocal_rank_fusion,
 )
+from onyx.tools.tool_implementations.search.turn_state import ExecutedQuerySpec
+from onyx.tools.tool_implementations.search.turn_state import SearchEntry
+from onyx.tools.tool_implementations.search.turn_state import SearchToolTurnState
 from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
 )
@@ -132,31 +130,8 @@ from shared_configs.configs import MODEL_SERVER_PORT
 
 logger = setup_logger()
 
-QUERIES_FIELD = "queries"
-
-
-class QueryExpansionAndScope(BaseModel):
-    """Result of one search cycle's query expansion + source-scope decision."""
-
-    semantic_query: str | None
-    keyword_queries: list[str]
-    plan_scope: list[DocumentSource] | None
-    time_filter: TimeFilter | None = None
-
-
-def _build_scope_note(
-    scope: list[DocumentSource] | None, queries_run: list[str]
-) -> str:
-    """Note appended to a scoped search's response: which source(s) it covered
-    and the queries that ran, so a repeat can vary terms. "" when unscoped."""
-    if not scope:
-        return ""
-    searched = ", ".join(source.value for source in scope)
-    queries_str = "; ".join(queries_run) or "(none)"
-    return (
-        f"(This internal search covered only: {searched}. Queries run: {queries_str}. "
-        "Call internal_search again with different query terms to keep searching.)"
-    )
+SEMANTIC_QUERIES_FIELD = "semantic_queries"
+KEYWORD_QUERIES_FIELD = "keyword_queries"
 
 
 def deduplicate_queries(
@@ -258,10 +233,202 @@ def _trim_sections_by_tokens(
     return trimmed_sections
 
 
+def _coerce_query_list(raw: Any) -> list[str]:
+    """Coerce an LLM-provided query list arg into a clean list of strings.
+
+    Tolerates a bare string (some models send one instead of a single-element
+    array) and drops empty/whitespace-only entries.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return []
+    return [query.strip() for query in raw if isinstance(query, str) and query.strip()]
+
+
+def _expand_section_safe(
+    section: InferenceSection,
+    user_query: str,
+    llm: LLM,
+    document_index: DocumentIndex,
+    expand_override: bool,
+) -> InferenceSection:
+    """Wrapper that handles exceptions and returns original section on error."""
+    try:
+        expanded_section = expand_section_with_context(
+            section=section,
+            user_query=user_query,
+            llm=llm,
+            document_index=document_index,
+            expand_override=expand_override,
+        )
+        # Return expanded section if not None, otherwise original
+        return expanded_section if expanded_section is not None else section
+    except Exception as e:
+        logger.warning(
+            "Error processing section context expansion: %s. Using original section.",
+            e,
+        )
+        return section
+
+
+def run_post_retrieval_pipeline(
+    sections: list[InferenceSection],
+    user_query: str,
+    llm: LLM,
+    document_index: DocumentIndex,
+    emitter: Emitter,
+    placement: Placement,
+    starting_citation_num: int,
+    max_llm_chunks: int | None,
+    include_link: bool,
+    search_query_id: int | None = None,
+    page: int | None = None,
+    automatic_semantic_expansion: str | None = None,
+) -> ToolResponse:
+    """Steps 3-5 of the search flow (see module docstring): LLM relevance
+    selection, context expansion, section merging, and response building for a
+    window of RRF-merged sections.
+
+    Shared by SearchTool (page 0) and PaginateSearchResultsTool (pages >= 1) so
+    every page of a search gets the identical treatment.
+    """
+    # Enrich chunks with `Document.file_id` (Postgres-only metadata not
+    # stored in the document index).
+    with get_session_with_current_tenant() as enrichment_session:
+        populate_file_ids_on_sections(sections, enrichment_session)
+
+    # Convert InferenceSections to SearchDocs for emission
+    search_docs = convert_inference_sections_to_search_docs(sections, is_internet=False)
+
+    token_counter = get_llm_token_counter(llm)
+
+    # Trim sections to fit within token budget before LLM selection
+    # This is to account for very short chunks flooding the search context
+    # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
+    # documents with many matching sections
+    max_tokens_for_selection = (
+        max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT
+    ) * DOC_EMBEDDING_CONTEXT_SIZE
+
+    # This is approximate since it doesn't build the exact string of the call below
+    # Some things are estimated and may be under (like the metadata tokens)
+    sections_for_selection = _trim_sections_by_tokens(
+        sections=sections,
+        max_tokens=max_tokens_for_selection,
+        token_counter=token_counter,
+        max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+    )
+
+    document_selection_start_time = time.time()
+
+    # Use LLM to select the most relevant sections for expansion
+    selected_sections, best_doc_ids = select_sections_for_expansion(
+        sections=sections_for_selection,
+        user_query=user_query,
+        llm=llm,
+        max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+    )
+
+    document_selection_elapsed = time.time() - document_selection_start_time
+    logger.debug(
+        "Search tool - LLM picking documents took %s seconds (selected %s sections)",
+        format(document_selection_elapsed, ".3f"),
+        len(selected_sections),
+    )
+
+    # Create a set of best document IDs for quick lookup
+    best_doc_ids_set = set(best_doc_ids) if best_doc_ids else set()
+
+    # To show the users, we only pass in the docs that are determined to be good by the LLM
+    final_ui_docs = convert_inference_sections_to_search_docs(
+        selected_sections, is_internet=False
+    )
+
+    emitter.emit(
+        Packet(
+            placement=placement,
+            obj=SearchToolDocumentsDelta(
+                documents=final_ui_docs,
+            ),
+        )
+    )
+
+    # Build parallel function calls for all sections
+    expansion_functions: list[tuple[Callable, tuple]] = [
+        (
+            _expand_section_safe,
+            (
+                section,
+                user_query,
+                llm,
+                document_index,
+                section.center_chunk.document_id in best_doc_ids_set,
+            ),
+        )
+        for section in selected_sections
+    ]
+
+    document_expansion_start_time = time.time()
+
+    # Run all expansions in parallel
+    expanded_sections = run_functions_tuples_in_parallel(expansion_functions)
+
+    document_expansion_elapsed = time.time() - document_expansion_start_time
+    logger.debug(
+        "Search tool - Expansion of selected documents took %s seconds (expanded %s sections)",
+        format(document_expansion_elapsed, ".3f"),
+        len(expanded_sections),
+    )
+
+    if not expanded_sections:
+        expanded_sections = selected_sections
+
+    # Merge sections from the same document that have adjacent or overlapping chunks
+    # This prevents duplicate content and reduces token usage
+    merged_sections = merge_overlapping_sections(expanded_sections)
+
+    docs_str, citation_mapping = convert_inference_sections_to_llm_string(
+        top_sections=merged_sections,
+        citation_start=starting_citation_num,
+        limit=max_llm_chunks,
+        include_document_id=False,
+        include_link=include_link,
+        search_query_id=search_query_id,
+        page=page,
+        automatic_semantic_expansion=automatic_semantic_expansion,
+    )
+
+    return ToolResponse(
+        # Typically the rich response will give more docs in case it needs to be displayed in the UI
+        rich_response=SearchDocsResponse(
+            search_docs=search_docs,
+            citation_mapping=citation_mapping,
+            displayed_docs=final_ui_docs,
+        ),
+        # The LLM facing response typically includes less docs to cut down on noise and token usage
+        llm_facing_response=docs_str,
+    )
+
+
 class SearchTool(Tool[SearchToolOverrideKwargs]):
     NAME = "internal_search"
     DISPLAY_NAME = "Internal Search"
-    DESCRIPTION = "Search connected applications for information."
+    DESCRIPTION = (
+        "Search indexed applications for information. Provide two lists of queries in a "
+        "single call: `semantic_queries` and `keyword_queries` — you may use either or both "
+        "(at least one is required). It is recommended to always use an expanded set of "
+        "queries, for example, 3 semantic queries and 3 keyword queries. For semantic "
+        "queries, each should be fully natural language and a complete standalone question, "
+        "typically very similar to the user's ask; do not simplify or truncate the query, "
+        "should be specific and natural. For keyword queries, only extract the most relevant "
+        "keywords and try to create variations or expansions using synonyms or other forms "
+        "of the key terms. Every result includes a `search_query_id`; to fetch more results "
+        "for this search, call the `paginate_search_results` tool with that id and the next "
+        "page number rather than repeating the same queries."
+    )
 
     def __init__(
         self,
@@ -285,9 +452,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         slack_context: SlackContext | None = None,
         # Whether to enable Slack federated search
         enable_slack_search: bool = True,
-        # Whether to infer source and time filters from the
-        # query. When False, only user/persona-selected filters are applied.
-        auto_detect_filters: bool = True,
+        # Shared with PaginateSearchResultsTool; holds search-query ids and the
+        # cached result tails for pagination. A private one is created when the
+        # caller doesn't supply one (standalone Search API usage).
+        turn_state: SearchToolTurnState | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -301,13 +469,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.bypass_acl = bypass_acl
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
-        self.auto_detect_filters = auto_detect_filters
-
-        self._search_cycles: list[SearchCycle] = []
-        self._cached_expansion: tuple[str | None, list[str]] | None = None
-        self._scope_decision_settled = False
-        self._time_filter: TimeFilter | None = None
-        self._time_filter_computed = False
+        self.turn_state = (
+            turn_state if turn_state is not None else SearchToolTurnState()
+        )
 
         self._id = tool_id
 
@@ -561,18 +725,26 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        QUERIES_FIELD: {
+                        SEMANTIC_QUERIES_FIELD: {
                             "type": "array",
                             "items": {"type": "string"},
                             "description": (
-                                "List of search queries to execute, typically a single query. "
-                                "Query expansion and filter extraction steps will be run "
-                                "automatically downstream, do not include time or source type "
-                                "scoping details in your query."
+                                "List of natural-language semantic queries. Each should be "
+                                "a complete, standalone, natural-language question — "
+                                "typically very similar to the user's ask; do not simplify "
+                                "or truncate."
+                            ),
+                        },
+                        KEYWORD_QUERIES_FIELD: {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "List of keyword queries. Extract only the most relevant "
+                                "keywords and create variations or expansions using "
+                                "synonyms or other forms of the key terms."
                             ),
                         },
                     },
-                    "required": [QUERIES_FIELD],
                 },
             },
         }
@@ -586,68 +758,38 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
 
     @log_function_time(
-        func_name="Search tool - query expansion + scope decision",
+        func_name="Search tool - automatic semantic rephrase",
         print_only=True,
         debug_only=True,
     )
-    def _expand_queries_and_decide_scope(
+    def _maybe_semantic_rephrase(
         self,
         skip_query_expansion: bool,
-        message_history: list[ChatMinimalTextMessage],
-        user_info: str | None,
-        memories: list[str],
-        decide_args: tuple[Any, ...],
-    ) -> QueryExpansionAndScope:
-        """Expand the query and decide the source/time scope, in parallel when each
-        applies.
+        override_kwargs: SearchToolOverrideKwargs,
+    ) -> str | None:
+        """Run the automatic semantic rephrase for the first search call of the
+        turn. Computed at most once per turn (shared through the turn state, so
+        parallel first-cycle calls reuse a single result); skipped entirely on
+        repeat calls."""
+        if skip_query_expansion:
+            return None
 
-        Repeat calls reuse the cached expansion instead of re-expanding. Once the
-        scope decision finds no source directive it latches off for the rest of the
-        turn, since the conversation cannot introduce one mid-turn. The time-window
-        decision is computed once per turn and cached. Both auto decisions are
-        gated by ``auto_detect_filters``.
-        """
-        expand_queries = not skip_query_expansion
-        decide_scope = self.auto_detect_filters and not self._scope_decision_settled
-        decide_time = self.auto_detect_filters and not self._time_filter_computed
+        message_history = (
+            override_kwargs.message_history if override_kwargs.message_history else []
+        )
+        if not message_history:
+            return None
+        memories = (
+            override_kwargs.user_memory_context.as_formatted_list()
+            if override_kwargs.user_memory_context
+            else []
+        )
+        user_info = override_kwargs.user_info
 
-        jobs: list[tuple[Callable, tuple]] = []
-        scope_job_index: int | None = None
-        time_job_index: int | None = None
-        if expand_queries:
-            expansion_args = (message_history, self.llm, user_info, memories)
-            jobs.append((semantic_query_rephrase, expansion_args))
-            jobs.append((keyword_query_expansion, expansion_args))
-        if decide_scope:
-            scope_job_index = len(jobs)
-            jobs.append((decide_search_scope, decide_args))
-        if decide_time:
-            time_job_index = len(jobs)
-            jobs.append((decide_time_filter, (message_history, self.llm)))
-
-        results = run_functions_tuples_in_parallel(jobs) if jobs else []
-
-        semantic_query: str | None = None
-        keyword_queries: list[str] = []
-        if expand_queries:
-            semantic_query = results[0]
-            keyword_queries = results[1] or []
-            self._cached_expansion = (semantic_query, keyword_queries)
-
-        plan_scope: list[DocumentSource] | None = None
-        if scope_job_index is not None:
-            plan_scope = results[scope_job_index]
-            self._scope_decision_settled = plan_scope is None
-
-        if time_job_index is not None:
-            self._time_filter = results[time_job_index]
-            self._time_filter_computed = True
-
-        return QueryExpansionAndScope(
-            semantic_query=semantic_query,
-            keyword_queries=keyword_queries,
-            plan_scope=plan_scope,
-            time_filter=self._time_filter,
+        return self.turn_state.get_or_compute_rephrase(
+            lambda: semantic_query_rephrase(
+                message_history, self.llm, user_info, memories
+            )
         )
 
     @log_function_time(print_only=True)
@@ -660,11 +802,22 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Start overall timing
         overall_start_time = time.time()
 
-        # Initialize timing variables (in case of early exceptions)
-        document_selection_elapsed = 0.0
-        document_expansion_elapsed = 0.0
-
-        connected_sources: list[DocumentSource] = []
+        semantic_queries = _coerce_query_list(llm_kwargs.get(SEMANTIC_QUERIES_FIELD))
+        keyword_queries = _coerce_query_list(llm_kwargs.get(KEYWORD_QUERIES_FIELD))
+        if not semantic_queries and not keyword_queries:
+            raise ToolCallException(
+                message=(
+                    "internal_search called without any semantic_queries or "
+                    "keyword_queries"
+                ),
+                llm_facing_message=(
+                    "The internal_search tool requires at least one of "
+                    f"'{SEMANTIC_QUERIES_FIELD}' or '{KEYWORD_QUERIES_FIELD}' to be a "
+                    "non-empty array of strings. Please provide the queries like: "
+                    f'{{"{SEMANTIC_QUERIES_FIELD}": ["your standalone question here"], '
+                    f'"{KEYWORD_QUERIES_FIELD}": ["relevant key terms"]}}'
+                ),
+            )
 
         # Pre-fetch all DB data in a single short-lived session so that
         # parallel search workers need zero DB connections.
@@ -734,10 +887,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 or []
             )
 
-            # Project mode ignores user filters, so source scoping doesn't apply.
-            if self.project_id_filter is None:
-                connected_sources = fetch_unique_document_sources(db_session)
-
             # Slack tokens and entity config — only prefetch when Slack
             # search is enabled or we're in a Slack bot context.
             if self.enable_slack_search or self.slack_context:
@@ -752,174 +901,33 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 )
         # Session is closed here — all parallel work uses plain Python objects only
 
-        if QUERIES_FIELD not in llm_kwargs:
-            raise ToolCallException(
-                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
-                llm_facing_message=(
-                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
-                    f"containing an array of search queries. Please provide the queries "
-                    f'like: {{"queries": ["your search query here"]}}'
-                ),
-            )
-        llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
-
-        # Run semantic and keyword query expansion in parallel (unless skipped)
-        # Use message history, memories, and user info from override_kwargs
-        message_history = (
-            override_kwargs.message_history if override_kwargs.message_history else []
-        )
-        memories = (
-            override_kwargs.user_memory_context.as_formatted_list()
-            if override_kwargs.user_memory_context
-            else []
-        )
-        user_info = override_kwargs.user_info
-
-        # A persona/user source restriction is the outer bound the decision works within.
-        user_source_restriction: list[DocumentSource] | None = (
-            list(self.user_selected_filters.source_type)
-            if self.user_selected_filters and self.user_selected_filters.source_type
-            else None
-        )
-        if user_source_restriction is not None:
-            allowed = set(user_source_restriction)
-            candidate_sources = [s for s in connected_sources if s in allowed]
-        else:
-            candidate_sources = connected_sources
-
-        decide_args = (
-            message_history,
-            self.llm,
-            candidate_sources,
-            list(self._search_cycles),
-            llm_queries,
-        )
-        expansion = self._expand_queries_and_decide_scope(
+        # Automatic semantic rephrase — first search call of the turn only.
+        automatic_semantic_expansion = self._maybe_semantic_rephrase(
             skip_query_expansion=override_kwargs.skip_query_expansion,
-            message_history=message_history,
-            user_info=user_info,
-            memories=memories,
-            decide_args=decide_args,
+            override_kwargs=override_kwargs,
         )
-        semantic_query = expansion.semantic_query
-        keyword_queries = expansion.keyword_queries
-        plan_scope = expansion.plan_scope
-
-        resolved_scope = (
-            plan_scope if plan_scope is not None else user_source_restriction
-        )
-
-        logger.info(
-            "Internal search - source scope: %s",
-            [s.value for s in resolved_scope] if resolved_scope else "all sources",
-        )
-
-        # On a repeat call that advanced to a not-yet-searched source, reuse the
-        # cached expansion (it is source-agnostic) rather than searching raw queries.
-        searched_sources = {
-            value for cycle in self._search_cycles for value in cycle.searched_sources
-        }
-        is_new_filter = bool(resolved_scope) and any(
-            source.value not in searched_sources for source in resolved_scope
-        )
-        if (
-            override_kwargs.skip_query_expansion
-            and is_new_filter
-            and self._cached_expansion is not None
-        ):
-            semantic_query, keyword_queries = self._cached_expansion
-
-        self._search_cycles.append(
-            SearchCycle(
-                cycle_number=len(self._search_cycles) + 1,
-                queries=list(llm_queries),
-                searched_sources=(
-                    [source.value for source in resolved_scope]
-                    if resolved_scope
-                    else []
-                ),
-            )
-        )
-
-        # Surface the applied filters (source scope + time window) to the UI. Scope
-        # is reported only when it narrows to a strict subset — scoping to all
-        # connected sources is equivalent to an unscoped search.
-        scopes_all_sources = bool(connected_sources) and set(
-            connected_sources
-        ).issubset(resolved_scope or [])
-        emitted_sources = (
-            [source.value for source in resolved_scope]
-            if resolved_scope and not scopes_all_sources
-            else []
-        )
-        time_filter = expansion.time_filter
-        if emitted_sources or time_filter is not None:
-            self.emitter.emit(
-                Packet(
-                    placement=placement,
-                    obj=SearchToolFilterDelta(
-                        sources=emitted_sources,
-                        time_filter_start=time_filter.start if time_filter else None,
-                        time_filter_end=time_filter.end if time_filter else None,
-                    ),
-                )
-            )
-
-        queries_run = list(
-            dict.fromkeys(
-                llm_queries
-                + ([semantic_query] if semantic_query else [])
-                + keyword_queries
-            )
-        )
-        scope_note = _build_scope_note(resolved_scope, queries_run)
 
         effective_filters = self.user_selected_filters
-        if resolved_scope is not None:
-            effective_filters = (
-                self.user_selected_filters or BaseFilters()
-            ).model_copy(update={"source_type": resolved_scope})
-            federated_retrieval_infos = [
-                info
-                for info in federated_retrieval_infos
-                if info.source.to_non_federated_source() in resolved_scope
-            ]
-            # Disable the Slack federated search when Slack is out of scope.
-            if DocumentSource.SLACK not in resolved_scope:
-                slack_access_token = None
-
-        # The pipeline composes the lower bound with any persona time floor.
-        if time_filter is not None:
-            effective_filters = time_filter.apply_to(effective_filters or BaseFilters())
-            logger.info(
-                "Internal search - time window (%s): %s to %s",
-                time_filter.field.value,
-                time_filter.start.isoformat() if time_filter.start else "any",
-                time_filter.end.isoformat() if time_filter.end else "any",
-            )
 
         # Prepare queries with their weights and hybrid_alpha settings
-        # Group 1: Keyword queries (use hybrid_alpha=0.2)
+        # Group 1: Keyword queries — pure keyword (BM25) search, no embedding
         keyword_queries_with_weights = [
-            (kw_query, LLM_KEYWORD_QUERY_WEIGHT) for kw_query in keyword_queries
+            (kw_query, MODEL_KEYWORD_QUERY_WEIGHT) for kw_query in keyword_queries
         ]
         deduplicated_keyword_queries = deduplicate_queries(keyword_queries_with_weights)
 
-        # Group 2: Semantic/LLM/Original queries (use hybrid_alpha=None)
-        # Include all LLM-provided queries with their weight
+        # Group 2: Semantic/Original queries (use hybrid_alpha=None)
         semantic_queries_with_weights = (
             [
-                (semantic_query, LLM_SEMANTIC_QUERY_WEIGHT),
+                (automatic_semantic_expansion, LLM_SEMANTIC_QUERY_WEIGHT),
             ]
-            if semantic_query
+            if automatic_semantic_expansion
             else []
         )
-        for llm_query in llm_queries:
-            # In rare cases, the LLM may fail to provide real queries
-            if llm_query:
-                semantic_queries_with_weights.append(
-                    (llm_query, LLM_NON_CUSTOM_QUERY_WEIGHT)
-                )
+        for semantic_llm_query in semantic_queries:
+            semantic_queries_with_weights.append(
+                (semantic_llm_query, MODEL_SEMANTIC_QUERY_WEIGHT)
+            )
         if override_kwargs.original_query:
             semantic_queries_with_weights.append(
                 (override_kwargs.original_query, ORIGINAL_QUERY_WEIGHT)
@@ -960,38 +968,33 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
         )
 
-        # Run all searches in parallel with appropriate hybrid_alpha values
-        # Keyword queries use hybrid_alpha=0.2 (favor keyword search)
-        # Other queries use default hybrid_alpha (balanced semantic/keyword)
+        # Run all searches in parallel. Semantic queries use the default hybrid
+        # search; keyword queries run pure keyword (BM25) with no embedding.
+        # The (query, weight, alpha) specs are also recorded on the search
+        # entry so pagination can re-run the exact same document-index queries
+        # with an offset. Slack federated search is excluded from those specs.
         search_functions: list[tuple[Callable, tuple]] = []
         search_weights: list[float] = []
+        query_specs: list[ExecutedQuerySpec] = []
 
-        # Add deduplicated semantic queries (use hybrid_alpha=None)
         for query, weight in deduplicated_semantic_queries:
-            search_functions.append(
-                (
-                    self._run_search_for_query,
-                    (
-                        query,
-                        None,
-                        override_kwargs.num_hits,
-                        acl_filters,
-                        embedding_model,
-                        federated_retrieval_infos,
-                        effective_filters,
-                    ),
-                )
+            query_specs.append(
+                ExecutedQuerySpec(query=query, weight=weight, hybrid_alpha=None)
             )
-            search_weights.append(weight)
-
-        # Add deduplicated keyword queries (use hybrid_alpha=0.2)
         for query, weight in deduplicated_keyword_queries:
+            query_specs.append(
+                ExecutedQuerySpec(
+                    query=query, weight=weight, hybrid_alpha=KEYWORD_ONLY_HYBRID_ALPHA
+                )
+            )
+
+        for spec in query_specs:
             search_functions.append(
                 (
                     self._run_search_for_query,
                     (
-                        query,
-                        KEYWORD_QUERY_HYBRID_ALPHA,
+                        spec.query,
+                        spec.hybrid_alpha,
                         override_kwargs.num_hits,
                         acl_filters,
                         embedding_model,
@@ -1000,11 +1003,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     ),
                 )
             )
-            search_weights.append(weight)
+            search_weights.append(spec.weight)
 
-        # Add Slack federated search (runs once in parallel with all Vespa queries)
-        # This avoids the query multiplication problem where each Vespa query
-        # would trigger a separate Slack search.
+        # Add Slack federated search (runs once in parallel with all document
+        # index queries). This avoids the query multiplication problem where
+        # each query would trigger a separate Slack search.
         # Only run if pre-fetch found a valid Slack access token.
         if slack_access_token and override_kwargs.original_query:
             search_functions.append(
@@ -1022,7 +1025,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # Use same weight as original query for Slack results
             search_weights.append(ORIGINAL_QUERY_WEIGHT)
 
-        # Run all searches in parallel (Vespa queries + Slack)
+        # Run all searches in parallel (document index queries + Slack)
         all_search_results = run_functions_tuples_in_parallel(search_functions)
         if not all_search_results:
             all_search_results = []
@@ -1035,17 +1038,47 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             id_extractor=lambda chunk: f"{chunk.document_id}_{chunk.chunk_id}",
         )
 
-        # We can disregard all of the chunks that exceed the num_hits parameter since it's not valid to have
-        # documents/contents from things that aren't returned to the user on the frontend
-        top_sections = merge_individual_chunks(top_chunks)[: override_kwargs.num_hits]
+        # The window past num_hits is not returned now, but is cached on the
+        # search entry so paginate_search_results can serve deeper pages.
+        all_merged_sections = merge_individual_chunks(top_chunks)
+        num_hits = override_kwargs.num_hits or NUM_RETURNED_HITS
+        top_sections = all_merged_sections[:num_hits]
+
+        secondary_flows_user_query = (
+            override_kwargs.original_query
+            or automatic_semantic_expansion
+            or (semantic_queries[0] if semantic_queries else "")
+            or (keyword_queries[0] if keyword_queries else "")
+        )
+
+        entry = SearchEntry(
+            query_specs=query_specs,
+            merged_sections=all_merged_sections,
+            cached_chunk_ids={
+                (chunk.document_id, chunk.chunk_id)
+                for section in all_merged_sections
+                for chunk in section.chunks
+            },
+            per_query_fetch_depth=num_hits,
+            user_query=secondary_flows_user_query,
+            effective_filters=effective_filters,
+            acl_filters=acl_filters,
+            embedding_model=embedding_model,
+            project_id_filter=self.project_id_filter,
+            persona_id_filter=self.persona_id_filter,
+            bypass_acl=self.bypass_acl,
+            exhausted=not top_sections,
+        )
+        search_query_id = self.turn_state.register(entry)
 
         if not top_sections:
             logger.info("Search tool - no results found, returning empty response")
             empty_response, _ = convert_inference_sections_to_llm_string(
                 top_sections=[],
-                note=scope_note or None,
+                search_query_id=search_query_id,
+                automatic_semantic_expansion=automatic_semantic_expansion,
             )
-            return ToolResponse(
+            tool_response = ToolResponse(
                 rich_response=SearchDocsResponse(
                     search_docs=[],
                     citation_mapping={},
@@ -1053,167 +1086,29 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 ),
                 llm_facing_response=empty_response,
             )
+            entry.page_responses[0] = tool_response
+            return tool_response
 
-        # Enrich chunks with `Document.file_id` (Postgres-only metadata not
-        # stored in Vespa).
-        with get_session_with_current_tenant() as enrichment_session:
-            populate_file_ids_on_sections(top_sections, enrichment_session)
-
-        # Convert InferenceSections to SearchDocs for emission
-        search_docs = convert_inference_sections_to_search_docs(
-            top_sections, is_internet=False
-        )
-
-        secondary_flows_user_query = (
-            override_kwargs.original_query
-            or semantic_query
-            or (llm_queries[0] if llm_queries else "")
-        )
-
-        token_counter = get_llm_token_counter(self.llm)
-
-        # Trim sections to fit within token budget before LLM selection
-        # This is to account for very short chunks flooding the search context
-        # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
-        # documents with many matching sections
-        max_tokens_for_selection = (
-            override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT
-        ) * DOC_EMBEDDING_CONTEXT_SIZE
-
-        # This is approximate since it doesn't build the exact string of the call below
-        # Some things are estimated and may be under (like the metadata tokens)
-        sections_for_selection = _trim_sections_by_tokens(
+        tool_response = run_post_retrieval_pipeline(
             sections=top_sections,
-            max_tokens=max_tokens_for_selection,
-            token_counter=token_counter,
-            max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
-        )
-
-        # Start timing for LLM document selection
-        document_selection_start_time = time.time()
-
-        # Use LLM to select the most relevant sections for expansion
-        selected_sections, best_doc_ids = select_sections_for_expansion(
-            sections=sections_for_selection,
             user_query=secondary_flows_user_query,
             llm=self.llm,
-            max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
-        )
-
-        # End timing for LLM document selection
-        document_selection_elapsed = time.time() - document_selection_start_time
-        logger.debug(
-            "Search tool - LLM picking documents took %s seconds (selected %s sections)",
-            format(document_selection_elapsed, ".3f"),
-            len(selected_sections),
-        )
-
-        # Create a set of best document IDs for quick lookup
-        best_doc_ids_set = set(best_doc_ids) if best_doc_ids else set()
-
-        # To show the users, we only pass in the docs that are determined to be good by the LLM
-        final_ui_docs = convert_inference_sections_to_search_docs(
-            selected_sections, is_internet=False
-        )
-
-        self.emitter.emit(
-            Packet(
-                placement=placement,
-                obj=SearchToolDocumentsDelta(
-                    documents=final_ui_docs,
-                ),
-            )
-        )
-
-        # Create wrapper function to handle errors gracefully
-        def expand_section_safe(
-            section: InferenceSection,
-            user_query: str,
-            llm: LLM,
-            document_index: DocumentIndex,
-            expand_override: bool,
-        ) -> InferenceSection:
-            """Wrapper that handles exceptions and returns original section on error."""
-            try:
-                expanded_section = expand_section_with_context(
-                    section=section,
-                    user_query=user_query,
-                    llm=llm,
-                    document_index=document_index,
-                    expand_override=expand_override,
-                )
-                # Return expanded section if not None, otherwise original
-                return expanded_section if expanded_section is not None else section
-            except Exception as e:
-                logger.warning(
-                    "Error processing section context expansion: %s. Using original section.",
-                    e,
-                )
-                return section
-
-        # Build parallel function calls for all sections
-        expansion_functions: list[tuple[Callable, tuple]] = [
-            (
-                expand_section_safe,
-                (
-                    section,
-                    secondary_flows_user_query,
-                    self.llm,
-                    self.document_index,
-                    section.center_chunk.document_id in best_doc_ids_set,
-                ),
-            )
-            for section in selected_sections
-        ]
-
-        # Start timing for document expansion
-        document_expansion_start_time = time.time()
-
-        # Run all expansions in parallel
-        expanded_sections = run_functions_tuples_in_parallel(expansion_functions)
-
-        # End timing for document expansion
-        document_expansion_elapsed = time.time() - document_expansion_start_time
-        logger.debug(
-            "Search tool - Expansion of selected documents took %s seconds (expanded %s sections)",
-            format(document_expansion_elapsed, ".3f"),
-            len(expanded_sections),
-        )
-
-        if not expanded_sections:
-            expanded_sections = selected_sections
-
-        # Merge sections from the same document that have adjacent or overlapping chunks
-        # This prevents duplicate content and reduces token usage
-        merged_sections = merge_overlapping_sections(expanded_sections)
-
-        docs_str, citation_mapping = convert_inference_sections_to_llm_string(
-            top_sections=merged_sections,
-            citation_start=override_kwargs.starting_citation_num,
-            limit=override_kwargs.max_llm_chunks,
-            include_document_id=False,
+            document_index=self.document_index,
+            emitter=self.emitter,
+            placement=placement,
+            starting_citation_num=override_kwargs.starting_citation_num,
+            max_llm_chunks=override_kwargs.max_llm_chunks,
             include_link=override_kwargs.include_link,
-            note=scope_note or None,
+            search_query_id=search_query_id,
+            automatic_semantic_expansion=automatic_semantic_expansion,
         )
+        # Stash for idempotent re-serving via paginate_search_results page 0.
+        entry.page_responses[0] = tool_response
 
-        # End overall timing
         overall_elapsed = time.time() - overall_start_time
         logger.debug(
-            "Search tool - Total execution time: %s seconds (document selection: %ss, document expansion: %ss)",
+            "Search tool - Total execution time: %s seconds",
             format(overall_elapsed, ".3f"),
-            format(document_selection_elapsed, ".3f"),
-            format(document_expansion_elapsed, ".3f"),
         )
 
-        llm_facing_response = docs_str
-
-        return ToolResponse(
-            # Typically the rich response will give more docs in case it needs to be displayed in the UI
-            rich_response=SearchDocsResponse(
-                search_docs=search_docs,
-                citation_mapping=citation_mapping,
-                displayed_docs=final_ui_docs,
-            ),
-            # The LLM facing response typically includes less docs to cut down on noise and token usage
-            llm_facing_response=llm_facing_response,
-        )
+        return tool_response

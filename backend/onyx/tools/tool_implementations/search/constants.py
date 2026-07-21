@@ -4,17 +4,25 @@
 # Taking an opinionated stance on the weights, no chance users can do a good job customizing this.
 # The dedicated rephrased/extracted semantic query is likely the best for hybrid search
 LLM_SEMANTIC_QUERY_WEIGHT = 1.3
-# The keyword expansions provide more breadth through a different search ranking function
-# This one is likely to produce the most different results.
-LLM_KEYWORD_QUERY_WEIGHT = 1.0
-# This is also lower because it is the LLM generated query without the custom instructions specifically for this purpose.
-LLM_NON_CUSTOM_QUERY_WEIGHT = 0.7
+# The semantic queries the model provides directly in the tool call.
+MODEL_SEMANTIC_QUERY_WEIGHT = 1.0
+# The keyword queries the model provides directly in the tool call. These provide more breadth
+# through a different search ranking function and are likely to produce the most different results.
+MODEL_KEYWORD_QUERY_WEIGHT = 1.0
 # This is much lower weight because it is likely pretty similar to the LLM semantic query but just worse quality.
 ORIGINAL_QUERY_WEIGHT = 0.5
 
 # Hybrid Search Configuration
-# This may in the future just use an entirely keyword search. Currently it is a hybrid search with a keyword first phase.
+# NOTE: only used by the legacy Vespa document index; keyword queries from the search tool
+# run as pure keyword (BM25) searches with hybrid_alpha=0.0.
 KEYWORD_QUERY_HYBRID_ALPHA = 0.2
+# Routes a query down the pure keyword (BM25) retrieval path — no embedding is computed.
+KEYWORD_ONLY_HYBRID_ALPHA = 0.0
+
+# Pagination
+# How many rounds of deeper OpenSearch fetches a single paginate call may trigger when the
+# in-memory cache doesn't cover the requested page.
+MAX_PAGINATION_FALLBACK_ROUNDS = 2
 
 # Reciprocal Rank Fusion
 RRF_K_VALUE = 50

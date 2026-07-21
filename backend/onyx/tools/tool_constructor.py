@@ -44,7 +44,11 @@ from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.search.paginate_search_results_tool import (
+    PaginateSearchResultsTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.search.turn_state import SearchToolTurnState
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
@@ -71,7 +75,6 @@ class SearchToolConfig(BaseModel):
     additional_context: str | None = None
     slack_context: SlackContext | None = None
     enable_slack_search: bool = True
-    auto_detect_filters: bool = True
 
 
 class FileReaderToolConfig(BaseModel):
@@ -187,14 +190,18 @@ def _construct_tools_impl(
     # This flow is for search so we do not get all indices.
     document_index = get_default_document_index(search_settings, None, db_session)
 
-    def _build_search_tool(tool_id: int, config: SearchToolConfig) -> SearchTool:
+    def _build_search_tools(tool_id: int, config: SearchToolConfig) -> list[Tool]:
+        """Build the search tool plus its paginate companion. They share the
+        turn state (search-query ids + cached result tails) and the DB tool id,
+        so pagination is available exactly when search is."""
         persona_search_info = PersonaSearchInfo(
             document_set_names=[ds.name for ds in persona.document_sets],
             search_start_date=persona.search_start_date,
             attached_document_ids=[doc.id for doc in persona.attached_documents],
             hierarchy_node_ids=[node.id for node in persona.hierarchy_nodes],
         )
-        return SearchTool(
+        turn_state = SearchToolTurnState()
+        search_tool = SearchTool(
             tool_id=tool_id,
             emitter=emitter,
             user=user,
@@ -207,8 +214,18 @@ def _construct_tools_impl(
             bypass_acl=config.bypass_acl,
             slack_context=config.slack_context,
             enable_slack_search=config.enable_slack_search,
-            auto_detect_filters=config.auto_detect_filters,
+            turn_state=turn_state,
         )
+        paginate_tool = PaginateSearchResultsTool(
+            tool_id=tool_id,
+            emitter=emitter,
+            user=user,
+            persona_search_info=persona_search_info,
+            llm=llm,
+            document_index=document_index,
+            turn_state=turn_state,
+        )
+        return [search_tool, paginate_tool]
 
     added_search_tool = False
     for db_tool_model in persona.tools:
@@ -243,9 +260,9 @@ def _construct_tools_impl(
                 if not search_tool_config:
                     search_tool_config = SearchToolConfig()
 
-                tool_dict[db_tool_model.id] = [
-                    _build_search_tool(db_tool_model.id, search_tool_config)
-                ]
+                tool_dict[db_tool_model.id] = _build_search_tools(
+                    db_tool_model.id, search_tool_config
+                )
 
             # Handle Image Generation Tool
             elif tool_cls.__name__ == ImageGenerationTool.__name__:
@@ -474,9 +491,9 @@ def _construct_tools_impl(
         if not search_tool_config:
             search_tool_config = SearchToolConfig()
 
-        tool_dict[search_tool_db_model.id] = [
-            _build_search_tool(search_tool_db_model.id, search_tool_config)
-        ]
+        tool_dict[search_tool_db_model.id] = _build_search_tools(
+            search_tool_db_model.id, search_tool_config
+        )
 
     # Always inject MemoryTool when the user has the memory tool enabled,
     # bypassing persona tool associations and allowed_tool_ids filtering

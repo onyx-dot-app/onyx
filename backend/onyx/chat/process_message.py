@@ -121,7 +121,6 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import heartbeat_packet
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
 from onyx.tools.constants import FILE_READER_TOOL_ID
@@ -1095,9 +1094,6 @@ def _run_models(
     """
     n_models = len(setup.llms)
 
-    # Workspace toggle: infer source/time filters from the query (default on).
-    auto_detect_search_filters = load_settings().auto_detect_search_filters is not False
-
     merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
 
     state_containers: list[ChatStateContainer] = [
@@ -1230,7 +1226,6 @@ def _run_models(
                     enable_slack_search=_should_enable_slack_search(
                         setup.persona, setup.new_msg_req.internal_search_filters
                     ),
-                    auto_detect_filters=auto_detect_search_filters,
                 ),
                 custom_tool_config=CustomToolConfig(
                     chat_session_id=setup.chat_session.id,

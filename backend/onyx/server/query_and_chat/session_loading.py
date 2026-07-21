@@ -592,9 +592,14 @@ def translate_assistant_message_to_packets(
                         SearchTool.__name__,
                         WebSearchTool.__name__,
                     ]:
-                        queries = cast(
-                            list[str], tool_call.tool_call_arguments.get("queries", [])
-                        )
+                        # internal_search takes semantic_queries + keyword_queries;
+                        # web_search (and pre-migration internal_search calls) use
+                        # a single `queries` list. paginate_search_results calls
+                        # (which share the search tool's id) have neither → [].
+                        tool_args = tool_call.tool_call_arguments
+                        queries = cast(list[str], tool_args.get("queries", [])) or cast(
+                            list[str], tool_args.get("semantic_queries") or []
+                        ) + cast(list[str], tool_args.get("keyword_queries") or [])
                         search_docs: list[SavedSearchDoc] = [
                             translate_db_search_doc_to_saved_search_doc(doc)
                             for doc in tool_call.search_docs
