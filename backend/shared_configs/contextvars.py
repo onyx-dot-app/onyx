@@ -1,7 +1,6 @@
 import contextvars
 
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 
 # Context variable for the current tenant id
 CURRENT_TENANT_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = (
@@ -30,8 +29,10 @@ CURRENT_ENDPOINT_CONTEXTVAR: contextvars.ContextVar[str | None] = (
     contextvars.ContextVar("current_endpoint", default=None)
 )
 
-
-"""Utils related to contextvars"""
+# Per-request user id for usage attribution; None in workers.
+CURRENT_USER_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "current_user_id", default=None
+)
 
 
 def get_current_tenant_id() -> str:
@@ -49,3 +50,8 @@ def get_current_tenant_id() -> str:
         )
         raise RuntimeError(error_message)
     return tenant_id
+
+
+def get_current_user_id() -> str | None:
+    """Requesting user's id, or None outside a per-request context."""
+    return CURRENT_USER_ID_CONTEXTVAR.get()

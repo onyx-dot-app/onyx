@@ -11,12 +11,9 @@ import mimetypes
 import threading
 import uuid
 import zipfile
-from collections.abc import Callable
-from collections.abc import Generator
-from contextlib import AbstractContextManager
-from contextlib import nullcontext
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator
+from contextlib import AbstractContextManager, nullcontext
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -26,54 +23,67 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.models import BuildMessage
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.enums import SandboxStatus, SessionOrigin
+from onyx.db.external_app import get_connectable_apps_for_user
+from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
-from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
-from onyx.server.features.build.configs import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
-from onyx.server.features.build.db.build_session import allocate_nextjs_port
-from onyx.server.features.build.db.build_session import create_build_session__no_commit
-from onyx.server.features.build.db.build_session import delete_build_session__no_commit
-from onyx.server.features.build.db.build_session import (
-    fetch_all_supported_build_llm_providers,
+from onyx.server.features.build.configs import (
+    MAX_TOTAL_UPLOAD_SIZE_BYTES,
+    MAX_UPLOAD_FILES_PER_SESSION,
+    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
 )
-from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.build_session import get_empty_session_for_user
-from onyx.server.features.build.db.build_session import get_session_messages
-from onyx.server.features.build.db.build_session import get_user_build_sessions
-from onyx.server.features.build.db.build_session import update_session_activity
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import get_snapshots_for_session
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.db.build_session import (
+    allocate_nextjs_port,
+    create_build_session__no_commit,
+    delete_build_session__no_commit,
+    fetch_all_supported_build_llm_providers,
+    get_build_session,
+    get_empty_session_for_user,
+    get_session_messages,
+    get_user_build_sessions,
+    skills_are_stale,
+    update_session_activity,
+)
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_by_user_id,
+    get_snapshots_for_session,
+    update_sandbox_heartbeat,
+)
 from onyx.server.features.build.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.models import DirectoryListing
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import (
+    DirectoryListing,
+    FilesystemEntry,
+    LLMProviderConfig,
+)
 from onyx.server.features.build.sandbox.serve_transport import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+    PromptSlot,
 )
-from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
+from onyx.server.features.build.sandbox.util.agent_instructions import (
+    build_connectable_apps_list,
+)
 from onyx.server.features.build.session import streaming as _streaming
-from onyx.server.features.build.session.errors import RateLimitError
-from onyx.server.features.build.session.errors import UploadLimitExceededError
+from onyx.server.features.build.session.errors import (
+    RateLimitError,
+    UploadLimitExceededError,
+)
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
-from onyx.server.features.build.session.llm_config import get_all_build_mode_llm_configs
-from onyx.server.features.build.session.llm_config import select_default_llm_config
+from onyx.server.features.build.session.llm_config import (
+    get_all_build_mode_llm_configs,
+    select_default_llm_config,
+)
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.naming import generate_session_name
-from onyx.server.features.build.session.sandbox_lifecycle import ensure_sandbox_ready
-from onyx.server.features.build.session.sandbox_lifecycle import hydrate_managed_content
-from onyx.server.features.build.session.sandbox_lifecycle import ProvisioningPolicy
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    ProvisioningPolicy,
+    ensure_sandbox_ready,
+    hydrate_managed_content,
+)
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.skills.push import build_user_skills_payload
 from onyx.utils.logger import setup_logger
@@ -209,16 +219,15 @@ class SessionManager:
         return get_user_build_sessions(user_id, self._db_session)
 
     def _prewarm_opencode_session(
-        self, sandbox_id: UUID, session: BuildSession
+        self, sandbox: Sandbox, session: BuildSession
     ) -> None:
-        """Mint and persist the opencode-serve session before the first prompt.
+        """Mint and persist the OpenCode session before the first prompt.
 
         The caller owns the surrounding transaction. This keeps the empty Craft
-        session's frontend-ready state aligned with the agent runtime being
-        ready to accept the first user message.
+        session's runtime ID and acknowledged skills generation aligned.
         """
         opencode_session_id = self._sandbox_manager.ensure_opencode_session(
-            sandbox_id=sandbox_id,
+            sandbox_id=sandbox.id,
             session_id=session.id,
             opencode_session_id=session.opencode_session_id,
         )
@@ -233,7 +242,78 @@ class SessionManager:
                 session.id,
             )
             session.opencode_session_id = opencode_session_id
+            session.skills_hash = sandbox.skills_hash
             self._db_session.flush()
+
+    def reload_session_skills(self, session_id: UUID, user: User) -> bool:
+        """Reload one runtime and report whether its skills remain stale."""
+        session = get_build_session(session_id, user.id, self._db_session)
+        if session is None:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+
+        sandbox = get_sandbox_by_user_id(self._db_session, user.id)
+        if sandbox is None or not skills_are_stale(session, sandbox):
+            return False
+
+        skills_hash = sandbox.skills_hash
+        if sandbox.status == SandboxStatus.PROVISIONING:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "Wait for the sandbox to finish starting before reloading skills.",
+            )
+
+        update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
+
+        prompt_slot = (
+            self._sandbox_manager.prompt_slot(
+                sandbox.id,
+                session_id,
+                acquire_timeout=0.1,
+                fail_open=False,
+            )
+            if sandbox.status == SandboxStatus.RUNNING
+            else nullcontext(PromptSlot(acquired=True))
+        )
+        with prompt_slot as slot:
+            if not slot.acquired:
+                raise OnyxError(
+                    OnyxErrorCode.CONFLICT,
+                    "Wait for the current turn to finish before reloading skills.",
+                )
+
+            if sandbox.status == SandboxStatus.RUNNING:
+                try:
+                    self._sandbox_manager.regenerate_session_config(
+                        sandbox_id=sandbox.id,
+                        session_id=session_id,
+                        agent_provider=session.agent_provider,
+                        agent_model=session.agent_model,
+                        nextjs_port=session.nextjs_port,
+                        connectable_apps_section=build_connectable_apps_list(
+                            get_connectable_apps_for_user(self._db_session, user)
+                        ),
+                        user_name=user.personal_name,
+                    )
+                    if session.opencode_session_id is not None:
+                        self._sandbox_manager.dispose_opencode_instance(
+                            sandbox.id, session_id
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to refresh skills for session %s",
+                        session_id,
+                        exc_info=True,
+                    )
+                    raise OnyxError(
+                        OnyxErrorCode.BAD_GATEWAY,
+                        "Failed to reload session.",
+                    ) from exc
+
+            session.skills_hash = skills_hash
+            self._db_session.flush()
+            self._db_session.refresh(sandbox)
+            return skills_are_stale(session, sandbox)
 
     def ensure_sandbox_running(
         self,
@@ -378,29 +458,26 @@ class SessionManager:
         )
         user_name = user.personal_name
 
-        skills_section, connectable_apps_section, skills_files = (
-            build_user_skills_payload(user, self._db_session)
+        connectable_apps_section, skills_files = build_user_skills_payload(
+            user, self._db_session
         )
-        # Push the exact fileset AGENTS.md is rendered from, before rendering
-        # it — a skill can never be advertised while missing from disk.
         hydrate_managed_content(
             self._sandbox_manager,
             sandbox.id,
             user,
             self._db_session,
+            connectable_apps_section=connectable_apps_section,
             skills_files=skills_files,
         )
-
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
             session_id=build_session.id,
             llm_config=llm_config,
             nextjs_port=nextjs_port,
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
-        self._prewarm_opencode_session(sandbox.id, build_session)
+        self._prewarm_opencode_session(sandbox, build_session)
 
         logger.info(
             "Successfully created session %s with workspace in sandbox %s",
@@ -464,7 +541,7 @@ class SessionManager:
                         hydrate_managed_content(
                             self._sandbox_manager, sandbox.id, user, self._db_session
                         )
-                    self._prewarm_opencode_session(sandbox.id, existing)
+                    self._prewarm_opencode_session(sandbox, existing)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,
@@ -683,7 +760,10 @@ class SessionManager:
                     # Log but don't fail - session can still be deleted even if
                     # workspace cleanup fails (e.g., if pod is already terminated)
                     logger.warning(
-                        "Failed to cleanup session workspace %s: %s", session_id, e
+                        "Failed to cleanup session workspace %s: %s",
+                        session_id,
+                        e,
+                        exc_info=True,
                     )
 
                 ensure_prompt_slot_owned()
@@ -1482,6 +1562,7 @@ class SessionManager:
 
         # Update heartbeat - file upload is user activity that keeps sandbox alive
         update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
 
         return relative_path, len(content)
 
@@ -1520,5 +1601,6 @@ class SessionManager:
             # SandboxManager already logs the deletion details
             # Update heartbeat - file deletion is user activity that keeps sandbox alive
             update_sandbox_heartbeat(self._db_session, sandbox.id)
+            self._db_session.commit()
 
         return deleted

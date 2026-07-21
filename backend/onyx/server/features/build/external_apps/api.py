@@ -1,63 +1,56 @@
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import File
-from fastapi import Form
-from fastapi import UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ExternalAppType
-from onyx.db.enums import Permission
-from onyx.db.enums import SandboxStatus
-from onyx.db.external_app import create_external_app
-from onyx.db.external_app import delete_external_app
-from onyx.db.external_app import get_external_app_by_id
-from onyx.db.external_app import get_external_apps
-from onyx.db.external_app import get_policies
-from onyx.db.external_app import get_user_credentials_by_app_id
-from onyx.db.external_app import required_user_credential_keys
-from onyx.db.external_app import update_external_app
-from onyx.db.external_app import upsert_external_app_user_credential
-from onyx.db.external_app import validate_auth_template
-from onyx.db.models import ExternalApp
-from onyx.db.models import ExternalAppUserCredential
-from onyx.db.models import User
+from onyx.db.enums import ExternalAppType, Permission, SandboxStatus
+from onyx.db.external_app import (
+    create_external_app,
+    delete_external_app,
+    get_external_app_by_id,
+    get_external_apps,
+    get_policies,
+    get_user_credentials_by_app_id,
+    required_user_credential_keys,
+    update_external_app,
+    upsert_external_app_user_credential,
+    validate_auth_template,
+)
+from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
 from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.utils import none_as_unset
-from onyx.db.utils import UNSET
+from onyx.db.utils import UNSET, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.models import BuiltInExternalAppDescriptor
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.registry import action_policy_views
-from onyx.external_apps.providers.registry import fetch_available_built_in_apps
-from onyx.external_apps.providers.registry import get_onyx_managed_provider
-from onyx.external_apps.providers.registry import get_provider_for_app
-from onyx.external_apps.providers.registry import resolve_action_overrides
+from onyx.external_apps.providers.registry import (
+    action_policy_views,
+    fetch_available_built_in_apps,
+    get_onyx_managed_provider,
+    get_provider_for_app,
+    resolve_action_overrides,
+)
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.external_apps.models import ConnectAppDecisionRequest
 from onyx.server.features.build.external_apps.models import (
+    ConnectAppDecisionRequest,
     CreateBuiltInExternalAppRequest,
+    ExternalAppAdminResponse,
+    ExternalAppUserResponse,
+    UpdateExternalAppRequest,
+    UpsertUserCredentialsRequest,
 )
-from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
-from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
-from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
-from onyx.server.features.build.external_apps.models import UpsertUserCredentialsRequest
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.skills.bundle import read_bundle_file
-from onyx.skills.ingest import delete_bundle_blob
-from onyx.skills.ingest import ingested_skill_bundle
-from onyx.skills.push import push_skill_to_affected_sandboxes
-from onyx.skills.push import push_skills_for_users
+from onyx.skills.ingest import delete_bundle_blob, ingested_skill_bundle
+from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
 from onyx.utils.encryption import mask_string
 from onyx.utils.pydantic_util import parse_json_form_field
 from shared_configs.configs import MULTI_TENANT
@@ -98,6 +91,7 @@ def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
         organization_credentials=(
             {} if managed else app.organization_credentials.get_value(apply_mask=True)
         ),
+        enabled=app.enabled,
         actions=action_policy_views(app.app_type, stored),
         is_onyx_managed=managed,
     )
@@ -200,7 +194,7 @@ def update_external_app_admin(
 ) -> ExternalAppAdminResponse:
     """Partial update of any app (404 if absent). ``None`` fields are left
     untouched. For Onyx-managed built-ins (cloud) the gateway-config fields
-    are Onyx-owned and ignored — only ``action_policies`` apply.
+    are Onyx-owned and ignored — only ``enabled`` and ``action_policies`` apply.
     A custom app's bundle bytes are swapped via ``PUT /admin/apps/{id}/bundle``.
     """
     app = _get_app_or_404(db_session, external_app_id)
@@ -225,6 +219,7 @@ def update_external_app_admin(
         db_session=db_session,
         external_app_id=external_app_id,
         app_type=app.app_type,
+        enabled=none_as_unset(request.enabled),
         name=none_as_unset(request.name),
         description=none_as_unset(request.description),
         # Gateway config is Onyx-owned for managed built-ins; leave it untouched.
@@ -421,6 +416,13 @@ def upsert_user_credentials(
 
     Returns 404 if no app with `external_app_id` exists.
     """
+    app = _get_app_or_404(db_session, external_app_id)
+    if not app.enabled:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This app is currently disabled by an admin.",
+        )
+
     upsert_external_app_user_credential(
         db_session=db_session,
         external_app_id=external_app_id,
@@ -431,6 +433,7 @@ def upsert_user_credentials(
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes now.
     push_skills_for_users({user.id}, db_session)
+    db_session.commit()
 
 
 @router.get("/apps")
@@ -438,12 +441,12 @@ def list_external_apps(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ExternalAppUserResponse]:
-    """List external apps with the calling user's credential state: the
+    """List enabled external apps with the calling user's credential state: the
     keys the user must supply, the values already stored, and an
     ``authenticated`` flag. Org credentials and the raw auth template aren't
     exposed.
     """
-    apps = get_external_apps(db_session=db_session)
+    apps = get_external_apps(db_session=db_session, enabled_only=True)
     user_creds_by_app = get_user_credentials_by_app_id(
         db_session=db_session, user_id=user.id
     )

@@ -1,5 +1,6 @@
 """Push skill bundles to running sandboxes."""
 
+import hashlib
 import io
 import zipfile
 from collections.abc import Iterable
@@ -8,35 +9,41 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.external_app import get_connectable_apps_for_user
-from onyx.db.external_app import get_external_app_by_skill_id
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.skill import list_skills
-from onyx.db.skill import persist_skill_validity
-from onyx.db.skill import SkillAccessPolicy
-from onyx.db.skill import SkillValidityUpdate
+from onyx.db.external_app import (
+    get_connectable_apps_for_user,
+    get_external_app_by_skill_id,
+)
+from onyx.db.models import Skill, User
+from onyx.db.skill import (
+    SkillAccessPolicy,
+    SkillValidityUpdate,
+    affected_user_ids_for_skill,
+    list_skills,
+    persist_skill_validity,
+)
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.db.sandbox import get_sandbox_user_map
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_user_map,
+    lock_sandbox_skills_hashes,
+    set_sandbox_skills_hashes__no_commit,
+)
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import PushResult
+from onyx.server.features.build.sandbox.models import FileSet, PushResult
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
-from onyx.server.features.build.sandbox.util.agent_instructions import (
-    build_skills_section_from_data,
+from onyx.skills.built_in import (
+    BUILT_IN_SKILLS,
+    COMPANY_SEARCH,
+    EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
+    BuiltInSkillDefinition,
 )
-from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.built_in import COMPANY_SEARCH
-from onyx.skills.built_in import EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
-from onyx.skills.rendering import render_company_search_skill
-from onyx.skills.rendering import render_external_app_skill
-from onyx.skills.validation import load_stored_custom_skill_bundle
-from onyx.skills.validation import validate_stored_custom_skill
+from onyx.skills.rendering import render_company_search_skill, render_external_app_skill
+from onyx.skills.validation import (
+    load_stored_custom_skill_bundle,
+    validate_stored_custom_skill,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -44,6 +51,25 @@ logger = setup_logger()
 SKILLS_MOUNT_PATH = "/workspace/managed/skills"
 
 _EXCLUDED_DIR_NAMES: frozenset[str] = frozenset({"__pycache__"})
+
+
+def compute_skill_runtime_hash(
+    files: FileSet,
+    connectable_apps_section: str,
+) -> str:
+    """Digest skill files and the app guidance rendered into ``AGENTS.md``."""
+    digest = hashlib.sha256()
+    connectable_apps_bytes = connectable_apps_section.encode()
+    digest.update(len(connectable_apps_bytes).to_bytes(8))
+    digest.update(connectable_apps_bytes)
+    for path in sorted(files):
+        path_bytes = path.encode()
+        content = files[path]
+        digest.update(len(path_bytes).to_bytes(8))
+        digest.update(path_bytes)
+        digest.update(len(content).to_bytes(8))
+        digest.update(content)
+    return digest.hexdigest()
 
 
 def _is_excluded(path: Path, source_dir: Path) -> bool:
@@ -102,7 +128,7 @@ def _render_template(
     )
 
 
-def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> bool:
+def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None:
     try:
         bundle_files: FileSet = {}
         with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as zf:
@@ -111,7 +137,6 @@ def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> bool
                     continue
                 bundle_files[f"{skill.slug}/{info.filename}"] = zf.read(info)
         files.update(bundle_files)
-        return True
     except Exception:
         logger.warning(
             "Failed to unpack bundle for skill %s (%s), skipping",
@@ -119,22 +144,20 @@ def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> bool
             skill.bundle_file_id,
             exc_info=True,
         )
-        return False
 
 
 def _assemble_fileset(
     skills: Iterable[Skill],
     user: User,
     db_session: Session,
-) -> tuple[list[Skill], FileSet]:
-    """Return hydrated skills and their flat ``{path: bytes}`` map.
+) -> FileSet:
+    """Return the hydrated skills as a flat ``{path: bytes}`` map.
 
     Built-ins render from disk. Custom rows must already be valid or pass lazy
     validation before their FileStore bundle is unpacked. Invalid,
     indeterminate, and unknown built-in rows are skipped.
     """
     files: FileSet = {}
-    hydrated_skills: list[Skill] = []
     validity_updates: list[SkillValidityUpdate] = []
     file_store = get_default_file_store()
 
@@ -177,8 +200,7 @@ def _assemble_fileset(
                     )
                     continue
 
-            if _add_bundle_bytes(files, skill, bundle_bytes):
-                hydrated_skills.append(skill)
+            _add_bundle_bytes(files, skill, bundle_bytes)
             continue
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
         if definition is None:
@@ -188,7 +210,6 @@ def _assemble_fileset(
                 skill.built_in_skill_id,
             )
             continue
-        hydrated_skills.append(skill)
         _add_static_builtin(files, skill, definition)
         if definition.has_template:
             _render_template(files, skill, definition, db_session, user)
@@ -197,7 +218,7 @@ def _assemble_fileset(
         persist_skill_validity(validity_updates)
     except Exception:
         logger.exception("Failed to persist skill validity classifications")
-    return hydrated_skills, files
+    return files
 
 
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
@@ -207,28 +228,25 @@ def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
         user=user,
         db_session=db_session,
     )
-    _, files = _assemble_fileset(skills, user, db_session)
-    return files
+    return _assemble_fileset(skills, user, db_session)
 
 
-def build_user_skills_payload(
-    user: User, db_session: Session
-) -> tuple[str, str, FileSet]:
-    """Return (skills_section, connectable_apps_section, fileset) sharing one set
-    of DB reads. ``connectable_apps_section`` lists org apps the user hasn't
-    connected yet, so the agent knows they exist and can offer to set one up via
-    the connect tool."""
+def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, FileSet]:
+    """Return the connectable-apps section and skill fileset.
+
+    The connectable-apps section lists org apps the user has not connected yet,
+    so the agent can offer to set one up through the connect tool.
+    """
     skills = list_skills(
         policy=SkillAccessPolicy.USE,
         user=user,
         db_session=db_session,
     )
-    hydrated_skills, files = _assemble_fileset(skills, user, db_session)
-    skills_section = build_skills_section_from_data(hydrated_skills)
+    files = _assemble_fileset(skills, user, db_session)
     connectable_apps_section = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
     )
-    return skills_section, connectable_apps_section, files
+    return connectable_apps_section, files
 
 
 def hydrate_sandbox_skills(
@@ -256,19 +274,38 @@ def push_skill_to_affected_sandboxes(skill: Skill, db_session: Session) -> None:
 
 
 def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
-    """Rebuild and push the full skills fileset for each user's sandbox."""
+    """Push skill state changes and mark affected sessions for reload."""
     if not user_ids:
         return
     try:
         sandbox_map = get_sandbox_user_map(list(user_ids), db_session)
-        sandbox_files = {
-            sid: build_skills_fileset_for_user(user, db_session)
-            for sid, user in sandbox_map.items()
+        current_hashes = lock_sandbox_skills_hashes(db_session, set(sandbox_map))
+        sandbox_payloads = {
+            sandbox_id: build_user_skills_payload(user, db_session)
+            for sandbox_id, user in sandbox_map.items()
         }
+        desired_hashes = {
+            sandbox_id: compute_skill_runtime_hash(files, connectable_apps_section)
+            for sandbox_id, (
+                connectable_apps_section,
+                files,
+            ) in sandbox_payloads.items()
+        }
+        changed_files = {
+            sandbox_id: files
+            for sandbox_id, (
+                _connectable_apps_section,
+                files,
+            ) in sandbox_payloads.items()
+            if current_hashes.get(sandbox_id) != desired_hashes[sandbox_id]
+        }
+        if not changed_files:
+            return
         result = get_sandbox_manager().push_to_sandboxes(
             mount_path=SKILLS_MOUNT_PATH,
-            sandbox_files=sandbox_files,
+            sandbox_files=changed_files,
         )
+        failed_sandbox_ids = {failure.sandbox_id for failure in result.failures}
         for failure in result.failures:
             logger.warning(
                 "Skill push failed for sandbox %s: %s: %s",
@@ -276,5 +313,19 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
                 failure.reason,
                 failure.detail,
             )
+        successful_sandbox_ids = set(changed_files) - failed_sandbox_ids
+        if not successful_sandbox_ids:
+            return
+        try:
+            with db_session.begin_nested():
+                set_sandbox_skills_hashes__no_commit(
+                    db_session,
+                    {
+                        sandbox_id: desired_hashes[sandbox_id]
+                        for sandbox_id in successful_sandbox_ids
+                    },
+                )
+        except Exception:
+            logger.exception("Failed to persist successful skill push state")
     except Exception:
         logger.exception("Failed to push skills to sandboxes")

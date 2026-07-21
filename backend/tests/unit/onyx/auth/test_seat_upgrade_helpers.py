@@ -14,16 +14,13 @@ both EE and CE builds.
 
 from __future__ import annotations
 
-from typing import Any
-from typing import Iterator
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, Iterator
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from ee.onyx.db.license import user_counts_toward_seats as _canonical
-from onyx.auth.users import _upgrade_will_add_seat
-from onyx.auth.users import _user_currently_counts_toward_seats
+from onyx.auth.users import _upgrade_will_add_seat, _user_currently_counts_toward_seats
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.db.enums import AccountType
 

@@ -23,15 +23,12 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import ASGITransport
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import cookie_transport
 from onyx.db.enums import SSOProviderType
-from onyx.db.models import SSOProvider
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
+from onyx.db.models import SSOProvider, User, User__UserGroup
 from onyx.db.sso_provider import create_sso_provider
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.server import oidc_multi

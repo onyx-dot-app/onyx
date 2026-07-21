@@ -14,13 +14,9 @@ from __future__ import annotations
 
 import queue
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterable
-from dataclasses import dataclass
-from dataclasses import field
-from typing import Any
-from typing import cast
+from collections.abc import Callable, Generator, Iterable
+from dataclasses import dataclass, field
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx
@@ -29,29 +25,35 @@ from onyx.cache.factory import get_cache_backend
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+    OPENCODE_SERVE_CONNECT_TIMEOUT,
+    OPENCODE_SERVE_EVENT_READ_TIMEOUT,
+    OPENCODE_SERVE_REQUEST_TIMEOUT,
+    OPENCODE_SERVER_USERNAME,
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+    SSE_KEEPALIVE_INTERVAL,
 )
-from onyx.server.features.build.configs import OPENCODE_SERVE_CONNECT_TIMEOUT
-from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
-from onyx.server.features.build.configs import OPENCODE_SERVE_REQUEST_TIMEOUT
-from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
-from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
-from onyx.server.features.build.packets import CompactionPacket
-from onyx.server.features.build.packets import ContextUsagePacket
-from onyx.server.features.build.packets import SubagentStartedPacket
-from onyx.server.features.build.sandbox.event_schema import ActivityTimeoutError
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_SESSION
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TRANSPORT
-from onyx.server.features.build.sandbox.opencode.event_bus import _Subscription
-from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
-from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
+from onyx.server.features.build.packets import (
+    CompactionPacket,
+    ContextUsagePacket,
+    SubagentStartedPacket,
+)
+from onyx.server.features.build.sandbox.event_schema import (
+    TURN_ERROR_CODE_SESSION,
+    TURN_ERROR_CODE_TIMEOUT,
+    TURN_ERROR_CODE_TRANSPORT,
+    ActivityTimeoutError,
+    AgentMessageChunk,
+    AgentThoughtChunk,
+    Error,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
+from onyx.server.features.build.sandbox.opencode.event_bus import (
+    BUS_CLOSED_SENTINEL,
+    PodEventBus,
+    _Subscription,
+)
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -1241,6 +1243,16 @@ class OpencodeServeClient:
             r.status_code,
         )
         return False
+
+    def dispose_instance(self, *, directory: str) -> None:
+        """Dispose the directory-scoped runtime so OpenCode reloads managed files."""
+        r = self._request(
+            "POST",
+            "/instance/dispose",
+            params={"directory": directory},
+            idempotent=True,
+        )
+        _raise_for_status(r, "instance dispose")
 
     def list_messages(
         self, opencode_session_id: str, *, directory: str

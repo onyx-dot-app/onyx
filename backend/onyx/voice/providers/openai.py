@@ -12,17 +12,18 @@ import io
 import json
 from collections.abc import AsyncIterator
 from enum import StrEnum
-from typing import Any
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
-from onyx.voice.interface import StreamingSynthesizerProtocol
-from onyx.voice.interface import StreamingTranscriberProtocol
-from onyx.voice.interface import TranscriptResult
-from onyx.voice.interface import VoiceProviderInterface
+from onyx.voice.interface import (
+    StreamingSynthesizerProtocol,
+    StreamingTranscriberProtocol,
+    TranscriptResult,
+    VoiceProviderInterface,
+)
 
 if TYPE_CHECKING:
     from openai import AsyncOpenAI
@@ -594,8 +595,7 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
 
     async def validate_credentials(self) -> None:
         """Validate OpenAI API key by listing models."""
-        from openai import AuthenticationError
-        from openai import PermissionDeniedError
+        from openai import AuthenticationError, PermissionDeniedError
 
         client = self._get_client()
         try:

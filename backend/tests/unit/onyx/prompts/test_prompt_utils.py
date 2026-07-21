@@ -1,14 +1,17 @@
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.prompts.chat_prompts import CITATION_GUIDANCE_REPLACEMENT_PAT
-from onyx.prompts.chat_prompts import DATETIME_REPLACEMENT_PAT
-from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
+from onyx.prompts.chat_prompts import (
+    CITATION_GUIDANCE_REPLACEMENT_PAT,
+    DATETIME_REPLACEMENT_PAT,
+    REQUIRE_CITATION_GUIDANCE,
+)
 from onyx.prompts.constants import REMINDER_TAG_DESCRIPTION
-from onyx.prompts.prompt_utils import apply_prompt_placeholders
-from onyx.prompts.prompt_utils import replace_current_datetime_tag
-from onyx.prompts.prompt_utils import replace_reminder_tag
-from onyx.prompts.prompt_utils import substitute_user_placeholders
+from onyx.prompts.prompt_utils import (
+    apply_prompt_placeholders,
+    replace_current_datetime_tag,
+    replace_reminder_tag,
+    substitute_user_placeholders,
+)
 
 
 def test_replace_reminder_tag_pattern() -> None:
@@ -158,3 +161,12 @@ def test_apply_prompt_placeholders_replaces_citation_guidance(
     assert REQUIRE_CITATION_GUIDANCE in result
     assert CITATION_GUIDANCE_REPLACEMENT_PAT not in result
     assert should_append_citation is False
+
+
+def test_placeholder_split_across_prompt_parts_stays_literal_per_part() -> None:
+    # Prompt parts are substituted independently. A placeholder split across
+    # parts has no complete {{user.<key>}} match in either, so each stays literal.
+    system_part = "System ends with {{user.dep"
+    agent_part = "artment}} and more"
+    assert substitute_user_placeholders(system_part, _VALUES) == system_part
+    assert substitute_user_placeholders(agent_part, _VALUES) == agent_part

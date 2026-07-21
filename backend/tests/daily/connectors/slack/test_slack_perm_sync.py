@@ -1,11 +1,9 @@
 import time
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import HierarchyNode, SlimDocument
 from onyx.connectors.slack.connector import SlackConnector
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.secret_names import TestSecret

@@ -1,7 +1,6 @@
 import pytest
 
-from shared_configs.configs import cors_allow_credentials
-from shared_configs.configs import parse_cors_allowed_origins
+from shared_configs.configs import cors_allow_credentials, parse_cors_allowed_origins
 
 
 def test_empty_env_allows_all_origins_without_credentials() -> None:

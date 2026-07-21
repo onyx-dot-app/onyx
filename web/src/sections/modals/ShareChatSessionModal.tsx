@@ -5,7 +5,7 @@ import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { copyAll } from "@/app/app/message/copyingUtils";
 import { Section } from "@/layouts/general-layouts";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Button, CopyButton, InputTypeIn, SelectCard } from "@opal/components";
 import { ContentAction, toast } from "@opal/layouts";
 import { SvgLink, SvgShare, SvgUsers } from "@opal/icons";

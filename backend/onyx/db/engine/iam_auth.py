@@ -5,10 +5,12 @@ from typing import Any
 
 import boto3
 
-from onyx.configs.app_configs import POSTGRES_HOST
-from onyx.configs.app_configs import POSTGRES_PORT
-from onyx.configs.app_configs import POSTGRES_USER
-from onyx.configs.app_configs import USE_IAM_AUTH
+from onyx.configs.app_configs import (
+    POSTGRES_HOST,
+    POSTGRES_PORT,
+    POSTGRES_USER,
+    USE_IAM_AUTH,
+)
 from onyx.configs.constants import SSL_CERT_FILE
 
 

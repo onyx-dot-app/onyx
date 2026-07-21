@@ -8,13 +8,15 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
-from onyx.db.models import MCPServer
-from onyx.db.models import MCPServer__UserGroup
-from onyx.db.models import Persona
-from onyx.db.models import Tool
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
+from onyx.db.models import (
+    MCPServer,
+    MCPServer__UserGroup,
+    Persona,
+    Tool,
+    User,
+    User__UserGroup,
+    UserGroup,
+)
 from onyx.db.persona import upsert_persona
 from tests.external_dependency_unit.conftest import create_test_user
 

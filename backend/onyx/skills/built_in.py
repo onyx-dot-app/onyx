@@ -20,17 +20,11 @@ or external app is a single ``_REGISTRY`` entry plus its on-disk
 ``builtin/<skill_id>/`` directory.
 """
 
-from collections.abc import Callable
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Final
-from typing import Literal
+from typing import Final, Literal
 
-from pydantic import BaseModel
-from pydantic import computed_field
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType

@@ -8,15 +8,17 @@ the DB layer and the outbound network call.
 """
 
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import SimpleNamespace
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from urllib.parse import parse_qs
 
 import httpx
 import pytest
 
 import onyx.server.features.mcp.oauth as mcp_oauth
+from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.server.features.mcp.models import MCPOAuthKeys
@@ -68,6 +70,13 @@ class _FakeAsyncHttpClient:
         return self._response
 
 
+@contextmanager
+def _noop_shared_lock(*_args: Any, **_kwargs: Any) -> Iterator[None]:
+    """Stand-in for the real shared cache lock so these stay pure unit tests (no
+    live Redis/Postgres). Single-flight coordination is covered elsewhere."""
+    yield
+
+
 def _install_mocks(
     monkeypatch: pytest.MonkeyPatch,
     config_data: dict[str, Any],
@@ -80,6 +89,8 @@ def _install_mocks(
     """
     captured: dict[str, Any] = {}
 
+    # Keep this a true unit test: no live cache backend for the single-flight lock.
+    monkeypatch.setattr(mcp_oauth, "cache_shared_lock", _noop_shared_lock)
     monkeypatch.setattr(
         mcp_oauth, "get_session_with_current_tenant", lambda: _FakeDbSession()
     )
@@ -102,7 +113,11 @@ def _install_mocks(
     monkeypatch.setattr(mcp_oauth, "update_connection_config", _fake_update)
 
     fake_client = _FakeAsyncHttpClient(response or httpx.Response(400), captured)
-    monkeypatch.setattr(mcp_oauth, "mcp_ssrf_httpx_client_factory", lambda: fake_client)
+    monkeypatch.setattr(
+        mcp_oauth,
+        "mcp_ssrf_httpx_client_factory",
+        lambda **_kwargs: fake_client,
+    )
     return captured
 
 
@@ -352,3 +367,51 @@ def test_refresh_failure_is_non_fatal_to_caller(
 
     with pytest.raises(RuntimeError):
         refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+
+
+@pytest.mark.parametrize(
+    ("expiry_offset_s", "expected_header"),
+    [
+        # Winner already persisted a fresh token: hand its header back.
+        (3600, "Bearer PERSISTED"),
+        # Winner still refreshing, so the stored token is expired and there is no
+        # fresh header yet: return None. The caller (MCPTool.run) then falls back
+        # to its existing header (which will 401 until the refresh lands).
+        (-60, None),
+    ],
+)
+def test_lock_contention_returns_persisted_header_or_none(
+    monkeypatch: pytest.MonkeyPatch,
+    expiry_offset_s: float,
+    expected_header: str | None,
+) -> None:
+    """On lock contention we skip our own refresh and hand back whatever is
+    persisted: the winner's fresh header if it has written one, else None when
+    the stored token is still expired. Never a network call."""
+    config_data: dict[str, Any] = {
+        "headers": {"Authorization": "Bearer PERSISTED"},
+        MCPOAuthKeys.TOKENS.value: {
+            "access_token": "PERSISTED",
+            "token_type": "Bearer",
+            "expires_in": 7200,
+            "refresh_token": "REFRESH_2",
+        },
+        MCPOAuthKeys.TOKEN_EXPIRES_AT.value: time.time() + expiry_offset_s,
+        MCPOAuthKeys.CLIENT_INFO.value: {
+            "client_id": "cid",
+            "redirect_uris": [_REDIRECT_URI],
+        },
+    }
+    captured = _install_mocks(monkeypatch, config_data, response=_token_response())
+
+    @contextmanager
+    def _contended_lock(*_args: Any, **_kwargs: Any) -> Iterator[None]:
+        raise CacheLockAcquisitionError("held by a concurrent refresher")
+        yield  # pragma: no cover — unreachable, satisfies the generator contract
+
+    monkeypatch.setattr(mcp_oauth, "cache_shared_lock", _contended_lock)
+
+    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+
+    assert header == expected_header
+    assert "sent_request" not in captured

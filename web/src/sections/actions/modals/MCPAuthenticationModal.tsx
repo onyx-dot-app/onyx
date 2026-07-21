@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import useSWR, { KeyedMutator } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import { Section } from "@/layouts/general-layouts";
 import { FormField } from "@/refresh-components/form/FormField";
@@ -22,7 +22,7 @@ import { markdown } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { useModal } from "@opal/components";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,

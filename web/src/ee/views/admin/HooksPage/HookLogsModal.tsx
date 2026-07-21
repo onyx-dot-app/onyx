@@ -2,7 +2,7 @@
 
 import { Button, Text } from "@opal/components";
 import { SvgDownload, SvgTextLines, SvgSimpleLoader } from "@opal/icons";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
@@ -14,7 +14,7 @@ import type {
   HookPointMeta,
   HookResponse,
 } from "@/ee/views/admin/HooksPage/interfaces";
-import { useModalClose } from "@/refresh-components/contexts/ModalContext";
+import { useModalClose } from "@opal/components";
 
 interface HookLogsModalProps {
   hook: HookResponse;

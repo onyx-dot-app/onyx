@@ -4,8 +4,10 @@ import httpx
 import pytest
 
 from onyx.db.enums import ExternalAppType
-from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
-from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
+from onyx.server.features.build.external_apps.models import (
+    ExternalAppAdminResponse,
+    ExternalAppUserResponse,
+)
 from onyx.utils.encryption import mask_credential_dict
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.skill import SkillManager
@@ -107,6 +109,7 @@ def test_admin_creates_app_user_configures_credentials(
     assert admin_app.description == "An app for testing"
     assert admin_app.upstream_url_patterns == ["https://api.example.com/*"]
     assert admin_app.auth_template == _AUTH_TEMPLATE
+    assert admin_app.enabled is True
     # Org credentials are masked in the admin response so secrets are never
     # returned to the client.
     assert admin_app.organization_credentials == mask_credential_dict(_ORG_CREDENTIALS)
@@ -138,6 +141,39 @@ def test_admin_creates_app_user_configures_credentials(
     assert admin_apps_after[0].organization_credentials == mask_credential_dict(
         _ORG_CREDENTIALS
     )
+
+
+def test_admin_disablement_hides_app_without_deleting_user_credentials(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    basic_user: DATestUser,
+) -> None:
+    created = _create_test_app(admin_user)
+    ExternalAppManager.upsert_user_credentials(
+        user_performing_action=basic_user,
+        app_id=created.id,
+        credentials=_USER_CREDENTIALS,
+    )
+
+    disabled = ExternalAppManager.set_enabled(admin_user, created.id, False)
+
+    assert disabled.enabled is False
+    assert all(
+        app.id != created.id for app in ExternalAppManager.list_for_user(basic_user)
+    )
+    with pytest.raises(httpx.HTTPStatusError) as exc:
+        ExternalAppManager.upsert_user_credentials(
+            user_performing_action=basic_user,
+            app_id=created.id,
+            credentials=_USER_CREDENTIALS,
+        )
+    assert exc.value.response.status_code == 400
+
+    enabled = ExternalAppManager.set_enabled(admin_user, created.id, True)
+    restored = ExternalAppManager.get_for_user(basic_user, created.id)
+
+    assert enabled.enabled is True
+    assert restored.authenticated is True
 
 
 def test_external_app_is_excluded_from_skill_management_apis(

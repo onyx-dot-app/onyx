@@ -12,13 +12,17 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 from onyx.context.search.models import IndexFilters  # noqa: E402
-from onyx.db.document import delete_documents_complete__no_commit  # noqa: E402
-from onyx.db.document import get_document  # noqa: E402
+from onyx.db.document import (  # noqa: E402
+    delete_documents_complete__no_commit,
+    get_document,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant  # noqa: E402
 from onyx.db.search_settings import get_current_search_settings  # noqa: E402
 from onyx.db.tag import delete_orphan_tags_batched  # noqa: E402
-from onyx.document_index.interfaces_new import DocumentSectionRequest  # noqa: E402
-from onyx.document_index.interfaces_new import TenantState  # noqa: E402
+from onyx.document_index.interfaces_new import (  # noqa: E402
+    DocumentSectionRequest,
+    TenantState,
+)
 from onyx.document_index.vespa.vespa_document_index import (  # noqa: E402
     VespaDocumentIndex,
 )

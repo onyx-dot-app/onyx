@@ -16,20 +16,22 @@ from typing import Any
 from uuid import UUID
 
 from docker import DockerClient
-from docker.errors import APIError
-from docker.errors import NotFound
+from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 from docker.types.daemon import CancellableStream
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
-from onyx.sandbox_proxy.identity import SandboxIdentity
-from onyx.sandbox_proxy.identity import SandboxIPLookup
-from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
-from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
-from onyx.server.features.build.sandbox.labels import LABEL_DOCKER_COMPONENT
-from onyx.server.features.build.sandbox.labels import LABEL_DOCKER_COMPONENT_SANDBOX
-from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
-from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
+from onyx.sandbox_proxy.identity import SandboxIdentity, SandboxIPLookup
+from onyx.server.features.build.configs import (
+    SANDBOX_DOCKER_NETWORK,
+    SANDBOX_DOCKER_SOCKET,
+)
+from onyx.server.features.build.sandbox.labels import (
+    LABEL_DOCKER_COMPONENT,
+    LABEL_DOCKER_COMPONENT_SANDBOX,
+    LABEL_SANDBOX_ID,
+    LABEL_TENANT_ID,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -31,12 +31,9 @@ import re
 import sys
 import urllib.request
 from dataclasses import dataclass
-from datetime import date
-from datetime import datetime
-from datetime import timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
-from typing import Literal
+from typing import Any, Literal
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = SCRIPT_DIR.parent

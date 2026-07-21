@@ -1,17 +1,16 @@
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.background.celery.tasks.hierarchyfetching.tasks import (
     _connector_supports_hierarchy_fetching,
-)
-from onyx.background.celery.tasks.hierarchyfetching.tasks import (
     check_for_hierarchy_fetching,
 )
 from onyx.connectors.factory import ConnectorMissingException
-from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import HierarchyConnector
-from onyx.connectors.interfaces import HierarchyOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    HierarchyConnector,
+    HierarchyOutput,
+    SecondsSinceUnixEpoch,
+)
 
 TASKS_MODULE = "onyx.background.celery.tasks.hierarchyfetching.tasks"
 

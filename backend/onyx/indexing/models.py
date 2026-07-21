@@ -1,16 +1,12 @@
 import contextlib
 from collections.abc import Generator
-from typing import Optional
-from typing import Protocol
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Protocol
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.access.models import DocumentAccess
 from onyx.connectors.models import Document
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.enums import SwitchoverType
+from onyx.db.enums import EmbeddingPrecision, SwitchoverType
 from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import shallow_model_dump
 from shared_configs.enums import EmbeddingProvider

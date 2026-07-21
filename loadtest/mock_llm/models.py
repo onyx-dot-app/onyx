@@ -7,11 +7,9 @@ never 422 a request the real OpenAI API would accept.
 
 from __future__ import annotations
 
-from typing import Any
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 ################################################
 # Request

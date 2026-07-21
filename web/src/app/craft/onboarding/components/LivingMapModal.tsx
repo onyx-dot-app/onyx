@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Button, Text } from "@opal/components";
 import { SvgArrowLeft, SvgArrowRight } from "@opal/icons";
 import { cn } from "@opal/utils";

@@ -3,29 +3,27 @@ import uuid
 from typing import List
 from uuid import UUID
 
-from fastapi import HTTPException
-from fastapi import UploadFile
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
+from fastapi import HTTPException, UploadFile
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTasks
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.constants import CELERY_USER_FILE_PROCESSING_TASK_EXPIRES
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import (
+    CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
+    FileOrigin,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.db.enums import UserFileStatus
-from onyx.db.models import Project__UserFile
-from onyx.db.models import User
-from onyx.db.models import UserFile
-from onyx.db.models import UserProject
+from onyx.db.models import Project__UserFile, User, UserFile, UserProject
 from onyx.server.documents.connector import upload_files
-from onyx.server.features.projects.projects_file_utils import categorize_uploaded_files
-from onyx.server.features.projects.projects_file_utils import RejectedFile
+from onyx.server.features.projects.projects_file_utils import (
+    RejectedFile,
+    categorize_uploaded_files,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

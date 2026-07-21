@@ -19,7 +19,7 @@ import { toast } from "@opal/layouts";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import SvgSimpleLoader from "@opal/icons/simple-loader";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgCheck,

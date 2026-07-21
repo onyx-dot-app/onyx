@@ -12,58 +12,61 @@ SUCCESS/CANCELED are left alone).
 
 import logging
 import time
-from collections.abc import Callable
-from collections.abc import MutableMapping
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from collections.abc import Callable, MutableMapping
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from celery import Celery
-from celery import shared_task
-from celery import Task
+from celery import Celery, Task, shared_task
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import MAX_CONCURRENT_PORT_ATTEMPTS
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, MAX_CONCURRENT_PORT_ATTEMPTS
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisLocks,
+)
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
+    get_connector_credential_pair_from_id,
 )
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.document import filter_existing_cc_pair_document_ids
-from onyx.db.document import get_document_ids_for_cc_pair_batch
-from onyx.db.document import get_max_document_id_for_cc_pair
+from onyx.db.document import (
+    filter_existing_cc_pair_document_ids,
+    get_document_ids_for_cc_pair_batch,
+    get_max_document_id_for_cc_pair,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import PortAttemptStatus
-from onyx.db.enums import SwitchoverType
-from onyx.db.models import PortAttempt
-from onyx.db.models import SearchSettings
-from onyx.db.port_attempt import commit_port_cursor
-from onyx.db.port_attempt import count_active_port_attempts
-from onyx.db.port_attempt import count_consecutive_failed_port_attempts_no_progress
-from onyx.db.port_attempt import create_port_attempt
-from onyx.db.port_attempt import get_active_port_attempt
-from onyx.db.port_attempt import get_latest_port_attempt
-from onyx.db.port_attempt import get_port_attempt
-from onyx.db.port_attempt import get_stale_in_progress_port_attempts
-from onyx.db.port_attempt import mark_port_canceled
-from onyx.db.port_attempt import mark_port_failed
-from onyx.db.port_attempt import mark_port_in_progress
-from onyx.db.port_attempt import mark_port_succeeded
-from onyx.db.port_attempt import port_backfill_has_pending_work
-from onyx.db.port_attempt import touch_port_progress
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_search_settings_by_id
-from onyx.db.search_settings import get_secondary_search_settings
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    PortAttemptStatus,
+    SwitchoverType,
+)
+from onyx.db.models import PortAttempt, SearchSettings
+from onyx.db.port_attempt import (
+    commit_port_cursor,
+    count_active_port_attempts,
+    count_consecutive_failed_port_attempts_no_progress,
+    create_port_attempt,
+    get_active_port_attempt,
+    get_latest_port_attempt,
+    get_port_attempt,
+    get_stale_in_progress_port_attempts,
+    mark_port_canceled,
+    mark_port_failed,
+    mark_port_in_progress,
+    mark_port_succeeded,
+    port_backfill_has_pending_work,
+    touch_port_progress,
+)
+from onyx.db.search_settings import (
+    get_current_search_settings,
+    get_search_settings_by_id,
+    get_secondary_search_settings,
+)
 from onyx.document_index.opensearch.port_copy import PortCopier
 from onyx.redis.redis_pool import get_redis_client
 

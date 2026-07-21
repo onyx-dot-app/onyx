@@ -18,38 +18,40 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import delete
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.enums import AccessType
-from onyx.db.enums import AccountType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SkillSharePermission
-from onyx.db.models import ActionApproval
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import ExternalApp
-from onyx.db.models import ExternalAppPolicy
-from onyx.db.models import ExternalAppUserCredential
-from onyx.db.models import Sandbox
-from onyx.db.models import Skill
-from onyx.db.models import Skill__User
-from onyx.db.models import Skill__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.models import UserRole
+from onyx.db.enums import (
+    AccessType,
+    AccountType,
+    ConnectorCredentialPairStatus,
+    EndpointPolicy,
+    ExternalAppType,
+    SandboxStatus,
+    SkillSharePermission,
+)
+from onyx.db.models import (
+    ActionApproval,
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    ExternalApp,
+    ExternalAppPolicy,
+    ExternalAppUserCredential,
+    Sandbox,
+    Skill,
+    Skill__User,
+    Skill__UserGroup,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserGroup__ConnectorCredentialPair,
+    UserRole,
+)
 
 
 def force_approval_created_at(
@@ -219,12 +221,14 @@ def make_external_app(
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
     upstream_url_patterns: list[str] | None = None,
     action_policies: dict[str, EndpointPolicy] | None = None,
+    enabled: bool = True,
 ) -> ExternalApp:
     """Insert an ``ExternalApp`` row backing ``skill``, plus any per-action
     policy overrides in ``action_policies`` (``{action_id: policy}``)."""
     app = ExternalApp(
         skill_id=skill.id,
         app_type=app_type,
+        enabled=enabled,
         upstream_url_patterns=upstream_url_patterns or [],
         auth_template=auth_template,
         organization_credentials=organization_credentials or {},

@@ -1,8 +1,6 @@
 import uuid
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
 
 import jwt
 import pytest

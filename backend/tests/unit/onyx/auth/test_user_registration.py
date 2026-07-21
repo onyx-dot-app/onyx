@@ -9,15 +9,15 @@ Tests cover:
 """
 
 from types import TracebackType
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import cast
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi_users import exceptions
 
-from onyx.auth.schemas import UserCreate
+from onyx.auth.schemas import UserCreate, UserRole
 from onyx.auth.users import UserManager
+from onyx.db.enums import AccountType
 from onyx.error_handling.exceptions import OnyxError
 
 # Note: Only async test methods are marked with @pytest.mark.asyncio individually
@@ -621,3 +621,128 @@ class TestOAuthDottedGmail:
         assert mock_verify_domain.call_args_list
         for call in mock_verify_domain.call_args_list:
             assert call.kwargs.get("is_registration") is not True
+
+
+class TestOAuthPlaceholderPromotion:
+    """A permission-sync placeholder (non-web-login account_type) must be
+    claimed and upgraded by SSO login even with auto-link off, while real
+    web-login accounts keep the account-takeover rejection."""
+
+    @staticmethod
+    def _manager_with_existing(existing_user: MagicMock) -> UserManager:
+        user_manager = UserManager(MagicMock())
+        _mock_user_manager_methods(user_manager)
+        setattr(user_manager, "on_after_register", AsyncMock())
+        setattr(
+            user_manager,
+            "get_by_oauth_account",
+            AsyncMock(side_effect=exceptions.UserNotExists()),
+        )
+        mock_user_db = MagicMock()
+        mock_user_db.get_by_email = AsyncMock(return_value=existing_user)
+        mock_user_db.get = AsyncMock(return_value=existing_user)
+        mock_user_db.add_oauth_account = AsyncMock(return_value=existing_user)
+        mock_user_db.update = AsyncMock(return_value=existing_user)
+        mock_user_db.session = MagicMock()
+        user_manager.user_db = mock_user_db
+        return user_manager
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.verify_email_in_whitelist")
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_async_session_context_manager")
+    @patch("onyx.auth.users.remove_user_from_invited_users")
+    @patch("onyx.auth.users.assign_user_to_default_groups__no_commit")
+    @patch("onyx.auth.users._upgrade_will_add_seat", return_value=False)
+    @patch("onyx.auth.users.get_session_with_current_tenant")
+    async def test_placeholder_promoted_without_auto_link(
+        self,
+        mock_sync_session_factory: MagicMock,
+        mock_will_add_seat: MagicMock,  # noqa: ARG002
+        mock_assign_groups: MagicMock,
+        mock_remove_invited: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_verify_whitelist: MagicMock,  # noqa: ARG002
+        mock_async_session: MagicMock,
+    ) -> None:
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
+        )
+        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+
+        placeholder = MagicMock(id="placeholder-id", email="synced@corp.com")
+        placeholder.account_type = AccountType.EXT_PERM_USER
+        placeholder.oidc_expiry = None
+        placeholder.is_active = True
+        user_manager = self._manager_with_existing(placeholder)
+
+        sync_user = MagicMock(is_active=True)
+        mock_sync_db = MagicMock()
+        mock_sync_db.query.return_value.filter.return_value.first.return_value = (
+            sync_user
+        )
+        mock_sync_session_factory.return_value.__enter__ = MagicMock(
+            return_value=mock_sync_db
+        )
+        mock_sync_session_factory.return_value.__exit__ = MagicMock(return_value=False)
+
+        result = await user_manager.oauth_callback(
+            oauth_name="okta",
+            access_token="token",
+            account_id="acct-1",
+            account_email="synced@corp.com",
+            associate_by_email=False,
+            is_verified_by_default=True,
+            sso_managed=True,
+        )
+
+        # The oauth account attaches instead of UserAlreadyExists, and the
+        # existing non-web-login upgrade block promotes the placeholder.
+        cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_awaited_once()
+        assert sync_user.role == UserRole.BASIC
+        assert sync_user.account_type == AccountType.STANDARD
+        assert sync_user.is_verified is True
+        mock_assign_groups.assert_called_once()
+        mock_sync_db.commit.assert_called_once()
+        assert result is placeholder
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.verify_email_in_whitelist")
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_async_session_context_manager")
+    @patch("onyx.auth.users.remove_user_from_invited_users")
+    async def test_web_login_account_still_rejected_without_auto_link(
+        self,
+        mock_remove_invited: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_verify_whitelist: MagicMock,  # noqa: ARG002
+        mock_async_session: MagicMock,
+    ) -> None:
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
+        )
+        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+
+        real_user = MagicMock(id="real-id", email="taken@corp.com")
+        real_user.account_type = AccountType.STANDARD
+        user_manager = self._manager_with_existing(real_user)
+
+        with pytest.raises(exceptions.UserAlreadyExists):
+            await user_manager.oauth_callback(
+                oauth_name="okta",
+                access_token="token",
+                account_id="acct-2",
+                account_email="taken@corp.com",
+                associate_by_email=False,
+                sso_managed=True,
+            )
+
+        cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_not_awaited()

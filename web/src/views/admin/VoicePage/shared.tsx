@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { SvgOnyxLogo } from "@opal/logos";
-import Modal from "@/refresh-components/Modal";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { Modal } from "@opal/components";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import InputComboBoxField from "@/refresh-components/form/InputComboBoxField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
@@ -16,7 +16,7 @@ import { InputVertical, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { SvgArrowExchange, SvgUnplug, SvgSimpleLoader } from "@opal/icons";
 import { Button, Text } from "@opal/components";
-import { useModalClose } from "@/refresh-components/contexts/ModalContext";
+import { useModalClose } from "@opal/components";
 import type {
   VoiceProviderView,
   VoiceFormValues,

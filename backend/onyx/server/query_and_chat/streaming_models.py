@@ -1,12 +1,8 @@
 from datetime import datetime
 from enum import Enum
-from typing import Annotated
-from typing import Any
-from typing import Literal
-from typing import Union
+from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.placement import Placement

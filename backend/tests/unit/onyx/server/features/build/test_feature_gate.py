@@ -11,14 +11,12 @@ from __future__ import annotations
 
 from typing import Any
 from unittest.mock import MagicMock
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.db.enums import AccountType
-from onyx.feature_flags.interface import FeatureFlagProvider
-from onyx.feature_flags.interface import NoOpFeatureFlagProvider
+from onyx.feature_flags.interface import FeatureFlagProvider, NoOpFeatureFlagProvider
 from onyx.server.features.build import utils as build_utils
 from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.server.settings.models import Settings

@@ -1,15 +1,12 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.lumapps.connector import _parse_dt
-from onyx.connectors.lumapps.connector import LumAppsConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import SlimDocument
+from onyx.connectors.lumapps.connector import LumAppsConnector, _parse_dt
+from onyx.connectors.models import Document, SlimDocument
 
 
 def _make_connector(list_response: dict[str, Any]) -> LumAppsConnector:

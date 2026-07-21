@@ -10,19 +10,19 @@ Covers:
 - _raise_for_validation_failure: HookValidateStatus → OnyxError mapping
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 
-from ee.onyx.server.features.hooks.api import _check_ssrf_safety
-from ee.onyx.server.features.hooks.api import _raise_for_validation_failure
-from ee.onyx.server.features.hooks.api import _validate_endpoint
+from ee.onyx.server.features.hooks.api import (
+    _check_ssrf_safety,
+    _raise_for_validation_failure,
+    _validate_endpoint,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.hooks.models import HookValidateResponse
-from onyx.hooks.models import HookValidateStatus
+from onyx.hooks.models import HookValidateResponse, HookValidateStatus
 
 # ---------------------------------------------------------------------------
 # Helpers

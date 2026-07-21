@@ -70,14 +70,19 @@ repos:
         args: ["ty", "check"]
         pass_filenames: true
         types_or: [python]
+        # Scope to backend/, matching `[tool.ty.src] include = ["backend"]` in
+        # pyproject. The full ty run only discovers backend/, but pre-commit
+        # passes explicit filenames, which bypass that discovery-time include —
+        # without this, a touched file outside backend/ (examples/, loadtest/,
+        # tools/, …) would get type-checked against the backend venv it was
+        # never meant to run in.
+        files: ^backend/
         # sandbox_daemon ships in the sandbox image (own runtime); skills/builtin
         # are sandbox-only scripts importing deps absent from the backend venv
-        # (lxml, PIL, office.*). loadtest/ imports locust/gevent, which live in
-        # the non-default `loadtest` dependency group and so aren't in the venv
-        # ty runs against. All are excluded from the full ty run via
-        # [tool.ty.src] in pyproject; repeat here because pre-commit passes
-        # explicit filenames, which bypass that discovery-time exclude.
-        exclude: ^(backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)|loadtest/)
+        # (lxml, PIL, office.*). Both are excluded from the full ty run via
+        # [tool.ty.src] in pyproject; repeat here because the explicit filenames
+        # bypass that discovery-time exclude too.
+        exclude: ^backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)
       - id: uv-run
         alias: ruff
         name: ruff

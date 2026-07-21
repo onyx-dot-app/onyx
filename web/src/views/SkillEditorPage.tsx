@@ -15,6 +15,7 @@ import {
   Card,
   CompactMarkdown,
   Divider,
+  InputTextArea,
   InputTypeIn,
   MessageCard,
   Tag,
@@ -35,7 +36,6 @@ import {
   toast,
 } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -55,7 +55,7 @@ import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import SkillFileTree from "@/sections/skills/SkillFileTree";
 import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 
 interface SkillEditorPageProps {
   skillId?: string;
@@ -551,7 +551,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                       onChange={(event) =>
                         setInstructionsMarkdown(event.target.value)
                       }
-                      className="border-0"
                       placeholder="Write the skill instructions."
                       variant={fieldsLocked ? "disabled" : "internal"}
                     />

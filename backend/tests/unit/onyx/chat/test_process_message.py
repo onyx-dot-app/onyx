@@ -2,13 +2,14 @@ import pytest
 from types import SimpleNamespace
 from uuid import uuid4
 
-from onyx.chat.process_message import _collect_available_file_ids
-from onyx.chat.process_message import _resolve_query_processing_hook_result
-from onyx.chat.process_message import remove_answer_citations
+from onyx.chat.process_message import (
+    _collect_available_file_ids,
+    _resolve_query_processing_hook_result,
+    remove_answer_citations,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.hooks.executor import HookSkipped
-from onyx.hooks.executor import HookSoftFailed
+from onyx.hooks.executor import HookSkipped, HookSoftFailed
 from onyx.hooks.points.query_processing import QueryProcessingResponse
 
 

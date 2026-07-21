@@ -110,6 +110,15 @@ export {
   type MessageCardProps,
 } from "@opal/components/cards/message-card/components";
 
+/* Loader */
+export {
+  IconLoader,
+  type IconLoaderProps,
+  OnyxLoader,
+  type OnyxLoaderProps,
+  type LoaderColor,
+} from "@opal/components/loader/components";
+
 /* Pagination */
 export {
   Pagination,
@@ -146,6 +155,26 @@ export {
   PopoverMenu,
   type PopoverMenuProps,
 } from "@opal/components/popover/components";
+
+/* Modal */
+export {
+  Modal,
+  BasicModalFooter,
+  type ModalContentProps,
+  type ModalHeaderProps,
+  type ModalBodyProps,
+  type BasicModalFooterProps,
+} from "@opal/components/modal/components";
+
+/* ModalContext */
+export {
+  useCreateModal,
+  useModal,
+  useModalClose,
+  type ModalInterface,
+  type ModalCreationInterface,
+  type ModalProviderProps,
+} from "@opal/components/modal/context";
 
 /* InputTypeIn */
 export {

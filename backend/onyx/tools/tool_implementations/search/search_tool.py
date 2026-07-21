@@ -36,88 +36,94 @@ refer to by using matching keywords to other parts of the prompt and reminders.
 
 import time
 from collections.abc import Callable
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FederatedConnectorSource
+from onyx.configs.constants import DocumentSource, FederatedConnectorSource
 from onyx.context.search.federated.slack_search import slack_retrieval
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import ChunkIndexRequest
-from onyx.context.search.models import ChunkSearchRequest
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import PersonaSearchInfo
-from onyx.context.search.models import SearchDocsResponse
-from onyx.context.search.pipeline import merge_individual_chunks
-from onyx.context.search.pipeline import search_pipeline
+from onyx.context.search.models import (
+    BaseFilters,
+    ChunkIndexRequest,
+    ChunkSearchRequest,
+    IndexFilters,
+    InferenceChunk,
+    InferenceSection,
+    PersonaSearchInfo,
+    SearchDocsResponse,
+)
+from onyx.context.search.pipeline import merge_individual_chunks, search_pipeline
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
-from onyx.context.search.utils import convert_inference_sections_to_search_docs
-from onyx.context.search.utils import populate_file_ids_on_sections
-from onyx.db.connector import check_connectors_exist
-from onyx.db.connector import check_federated_connectors_exist
-from onyx.db.connector import fetch_unique_document_sources
+from onyx.context.search.utils import (
+    convert_inference_sections_to_search_docs,
+    populate_file_ids_on_sections,
+)
+from onyx.db.connector import (
+    check_connectors_exist,
+    check_federated_connectors_exist,
+    fetch_unique_document_sources,
+)
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
+    list_federated_connector_oauth_tokens,
 )
-from onyx.db.federated import list_federated_connector_oauth_tokens
-from onyx.db.models import SearchSettings
-from onyx.db.models import User
+from onyx.db.models import SearchSettings, User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
 from onyx.federated_connectors.federated_retrieval import (
+    FederatedRetrievalInfo,
     get_federated_retrieval_functions,
 )
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
-from onyx.secondary_llm_flows.document_filter import select_chunks_for_relevance
-from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
-from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
-from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
-from onyx.secondary_llm_flows.source_filter import decide_search_scope
-from onyx.secondary_llm_flows.source_filter import SearchCycle
-from onyx.secondary_llm_flows.time_filter import decide_time_filter
-from onyx.secondary_llm_flows.time_filter import TimeFilter
+from onyx.secondary_llm_flows.document_filter import (
+    select_chunks_for_relevance,
+    select_sections_for_expansion,
+)
+from onyx.secondary_llm_flows.query_expansion import (
+    keyword_query_expansion,
+    semantic_query_rephrase,
+)
+from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_scope
+from onyx.secondary_llm_flows.time_filter import TimeFilter, decide_time_filter
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolStart
+from onyx.server.query_and_chat.streaming_models import (
+    Packet,
+    SearchToolDocumentsDelta,
+    SearchToolFilterDelta,
+    SearchToolQueriesDelta,
+    SearchToolStart,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatMinimalTextMessage
-from onyx.tools.models import SearchToolOverrideKwargs
-from onyx.tools.models import ToolCallException
-from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.search.constants import KEYWORD_QUERY_HYBRID_ALPHA
-from onyx.tools.tool_implementations.search.constants import LLM_KEYWORD_QUERY_WEIGHT
-from onyx.tools.tool_implementations.search.constants import LLM_NON_CUSTOM_QUERY_WEIGHT
-from onyx.tools.tool_implementations.search.constants import LLM_SEMANTIC_QUERY_WEIGHT
-from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELEVANCE
-from onyx.tools.tool_implementations.search.constants import ORIGINAL_QUERY_WEIGHT
+from onyx.tools.models import (
+    ChatMinimalTextMessage,
+    SearchToolOverrideKwargs,
+    ToolCallException,
+    ToolResponse,
+)
+from onyx.tools.tool_implementations.search.constants import (
+    KEYWORD_QUERY_HYBRID_ALPHA,
+    LLM_KEYWORD_QUERY_WEIGHT,
+    LLM_NON_CUSTOM_QUERY_WEIGHT,
+    LLM_SEMANTIC_QUERY_WEIGHT,
+    MAX_CHUNKS_FOR_RELEVANCE,
+    ORIGINAL_QUERY_WEIGHT,
+)
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
-)
-from onyx.tools.tool_implementations.search.search_utils import (
     merge_overlapping_sections,
-)
-from onyx.tools.tool_implementations.search.search_utils import (
     weighted_reciprocal_rank_fusion,
 )
 from onyx.tools.tool_implementations.utils import (
@@ -126,9 +132,11 @@ from onyx.tools.tool_implementations.utils import (
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
-from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
+from shared_configs.configs import (
+    DOC_EMBEDDING_CONTEXT_SIZE,
+    MODEL_SERVER_HOST,
+    MODEL_SERVER_PORT,
+)
 
 logger = setup_logger()
 

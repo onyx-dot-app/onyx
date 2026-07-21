@@ -3,44 +3,36 @@ the app cred from the row, reconstruct it from the row's token blob when
 absent, and restore the PKCE verifier for the callback token exchange."""
 
 import json
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import cast
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import KV_CRED_KEY
-from onyx.connectors.google_utils.google_kv import build_service_account_creds
-from onyx.connectors.google_utils.google_kv import get_auth_url
-from onyx.connectors.google_utils.google_kv import update_credential_access_tokens
-from onyx.connectors.google_utils.google_kv import verify_csrf
+from onyx.configs.constants import KV_CRED_KEY, DocumentSource
+from onyx.connectors.google_utils.google_kv import (
+    build_service_account_creds,
+    get_auth_url,
+    update_credential_access_tokens,
+    verify_csrf,
+)
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
-)
-from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
-from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.server.documents.models import GoogleAppCredentials
-from onyx.server.documents.models import GoogleAppWebCredentials
-from onyx.server.documents.models import GoogleServiceAccountKey
+from onyx.server.documents.models import (
+    GoogleAppCredentials,
+    GoogleAppWebCredentials,
+    GoogleServiceAccountKey,
+)
 
 
 class _StubCredentialJson:

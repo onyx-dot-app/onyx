@@ -1,55 +1,46 @@
 import random
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import TypeAlias
-from typing import TypeVar
+from datetime import datetime, timedelta, timezone
+from typing import Any, TypeAlias, TypeVar
 
-from onyx.configs.app_configs import DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S
-from onyx.configs.app_configs import OPENSEARCH_EXPLAIN_ENABLED
-from onyx.configs.app_configs import OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED
-from onyx.configs.app_configs import OPENSEARCH_PROFILING_DISABLED
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import INDEX_SEPARATOR
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import Tag
-from onyx.context.search.models import TimeRange
+from onyx.configs.app_configs import (
+    DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S,
+    OPENSEARCH_EXPLAIN_ENABLED,
+    OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED,
+    OPENSEARCH_PROFILING_DISABLED,
+)
+from onyx.configs.constants import INDEX_SEPARATOR, DocumentSource
+from onyx.context.search.models import IndexFilters, Tag, TimeRange
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.constants import ASSUMED_DOCUMENT_AGE_DAYS
 from onyx.document_index.opensearch.constants import (
+    ASSUMED_DOCUMENT_AGE_DAYS,
     DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
-)
-from onyx.document_index.opensearch.constants import (
     DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
-)
-from onyx.document_index.opensearch.constants import (
     HYBRID_SEARCH_NORMALIZATION_PIPELINE,
-)
-from onyx.document_index.opensearch.constants import (
     HYBRID_SEARCH_SUBQUERY_CONFIGURATION,
+    HybridSearchNormalizationPipeline,
+    HybridSearchSubqueryConfiguration,
 )
-from onyx.document_index.opensearch.constants import HybridSearchNormalizationPipeline
-from onyx.document_index.opensearch.constants import HybridSearchSubqueryConfiguration
-from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
-from onyx.document_index.opensearch.schema import ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME
-from onyx.document_index.opensearch.schema import CHUNK_INDEX_FIELD_NAME
-from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
-from onyx.document_index.opensearch.schema import CONTENT_VECTOR_FIELD_NAME
-from onyx.document_index.opensearch.schema import CREATED_AT_FIELD_NAME
-from onyx.document_index.opensearch.schema import DOCUMENT_ID_FIELD_NAME
-from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
-from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
-from onyx.document_index.opensearch.schema import LAST_UPDATED_FIELD_NAME
-from onyx.document_index.opensearch.schema import MAX_CHUNK_SIZE_FIELD_NAME
-from onyx.document_index.opensearch.schema import METADATA_LIST_FIELD_NAME
-from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
-from onyx.document_index.opensearch.schema import PUBLIC_FIELD_NAME
-from onyx.document_index.opensearch.schema import SOURCE_TYPE_FIELD_NAME
-from onyx.document_index.opensearch.schema import TENANT_ID_FIELD_NAME
-from onyx.document_index.opensearch.schema import TITLE_FIELD_NAME
-from onyx.document_index.opensearch.schema import TITLE_VECTOR_FIELD_NAME
-from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
+from onyx.document_index.opensearch.schema import (
+    ACCESS_CONTROL_LIST_FIELD_NAME,
+    ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME,
+    CHUNK_INDEX_FIELD_NAME,
+    CONTENT_FIELD_NAME,
+    CONTENT_VECTOR_FIELD_NAME,
+    CREATED_AT_FIELD_NAME,
+    DOCUMENT_ID_FIELD_NAME,
+    DOCUMENT_SETS_FIELD_NAME,
+    HIDDEN_FIELD_NAME,
+    LAST_UPDATED_FIELD_NAME,
+    MAX_CHUNK_SIZE_FIELD_NAME,
+    METADATA_LIST_FIELD_NAME,
+    PERSONAS_FIELD_NAME,
+    PUBLIC_FIELD_NAME,
+    SOURCE_TYPE_FIELD_NAME,
+    TENANT_ID_FIELD_NAME,
+    TITLE_FIELD_NAME,
+    TITLE_VECTOR_FIELD_NAME,
+    USER_PROJECTS_FIELD_NAME,
+)
 from onyx.utils.datetime import datetime_to_utc
 
 # See https://docs.opensearch.org/latest/query-dsl/term/terms/.
