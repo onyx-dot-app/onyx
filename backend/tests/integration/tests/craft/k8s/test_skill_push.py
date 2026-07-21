@@ -351,7 +351,7 @@ class TestSkillPush:
         )
         try:
             user_app = ExternalAppManager.get_for_user(user, app.id)
-            skill_file = _skill_file_path(workspace, user_app.name)
+            skill_file = _skill_file_path(workspace, user_app.slug)
             skill_file.wait_for_absent()
 
             ExternalAppManager.upsert_user_credentials(
