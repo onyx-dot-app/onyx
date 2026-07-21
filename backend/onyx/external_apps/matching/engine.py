@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, ExternalAppType, GatedAppKind
-from onyx.db.gated_app import get_action_policies_for_target
+from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
@@ -86,20 +86,6 @@ class AllMatchedActions(BaseModel):
     def app_name(self) -> str:
         return self.target.app_name
 
-    @property
-    def external_app_id(self) -> int | None:
-        """The external-app row id, or ``None`` for a non-external-app target."""
-        if self.target.kind is GatedAppKind.EXTERNAL_APP:
-            return self.target.id
-        return None
-
-    @property
-    def mcp_server_id(self) -> int | None:
-        """The mcp_server row id, or ``None`` for a non-MCP target."""
-        if self.target.kind is GatedAppKind.MCP_SERVER:
-            return self.target.id
-        return None
-
 
 PersistedMatchedAction = Mapping[str, Any]
 ActionLike = MatchedAction | PersistedMatchedAction
@@ -158,9 +144,7 @@ def recognize_actions(
     it via ``model_copy``.
     """
     context = MatchContext(request)
-    stored = get_action_policies_for_target(
-        db_session, GatedAppKind.EXTERNAL_APP, app.id
-    )
+    stored = get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, app.id)
     catalog = get_endpoint_catalog(app.app_type)
     matched = [
         MatchedAction(

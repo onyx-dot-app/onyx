@@ -67,7 +67,7 @@ def test_apply_gate_serveable_no_catalog_synthesizes_whole_domain_ask() -> None:
     assert matched_actions.governing_action.action_type == WHOLE_DOMAIN_ACTION_TYPE
     assert matched_actions.governing_action.policy == EndpointPolicy.ASK
     assert matched_actions.app_name == "Slack"
-    assert matched_actions.external_app_id == 1
+    assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, 1)
 
 
 def test_apply_gate_not_serveable_no_catalog_forwards_bare() -> None:

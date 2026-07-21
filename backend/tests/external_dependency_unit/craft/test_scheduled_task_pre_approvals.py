@@ -306,7 +306,7 @@ def test_mcp_grants_survive_external_app_replacement(
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
-    """``set_pre_approved_external_apps`` manages only EXTERNAL_APP grants: an MCP-server
+    """``set_pre_approved_apps`` replaces only the given kind's grants: an MCP-server
     grant (seeded directly — no API writes these yet) survives a wholesale
     external-app replacement, stays out of ``pre_approved_external_app_ids``, and reaches
     the gate through ``get_live_scheduled_run_grants`` as its (kind, id) target.

@@ -269,8 +269,7 @@ def submit_session_grant(
     grant_source_rows = action_approval.list_session_grant_action_approvals(
         db_session,
         session_id=session_id,
-        kind=target_kind,
-        target_id=target_id,
+        gated_app_id=current.gated_app_id,
     )
     cache: CacheBackend | None = None
     try:

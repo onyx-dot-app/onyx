@@ -84,38 +84,42 @@ def create_scheduled_task(
         status=status,
         next_run_at=next_run_at,
     )
-    set_pre_approved_external_apps(
-        db_session, task, pre_approved_external_app_ids or []
+    set_pre_approved_apps(
+        db_session,
+        task,
+        GatedAppKind.EXTERNAL_APP,
+        pre_approved_external_app_ids or [],
     )
     db_session.add(task)
     db_session.flush()
     return task
 
 
-def set_pre_approved_external_apps(
-    db_session: Session, task: ScheduledTask, app_ids: list[int]
+def set_pre_approved_apps(
+    db_session: Session,
+    task: ScheduledTask,
+    kind: GatedAppKind,
+    target_ids: list[int],
 ) -> None:
-    """Replace a task's EXTERNAL-APP pre-approval grants with ``app_ids``
-    (deduped); MCP-server grants are preserved. Reuses existing grant rows so
-    re-submitting a granted app is a no-op — recreating it would orphan+reinsert
+    """Replace a task's ``kind`` pre-approval grants with ``target_ids``
+    (deduped); grants of other kinds are preserved. Reuses existing grant rows so
+    re-submitting a granted target is a no-op — recreating it would orphan+reinsert
     the same unique key in one flush, which Postgres rejects. Removed grants drop
     via the ``delete-orphan`` cascade.
     """
     wanted_gated_app_ids = [
-        get_or_create_gated_app_id(db_session, GatedAppKind.EXTERNAL_APP, app_id)
-        for app_id in dict.fromkeys(app_ids)
+        get_or_create_gated_app_id(db_session, kind, target_id)
+        for target_id in dict.fromkeys(target_ids)
     ]
     existing = {grant.gated_app_id: grant for grant in task.pre_approved_apps}
-    mcp_grants = [
-        grant
-        for grant in task.pre_approved_apps
-        if grant.gated_app.kind is GatedAppKind.MCP_SERVER
+    other_kind_grants = [
+        grant for grant in task.pre_approved_apps if grant.gated_app.kind is not kind
     ]
     task.pre_approved_apps = [
         existing.get(gated_app_id)
         or ScheduledTaskPreApprovedApp(gated_app_id=gated_app_id)
         for gated_app_id in wanted_gated_app_ids
-    ] + mcp_grants
+    ] + other_kind_grants
 
 
 def get_scheduled_task(
@@ -197,7 +201,9 @@ def update_scheduled_task(
     if prompt is not None:
         task.prompt = prompt
     if pre_approved_external_app_ids is not None:
-        set_pre_approved_external_apps(db_session, task, pre_approved_external_app_ids)
+        set_pre_approved_apps(
+            db_session, task, GatedAppKind.EXTERNAL_APP, pre_approved_external_app_ids
+        )
     if editor_mode is not None:
         task.editor_mode = editor_mode
     if cron_expression is not None and cron_expression != task.cron_expression:

@@ -17,7 +17,7 @@ from onyx.db.enums import (
     EndpointPolicy,
     GatedAppKind,
 )
-from onyx.db.gated_app import get_gated_app_id, get_or_create_gated_app_id
+from onyx.db.gated_app import get_or_create_gated_app_id
 from onyx.db.models import ActionApproval, BuildSession
 from onyx.utils.logger import setup_logger
 
@@ -158,11 +158,10 @@ def list_session_grant_action_approvals(
     db_session: Session,
     session_id: UUID,
     *,
-    kind: GatedAppKind,
-    target_id: int,
+    gated_app_id: int | None,
 ) -> list[ActionApproval]:
-    """Approved rows covered by a durable session-scope grant for one target."""
-    gated_app_id = get_gated_app_id(db_session, kind, target_id)
+    """Approved rows covered by a durable session-scope grant for one gated app.
+    ``None`` means the target was never gated — no identity row, so no grants."""
     if gated_app_id is None:
         return []
     stmt = (

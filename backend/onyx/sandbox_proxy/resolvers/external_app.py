@@ -11,6 +11,7 @@ from __future__ import annotations
 from mitmproxy import http
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.enums import GatedAppKind
 from onyx.external_apps.credentials import resolve_injection_headers
 from onyx.external_apps.token_refresh import ensure_fresh_credentials
 from onyx.sandbox_proxy.credential_injection import (
@@ -34,17 +35,20 @@ class ExternalAppResolver(CredentialResolver):
         # The matcher has already proven URL→app attribution; host is unused. An
         # MCP-server target is another resolver's — external app only here.
         actions = ctx.matched_actions
-        return actions is not None and actions.external_app_id is not None
+        return actions is not None and actions.target.kind is GatedAppKind.EXTERNAL_APP
 
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
         matched_actions = ctx.matched_actions
-        external_app_id = matched_actions.external_app_id if matched_actions else None
-        if external_app_id is None:
+        if (
+            matched_actions is None
+            or matched_actions.target.kind is not GatedAppKind.EXTERNAL_APP
+        ):
             # `claims` guarantees this is unreachable; explicit raise so a
             # broken Protocol contract surfaces as a 403, not a NoneType crash.
             raise CredentialUnavailableError(
                 "ExternalAppResolver invoked without an external-app request"
             )
+        external_app_id = matched_actions.target.id
 
         # Lazily refresh an expired/expiring OAuth token before rendering, so the
         # injected `Bearer` is live. A no-op for fresh or non-OAuth credentials,

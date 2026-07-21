@@ -25,7 +25,7 @@ from onyx.db.external_app import (
     upsert_external_app_user_credential,
     validate_auth_template,
 )
-from onyx.db.gated_app import get_action_policies, get_action_policies_for_target
+from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.utils import UNSET, none_as_unset
@@ -87,8 +87,7 @@ def _to_admin_response(
     *,
     stored: dict[str, EndpointPolicy],
 ) -> ExternalAppAdminResponse:
-    # ``stored`` is the app's per-action policy overrides; list callers fetch
-    # them for all apps in one batched query instead of per app.
+    # ``stored`` is the app's per-action policy overrides.
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
     return ExternalAppAdminResponse(
         id=app.id,
@@ -225,9 +224,7 @@ def update_external_app_admin(
     action_policies = resolve_action_overrides(
         app.app_type,
         request.action_policies,
-        get_action_policies_for_target(
-            db_session, GatedAppKind.EXTERNAL_APP, external_app_id
-        ),
+        get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app_id),
     )
     app, _old = update_external_app(
         db_session=db_session,
@@ -372,9 +369,7 @@ def replace_custom_app_bundle(
 
     return _to_admin_response(
         app,
-        stored=get_action_policies_for_target(
-            db_session, GatedAppKind.EXTERNAL_APP, app.id
-        ),
+        stored=get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, app.id),
     )
 
 
@@ -385,11 +380,12 @@ def list_external_apps_admin(
 ) -> list[ExternalAppAdminResponse]:
     """List all external apps with admin-only fields (org credentials, auth template)."""
     apps = get_external_apps(db_session=db_session)
-    policies_by_app = get_action_policies(
-        db_session, GatedAppKind.EXTERNAL_APP, [app.id for app in apps]
-    )
+    # One policy query per app; admin app lists are small.
     return [
-        _to_admin_response(app, stored=policies_by_app.for_target(app.id))
+        _to_admin_response(
+            app,
+            stored=get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, app.id),
+        )
         for app in apps
     ]
 

@@ -8,24 +8,12 @@ columns.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
 from sqlalchemy import delete, insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.db.enums import EndpointPolicy, GatedAppKind
 from onyx.db.models import GatedActionPolicy, GatedApp
-
-
-class StoredActionPolicies(BaseModel):
-    """Stored per-action policy overrides as ``{target_id: {action_id: policy}}``.
-    Sparse — only actions an admin has explicitly set; targets with no stored
-    overrides are absent."""
-
-    by_target_id: dict[int, dict[str, EndpointPolicy]]
-
-    def for_target(self, target_id: int) -> dict[str, EndpointPolicy]:
-        return self.by_target_id.get(target_id, {})
 
 
 def _target_column(kind: GatedAppKind) -> InstrumentedAttribute[int | None]:
@@ -75,33 +63,18 @@ def get_or_create_gated_app_id(
 
 
 def get_action_policies(
-    db_session: Session, kind: GatedAppKind, target_ids: list[int]
-) -> StoredActionPolicies:
-    """The targets' stored per-action policy overrides.
-
-    Single query regardless of target count: joins ``gated_action_policy`` to
-    ``gated_app`` so resolving the identity rows and reading their policies is
-    one round trip (this runs on the request matching path)."""
-    if not target_ids:
-        return StoredActionPolicies(by_target_id={})
-    target_column = _target_column(kind)
-    rows = db_session.execute(
-        select(target_column, GatedActionPolicy.action_id, GatedActionPolicy.policy)
-        .join(GatedApp, GatedApp.id == GatedActionPolicy.gated_app_id)
-        .where(target_column.in_(target_ids))
-    ).all()
-    by_target_id: dict[int, dict[str, EndpointPolicy]] = {}
-    for target_id, action_id, policy in rows:
-        by_target_id.setdefault(target_id, {})[action_id] = policy
-    return StoredActionPolicies(by_target_id=by_target_id)
-
-
-def get_action_policies_for_target(
     db_session: Session, kind: GatedAppKind, target_id: int
 ) -> dict[str, EndpointPolicy]:
-    """Single-target convenience over ``get_action_policies``: the target's
-    stored ``{action_id: policy}`` overrides, ``{}`` when none are set."""
-    return get_action_policies(db_session, kind, [target_id]).for_target(target_id)
+    """The target's stored per-action policy overrides as
+    ``{action_id: policy}``; ``{}`` when none are set. Sparse — only actions an
+    admin has explicitly set. One query: joins ``gated_action_policy`` to
+    ``gated_app`` (this runs on the request matching path)."""
+    rows = db_session.execute(
+        select(GatedActionPolicy.action_id, GatedActionPolicy.policy)
+        .join(GatedApp, GatedApp.id == GatedActionPolicy.gated_app_id)
+        .where(_target_column(kind) == target_id)
+    ).all()
+    return {action_id: policy for action_id, policy in rows}
 
 
 def replace_action_policies__no_commit(

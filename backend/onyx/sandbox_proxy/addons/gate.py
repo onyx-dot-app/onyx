@@ -26,6 +26,7 @@ from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
+from onyx.db.gated_app import get_gated_app_id
 from onyx.db.notification import create_notification
 from onyx.db.scheduled_task import ScheduledRunGrants, get_live_scheduled_run_grants
 from onyx.external_apps.matching.engine import (
@@ -777,8 +778,7 @@ class GateAddon:
         grant_source_rows = action_approval.list_session_grant_action_approvals(
             db,
             session_id=ctx.session_id,
-            kind=target.kind,
-            target_id=target.id,
+            gated_app_id=get_gated_app_id(db, target.kind, target.id),
         )
         granted_action_types = approval_cache.hydrate_session_grants(
             session_id=ctx.session_id,
@@ -919,14 +919,15 @@ class GateAddon:
 
         logger.info(
             "approval_requested tenant=%s sandbox=%s session=%s approval=%s "
-            "app_name=%r external_app_id=%s action_type=%s action_count=%s "
+            "app_name=%r target=%s:%s action_type=%s action_count=%s "
             "proxy_instance=%s session_id=%s approval_id=%s",
             ctx.tenant_id,
             sandbox_log_label(ctx),
             short_log_id(ctx.session_id),
             short_log_id(approval_id),
             matched_actions.app_name,
-            matched_actions.external_app_id,
+            matched_actions.target.kind.value,
+            matched_actions.target.id,
             matched_actions.governing_action.action_type,
             len(matched_actions.actions),
             self._proxy_instance_id,

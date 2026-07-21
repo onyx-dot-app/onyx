@@ -111,10 +111,12 @@ def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
     Default it to a dummy MagicMock-yielding session; tests asserting on
     session-open ordering re-patch it with `_recorder_db_factory(ops)`."""
     monkeypatch.setattr(gate, "get_session_with_tenant", _recorder_db_factory([]))
+    # The stub sessions can't answer the target → gated_app_id lookup.
+    monkeypatch.setattr(gate, "get_gated_app_id", lambda _db, _kind, _target_id: 1)
     monkeypatch.setattr(
         gate.action_approval,
         "list_session_grant_action_approvals",
-        lambda _db, *, session_id, kind, target_id: [],  # noqa: ARG005
+        lambda _db, *, session_id, gated_app_id: [],  # noqa: ARG005
     )
 
 
@@ -729,7 +731,7 @@ async def test_session_grant_db_fallback_hydrates_cache(
     monkeypatch.setattr(
         gate.action_approval,
         "list_session_grant_action_approvals",
-        lambda _db, *, session_id, kind, target_id: [grant_source],  # noqa: ARG005
+        lambda _db, *, session_id, gated_app_id: [grant_source],  # noqa: ARG005
     )
     flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
 
