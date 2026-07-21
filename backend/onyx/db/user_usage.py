@@ -1,4 +1,4 @@
-"""Hourly per-user LLM usage rollup for cost/token attribution.
+"""Daily per-user LLM usage rollup for cost/token attribution.
 
 A window rollup: rows accumulate in place per (user, window,
 model, flow, provider), not an append-only per-call ledger."""
@@ -17,7 +17,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-USER_USAGE_BUCKET_SECONDS = 60 * 60
+USER_USAGE_BUCKET_SECONDS = 24 * 60 * 60
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
 
 

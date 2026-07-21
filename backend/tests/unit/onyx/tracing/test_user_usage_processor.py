@@ -114,8 +114,14 @@ def test_records_usage_when_user_id_set(
     assert call["flow"] == "chat_response"
     assert call["cost_cents"] == pytest.approx(3.0)  # 1.0 input + 2.0 output
     window_start = call["window_start"]
-    assert window_start.minute == window_start.second == window_start.microsecond == 0
-    assert datetime.now(timezone.utc) - window_start < timedelta(hours=1)
+    assert (
+        window_start.hour
+        == window_start.minute
+        == window_start.second
+        == window_start.microsecond
+        == 0
+    )
+    assert datetime.now(timezone.utc) - window_start < timedelta(days=1)
 
 
 def test_normalizes_prompt_completion_token_aliases(

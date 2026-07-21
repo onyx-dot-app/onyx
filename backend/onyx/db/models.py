@@ -5624,7 +5624,7 @@ class TenantUsage(Base):
 
 class UserUsage(Base):
     """
-    Hourly per-user LLM usage rollup for cost/token attribution and budget checks.
+    Daily per-user LLM usage rollup for cost/token attribution and budget checks.
 
     One accumulating row per (user, window, model, flow, provider), not per call.
     """
