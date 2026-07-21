@@ -13,6 +13,7 @@ from onyx.connectors.canvas.connector import (
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.db.models import ConnectorCredentialPair
 from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -76,7 +77,7 @@ def canvas_group_sync(
     connector = CanvasConnector(**cc_pair.connector.connector_specific_config)
     connector.load_credentials(credential_json(cc_pair))
     indexing_start = (
-        cc_pair.connector.indexing_start.timestamp()
+        datetime_to_utc(cc_pair.connector.indexing_start).timestamp()
         if cc_pair.connector.indexing_start is not None
         else None
     )
