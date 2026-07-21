@@ -68,7 +68,7 @@ import shlex
 import tarfile
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from pathlib import Path
 from typing import TypedDict
 from uuid import UUID
@@ -827,7 +827,7 @@ class DockerSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        mcp_servers: list[CraftMCPServerConfig] | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning.")

@@ -16,7 +16,7 @@ Architecture Note (User-Shared Sandbox Model):
 
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
@@ -121,7 +121,7 @@ class SandboxManager(_ServeMixin, ABC):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        mcp_servers: list[CraftMCPServerConfig] | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 

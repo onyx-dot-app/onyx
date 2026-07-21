@@ -7,6 +7,7 @@ key otherwise — letting per-prompt model overrides cross providers without a
 restart.
 """
 
+from collections.abc import Sequence
 from typing import Any
 
 from onyx.server.features.build.sandbox.models import (
@@ -105,7 +106,9 @@ _TMP_EXTERNAL_DIRECTORY_RULES: dict[str, str] = {
 
 
 def _build_permissions(
-    disabled_tools: list[str] | None, dev_mode: bool
+    disabled_tools: list[str] | None,
+    dev_mode: bool,
+    mcp_servers: Sequence[CraftMCPServerConfig],
 ) -> dict[str, Any]:
     permissions: dict[str, Any] = {
         k: (v.copy() if isinstance(v, dict) else v)
@@ -117,34 +120,24 @@ def _build_permissions(
     if disabled_tools:
         for tool in disabled_tools:
             permissions[tool] = "deny"
+    # MCP tool ids are ``<serverKey>_<toolName>``. Allow each server's tools
+    # wholesale (the proxy is the sole gate; the wildcard also covers tools
+    # discovered at runtime), hard-denying the admin-disabled ones.
+    for server in mcp_servers:
+        permissions[f"{server.key}_*"] = "allow"
+        for tool_name in server.disabled_tools:
+            permissions[f"{server.key}_{tool_name}"] = "deny"
     return permissions
 
 
-def _mcp_tool_id(server_key: str, tool_name: str) -> str:
-    """opencode's tool id for an MCP tool: ``<serverKey>_<toolName>``."""
-    return f"{server_key}_{tool_name}"
-
-
 def _build_mcp_block(
-    mcp_servers: list[CraftMCPServerConfig],
+    mcp_servers: Sequence[CraftMCPServerConfig],
 ) -> dict[str, dict[str, Any]]:
     """opencode remote `mcp` entries. No auth headers — the proxy injects them."""
     return {
         server.key: {"type": "remote", "url": server.url, "enabled": True}
         for server in mcp_servers
     }
-
-
-def _apply_mcp_permissions(
-    permissions: dict[str, Any], mcp_servers: list[CraftMCPServerConfig]
-) -> None:
-    """Allow all of a server's MCP tools (the proxy is the sole gate; the
-    wildcard also covers tools discovered at runtime), hard-denying the
-    admin-disabled ones."""
-    for server in mcp_servers:
-        permissions[f"{server.key}_*"] = "allow"
-        for tool_name in server.disabled_tools:
-            permissions[_mcp_tool_id(server.key, tool_name)] = "deny"
 
 
 def _build_provider_block(
@@ -168,7 +161,7 @@ def build_multi_provider_opencode_config(
     disabled_tools: list[str] | None = None,
     dev_mode: bool = False,
     plugins: list[str] | None = None,
-    mcp_servers: list[CraftMCPServerConfig] | None = None,
+    mcp_servers: Sequence[CraftMCPServerConfig] = (),
 ) -> dict[str, Any]:
     """opencode.json with every provider pre-registered so per-prompt
     ``body["model"]`` overrides can target any of them.
@@ -203,9 +196,7 @@ def build_multi_provider_opencode_config(
             f" {sorted(provider_names)}"
         )
 
-    permissions = _build_permissions(disabled_tools, dev_mode)
-    if mcp_servers:
-        _apply_mcp_permissions(permissions, mcp_servers)
+    permissions = _build_permissions(disabled_tools, dev_mode, mcp_servers)
     config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
         "model": f"{default_provider}/{default_model}",

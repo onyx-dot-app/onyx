@@ -49,7 +49,7 @@ import tarfile
 import tempfile
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
@@ -1008,7 +1008,7 @@ class KubernetesSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        mcp_servers: list[CraftMCPServerConfig] | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
