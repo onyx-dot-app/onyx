@@ -3,8 +3,8 @@
 # Hub rate limits.
 ARG BASE_IMAGE_REGISTRY=docker.io
 
-# bun + node binary sources. Pinned via the registry prefix in their own stages because
-# buildx rejects variable expansion directly in `COPY --from=` -- the ARG is only expandable in a FROM.
+# bun + node binary sources. Pinned via the registry prefix in their own stages because buildx
+# rejects variable expansion directly in `COPY --from=` -- the ARG is only expandable in a FROM.
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
 FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:05c08ce4291e9a58f59456a7985176defb12cdd42271f35ff81a3e167ea61d4c AS node_source
 
