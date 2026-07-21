@@ -8,7 +8,7 @@ gated-target catalog adds one column to ``gated_app`` instead of a column to
 every consumer table. ``external_app_policy`` becomes ``gated_action_policy``.
 
 Revision ID: bc9e56f2fb96
-Revises: 1e0a3e4226f7
+Revises: eec4fc85ef28
 Create Date: 2026-07-17 14:10:36.718336
 
 """
@@ -18,7 +18,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "bc9e56f2fb96"
-down_revision = "1e0a3e4226f7"
+down_revision = "eec4fc85ef28"
 branch_labels = None
 depends_on = None
 
