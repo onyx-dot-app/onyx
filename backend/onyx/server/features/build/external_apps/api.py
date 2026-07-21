@@ -14,7 +14,6 @@ from onyx.db.external_app import (
     get_external_app_by_id,
     get_external_apps,
     get_policies,
-    get_policies_for_apps,
     get_user_credentials_by_app_id,
     required_user_credential_keys,
     update_external_app,
@@ -188,7 +187,8 @@ def create_built_in_external_app(
     # Push before commit so a push failure rolls back the create.
     push_skill_to_affected_sandboxes(app.skill, db_session)
     db_session.commit()
-    return _to_admin_response(app, stored=get_policies(db_session, app.id))
+    # ``action_policies`` is exactly what was persisted — no need to re-read.
+    return _to_admin_response(app, stored=action_policies)
 
 
 @admin_router.patch("/apps/{external_app_id}")
@@ -219,7 +219,7 @@ def update_external_app_admin(
     action_policies = resolve_action_overrides(
         app.app_type,
         request.action_policies,
-        get_policies(db_session, external_app_id),
+        get_policies(db_session, [external_app_id]).get(external_app_id, {}),
     )
     app, _old = update_external_app(
         db_session=db_session,
@@ -241,7 +241,8 @@ def update_external_app_admin(
     # Push before commit so a push failure rolls back the change.
     push_skill_to_affected_sandboxes(app.skill, db_session)
     db_session.commit()
-    return _to_admin_response(app, stored=get_policies(db_session, app.id))
+    # ``action_policies`` is exactly what was persisted — no need to re-read.
+    return _to_admin_response(app, stored=action_policies)
 
 
 @admin_router.post("/apps/custom")
@@ -317,7 +318,8 @@ def create_custom_external_app(
         push_skill_to_affected_sandboxes(app.skill, db_session)
         db_session.commit()
 
-    return _to_admin_response(app, stored=get_policies(db_session, app.id))
+    # A freshly created custom app has no stored policy overrides.
+    return _to_admin_response(app, stored={})
 
 
 @admin_router.put("/apps/{external_app_id}/bundle")
@@ -360,7 +362,9 @@ def replace_custom_app_bundle(
     if old_bundle_file_id:
         delete_bundle_blob(file_store, old_bundle_file_id)
 
-    return _to_admin_response(app, stored=get_policies(db_session, app.id))
+    return _to_admin_response(
+        app, stored=get_policies(db_session, [app.id]).get(app.id, {})
+    )
 
 
 @admin_router.get("/apps")
@@ -370,7 +374,7 @@ def list_external_apps_admin(
 ) -> list[ExternalAppAdminResponse]:
     """List all external apps with admin-only fields (org credentials, auth template)."""
     apps = get_external_apps(db_session=db_session)
-    policies_by_app = get_policies_for_apps(db_session, [app.id for app in apps])
+    policies_by_app = get_policies(db_session, [app.id for app in apps])
     return [
         _to_admin_response(app, stored=policies_by_app.get(app.id, {})) for app in apps
     ]

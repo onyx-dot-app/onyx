@@ -60,29 +60,15 @@ def get_or_create_gated_app_id(
 
 
 def get_action_policies(
-    db_session: Session, kind: GatedAppKind, target_id: int
-) -> dict[str, EndpointPolicy]:
-    """The target's stored per-action policy overrides as ``{action_id: policy}``.
-    Sparse — only actions an admin has explicitly set.
-
-    Single query: joins ``gated_action_policy`` to ``gated_app`` so resolving the
-    identity row and reading its policies is one round trip (this runs on the
-    request matching path).
-    """
-    rows = db_session.execute(
-        select(GatedActionPolicy.action_id, GatedActionPolicy.policy)
-        .join(GatedApp, GatedApp.id == GatedActionPolicy.gated_app_id)
-        .where(_target_column(kind) == target_id)
-    ).all()
-    return {action_id: policy for action_id, policy in rows}
-
-
-def get_action_policies_by_target(
     db_session: Session, kind: GatedAppKind, target_ids: list[int]
 ) -> dict[int, dict[str, EndpointPolicy]]:
-    """Batched :func:`get_action_policies` for many targets of one kind, as
-    ``{target_id: {action_id: policy}}``. Targets with no stored overrides are
-    absent from the result. One query regardless of target count."""
+    """The targets' stored per-action policy overrides as
+    ``{target_id: {action_id: policy}}``. Sparse — only actions an admin has
+    explicitly set; targets with no stored overrides are absent.
+
+    Single query regardless of target count: joins ``gated_action_policy`` to
+    ``gated_app`` so resolving the identity rows and reading their policies is
+    one round trip (this runs on the request matching path)."""
     if not target_ids:
         return {}
     target_column = _target_column(kind)

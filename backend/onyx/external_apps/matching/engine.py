@@ -158,7 +158,7 @@ def recognize_actions(
     it via ``model_copy``.
     """
     context = MatchContext(request)
-    stored = get_policies(db_session, app.id)
+    stored = get_policies(db_session, [app.id]).get(app.id, {})
     catalog = get_endpoint_catalog(app.app_type)
     matched = [
         MatchedAction(

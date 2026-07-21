@@ -112,7 +112,11 @@ def render_external_app_skill(
     ``skill_dir`` is the skill's on-disk directory (holds ``SKILL.md.template``).
     """
     template = (skill_dir / "SKILL.md.template").read_text()
-    stored = get_policies(db_session, external_app.id) if external_app else {}
+    stored = (
+        get_policies(db_session, [external_app.id]).get(external_app.id, {})
+        if external_app
+        else {}
+    )
     section = build_action_availability_section(app_type, stored)
     if section:
         return template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)
