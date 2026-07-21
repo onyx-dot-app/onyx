@@ -8,7 +8,11 @@ _ADAPTIVE_THINKING_MODELS = frozenset(
     {"claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6"}
 )
 
-_GATEWAY_DEFAULT_MAX_OUTPUT_TOKENS = 32000
+# Model configurations don't track max output tokens, so gateway model entries
+# advertise this fixed budget to opencode. 128k matches the recommended Craft
+# models (Claude Fable/Opus 4.8, GPT-5.6) per models.dev; providers enforce
+# their own real caps on models with smaller limits.
+_GATEWAY_DEFAULT_MAX_OUTPUT_TOKENS = 128_000
 
 
 def _model_options(provider: str, model_name: str) -> dict[str, Any]:

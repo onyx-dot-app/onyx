@@ -48,7 +48,7 @@ def test_gateway_is_the_only_enabled_provider() -> None:
     assert set(provider["models"]) == {"7/gpt-5.5", "9/claude-opus-4-8"}
     assert provider["models"]["9/claude-opus-4-8"]["limit"] == {
         "context": 200_000,
-        "output": 32_000,
+        "output": 128_000,
     }
 
 
