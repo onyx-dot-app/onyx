@@ -115,6 +115,7 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
+from onyx.tools.built_in_tools import llm_tool_name
 from onyx.tools.constants import FILE_READER_TOOL_ID
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.models import ChatFile
@@ -859,7 +860,11 @@ def build_chat_turn(
                 available_files.user_file_ids.append(uf.id)
 
     all_tools = get_tools(db_session)
-    tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
+    # Resolve built-in tool names from code, not the DB name column — replayed
+    # history must use the same function names the live tools advertise.
+    tool_id_to_name_map = {
+        tool.id: llm_tool_name(tool.in_code_tool_id, tool.name) for tool in all_tools
+    }
 
     search_tool_id = next(
         (tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID), None

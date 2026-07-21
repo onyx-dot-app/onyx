@@ -73,8 +73,14 @@ export enum PacketType {
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
+  // Legacy LLM-facing name; still present in sessions persisted before the
+  // rename (OpenAI reserves the function name "python" and rejects it).
   PYTHON: "python",
+  RUN_PYTHON: "run_python",
 } as const;
+
+export const isCodeInterpreterToolType = (toolType: string): boolean =>
+  (Object.values(CODE_INTERPRETER_TOOL_TYPES) as string[]).includes(toolType);
 
 // Basic Message Packets
 export interface MessageStart extends BaseObj {
