@@ -467,6 +467,49 @@ def test_stream_emits_openai_tool_call_deltas_and_usage() -> None:
     assert final["usage"]["prompt_tokens_details"]["cached_tokens"] == 100
 
 
+class _ReasoningStreamLLM(_ConfigOnlyLLM):
+    def __init__(self) -> None:
+        super().__init__(
+            LLMConfig(
+                model_provider="anthropic",
+                model_name="test",
+                temperature=0,
+                max_input_tokens=1_000,
+            )
+        )
+
+    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+        del args, kwargs
+        yield ModelResponseStream(
+            id="r1",
+            created="0",
+            choice=StreamingChoice(delta=Delta(reasoning_content="thinking ")),
+        )
+        yield ModelResponseStream(
+            id="r1",
+            created="0",
+            choice=StreamingChoice(delta=Delta(reasoning_content="hard")),
+        )
+        yield ModelResponseStream(
+            id="r1",
+            created="0",
+            choice=StreamingChoice(finish_reason="stop", delta=Delta(content="done")),
+        )
+
+
+def test_stream_records_accumulated_reasoning_on_span() -> None:
+    with (
+        patch.object(gateway_api, "llm_generation_span"),
+        patch.object(gateway_api, "record_llm_span_output") as record,
+    ):
+        frames = list(_gateway_stream(_ReasoningStreamLLM()))
+
+    assert frames[-1] == "data: [DONE]\n\n"
+    record.assert_called_once()
+    assert record.call_args.kwargs["reasoning"] == "thinking hard"
+    assert record.call_args.kwargs["output"] == "done"
+
+
 class _RaisingInvokeLLM(_ConfigOnlyLLM):
     def __init__(self, exc: Exception) -> None:
         super().__init__(

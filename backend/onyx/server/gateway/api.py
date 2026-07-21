@@ -258,6 +258,7 @@ def _stream_worker(
         llm, flow=flow, input_messages=messages, tools=tools
     ) as span:
         accumulated_content: list[str] = []
+        accumulated_reasoning: list[str] = []
         final_usage: Usage | None = None
         tool_call_buffer: dict[int, ChatCompletionDeltaToolCall] = {}
         sent_role = False
@@ -278,6 +279,8 @@ def _stream_worker(
                     final_usage = chunk.usage
                 if chunk.choice.delta.content:
                     accumulated_content.append(chunk.choice.delta.content)
+                if chunk.choice.delta.reasoning_content:
+                    accumulated_reasoning.append(chunk.choice.delta.reasoning_content)
                 for delta_tc in chunk.choice.delta.tool_calls:
                     _merge_tool_call_delta(tool_call_buffer, delta_tc)
                 payload = _chunk_payload(chunk, model, include_role=not sent_role)
@@ -341,6 +344,7 @@ def _stream_worker(
                         span,
                         output="".join(accumulated_content) or None,
                         usage=final_usage,
+                        reasoning="".join(accumulated_reasoning) or None,
                         tool_calls=_finalize_tool_calls(tool_call_buffer),
                     )
             except Exception:
