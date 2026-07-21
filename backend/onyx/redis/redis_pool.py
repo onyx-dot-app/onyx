@@ -477,6 +477,37 @@ async def get_async_redis_connection() -> aioredis.Redis:
         return connection
 
 
+async def log_redis_server_diagnostics() -> None:
+    """
+    Logs Redis memory/persistence config relevant to session-store health. Reads
+    INFO (managed Redis often blocks CONFIG) and tolerates refusal.
+    """
+    try:
+        redis_client = await get_async_redis_connection()
+        info = await redis_client.info()
+    except Exception as e:
+        logger.warning("Could not read Redis INFO for server diagnostics: %s", e)
+        return
+
+    maxmemory_policy = info.get("maxmemory_policy", "unknown")
+    logger.notice(
+        "Redis server config: maxmemory=%s maxmemory_policy=%s aof_enabled=%s "
+        "rdb_last_bgsave_status=%s",
+        info.get("maxmemory_human", info.get("maxmemory", "unknown")),
+        maxmemory_policy,
+        info.get("aof_enabled", "unknown"),
+        info.get("rdb_last_bgsave_status", "unknown"),
+    )
+    # ``volatile-*`` policies evict only TTL-bearing keys, and session tokens
+    # always carry a TTL, so they are exposed under both policy families.
+    if str(maxmemory_policy).startswith(("allkeys", "volatile")):
+        logger.warning(
+            "Redis maxmemory_policy=%s can evict live session keys under memory "
+            "pressure; unexplained sign-outs may be evictions.",
+            maxmemory_policy,
+        )
+
+
 async def retrieve_auth_token_data(token: str) -> dict | None:
     """Validate auth token against Redis and return token data.
 
