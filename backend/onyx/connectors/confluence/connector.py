@@ -23,6 +23,7 @@ from onyx.connectors.confluence.access import (
     get_page_restrictions_with_per_ancestor_fetch,
 )
 from onyx.connectors.confluence.onyx_confluence import (
+    _SERVER_ERROR_CODES,
     Confcloud77618Error,
     OnyxConfluence,
     extract_text_from_confluence_html,
@@ -780,14 +781,16 @@ class ConfluenceConnector(
                         )
                     )
         except HTTPError as e:
-            # If we get a 403 after all retries, the user likely doesn't have permission
-            # to access attachments on this page. Log and skip rather than failing the whole job.
+            # Auth (401/403) or server (5xx) errors while listing a page's
+            # attachments skip just that page's attachments rather than failing
+            # the whole index attempt. Other statuses propagate.
             page_id = _get_page_id(page, allow_missing=True)
             page_title = page.get("title", "unknown")
-            if e.response and e.response.status_code in [401, 403]:
+            status_code = e.response.status_code if e.response else None
+            if status_code in (401, 403):
                 failure_message_prefix = (
                     "Invalid credentials (401)"
-                    if e.response.status_code == 401
+                    if status_code == 401
                     else "Permission denied (403)"
                 )
                 failure_message = (
@@ -795,28 +798,34 @@ class ConfluenceConnector(
                     f"(ID: {page_id}). The user may not have permission to query attachments on this page. "
                     "Skipping attachments for this page."
                 )
-                logger.warning(failure_message)
-
-                # Build the page URL for the failure record
-                try:
-                    page_url = build_confluence_document_id(
-                        self.wiki_base, page["_links"]["webui"], self.is_cloud
-                    )
-                except Exception:
-                    page_url = f"page_id:{page_id}"
-
-                return [], [
-                    ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=page_id,
-                            document_link=page_url,
-                        ),
-                        failure_message=failure_message,
-                        exception=e,
-                    )
-                ]
+            elif status_code in _SERVER_ERROR_CODES:
+                failure_message = (
+                    f"Server error ({status_code}) when fetching attachments for page "
+                    f"'{page_title}' (ID: {page_id}). Skipping attachments for this page."
+                )
             else:
                 raise
+
+            logger.warning(failure_message)
+
+            # Build the page URL for the failure record
+            try:
+                page_url = build_confluence_document_id(
+                    self.wiki_base, page["_links"]["webui"], self.is_cloud
+                )
+            except Exception:
+                page_url = f"page_id:{page_id}"
+
+            return [], [
+                ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=page_id,
+                        document_link=page_url,
+                    ),
+                    failure_message=failure_message,
+                    exception=e,
+                )
+            ]
 
         return attachment_docs, attachment_failures
 

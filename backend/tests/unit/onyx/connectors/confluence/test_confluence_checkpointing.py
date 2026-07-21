@@ -212,6 +212,29 @@ def test_load_from_checkpoint_happy_path(
     assert not checkpoint_output2.next_checkpoint.has_more
 
 
+def test_fetch_page_attachments_skips_on_server_error(
+    confluence_connector: ConfluenceConnector,
+    create_mock_page: Callable[..., dict[str, Any]],
+) -> None:
+    """A 5xx while listing a page's attachments should skip that page's
+    attachments (recording a ConnectorFailure) rather than failing the whole
+    index attempt."""
+    page = create_mock_page(id="1", title="Page 1")
+    confluence_client = confluence_connector._confluence_client
+    assert confluence_client is not None, "bad test setup"
+
+    confluence_client.paginated_cql_retrieval = MagicMock(  # ty: ignore[invalid-assignment]
+        side_effect=HTTPError(response=MagicMock(status_code=500))
+    )
+
+    docs, failures = confluence_connector._fetch_page_attachments(page)
+
+    assert docs == []
+    assert len(failures) == 1
+    assert isinstance(failures[0], ConnectorFailure)
+    assert "500" in failures[0].failure_message
+
+
 def test_load_from_checkpoint_with_page_processing_error(
     confluence_connector: ConfluenceConnector,
     create_mock_page: Callable[..., dict[str, Any]],
