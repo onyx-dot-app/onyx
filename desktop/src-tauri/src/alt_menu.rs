@@ -14,10 +14,16 @@
 /// toggle only fires when Alt is pressed and released without any other key
 /// being pressed in between.
 #[derive(Debug, Default)]
+// Only wired up from the Linux GTK setup below, but kept unconditionally
+// compiled (and unit-tested) since the state machine itself has no
+// platform dependencies -- suppress dead-code on the non-Linux builds where
+// nothing outside `#[cfg(test)]` constructs it.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub struct AltAloneTracker {
     held_alone: bool,
 }
 
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 impl AltAloneTracker {
     pub fn new() -> Self {
         Self::default()
