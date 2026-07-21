@@ -35,3 +35,9 @@ FULL_DOC_NUM_CHUNKS_AROUND = 5
 # This avoids documents with good titles or generally strong matches to flood out the rest of the search results.
 # If there are multiple indepedent sections from the doc, this won't truncate it, only if they're connected.
 MAX_CHUNKS_FOR_RELEVANCE = 3
+
+# The token budget for the LLM relevance-selection step is
+# max_llm_chunks * DOC_EMBEDDING_CONTEXT_SIZE * this multiplier. The selection step can
+# afford to see more candidates than what is ultimately fed to the chat LLM since it only
+# picks documents rather than reading them in full.
+SELECTION_TOKEN_BUDGET_MULTIPLIER = 2

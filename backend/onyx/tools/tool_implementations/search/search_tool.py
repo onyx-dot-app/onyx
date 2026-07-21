@@ -106,6 +106,9 @@ from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELE
 from onyx.tools.tool_implementations.search.constants import MODEL_KEYWORD_QUERY_WEIGHT
 from onyx.tools.tool_implementations.search.constants import MODEL_SEMANTIC_QUERY_WEIGHT
 from onyx.tools.tool_implementations.search.constants import ORIGINAL_QUERY_WEIGHT
+from onyx.tools.tool_implementations.search.constants import (
+    SELECTION_TOKEN_BUDGET_MULTIPLIER,
+)
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
 )
@@ -310,8 +313,10 @@ def run_post_retrieval_pipeline(
     # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
     # documents with many matching sections
     max_tokens_for_selection = (
-        max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT
-    ) * DOC_EMBEDDING_CONTEXT_SIZE
+        (max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT)
+        * DOC_EMBEDDING_CONTEXT_SIZE
+        * SELECTION_TOKEN_BUDGET_MULTIPLIER
+    )
 
     # This is approximate since it doesn't build the exact string of the call below
     # Some things are estimated and may be under (like the metadata tokens)
