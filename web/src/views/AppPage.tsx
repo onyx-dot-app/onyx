@@ -62,7 +62,7 @@ import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
 import { OnboardingStep } from "@/interfaces/onboarding";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
-import { Button, Spacer } from "@opal/components";
+import { Button, ShadowDiv, Spacer } from "@opal/components";
 import {
   IllustrationContent,
   RootLayout,
@@ -697,19 +697,32 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const hasAgentStarterMessages =
     (liveAgent?.starter_messages?.length ?? 0) > 0;
 
+  const isWelcomeFocus =
+    (appFocus.isNewSession() || appFocus.isAgent()) &&
+    (state.phase === "idle" || state.phase === "classifying");
+
+  const onboardingVisible =
+    isWelcomeFocus &&
+    (showOnboarding || !user?.personalization?.name) &&
+    !onboardingDismissed;
+
   const gridStyle = {
     // minmax(0, 1fr) (instead of "1fr") lets the single column shrink to the
     // grid's width. A bare "1fr" is minmax(auto, 1fr), whose auto minimum is
     // the content's min-content — wide content (e.g. the onboarding cards) would
     // otherwise blow the column past the viewport and clip the right edge.
     gridTemplateColumns: "minmax(0, 1fr)",
-    gridTemplateRows: isSearch
-      ? "0fr auto 1fr"
-      : appFocus.isChat()
-        ? "1fr auto 0fr"
-        : appFocus.isProject()
-          ? "auto auto 1fr"
-          : "1fr auto 1fr",
+    // Onboarding: welcome floored at content height, form row compressible
+    // (scrolls), bottom row absorbs slack. Centered when short, pinned when tall.
+    gridTemplateRows: onboardingVisible
+      ? "minmax(min-content, 1fr) minmax(0, max-content) minmax(0, 1fr)"
+      : isSearch
+        ? "0fr auto 1fr"
+        : appFocus.isChat()
+          ? "1fr auto 0fr"
+          : appFocus.isProject()
+            ? "auto auto 1fr"
+            : "1fr auto 1fr",
   };
 
   if (!isReady) return <OnyxInitializingLoader />;
@@ -882,10 +895,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                   {/* WelcomeMessageUI */}
                   <Fade
-                    show={
-                      (appFocus.isNewSession() || appFocus.isAgent()) &&
-                      (state.phase === "idle" || state.phase === "classifying")
-                    }
+                    show={isWelcomeFocus}
                     className="w-full flex-1 flex flex-col items-center justify-end px-2 sm:px-4"
                   >
                     <Section
@@ -902,7 +912,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         !(
                           state.phase === "idle" && state.appMode === "search"
                         ) &&
-                        liveAgent && (
+                        liveAgent &&
+                        llmManager.hasAnyProvider && (
                           <MultiModelSelector
                             selectedModels={multiModel.selectedModels}
                             onAdd={multiModel.addModel}
@@ -911,7 +922,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           />
                         )}
                     </Section>
-                    <Spacer rem={1.5} />
+                    <Spacer rem={1} />
                   </Fade>
                 </div>
 
@@ -919,12 +930,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 <div
                   className={cn(
                     "row-start-2 flex flex-col items-center px-2 sm:px-4",
+                    onboardingVisible && "min-h-0",
                     sessionFetchError && "hidden"
                   )}
                 >
                   <div
                     className={cn(
                       "relative w-full flex flex-col",
+                      onboardingVisible && "min-h-0",
                       !fullWidthActive &&
                         "max-w-(--app-page-main-content-width)"
                     )}
@@ -942,11 +955,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     )}
 
                     {/* OnboardingUI */}
-                    {(appFocus.isNewSession() || appFocus.isAgent()) &&
-                      (state.phase === "idle" ||
-                        state.phase === "classifying") &&
-                      (showOnboarding || !user?.personalization?.name) &&
-                      !onboardingDismissed && (
+                    {onboardingVisible && (
+                      <ShadowDiv mask className="overscroll-contain">
                         <OnboardingFlow
                           showOnboarding={showOnboarding}
                           handleHideOnboarding={hideOnboarding}
@@ -954,7 +964,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           state={onboardingState}
                           actions={onboardingActions}
                         />
-                      )}
+                      </ShadowDiv>
+                    )}
 
                     {/*
                       # Note (@raunakab)
@@ -974,7 +985,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       (Footer) that explains why the Footer removes its top
                       padding during chat to compensate for this extra space.
                     */}
-                    <div>
+                    <div className={cn(onboardingVisible && "shrink-0 pt-4")}>
                       <div
                         className={cn(
                           "transition-all duration-150 ease-in-out overflow-hidden",
