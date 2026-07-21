@@ -679,12 +679,28 @@ class UserSkillPreference(Base):
     )
     skill_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("skill.id", ondelete="CASCADE"),
         primary_key=True,
     )
+    # Denormalized for the enabled-name index; the composite FK keeps it exact.
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
-    __table_args__ = (Index("ix_user_skill_preference_skill_id", "skill_id"),)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["skill_id", "name"],
+            ["skill.id", "skill.name"],
+            name="fk_user_skill_preference_skill_name",
+            ondelete="CASCADE",
+        ),
+        Index("ix_user_skill_preference_skill_id", "skill_id"),
+        Index(
+            "uq_user_skill_preference_enabled_name",
+            "user_id",
+            "name",
+            unique=True,
+            postgresql_where=enabled.is_(True),
+        ),
+    )
 
 
 class DocumentSet__User(Base):
@@ -4498,9 +4514,8 @@ class Skill(Base):
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
-    # Admin-controlled metadata (editable post-creation via PATCH).
-    slug: Mapped[str] = mapped_column(String(64), nullable=False)
-    name: Mapped[str] = mapped_column(String, nullable=False)
+    # Immutable Agent Skills name and sandbox directory name.
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Discriminator: when set, definition (source files, has_template, etc.)
@@ -4565,7 +4580,8 @@ class Skill(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("slug", name="uq_skill_slug"),
+        UniqueConstraint("id", "name", name="uq_skill_id_name"),
+        Index("ix_skill_name", "name"),
         CheckConstraint(
             "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
             name="ck_skill_definition_source",
@@ -6453,8 +6469,8 @@ class ExternalApp(Base):
     __tablename__ = "external_app"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # Display and bundle metadata currently live on the linked Skill row.
-    # App availability is independent of user skill preferences.
+    # App display metadata is independent of the linked skill's canonical name.
+    name: Mapped[str] = mapped_column(String, nullable=False)
     skill_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("skill.id", ondelete="CASCADE"),

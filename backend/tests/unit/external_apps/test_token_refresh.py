@@ -272,7 +272,7 @@ def _setup(
     the lock)."""
     provider = GoogleCalendarProvider()
     app = MagicMock()
-    app.skill.name = "Google Calendar"
+    app.name = "Google Calendar"
 
     monkeypatch.setattr(tr, "redis_shared_lock", _noop_cm)
     monkeypatch.setattr(tr, "get_session_with_tenant", _noop_cm)

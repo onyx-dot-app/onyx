@@ -128,7 +128,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
-    setName(nextSkill.slug);
+    setName(nextSkill.name);
     setDescription(nextSkill.description);
     setInstructionsMarkdown(nextSkill.instructions_markdown);
   }, []);

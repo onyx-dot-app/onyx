@@ -62,7 +62,7 @@ def test_read_custom_skill_bundle_instructions_reads_bundle_from_file_store() ->
     file_store.read_file.return_value = io.BytesIO(zip_bytes)
 
     instructions = read_custom_skill_bundle_instructions(
-        Skill(slug="preview-test", bundle_file_id="bundle-file-id"),
+        Skill(name="preview-test", bundle_file_id="bundle-file-id"),
         file_store,
     )
 

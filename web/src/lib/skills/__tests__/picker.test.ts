@@ -56,8 +56,8 @@ describe("toPickerSections", () => {
   it("places plain built-ins in `skills`", () => {
     const data = skillsList({
       builtins: [
-        builtinFixture({ slug: "pptx" }),
-        builtinFixture({ slug: "image-gen" }),
+        builtinFixture({ name: "pptx" }),
+        builtinFixture({ name: "image-gen" }),
       ],
     });
     const result = toPickerSections(data, []);
@@ -68,8 +68,8 @@ describe("toPickerSections", () => {
   it("filters out unavailable built-ins", () => {
     const data = skillsList({
       builtins: [
-        builtinFixture({ slug: "pptx" }),
-        builtinFixture({ slug: "image-gen", is_available: false }),
+        builtinFixture({ name: "pptx" }),
+        builtinFixture({ name: "image-gen", is_available: false }),
       ],
     });
     expect(toPickerSections(data, []).skills.map((s) => s.slug)).toEqual([
@@ -79,10 +79,10 @@ describe("toPickerSections", () => {
 
   it("appends enabled customs to `skills`", () => {
     const data = skillsList({
-      builtins: [builtinFixture({ slug: "pptx" })],
+      builtins: [builtinFixture({ name: "pptx" })],
       customs: [
-        customFixture({ slug: "my-custom" }),
-        customFixture({ slug: "disabled-one", enabled: false }),
+        customFixture({ name: "my-custom" }),
+        customFixture({ name: "disabled-one", enabled: false }),
       ],
     });
     expect(toPickerSections(data, []).skills.map((s) => s.slug)).toEqual([
@@ -94,8 +94,8 @@ describe("toPickerSections", () => {
   it("filters out invalid customs", () => {
     const data = skillsList({
       customs: [
-        customFixture({ slug: "valid-skill" }),
-        customFixture({ slug: "invalid-skill", is_valid: false }),
+        customFixture({ name: "valid-skill" }),
+        customFixture({ name: "invalid-skill", is_valid: false }),
       ],
     });
     expect(toPickerSections(data, []).skills.map((s) => s.slug)).toEqual([

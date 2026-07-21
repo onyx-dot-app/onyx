@@ -67,7 +67,7 @@ def test_replace_custom_app_bundle_cleans_new_bundle_on_failure(
         ExternalApp,
         SimpleNamespace(
             app_type=ExternalAppType.CUSTOM,
-            skill=SimpleNamespace(slug="helper-skill"),
+            skill=SimpleNamespace(name="helper-skill"),
         ),
     )
     monkeypatch.setattr(external_apps_api, "get_default_file_store", lambda: file_store)

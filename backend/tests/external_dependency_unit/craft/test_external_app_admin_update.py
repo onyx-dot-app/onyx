@@ -31,16 +31,16 @@ def _noop(*_args: object, **_kwargs: object) -> None:
 
 @pytest.fixture(autouse=True)
 def _clean_slack_rows(db_session: Session) -> Generator[None, None, None]:
-    db_session.execute(delete(Skill).where(Skill.slug == "slack"))
+    db_session.execute(delete(Skill).where(Skill.name == "slack"))
     db_session.commit()
     yield
-    db_session.execute(delete(Skill).where(Skill.slug == "slack"))
+    db_session.execute(delete(Skill).where(Skill.name == "slack"))
     db_session.commit()
 
 
 def _slack_app(db_session: Session) -> ExternalApp:
     skill = reset_built_in_skill_row(
-        db_session, built_in_skill_id="slack", name="Slack", is_public=True
+        db_session, built_in_skill_id="slack", is_public=True
     )
     app = make_external_app(
         db_session,
@@ -85,6 +85,8 @@ def test_patch_updates_config_on_non_managed_built_in(
     db_session.expire_all()
     stored = get_external_app_by_id(db_session, app_id)
     assert stored is not None
+    assert stored.name == "Slack — Eng"
+    assert stored.skill.name == "slack"
     assert list(stored.upstream_url_patterns) == new_patterns
     assert stored.auth_template == new_auth
     assert stored.organization_credentials.get_value(apply_mask=False) == {

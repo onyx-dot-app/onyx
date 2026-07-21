@@ -114,7 +114,7 @@ export interface ExternalAppUserResponse {
 
 /**
  * Built-in descriptors still available to add. Only one app per `app_type` is
- * allowed (server-enforced via the built-in skill's unique slug), so configured
+ * allowed (server-enforced through its backing skill name), so configured
  * types are dropped to avoid a duplicate-resource error. Cloud managed built-ins
  * are pre-provisioned (always configured) and never show here. CUSTOM apps have
  * no descriptor, so they never match and are left untouched.

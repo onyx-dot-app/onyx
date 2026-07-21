@@ -7,6 +7,7 @@ import {
 } from "@tests/setup/test-utils";
 import SkillsPage from "@/views/SkillsPage";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
+import { builtinFixture } from "@/lib/skills/__fixtures__/picker";
 
 const mockSetSkillEnabled = jest.fn();
 const mockRefresh = jest.fn();
@@ -16,6 +17,7 @@ const mockUseUserSkills = jest.fn();
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
+  usePathname: () => "/craft/v1/skills",
 }));
 
 jest.mock("@/hooks/useUserSkills", () => ({
@@ -71,7 +73,6 @@ function customSkill(id: string, name: string): CustomSkill {
   return {
     source: "custom",
     id,
-    slug: name.toLowerCase().replaceAll(" ", "-"),
     name,
     description: `${name} description`,
     is_available: null,
@@ -118,8 +119,8 @@ describe("SkillsPage preference toggles", () => {
     skillsData = {
       builtins: [],
       customs: [
-        customSkill("first-id", "First Skill"),
-        customSkill("second-id", "Second Skill"),
+        customSkill("first-id", "first-skill"),
+        customSkill("second-id", "second-skill"),
       ],
     };
     mockUseUserSkills.mockImplementation(() => ({
@@ -142,10 +143,10 @@ describe("SkillsPage preference toggles", () => {
     mockSetSkillEnabled.mockReturnValueOnce(mutation.promise);
     render(<SkillsPage />);
 
-    await user.click(screen.getByRole("switch", { name: "First Skill" }));
+    await user.click(screen.getByRole("switch", { name: "first-skill" }));
 
-    const firstSwitch = screen.getByRole("switch", { name: "First Skill" });
-    const secondSwitch = screen.getByRole("switch", { name: "Second Skill" });
+    const firstSwitch = screen.getByRole("switch", { name: "first-skill" });
+    const secondSwitch = screen.getByRole("switch", { name: "second-skill" });
     expect(firstSwitch).toHaveAttribute("aria-checked", "true");
     expect(firstSwitch).toBeDisabled();
     expect(secondSwitch).toHaveAttribute("aria-checked", "false");
@@ -167,11 +168,11 @@ describe("SkillsPage preference toggles", () => {
       .mockReturnValueOnce(secondMutation.promise);
     render(<SkillsPage />);
 
-    await user.click(screen.getByRole("switch", { name: "First Skill" }));
-    await user.click(screen.getByRole("switch", { name: "Second Skill" }));
+    await user.click(screen.getByRole("switch", { name: "first-skill" }));
+    await user.click(screen.getByRole("switch", { name: "second-skill" }));
 
-    const firstSwitch = screen.getByRole("switch", { name: "First Skill" });
-    const secondSwitch = screen.getByRole("switch", { name: "Second Skill" });
+    const firstSwitch = screen.getByRole("switch", { name: "first-skill" });
+    const secondSwitch = screen.getByRole("switch", { name: "second-skill" });
     expect(firstSwitch).toHaveAttribute("aria-checked", "true");
     expect(firstSwitch).toBeDisabled();
     expect(secondSwitch).toHaveAttribute("aria-checked", "true");
@@ -196,8 +197,8 @@ describe("SkillsPage preference toggles", () => {
     mockSetSkillEnabled.mockReturnValueOnce(mutation.promise);
     render(<SkillsPage />);
 
-    await user.click(screen.getByRole("switch", { name: "First Skill" }));
-    const firstSwitch = screen.getByRole("switch", { name: "First Skill" });
+    await user.click(screen.getByRole("switch", { name: "first-skill" }));
+    const firstSwitch = screen.getByRole("switch", { name: "first-skill" });
     expect(firstSwitch).toHaveAttribute("aria-checked", "true");
 
     await act(async () => {
@@ -226,20 +227,59 @@ describe("SkillsPage preference toggles", () => {
       .mockRejectedValueOnce(new Error("Refresh failed"));
     render(<SkillsPage />);
 
-    await user.click(screen.getByRole("switch", { name: "First Skill" }));
+    await user.click(screen.getByRole("switch", { name: "first-skill" }));
 
-    const firstSwitch = screen.getByRole("switch", { name: "First Skill" });
+    const firstSwitch = screen.getByRole("switch", { name: "first-skill" });
     await waitFor(() => {
       expect(firstSwitch).toHaveAttribute("aria-checked", "true");
       expect(firstSwitch).toBeEnabled();
     });
     await waitFor(() =>
       expect(mockToastError).toHaveBeenCalledWith(
-        "First Skill was updated, but the skill list could not be refreshed."
+        "first-skill was updated, but the skill list could not be refreshed."
       )
     );
     expect(mockToastError).not.toHaveBeenCalledWith(
       expect.stringContaining("Failed to enable")
     );
+  });
+
+  it("confirms before switching between skills with the same name", async () => {
+    const user = setupUser();
+    const first = builtinFixture({
+      id: "first-id",
+      name: "report-writer",
+      enabled: true,
+      can_toggle: true,
+    });
+    const second = customSkill("second-id", "report-writer");
+    skillsData = { builtins: [first], customs: [second] };
+    mockSetSkillEnabled.mockResolvedValueOnce({ ...second, enabled: true });
+    render(<SkillsPage />);
+
+    const switches = screen.getAllByRole("switch", { name: "report-writer" });
+    await user.click(switches[1]!);
+
+    expect(mockSetSkillEnabled).not.toHaveBeenCalled();
+    expect(screen.getByText("Switch active skill?")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        "Only one skill named “report-writer” can be active at a time."
+      )
+    ).not.toHaveLength(0);
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(mockSetSkillEnabled).not.toHaveBeenCalled();
+
+    await user.click(switches[1]!);
+    await user.click(screen.getByRole("button", { name: "Switch skill" }));
+
+    await waitFor(() =>
+      expect(mockSetSkillEnabled).toHaveBeenCalledWith("second-id", true)
+    );
+    await waitFor(() => {
+      expect(switches[0]).toHaveAttribute("aria-checked", "false");
+      expect(switches[1]).toHaveAttribute("aria-checked", "true");
+    });
   });
 });

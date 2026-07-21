@@ -21,6 +21,8 @@ from onyx.db.skill import (
     list_skills,
     persist_skill_validity,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_user_map,
@@ -91,7 +93,7 @@ def _add_static_builtin(
         if not path.is_file() or _is_excluded(path, source_dir):
             continue
         rel = path.relative_to(source_dir)
-        files[f"{skill.slug}/{rel.as_posix()}"] = path.read_bytes()
+        files[f"{skill.name}/{rel.as_posix()}"] = path.read_bytes()
 
 
 def _render_template(
@@ -101,14 +103,14 @@ def _render_template(
     db_session: Session,
     user: User,
 ) -> None:
-    """Overwrite ``{slug}/SKILL.md`` with a per-user rendering. company-search
+    """Overwrite ``{name}/SKILL.md`` with a per-user rendering. company-search
     and external-app built-ins have renderers; any other templated built-in logs
     a warning and ships the static siblings as-is."""
     if definition.built_in_skill_id == COMPANY_SEARCH.built_in_skill_id:
         rendered = render_company_search_skill(
             db_session, user, definition.source_dir.parent
         )
-        files[f"{skill.slug}/SKILL.md"] = rendered.encode("utf-8")
+        files[f"{skill.name}/SKILL.md"] = rendered.encode("utf-8")
         return
 
     app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
@@ -120,7 +122,7 @@ def _render_template(
             external_app,
             definition.source_dir,
         )
-        files[f"{skill.slug}/SKILL.md"] = rendered.encode("utf-8")
+        files[f"{skill.name}/SKILL.md"] = rendered.encode("utf-8")
         return
 
     logger.warning(
@@ -135,12 +137,12 @@ def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None
             for info in zf.infolist():
                 if info.is_dir():
                     continue
-                bundle_files[f"{skill.slug}/{info.filename}"] = zf.read(info)
+                bundle_files[f"{skill.name}/{info.filename}"] = zf.read(info)
         files.update(bundle_files)
     except Exception:
         logger.warning(
             "Failed to unpack bundle for skill %s (%s), skipping",
-            skill.slug,
+            skill.name,
             skill.bundle_file_id,
             exc_info=True,
         )
@@ -157,6 +159,16 @@ def _assemble_fileset(
     validation before their FileStore bundle is unpacked. Invalid,
     indeterminate, and unknown built-in rows are skipped.
     """
+    skills = list(skills)
+    seen_names: set[str] = set()
+    for skill in skills:
+        if skill.name in seen_names:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                f"Multiple enabled skills are named '{skill.name}'.",
+            )
+        seen_names.add(skill.name)
+
     files: FileSet = {}
     validity_updates: list[SkillValidityUpdate] = []
     file_store = get_default_file_store()
@@ -206,7 +218,7 @@ def _assemble_fileset(
         if definition is None:
             logger.warning(
                 "Skill row %s references unknown built-in %s; skipping",
-                skill.slug,
+                skill.name,
                 skill.built_in_skill_id,
             )
             continue

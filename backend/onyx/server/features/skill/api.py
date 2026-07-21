@@ -111,9 +111,9 @@ def _replace_skill_bundle_from_editor(
     file_store = get_default_file_store()
     with ingested_skill_bundle(
         bundle_bytes,
-        f"{skill.slug}.zip",
+        f"{skill.name}.zip",
         file_store,
-        expected_name=skill.slug,
+        expected_name=skill.name,
     ) as ingested:
         old_file_id = replace_skill_bundle(
             skill=skill,
@@ -210,7 +210,6 @@ def create_custom_skill(
         file_store,
     ) as ingested:
         skill = create_skill__no_commit(
-            slug=ingested.canonical_name,
             name=ingested.canonical_name,
             description=ingested.description,
             bundle_file_id=ingested.bundle_file_id,
@@ -280,7 +279,6 @@ def create_custom_skill_from_editor(
         expected_name=canonical_name,
     ) as ingested:
         skill = create_skill__no_commit(
-            slug=ingested.canonical_name,
             name=ingested.canonical_name,
             description=ingested.description,
             bundle_file_id=ingested.bundle_file_id,
@@ -368,7 +366,7 @@ def replace_current_user_skill_bundle(
         read_bundle_file(bundle.file),
         bundle.filename,
         file_store,
-        expected_name=skill.slug,
+        expected_name=skill.name,
     ) as ingested:
         old_file_id = replace_skill_bundle(
             skill=skill,
@@ -494,13 +492,13 @@ def patch_current_user_skill(
                 )
             new_bundle_bytes = rewrite_custom_bundle_skill_md(
                 old_bundle_bytes,
-                canonical_name=skill.slug,
+                canonical_name=skill.name,
                 description=description,
                 instructions_markdown=instructions_markdown,
             )
             new_bundle_file_id = save_skill_bundle_bytes(
                 new_bundle_bytes,
-                display_name=f"{skill.slug}.zip",
+                display_name=f"{skill.name}.zip",
                 file_store=file_store,
             )
             old_bundle_file_id = replace_skill_bundle(
@@ -640,7 +638,7 @@ def transfer_current_user_skill_ownership(
     if skill.built_in_skill_id is not None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.slug}' is a built-in and cannot change ownership.",
+            f"Skill '{skill.name}' is a built-in and cannot change ownership.",
         )
 
     ownership_vacant = (

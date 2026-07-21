@@ -162,8 +162,7 @@ class ExternalAppManager:
             "auth_template": json.dumps(auth_template),
             "organization_credentials": json.dumps(organization_credentials),
         }
-        # Each bundle needs a unique canonical name while slug uniqueness is
-        # still enforced by the current persistence model.
+        # Keep app-backed skill names unique so independent tests cannot collide.
         skill_name = f"custom-{uuid4().hex[:8]}"
         files: dict[str, tuple[str, bytes, str]] = {
             "bundle": (

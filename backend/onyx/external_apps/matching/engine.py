@@ -122,9 +122,9 @@ def _app_name(app: ExternalApp) -> str:
     provider = get_provider_for_app(app)
     if provider is not None:
         return provider.spec.app_name
-    # CUSTOM apps have no provider; their human name lives on the linked skill.
+    # CUSTOM apps have no provider; use their independently editable display name.
     if app.app_type == ExternalAppType.CUSTOM:
-        return app.skill.name
+        return app.name
     return app.app_type.value
 
 

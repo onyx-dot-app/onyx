@@ -4,13 +4,17 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill__User, Skill__UserGroup, UserSkillPreference
 from onyx.db.skill import (
+    SkillAccessPolicy,
+    list_skills,
     replace_skill_shares,
+    set_skill_enabled_for_user,
     skill_user_states,
     transfer_skill_ownership,
 )
@@ -54,7 +58,7 @@ def test_skill_user_states_resolve_defaults_and_visibility(
     invalid_custom = make_skill(
         db_session,
         is_public=True,
-        slug=f"invalid-{uuid4().hex[:8]}",
+        name=f"invalid-{uuid4().hex[:8]}",
     )
     invalid_custom.is_valid = False
     built_in = make_built_in_skill_row(
@@ -255,6 +259,7 @@ def test_transfer_skill_ownership_preserves_new_owner_explicit_disable(
     preference = UserSkillPreference(
         user_id=new_owner.id,
         skill_id=skill.id,
+        name=skill.name,
         enabled=False,
     )
     db_session.add(preference)
@@ -268,6 +273,111 @@ def test_transfer_skill_ownership_preserves_new_owner_explicit_disable(
 
     assert skill.author_user_id == new_owner.id
     assert preference.enabled is False
+
+
+def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> None:
+    first_user = make_user(db_session)
+    second_user = make_user(db_session)
+    name = f"shared-name-{uuid4().hex[:8]}"
+    first_skill = make_skill(db_session, name=name, is_public=True)
+    second_skill = make_skill(db_session, name=name, is_public=True)
+
+    set_skill_enabled_for_user(
+        skill_id=first_skill.id,
+        enabled=True,
+        user=first_user,
+        db_session=db_session,
+    )
+    set_skill_enabled_for_user(
+        skill_id=second_skill.id,
+        enabled=True,
+        user=second_user,
+        db_session=db_session,
+    )
+
+    assert {
+        skill.id
+        for skill in list_skills(
+            policy=SkillAccessPolicy.USE,
+            user=first_user,
+            db_session=db_session,
+        )
+        if skill.name == name
+    } == {first_skill.id}
+    assert {
+        skill.id
+        for skill in list_skills(
+            policy=SkillAccessPolicy.USE,
+            user=second_user,
+            db_session=db_session,
+        )
+        if skill.name == name
+    } == {second_skill.id}
+
+    set_skill_enabled_for_user(
+        skill_id=second_skill.id,
+        enabled=True,
+        user=first_user,
+        db_session=db_session,
+    )
+
+    preferences = list(
+        db_session.scalars(
+            select(UserSkillPreference)
+            .where(UserSkillPreference.user_id == first_user.id)
+            .where(UserSkillPreference.name == name)
+        )
+    )
+    assert {
+        preference.skill_id for preference in preferences if preference.enabled
+    } == {second_skill.id}
+
+
+def test_database_rejects_two_enabled_same_name_preferences(
+    db_session: Session,
+) -> None:
+    user = make_user(db_session)
+    name = f"constrained-name-{uuid4().hex[:8]}"
+    first_skill = make_skill(db_session, name=name, is_public=True)
+    second_skill = make_skill(db_session, name=name, is_public=True)
+    db_session.add(
+        UserSkillPreference(
+            user_id=user.id,
+            skill_id=first_skill.id,
+            name=name,
+            enabled=True,
+        )
+    )
+    db_session.flush()
+
+    with pytest.raises(IntegrityError):
+        with db_session.begin_nested():
+            db_session.add(
+                UserSkillPreference(
+                    user_id=user.id,
+                    skill_id=second_skill.id,
+                    name=name,
+                    enabled=True,
+                )
+            )
+            db_session.flush()
+
+
+def test_preference_name_must_match_skill_name(db_session: Session) -> None:
+    user = make_user(db_session)
+    skill = make_skill(db_session, is_public=True)
+
+    with pytest.raises(IntegrityError):
+        with db_session.begin_nested():
+            db_session.add(
+                UserSkillPreference(
+                    user_id=user.id,
+                    skill_id=skill.id,
+                    name="different-name",
+                    enabled=True,
+                )
+            )
+            db_session.flush()
 
 
 def test_transfer_skill_ownership_self_transfer_preserves_direct_share(

@@ -256,8 +256,8 @@ export default function CreateCustomAppModal({
               </Text>
               <Text font="secondary-body" color="text-03">
                 {isEdit
-                  ? "Optional — upload a new zip to replace the current bundle. Leave empty to keep it. The slug stays the same."
-                  : "A zip containing SKILL.md plus any other files. The filename becomes the app slug."}
+                  ? "Optional — upload a new zip to replace the current bundle. Leave empty to keep it. The skill name stays the same."
+                  : "A zip containing SKILL.md plus any other files. The linked skill name comes from SKILL.md."}
               </Text>
               <div className="flex items-center gap-2">
                 <input

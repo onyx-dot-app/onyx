@@ -10,16 +10,21 @@ import {
   Popover,
   Text,
 } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
+import {
+  ConfirmationModalLayout,
+  IllustrationContent,
+  SettingsLayouts,
+  toast,
+} from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
+  SvgAlertTriangle,
   SvgBlocks,
   SvgEdit,
   SvgPlus,
   SvgSimpleLoader,
   SvgUploadCloud,
 } from "@opal/icons";
-import { SettingsLayouts, toast } from "@opal/layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -52,6 +57,8 @@ export default function SkillsPage() {
   const [optimisticEnabledById, setOptimisticEnabledById] = useState<
     Map<string, boolean>
   >(new Map());
+  const [pendingSwitchTarget, setPendingSwitchTarget] =
+    useState<SkillCardItem | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useOnMount(() => {
@@ -62,23 +69,76 @@ export default function SkillsPage() {
     router.push(`/craft/v1/skills/edit/${item.id}` as Route);
   }
 
-  async function handleEnabledChange(item: SkillCardItem, enabled: boolean) {
-    setPendingSkillIds((current) => new Set(current).add(item.id));
-    setOptimisticEnabledById((current) =>
-      new Map(current).set(item.id, enabled)
-    );
+  async function updateSkillEnabled(
+    item: SkillCardItem,
+    enabled: boolean,
+    confirmed = false
+  ) {
+    if (
+      enabled &&
+      !confirmed &&
+      items.some(
+        (candidate) =>
+          candidate.id !== item.id &&
+          candidate.name === item.name &&
+          candidate.enabled
+      )
+    ) {
+      setPendingSwitchTarget(item);
+      return;
+    }
+
+    const affectedItems = enabled
+      ? items.filter((candidate) => candidate.name === item.name)
+      : [item];
+    const affectedIds = new Set(affectedItems.map(({ id }) => id));
+    setPendingSkillIds((current) => {
+      const next = new Set(current);
+      affectedIds.forEach((id) => next.add(id));
+      return next;
+    });
+    setOptimisticEnabledById((current) => {
+      const next = new Map(current);
+      if (enabled) {
+        affectedItems.forEach((candidate) =>
+          next.set(candidate.id, candidate.id === item.id)
+        );
+      } else {
+        next.set(item.id, false);
+      }
+      return next;
+    });
     try {
       const updatedSkill = await setSkillEnabled(item.id, enabled);
       await refresh(
         (current) => {
           if (!current) return current;
-          const key =
-            updatedSkill.source === "builtin" ? "builtins" : "customs";
           return {
             ...current,
-            [key]: current[key].map((skill) =>
-              skill.id === updatedSkill.id ? updatedSkill : skill
-            ),
+            builtins: current.builtins.map((skill) => {
+              if (
+                updatedSkill.source === "builtin" &&
+                skill.id === updatedSkill.id
+              ) {
+                return updatedSkill;
+              }
+              if (enabled && skill.name === updatedSkill.name) {
+                return { ...skill, enabled: false };
+              }
+              return skill;
+            }),
+            customs: current.customs.map((skill) => {
+              if (
+                updatedSkill.source === "custom" &&
+                skill.id === updatedSkill.id
+              ) {
+                return updatedSkill;
+              }
+              if (enabled && skill.name === updatedSkill.name) {
+                return { ...skill, enabled: false };
+              }
+              return skill;
+            }),
           };
         },
         { revalidate: false }
@@ -97,12 +157,12 @@ export default function SkillsPage() {
     } finally {
       setOptimisticEnabledById((current) => {
         const next = new Map(current);
-        next.delete(item.id);
+        affectedIds.forEach((id) => next.delete(id));
         return next;
       });
       setPendingSkillIds((current) => {
         const next = new Set(current);
-        next.delete(item.id);
+        affectedIds.forEach((id) => next.delete(id));
         return next;
       });
     }
@@ -258,7 +318,9 @@ export default function SkillsPage() {
                         item={item}
                         onEdit={handleEdit}
                         onClick={setPreviewTarget}
-                        onEnabledChange={handleEnabledChange}
+                        onEnabledChange={(skill, enabled) =>
+                          void updateSkillEnabled(skill, enabled)
+                        }
                         enablementPending={pendingSkillIds.has(item.id)}
                       />
                     ))}
@@ -290,6 +352,28 @@ export default function SkillsPage() {
         unavailableReason={previewUnavailableReason}
         onClose={() => setPreviewTarget(null)}
       />
+
+      {pendingSwitchTarget && (
+        <ConfirmationModalLayout
+          icon={SvgAlertTriangle}
+          title="Switch active skill?"
+          description={`Only one skill named “${pendingSwitchTarget.name}” can be active at a time.`}
+          onClose={() => setPendingSwitchTarget(null)}
+          submit={
+            <Button
+              onClick={() => {
+                const target = pendingSwitchTarget;
+                setPendingSwitchTarget(null);
+                void updateSkillEnabled(target, true, true);
+              }}
+            >
+              Switch skill
+            </Button>
+          }
+        >
+          Continuing will disable the active skill and enable the selected one.
+        </ConfirmationModalLayout>
+      )}
     </SettingsLayouts.Root>
   );
 }

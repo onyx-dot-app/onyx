@@ -35,24 +35,21 @@ def _response_model(
 
 
 def build_minimal_bundle(
-    slug: str,
+    name: str,
     *,
-    name: str | None = None,
     description: str | None = None,
 ) -> bytes:
     """Build a minimal valid skill bundle zip with SKILL.md.
 
-    `name` / `description` are written into the bundle's frontmatter — that's
-    now the canonical source for those fields on the backend, so tests that
-    care about them should pass them here instead of as separate API args.
+    ``name`` and ``description`` are written into the bundle's frontmatter,
+    which is the canonical metadata source.
     """
-    fm_name = name or slug
-    fm_desc = description or f"Description for {slug}"
+    description = description or f"Description for {name}"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
             "SKILL.md",
-            f"---\nname: {fm_name}\ndescription: {fm_desc}\n---\n\nSkill instructions.",
+            f"---\nname: {name}\ndescription: {description}\n---\n\nSkill instructions.",
         )
     return buf.getvalue()
 
@@ -97,7 +94,6 @@ class SkillManager:
     def create_custom(
         user_performing_action: DATestUser,
         *,
-        slug: str | None = None,
         name: str | None = None,
         description: str | None = None,
         is_public: bool = False,
@@ -105,11 +101,9 @@ class SkillManager:
         bundle_bytes: bytes | None = None,
         filename: str | None = None,
     ) -> SkillResponse:
-        slug = slug or f"test-skill-{uuid4().hex[:8]}"
+        name = name or f"test-skill-{uuid4().hex[:8]}"
         if bundle_bytes is None:
-            bundle_bytes = build_minimal_bundle(
-                slug, name=name, description=description
-            )
+            bundle_bytes = build_minimal_bundle(name, description=description)
 
         headers = dict(user_performing_action.headers)
         headers.pop("Content-Type", None)
@@ -118,7 +112,7 @@ class SkillManager:
             f"{API_SERVER_URL}/skills/custom",
             files={
                 "bundle": (
-                    filename or f"{slug}.zip",
+                    filename or f"{name}.zip",
                     io.BytesIO(bundle_bytes),
                     "application/zip",
                 )
@@ -179,7 +173,7 @@ class SkillManager:
             f"{API_SERVER_URL}/skills/custom/{skill.id}/bundle",
             files={
                 "bundle": (
-                    f"{skill.slug}.zip",
+                    f"{skill.name}.zip",
                     io.BytesIO(bundle_bytes),
                     "application/zip",
                 )
@@ -391,17 +385,14 @@ class SkillManager:
     def create_personal(
         user_performing_action: DATestUser,
         *,
-        slug: str | None = None,
         name: str | None = None,
         description: str | None = None,
         bundle_bytes: bytes | None = None,
         filename: str | None = None,
     ) -> SkillResponse:
-        slug = slug or f"personal-skill-{uuid4().hex[:8]}"
+        name = name or f"personal-skill-{uuid4().hex[:8]}"
         if bundle_bytes is None:
-            bundle_bytes = build_minimal_bundle(
-                slug, name=name, description=description
-            )
+            bundle_bytes = build_minimal_bundle(name, description=description)
 
         headers = dict(user_performing_action.headers)
         headers.pop("Content-Type", None)
@@ -410,7 +401,7 @@ class SkillManager:
             f"{API_SERVER_URL}/skills/custom",
             files={
                 "bundle": (
-                    filename or f"{slug}.zip",
+                    filename or f"{name}.zip",
                     io.BytesIO(bundle_bytes),
                     "application/zip",
                 )
@@ -433,7 +424,7 @@ class SkillManager:
             f"{API_SERVER_URL}/skills/custom/{skill.id}/bundle",
             files={
                 "bundle": (
-                    f"{skill.slug}.zip",
+                    f"{skill.name}.zip",
                     io.BytesIO(bundle_bytes),
                     "application/zip",
                 )

@@ -50,7 +50,7 @@ def _noop(*_args: object, **_kwargs: object) -> None:
 
 def _cleanup(db_session: Session) -> None:
     # Deleting the built-in skill cascades to its external_app + credential rows.
-    db_session.execute(delete(Skill).where(Skill.slug.in_(_BUILT_IN_SLUGS)))
+    db_session.execute(delete(Skill).where(Skill.name.in_(_BUILT_IN_SLUGS)))
     db_session.commit()
 
 
