@@ -1532,21 +1532,18 @@ def get_openrouter_available_models(
 
 
 def _get_edenai_models_response(api_base: str, api_key: str | None) -> dict:
-    """Perform GET to the Eden AI /models endpoint and return parsed JSON."""
+    """Perform GET to the Eden AI /models endpoint and return parsed JSON.
+
+    Delegates to the shared OpenAI-compatible helper so invalid credentials and
+    bad base URLs surface as actionable validation errors (rather than a generic
+    502) with consistent request-context logging.
+    """
     cleaned_api_base = api_base.strip().rstrip("/")
-    url = f"{cleaned_api_base}/models"
-    headers: dict[str, str] = {}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    try:
-        response = httpx.get(url, headers=headers, timeout=10.0)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"Failed to fetch Eden AI models: {e}",
-        )
+    return _get_openai_compatible_models_response(
+        url=f"{cleaned_api_base}/models",
+        source_name="Eden AI",
+        api_key=api_key,
+    )
 
 
 @admin_router.post("/edenai/available-models")

@@ -551,6 +551,11 @@ class LitellmLLM(LLM):
             LlmProviderNames.BIFROST,
             LlmProviderNames.OPENAI_COMPATIBLE,
             LlmProviderNames.NEBIUS_TOKENFACTORY,
+            # Eden AI is reached through LiteLLM's openai-compatible path too, so
+            # it needs the same tool_choice forwarding even when the underlying
+            # model is Claude or Mistral. Its extra "openai/" model prefix is
+            # handled by the dedicated branch below.
+            LlmProviderNames.EDENAI,
         )
         model_provider = (
             f"{self.config.model_provider}/responses"
