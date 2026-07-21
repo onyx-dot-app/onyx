@@ -11,8 +11,8 @@ pub const MENU_OPEN_DEBUG_LOG_ID: &str = "open_debug_log";
 
 const CONSOLE_CAPTURE_SCRIPT: &str = include_str!("scripts/console_capture.js");
 
-pub fn is_debug_mode() -> bool {
-    std::env::args().any(|arg| arg == "--debug") || std::env::var("ONYX_DEBUG").is_ok()
+pub fn is_debug_mode(cli_debug: bool) -> bool {
+    cli_debug || std::env::var("ONYX_DEBUG").is_ok()
 }
 
 pub fn get_debug_log_path() -> Option<PathBuf> {

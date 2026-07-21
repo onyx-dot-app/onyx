@@ -8,6 +8,7 @@ mod debug_log;
 mod menu;
 mod window;
 
+use clap::Parser;
 use config::ConfigState;
 use serde::Deserialize;
 use tauri::{webview::PageLoadPayload, Manager, Webview, Wry};
@@ -15,17 +16,27 @@ use tauri::{webview::PageLoadPayload, Manager, Webview, Wry};
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 // ============================================================================
-// Version
+// CLI flags
 // ============================================================================
+
+/// Onyx desktop client. Launching with no flags opens the app normally.
+#[derive(Parser)]
+#[command(name = "onyx", long_about = None, disable_version_flag = true)]
+struct Cli {
+    // Handled manually rather than via `#[command(version)]` so it can also
+    // report the connected server's version, not just the client build.
+    /// Print client and server version and exit
+    #[arg(short = 'v', long)]
+    version: bool,
+
+    /// Enable verbose logging, auto-open DevTools, and capture webview console output
+    #[arg(long)]
+    debug: bool,
+}
 
 #[derive(Deserialize)]
 struct VersionResponse {
     backend_version: String,
-}
-
-/// Whether the process was launched with `--version` / `-v`.
-fn wants_version() -> bool {
-    std::env::args().any(|arg| arg == "--version" || arg == "-v")
 }
 
 /// Fetch the backend version from the configured server's public `/api/version`
@@ -81,13 +92,15 @@ fn print_version_info() {
 // ============================================================================
 
 fn main() {
-    if wants_version() {
+    let cli = Cli::parse();
+
+    if cli.version {
         print_version_info();
         return;
     }
 
     let (app_config, config_initialized) = config::load_config();
-    let debug_mode = debug_log::is_debug_mode();
+    let debug_mode = debug_log::is_debug_mode(cli.debug);
 
     let debug_log_file = if debug_mode {
         eprintln!("[ONYX DEBUG] Debug mode enabled");
