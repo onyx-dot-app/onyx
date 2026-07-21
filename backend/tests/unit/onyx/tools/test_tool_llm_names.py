@@ -7,11 +7,9 @@ server-side since 2026-07-21. A collision breaks every chat that has the tool
 attached, across all GPT models served via api.openai.com.
 """
 
-from onyx.tools.built_in_tools import (
-    BUILT_IN_TOOL_MAP,
-    TOOL_NAME_TO_CLASS,
-    llm_tool_name,
-)
+from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
+from onyx.tools.built_in_tools import llm_tool_name
+from onyx.tools.built_in_tools import TOOL_NAME_TO_CLASS
 
 # Names OpenAI is known to reserve. Extend if OpenAI reserves more of its
 # harness tool names (e.g. "browser", "bash") and starts rejecting them.
