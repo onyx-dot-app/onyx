@@ -19,6 +19,8 @@ import { TableHeader } from "@/components/ui/table";
 import { Text } from "@opal/components";
 import { Spacer } from "@opal/components";
 
+const HOURS_PER_DAY = 24;
+
 type TokenRateLimitTableArgs = {
   tokenRateLimits: TokenRateLimitDisplay[];
   title?: string;
@@ -101,7 +103,7 @@ export const TokenRateLimitTable = ({
           <TableRow>
             <TableHead>Enabled</TableHead>
             {shouldRenderGroupName() && <TableHead>Group Name</TableHead>}
-            <TableHead>Time Window (Hours)</TableHead>
+            <TableHead>Time Window (UTC Days)</TableHead>
             <TableHead>Token Budget (Thousands)</TableHead>
             {isAdmin && <TableHead>Delete</TableHead>}
           </TableRow>
@@ -147,9 +149,9 @@ export const TokenRateLimitTable = ({
                   </TableCell>
                 )}
                 <TableCell>
-                  {tokenRateLimit.period_hours +
-                    " hour" +
-                    (tokenRateLimit.period_hours > 1 ? "s" : "")}
+                  {tokenRateLimit.period_hours / HOURS_PER_DAY +
+                    " day" +
+                    (tokenRateLimit.period_hours > HOURS_PER_DAY ? "s" : "")}
                 </TableCell>
                 <TableCell>
                   {tokenRateLimit.token_budget + " thousand tokens"}

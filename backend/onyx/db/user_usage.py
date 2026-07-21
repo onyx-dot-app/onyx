@@ -4,7 +4,8 @@ A window rollup: rows accumulate in place per (user, window,
 model, flow, provider), not an append-only per-call ledger."""
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
+from math import ceil
 
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -18,7 +19,30 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 USER_USAGE_BUCKET_SECONDS = 24 * 60 * 60
+USER_USAGE_BUCKET_HOURS = USER_USAGE_BUCKET_SECONDS // (60 * 60)
+TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
+
+
+class TokenUsageBucket(BaseModel):
+    window_start: datetime
+    tokens: int
+
+
+def normalize_token_period_hours(period_hours: int) -> int:
+    """Round legacy periods up to whole UTC days."""
+    return max(
+        USER_USAGE_BUCKET_HOURS,
+        ceil(period_hours / USER_USAGE_BUCKET_HOURS) * USER_USAGE_BUCKET_HOURS,
+    )
+
+
+def get_token_window_start(now: datetime, period_hours: int) -> datetime:
+    period_hours = normalize_token_period_hours(period_hours)
+    current_bucket = datetime_to_utc(now).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    return current_bucket - timedelta(hours=period_hours - USER_USAGE_BUCKET_HOURS)
 
 
 class UserUsageByDay(BaseModel):
@@ -291,4 +315,73 @@ def get_group_cost_cents_buckets_since(
     result: dict[int, list[tuple[datetime, float]]] = defaultdict(list)
     for group_id, window_start, cost in rows:
         result[group_id].append((datetime_to_utc(window_start), float(cost)))
+    return result
+
+
+def get_user_token_buckets_since(
+    db_session: Session,
+    user_id: str,
+    cutoff: datetime,
+) -> list[TokenUsageBucket]:
+    rows = db_session.execute(
+        select(
+            UserUsage.window_start,
+            func.sum(UserUsage.input_tokens + UserUsage.output_tokens),
+        )
+        .where(UserUsage.user_id == user_id, UserUsage.window_start >= cutoff)
+        .group_by(UserUsage.window_start)
+        .order_by(UserUsage.window_start)
+    ).all()
+    return [
+        TokenUsageBucket(window_start=datetime_to_utc(window_start), tokens=int(tokens))
+        for window_start, tokens in rows
+    ]
+
+
+def get_total_token_buckets_since(
+    db_session: Session,
+    cutoff: datetime,
+) -> list[TokenUsageBucket]:
+    rows = db_session.execute(
+        select(
+            UserUsage.window_start,
+            func.sum(UserUsage.input_tokens + UserUsage.output_tokens),
+        )
+        .where(UserUsage.window_start >= cutoff)
+        .group_by(UserUsage.window_start)
+        .order_by(UserUsage.window_start)
+    ).all()
+    return [
+        TokenUsageBucket(window_start=datetime_to_utc(window_start), tokens=int(tokens))
+        for window_start, tokens in rows
+    ]
+
+
+def get_group_token_buckets_since(
+    db_session: Session,
+    user_group_ids: list[int],
+    cutoff: datetime,
+) -> dict[int, list[TokenUsageBucket]]:
+    rows = db_session.execute(
+        select(
+            User__UserGroup.user_group_id,
+            UserUsage.window_start,
+            func.sum(UserUsage.input_tokens + UserUsage.output_tokens),
+        )
+        .join(User__UserGroup, User__UserGroup.user_id == UserUsage.user_id)
+        .where(
+            User__UserGroup.user_group_id.in_(user_group_ids),
+            UserUsage.window_start >= cutoff,
+        )
+        .group_by(User__UserGroup.user_group_id, UserUsage.window_start)
+        .order_by(User__UserGroup.user_group_id, UserUsage.window_start)
+    ).all()
+
+    result: dict[int, list[TokenUsageBucket]] = defaultdict(list)
+    for group_id, window_start, tokens in rows:
+        result[group_id].append(
+            TokenUsageBucket(
+                window_start=datetime_to_utc(window_start), tokens=int(tokens)
+            )
+        )
     return result

@@ -21,16 +21,36 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from onyx.db.models import User__UserGroup, UserUsage
 from onyx.db.user_usage import (
+    TokenUsageBucket,
     UserUsageByDay,
     get_group_cost_cents_since,
+    get_group_token_buckets_since,
+    get_token_window_start,
     get_total_cost_cents_buckets_since,
     get_total_cost_cents_since,
+    get_total_token_buckets_since,
     get_user_cost_cents_buckets_since,
     get_user_cost_cents_in_window,
     get_user_cost_cents_since,
+    get_user_token_buckets_since,
     get_user_usage_by_day_and_model,
+    normalize_token_period_hours,
     record_user_usage,
 )
+
+
+def test_token_periods_use_whole_utc_days() -> None:
+    now = datetime.datetime(2026, 7, 21, 13, 30, tzinfo=datetime.timezone.utc)
+
+    assert normalize_token_period_hours(1) == 24
+    assert normalize_token_period_hours(24) == 24
+    assert normalize_token_period_hours(25) == 48
+    assert get_token_window_start(now, 24) == datetime.datetime(
+        2026, 7, 21, tzinfo=datetime.timezone.utc
+    )
+    assert get_token_window_start(now, 48) == datetime.datetime(
+        2026, 7, 20, tzinfo=datetime.timezone.utc
+    )
 
 
 @compiles(PGUUID, "sqlite")
@@ -307,6 +327,32 @@ class TestTotalCostBucketsSince:
         assert buckets[w2] == pytest.approx(9.0)
 
 
+class TestTokenBuckets:
+    def test_user_tokens_are_provider_input_plus_output(
+        self, db_session: Session
+    ) -> None:
+        user_id, other_id = str(uuid4()), str(uuid4())
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        _seed_usage(db_session, user_id, "m", "CHAT", None, 100, 20, 80, 1.0, window)
+        _seed_usage(db_session, user_id, "n", "CHAT", None, 50, 10, 0, 1.0, window)
+        _seed_usage(db_session, other_id, "m", "CHAT", None, 999, 1, 0, 1.0, window)
+
+        assert get_user_token_buckets_since(db_session, user_id, window) == [
+            TokenUsageBucket(window_start=window, tokens=180)
+        ]
+
+    def test_total_tokens_sum_across_users(self, db_session: Session) -> None:
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        _seed_usage(
+            db_session, str(uuid4()), "m", "CHAT", None, 100, 20, 0, 1.0, window
+        )
+        _seed_usage(db_session, str(uuid4()), "m", "CHAT", None, 50, 10, 0, 1.0, window)
+
+        assert get_total_token_buckets_since(db_session, window) == [
+            TokenUsageBucket(window_start=window, tokens=180)
+        ]
+
+
 @pytest.fixture
 def db_session_with_groups() -> Generator[Session, None, None]:
     engine: Engine = create_engine("sqlite://")
@@ -338,3 +384,18 @@ class TestGroupCostSince:
         _seed_usage(s, outsider, "m", "CHAT", None, 1, 1, 0, 99.0, window)
 
         assert get_group_cost_cents_since(s, 10, window) == pytest.approx(7.0)
+
+    def test_token_buckets_sum_group_members(
+        self, db_session_with_groups: Session
+    ) -> None:
+        session = db_session_with_groups
+        member, outsider = str(uuid4()), str(uuid4())
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        session.add(User__UserGroup(user_group_id=10, user_id=member))
+        session.flush()
+        _seed_usage(session, member, "m", "CHAT", None, 100, 25, 0, 1.0, window)
+        _seed_usage(session, outsider, "m", "CHAT", None, 999, 1, 0, 1.0, window)
+
+        assert get_group_token_buckets_since(session, [10], window) == {
+            10: [TokenUsageBucket(window_start=window, tokens=125)]
+        }

@@ -1,19 +1,13 @@
 from collections import defaultdict
-from collections.abc import Sequence
 from datetime import datetime
-from itertools import groupby
-from typing import Dict, List, Tuple
 from uuid import UUID
 
-from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import (
-    ChatMessage,
-    ChatSession,
     TokenRateLimit,
     TokenRateLimit__UserGroup,
     User,
@@ -21,6 +15,13 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
+from onyx.db.user_usage import (
+    TokenUsageBucket,
+    get_group_token_buckets_since,
+    get_user_token_buckets_since,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat.token_limit import (
     _get_cutoff_time,
     _is_rate_limited,
@@ -64,29 +65,16 @@ def _user_is_rate_limited(user_id: UUID) -> None:
             user_usage = _fetch_user_usage(user_id, user_cutoff_time, db_session)
 
             if _is_rate_limited(user_rate_limits, user_usage):
-                raise HTTPException(
-                    status_code=429,
-                    detail="Token budget exceeded for user. Try again later.",
+                raise OnyxError(
+                    OnyxErrorCode.RATE_LIMITED,
+                    "Token budget exceeded for user. Try again later.",
                 )
 
 
 def _fetch_user_usage(
     user_id: UUID, cutoff_time: datetime, db_session: Session
-) -> Sequence[tuple[datetime, int]]:
-    """
-    Fetch user usage within the cutoff time, grouped by minute
-    """
-    result = db_session.execute(
-        select(
-            func.date_trunc("minute", ChatMessage.time_sent),
-            func.sum(ChatMessage.token_count),
-        )
-        .join(ChatSession, ChatMessage.chat_session_id == ChatSession.id)
-        .where(ChatSession.user_id == user_id, ChatMessage.time_sent >= cutoff_time)
-        .group_by(func.date_trunc("minute", ChatMessage.time_sent))
-    ).all()
-
-    return [(row[0], row[1]) for row in result]
+) -> list[TokenUsageBucket]:
+    return get_user_token_buckets_since(db_session, str(user_id), cutoff_time)
 
 
 """
@@ -120,15 +108,15 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
                     break
 
             if not has_at_least_one_untriggered_limit:
-                raise HTTPException(
-                    status_code=429,
-                    detail="Token budget exceeded for user's groups. Try again later.",
+                raise OnyxError(
+                    OnyxErrorCode.RATE_LIMITED,
+                    "Token budget exceeded for user's groups. Try again later.",
                 )
 
 
 def _fetch_all_user_group_rate_limits(
     user_id: UUID, db_session: Session
-) -> Dict[int, List[TokenRateLimit]]:
+) -> dict[int, list[TokenRateLimit]]:
     group_limits = (
         select(TokenRateLimit, User__UserGroup.user_group_id)
         .join(
@@ -160,26 +148,5 @@ def _fetch_all_user_group_rate_limits(
 
 def _fetch_user_group_usage(
     user_group_ids: list[int], cutoff_time: datetime, db_session: Session
-) -> dict[int, list[Tuple[datetime, int]]]:
-    """
-    Fetch user group usage within the cutoff time, grouped by minute
-    """
-    user_group_usage = db_session.execute(
-        select(
-            func.sum(ChatMessage.token_count),
-            func.date_trunc("minute", ChatMessage.time_sent),
-            UserGroup.id,
-        )
-        .join(ChatSession, ChatMessage.chat_session_id == ChatSession.id)
-        .join(User__UserGroup, User__UserGroup.user_id == ChatSession.user_id)
-        .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
-        .filter(UserGroup.id.in_(user_group_ids), ChatMessage.time_sent >= cutoff_time)
-        .group_by(func.date_trunc("minute", ChatMessage.time_sent), UserGroup.id)
-    ).all()
-
-    return {
-        user_group_id: [(usage, time_sent) for time_sent, usage, _ in group_usage]
-        for user_group_id, group_usage in groupby(
-            user_group_usage, key=lambda row: row[2]
-        )
-    }
+) -> dict[int, list[TokenUsageBucket]]:
+    return get_group_token_buckets_since(db_session, user_group_ids, cutoff_time)
