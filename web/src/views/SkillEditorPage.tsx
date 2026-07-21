@@ -182,12 +182,9 @@ export default function SkillEditorPage({
     skill,
   ]);
 
-  const discardCreationDraft = useCallback(() => {
-    if (draftId) discardSkillCreationDraft(draftId);
-  }, [draftId]);
   const unsavedChanges = useUnsavedChangesGuard({
-    isDirty: isCreating && isDirty,
-    onDiscard: discardCreationDraft,
+    isDirty,
+    onDiscard: draftId ? () => discardSkillCreationDraft(draftId) : undefined,
   });
 
   const canManageSkill =

@@ -33,7 +33,9 @@ export function UnsavedChangesNavigationProvider({
   const registerGuard = useCallback((guard: NavigationGuard) => {
     const id = Symbol();
     guards.current.set(id, guard);
-    return () => guards.current.delete(id);
+    return () => {
+      guards.current.delete(id);
+    };
   }, []);
 
   const requestNavigation = useCallback((navigate: Navigate) => {

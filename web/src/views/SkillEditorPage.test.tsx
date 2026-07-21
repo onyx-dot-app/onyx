@@ -15,6 +15,8 @@ const mockRouterPush = jest.fn();
 const mockGetSkillCreationDraft = jest.fn();
 const mockDiscardSkillCreationDraft = jest.fn();
 const mockMutate = jest.fn();
+const mockRefreshSkill = jest.fn();
+const mockUseSWR = jest.fn();
 
 async function fillRequiredFields(user: ReturnType<typeof setupUser>) {
   await user.type(
@@ -42,6 +44,7 @@ jest.mock("next/navigation", () => ({
 jest.mock("swr", () => ({
   __esModule: true,
   ...jest.requireActual("swr"),
+  default: (...args: unknown[]) => mockUseSWR(...args),
   useSWRConfig: () => ({ mutate: mockMutate }),
 }));
 
@@ -68,7 +71,7 @@ jest.mock("@/sections/skills/SkillFilesPicker", () => ({
   default: () => null,
 }));
 
-describe("SkillEditorPage creation", () => {
+describe("SkillEditorPage", () => {
   beforeEach(() => {
     mockCreateCustomSkillFromEditor.mockReset();
     mockRouterReplace.mockReset();
@@ -77,7 +80,17 @@ describe("SkillEditorPage creation", () => {
     mockDiscardSkillCreationDraft.mockReset();
     mockMutate.mockReset();
     mockMutate.mockResolvedValue(undefined);
+    mockRefreshSkill.mockReset();
+    mockUseSWR.mockReset();
+    mockUseSWR.mockReturnValue({
+      data: undefined,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
   });
+
+  afterEach(() => jest.restoreAllMocks());
 
   it("navigates after creation even when the skill-list refresh fails", async () => {
     const user = setupUser();
@@ -181,6 +194,55 @@ describe("SkillEditorPage creation", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/skills");
   });
 
+  it("confirms before leaving an existing skill with unsaved changes", async () => {
+    const user = setupUser();
+    const skill: SkillEditableDetail = {
+      source: "custom",
+      id: "existing-id",
+      name: "report-writer",
+      description: "Writes reports",
+      instructions_markdown: "Write the requested report.",
+      files: [],
+      is_available: true,
+      unavailable_reason: null,
+      is_valid: true,
+      is_personal: true,
+      enabled: true,
+      can_toggle: true,
+      author_user_id: "author-id",
+      author_email: "author@example.com",
+      owner: { id: "author-id", email: "author@example.com" },
+      ownership_vacant: false,
+      created_at: null,
+      updated_at: null,
+      user_shares: [],
+      group_shares: [],
+      public_permission: null,
+      user_permission: "OWNER",
+    };
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+
+    render(<SkillEditorPage skillId={skill.id} />);
+    const description = screen.getByPlaceholderText(
+      "What does this skill help with?"
+    );
+    await user.clear(description);
+    await user.type(description, "Writes detailed reports");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/skills");
+    expect(mockDiscardSkillCreationDraft).not.toHaveBeenCalled();
+  });
+
   it("requires confirmation before retrying a same-name creation disabled", async () => {
     const user = setupUser();
     const conflict = Object.assign(new Error("Name conflict"), {
@@ -232,6 +294,7 @@ describe("SkillEditorPage creation", () => {
 
   it("keeps the confirmation open when disabled creation fails", async () => {
     const user = setupUser();
+    const consoleError = jest.spyOn(console, "error").mockImplementation();
     const conflict = Object.assign(new Error("Name conflict"), {
       errorCode: "SKILL_NAME_CONFLICT",
     });
@@ -266,5 +329,9 @@ describe("SkillEditorPage creation", () => {
       screen.getByText("Create another “report-writer” skill?")
     ).toBeInTheDocument();
     expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(2);
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to save skill",
+      expect.any(Error)
+    );
   });
 });

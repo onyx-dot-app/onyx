@@ -49,6 +49,8 @@ describe("CreateSkillModal", () => {
     mockInspectSkillBundle.mockReset();
   });
 
+  afterEach(() => jest.restoreAllMocks());
+
   it("inspects the upload and passes an unsaved editor draft onward", async () => {
     const user = setupUser();
     const onContinue = jest.fn();
@@ -77,6 +79,7 @@ describe("CreateSkillModal", () => {
   it("keeps the modal open and reports inspection failures", async () => {
     const user = setupUser();
     const onContinue = jest.fn();
+    const consoleError = jest.spyOn(console, "error").mockImplementation();
     mockInspectSkillBundle.mockRejectedValue(
       new Error("SKILL.md is missing its description")
     );
@@ -92,6 +95,10 @@ describe("CreateSkillModal", () => {
     );
     expect(onContinue).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled();
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to inspect skill bundle",
+      expect.any(Error)
+    );
   });
 
   it("prevents duplicate review submissions while inspection is pending", async () => {
