@@ -6,10 +6,12 @@ from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
-from tests.external_dependency_unit.craft.db_helpers import make_external_app
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
-from tests.external_dependency_unit.craft.db_helpers import make_user_credential
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_external_app,
+    make_skill,
+    make_user,
+    make_user_credential,
+)
 
 # auth_template value carrying a user-supplied placeholder.
 _USER_TOKEN_TEMPLATE = {"Authorization": "Bearer {token}"}
@@ -50,6 +52,12 @@ def test_lists_only_unconnected_apps_and_renders_them(
         skill=make_skill(db_session, slug="hidden-app", is_public=False),
         auth_template=_USER_TOKEN_TEMPLATE,
     )
+    make_external_app(
+        db_session,
+        skill=make_skill(db_session, slug="disabled-app", is_public=True),
+        auth_template=_USER_TOKEN_TEMPLATE,
+        enabled=False,
+    )
     db_session.commit()
 
     slugs = {app.skill.slug for app in get_connectable_apps_for_user(db_session, user)}
@@ -58,9 +66,11 @@ def test_lists_only_unconnected_apps_and_renders_them(
     assert "already-connected" not in slugs
     assert "org-filled" not in slugs
     assert "hidden-app" not in slugs
+    assert "disabled-app" not in slugs
 
     apps_list = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
     )
     assert "- **needs-setup**" in apps_list
     assert "hidden-app" not in apps_list
+    assert "disabled-app" not in apps_list

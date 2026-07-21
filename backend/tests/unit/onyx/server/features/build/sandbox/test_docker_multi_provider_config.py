@@ -12,8 +12,10 @@ from __future__ import annotations
 import json
 
 import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
-from onyx.server.features.build.configs import BUILD_MODE_NOT_CONFIGURED_API_KEY
-from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
+from onyx.server.features.build.configs import (
+    BUILD_MODE_NOT_CONFIGURED_API_KEY,
+    SANDBOX_PROXY_INJECTED_PLACEHOLDER,
+)
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,

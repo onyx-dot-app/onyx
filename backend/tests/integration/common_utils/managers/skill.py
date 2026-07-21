@@ -2,23 +2,24 @@ import io
 import zipfile
 from collections.abc import Sequence
 from typing import TypeVar
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 from pydantic import BaseModel
 
 from onyx.db.enums import SkillSharePermission
-from onyx.server.features.skill.models import SkillCreateRequest
-from onyx.server.features.skill.models import SkillEditableDetailResponse
-from onyx.server.features.skill.models import SkillGroupShareRequest
-from onyx.server.features.skill.models import SkillPatchRequest
-from onyx.server.features.skill.models import SkillPreviewResponse
-from onyx.server.features.skill.models import SkillResponse
-from onyx.server.features.skill.models import SkillShareRequest
-from onyx.server.features.skill.models import SkillsList
-from onyx.server.features.skill.models import SkillUserShareRequest
-from onyx.server.features.skill.models import TransferSkillOwnershipRequest
+from onyx.server.features.skill.models import (
+    SkillCreateRequest,
+    SkillEditableDetailResponse,
+    SkillGroupShareRequest,
+    SkillPatchRequest,
+    SkillPreviewResponse,
+    SkillResponse,
+    SkillShareRequest,
+    SkillsList,
+    SkillUserShareRequest,
+    TransferSkillOwnershipRequest,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser

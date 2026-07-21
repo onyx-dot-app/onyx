@@ -440,8 +440,11 @@ fn trigger_new_chat(app: &AppHandle) {
 }
 
 fn trigger_new_window(app: &AppHandle) {
-    let state = app.state::<ConfigState>();
-    let server_url = state.config.read().unwrap().server_url.clone();
+    let (server_url, window_title) = {
+        let state = app.state::<ConfigState>();
+        let config = state.config.read().unwrap();
+        (config.server_url.clone(), config.window_title.clone())
+    };
     let handle = app.clone();
 
     tauri::async_runtime::spawn(async move {
@@ -451,8 +454,8 @@ fn trigger_new_window(app: &AppHandle) {
             &window_label,
             WebviewUrl::External(server_url.parse().unwrap()),
         )
-        .title("Onyx")
-        .inner_size(1200.0, 800.0)
+        .title(window_title)
+        .inner_size(1232.0, 800.0)
         .min_inner_size(800.0, 600.0);
 
         // Windows draws its own title bar in the system theme; a transparent
@@ -809,7 +812,10 @@ fn go_forward(window: tauri::WebviewWindow) {
 /// Open a new window
 #[tauri::command]
 async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Result<(), String> {
-    let server_url = state.config.read().unwrap().server_url.clone();
+    let (server_url, window_title) = {
+        let config = state.config.read().unwrap();
+        (config.server_url.clone(), config.window_title.clone())
+    };
     let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
 
     let builder = WebviewWindowBuilder::new(
@@ -821,8 +827,8 @@ async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Res
                 .map_err(|e| format!("Invalid URL: {}", e))?,
         ),
     )
-    .title("Onyx")
-    .inner_size(1200.0, 800.0)
+    .title(window_title)
+    .inner_size(1232.0, 800.0)
     .min_inner_size(800.0, 600.0);
 
     #[cfg(not(target_os = "windows"))]
@@ -905,11 +911,15 @@ fn find_check_menu_item(
 }
 
 fn apply_settings_to_window(app: &AppHandle, window: &tauri::WebviewWindow) {
+    let state = app.state::<ConfigState>();
+    let config = state.config.read().unwrap();
+
+    let _ = window.set_title(&config.window_title);
+
+    // Menu-bar visibility and window decorations are only configurable off macOS.
     if cfg!(target_os = "macos") {
         return;
     }
-    let state = app.state::<ConfigState>();
-    let config = state.config.read().unwrap();
     if !config.show_menu_bar {
         let _ = window.hide_menu();
     }
@@ -1194,10 +1204,72 @@ fn setup_tray_icon(app: &AppHandle) -> tauri::Result<()> {
 }
 
 // ============================================================================
+// Version
+// ============================================================================
+
+#[derive(Deserialize)]
+struct VersionResponse {
+    backend_version: String,
+}
+
+/// Whether the process was launched with `--version` / `-v`.
+fn wants_version() -> bool {
+    std::env::args().any(|arg| arg == "--version" || arg == "-v")
+}
+
+/// Fetch the backend version from the configured server's public `/api/version`
+/// endpoint. `Ok(None)` means the server answered but reported no version.
+fn fetch_server_version(server_url: &str) -> Result<Option<String>, String> {
+    let url = format!("{}/api/version", server_url.trim_end_matches('/'));
+
+    tauri::async_runtime::block_on(async move {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .map_err(|e| e.to_string())?;
+        let resp = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
+        let text = resp.text().await.map_err(|e| e.to_string())?;
+        let body: VersionResponse =
+            serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        if body.backend_version.trim().is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(body.backend_version))
+        }
+    })
+}
+
+/// Print client and (if reachable) server version, mirroring the CLI's
+/// `--version` output.
+fn print_version_info() {
+    println!("Client version: {}", env!("CARGO_PKG_VERSION"));
+
+    let (config, _) = load_config();
+    let server_url = config.server_url;
+
+    match fetch_server_version(&server_url) {
+        Ok(Some(version)) => println!("Server version: {}", version),
+        Ok(None) => println!("Server version: unknown (empty response from {})", server_url),
+        Err(_) => println!("Server version: unknown (could not fetch from {})", server_url),
+    }
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
 fn main() {
+    if wants_version() {
+        print_version_info();
+        return;
+    }
+
     let (config, config_initialized) = load_config();
     let debug_mode = is_debug_mode();
 

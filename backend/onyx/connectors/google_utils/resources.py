@@ -4,8 +4,7 @@ from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-from googleapiclient.discovery import build
-from googleapiclient.discovery import Resource
+from googleapiclient.discovery import Resource, build
 
 from onyx.utils.logger import setup_logger
 

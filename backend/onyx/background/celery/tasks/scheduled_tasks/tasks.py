@@ -28,33 +28,32 @@ Per CLAUDE.md:
 from __future__ import annotations
 
 import time
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ScheduledTaskErrorClass
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskSkipReason
-from onyx.db.enums import ScheduledTaskTriggerSource
-from onyx.db.scheduled_task import advance_next_run_at
-from onyx.db.scheduled_task import claim_due_scheduled_tasks
-from onyx.db.scheduled_task import find_stuck_runs
-from onyx.db.scheduled_task import has_in_flight_run_for_task
-from onyx.db.scheduled_task import insert_run
-from onyx.db.scheduled_task import mark_run_status
+from onyx.db.enums import (
+    ScheduledTaskErrorClass,
+    ScheduledTaskRunStatus,
+    ScheduledTaskSkipReason,
+    ScheduledTaskTriggerSource,
+)
+from onyx.db.scheduled_task import (
+    advance_next_run_at,
+    claim_due_scheduled_tasks,
+    find_stuck_runs,
+    has_in_flight_run_for_task,
+    insert_run,
+    mark_run_status,
+)
 from onyx.server.features.build.scheduled_tasks.executor import (
     DEFAULT_EXECUTOR_BUDGET_SECONDS,
+    run_scheduled_task_logic,
 )
-from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
 from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.server.settings.store import load_settings
 

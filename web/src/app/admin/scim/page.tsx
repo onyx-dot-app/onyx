@@ -4,10 +4,10 @@ import { useState } from "react";
 
 import { SvgUserSync } from "@opal/icons";
 import { useScimToken } from "@/hooks/useScimToken";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 
 import type { ScimTokenCreatedResponse, ScimModalView } from "./interfaces";
 import { generateScimToken } from "./svc";

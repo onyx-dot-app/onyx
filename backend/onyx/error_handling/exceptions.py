@@ -22,8 +22,7 @@ use ``status_code_override``::
     )
 """
 
-from fastapi import FastAPI
-from fastapi import Request
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from onyx.error_handling.error_codes import OnyxErrorCode

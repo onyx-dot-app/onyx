@@ -1,23 +1,16 @@
 from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from threading import RLock
 
 from cachetools import TTLCache
 from dateutil import tz
-from fastapi import Depends
-from fastapi import HTTPException
-from sqlalchemy import func
-from sqlalchemy import select
+from fastapi import Depends, HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
-from onyx.db.models import TokenRateLimit
-from onyx.db.models import User
+from onyx.db.models import ChatMessage, ChatSession, TokenRateLimit, User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation

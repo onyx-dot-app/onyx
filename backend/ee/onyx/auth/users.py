@@ -1,15 +1,10 @@
 import secrets
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import jwt
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Request
-from fastapi import status
+from fastapi import Depends, HTTPException, Request, status
 
-from ee.onyx.configs.app_configs import SUPER_CLOUD_API_KEY
-from ee.onyx.configs.app_configs import SUPER_USERS
+from ee.onyx.configs.app_configs import SUPER_CLOUD_API_KEY, SUPER_USERS
 from ee.onyx.server.seeding import get_seed_config
 from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import USER_AUTH_SECRET

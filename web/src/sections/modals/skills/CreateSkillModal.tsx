@@ -7,7 +7,7 @@ import { toast } from "@opal/layouts";
 import { createCustomSkill } from "@/lib/skills/api";
 import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
 import type { CustomSkill } from "@/lib/skills/types";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import SkillBundlePicker from "@/sections/skills/SkillBundlePicker";
 
 interface CreateSkillModalProps {

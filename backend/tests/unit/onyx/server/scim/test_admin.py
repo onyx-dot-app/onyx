@@ -1,19 +1,19 @@
 """Tests for SCIM admin token management endpoints."""
 
 from datetime import datetime
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.scim import ScimDAL
-from ee.onyx.server.enterprise_settings.api import create_scim_token
-from ee.onyx.server.enterprise_settings.api import get_active_scim_token
+from ee.onyx.server.enterprise_settings.api import (
+    create_scim_token,
+    get_active_scim_token,
+)
 from ee.onyx.server.scim.models import ScimTokenCreate
-from onyx.db.models import ScimToken
-from onyx.db.models import User
+from onyx.db.models import ScimToken, User
 
 
 @pytest.fixture

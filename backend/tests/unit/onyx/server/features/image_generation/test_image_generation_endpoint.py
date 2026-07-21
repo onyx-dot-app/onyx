@@ -8,9 +8,11 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.image_gen.exceptions import ImageGenerationNotConfiguredError
 from onyx.image_gen.generation import GeneratedImageData
 from onyx.image_gen.interfaces import ImageShape
-from onyx.server.features.image_generation.api import generate_image
-from onyx.server.features.image_generation.api import ImageGenerationRequest
-from onyx.server.features.image_generation.api import ReferenceImagePayload
+from onyx.server.features.image_generation.api import (
+    ImageGenerationRequest,
+    ReferenceImagePayload,
+    generate_image,
+)
 
 _HELPER = (
     "onyx.server.features.image_generation.api.generate_images_with_default_config"

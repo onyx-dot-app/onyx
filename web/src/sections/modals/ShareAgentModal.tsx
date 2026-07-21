@@ -18,7 +18,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Button, Divider, Text } from "@opal/components";
 import {
   SvgArrowExchange,
@@ -33,7 +33,7 @@ import {
   SvgUsers,
 } from "@opal/icons";
 import { copyText, markdown } from "@opal/utils";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { useModal } from "@opal/components";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
 import {

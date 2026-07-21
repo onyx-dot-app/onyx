@@ -6,12 +6,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from onyx.configs.app_configs import BRAINTRUST_API_KEY
-from onyx.configs.app_configs import BRAINTRUST_API_URL
-from onyx.configs.app_configs import BRAINTRUST_PROJECT
-from onyx.configs.app_configs import LANGFUSE_HOST
-from onyx.configs.app_configs import LANGFUSE_PUBLIC_KEY
-from onyx.configs.app_configs import LANGFUSE_SECRET_KEY
+from onyx.configs.app_configs import (
+    BRAINTRUST_API_KEY,
+    BRAINTRUST_API_URL,
+    BRAINTRUST_PROJECT,
+    LANGFUSE_HOST,
+    LANGFUSE_PUBLIC_KEY,
+    LANGFUSE_SECRET_KEY,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import TracingProviderConfig
 from onyx.db.tracing import fetch_all_tracing_providers

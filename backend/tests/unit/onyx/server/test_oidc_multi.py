@@ -4,17 +4,18 @@ per-provider client construction, and OAuth state/CSRF validation. No DB, no
 network, no live IdP."""
 
 from types import SimpleNamespace
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import CSRF_TOKEN_COOKIE_NAME
-from onyx.auth.users import CSRF_TOKEN_KEY
-from onyx.auth.users import decode_and_validate_oauth_state
-from onyx.auth.users import generate_csrf_token
-from onyx.auth.users import generate_state_token
+from onyx.auth.users import (
+    CSRF_TOKEN_COOKIE_NAME,
+    CSRF_TOKEN_KEY,
+    decode_and_validate_oauth_state,
+    generate_csrf_token,
+    generate_state_token,
+)
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.error_handling.exceptions import OnyxError
@@ -277,7 +278,7 @@ def test_login_callback_uri_saml_is_fixed_acs() -> None:
 
     provider = _provider(name="corp-saml", provider_type=SSOProviderType.SAML)
     uri = sso_login_callback_uri(provider, {}, "https://onyx.example.com")
-    assert uri == "https://onyx.example.com/api/auth/saml/callback"
+    assert uri == "https://onyx.example.com/auth/saml/callback"
 
 
 def test_fixed_callback_rejects_missing_state() -> None:

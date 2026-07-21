@@ -1,10 +1,8 @@
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from onyx.db.models import OAuthAccount
-from onyx.db.models import User
+from onyx.db.models import OAuthAccount, User
 
 
 @pytest.fixture

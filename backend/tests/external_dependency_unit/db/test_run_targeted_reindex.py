@@ -15,34 +15,41 @@ Drive connector reindex run.
 
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.background.indexing.run_targeted_reindex import process_targets_for_cc_pair
 from onyx.connectors.interfaces import Resolver
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    DocumentSource,
+    HierarchyNode,
+    TextSection,
+)
 from onyx.db.enums import IndexingStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptError
-from onyx.db.models import TargetedReindexJob
-from onyx.db.models import TargetedReindexJobTarget
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    IndexAttemptError,
+    TargetedReindexJob,
+    TargetedReindexJobTarget,
+)
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.targeted_reindex import create_targeted_reindex_job
-from onyx.db.targeted_reindex import resolve_error_ids_to_targets
-from onyx.db.targeted_reindex import targets_to_connector_failures
-from onyx.db.targeted_reindex import TargetSpec
+from onyx.db.targeted_reindex import (
+    TargetSpec,
+    create_targeted_reindex_job,
+    resolve_error_ids_to_targets,
+    targets_to_connector_failures,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+)
 
 
 @pytest.fixture

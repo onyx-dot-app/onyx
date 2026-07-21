@@ -7,17 +7,17 @@ import requests
 from requests import HTTPError
 
 from onyx.connectors.confluence import onyx_confluence as onyx_confluence_module
-from onyx.connectors.confluence.onyx_confluence import _DEFAULT_PAGINATION_LIMIT
-from onyx.connectors.confluence.onyx_confluence import _MINIMUM_PAGINATION_LIMIT
 from onyx.connectors.confluence.onyx_confluence import (
+    _DEFAULT_PAGINATION_LIMIT,
+    _MINIMUM_PAGINATION_LIMIT,
     ConfluenceRestSpacePermissionsNotAvailableError,
-)
-from onyx.connectors.confluence.onyx_confluence import (
+    OnyxConfluence,
     get_user_email_from_userkey__server,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.interfaces import CredentialsProviderInterface
 
 

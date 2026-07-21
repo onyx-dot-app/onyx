@@ -1,16 +1,10 @@
 from datetime import datetime
 from enum import Enum
-from typing import Annotated
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
-from pydantic import model_validator
-from pydantic import SecretStr
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
-from onyx.db.enums import HookFailStrategy
-from onyx.db.enums import HookPoint
+from onyx.db.enums import HookFailStrategy, HookPoint
 
 NonEmptySecretStr = Annotated[SecretStr, Field(min_length=1)]
 

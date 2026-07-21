@@ -13,8 +13,7 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
@@ -23,8 +22,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
-from onyx.error_handling.exceptions import register_onyx_exception_handlers
+from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
 from onyx.server.manage.sso.api import admin_router
 from onyx.utils.encryption import is_masked_credential
 
@@ -284,8 +282,9 @@ def test_create_saml_provider(
     provider_names.append(name)
     body = response.json()
     assert body["provider_type"] == SSOProviderType.SAML.value
-    # Single issuer-resolved ACS for every SAML row.
-    assert body["redirect_uri"] == f"{WEB_DOMAIN}/api/auth/saml/callback"
+    # Single issuer-resolved ACS for every SAML row, no /api prefix (the
+    # AuthnRequest advertises this exact URL).
+    assert body["redirect_uri"] == f"{WEB_DOMAIN}/auth/saml/callback"
     assert is_masked_credential(body["config"]["sp_private_key"]) is True
 
     raw = _stored_config(db_session, body["id"])

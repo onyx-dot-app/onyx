@@ -245,6 +245,7 @@ const HumanMessage = React.memo(function HumanMessage({
                   as="p"
                   className="inline-block align-middle"
                   mainContentBody
+                  text04
                 >
                   {content}
                 </Text>

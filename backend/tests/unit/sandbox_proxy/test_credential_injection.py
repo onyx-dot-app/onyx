@@ -9,15 +9,19 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
-from onyx.sandbox_proxy.credential_injection import CredentialResolver
-from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
-from onyx.sandbox_proxy.credential_injection import InjectionContext
-from onyx.sandbox_proxy.credential_injection import InjectionOutcome
-from tests.unit.sandbox_proxy.conftest import make_flow
-from tests.unit.sandbox_proxy.conftest import make_matched_actions
-from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox
-from tests.unit.sandbox_proxy.conftest import RecordingCredentialResolver
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialInjectionDispatcher,
+    CredentialResolver,
+    CredentialUnavailableError,
+    InjectionContext,
+    InjectionOutcome,
+)
+from tests.unit.sandbox_proxy.conftest import (
+    RecordingCredentialResolver,
+    make_flow,
+    make_matched_actions,
+    make_resolved_sandbox,
+)
 
 
 def _ctx(*, matched_actions: AllMatchedActions | None = None) -> InjectionContext:

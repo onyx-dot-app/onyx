@@ -180,6 +180,13 @@ export interface ZendeskCredentialJson {
   zendesk_token: string;
 }
 
+export interface BoxCredentialJson {
+  box_client_id: string;
+  box_client_secret: string;
+  box_enterprise_id: string;
+  box_user_email: string | null;
+}
+
 export interface DropboxCredentialJson {
   dropbox_access_token: string;
 }
@@ -351,6 +358,12 @@ export const credentialTemplates: Record<ValidSources, any> = {
     loopio_client_id: "",
     loopio_client_token: "",
   } as LoopioCredentialJson,
+  box: {
+    box_client_id: "",
+    box_client_secret: "",
+    box_enterprise_id: "",
+    box_user_email: null,
+  } as BoxCredentialJson,
   dropbox: { dropbox_access_token: "" } as DropboxCredentialJson,
   salesforce: {
     sf_username: "",
@@ -606,6 +619,12 @@ export const credentialDisplayNames: Record<string, string> = {
   zendesk_subdomain: "Zendesk Subdomain",
   zendesk_email: "Zendesk Email",
   zendesk_token: "Zendesk Token",
+
+  // Box
+  box_client_id: "Box Client ID",
+  box_client_secret: "Box Client Secret",
+  box_enterprise_id: "Box Enterprise ID",
+  box_user_email: "Email of Box user to impersonate (optional)",
 
   // Dropbox
   dropbox_access_token: "Dropbox API Key",

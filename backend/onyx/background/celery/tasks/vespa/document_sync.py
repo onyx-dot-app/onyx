@@ -7,17 +7,19 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
-from onyx.configs.constants import CELERY_DOCUMENT_SYNC_TASK_EXPIRES
-from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisConstants
+from onyx.configs.constants import (
+    CELERY_DOCUMENT_SYNC_TASK_EXPIRES,
+    CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisConstants,
+)
 from onyx.db.document import (
     construct_document_id_select_by_needs_sync_or_secondary_pending,
+    count_documents_by_needs_sync_or_secondary_pending,
+    count_secondary_only_sync_pending_documents,
 )
-from onyx.db.document import count_documents_by_needs_sync_or_secondary_pending
-from onyx.db.document import count_secondary_only_sync_pending_documents
 from onyx.db.port_attempt import any_future_port_in_progress
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.tenant_redis_client import TenantRedisClient

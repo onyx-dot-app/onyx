@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.6.13
+version: 0.6.17
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,10 +16,16 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: Increase the default sandbox proxy memory request from 256Mi to 512Mi and its
-        memory limit from 1Gi to 2Gi, providing more headroom for transient proxy workloads and
-        reducing the risk of out-of-memory termination.
+    - kind: added
+      description: Add the Box connector with permission sync, and expose its configuration env
+        vars (BOX_CONNECTOR_SIZE_THRESHOLD, BOX_PERMISSION_DOC_SYNC_FREQUENCY,
+        BOX_PERMISSION_GROUP_SYNC_FREQUENCY) in the background config map values.
+    - kind: added
+      description: Add configurable per-user LLM usage accounting and fallback pricing.
+    - kind: added
+      description: Add authenticated Prometheus scraping for the MCP server.
+    - kind: fixed
+      description: Scope metrics credentials and ServiceMonitor selectors to the intended workloads.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

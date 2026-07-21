@@ -3,15 +3,16 @@ email_verified counts as unverified) and refuse discovery documents whose
 issuer does not own the configured endpoint."""
 
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx_oauth.exceptions import GetIdEmailError
 
-from onyx.auth.oidc_client import OpenIDConfigurationIssuerMismatch
-from onyx.auth.oidc_client import validate_issuer_owns_config_url
-from onyx.auth.oidc_client import VerifiedEmailOpenID
+from onyx.auth.oidc_client import (
+    OpenIDConfigurationIssuerMismatch,
+    VerifiedEmailOpenID,
+    validate_issuer_owns_config_url,
+)
 
 _ISSUER = "https://idp.companyb.com"
 _CONFIG_URL = f"{_ISSUER}/.well-known/openid-configuration"

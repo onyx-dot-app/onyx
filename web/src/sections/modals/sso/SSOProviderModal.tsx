@@ -28,8 +28,8 @@ import InputChipField, {
   type ChipItem,
 } from "@/refresh-components/inputs/InputChipField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import Modal from "@/refresh-components/Modal";
-import { useModalClose } from "@/refresh-components/contexts/ModalContext";
+import { Modal } from "@opal/components";
+import { useModalClose } from "@opal/components";
 
 export interface SSOProviderModalProps {
   provider: SSOProviderResponse | null;

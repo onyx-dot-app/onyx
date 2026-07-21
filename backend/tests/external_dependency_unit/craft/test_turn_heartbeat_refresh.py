@@ -4,22 +4,17 @@ reaper's only activity signal — at turn start and periodically while events fl
 from __future__ import annotations
 
 import datetime
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
-from acp.schema import AgentMessageChunk
-from acp.schema import PromptResponse
-from acp.schema import TextContentBlock
+from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.models import Sandbox, User
 from onyx.server.features.build.session import streaming as streaming_module
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.craft.db_helpers import make_sandbox
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
 
 def _agent_message_chunk(text: str) -> AgentMessageChunk:

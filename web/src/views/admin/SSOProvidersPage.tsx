@@ -21,8 +21,8 @@ import { tierAtLeast } from "@/lib/tiers";
 import { setSSOProviderEnabled } from "@/lib/sso/svc";
 import { copyRedirectUri, SSO_PROVIDER_DETAILS } from "@/lib/sso/utils";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { PageLoader } from "@/refresh-components/PageLoader";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { PageLoader } from "@opal/layouts";
+import { useCreateModal } from "@opal/components";
 import { SSOProviderModal } from "@/sections/modals/sso/SSOProviderModal";
 
 const route = ADMIN_ROUTES.SSO_PROVIDERS;

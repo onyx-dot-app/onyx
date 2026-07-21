@@ -12,102 +12,109 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 import requests
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from mcp.client.auth import OAuthClientProvider
-from mcp.shared.auth import OAuthClientInformationFull
-from mcp.shared.auth import OAuthToken
+from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from mcp.types import InitializeResult
 from mcp.types import Tool as MCPLibTool
-from pydantic import AnyUrl
-from pydantic import BaseModel
+from pydantic import AnyUrl, BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.oauth_token_manager import build_oauth_authorization_url
-from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
-from onyx.auth.oauth_token_manager import OAuthFlowParams
-from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
+from onyx.auth.oauth_token_manager import (
+    OAuthFlowParams,
+    build_oauth_authorization_url,
+    exchange_oauth_code_for_token,
+    validate_oauth_endpoint_url,
+)
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPOAuthProviderMode
-from onyx.db.enums import MCPServerStatus
-from onyx.db.enums import MCPTransport
-from onyx.db.enums import Permission
-from onyx.db.mcp import create_connection_config
-from onyx.db.mcp import create_mcp_server__no_commit
-from onyx.db.mcp import delete_all_user_connection_configs_for_server_no_commit
-from onyx.db.mcp import delete_connection_config
-from onyx.db.mcp import delete_mcp_server
-from onyx.db.mcp import extract_connection_data
-from onyx.db.mcp import get_all_mcp_servers
-from onyx.db.mcp import get_mcp_server_by_id
-from onyx.db.mcp import get_mcp_servers_accessible_to_user
-from onyx.db.mcp import get_mcp_servers_for_persona
-from onyx.db.mcp import get_server_auth_template
-from onyx.db.mcp import get_user_connection_config
-from onyx.db.mcp import update_connection_config
-from onyx.db.mcp import update_mcp_server__no_commit
-from onyx.db.mcp import upsert_user_connection_config
-from onyx.db.mcp import user_can_access_mcp_server
-from onyx.db.models import MCPConnectionConfig
+from onyx.db.enums import (
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPOAuthProviderMode,
+    MCPServerStatus,
+    MCPTransport,
+    Permission,
+)
+from onyx.db.mcp import (
+    create_connection_config,
+    create_mcp_server__no_commit,
+    delete_all_user_connection_configs_for_server_no_commit,
+    delete_connection_config,
+    delete_mcp_server,
+    extract_connection_data,
+    get_all_mcp_servers,
+    get_mcp_server_by_id,
+    get_mcp_servers_accessible_to_user,
+    get_mcp_servers_for_persona,
+    get_server_auth_template,
+    get_user_connection_config,
+    update_connection_config,
+    update_mcp_server__no_commit,
+    upsert_user_connection_config,
+    user_can_access_mcp_server,
+)
+from onyx.db.models import MCPConnectionConfig, Tool, User
 from onyx.db.models import MCPServer as DbMCPServer
-from onyx.db.models import Tool
-from onyx.db.models import User
-from onyx.db.tools import create_tool__no_commit
-from onyx.db.tools import delete_tool__no_commit
-from onyx.db.tools import get_tools_by_mcp_server_id
+from onyx.db.tools import (
+    create_tool__no_commit,
+    delete_tool__no_commit,
+    get_tools_by_mcp_server_id,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.mcp.client import discover_mcp_tools
-from onyx.server.features.mcp.client import initialize_mcp_client
-from onyx.server.features.mcp.client import log_exception_group
-from onyx.server.features.mcp.models import apply_auto_substitutions
-from onyx.server.features.mcp.models import MCPApiKeyResponse
-from onyx.server.features.mcp.models import MCPAuthTemplate
-from onyx.server.features.mcp.models import MCPConnectionData
-from onyx.server.features.mcp.models import MCPOAuthCallbackResponse
-from onyx.server.features.mcp.models import MCPOAuthKeys
-from onyx.server.features.mcp.models import MCPServer
-from onyx.server.features.mcp.models import MCPServerCreateResponse
-from onyx.server.features.mcp.models import MCPServerSimpleCreateRequest
-from onyx.server.features.mcp.models import MCPServerSimpleUpdateRequest
-from onyx.server.features.mcp.models import MCPServersResponse
-from onyx.server.features.mcp.models import MCPServerUpdateResponse
-from onyx.server.features.mcp.models import MCPToolCreateRequest
-from onyx.server.features.mcp.models import MCPToolListResponse
-from onyx.server.features.mcp.models import MCPToolUpdateRequest
-from onyx.server.features.mcp.models import MCPUserCredentialsRequest
-from onyx.server.features.mcp.models import MCPUserOAuthConnectRequest
-from onyx.server.features.mcp.models import MCPUserOAuthConnectResponse
-from onyx.server.features.mcp.oauth import _absolute_token_expiry
-from onyx.server.features.mcp.oauth import key_auth_url
-from onyx.server.features.mcp.oauth import key_code
-from onyx.server.features.mcp.oauth import key_state
-from onyx.server.features.mcp.oauth import key_tokens
-from onyx.server.features.mcp.oauth import make_oauth_provider
-from onyx.server.features.mcp.oauth import MCPOauthState
-from onyx.server.features.mcp.oauth import OAUTH_WAIT_SECONDS
-from onyx.server.features.mcp.oauth import REQUESTED_SCOPE
-from onyx.server.features.mcp.oauth import STATE_TTL_SECONDS
-from onyx.server.features.mcp.oauth import UNUSED_RETURN_PATH
+from onyx.server.features.mcp.client import (
+    discover_mcp_tools,
+    initialize_mcp_client,
+    log_exception_group,
+)
+from onyx.server.features.mcp.models import (
+    MCPApiKeyResponse,
+    MCPAuthTemplate,
+    MCPConnectionData,
+    MCPOAuthCallbackResponse,
+    MCPOAuthKeys,
+    MCPServer,
+    MCPServerCreateResponse,
+    MCPServerSimpleCreateRequest,
+    MCPServerSimpleUpdateRequest,
+    MCPServersResponse,
+    MCPServerUpdateResponse,
+    MCPToolCreateRequest,
+    MCPToolListResponse,
+    MCPToolUpdateRequest,
+    MCPUserCredentialsRequest,
+    MCPUserOAuthConnectRequest,
+    MCPUserOAuthConnectResponse,
+    apply_auto_substitutions,
+)
+from onyx.server.features.mcp.oauth import (
+    OAUTH_WAIT_SECONDS,
+    REQUESTED_SCOPE,
+    STATE_TTL_SECONDS,
+    UNUSED_RETURN_PATH,
+    MCPOauthState,
+    _absolute_token_expiry,
+    key_auth_url,
+    key_code,
+    key_state,
+    key_tokens,
+    make_oauth_provider,
+)
 from onyx.server.features.mcp.ssrf import validate_mcp_outbound_url
 from onyx.server.features.tool.models import ToolSnapshot
-from onyx.utils.encryption import mask_string
-from onyx.utils.encryption import reject_masked_credentials
+from onyx.utils.encryption import mask_string, reject_masked_credentials
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import BLOCKED_HOSTNAMES
-from onyx.utils.url import SSRFException
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-from onyx.utils.variable_functionality import fetch_versioned_implementation
-from onyx.utils.variable_functionality import global_version
+from onyx.utils.url import BLOCKED_HOSTNAMES, SSRFException
+from onyx.utils.variable_functionality import (
+    fetch_ee_implementation_or_noop,
+    fetch_versioned_implementation,
+    global_version,
+)
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()

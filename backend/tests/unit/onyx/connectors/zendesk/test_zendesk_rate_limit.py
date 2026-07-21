@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import types
-from typing import Any
-from typing import Dict
+from typing import Any, Dict
 
 import pytest
 

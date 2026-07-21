@@ -3,68 +3,70 @@ import zipfile
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import File
-from fastapi import Form
-from fastapi import UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import AccountType
-from onyx.db.enums import Permission
-from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.skill import create_skill__no_commit
-from onyx.db.skill import delete_skill
-from onyx.db.skill import enable_skill_for_user_if_unset__no_commit
-from onyx.db.skill import fetch_skill
-from onyx.db.skill import list_skills
-from onyx.db.skill import replace_skill_bundle
-from onyx.db.skill import replace_skill_shares
-from onyx.db.skill import set_skill_enabled_for_user
-from onyx.db.skill import set_skill_public_permission
-from onyx.db.skill import SkillAccessPolicy
-from onyx.db.skill import transfer_skill_ownership
+from onyx.db.enums import AccountType, Permission, SkillSharePermission
+from onyx.db.models import Skill, User
+from onyx.db.skill import (
+    SkillAccessPolicy,
+    affected_user_ids_for_skill,
+    create_skill__no_commit,
+    delete_skill,
+    enable_skill_for_user_if_unset__no_commit,
+    fetch_skill,
+    list_skills,
+    replace_skill_bundle,
+    replace_skill_shares,
+    set_skill_enabled_for_user,
+    set_skill_public_permission,
+    transfer_skill_ownership,
+)
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.skill.models import SkillBundleInspectResponse
-from onyx.server.features.skill.models import SkillCreateRequest
-from onyx.server.features.skill.models import SkillEditableDetailResponse
-from onyx.server.features.skill.models import SkillEnableRequest
-from onyx.server.features.skill.models import SkillPatchRequest
-from onyx.server.features.skill.models import SkillPreviewResponse
-from onyx.server.features.skill.models import SkillResponse
-from onyx.server.features.skill.models import SkillShareRequest
-from onyx.server.features.skill.models import SkillsList
-from onyx.server.features.skill.models import TransferSkillOwnershipRequest
-from onyx.server.features.skill.response_helpers import skill_preview_response
-from onyx.server.features.skill.response_helpers import skill_response_for_user
-from onyx.server.features.skill.response_helpers import skills_list_response_for_user
-from onyx.skills.bundle import build_single_file_bundle
-from onyx.skills.bundle import build_skill_md
-from onyx.skills.bundle import compute_bundle_sha256
-from onyx.skills.bundle import inspect_custom_bundle
-from onyx.skills.bundle import normalize_custom_bundle
-from onyx.skills.bundle import read_bundle_file
-from onyx.skills.bundle import read_custom_bundle_instructions
-from onyx.skills.bundle import rewrite_custom_bundle_skill_md
-from onyx.skills.bundle import SKILL_MD_NAME
-from onyx.skills.bundle import update_custom_bundle_files
+from onyx.server.features.skill.models import (
+    SkillBundleInspectResponse,
+    SkillCreateRequest,
+    SkillEditableDetailResponse,
+    SkillEnableRequest,
+    SkillPatchRequest,
+    SkillPreviewResponse,
+    SkillResponse,
+    SkillShareRequest,
+    SkillsList,
+    TransferSkillOwnershipRequest,
+)
+from onyx.server.features.skill.response_helpers import (
+    skill_preview_response,
+    skill_response_for_user,
+    skills_list_response_for_user,
+)
+from onyx.skills.bundle import (
+    SKILL_MD_NAME,
+    build_single_file_bundle,
+    build_skill_md,
+    compute_bundle_sha256,
+    inspect_custom_bundle,
+    normalize_custom_bundle,
+    read_bundle_file,
+    read_custom_bundle_instructions,
+    rewrite_custom_bundle_skill_md,
+    update_custom_bundle_files,
+)
 from onyx.skills.content import read_custom_skill_bundle_bytes
-from onyx.skills.ingest import delete_bundle_blob
-from onyx.skills.ingest import ingested_skill_bundle
-from onyx.skills.ingest import save_skill_bundle_bytes
+from onyx.skills.ingest import (
+    delete_bundle_blob,
+    ingested_skill_bundle,
+    save_skill_bundle_bytes,
+)
 from onyx.skills.metadata import parse_skill_document
-from onyx.skills.push import push_skill_to_affected_sandboxes
-from onyx.skills.push import push_skills_for_users
+from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
 
 user_router = APIRouter(prefix="/skills")
 
@@ -124,6 +126,7 @@ def _replace_skill_bundle_from_editor(
 
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
+    db_session.commit()
     delete_bundle_blob(file_store, old_file_id)
     return _editable_skill_response(skill, user, db_session)
 
@@ -156,6 +159,7 @@ def set_skill_enabled_for_current_user(
     )
     db_session.commit()
     push_skills_for_users({user.id}, db_session)
+    db_session.commit()
     return skill_response_for_user(skill, user, db_session)
 
 
@@ -218,6 +222,7 @@ def create_custom_skill(
         db_session.commit()
 
     push_skill_to_affected_sandboxes(skill, db_session)
+    db_session.commit()
     return skill_response_for_user(
         skill,
         user,
@@ -287,6 +292,7 @@ def create_custom_skill_from_editor(
         db_session.commit()
 
     push_skill_to_affected_sandboxes(skill, db_session)
+    db_session.commit()
     return _editable_skill_response(skill, user, db_session)
 
 
@@ -375,6 +381,7 @@ def replace_current_user_skill_bundle(
 
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
+    db_session.commit()
     delete_bundle_blob(file_store, old_file_id)
     return skill_response_for_user(
         skill,
@@ -527,6 +534,7 @@ def patch_current_user_skill(
     if patch_req.has_details_update or visibility_changed:
         after_affected = affected_user_ids_for_skill(skill, db_session)
         push_skills_for_users(before_affected | after_affected, db_session)
+        db_session.commit()
 
     if file_store is not None and old_bundle_file_id is not None:
         delete_bundle_blob(file_store, old_bundle_file_id)
@@ -604,6 +612,7 @@ def share_current_user_skill(
     db_session.expire(skill)
     after_affected = affected_user_ids_for_skill(skill, db_session)
     push_skills_for_users(before_affected | after_affected, db_session)
+    db_session.commit()
     return skill_response_for_user(
         skill,
         user,
@@ -682,6 +691,7 @@ def transfer_current_user_skill_ownership(
     db_session.expire(skill)
     after_affected = affected_user_ids_for_skill(skill, db_session)
     push_skills_for_users(before_affected | after_affected, db_session)
+    db_session.commit()
     return skill_response_for_user(
         skill,
         user,
@@ -711,5 +721,6 @@ def delete_current_user_skill(
     db_session.commit()
 
     push_skills_for_users(affected, db_session)
+    db_session.commit()
     if old_file_id is not None:
         delete_bundle_blob(get_default_file_store(), old_file_id)

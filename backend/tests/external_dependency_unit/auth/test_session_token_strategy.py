@@ -7,30 +7,27 @@ request-level 403 contract lives in test_session_rejection_contract.py.
 import contextvars
 import json
 import secrets
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import cast
 
 import pytest
 from fastapi import Request
 from sqlalchemy.orm import Session
 
-from onyx.auth.session_tokens import get_session_rejection
-from onyx.auth.session_tokens import record_session_rejection
-from onyx.auth.session_tokens import SESSION_TOKEN_GRACE_PERIOD_SECONDS
-from onyx.auth.session_tokens import SessionRejection
-from onyx.auth.session_tokens import SessionRejectionReason
-from onyx.auth.session_tokens import SessionTokenValue
-from onyx.auth.users import TenantAwareRedisStrategy
-from onyx.auth.users import UserManager
-from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
-from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
+from onyx.auth.session_tokens import (
+    SESSION_TOKEN_GRACE_PERIOD_SECONDS,
+    SessionRejection,
+    SessionRejectionReason,
+    SessionTokenValue,
+    get_session_rejection,
+    record_session_rejection,
+)
+from onyx.auth.users import TenantAwareRedisStrategy, UserManager
+from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX, SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.auth import SQLAlchemyUserAdminDB
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.models import OAuthAccount
-from onyx.db.models import User
+from onyx.db.models import OAuthAccount, User
 from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.manage.users import get_current_auth_token_expiry_redis
 from tests.external_dependency_unit.conftest import create_test_user

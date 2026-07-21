@@ -631,6 +631,9 @@ export interface BuildSessionData {
   /** Model this session runs on (from the row); seeds the composer picker. */
   agentProvider: string | null;
   agentModel: string | null;
+  skillsStale: boolean;
+  /** Incremented only with skillsStale so async refreshes can reject stale responses. */
+  skillsStaleRevision: number;
   origin: SessionOrigin;
   abortController: AbortController;
   lastAccessed: Date;
@@ -876,6 +879,8 @@ const createInitialSessionData = (
   sandbox: null,
   agentProvider: null,
   agentModel: null,
+  skillsStale: false,
+  skillsStaleRevision: 0,
   origin: "INTERACTIVE",
   abortController: new AbortController(),
   lastAccessed: new Date(),
@@ -1021,6 +1026,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         ...updates,
+        skillsStaleRevision:
+          updates.skillsStale === undefined
+            ? session.skillsStaleRevision
+            : session.skillsStaleRevision + 1,
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -1555,6 +1564,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
+        skillsStale: sessionData.skills_stale,
         origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,
@@ -1590,6 +1600,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           sandbox: sessionData.sandbox
             ? { ...sessionData.sandbox, status: "restoring" }
             : sessionData.sandbox,
+          skillsStale: sessionData.skills_stale,
           webappNeedsRefresh:
             (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
         });

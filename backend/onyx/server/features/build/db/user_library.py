@@ -8,44 +8,43 @@ import hashlib
 import io
 from uuid import UUID
 
-from sqlalchemy import and_
-from sqlalchemy import cast
-from sqlalchemy import func
-from sqlalchemy import Integer
-from sqlalchemy import select
+from sqlalchemy import Integer, and_, cast, func, select
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.models import InputType
-from onyx.db.connector import create_connector
-from onyx.db.connector import fetch_connectors
-from onyx.db.connector_credential_pair import add_credential_to_connector
-from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
-from onyx.db.credentials import create_credential
-from onyx.db.credentials import fetch_credentials_for_user
-from onyx.db.document import delete_document_by_id__no_commit
-from onyx.db.document import get_document
-from onyx.db.document import get_documents_by_source
-from onyx.db.document import update_document_metadata__no_commit
-from onyx.db.document import upsert_document_by_connector_credential_pair
-from onyx.db.document import upsert_documents
-from onyx.db.enums import AccessType
-from onyx.db.enums import ProcessingMode
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.connector import create_connector, fetch_connectors
+from onyx.db.connector_credential_pair import (
+    add_credential_to_connector,
+    get_connector_credential_pairs_for_user,
+)
+from onyx.db.credentials import create_credential, fetch_credentials_for_user
+from onyx.db.document import (
+    delete_document_by_id__no_commit,
+    get_document,
+    get_documents_by_source,
+    update_document_metadata__no_commit,
+    upsert_document_by_connector_credential_pair,
+    upsert_documents,
+)
+from onyx.db.enums import AccessType, ProcessingMode
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    DocumentByConnectorCredentialPair,
+    User,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import User
 from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.documents.models import ConnectorBase
-from onyx.server.documents.models import CredentialBase
-from onyx.server.features.build.configs import USER_LIBRARY_CONNECTOR_NAME
-from onyx.server.features.build.configs import USER_LIBRARY_CREDENTIAL_NAME
-from onyx.server.features.build.configs import USER_LIBRARY_SOURCE_DIR
+from onyx.server.documents.models import ConnectorBase, CredentialBase
+from onyx.server.features.build.configs import (
+    USER_LIBRARY_CONNECTOR_NAME,
+    USER_LIBRARY_CREDENTIAL_NAME,
+    USER_LIBRARY_SOURCE_DIR,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -3,79 +3,76 @@
 import json
 import time
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import File
-from fastapi import HTTPException
-from fastapi import Response
-from fastapi import UploadFile
-from fastapi.responses import JSONResponse
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import Permission
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.models import BuildMessage
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
+from onyx.db.enums import (
+    BuildSessionStatus,
+    Permission,
+    SandboxStatus,
+    ScheduledTaskRunStatus,
+)
+from onyx.db.models import BuildMessage, Sandbox, User
 from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.db.build_session import allocate_nextjs_port
-from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
-from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.db.build_session import (
+    allocate_nextjs_port,
+    get_build_session,
+    set_build_session_sharing_scope,
+    skills_are_stale,
+)
+from onyx.server.features.build.db.sandbox import (
+    get_latest_snapshot_for_session,
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+)
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.session.errors import UploadLimitExceededError
+from onyx.server.features.build.session.locks import (
+    SessionCreationLockAcquisitionError,
+    session_creation_lock,
+)
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.features.build.session.models import ArtifactResponse
-from onyx.server.features.build.session.models import DetailedSessionResponse
-from onyx.server.features.build.session.models import OpencodeHistorySnapshotResponse
-from onyx.server.features.build.session.models import PptxPreviewResponse
-from onyx.server.features.build.session.models import PreProvisionedCheckResponse
-from onyx.server.features.build.session.models import SandboxStatusResponse
-from onyx.server.features.build.session.models import SessionCreateRequest
-from onyx.server.features.build.session.models import SessionListResponse
-from onyx.server.features.build.session.models import SessionNameGenerateResponse
-from onyx.server.features.build.session.models import SessionResponse
-from onyx.server.features.build.session.models import SessionUpdateRequest
-from onyx.server.features.build.session.models import SetSessionSharingRequest
-from onyx.server.features.build.session.models import SetSessionSharingResponse
-from onyx.server.features.build.session.models import SnapshotResponse
-from onyx.server.features.build.session.models import WebappInfo
+from onyx.server.features.build.session.models import (
+    ArtifactResponse,
+    DetailedSessionResponse,
+    OpencodeHistorySnapshotResponse,
+    PptxPreviewResponse,
+    PreProvisionedCheckResponse,
+    SandboxStatusResponse,
+    SessionCreateRequest,
+    SessionListResponse,
+    SessionNameGenerateResponse,
+    SessionResponse,
+    SessionSkillsStateResponse,
+    SessionUpdateRequest,
+    SetSessionSharingRequest,
+    SetSessionSharingResponse,
+    SnapshotResponse,
+    WebappInfo,
+)
 from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
-)
-from onyx.server.features.build.session.sandbox_lifecycle import hydrate_managed_content
-from onyx.server.features.build.session.sandbox_lifecycle import (
+    hydrate_managed_content,
     mark_sandbox_provisioning,
-)
-from onyx.server.features.build.session.sandbox_lifecycle import provision_sandbox
-from onyx.server.features.build.session.sandbox_lifecycle import (
+    provision_sandbox,
     recover_unhealthy_sandbox,
-)
-from onyx.server.features.build.session.sandbox_lifecycle import (
     rollback_failed_provisioning,
 )
 from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
-from onyx.server.features.build.utils import sanitize_filename
-from onyx.server.features.build.utils import validate_file
+from onyx.server.features.build.utils import sanitize_filename, validate_file
 from onyx.skills.push import build_user_skills_payload
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -108,10 +105,6 @@ def list_sessions(
     )
 
 
-# Lock timeout for session creation (should be longer than max provision time)
-SESSION_CREATE_LOCK_TIMEOUT_SECONDS = 300
-
-
 @router.post("", response_model=DetailedSessionResponse)
 def create_session(
     request: SessionCreateRequest,
@@ -130,40 +123,28 @@ def create_session(
     Uses Redis lock to prevent race conditions when multiple requests try to
     create/provision a session for the same user concurrently.
     """
-    tenant_id = get_current_tenant_id()
-    redis_client = get_redis_client(tenant_id=tenant_id)
-
-    # Lock on user_id to prevent concurrent session creation for the same user
-    # This prevents race conditions where two requests both see sandbox as SLEEPING
-    # and both try to provision, with one deleting the other's work
-    lock_key = f"session_create:{user.id}"
-    lock = redis_client.lock(lock_key, timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS)
-
-    # blocking=True means wait if another create is in progress
-    acquired = lock.acquire(
-        blocking=True, blocking_timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS
-    )
-    if not acquired:
-        raise HTTPException(
-            status_code=503,
-            detail="Session creation timed out waiting for lock",
-        )
-
     try:
-        session_manager = SessionManager(db_session)
-        build_session = session_manager.get_or_create_empty_session(
-            user.id,
-            llm_provider_type=request.llm_provider_type,
-            llm_model_name=request.llm_model_name,
-            headless=request.headless,
-        )
-        db_session.commit()
+        with session_creation_lock(user.id):
+            session_manager = SessionManager(db_session)
+            build_session = session_manager.get_or_create_empty_session(
+                user.id,
+                llm_provider_type=request.llm_provider_type,
+                llm_model_name=request.llm_model_name,
+                headless=request.headless,
+            )
+            sandbox = get_sandbox_by_user_id(db_session, user.id)
+            if sandbox is None:
+                raise RuntimeError("Session creation completed without a sandbox")
+            update_sandbox_heartbeat(db_session, sandbox.id)
+            db_session.commit()
 
-        sandbox = get_sandbox_by_user_id(db_session, user.id)
         base_response = SessionResponse.from_model(build_session, sandbox)
         return DetailedSessionResponse.from_session_response(
             base_response, session_loaded_in_sandbox=True
         )
+    except SessionCreationLockAcquisitionError as e:
+        db_session.rollback()
+        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, str(e)) from e
     except OnyxError:
         # e.g. no provider exposes a supported model; let the global handler
         # return its own status code instead of collapsing to 429/500.
@@ -177,9 +158,6 @@ def create_session(
         db_session.rollback()
         logger.error("Session creation failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Session creation failed: {e}")
-    finally:
-        if lock.owned():
-            lock.release()
 
 
 @router.get("/{session_id}", response_model=DetailedSessionResponse)
@@ -187,6 +165,7 @@ def get_session_details(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    check_workspace: bool = True,
 ) -> DetailedSessionResponse:
     """
     Get details of a specific build session.
@@ -206,7 +185,7 @@ def get_session_details(
 
     # Check if session workspace exists in the sandbox
     session_loaded = False
-    if sandbox and sandbox.status == SandboxStatus.RUNNING:
+    if check_workspace and sandbox and sandbox.status == SandboxStatus.RUNNING:
         sandbox_manager = get_sandbox_manager()
         session_loaded = sandbox_manager.session_workspace_exists(
             sandbox.id, session_id
@@ -216,6 +195,17 @@ def get_session_details(
     return DetailedSessionResponse.from_session_response(
         base_response, session_loaded_in_sandbox=session_loaded
     )
+
+
+@router.post("/{session_id}/skills/reload")
+def reload_session_skills(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SessionSkillsStateResponse:
+    skills_stale = SessionManager(db_session).reload_session_skills(session_id, user)
+    db_session.commit()
+    return SessionSkillsStateResponse(skills_stale=skills_stale)
 
 
 @router.get("/{session_id}/sandbox-status")
@@ -407,7 +397,11 @@ def restore_session(
                 sandbox.id, session_id
             ):
                 session.status = BuildSessionStatus.ACTIVE
-                update_sandbox_heartbeat(db_session, sandbox.id)
+                if skills_are_stale(session, sandbox):
+                    SessionManager(db_session).reload_session_skills(session_id, user)
+                else:
+                    update_sandbox_heartbeat(db_session, sandbox.id)
+                    db_session.commit()
                 base_response = SessionResponse.from_model(session, sandbox)
                 return DetailedSessionResponse.from_session_response(
                     base_response, session_loaded_in_sandbox=True
@@ -454,17 +448,15 @@ def restore_session(
 
                 snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
-                skills_section, connectable_apps_section, skills_files = (
-                    build_user_skills_payload(user, db_session)
+                connectable_apps_section, skills_files = build_user_skills_payload(
+                    user, db_session
                 )
-                # Push the exact fileset AGENTS.md is rendered from, before
-                # rendering it — a skill can never be advertised while
-                # missing from disk.
                 hydrate_managed_content(
                     sandbox_manager,
                     sandbox.id,
                     user,
                     db_session,
+                    connectable_apps_section=connectable_apps_section,
                     skills_files=skills_files,
                 )
                 if snapshot:
@@ -475,10 +467,10 @@ def restore_session(
                             snapshot_storage_path=snapshot.storage_path,
                             nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
-                            skills_section=skills_section,
                             connectable_apps_section=connectable_apps_section,
                         )
                         session.status = BuildSessionStatus.ACTIVE
+                        session.skills_hash = sandbox.skills_hash
                         db_session.commit()
                     except Exception as e:
                         logger.error(
@@ -493,10 +485,10 @@ def restore_session(
                         session_id=session_id,
                         llm_config=llm_config,
                         nextjs_port=session.nextjs_port,
-                        skills_section=skills_section,
                         connectable_apps_section=connectable_apps_section,
                     )
                     session.status = BuildSessionStatus.ACTIVE
+                    session.skills_hash = sandbox.skills_hash
                     db_session.commit()
 
         else:
@@ -541,6 +533,7 @@ def restore_session(
 
     # Update heartbeat to mark sandbox as active after successful restore
     update_sandbox_heartbeat(db_session, sandbox.id)
+    db_session.commit()
 
     base_response = SessionResponse.from_model(session, sandbox)
     return DetailedSessionResponse.from_session_response(

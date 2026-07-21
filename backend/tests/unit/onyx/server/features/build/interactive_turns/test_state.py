@@ -1,22 +1,23 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from onyx.server.features.build.interactive_turns.state import acquire_active_turn_lock
-from onyx.server.features.build.interactive_turns.state import claim_turn_for_runner
-from onyx.server.features.build.interactive_turns.state import create_interactive_turn
-from onyx.server.features.build.interactive_turns.state import finish_turn
-from onyx.server.features.build.interactive_turns.state import get_active_turn
-from onyx.server.features.build.interactive_turns.state import get_turn
-from onyx.server.features.build.interactive_turns.state import get_turn_for_request
-from onyx.server.features.build.interactive_turns.state import InteractiveTurn
-from onyx.server.features.build.interactive_turns.state import REQUEST_ID_TTL_SECONDS
-from onyx.server.features.build.interactive_turns.state import touch_turn
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_QUEUED
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_RUNNING
+from onyx.server.features.build.interactive_turns.state import (
+    REQUEST_ID_TTL_SECONDS,
+    TURN_STATUS_FAILED,
+    TURN_STATUS_QUEUED,
+    TURN_STATUS_RUNNING,
+    InteractiveTurn,
+    acquire_active_turn_lock,
+    claim_turn_for_runner,
+    create_interactive_turn,
+    finish_turn,
+    get_active_turn,
+    get_turn,
+    get_turn_for_request,
+    touch_turn,
+)
 from tests.unit.fakes import FakeCache
 
 

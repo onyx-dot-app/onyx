@@ -1,16 +1,13 @@
 import json
 import os
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import Document, HierarchyNode
 from onyx.connectors.salesforce.connector import SalesforceConnector
 from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
 from tests.utils.secret_names import TestSecret

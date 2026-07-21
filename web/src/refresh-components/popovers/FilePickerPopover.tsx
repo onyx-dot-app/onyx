@@ -5,7 +5,7 @@ import { Popover, PopoverMenu } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import IconButton from "@/refresh-components/buttons/IconButton";

@@ -8,9 +8,11 @@ import pytest
 
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
-from onyx.skills.ingest import ingest_skill_bundle
-from onyx.skills.ingest import ingested_skill_bundle
-from onyx.skills.ingest import IngestedBundle
+from onyx.skills.ingest import (
+    IngestedBundle,
+    ingest_skill_bundle,
+    ingested_skill_bundle,
+)
 
 
 def test_ingest_normalizes_wrapped_bundle_before_hashing_and_storage() -> None:

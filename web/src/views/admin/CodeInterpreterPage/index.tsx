@@ -17,7 +17,7 @@ import { Button, SelectCard } from "@opal/components";
 import { Card, Content, ContentAction } from "@opal/layouts";
 import { Disabled, Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import useCodeInterpreter, {
   type CodeInterpreterHealthStatus,
 } from "@/hooks/useCodeInterpreter";

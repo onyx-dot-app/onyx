@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { Button, Text } from "@opal/components";
 import { InputErrorText, toast } from "@opal/layouts";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useModalContext } from "@/components/context/ModalContext";
 import {

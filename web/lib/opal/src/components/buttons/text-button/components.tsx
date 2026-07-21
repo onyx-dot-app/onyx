@@ -61,7 +61,7 @@ function TextButton({
   ...rest
 }: TextButtonProps) {
   const label = (
-    <Text font={font} color="inherit" nowrap={nowrap}>
+    <Text font={font} color="inherit" as="p" nowrap={nowrap}>
       {children}
     </Text>
   );
@@ -86,13 +86,7 @@ function TextButton({
           {label}
         </Link>
       ) : (
-        <button
-          type="button"
-          disabled={disabled}
-          className="opal-text-button interactive-foreground"
-        >
-          {label}
-        </button>
+        <div className="opal-text-button interactive-foreground">{label}</div>
       )}
     </Interactive.Stateless>
   );

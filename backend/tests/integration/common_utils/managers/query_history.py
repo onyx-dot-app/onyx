@@ -5,13 +5,11 @@ from uuid import UUID
 
 import httpx
 
-from ee.onyx.server.query_history.models import ChatSessionMinimal
-from ee.onyx.server.query_history.models import ChatSessionSnapshot
+from ee.onyx.server.query_history.models import ChatSessionMinimal, ChatSessionSnapshot
 from onyx.configs.constants import QAFeedbackType
 from onyx.db.enums import TaskStatus
 from onyx.server.documents.models import PaginatedReturn
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import MAX_DELAY
+from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 

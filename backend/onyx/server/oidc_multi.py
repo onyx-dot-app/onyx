@@ -11,46 +11,47 @@ import uuid
 from typing import Any
 
 from cachetools import TTLCache
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Request
-from fastapi import Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from fastapi_users.authentication import Strategy
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES
-from httpx_oauth.oauth2 import BaseOAuth2
-from httpx_oauth.oauth2 import GetAccessTokenError
+from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError
 from sqlalchemy.orm import Session
 
 from onyx.auth.oidc_client import VerifiedEmailOpenID
-from onyx.auth.users import auth_backend
-from onyx.auth.users import complete_login_flow
-from onyx.auth.users import CSRF_TOKEN_COOKIE_NAME
-from onyx.auth.users import CSRF_TOKEN_KEY
-from onyx.auth.users import decode_and_validate_oauth_state
-from onyx.auth.users import generate_csrf_token
-from onyx.auth.users import generate_pkce_pair
-from onyx.auth.users import generate_state_token
-from onyx.auth.users import get_pkce_cookie_name
-from onyx.auth.users import get_user_manager
-from onyx.auth.users import OAuth2AuthorizeResponse
-from onyx.auth.users import STATE_TOKEN_LIFETIME_SECONDS
-from onyx.auth.users import UserManager
-from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
-from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
-from onyx.configs.app_configs import OIDC_PKCE_ENABLED
-from onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
-from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.auth.users import (
+    CSRF_TOKEN_COOKIE_NAME,
+    CSRF_TOKEN_KEY,
+    STATE_TOKEN_LIFETIME_SECONDS,
+    OAuth2AuthorizeResponse,
+    UserManager,
+    auth_backend,
+    complete_login_flow,
+    decode_and_validate_oauth_state,
+    generate_csrf_token,
+    generate_pkce_pair,
+    generate_state_token,
+    get_pkce_cookie_name,
+    get_user_manager,
+)
+from onyx.configs.app_configs import (
+    GOOGLE_LOGIN_BASE_SCOPES,
+    GOOGLE_OAUTH_SCOPE_OVERRIDE,
+    OIDC_PKCE_ENABLED,
+    OIDC_SCOPE_OVERRIDE,
+    USER_AUTH_SECRET,
+    WEB_DOMAIN,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import SSOProviderType
-from onyx.db.models import SSOProvider
-from onyx.db.models import User
-from onyx.db.sso_provider import fetch_sso_provider_by_name
-from onyx.db.sso_provider import sso_login_callback_uri
-from onyx.db.sso_provider import validate_sso_config
+from onyx.db.models import SSOProvider, User
+from onyx.db.sso_provider import (
+    fetch_sso_provider_by_name,
+    sso_login_callback_uri,
+    validate_sso_config,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.url import sanitize_next_url

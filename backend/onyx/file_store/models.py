@@ -1,8 +1,7 @@
 import base64
 import threading
 from enum import Enum
-from typing import Callable
-from typing import NotRequired
+from typing import Callable, NotRequired
 
 from pydantic import BaseModel
 from typing_extensions import TypedDict  # noreorder

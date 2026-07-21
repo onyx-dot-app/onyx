@@ -1,6 +1,5 @@
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
 from onyx.server.query_and_chat.placement import Placement

@@ -15,8 +15,5 @@
 ============================================================================ */
 
 .opal-text-button {
-  @apply inline-flex items-center;
-  background-color: transparent !important;
-  border: 0;
-  padding: 0;
+  @apply bg-transparent;
 }

@@ -5,9 +5,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import httpx

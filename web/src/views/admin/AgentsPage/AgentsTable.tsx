@@ -5,7 +5,7 @@ import { Table, createTableColumns } from "@opal/components";
 import { Content, IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import Text from "@/refresh-components/texts/Text";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 import { InputTypeIn } from "@opal/components";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";

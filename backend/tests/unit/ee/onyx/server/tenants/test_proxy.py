@@ -1,25 +1,22 @@
 """Tests for proxy endpoints for self-hosted data planes."""
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 from fastapi import HTTPException
 
-from ee.onyx.server.license.models import LicensePayload
-from ee.onyx.server.license.models import PlanType
-from ee.onyx.server.tenants.proxy import _check_license_enforcement_enabled
-from ee.onyx.server.tenants.proxy import _extract_license_from_header
-from ee.onyx.server.tenants.proxy import forward_to_control_plane
-from ee.onyx.server.tenants.proxy import get_license_payload
-from ee.onyx.server.tenants.proxy import get_license_payload_allow_expired
-from ee.onyx.server.tenants.proxy import get_optional_license_payload
-from ee.onyx.server.tenants.proxy import verify_license_auth
+from ee.onyx.server.license.models import LicensePayload, PlanType
+from ee.onyx.server.tenants.proxy import (
+    _check_license_enforcement_enabled,
+    _extract_license_from_header,
+    forward_to_control_plane,
+    get_license_payload,
+    get_license_payload_allow_expired,
+    get_optional_license_payload,
+    verify_license_auth,
+)
 
 # All tests that use license auth need LICENSE_ENFORCEMENT_ENABLED=True
 LICENSE_ENABLED_PATCH = patch(
@@ -482,8 +479,10 @@ class TestProxyCheckoutSessionWithSeats:
     @pytest.mark.asyncio
     async def test_includes_seats_in_body_when_provided(self) -> None:
         """Should include seats in request body when provided."""
-        from ee.onyx.server.tenants.proxy import CreateCheckoutSessionRequest
-        from ee.onyx.server.tenants.proxy import proxy_create_checkout_session
+        from ee.onyx.server.tenants.proxy import (
+            CreateCheckoutSessionRequest,
+            proxy_create_checkout_session,
+        )
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"url": "https://checkout.stripe.com/session"}
@@ -527,8 +526,10 @@ class TestProxyCheckoutSessionWithSeats:
     @pytest.mark.asyncio
     async def test_excludes_seats_when_not_provided(self) -> None:
         """Should not include seats in request body when not provided."""
-        from ee.onyx.server.tenants.proxy import CreateCheckoutSessionRequest
-        from ee.onyx.server.tenants.proxy import proxy_create_checkout_session
+        from ee.onyx.server.tenants.proxy import (
+            CreateCheckoutSessionRequest,
+            proxy_create_checkout_session,
+        )
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"url": "https://checkout.stripe.com/session"}
@@ -566,8 +567,10 @@ class TestProxyCheckoutSessionWithSeats:
     @pytest.mark.asyncio
     async def test_includes_seats_for_new_customer(self) -> None:
         """Should include seats for new customer without license."""
-        from ee.onyx.server.tenants.proxy import CreateCheckoutSessionRequest
-        from ee.onyx.server.tenants.proxy import proxy_create_checkout_session
+        from ee.onyx.server.tenants.proxy import (
+            CreateCheckoutSessionRequest,
+            proxy_create_checkout_session,
+        )
 
         mock_response = MagicMock()
         mock_response.json.return_value = {"url": "https://checkout.stripe.com/session"}

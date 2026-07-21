@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SvgCheck, SvgCopy, SvgTerminal, SvgTrash } from "@opal/icons";
 import { Button, InputTypeIn, Text } from "@opal/components";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
 import { cn } from "@opal/utils";
 

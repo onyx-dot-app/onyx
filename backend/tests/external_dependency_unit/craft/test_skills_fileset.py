@@ -10,17 +10,17 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.models import UserGroup
+from onyx.db.models import Skill, User, UserGroup
 from onyx.db.skill import set_skill_enabled_for_user
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import build_skills_fileset_for_user
-from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
-from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
-from tests.external_dependency_unit.craft.db_helpers import make_group
-from tests.external_dependency_unit.craft.db_helpers import reset_built_in_skill_row
+from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
+    make_built_in_skill_row,
+    make_group,
+    reset_built_in_skill_row,
+)
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
 _FRONTMATTER = "---\nname: {slug}\ndescription: {slug}\n---\n"

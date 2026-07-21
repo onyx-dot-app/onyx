@@ -10,9 +10,11 @@ from typing import Any
 from unittest.mock import patch
 
 from onyx.connectors.models import Document
-from onyx.connectors.notion.connector import BlockReadOutput
-from onyx.connectors.notion.connector import NotionConnector
-from onyx.connectors.notion.connector import NotionPage
+from onyx.connectors.notion.connector import (
+    BlockReadOutput,
+    NotionConnector,
+    NotionPage,
+)
 
 # Pinned per test for determinism; _DEEP is well past it to force the overflow.
 _PROD_RECURSION_LIMIT = 1000

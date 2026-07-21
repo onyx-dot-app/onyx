@@ -11,8 +11,7 @@ import time
 import httpx
 import pytest
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser

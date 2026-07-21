@@ -8,7 +8,10 @@ import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { hasSupportedCraftProvider } from "@/app/craft/onboarding/constants";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
-import { checkPreProvisionedSession } from "@/app/craft/services/apiServices";
+import {
+  checkPreProvisionedSession,
+  fetchSession,
+} from "@/app/craft/services/apiServices";
 
 interface UseBuildSessionControllerProps {
   /** Session ID from search params, or null for new session */
@@ -53,6 +56,9 @@ export function useBuildSessionController({
     (state) => state.setCurrentSession
   );
   const loadSession = useBuildSessionStore((state) => state.loadSession);
+  const updateSessionData = useBuildSessionStore(
+    (state) => state.updateSessionData
+  );
 
   // Controller state from Zustand (replaces refs for better race condition handling)
   const controllerState = useBuildSessionStore(
@@ -89,6 +95,32 @@ export function useBuildSessionController({
   // Pre-provisioning derived state
   const isPreProvisioning = preProvisioning.status === "provisioning";
   const isPreProvisioningReady = preProvisioning.status === "ready";
+
+  const refreshCachedSessionState = useCallback(
+    async (sessionId: string) => {
+      const cachedSession = useBuildSessionStore
+        .getState()
+        .sessions.get(sessionId);
+      if (!cachedSession?.isLoaded) return;
+      const skillsStaleRevision = cachedSession.skillsStaleRevision;
+
+      try {
+        const session = await fetchSession(sessionId, {
+          checkWorkspace: false,
+        });
+        const currentSession = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId);
+        if (currentSession?.skillsStaleRevision !== skillsStaleRevision) return;
+        updateSessionData(sessionId, {
+          skillsStale: session.skills_stale,
+        });
+      } catch {
+        // Keep the usable cached session on transient refresh failures.
+      }
+    },
+    [updateSessionData]
+  );
 
   // Effect: Handle session changes based on URL
   useEffect(() => {
@@ -136,7 +168,7 @@ export function useBuildSessionController({
     }
 
     // Handle navigation to existing session
-    async function fetchSession() {
+    async function loadRequestedSession() {
       if (!existingSessionId) return;
 
       // Mark as loaded BEFORE any async work to prevent duplicate calls
@@ -147,7 +179,6 @@ export function useBuildSessionController({
       const cachedSession = currentState.sessions.get(existingSessionId);
 
       if (cachedSession?.isLoaded) {
-        // Just switch to it
         setCurrentSession(existingSessionId);
         return;
       }
@@ -170,7 +201,7 @@ export function useBuildSessionController({
       controllerState.loadedSessionId !== existingSessionId &&
       !isCurrentlyStreaming
     ) {
-      fetchSession();
+      loadRequestedSession();
     } else if (currentSessionId !== existingSessionId) {
       // Session is cached, just switch to it
       setCurrentSession(existingSessionId);
@@ -228,11 +259,14 @@ export function useBuildSessionController({
     ensurePreProvisionedSession,
   ]);
 
-  // Effect: Re-validate pre-provisioned session on tab focus (multi-tab support)
-  // Uses checkPreProvisionedSession API to validate without resetting state,
-  // which prevents unnecessary cascading effects when session is still valid.
+  // Effect: Refresh cached session state and re-validate pre-provisioning on focus.
   useEffect(() => {
     const handleFocus = async () => {
+      if (existingSessionId) {
+        await refreshCachedSessionState(existingSessionId);
+        return;
+      }
+
       const { preProvisioning } = useBuildSessionStore.getState();
 
       // Only re-validate if we have a "ready" pre-provisioned session
@@ -279,9 +313,12 @@ export function useBuildSessionController({
       }
     };
 
+    if (existingSessionId) {
+      void refreshCachedSessionState(existingSessionId);
+    }
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  }, []);
+  }, [existingSessionId, refreshCachedSessionState]);
 
   /**
    * Navigate to a specific session

@@ -1,10 +1,7 @@
 import re
-from collections.abc import Callable
-from collections.abc import Generator
-from functools import lru_cache
-from functools import wraps
-from typing import Any
-from typing import cast
+from collections.abc import Callable, Generator
+from functools import lru_cache, wraps
+from typing import Any, cast
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError

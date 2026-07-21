@@ -6,17 +6,20 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SkillSharePermission
-from onyx.db.models import User
-from onyx.db.models import UserRole
-from onyx.db.skill import fetch_skill
-from onyx.db.skill import list_skills
-from onyx.db.skill import set_skill_public_permission
-from onyx.db.skill import SkillAccessPolicy
-from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
-from tests.external_dependency_unit.craft.db_helpers import make_group
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
-from tests.external_dependency_unit.craft.db_helpers import share_skill_with_group
+from onyx.db.models import User, UserRole
+from onyx.db.skill import (
+    SkillAccessPolicy,
+    fetch_skill,
+    list_skills,
+    set_skill_public_permission,
+)
+from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
+    make_group,
+    make_skill,
+    make_user,
+    share_skill_with_group,
+)
 
 
 def _user_skills(user: User, db_session: Session):

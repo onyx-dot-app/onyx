@@ -1,7 +1,5 @@
 import json
-from typing import Any
-from typing import Optional
-from typing import Type
+from typing import Any, Optional, Type
 
 from pydantic import BaseModel
 from sqlalchemy.dialects.postgresql import JSONB

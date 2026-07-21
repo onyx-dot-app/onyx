@@ -2,24 +2,28 @@ from io import BytesIO
 from typing import Any
 
 from dropbox import Dropbox
-from dropbox.exceptions import ApiError
-from dropbox.exceptions import AuthError
-from dropbox.files import FileMetadata
-from dropbox.files import FolderMetadata
+from dropbox.exceptions import ApiError, AuthError
+from dropbox.files import FileMetadata, FolderMetadata
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialInvalidError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger

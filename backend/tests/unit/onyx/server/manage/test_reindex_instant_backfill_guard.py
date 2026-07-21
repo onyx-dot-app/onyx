@@ -1,8 +1,7 @@
 """Guard that blocks a new reindex while an INSTANT swap is still backfilling the
 live index (superseding it would abandon that backfill)."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 

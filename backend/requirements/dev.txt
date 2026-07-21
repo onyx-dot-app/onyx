@@ -178,9 +178,9 @@ brotli==1.2.0 \
     --hash=sha256:e7c0af964e0b4e3412a0ebf341ea26ec767fa0b4cf81abb5e897c9338b5ad6a3 \
     --hash=sha256:fc1530af5c3c275b8524f2e24841cbe2599d74462455e9bae5109e9ff42e9361
     # via onyx
-celery-types==0.19.0 \
-    --hash=sha256:3d3b54fa115aba1798c341d01cb156d5ccbfbebdae0a57dfa9b4b6a726271d80 \
-    --hash=sha256:d4e2d4271b2ec46fec08a0f12a25388bba391f26897485bcacfa3c5287cc236f
+celery-types==0.26.0 \
+    --hash=sha256:eb9da76f461786091970df466ec647d9a27956399852542cb6cab9309970f950 \
+    --hash=sha256:fa318136fdad83f83f1531deecd9fe664b5dfffff29f3c31e9120a46b8e3908f
 certifi==2025.11.12 \
     --hash=sha256:97de8790030bbd5c2d96b7ec782fc2f7820ef8dba6db909ccf95449f2d062d4b \
     --hash=sha256:d8ab5478f2ecd78af242878415affce761ca6bc54a22a27e026d7c25357c3316
@@ -943,9 +943,12 @@ kiwisolver==1.4.9 \
     --hash=sha256:efb3a45b35622bb6c16dbfab491a8f5a391fe0e9d45ef32f4df85658232ca0e2 \
     --hash=sha256:f68e4f3eeca8fb22cc3d731f9715a13b652795ef657a13df1ad0c7dc0e9731df
     # via matplotlib
-litellm==1.89.4 \
-    --hash=sha256:ab551a8d52cb703c738b4db7cb6f350c4bb2ff146f0d3cc3986fd879a1eecac5 \
-    --hash=sha256:c3a19961b9e3576d4aafb6d27a0a8e1d06c370784b2d88631a9ba0d027cfd757
+litellm==1.93.0 \
+    --hash=sha256:140bf215e264c71601bca9c06d2436c5451bb59e1e195ea23fc2d3d87b6929ec \
+    --hash=sha256:1a476ebc340c070c982eab15b4673fa63a70f5936935f9f20e4d2acb5f35d23b \
+    --hash=sha256:23b8eea4fb8b3b6ade05e7b6085ec9ca12daffcfb38d033d0bbce9c1d5894da5 \
+    --hash=sha256:98c15e84d32e922a821c105308bf9ddae8700de9ed396530bee2cbb1cacf4cbb \
+    --hash=sha256:cd70ccd4ba3ef1a395535c287bce72d30c7d937ecca4290c0db37a00738f7ada
     # via onyx
 mako==1.3.12 \
     --hash=sha256:8f61569480282dbf557145ce441e4ba888be453c30989f879f0d652e39f53ea9 \
