@@ -243,3 +243,30 @@ def test_batched_tool_calls_sorted_strictest_first(
     assert matched.governing_action.action_type == "danger_write"
     assert matched.governing_action.policy is EndpointPolicy.DENY
     assert {a.action_type for a in matched.actions} == {"safe_read", "danger_write"}
+
+
+def test_evaluator_failure_after_attribution_denies(
+    db_session: Session,
+    craft_server: CraftServerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An evaluator crash on an attributed MCP request must yield a DENY verdict:
+    the gate treats evaluator exceptions as off-catalog and the MCP resolver
+    claims by host, so a raise would forward the request with credentials."""
+    user = create_test_user(db_session, "mcp_eval_crash")
+    server = craft_server()
+
+    import onyx.sandbox_proxy.request_evaluator as re_mod
+
+    def _boom(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("policy lookup failed")
+
+    monkeypatch.setattr(re_mod, "get_mcp_tool_policies", _boom)
+
+    matched = _evaluate(
+        _request(_server_host(server), body=_tool_call_body("send_email")), user.id
+    )
+    assert matched is not None
+    assert matched.governing_action.policy is EndpointPolicy.DENY
+    assert matched.governing_action.action_type == MCP_UNCLASSIFIABLE_ACTION_TYPE
+    assert matched.target.key == (GatedAppKind.MCP_SERVER, server.id)

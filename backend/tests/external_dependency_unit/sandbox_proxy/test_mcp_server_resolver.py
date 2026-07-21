@@ -669,3 +669,33 @@ def test_refresh_lock_contention_yields_retry_detail(
     detail = exc_info.value.sandbox_detail or ""
     assert "retry" in detail.lower()
     assert server.name in detail
+
+
+def test_gated_request_injects_for_the_evaluated_server(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    """When the gate attributed the request (``matched_actions`` carries an MCP
+    target), injection uses that server id directly — never a re-match against
+    the resolver's cached targets, which can be stale after a URL change."""
+    user = create_test_user(db_session, "mcp_resolver_attr")
+    server = craft_server(
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    _attach_admin_config(
+        db_session,
+        server,
+        MCPConnectionData(headers={"Authorization": "Bearer admin-token"}),
+    )
+    host = _server_host(server)
+
+    resolver = MCPServerResolver()
+    ctx = InjectionContext(
+        sandbox=_ctx(user).sandbox,
+        matched_actions=_matched(GatedAppKind.MCP_SERVER, server.id),
+    )
+    # A path the resolver's own matching would fail closed on still resolves,
+    # because the gate's attribution wins for gated requests.
+    assert resolver.resolve(_request(host, path="/other"), ctx) == {
+        "Authorization": "Bearer admin-token"
+    }

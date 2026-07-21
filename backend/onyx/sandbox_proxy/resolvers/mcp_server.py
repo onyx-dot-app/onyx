@@ -78,10 +78,14 @@ class MCPServerResolver(CredentialResolver):
         return bool(self._host_targets(request, ctx.sandbox.tenant_id))
 
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
-        tenant_id = ctx.sandbox.tenant_id
-        user_id = ctx.sandbox.user_id
+        actions = ctx.matched_actions
+        if actions is not None and actions.target.kind is GatedAppKind.MCP_SERVER:
+            # Gated request: inject for the exact server the gate evaluated
+            # (fresh attribution), never a re-match against this resolver's
+            # 30s target cache — a stale cache could pick a different server.
+            return self._resolve_for_server(actions.target.id, ctx)
         try:
-            target = match_request(self._targets(tenant_id), request)
+            target = match_request(self._targets(ctx.sandbox.tenant_id), request)
         except AmbiguousMCPTargetError as e:
             raise CredentialUnavailableError(
                 str(e),
@@ -104,9 +108,15 @@ class MCPServerResolver(CredentialResolver):
                     "reachable on this host."
                 ),
             )
+        return self._resolve_for_server(target.server_id, ctx)
 
+    def _resolve_for_server(
+        self, server_id: int, ctx: InjectionContext
+    ) -> dict[str, str]:
+        tenant_id = ctx.sandbox.tenant_id
+        user_id = ctx.sandbox.user_id
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            server = get_mcp_server_by_id(target.server_id, db)
+            server = get_mcp_server_by_id(server_id, db)
             admin_managed = server.auth_performer == MCPAuthenticationPerformer.ADMIN
             if not server.available_in_craft:
                 # Flag flipped since the cache entry was built.

@@ -50,7 +50,8 @@ class CraftMCPTarget(BaseModel):
 def parse_target(server_id: int, server_url: str) -> CraftMCPTarget | None:
     parsed = urlparse(server_url)
     scheme = (parsed.scheme or "").lower()
-    port = parsed.port or _SCHEME_DEFAULT_PORTS.get(scheme)
+    # `is None`, not falsy: an explicit `:0` must stay 0, not become 80/443.
+    port = parsed.port if parsed.port is not None else _SCHEME_DEFAULT_PORTS.get(scheme)
     if not scheme or not parsed.hostname or port is None:
         logger.warning(
             "craft MCP server %s has an unusable server_url; "

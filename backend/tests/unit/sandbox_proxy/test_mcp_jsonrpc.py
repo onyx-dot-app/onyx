@@ -42,10 +42,29 @@ def test_protocol_plumbing_passes(method: str) -> None:
     assert result.kind is McpRpcKind.PLUMBING
 
 
-@pytest.mark.parametrize("http_method", ["GET", "DELETE", "HEAD"])
-def test_non_post_is_plumbing(http_method: str) -> None:
+@pytest.mark.parametrize("http_method", ["GET", "DELETE"])
+def test_bodyless_get_delete_is_plumbing(http_method: str) -> None:
     # The SSE stream (GET) and session teardown (DELETE) carry no invocation.
     assert classify_mcp_request(http_method, None).kind is McpRpcKind.PLUMBING
+
+
+@pytest.mark.parametrize("http_method", ["HEAD", "PUT", "PATCH", "OPTIONS"])
+def test_other_verbs_fail_closed(http_method: str) -> None:
+    assert classify_mcp_request(http_method, None).kind is McpRpcKind.UNCLASSIFIABLE
+
+
+@pytest.mark.parametrize("http_method", ["GET", "DELETE"])
+def test_body_bearing_get_delete_fails_closed(http_method: str) -> None:
+    # A body on the plumbing verbs could smuggle an invocation past the gate.
+    body = _body(_rpc("tools/call", params={"name": "send_email"}))
+    assert classify_mcp_request(http_method, body).kind is McpRpcKind.UNCLASSIFIABLE
+
+
+def test_deeply_nested_body_fails_closed() -> None:
+    # json.loads raises RecursionError past the C parser's depth limit; that
+    # must classify as UNCLASSIFIABLE, not crash into the gate's fail-open path.
+    body = (b"[" * 200_000) + (b"]" * 200_000)
+    assert classify_mcp_request("POST", body).kind is McpRpcKind.UNCLASSIFIABLE
 
 
 def test_tools_call_extracts_tool_name() -> None:

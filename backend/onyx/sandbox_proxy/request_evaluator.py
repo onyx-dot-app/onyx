@@ -174,17 +174,29 @@ class McpRequestEvaluator(RequestEvaluator):
             if target is None:
                 return None
             server = servers_by_id[target.server_id]
-
-            classification = classify_mcp_request(
-                request.method or "", request.raw_content
-            )
-            if classification.kind is McpRpcKind.PLUMBING:
-                return None
-
-            actions = _mcp_tool_actions(classification, server, request, db)
             gated_target = GatedTarget(
                 kind=GatedAppKind.MCP_SERVER, id=server.id, app_name=server.name
             )
+
+            # Once attributed to an MCP host, a failure must fail closed: the
+            # gate turns evaluator exceptions into "off-catalog", and the MCP
+            # resolver claims by host — the request would forward with injected
+            # credentials, ungated.
+            try:
+                classification = classify_mcp_request(
+                    request.method or "", request.raw_content
+                )
+                if classification.kind is McpRpcKind.PLUMBING:
+                    return None
+                actions = _mcp_tool_actions(classification, server, request, db)
+            except Exception:
+                logger.exception(
+                    "mcp_evaluator_error tenant=%s server=%s host=%s; denying",
+                    tenant_id,
+                    server.id,
+                    request.host,
+                )
+                actions = (_deny_action("MCP gating failed; blocked."),)
 
         return AllMatchedActions.from_actions(
             actions, gated_target, _request_payload(request)
@@ -200,14 +212,9 @@ def _mcp_tool_actions(
     """One MatchedAction per invoked tool; a single DENY when unclassifiable."""
     if classification.kind is McpRpcKind.UNCLASSIFIABLE:
         return (
-            MatchedAction(
-                action_type=MCP_UNCLASSIFIABLE_ACTION_TYPE,
-                display_name="Unrecognized MCP request",
-                description=(
-                    f"{request.method} {request.path} could not be parsed "
-                    "as an MCP tool call or protocol message; blocked."
-                ),
-                policy=EndpointPolicy.DENY,
+            _deny_action(
+                f"{request.method} {request.path} could not be parsed "
+                "as an MCP tool call or protocol message; blocked.",
             ),
         )
     stored = get_mcp_tool_policies(server.id, db)
@@ -219,6 +226,15 @@ def _mcp_tool_actions(
             policy=effective_mcp_tool_policy(tool_name, stored),
         )
         for tool_name in dict.fromkeys(classification.tool_names)
+    )
+
+
+def _deny_action(description: str) -> MatchedAction:
+    return MatchedAction(
+        action_type=MCP_UNCLASSIFIABLE_ACTION_TYPE,
+        display_name="Unrecognized MCP request",
+        description=description,
+        policy=EndpointPolicy.DENY,
     )
 
 

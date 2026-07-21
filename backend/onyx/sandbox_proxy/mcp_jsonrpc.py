@@ -61,9 +61,10 @@ _UNCLASSIFIABLE = McpRpcClassification(kind=McpRpcKind.UNCLASSIFIABLE)
 def classify_mcp_request(http_method: str, body: bytes | None) -> McpRpcClassification:
     """Classify one intercepted request to a matched craft MCP host.
 
-    Non-POST verbs (the SSE ``GET`` stream, session-terminating ``DELETE``)
-    carry no invocation and pass as plumbing. A POST body is parsed as a single
-    JSON-RPC message or a batched array:
+    Bodyless ``GET`` (SSE stream) and ``DELETE`` (session termination) are the
+    only non-POST plumbing; any other verb, or a body on those, is
+    ``UNCLASSIFIABLE``. A POST body is parsed as a single JSON-RPC message or a
+    batched array:
 
     * every message a recognized plumbing method → ``PLUMBING``;
     * any message a well-formed ``tools/call`` (string ``params.name``) →
@@ -71,8 +72,11 @@ def classify_mcp_request(http_method: str, body: bytes | None) -> McpRpcClassifi
     * anything else (unknown method, malformed body, a ``tools/call`` missing its
       name) → ``UNCLASSIFIABLE``.
     """
-    if (http_method or "").upper() != "POST":
-        return _PLUMBING
+    method = (http_method or "").upper()
+    if method in ("GET", "DELETE"):
+        return _PLUMBING if not body else _UNCLASSIFIABLE
+    if method != "POST":
+        return _UNCLASSIFIABLE
 
     messages = _parse_messages(body)
     if messages is None:
@@ -106,7 +110,9 @@ def _parse_messages(body: bytes | None) -> list[dict[str, Any]] | None:
         return None
     try:
         payload = json.loads(body)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, RecursionError):
+        # RecursionError: a deeply-nested body must fail closed, not crash the
+        # evaluator into the gate's fail-open path.
         return None
     if isinstance(payload, dict):
         return [payload]
