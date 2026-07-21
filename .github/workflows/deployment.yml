@@ -546,7 +546,7 @@ jobs:
 
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./web
           file: ./web/Dockerfile
@@ -628,7 +628,7 @@ jobs:
 
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./web
           file: ./web/Dockerfile
@@ -780,7 +780,7 @@ jobs:
 
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./web
           file: ./web/Dockerfile
@@ -873,7 +873,7 @@ jobs:
 
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./web
           file: ./web/Dockerfile
@@ -1021,7 +1021,7 @@ jobs:
 
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -1093,7 +1093,7 @@ jobs:
 
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -1247,7 +1247,7 @@ jobs:
 
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         env:
           DEBUG: ${{ vars.DOCKER_DEBUG == 'true' && 1 || 0 }}
         with:
@@ -1333,7 +1333,7 @@ jobs:
 
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         env:
           DEBUG: ${{ vars.DOCKER_DEBUG == 'true' && 1 || 0 }}
         with:
@@ -1550,7 +1550,7 @@ jobs:
 
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./backend/onyx/server/features/build/sandbox/image
           file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
@@ -1623,7 +1623,7 @@ jobs:
 
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./backend/onyx/server/features/build/sandbox/image
           file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
