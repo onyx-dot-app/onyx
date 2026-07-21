@@ -22,11 +22,12 @@ from onyx.db.token_limit import (
     fetch_user_group_token_rate_limits,
 )
 from onyx.db.user_usage import (
+    USER_USAGE_BUCKET_SECONDS,
     get_group_cost_cents_buckets_since,
     get_total_cost_cents_buckets_since,
     get_usage_export,
     get_user_cost_cents_buckets_since,
-    get_user_cost_cents_in_window,
+    get_user_cost_cents_since,
     get_user_usage_by_day_and_model,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -55,8 +56,8 @@ from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 # Default trailing range for the export when no start is given.
 _DEFAULT_EXPORT_DAYS = 30
 
-# Ledger grid; relax cutoff like cost gate so UI matches enforcement.
-_LEDGER_GRID = timedelta(seconds=USAGE_LIMIT_WINDOW_SECONDS)
+# Relax budget cutoffs to include the partially overlapping ledger bucket.
+_LEDGER_GRID = timedelta(seconds=USER_USAGE_BUCKET_SECONDS)
 
 
 def _used_from_buckets(
@@ -196,7 +197,7 @@ def get_my_usage(
     per_day = get_user_usage_by_day_and_model(
         db_session, user_id, since=since, until=now
     )
-    window_cost_cents = get_user_cost_cents_in_window(db_session, user_id, window_start)
+    window_cost_cents = get_user_cost_cents_since(db_session, user_id, window_start)
 
     # Price tenant default chat model (no per-user model selection yet).
     default_model = fetch_default_llm_model(db_session)
@@ -235,7 +236,7 @@ def export_usage(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UsageExportResponse:
-    """Company-wide usage export by email; day = window start, not call calendar day."""
+    """Company-wide daily usage export by email."""
     end_date = end or datetime.now(timezone.utc).date()
     start_date = start or (end_date - timedelta(days=_DEFAULT_EXPORT_DAYS))
     if start_date > end_date:

@@ -5627,14 +5627,9 @@ class TenantUsage(Base):
 
 class UserUsage(Base):
     """
-    Per-user LLM usage rollup within a time window — the source of truth for
-    per-user cost/token attribution and budget checks. Mirrors TenantUsage's
-    window-rollup model (one accumulating row per window+dims, not a per-call
-    ledger).
+    Daily per-user LLM usage rollup for cost/token attribution and budget checks.
 
-    One row per (user, window, model, flow, provider), accumulated in place;
-    windows match the tenant-usage alignment so per-user and per-tenant totals
-    reconcile.
+    One accumulating row per (user, window, model, flow, provider), not per call.
     """
 
     __tablename__ = "user_usage"

@@ -1,6 +1,6 @@
-"""Per-user LLM usage rollup — the source of truth for cost/token attribution.
+"""Daily per-user LLM usage rollup for cost/token attribution.
 
-A window-rollup like TenantUsage: rows accumulate in place per (user, window,
+A window rollup: rows accumulate in place per (user, window,
 model, flow, provider), not an append-only per-call ledger."""
 
 from collections import defaultdict
@@ -17,6 +17,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+USER_USAGE_BUCKET_SECONDS = 24 * 60 * 60
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
 
 
@@ -32,11 +33,11 @@ class UserUsageByDay(BaseModel):
 
 
 class UsageExportRow(BaseModel):
-    """Tenant-wide usage row: email + model + window-start day."""
+    """Tenant-wide usage row by email, model, and UTC day."""
 
     email: str
     model: str
-    day: str  # YYYY-MM-DD — window start day, not call calendar day
+    day: str  # YYYY-MM-DD
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
@@ -129,8 +130,7 @@ def get_usage_export(
     end: datetime,
     model: str | None = None,
 ) -> list[UsageExportRow]:
-    """Tenant-wide usage by email/model/window-day.
-    day = window start (weekly grid), not call calendar day."""
+    """Tenant-wide usage by email, model, and UTC day."""
     utc_day = func.date(func.timezone("UTC", UserUsage.window_start))
     query = (
         # User.email comes from the fastapi-users base; ty mis-resolves it as a
