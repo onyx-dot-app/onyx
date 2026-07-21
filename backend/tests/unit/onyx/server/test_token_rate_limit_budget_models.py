@@ -6,8 +6,10 @@ from pydantic import ValidationError
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.models import TokenRateLimit
 from onyx.server.query_and_chat.token_limit import _is_rate_limited
-from onyx.server.token_rate_limits.models import TokenRateLimitArgs
-from onyx.server.token_rate_limits.models import TokenRateLimitDisplay
+from onyx.server.token_rate_limits.models import (
+    TokenRateLimitArgs,
+    TokenRateLimitDisplay,
+)
 
 
 def _rate_limit(

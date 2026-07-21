@@ -1,10 +1,8 @@
 import io
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any
-from typing import cast
-from urllib.parse import urlparse
-from urllib.parse import urlunparse
+from typing import Any, cast
+from urllib.parse import urlparse, urlunparse
 
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
@@ -12,48 +10,62 @@ from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.section_utils import cap_sections_text
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
+    is_tabular_file,
 )
-from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
-from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
-from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
-from onyx.connectors.google_drive.file_retrieval import add_drive_resource_key_header
-from onyx.connectors.google_drive.file_retrieval import DRIVE_RESOURCE_KEY_FIELD
-from onyx.connectors.google_drive.models import GDriveMimeType
-from onyx.connectors.google_drive.models import GoogleDriveFileType
-from onyx.connectors.google_drive.section_extraction import get_document_sections
-from onyx.connectors.google_drive.section_extraction import HEADING_DELIMITER
-from onyx.connectors.google_utils.resources import get_drive_service
-from onyx.connectors.google_utils.resources import get_google_authorized_session
-from onyx.connectors.google_utils.resources import GoogleDriveService
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.extract_file_text import read_docx_file
-from onyx.file_processing.extract_file_text import read_pdf_file
-from onyx.file_processing.extract_file_text import read_pptx_file
-from onyx.file_processing.file_types import OnyxFileExtensions
-from onyx.file_processing.file_types import OnyxMimeTypes
-from onyx.file_processing.file_types import PRESENTATION_MIME_TYPE
-from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPE
-from onyx.file_processing.image_utils import make_image_callback
-from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.connectors.google_drive.constants import (
+    DRIVE_FOLDER_TYPE,
+    DRIVE_SHORTCUT_TYPE,
+)
+from onyx.connectors.google_drive.file_retrieval import (
+    DRIVE_RESOURCE_KEY_FIELD,
+    add_drive_resource_key_header,
+)
+from onyx.connectors.google_drive.models import GDriveMimeType, GoogleDriveFileType
+from onyx.connectors.google_drive.section_extraction import (
+    HEADING_DELIMITER,
+    get_document_sections,
+)
+from onyx.connectors.google_utils.resources import (
+    GoogleDriveService,
+    get_drive_service,
+    get_google_authorized_session,
+)
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    ImageSection,
+    SlimDocument,
+    TabularSection,
+    TextSection,
+)
+from onyx.file_processing.extract_file_text import (
+    extract_file_text,
+    get_file_ext,
+    read_docx_file,
+    read_pdf_file,
+    read_pptx_file,
+)
+from onyx.file_processing.file_types import (
+    PRESENTATION_MIME_TYPE,
+    SPREADSHEET_MIME_TYPE,
+    OnyxFileExtensions,
+    OnyxMimeTypes,
+)
+from onyx.file_processing.image_utils import (
+    make_image_callback,
+    store_image_and_create_section,
+)
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
+    noop_fallback,
 )
-from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()
 

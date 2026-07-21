@@ -1,6 +1,5 @@
-﻿import requests
-from typing import List, Dict, Any, Generator
-from datetime import datetime, timezone
+from typing import List, Dict, Any
+import requests
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.models import Document, TextSection
 from onyx.configs.constants import DocumentSource
@@ -15,10 +14,10 @@ class JiraServiceManagementConnector(PollConnector):
     """
     
     def __init__(self, **kwargs: Any):
-        self.username = None
-        self.api_token = None
-        self.url = None
-        self.project_key = None
+        self.username: str | None = None
+        self.api_token: str | None = None
+        self.url: str | None = None
+        self.project_key: str | None = None
 
     def load_credentials(self, db_credentials: Dict[str, Any]) -> None:
         """Injects credentials from Onyx database into the connector instance."""
@@ -36,6 +35,10 @@ class JiraServiceManagementConnector(PollConnector):
         start_at = 0
         max_results = 50
         
+        if not self.project_key:
+            logger.error("Jira JSM: No project key provided.")
+            return []
+
         logger.info(f"Starting JSM poll for project: {self.project_key}")
         
         while True:

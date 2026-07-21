@@ -1,19 +1,20 @@
 import json
 import os
 import urllib.parse
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
 from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import AuthType
 from onyx.configs.constants import QueryHistoryType
 from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.prompts.image_analysis import (
+    DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+    DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
+)
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -129,14 +130,6 @@ POSTHOG_HOST = os.environ.get("POSTHOG_HOST") or "https://us.i.posthog.com"
 #####
 # Auth Configs
 #####
-# Silently default to basic - warnings/errors logged in verify_auth_setting()
-# which only runs on app startup, not during migrations/scripts
-_auth_type_str = (os.environ.get("AUTH_TYPE") or "").lower()
-if _auth_type_str in [auth_type.value for auth_type in AuthType]:
-    AUTH_TYPE = AuthType(_auth_type_str)
-else:
-    AUTH_TYPE = AuthType.BASIC
-
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
 PASSWORD_REQUIRE_UPPERCASE = (
@@ -225,9 +218,8 @@ OAUTH_CLIENT_SECRET = (
 # Whether Google OAuth is enabled (requires both client ID and secret)
 OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
 
-# Default scopes requested when signing in with Google (AUTH_TYPE=google_oauth
-# or AUTH_TYPE=cloud, and the BASIC + OAuth fallback path). These are the
-# minimum required to identify the user via OpenID Connect.
+# Default Google sign-in scopes, the minimum required to identify the user
+# via OpenID Connect.
 GOOGLE_LOGIN_BASE_SCOPES = ["openid", "email", "profile"]
 
 # Applicable for Google OAuth login, allows you to override the scopes that
@@ -268,6 +260,55 @@ if _OIDC_SCOPE_OVERRIDE:
 # Enables PKCE for OIDC login flow. Disabled by default to preserve
 # backwards compatibility for existing OIDC deployments.
 OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
+
+# Opt-in: capture IdP claims at OAuth login and enrich the chat experience
+# with the user's directory profile (country, department, job title, ...) —
+# an "Organization Profile" block in the system prompt plus `{{user.<key>}}`
+# placeholders in agent prompts. Off by default: it sends directory data to
+# the configured LLM, which deployments must consciously opt into.
+IDP_PROFILE_ENRICHMENT_ENABLED = (
+    os.environ.get("IDP_PROFILE_ENRICHMENT_ENABLED", "").lower() == "true"
+)
+
+
+def parse_idp_claim_map(raw: str | None) -> dict[str, list[str]]:
+    """Parse the IDP_PROFILE_CLAIM_MAP env value, warning on every ignored
+    shape. A silently dropped map is invisible misconfiguration (placeholders
+    just stay empty), so anything not a dict-of-lists gets a log line."""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("IDP_PROFILE_CLAIM_MAP is not valid JSON, ignoring it")
+        return {}
+    if not isinstance(parsed, dict):
+        logger.warning(
+            "IDP_PROFILE_CLAIM_MAP must be a JSON object, got %s, ignoring it",
+            type(parsed).__name__,
+        )
+        return {}
+    claim_map: dict[str, list[str]] = {}
+    for key, aliases in parsed.items():
+        if not isinstance(aliases, list):
+            logger.warning(
+                "IDP_PROFILE_CLAIM_MAP entry %r must map to a list of claim "
+                "names, got %s, dropping it",
+                key,
+                type(aliases).__name__,
+            )
+            continue
+        claim_map[str(key)] = [str(alias) for alias in aliases]
+    return claim_map
+
+
+# Optional per-deployment claim-alias overrides for the directory profile,
+# as JSON mapping placeholder key -> ordered claim-name list, e.g.
+# '{"department": ["dept", "division"], "country": ["c"]}'. Configured
+# aliases are checked before the built-in ones.
+IDP_PROFILE_CLAIM_MAP: dict[str, list[str]] = parse_idp_claim_map(
+    os.environ.get("IDP_PROFILE_CLAIM_MAP")
+)
 
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
@@ -1196,6 +1237,10 @@ BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+BOX_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
     for ignored_tag in os.environ.get("JIRA_CONNECTOR_LABELS_TO_SKIP", "").split(",")
@@ -1431,6 +1476,20 @@ RECENCY_BIAS_MULTIPLIER = float(os.environ.get("RECENCY_BIAS_MULTIPLIER") or 1.0
 # backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
 RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
 
+# Flat per-image cost (cents) when litellm has no price for an image model.
+# Clamped to >= 0 so a misconfigured negative can't credit usage.
+DEFAULT_IMAGE_COST_CENTS = max(
+    0.0, float(os.environ.get("DEFAULT_IMAGE_COST_CENTS") or 4.0)
+)
+
+# Fallback USD/Mtok when litellm can't price (default 0 = free). Clamped >= 0.
+DEFAULT_LLM_INPUT_COST_PER_MTOK = max(
+    0.0, float(os.environ.get("DEFAULT_LLM_INPUT_COST_PER_MTOK") or 0.0)
+)
+DEFAULT_LLM_OUTPUT_COST_PER_MTOK = max(
+    0.0, float(os.environ.get("DEFAULT_LLM_OUTPUT_COST_PER_MTOK") or 0.0)
+)
+
 
 #####
 # Tool Configs
@@ -1552,6 +1611,15 @@ LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or ""  # For self-hosted Langfus
 # connect/disconnect takes effect (no restart needed).
 TRACING_CONFIG_CACHE_TTL_SECONDS = float(
     os.environ.get("TRACING_CONFIG_CACHE_TTL_SECONDS") or "30"
+)
+
+#####
+# Per-user usage/cost tracking
+#####
+# Records every priced generation span into the per-user usage ledger. On by
+# default; set to "false" to drop the recording processor entirely.
+USER_USAGE_TRACKING_ENABLED = (
+    os.environ.get("USER_USAGE_TRACKING_ENABLED", "true").lower() != "false"
 )
 
 # Defined custom query/answer conditions to validate the query and the LLM answer.
@@ -1915,7 +1983,7 @@ INSTANCE_TYPE = (
     "managed"
     if os.environ.get("IS_MANAGED_INSTANCE", "").lower() == "true"
     else "cloud"
-    if AUTH_TYPE == AuthType.CLOUD
+    if MULTI_TENANT
     else "self_hosted"
 )
 

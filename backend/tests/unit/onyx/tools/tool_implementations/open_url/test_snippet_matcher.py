@@ -5,8 +5,7 @@ import unicodedata  # used to verify NFC expansion test preconditions
 from pathlib import Path
 
 import pytest
-from pydantic import BaseModel
-from pydantic import field_validator
+from pydantic import BaseModel, field_validator
 
 from onyx.tools.tool_implementations.open_url.snippet_matcher import (
     find_snippet_in_content,

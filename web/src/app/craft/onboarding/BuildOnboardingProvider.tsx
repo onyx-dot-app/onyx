@@ -10,7 +10,7 @@ import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { useUser } from "@/providers/UserProvider";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 
 // Context for accessing onboarding modal controls
 const OnboardingContext = createContext<OnboardingModalController | null>(null);

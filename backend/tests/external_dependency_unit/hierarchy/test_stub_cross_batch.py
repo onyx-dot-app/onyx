@@ -16,10 +16,12 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.db.enums import HierarchyNodeType
-from onyx.db.hierarchy import ensure_source_node_exists
-from onyx.db.hierarchy import get_hierarchy_node_by_raw_id
-from onyx.db.hierarchy import get_source_hierarchy_node
-from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
+from onyx.db.hierarchy import (
+    ensure_source_node_exists,
+    get_hierarchy_node_by_raw_id,
+    get_source_hierarchy_node,
+    upsert_hierarchy_nodes_batch,
+)
 
 
 @pytest.fixture()

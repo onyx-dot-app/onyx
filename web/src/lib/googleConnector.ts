@@ -1,5 +1,5 @@
 import useSWR, { mutate } from "swr";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { FetchError, errorHandlingFetcher } from "@/lib/fetcher";
 import { Credential } from "@/lib/connectors/credentials";
 import { ConnectorSnapshot } from "@/lib/connectors/connectors";

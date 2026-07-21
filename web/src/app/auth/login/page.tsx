@@ -1,7 +1,8 @@
 import { User } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
-import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
+import { AuthTypeMetadata } from "@/lib/auth/types";
+import { validateInternalRedirect } from "@/lib/auth/utils";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
@@ -13,7 +14,6 @@ export interface PageProps {
 
 export default async function Page(props: PageProps) {
   const searchParams = await props.searchParams;
-  const autoRedirectDisabled = searchParams?.disableAutoRedirect === "true";
   const autoRedirectToSignupDisabled =
     searchParams?.autoRedirectToSignup === "false";
   const nextUrl: string | null = Array.isArray(searchParams?.next)
@@ -36,13 +36,13 @@ export default async function Page(props: PageProps) {
     console.log(`Some fetch failed for the login page - ${e}`);
   }
 
-  // if there are no users, redirect to signup page for initial setup
-  // (only for auth types that support self-service signup)
+  // if there are no users, send self-hosted deployments to signup for
+  // initial setup
   if (
     authTypeMetadata &&
     !authTypeMetadata.hasUsers &&
     !autoRedirectToSignupDisabled &&
-    authTypeMetadata.authType === AuthType.BASIC
+    authTypeMetadata.multiTenant === false
   ) {
     return redirect("/auth/signup");
   }
@@ -59,39 +59,26 @@ export default async function Page(props: PageProps) {
       return redirect("/auth/waiting-on-verification");
     }
 
-    // Add a query parameter to indicate this is a redirect from login
-    // This will help prevent redirect loops
-    return redirect("/app?from=login");
+    // Honor a validated return-to (e.g. the session re-established in another
+    // tab); otherwise land on the main app page. The `from=login` query
+    // parameter helps prevent redirect loops.
+    const validatedNextUrl = validateInternalRedirect(nextUrl);
+    return redirect((validatedNextUrl ?? "/app?from=login") as Route);
   }
 
   // get where to send the user to authenticate
   let authUrl: string | null = null;
   if (authTypeMetadata) {
     try {
-      authUrl = await getAuthUrlSS(authTypeMetadata.authType, nextUrl);
+      authUrl = await getAuthUrlSS(authTypeMetadata.multiTenant, nextUrl);
     } catch (e) {
       console.log(`Some fetch failed for the login page - ${e}`);
     }
   }
 
-  if (authTypeMetadata?.autoRedirect && authUrl && !autoRedirectDisabled) {
-    return redirect(authUrl as Route);
-  }
-
-  const ssoLoginFooterContent =
-    authTypeMetadata &&
-    (authTypeMetadata.authType === AuthType.GOOGLE_OAUTH ||
-      authTypeMetadata.authType === AuthType.OIDC ||
-      authTypeMetadata.authType === AuthType.SAML) ? (
-      <>Need access? Reach out to your IT admin to get access.</>
-    ) : undefined;
-
   return (
     <div className="flex flex-col ">
-      <AuthFlowContainer
-        authState="login"
-        footerContent={ssoLoginFooterContent}
-      >
+      <AuthFlowContainer authState="login">
         <LoginPage
           authUrl={authUrl}
           authTypeMetadata={authTypeMetadata}

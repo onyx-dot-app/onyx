@@ -6,10 +6,12 @@ Called once by the monitoring celery worker after Redis and DB are ready.
 from celery import Celery
 from prometheus_client.registry import REGISTRY
 
-from onyx.server.metrics.indexing_pipeline import QueueDepthCollector
-from onyx.server.metrics.indexing_pipeline import RedisHealthCollector
-from onyx.server.metrics.indexing_pipeline import WorkerHealthCollector
-from onyx.server.metrics.indexing_pipeline import WorkerHeartbeatMonitor
+from onyx.server.metrics.indexing_pipeline import (
+    QueueDepthCollector,
+    RedisHealthCollector,
+    WorkerHealthCollector,
+    WorkerHeartbeatMonitor,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

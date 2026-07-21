@@ -1,22 +1,13 @@
 import csv
 import io
 import re
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import cast
 from uuid import UUID
 
 import jwt
-from email_validator import EmailNotValidError
-from email_validator import EmailUndeliverableError
-from email_validator import validate_email
-from fastapi import APIRouter
-from fastapi import Body
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
+from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -24,113 +15,127 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.anonymous_user import fetch_anonymous_user_info
 from onyx.auth.email_utils import send_user_email_invite
-from onyx.auth.invited_users import get_invited_users
-from onyx.auth.invited_users import remove_user_from_invited_users
-from onyx.auth.invited_users import write_invited_users
-from onyx.auth.permissions import get_effective_permissions
-from onyx.auth.permissions import require_permission
+from onyx.auth.invited_users import (
+    get_invited_users,
+    remove_user_from_invited_users,
+    write_invited_users,
+)
+from onyx.auth.permissions import get_effective_permissions, require_permission
 from onyx.auth.schemas import UserRole
-from onyx.auth.users import anonymous_user_enabled
-from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import enforce_seat_limit_locked
-from onyx.auth.users import optional_user
-from onyx.auth.users import scope_exempt
-from onyx.configs.app_configs import AUTH_BACKEND
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import AuthBackend
-from onyx.configs.app_configs import DEV_MODE
-from onyx.configs.app_configs import EMAIL_CONFIGURED
-from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
-from onyx.configs.app_configs import NUM_FREE_TRIAL_USER_INVITES
-from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
-from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
-from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
-from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.auth.session_tokens import (
+    SessionRejection,
+    build_session_rejection_error,
+    classify_session_token_value,
+)
+from onyx.auth.users import (
+    anonymous_user_enabled,
+    current_curator_or_admin_user,
+    enforce_seat_limit_locked,
+    optional_user,
+    scope_exempt,
+)
+from onyx.configs.app_configs import (
+    AUTH_BACKEND,
+    DEV_MODE,
+    EMAIL_CONFIGURED,
+    ENABLE_EMAIL_INVITES,
+    NUM_FREE_TRIAL_USER_INVITES,
+    REDIS_AUTH_KEY_PREFIX,
+    SESSION_EXPIRE_TIME_SECONDS,
+    USER_AUTH_SECRET,
+    AuthBackend,
+)
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, PUBLIC_API_TAGS
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
-from onyx.db.enums import AccountType
-from onyx.db.enums import Permission
-from onyx.db.enums import UserFileStatus
-from onyx.db.models import User
-from onyx.db.models import UserFile
-from onyx.db.tenant_invite_counter import release_trial_invites
-from onyx.db.tenant_invite_counter import reserve_trial_invites
-from onyx.db.user_preferences import activate_user
-from onyx.db.user_preferences import deactivate_user
-from onyx.db.user_preferences import get_all_user_assistant_specific_configs
-from onyx.db.user_preferences import get_latest_access_token_for_user
-from onyx.db.user_preferences import get_memories_for_user
-from onyx.db.user_preferences import update_assistant_preferences
-from onyx.db.user_preferences import update_user_assistant_visibility
-from onyx.db.user_preferences import update_user_auto_scroll
-from onyx.db.user_preferences import update_user_chat_background
-from onyx.db.user_preferences import update_user_default_app_mode
-from onyx.db.user_preferences import update_user_default_model
-from onyx.db.user_preferences import update_user_language
-from onyx.db.user_preferences import update_user_paste_as_tile
-from onyx.db.user_preferences import update_user_personalization
-from onyx.db.user_preferences import update_user_pinned_assistants
-from onyx.db.user_preferences import update_user_role
-from onyx.db.user_preferences import update_user_shortcut_enabled
-from onyx.db.user_preferences import update_user_temperature_override_enabled
-from onyx.db.user_preferences import update_user_theme_preference
-from onyx.db.user_preferences import update_users_craft_enabled
-from onyx.db.users import batch_get_user_groups
-from onyx.db.users import delete_user_from_db
-from onyx.db.users import get_all_accepted_users
-from onyx.db.users import get_all_users
-from onyx.db.users import get_page_of_filtered_users
-from onyx.db.users import get_total_filtered_users_count
-from onyx.db.users import get_user_by_email
-from onyx.db.users import get_user_counts_by_role_and_status
-from onyx.db.users import validate_user_role_update
+from onyx.db.engine.sql_engine import get_session, get_session_with_shared_schema
+from onyx.db.enums import AccountType, Permission, UserFileStatus
+from onyx.db.models import User, UserFile
+from onyx.db.tenant_invite_counter import release_trial_invites, reserve_trial_invites
+from onyx.db.user_preferences import (
+    activate_user,
+    deactivate_user,
+    get_all_user_assistant_specific_configs,
+    get_latest_access_token_for_user,
+    get_memories_for_user,
+    update_assistant_preferences,
+    update_user_assistant_visibility,
+    update_user_auto_scroll,
+    update_user_chat_background,
+    update_user_default_app_mode,
+    update_user_default_model,
+    update_user_language,
+    update_user_paste_as_tile,
+    update_user_personalization,
+    update_user_pinned_assistants,
+    update_user_role,
+    update_user_shortcut_enabled,
+    update_user_temperature_override_enabled,
+    update_user_theme_preference,
+    update_users_craft_enabled,
+)
+from onyx.db.users import (
+    batch_get_user_groups,
+    delete_user_from_db,
+    get_all_accepted_users,
+    get_all_users,
+    get_page_of_filtered_users,
+    get_total_filtered_users_count,
+    get_user_by_email,
+    get_user_counts_by_role_and_status,
+    validate_user_role_update,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
-from onyx.redis.redis_pool import get_raw_redis_client
-from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
-from onyx.server.manage.invite_rate_limit import enforce_invite_rate_limit
-from onyx.server.manage.invite_rate_limit import enforce_remove_invited_rate_limit
-from onyx.server.manage.models import AllUsersResponse
-from onyx.server.manage.models import AutoScrollRequest
-from onyx.server.manage.models import BulkInviteResponse
-from onyx.server.manage.models import ChatBackgroundRequest
-from onyx.server.manage.models import DefaultAppModeRequest
-from onyx.server.manage.models import EmailInviteStatus
-from onyx.server.manage.models import LanguageRequest
-from onyx.server.manage.models import MemoryItem
-from onyx.server.manage.models import PersonalizationUpdateRequest
-from onyx.server.manage.models import TenantInfo
-from onyx.server.manage.models import TenantSnapshot
-from onyx.server.manage.models import ThemePreferenceRequest
-from onyx.server.manage.models import UserByEmail
-from onyx.server.manage.models import UserCraftAccessUpdateRequest
-from onyx.server.manage.models import UserInfo
-from onyx.server.manage.models import UserPreferences
-from onyx.server.manage.models import UserRoleResponse
-from onyx.server.manage.models import UserRoleUpdateRequest
-from onyx.server.manage.models import UserSpecificAssistantPreference
-from onyx.server.manage.models import UserSpecificAssistantPreferences
-from onyx.server.models import FullUserSnapshot
-from onyx.server.models import InvitedUserSnapshot
-from onyx.server.models import MinimalUserSnapshot
-from onyx.server.models import UserGroupInfo
+from onyx.server.manage.invite_rate_limit import (
+    enforce_invite_rate_limit,
+    enforce_remove_invited_rate_limit,
+)
+from onyx.server.manage.models import (
+    AllUsersResponse,
+    AutoScrollRequest,
+    BulkInviteResponse,
+    ChatBackgroundRequest,
+    DefaultAppModeRequest,
+    EmailInviteStatus,
+    LanguageRequest,
+    MemoryItem,
+    PersonalizationUpdateRequest,
+    TenantInfo,
+    TenantSnapshot,
+    ThemePreferenceRequest,
+    UserByEmail,
+    UserCraftAccessUpdateRequest,
+    UserInfo,
+    UserPreferences,
+    UserRoleResponse,
+    UserRoleUpdateRequest,
+    UserSpecificAssistantPreference,
+    UserSpecificAssistantPreferences,
+)
+from onyx.server.models import (
+    FullUserSnapshot,
+    InvitedUserSnapshot,
+    MinimalUserSnapshot,
+    UserGroupInfo,
+)
 from onyx.server.security.store import get_security_settings
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
-from onyx.utils.audit import actor_from_user
-from onyx.utils.audit import AuditAction
-from onyx.utils.audit import AuditOutcome
-from onyx.utils.audit import emit_audit_event
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.csv_utils import sanitize_csv_cell
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import (
+    fetch_ee_implementation_or_noop,
     fetch_versioned_implementation_with_fallback,
 )
 from shared_configs.configs import MULTI_TENANT
@@ -615,7 +620,7 @@ def bulk_invite_users(
     else:
         try:
             for email in emails_needing_seats:
-                send_user_email_invite(email, current_user, AUTH_TYPE)
+                send_user_email_invite(email, current_user)
             email_invite_status = EmailInviteStatus.SENT
         except Exception as e:
             logger.error("Error sending email invite to invited users: %s", e)
@@ -889,43 +894,44 @@ async def get_user_role(
     return UserRoleResponse(role=user.role)
 
 
-def get_current_auth_token_creation_redis(
+def get_current_auth_token_expiry_redis(
     user: User, request: Request
 ) -> datetime | None:
-    """Calculate the token creation time from Redis TTL information.
-
-    This function retrieves the authentication token from cookies,
-    checks its TTL in Redis, and calculates when the token was created.
-    Despite the function name, it returns the token creation time, not the expiration time.
     """
-    # Anonymous users don't have auth tokens
+    Reads the logical expiry embedded in the Redis token value; the physical TTL
+    outlives it by the grace window, so TTL back-calculation would overstate the
+    remaining session time. Pre-upgrade values are the exception: written
+    without the grace window, their TTL is the exact logical expiry, so it is
+    used directly.
+    """
+    # Anonymous users don't have auth tokens.
     if user.is_anonymous:
         return None
     try:
-        # Get the token from the request
         token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
         if not token:
             logger.debug("No auth token cookie found")
             return None
 
-        # Get the Redis client
         redis = get_raw_redis_client()
         redis_key = REDIS_AUTH_KEY_PREFIX + token
-
-        # Get the TTL of the token
-        ttl = cast(int, redis.ttl(redis_key))
-        if ttl <= 0:
-            logger.error("Token has expired or doesn't exist in Redis")
+        raw_value = redis.get(redis_key)
+        result = classify_session_token_value(cast(str | bytes | None, raw_value))
+        if isinstance(result, SessionRejection):
+            logger.error(
+                "Token of authenticated request is not live in Redis: %s",
+                result.reason.value,
+            )
             return None
 
-        # Calculate the creation time based on TTL and session expiry
-        # Current time minus (total session length minus remaining TTL)
-        current_time = datetime.now(timezone.utc)
-        token_creation_time = current_time - timedelta(
-            seconds=(SESSION_EXPIRE_TIME_SECONDS - ttl)
-        )
+        if result.issued_at is None:
+            # Pre-upgrade value: its physical TTL is its logical expiry.
+            ttl = cast(int, redis.ttl(redis_key))
+            if ttl <= 0:
+                return None
+            return datetime.now(timezone.utc) + timedelta(seconds=ttl)
 
-        return token_creation_time
+        return result.expires_at
 
     except Exception as e:
         logger.error("Error retrieving token expiration from Redis: %s", e)
@@ -972,14 +978,19 @@ def get_current_token_creation_jwt(user: User, request: Request) -> datetime | N
         return None
 
 
-def _get_token_created_at(
+def _get_token_expires_at(
     user: User, request: Request, db_session: Session
 ) -> datetime | None:
     if AUTH_BACKEND == AuthBackend.REDIS:
-        return get_current_auth_token_creation_redis(user, request)
+        return get_current_auth_token_expiry_redis(user, request)
+
     if AUTH_BACKEND == AuthBackend.JWT:
-        return get_current_token_creation_jwt(user, request)
-    return get_current_token_creation_postgres(user, db_session)
+        token_created_at = get_current_token_creation_jwt(user, request)
+    else:
+        token_created_at = get_current_token_creation_postgres(user, db_session)
+    if token_created_at is None:
+        return None
+    return token_created_at + timedelta(seconds=SESSION_EXPIRE_TIME_SECONDS)
 
 
 @router.get("/me/permissions", tags=PUBLIC_API_TAGS)
@@ -1004,6 +1015,9 @@ def verify_user_logged_in(
         if anonymous_user_enabled(tenant_id=tenant_id):
             store = get_kv_store()
             return fetch_anonymous_user_info(store)
+        session_rejection_error = build_session_rejection_error()
+        if session_rejection_error is not None:
+            raise session_rejection_error
         raise BasicAuthenticationError(detail="Unauthorized")
 
     if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
@@ -1011,13 +1025,7 @@ def verify_user_logged_in(
             detail="Access denied. User's OIDC token has expired.",
         )
 
-    token_created_at = _get_token_created_at(user, request, db_session)
-
-    token_expires_at: datetime | None = None
-    if token_created_at is not None:
-        token_expires_at = token_created_at + timedelta(
-            seconds=SESSION_EXPIRE_TIME_SECONDS
-        )
+    token_expires_at = _get_token_expires_at(user, request, db_session)
     track_oidc = get_security_settings().track_external_idp_expiry
     # When OIDC tracking is enabled, cap expiry at the IdP token's lifetime.
     # Guard against stale oidc_expiry from a previous OIDC session (same comment

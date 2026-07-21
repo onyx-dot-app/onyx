@@ -1,16 +1,13 @@
-import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
+import { router } from "expo-router";
 
-import { useRecentFiles } from "@/hooks/useRecentFiles";
-import { Button } from "@/components/ui/button";
-import { Content, ContentAction } from "@/components/ui/content";
-import { Text } from "@/components/ui/text";
+import { Content } from "@/components/ui/content";
+import { Icon } from "@/components/ui/icon";
+import { LineItemButton } from "@/components/ui/line-item-button";
 import { Separator } from "@/components/ui/separator";
-import { FileCard } from "@/components/chat/FileCard";
-import { FilePickerSheet } from "@/components/chat/FilePickerSheet";
-import { useProjectFiles } from "@/hooks/useProjectFiles";
+import { Text } from "@/components/ui/text";
+import SvgChevronRight from "@/icons/chevron-right";
 import SvgFolder from "@/icons/folder";
-import SvgPlus from "@/icons/plus";
 import type { ProjectDetails } from "@/chat/contracts/projects";
 
 interface ProjectContextPanelProps {
@@ -19,34 +16,14 @@ interface ProjectContextPanelProps {
   isLoading: boolean;
 }
 
-// Project detail + file management (mirrors web's ProjectContextPanel).
+// File management lives on the dedicated /sources/[id] screen, not here.
 export function ProjectContextPanel({
   projectId,
   details,
-  isLoading,
 }: ProjectContextPanelProps) {
   const project = details?.project;
   const instructions = project?.instructions?.trim();
-  const loadingDetails = isLoading && !details;
-
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const { files, addDocuments, addImages, linkRecent, removeFile } =
-    useProjectFiles(projectId, details?.files);
-
-  const onRemoveFile = useCallback(
-    (id: string) => {
-      void removeFile(id);
-    },
-    [removeFile],
-  );
-
-  // Recent library files, fetched only while the picker is open.
-  const { data: recentFiles = [], isLoading: isLoadingRecent } =
-    useRecentFiles(pickerOpen);
-  const linkableRecent = useMemo(() => {
-    const existingIds = new Set(files.map((file) => file.id));
-    return recentFiles.filter((file) => !existingIds.has(file.id));
-  }, [files, recentFiles]);
+  const fileCount = details?.files?.length ?? 0;
 
   return (
     <View className="gap-24">
@@ -62,58 +39,28 @@ export function ProjectContextPanel({
         descriptionMaxLines={4}
       />
 
-      <View className="gap-8">
-        <ContentAction
-          sizePreset="main-ui"
-          variant="section"
-          title="Files"
-          description="Chats in this project can access these files."
-          rightChildren={
-            <Button
-              icon={SvgPlus}
-              prominence="secondary"
-              size="sm"
-              accessibilityLabel="Add files"
-              disabled={projectId == null || loadingDetails}
-              onPress={() => setPickerOpen(true)}
-            />
-          }
-        />
-
-        {loadingDetails ? (
-          <ActivityIndicator size="small" />
-        ) : files.length === 0 ? (
-          <View className="justify-center rounded-12 border border-dashed border-border-01 px-12 py-12">
-            <Text font="secondary-body" color="text-02">
-              No files in this project yet.
+      <LineItemButton
+        icon={SvgFolder}
+        title="View sources"
+        sizePreset="main-ui"
+        variant="section"
+        center
+        disabled={projectId == null}
+        onPress={() =>
+          projectId != null &&
+          router.navigate({
+            pathname: "/sources/[id]",
+            params: { id: String(projectId) },
+          })
+        }
+        rightChildren={
+          <View className="flex-row items-center gap-4">
+            <Text font="secondary-body" color="text-03">
+              {fileCount} {fileCount === 1 ? "file" : "files"}
             </Text>
+            <Icon as={SvgChevronRight} size={16} className="text-text-03" />
           </View>
-        ) : (
-          <View className="flex-row flex-wrap gap-8">
-            {files.map((file) => (
-              <FileCard key={file.id} file={file} onRemove={onRemoveFile} />
-            ))}
-          </View>
-        )}
-      </View>
-
-      <FilePickerSheet
-        visible={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onUploadDocuments={() => {
-          setPickerOpen(false);
-          void addDocuments();
-        }}
-        onUploadPhotos={() => {
-          setPickerOpen(false);
-          void addImages();
-        }}
-        recentFiles={linkableRecent}
-        onPickRecent={(fileId) => {
-          setPickerOpen(false);
-          void linkRecent(fileId);
-        }}
-        isLoadingRecent={isLoadingRecent}
+        }
       />
     </View>
   );

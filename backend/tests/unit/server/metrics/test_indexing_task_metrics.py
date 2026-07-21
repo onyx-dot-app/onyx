@@ -1,19 +1,20 @@
 """Tests for per-connector indexing task Prometheus metrics."""
 
 from collections.abc import Iterator
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.server.metrics.indexing_task_metrics import _connector_cache
-from onyx.server.metrics.indexing_task_metrics import _indexing_start_times
-from onyx.server.metrics.indexing_task_metrics import ConnectorInfo
-from onyx.server.metrics.indexing_task_metrics import INDEXING_TASK_COMPLETED
-from onyx.server.metrics.indexing_task_metrics import INDEXING_TASK_DURATION
-from onyx.server.metrics.indexing_task_metrics import INDEXING_TASK_STARTED
-from onyx.server.metrics.indexing_task_metrics import on_indexing_task_postrun
-from onyx.server.metrics.indexing_task_metrics import on_indexing_task_prerun
+from onyx.server.metrics.indexing_task_metrics import (
+    INDEXING_TASK_COMPLETED,
+    INDEXING_TASK_DURATION,
+    INDEXING_TASK_STARTED,
+    ConnectorInfo,
+    _connector_cache,
+    _indexing_start_times,
+    on_indexing_task_postrun,
+    on_indexing_task_prerun,
+)
 
 
 @pytest.fixture(autouse=True)

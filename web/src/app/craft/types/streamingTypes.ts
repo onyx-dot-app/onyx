@@ -4,7 +4,7 @@
 
 export type SharingScope = "private" | "public_org";
 
-export type SessionOrigin = "INTERACTIVE" | "SCHEDULED";
+export type SessionOrigin = "INTERACTIVE" | "SCHEDULED" | "SLACK";
 
 // =============================================================================
 // Session Error Constants
@@ -180,6 +180,11 @@ export interface ApiSessionResponse {
   origin: SessionOrigin;
   agent_provider: string | null;
   agent_model: string | null;
+  skills_stale: boolean;
+}
+
+export interface ApiSessionSkillsState {
+  skills_stale: boolean;
 }
 
 export interface ApiDetailedSessionResponse extends ApiSessionResponse {

@@ -136,6 +136,9 @@ export interface SearchToolFilterDelta extends BaseObj {
   type: "search_tool_filter_delta";
   // Connector/source values this search is scoped to (empty == all)
   sources: string[];
+  // Applied time window as ISO datetime strings; either bound may be open-ended
+  time_filter_start?: string | null;
+  time_filter_end?: string | null;
 }
 
 export interface SearchToolDocumentsDelta extends BaseObj {

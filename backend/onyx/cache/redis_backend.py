@@ -3,9 +3,7 @@ import math
 from redis.exceptions import LockNotOwnedError
 from redis.lock import Lock as RedisLock
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
-from onyx.cache.interface import CacheLockLostError
+from onyx.cache.interface import CacheBackend, CacheLock, CacheLockLostError
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 

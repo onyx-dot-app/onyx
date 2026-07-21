@@ -1420,15 +1420,14 @@ auth:
     values:
       user_auth_secret: ""
   metricsAuth:
-    # -- Bearer token guarding the API server's /metrics endpoint. /metrics
+    # -- Bearer token guarding the API and MCP servers' /metrics endpoints. /metrics
     # returns 401 by default until you either enable this (provide a token) or
     # explicitly opt out via configMap.DISABLE_METRICS_AUTH="true". When enabled,
     # scrapers must send the token as `Authorization: Bearer <token>` (Prometheus
-    # scrape config: `authorization`), and the api ServiceMonitor below is wired
+    # scrape config: `authorization`), and the ServiceMonitors are wired
     # to send it automatically.
     enabled: false
-    # -- Only inject the token into pods that serve the protected /metrics (the
-    # API server), not every backend pod. Routes through onyx.envSecretsRestricted.
+    # -- Only inject the token into pods that serve protected /metrics.
     allPods: false
     # -- Overwrite the default secret name, ignored if existingSecret is defined
     secretName: 'onyx-metrics-auth'
@@ -1481,6 +1480,13 @@ configMap:
   AUTH_TYPE: "basic"
   # Enable PKCE for OIDC login flow. Leave empty/false for backward compatibility.
   OIDC_PKCE_ENABLED: ""
+  # Opt-in: capture IdP directory claims at OAuth/OIDC login and use them to
+  # enrich chat prompts and resolve {{user.<key>}} agent placeholders. Sends
+  # directory data to the configured LLM, so off by default.
+  IDP_PROFILE_ENRICHMENT_ENABLED: ""
+  # Optional JSON overriding the directory claim aliases per profile field, e.g.
+  # '{"department": ["dept", "division"], "country": ["c"]}'.
+  IDP_PROFILE_CLAIM_MAP: ""
   # 1 Day Default
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
@@ -1514,6 +1520,15 @@ configMap:
   GEN_AI_MAX_TOKENS: ""
   LLM_SOCKET_READ_TIMEOUT: "60"
   MAX_CHUNKS_FED_TO_CHAT: ""
+  # Usage / cost accounting
+  # Records priced generation spans into the per-user usage ledger (default on).
+  # Set to "false" to disable the recording processor entirely.
+  USER_USAGE_TRACKING_ENABLED: ""
+  # Flat per-image cost in cents when litellm has no price for an image model (default 4).
+  DEFAULT_IMAGE_COST_CENTS: ""
+  # Fallback USD per million tokens when litellm can't price a model (default 0 = free).
+  DEFAULT_LLM_INPUT_COST_PER_MTOK: ""
+  DEFAULT_LLM_OUTPUT_COST_PER_MTOK: ""
   # Query Options
   DOC_TIME_DECAY: ""
   HYBRID_ALPHA: ""
@@ -1541,6 +1556,9 @@ configMap:
   JIRA_SERVER_API_VERSION: ""
   CANVAS_PERMISSION_DOC_SYNC_FREQUENCY: ""
   CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  BOX_CONNECTOR_SIZE_THRESHOLD: ""
+  BOX_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  BOX_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   GONG_CONNECTOR_START_TIME: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
@@ -1647,10 +1665,10 @@ sandboxProxy:
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 512Mi
     limits:
       cpu: 1000m
-      memory: 1Gi
+      memory: 2Gi
   nodeSelector: {}
   tolerations: []
   affinity: {}

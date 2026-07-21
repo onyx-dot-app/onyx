@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.6.12
+version: 0.6.17
 appVersion: latest
 annotations:
   category: Productivity
@@ -17,11 +17,15 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Mark a docfetching attempt INTERRUPTED (resumable, not failed) when the worker
-        is stopped by a graceful shutdown such as a rolling deploy or KEDA scale-down, so it
-        resumes from checkpoint instead of counting toward the repeated-error auto-pause. Adds a
-        terminationGracePeriodSeconds to the docfetching deployment, so a rollout is required for
-        existing deployments to pick it up.
+      description: Add the Box connector with permission sync, and expose its configuration env
+        vars (BOX_CONNECTOR_SIZE_THRESHOLD, BOX_PERMISSION_DOC_SYNC_FREQUENCY,
+        BOX_PERMISSION_GROUP_SYNC_FREQUENCY) in the background config map values.
+    - kind: added
+      description: Add configurable per-user LLM usage accounting and fallback pricing.
+    - kind: added
+      description: Add authenticated Prometheus scraping for the MCP server.
+    - kind: fixed
+      description: Scope metrics credentials and ServiceMonitor selectors to the intended workloads.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

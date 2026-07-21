@@ -1,11 +1,7 @@
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, Field, field_validator
 
-from onyx.tools.models import LlmOpenUrlResult
-from onyx.tools.models import LlmWebSearchResult
-from shared_configs.enums import WebContentProviderType
-from shared_configs.enums import WebSearchProviderType
+from onyx.tools.models import LlmOpenUrlResult, LlmWebSearchResult
+from shared_configs.enums import WebContentProviderType, WebSearchProviderType
 
 
 class WebSearchToolRequest(BaseModel):

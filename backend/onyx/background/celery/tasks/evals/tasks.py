@@ -1,15 +1,15 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 
-from onyx.configs.app_configs import BRAINTRUST_API_KEY
-from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
-from onyx.configs.app_configs import SCHEDULED_EVAL_PERMISSIONS_EMAIL
-from onyx.configs.app_configs import SCHEDULED_EVAL_PROJECT
+from onyx.configs.app_configs import (
+    BRAINTRUST_API_KEY,
+    JOB_TIMEOUT,
+    SCHEDULED_EVAL_DATASET_NAMES,
+    SCHEDULED_EVAL_PERMISSIONS_EMAIL,
+    SCHEDULED_EVAL_PROJECT,
+)
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.evals.eval import run_eval
 from onyx.evals.models import EvalConfigurationOptions

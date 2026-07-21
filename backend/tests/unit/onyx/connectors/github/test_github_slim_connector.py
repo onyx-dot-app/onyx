@@ -4,17 +4,14 @@ correctly, and that pruning uses the cheap slim path (no lazy loading).
 """
 
 from collections.abc import Generator
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from unittest.mock import PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
 from onyx.access.models import ExternalAccess
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.connectors.github.connector import GithubConnector
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.interfaces import SlimConnector, SlimConnectorWithPermSync
 from onyx.connectors.models import SlimDocument
 
 

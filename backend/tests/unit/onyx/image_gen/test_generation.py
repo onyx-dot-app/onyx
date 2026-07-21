@@ -1,14 +1,14 @@
 from types import SimpleNamespace
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.image_gen.exceptions import ImageGenerationNotConfiguredError
-from onyx.image_gen.generation import generate_images_with_default_config
-from onyx.image_gen.generation import is_image_generation_configured
-from onyx.image_gen.interfaces import ImageShape
-from onyx.image_gen.interfaces import ReferenceImage
+from onyx.image_gen.generation import (
+    generate_images_with_default_config,
+    is_image_generation_configured,
+)
+from onyx.image_gen.interfaces import ImageShape, ReferenceImage
 
 _HELPER = "onyx.image_gen.generation"
 

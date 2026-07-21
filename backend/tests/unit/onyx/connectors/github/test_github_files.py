@@ -1,21 +1,17 @@
 import time
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 from github import Github
-from github.GithubException import UnknownObjectException
+from github.GithubException import GithubException, UnknownObjectException
 from github.RateLimit import RateLimit
 from github.Requester import Requester
 
-from onyx.connectors.github.connector import _is_indexable_path
-from onyx.connectors.github.connector import GithubConnector
+from onyx.connectors.github.connector import GithubConnector, _is_indexable_path
 from onyx.connectors.github.models import SerializedRepository
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
+from onyx.connectors.models import ConnectorFailure, Document
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 
@@ -312,6 +308,25 @@ def test_truncated_tree_yields_failure(
     assert len(failures) == 1
     assert failures[0].failed_entity is not None
     assert "truncated" in failures[0].failure_message.lower()
+
+
+def test_empty_repository_tree_skips_file_stage(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    """GitHub returns 409 when listing the tree of an empty repository."""
+    connector = _build_connector(mock_github_client)
+    mock_repo = create_mock_repo({})
+    mock_repo.get_git_tree.side_effect = GithubException(
+        409, {"message": "Git Repository is empty."}, {}
+    )
+    mock_github_client.get_repo.return_value = mock_repo
+
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+
+    assert _all_items(outputs) == []
+    assert outputs[-1].next_checkpoint.has_more is False
 
 
 def test_prs_disabled_404_does_not_crash_files(

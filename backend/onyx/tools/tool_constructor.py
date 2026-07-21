@@ -9,28 +9,25 @@ from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import PersonaSearchInfo
+from onyx.context.search.models import BaseFilters, PersonaSearchInfo
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.mcp import get_all_mcp_tools_for_server
-from onyx.db.mcp import get_mcp_server_by_id
-from onyx.db.mcp import get_user_connection_config
-from onyx.db.models import Persona
-from onyx.db.models import User
+from onyx.db.mcp import (
+    MCPCredentialsError,
+    get_all_mcp_tools_for_server,
+    get_mcp_server_by_id,
+    resolve_mcp_credentials,
+)
+from onyx.db.models import Persona, User
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
-from onyx.tools.models import DynamicSchemaInfo
-from onyx.tools.models import SearchToolUsage
+from onyx.tools.models import DynamicSchemaInfo, SearchToolUsage
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )
@@ -419,32 +416,11 @@ def _construct_tools_impl(
 
             mcp_server = get_mcp_server_by_id(db_tool_model.mcp_server_id, db_session)
 
-            # Get user-specific connection config if needed
-            connection_config = None
-            user_email = user.email
-            mcp_user_oauth_token = None
-
-            if mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
-                # Pass-through OAuth: use the user's login OAuth token
-                if user.is_anonymous:
-                    logger.warning(
-                        "Anonymous user cannot use PT_OAUTH MCP server %s",
-                        mcp_server.id,
-                    )
-                    continue
-                mcp_user_oauth_token = user_oauth_token
-            elif (
-                mcp_server.auth_type == MCPAuthenticationType.API_TOKEN
-                or mcp_server.auth_type == MCPAuthenticationType.OAUTH
-            ):
-                # If server has a per-user template, only use that user's config
-                if mcp_server.auth_performer == MCPAuthenticationPerformer.PER_USER:
-                    connection_config = get_user_connection_config(
-                        mcp_server.id, user_email, db_session
-                    )
-                else:
-                    # No per-user template: use admin config
-                    connection_config = mcp_server.admin_connection_config
+            try:
+                mcp_credentials = resolve_mcp_credentials(mcp_server, user, db_session)
+            except MCPCredentialsError as e:
+                logger.warning(str(e))
+                continue
 
             # Get all saved tools for this MCP server
             saved_tools = get_all_mcp_tools_for_server(mcp_server.id, db_session)
@@ -468,10 +444,10 @@ def _construct_tools_impl(
                     tool_name=saved_tool.name,
                     tool_description=saved_tool.description,
                     tool_definition=saved_tool.mcp_input_schema or {},
-                    connection_config=connection_config,
-                    user_email=user_email,
+                    connection_config=mcp_credentials.connection_config,
+                    user_email=user.email,
                     user_id=str(user.id),
-                    user_oauth_token=mcp_user_oauth_token,
+                    user_oauth_token=mcp_credentials.user_oauth_token,
                     additional_headers=additional_mcp_headers,
                 )
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool

@@ -95,7 +95,7 @@ export interface ExternalAppAdminResponse {
   enabled: boolean;
   actions: ActionPolicyView[];
   // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
-  // admin may only enable/disable + set policies (the UI hides the rest).
+  // admin may only set availability and policies (the UI hides the rest).
   is_onyx_managed: boolean;
 }
 

@@ -14,8 +14,7 @@ import queue
 import threading
 import time
 from abc import abstractmethod
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -23,23 +22,28 @@ from uuid import UUID
 import httpx
 
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
-from onyx.cache.interface import CacheLock
-from onyx.cache.interface import CacheLockLostError
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheLock, CacheLockLostError
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.server.features.build.configs import OPENCODE_PROMPT_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
-from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
-from onyx.server.features.build.configs import PROMPT_SLOT_LEASE_SECONDS
+from onyx.server.features.build.configs import (
+    OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+    OPENCODE_SERVE_EVENT_READ_TIMEOUT,
+    OPENCODE_SERVER_USERNAME,
+    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
+    PROMPT_SLOT_LEASE_SECONDS,
+)
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
-from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
-from onyx.server.features.build.sandbox.opencode.serve_client import _TurnState
-from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentThoughtChunk,
+    PromptResponse,
+)
+from onyx.server.features.build.sandbox.opencode.event_bus import (
+    BUS_CLOSED_SENTINEL,
+    PodEventBus,
+)
 from onyx.server.features.build.sandbox.opencode.serve_client import (
+    OpencodeServeClient,
+    _TurnState,
     translate_opencode_event,
 )
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
@@ -115,8 +119,8 @@ class PromptSlot:
     def keep_alive(self, stop: threading.Event, max_seconds: float) -> None:
         """For holders whose progress is client-paced or opaque — SSE
         backpressure must not expire a live turn's lease. The cap bounds a
-        leaked holder to roughly the old fixed-TTL ceiling; hitting it marks
-        the slot ``lost`` so the holder aborts instead of driving unrenewed."""
+        leaked holder; hitting it marks the slot ``lost`` so the holder aborts
+        instead of driving opencode without mutual exclusion."""
         deadline = time.monotonic() + max_seconds
         while not stop.wait(PROMPT_SLOT_LEASE_SECONDS / 4):
             if self.lost:
@@ -216,6 +220,8 @@ class _ServeMixin:
         sandbox_id: UUID,
         build_session_id: UUID,
         acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+        *,
+        fail_open: bool = True,
     ) -> Generator[PromptSlot, None, None]:
         """Serialize turns for a build session across replicas via the cache.
 
@@ -235,13 +241,14 @@ class _ServeMixin:
             acquired = lock.acquire(blocking=True, blocking_timeout=acquire_timeout)
         except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
-                "[SANDBOX-SERVE] prompt_slot: cache unreachable (%s) — failing open "
+                "[SANDBOX-SERVE] prompt_slot: cache unreachable (%s) — failing %s "
                 "on sandbox=%s build_session=%s",
                 e,
+                "open" if fail_open else "closed",
                 sandbox_id,
                 build_session_id,
             )
-            yield PromptSlot(acquired=True)
+            yield PromptSlot(acquired=fail_open)
             return
 
         try:
@@ -300,6 +307,19 @@ class _ServeMixin:
                 directory=session_path,
                 title=f"build-session-{str(session_id)[:8]}",
             )
+
+    def dispose_opencode_instance(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> None:
+        session_path = self._session_directory(session_id)
+        with self._build_serve_client(
+            sandbox_id,
+            session_path,
+            with_event_bus=False,
+        ) as client:
+            client.dispose_instance(directory=session_path)
 
     def list_subagents(
         self,
@@ -469,9 +489,9 @@ class _ServeMixin:
             password=info.password,
             event_bus=bus,
             # Self-heal a 401 on any unary call (peer pod rotated the password).
-            reload_password=lambda: self._reload_serve_connection_info(
-                sandbox_id
-            ).password,
+            reload_password=lambda: (
+                self._reload_serve_connection_info(sandbox_id).password
+            ),
         )
 
     def answer_connect_app_permission(
@@ -591,11 +611,8 @@ class _ServeMixin:
                     directory=session_path,
                     model_provider=agent_provider,
                     model_id=agent_model,
-                    timeout=(
-                        turn_timeout_seconds
-                        if turn_timeout_seconds is not None
-                        else OPENCODE_PROMPT_TIMEOUT_SECONDS
-                    ),
+                    timeout=OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+                    absolute_timeout=turn_timeout_seconds,
                     should_interrupt=should_interrupt,
                 ):
                     events_count += 1
@@ -748,6 +765,7 @@ class _ServeMixin:
                     directory=session_path,
                     model_provider=agent_provider,
                     model_id=agent_model,
+                    absolute_timeout=PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
                 ):
                     events_count += 1
                     yield event
@@ -840,9 +858,8 @@ class _ServeMixin:
                     fetch_message=fetch_message,
                     parent_resolver=bus.parent_of,
                     children_resolver=bus.list_children,
-                    fetch_message_by_session=lambda session_id,
-                    message_id: client.get_message(
-                        session_id, message_id, directory=directory
+                    fetch_message_by_session=lambda session_id, message_id: (
+                        client.get_message(session_id, message_id, directory=directory)
                     ),
                 ):
                     if pending_text_event is not None:

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 
-from onyx_client.stream_parser import ChatStreamAnalyzer
-from onyx_client.stream_parser import FIRST_ANSWER_TOKEN
-from onyx_client.stream_parser import FIRST_PACKET
+from onyx_client.stream_parser import (
+    FIRST_ANSWER_TOKEN,
+    FIRST_PACKET,
+    ChatStreamAnalyzer,
+)
 
 
 def _feed_all(analyzer: ChatStreamAnalyzer, lines: list[str]) -> list[str]:

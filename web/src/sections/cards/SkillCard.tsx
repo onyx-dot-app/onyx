@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, type MouseEvent } from "react";
-import { Button, Tag, Tooltip } from "@opal/components";
+import { Button, Switch, Tag, Tooltip } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgBlocks, SvgEdit, SvgUser } from "@opal/icons";
 import { CardItemLayout } from "@/layouts/general-layouts";
@@ -16,6 +16,8 @@ interface SkillCardItemBase {
   id: string;
   name: string;
   description: string;
+  enabled: boolean;
+  can_toggle: boolean;
 }
 
 export interface BuiltinSkillCardItem extends SkillCardItemBase {
@@ -30,8 +32,6 @@ export interface CustomSkillCardItem extends SkillCardItemBase {
   author_email?: string | null;
   /** True when the skill is a personal skill owned by the current user. */
   is_personal?: boolean;
-  /** Disabled skills render greyed out; owners can re-enable via the toggle. */
-  enabled?: boolean;
 }
 
 export type SkillCardItem = BuiltinSkillCardItem | CustomSkillCardItem;
@@ -40,9 +40,17 @@ export interface SkillCardProps {
   item: SkillCardItem;
   onClick?: (item: SkillCardItem) => void;
   onEdit?: (item: CustomSkillCardItem) => void;
+  onEnabledChange?: (item: SkillCardItem, enabled: boolean) => void;
+  enablementPending?: boolean;
 }
 
-export default function SkillCard({ item, onClick, onEdit }: SkillCardProps) {
+export default function SkillCard({
+  item,
+  onClick,
+  onEdit,
+  onEnabledChange,
+  enablementPending = false,
+}: SkillCardProps) {
   const { appName } = useSettings();
 
   const handleClick = useCallback(() => {
@@ -51,11 +59,14 @@ export default function SkillCard({ item, onClick, onEdit }: SkillCardProps) {
 
   const authorTitle =
     item.source === "builtin" ? appName : item.author_email || appName;
-  const isDisabled = item.source === "custom" && item.enabled === false;
+  const isDisabled = !item.enabled;
+  const isInvalid = item.source === "custom" && item.skill.is_valid === false;
   const isBuiltinUnavailable = item.source === "builtin" && !item.is_available;
-  const tooltip = isBuiltinUnavailable
-    ? "Skill is currently unavailable. Click to view details."
-    : undefined;
+  const tooltip = isInvalid
+    ? "This skill is invalid. Delete it and create a new skill."
+    : isBuiltinUnavailable
+      ? "Skill is currently unavailable. Click to view details."
+      : undefined;
   const canEdit =
     item.source === "custom" &&
     (item.skill.user_permission === "OWNER" ||
@@ -68,11 +79,19 @@ export default function SkillCard({ item, onClick, onEdit }: SkillCardProps) {
     }
   };
 
+  const handleEnabledChange = (enabled: boolean) => {
+    onEnabledChange?.(item, enabled);
+  };
+
   return (
     <Tooltip tooltip={tooltip} side="top">
       <Interactive.Simple onClick={handleClick} group="group/SkillCard">
         <Card
-          variant={isDisabled || isBuiltinUnavailable ? "disabled" : "primary"}
+          variant={
+            isDisabled || isInvalid || isBuiltinUnavailable
+              ? "disabled"
+              : "primary"
+          }
           padding={0}
           gap={0}
           height="full"
@@ -81,7 +100,11 @@ export default function SkillCard({ item, onClick, onEdit }: SkillCardProps) {
             <CardItemLayout
               icon={SvgBlocks}
               title={item.name}
-              description={item.description}
+              description={
+                isInvalid
+                  ? "Delete this invalid skill and create a new one."
+                  : item.description
+              }
               rightChildren={
                 item.source === "custom" && canEdit ? (
                   <div className="opacity-0 transition-opacity group-hover/SkillCard:opacity-100 group-focus-within/SkillCard:opacity-100">
@@ -109,6 +132,16 @@ export default function SkillCard({ item, onClick, onEdit }: SkillCardProps) {
               />
             </div>
             <div className="p-0.5 pr-1.5 flex items-center gap-1">
+              {item.can_toggle && (
+                <div onClick={(event) => event.stopPropagation()}>
+                  <Switch
+                    checked={item.enabled}
+                    onCheckedChange={handleEnabledChange}
+                    disabled={enablementPending || isInvalid}
+                    aria-label={`${item.enabled ? "Disable" : "Enable"} ${item.name}`}
+                  />
+                </div>
+              )}
               {item.source === "builtin" ? (
                 item.is_available ? (
                   <Tag title="Built-in" color="blue" />
@@ -118,6 +151,8 @@ export default function SkillCard({ item, onClick, onEdit }: SkillCardProps) {
                     color="amber"
                   />
                 )
+              ) : isInvalid ? (
+                <Tag title="Invalid" color="amber" />
               ) : item.is_personal ? (
                 <Tag title="Personal" color="purple" />
               ) : (

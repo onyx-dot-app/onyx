@@ -1,4 +1,4 @@
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { DeletionAttemptSnapshot } from "./types";
 
 export async function scheduleDeletionJobForConnector(

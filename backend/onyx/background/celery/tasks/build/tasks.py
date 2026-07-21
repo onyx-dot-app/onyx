@@ -3,27 +3,29 @@
 import datetime
 import time
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.constants import OnyxCeleryTask, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Sandbox
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
-from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
-from onyx.server.features.build.db.sandbox import get_running_sandboxes
-from onyx.server.features.build.db.sandbox import user_has_stale_active_session
+from onyx.server.features.build.db.sandbox import (
+    get_latest_snapshot_for_session,
+    get_running_sandboxes,
+    user_has_stale_active_session,
+)
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.session.locks import get_session_creation_lock
 from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
+    is_sandbox_idle,
+    list_snapshotable_session_workspaces,
+    sleep_sandbox,
 )
-from onyx.server.features.build.session.sandbox_lifecycle import is_sandbox_idle
-from onyx.server.features.build.session.sandbox_lifecycle import sleep_sandbox
 
 # 100 minutes - snapshotting can take time
 TIMEOUT_SECONDS = 6000
@@ -95,12 +97,16 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                 ).append(sandbox)
 
             for sandbox in idle_sandboxes:
+                session_creation_lock = get_session_creation_lock(
+                    redis_client, sandbox.user_id
+                )
                 try:
                     sleep_sandbox(
                         db_session=db_session,
                         sandbox_manager=sandbox_manager,
                         sandbox=sandbox,
                         tenant_id=tenant_id,
+                        session_creation_lock=session_creation_lock,
                     )
                 except Exception as e:
                     task_logger.error(
@@ -121,11 +127,28 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                     ):
                         continue
 
-                    # List session directories in the sandbox via the
-                    # backend-agnostic manager API. K8s lists pod paths via
-                    # exec; Docker lists container paths via exec; Local
-                    # walks the on-disk sessions/ directory.
-                    session_ids = sandbox_manager.list_session_workspaces(sandbox_id)
+                    session_creation_lock = get_session_creation_lock(
+                        redis_client, sandbox.user_id
+                    )
+                    if not session_creation_lock.acquire(blocking=False):
+                        task_logger.info(
+                            "Skipping sandbox %s background snapshot while a "
+                            "session is being created",
+                            sandbox.id,
+                        )
+                        continue
+                    try:
+                        # List session directories in the sandbox via the
+                        # backend-agnostic manager API.
+                        session_ids = list_snapshotable_session_workspaces(
+                            db_session,
+                            sandbox_manager,
+                            sandbox,
+                            session_creation_lock,
+                        )
+                    finally:
+                        if session_creation_lock.owned():
+                            session_creation_lock.release()
 
                     # Background snapshot failures are log-only (unlike the
                     # reap path, nothing is about to be terminated).

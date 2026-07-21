@@ -1,34 +1,37 @@
 import hashlib
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import Self
+from datetime import datetime, timezone
+from typing import Any, Self
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_serializer
-from pydantic import field_validator
-from pydantic import model_serializer
-from pydantic import model_validator
-from pydantic import SerializerFunctionWrapHandler
-from pydantic import ValidationInfo
+from pydantic import (
+    BaseModel,
+    Field,
+    SerializerFunctionWrapHandler,
+    ValidationInfo,
+    field_serializer,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
-from onyx.configs.app_configs import OPENSEARCH_INDEX_NUM_REPLICAS
-from onyx.configs.app_configs import OPENSEARCH_INDEX_NUM_SHARDS
-from onyx.configs.app_configs import OPENSEARCH_TEXT_ANALYZER
-from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
+from onyx.configs.app_configs import (
+    OPENSEARCH_INDEX_NUM_REPLICAS,
+    OPENSEARCH_INDEX_NUM_SHARDS,
+    OPENSEARCH_TEXT_ANALYZER,
+    USING_AWS_MANAGED_OPENSEARCH,
+)
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
-from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
-from onyx.document_index.opensearch.constants import EF_SEARCH
-from onyx.document_index.opensearch.constants import M
-from onyx.document_index.opensearch.string_filtering import DocumentIDTooLongError
-from onyx.document_index.opensearch.string_filtering import (
-    filter_and_validate_document_id,
+from onyx.document_index.opensearch.constants import (
+    DEFAULT_MAX_CHUNK_SIZE,
+    EF_CONSTRUCTION,
+    EF_SEARCH,
+    M,
 )
 from onyx.document_index.opensearch.string_filtering import (
     MAX_DOCUMENT_ID_ENCODED_LENGTH,
+    DocumentIDTooLongError,
+    filter_and_validate_document_id,
 )
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.tenant import get_tenant_id_short_string
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -128,17 +131,6 @@ def get_opensearch_doc_chunk_id(
     # Do one more validation to ensure we haven't exceeded the max length.
     opensearch_doc_chunk_id = filter_and_validate_document_id(opensearch_doc_chunk_id)
     return opensearch_doc_chunk_id
-
-
-def set_or_convert_timezone_to_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        # astimezone will raise if value does not have a timezone set.
-        value = value.replace(tzinfo=timezone.utc)
-    else:
-        # Does appropriate time conversion if value was set in a different
-        # timezone.
-        value = value.astimezone(timezone.utc)
-    return value
 
 
 class DocumentChunkWithoutVectors(BaseModel):
@@ -256,7 +248,7 @@ class DocumentChunkWithoutVectors(BaseModel):
         """
         if value is None:
             return None
-        value = set_or_convert_timezone_to_utc(value)
+        value = datetime_to_utc(value)
         return int(value.timestamp())
 
     @field_validator("last_updated", "created_at", mode="before")
@@ -273,8 +265,7 @@ class DocumentChunkWithoutVectors(BaseModel):
         if value is None:
             return None
         if isinstance(value, datetime):
-            value = set_or_convert_timezone_to_utc(value)
-            return value
+            return datetime_to_utc(value)
         if not isinstance(value, int):
             raise ValueError(
                 f"Bug: Expected an int for the datetime property '{info.field_name}' from OpenSearch, got {type(value)} instead."

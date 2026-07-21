@@ -29,34 +29,71 @@ export const QUERIES_PER_EXPANSION = 5;
 export const INITIAL_RESULTS_TO_SHOW = 3;
 export const RESULTS_PER_EXPANSION = 10;
 
+// Applied time window; null == no time filter, either bound may be open-ended.
+export interface TimeFilter {
+  start: string | null;
+  end: string | null;
+}
+
 export interface SearchState {
   queries: string[];
   results: OnyxDocument[];
   sourceFilters: string[];
+  timeFilter: TimeFilter | null;
   isSearching: boolean;
   hasResults: boolean;
   isComplete: boolean;
   isInternetSearch: boolean;
 }
 
-/**
- * Header text for an internal search step. When a source filter was applied,
- * overrides the default "Searching internal documents" with the connector(s).
- */
 const MAX_HEADER_SOURCES = 3;
 
-export const formatSearchHeader = (sourceFilters: string[]): string => {
-  if (sourceFilters.length === 0) return "Searching internal documents";
-  const names = sourceFilters.map((source) =>
-    isValidSource(source)
-      ? getSourceDisplayName(source as ValidSources)
-      : source
-  );
-  const shown = names.slice(0, MAX_HEADER_SOURCES);
-  const overflow = names.length - shown.length;
-  const label =
-    overflow > 0 ? `${shown.join(", ")} +${overflow} more` : shown.join(", ");
-  return `Searching ${label}`;
+// The bounds are day-granularity UTC dates; format in UTC so a midnight start
+// doesn't render as the previous day in western timezones. Locale is pinned to
+// match the surrounding hardcoded-English header copy.
+const formatFilterDate = (iso: string): string =>
+  new Date(iso).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+// Phrases a window as "since <date>", "before <date>", or "from <date> to <date>".
+export const formatTimeWindow = (
+  timeFilter: TimeFilter | null
+): string | null => {
+  if (!timeFilter) return null;
+  const { start, end } = timeFilter;
+  if (start && end) {
+    return `from ${formatFilterDate(start)} to ${formatFilterDate(end)}`;
+  }
+  if (start) return `since ${formatFilterDate(start)}`;
+  if (end) return `before ${formatFilterDate(end)}`;
+  return null;
+};
+
+export const formatSearchHeader = (
+  sourceFilters: string[],
+  timeFilter: TimeFilter | null = null
+): string => {
+  let base: string;
+  if (sourceFilters.length === 0) {
+    base = "Searching internal documents";
+  } else {
+    const names = sourceFilters.map((source) =>
+      isValidSource(source)
+        ? getSourceDisplayName(source as ValidSources)
+        : source
+    );
+    const shown = names.slice(0, MAX_HEADER_SOURCES);
+    const overflow = names.length - shown.length;
+    const label =
+      overflow > 0 ? `${shown.join(", ")} +${overflow} more` : shown.join(", ");
+    base = `Searching ${label}`;
+  }
+  const timeWindowText = formatTimeWindow(timeFilter);
+  return timeWindowText ? `${base} (${timeWindowText})` : base;
 };
 
 /** Constructs the current search state from search tool packets. */
@@ -76,6 +113,20 @@ export const constructCurrentSearchState = (
   const filterDeltas = packets
     .filter((packet) => packet.obj.type === PacketType.SEARCH_TOOL_FILTER_DELTA)
     .map((packet) => packet.obj as SearchToolFilterDelta);
+
+  // Time rides on the same filter delta; take the latest one carrying a bound.
+  const timeDelta = filterDeltas
+    .filter(
+      (delta) =>
+        delta.time_filter_start != null || delta.time_filter_end != null
+    )
+    .at(-1);
+  const timeFilter: TimeFilter | null = timeDelta
+    ? {
+        start: timeDelta.time_filter_start ?? null,
+        end: timeDelta.time_filter_end ?? null,
+      }
+    : null;
 
   const documentDeltas = packets
     .filter(
@@ -128,6 +179,7 @@ export const constructCurrentSearchState = (
     queries,
     results,
     sourceFilters,
+    timeFilter,
     isSearching,
     hasResults,
     isComplete,

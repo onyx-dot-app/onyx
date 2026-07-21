@@ -9,9 +9,9 @@ import {
   ContentAction,
   IllustrationContent,
   SettingsLayouts,
+  toast,
 } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import { toast } from "@/hooks/useToast";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { useSettings } from "@/lib/settings/hooks";
@@ -21,8 +21,8 @@ import { tierAtLeast } from "@/lib/tiers";
 import { setSSOProviderEnabled } from "@/lib/sso/svc";
 import { copyRedirectUri, SSO_PROVIDER_DETAILS } from "@/lib/sso/utils";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { PageLoader } from "@/refresh-components/PageLoader";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { PageLoader } from "@opal/layouts";
+import { useCreateModal } from "@opal/components";
 import { SSOProviderModal } from "@/sections/modals/sso/SSOProviderModal";
 
 const route = ADMIN_ROUTES.SSO_PROVIDERS;

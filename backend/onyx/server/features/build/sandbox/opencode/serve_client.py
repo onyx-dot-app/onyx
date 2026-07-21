@@ -14,41 +14,46 @@ from __future__ import annotations
 
 import queue
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterable
-from dataclasses import dataclass
-from dataclasses import field
-from typing import Any
-from typing import cast
+from collections.abc import Callable, Generator, Iterable
+from dataclasses import dataclass, field
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx
 
 from onyx.cache.factory import get_cache_backend
 from onyx.server.features.build import connect_app
-from onyx.server.features.build.configs import OPENCODE_PROMPT_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import OPENCODE_SERVE_CONNECT_TIMEOUT
-from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
-from onyx.server.features.build.configs import OPENCODE_SERVE_REQUEST_TIMEOUT
-from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
-from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
-from onyx.server.features.build.packets import CompactionPacket
-from onyx.server.features.build.packets import ContextUsagePacket
-from onyx.server.features.build.packets import SubagentStartedPacket
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_SESSION
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TRANSPORT
-from onyx.server.features.build.sandbox.opencode.event_bus import _Subscription
-from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
-from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
+from onyx.server.features.build.configs import (
+    OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+    OPENCODE_SERVE_CONNECT_TIMEOUT,
+    OPENCODE_SERVE_EVENT_READ_TIMEOUT,
+    OPENCODE_SERVE_REQUEST_TIMEOUT,
+    OPENCODE_SERVER_USERNAME,
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+    SSE_KEEPALIVE_INTERVAL,
+)
+from onyx.server.features.build.packets import (
+    CompactionPacket,
+    ContextUsagePacket,
+    SubagentStartedPacket,
+)
+from onyx.server.features.build.sandbox.event_schema import (
+    TURN_ERROR_CODE_SESSION,
+    TURN_ERROR_CODE_TIMEOUT,
+    TURN_ERROR_CODE_TRANSPORT,
+    ActivityTimeoutError,
+    AgentMessageChunk,
+    AgentThoughtChunk,
+    Error,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
+from onyx.server.features.build.sandbox.opencode.event_bus import (
+    BUS_CLOSED_SENTINEL,
+    PodEventBus,
+    _Subscription,
+)
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -1239,6 +1244,16 @@ class OpencodeServeClient:
         )
         return False
 
+    def dispose_instance(self, *, directory: str) -> None:
+        """Dispose the directory-scoped runtime so OpenCode reloads managed files."""
+        r = self._request(
+            "POST",
+            "/instance/dispose",
+            params={"directory": directory},
+            idempotent=True,
+        )
+        _raise_for_status(r, "instance dispose")
+
     def list_messages(
         self, opencode_session_id: str, *, directory: str
     ) -> list[dict[str, Any]]:
@@ -1317,7 +1332,8 @@ class OpencodeServeClient:
         directory: str,
         model_provider: str | None = None,
         model_id: str | None = None,
-        timeout: float = OPENCODE_PROMPT_TIMEOUT_SECONDS,
+        timeout: float = OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+        absolute_timeout: float | None = None,
         should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream one turn of SandboxEvents via the shared per-pod bus.
@@ -1328,7 +1344,9 @@ class OpencodeServeClient:
         directory will 404 the session.
 
         ``GeneratorExit`` (browser disconnect) → POST ``/abort``.
-        Wall-clock timeout → POST ``/abort`` and yield :class:`Error`.
+        ``timeout`` is renewed by scoped turn activity. ``absolute_timeout``,
+        when supplied, remains a fixed wall-clock budget. Either timeout posts
+        ``/abort`` and yields :class:`Error`.
         """
         if self._event_bus is None:
             raise RuntimeError(
@@ -1350,9 +1368,14 @@ class OpencodeServeClient:
             # may be in a reconnect window after a transient disconnect, so do
             # not fail on the short HTTP connect timeout; wait within the turn's
             # wall-clock budget while emitting keepalives.
+            readiness_timeout = (
+                min(timeout, absolute_timeout)
+                if absolute_timeout is not None
+                else timeout
+            )
             ready = yield from self._wait_for_event_stream_ready(
                 sub,
-                timeout,
+                readiness_timeout,
                 turn_started_at,
                 should_interrupt=should_interrupt,
             )
@@ -1385,14 +1408,18 @@ class OpencodeServeClient:
                 )
                 return
 
-            remaining_timeout = max(0.0, timeout - (time.monotonic() - turn_started_at))
             yield from self._consume_from_bus(
                 sub,
-                remaining_timeout,
+                timeout,
                 opencode_session_id,
                 state,
                 fetch_message,
                 directory=directory,
+                absolute_deadline=(
+                    turn_started_at + absolute_timeout
+                    if absolute_timeout is not None
+                    else None
+                ),
                 parent_resolver=self._event_bus.parent_of,
                 children_resolver=self._event_bus.list_children,
                 should_interrupt=should_interrupt,
@@ -1495,6 +1522,7 @@ class OpencodeServeClient:
         fetch_message: Callable[[str], dict[str, Any] | None],
         *,
         directory: str,
+        absolute_deadline: float | None = None,
         parent_resolver: Callable[[str], str | None] | None = None,
         children_resolver: Callable[[str], list[str]] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
@@ -1506,11 +1534,13 @@ class OpencodeServeClient:
         deterministically: we abort opencode and emit our own terminating
         ``PromptResponse`` rather than waiting on a ``session.idle`` that may
         never arrive after an abort — otherwise an interrupted, event-less turn
-        would pin its slot until ``timeout``."""
+        would pin its slot until ``timeout``. Scoped parent and descendant
+        packets renew ``timeout``; synthetic SSE keepalives do not."""
         terminated_locally = False
-        start = time.monotonic()
-        last_event = start
-        last_interrupt_check = start
+        started_at = time.monotonic()
+        last_activity_at = started_at
+        last_keepalive_at = started_at
+        last_interrupt_check = started_at
         while True:
             now = time.monotonic()
             if should_interrupt is not None and now - last_interrupt_check >= 1.0:
@@ -1524,27 +1554,34 @@ class OpencodeServeClient:
                 state, now, directory=directory
             )
 
-            remaining = timeout - (time.monotonic() - start)
+            inactivity_remaining = timeout - (now - last_activity_at)
+            absolute_remaining = (
+                absolute_deadline - now
+                if absolute_deadline is not None
+                else float("inf")
+            )
+            remaining = min(inactivity_remaining, absolute_remaining)
             if remaining <= 0:
                 self.abort(opencode_session_id, directory=directory)
-                yield Error.model_validate(
-                    {
-                        "code": TURN_ERROR_CODE_TIMEOUT,
-                        "message": "Timeout waiting for response",
-                    }
-                )
+                if absolute_remaining <= 0:
+                    yield Error.model_validate(
+                        {
+                            "code": TURN_ERROR_CODE_TIMEOUT,
+                            "message": "Turn exceeded maximum duration",
+                        }
+                    )
+                else:
+                    yield ActivityTimeoutError(message="Timeout waiting for activity")
                 return
 
             try:
                 raw = sub.queue.get(timeout=min(remaining, 1.0))
             except queue.Empty:
-                idle = time.monotonic() - last_event
-                if idle >= SSE_KEEPALIVE_INTERVAL:
+                now = time.monotonic()
+                if now - last_keepalive_at >= SSE_KEEPALIVE_INTERVAL:
                     yield SSEKeepalive()
-                    last_event = time.monotonic()
+                    last_keepalive_at = now
                 continue
-
-            last_event = time.monotonic()
 
             if raw is BUS_CLOSED_SENTINEL:
                 if not terminated_locally:
@@ -1560,15 +1597,16 @@ class OpencodeServeClient:
             if raw.get("type") == "server.connected":
                 continue
 
+            last_activity_at = time.monotonic()
+
             for sandbox_event in translate_opencode_event(
                 raw,
                 state,
                 fetch_message,
                 parent_resolver=parent_resolver,
                 children_resolver=children_resolver,
-                fetch_message_by_session=lambda session_id,
-                message_id: self.get_message(
-                    session_id, message_id, directory=directory
+                fetch_message_by_session=lambda session_id, message_id: (
+                    self.get_message(session_id, message_id, directory=directory)
                 ),
             ):
                 if isinstance(sandbox_event, (Error, PromptResponse)):

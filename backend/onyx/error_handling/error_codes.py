@@ -15,22 +15,27 @@ class OnyxErrorCode(Enum):
     """
     Each member is a tuple of (error_code_string, http_status_code).
 
-    The error_code_string is a stable, machine-readable identifier that
-    API consumers can match on. The http_status_code is the default HTTP
-    status to return.
+    The error_code_string is a stable, machine-readable identifier that API
+    consumers can match on. The http_status_code is the default HTTP status to
+    return.
     """
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Authentication (401)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     UNAUTHENTICATED = ("UNAUTHENTICATED", 401)
     INVALID_TOKEN = ("INVALID_TOKEN", 401)
     TOKEN_EXPIRED = ("TOKEN_EXPIRED", 401)
     CSRF_FAILURE = ("CSRF_FAILURE", 403)
+    # Session rejection reasons (see onyx/auth/session_tokens.py); 403 so the
+    # web client's "403 from /me = session ended" contract holds.
+    SESSION_EXPIRED = ("SESSION_EXPIRED", 403)
+    SESSION_TERMINATED = ("SESSION_TERMINATED", 403)
+    SESSION_UNRECOGNIZED = ("SESSION_UNRECOGNIZED", 403)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Authorization (403)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     UNAUTHORIZED = ("UNAUTHORIZED", 403)
     INSUFFICIENT_PERMISSIONS = ("INSUFFICIENT_PERMISSIONS", 403)
     ADMIN_ONLY = ("ADMIN_ONLY", 403)
@@ -38,17 +43,17 @@ class OnyxErrorCode(Enum):
     SINGLE_TENANT_ONLY = ("SINGLE_TENANT_ONLY", 403)
     ENV_VAR_GATED = ("ENV_VAR_GATED", 403)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Validation / Bad Request (400)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     VALIDATION_ERROR = ("VALIDATION_ERROR", 400)
     INVALID_INPUT = ("INVALID_INPUT", 400)
     MISSING_REQUIRED_FIELD = ("MISSING_REQUIRED_FIELD", 400)
     QUERY_REJECTED = ("QUERY_REJECTED", 400)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Not Found (404)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     NOT_FOUND = ("NOT_FOUND", 404)
     CONNECTOR_NOT_FOUND = ("CONNECTOR_NOT_FOUND", 404)
     CREDENTIAL_NOT_FOUND = ("CREDENTIAL_NOT_FOUND", 404)
@@ -57,36 +62,36 @@ class OnyxErrorCode(Enum):
     SESSION_NOT_FOUND = ("SESSION_NOT_FOUND", 404)
     USER_NOT_FOUND = ("USER_NOT_FOUND", 404)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Conflict (409)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     CONFLICT = ("CONFLICT", 409)
     DUPLICATE_RESOURCE = ("DUPLICATE_RESOURCE", 409)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     RATE_LIMITED = ("RATE_LIMITED", 429)
     SEAT_LIMIT_EXCEEDED = ("SEAT_LIMIT_EXCEEDED", 402)
     TRIAL_INVITE_LIMIT_EXCEEDED = ("TRIAL_INVITE_LIMIT_EXCEEDED", 403)
     FEATURE_NOT_AVAILABLE = ("FEATURE_NOT_AVAILABLE", 402)
     SUBSCRIPTION_INACTIVE = ("SUBSCRIPTION_INACTIVE", 402)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Payload (413)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     PAYLOAD_TOO_LARGE = ("PAYLOAD_TOO_LARGE", 413)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Connector / Credential Errors (400-range)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     CONNECTOR_VALIDATION_FAILED = ("CONNECTOR_VALIDATION_FAILED", 400)
     CREDENTIAL_INVALID = ("CREDENTIAL_INVALID", 400)
     CREDENTIAL_EXPIRED = ("CREDENTIAL_EXPIRED", 401)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Server Errors (5xx)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     INTERNAL_ERROR = ("INTERNAL_ERROR", 500)
     NOT_IMPLEMENTED = ("NOT_IMPLEMENTED", 501)
     SERVICE_UNAVAILABLE = ("SERVICE_UNAVAILABLE", 503)

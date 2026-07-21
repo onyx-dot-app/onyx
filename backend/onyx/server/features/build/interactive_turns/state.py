@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
-from dataclasses import dataclass
-from datetime import datetime
-from datetime import timezone
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from enum import StrEnum
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
+from onyx.cache.interface import CacheBackend, CacheLock
+from onyx.utils.datetime import datetime_to_utc
 
 
 class InteractiveTurnStatus(StrEnum):
@@ -275,10 +272,7 @@ def _runner_is_stale(
 ) -> bool:
     if turn.last_heartbeat_at is None:
         return True
-    heartbeat = turn.last_heartbeat_at
-    if heartbeat.tzinfo is None:
-        heartbeat = heartbeat.replace(tzinfo=timezone.utc)
-    age = datetime.now(tz=timezone.utc) - heartbeat
+    age = datetime.now(tz=timezone.utc) - datetime_to_utc(turn.last_heartbeat_at)
     return age.total_seconds() >= stale_after_seconds
 
 

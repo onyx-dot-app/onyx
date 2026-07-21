@@ -1,1 +1,0 @@
-../web/AGENTS.md

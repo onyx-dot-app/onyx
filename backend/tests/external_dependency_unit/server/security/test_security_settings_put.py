@@ -9,13 +9,11 @@ import asyncio
 import json
 import threading
 from collections.abc import Generator
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi import Request
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -27,9 +25,11 @@ from onyx.server.security import api as security_api
 from onyx.server.security import store as security_store
 from onyx.server.security.api import put_security_settings_endpoint
 from onyx.server.security.models import SecuritySettingsOverrides
-from onyx.server.security.store import _build_env_defaults
-from onyx.server.security.store import _install_cache_for_test
-from onyx.server.security.store import invalidate_security_cache
+from onyx.server.security.store import (
+    _build_env_defaults,
+    _install_cache_for_test,
+    invalidate_security_cache,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -196,6 +196,31 @@ def test_put_multi_tenant_accepts_tenant_editable_field(
     assert result.user_directory_admin_only is True
 
     assert _load_row_as_dict() == {"user_directory_admin_only": True}
+
+
+def test_put_multi_tenant_rejects_llm_env_injection_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """llm_custom_config_env_injection cannot be changed on multi-tenant."""
+    monkeypatch.setattr(security_api, "MULTI_TENANT", True)
+    monkeypatch.setattr(security_store, "MULTI_TENANT", True)
+
+    with pytest.raises(OnyxError) as exc_info:
+        _put({"llm_custom_config_env_injection": True})
+    assert exc_info.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    assert "llm_custom_config_env_injection" in str(exc_info.value)
+
+    assert _load_row_as_dict() is None
+
+
+def test_put_single_tenant_changes_llm_env_injection() -> None:
+    """On single-tenant the setting is editable: off, then back to on."""
+    result = _put({"llm_custom_config_env_injection": False})
+    assert result.llm_custom_config_env_injection is False
+    assert _load_row_as_dict() == {"llm_custom_config_env_injection": False}
+
+    result = _put({"llm_custom_config_env_injection": True})
+    assert result.llm_custom_config_env_injection is True
 
 
 # -----------------------------------------------------------------------------

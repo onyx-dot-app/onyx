@@ -21,15 +21,19 @@ import httpx
 import pytest
 
 from onyx.auth.schemas import UserRole
-from tests.integration.common_utils.constants import ADMIN_USER_NAME
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import (
+    ADMIN_USER_NAME,
+    API_SERVER_URL,
+    GENERAL_HEADERS,
+)
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
-from tests.integration.common_utils.managers.user import build_email
-from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
-from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user import (
+    DEFAULT_PASSWORD,
+    UserManager,
+    build_email,
+)
 from tests.integration.common_utils.test_models import DATestUser
 
 SCIM_GROUP_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Group"

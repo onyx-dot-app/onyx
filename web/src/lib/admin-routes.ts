@@ -254,6 +254,12 @@ export const ADMIN_ROUTES = {
     title: "SCIM",
     sidebarLabel: "SCIM",
   },
+  OAUTH_TEST: {
+    path: "/admin/oauth-test",
+    icon: SvgUserKey,
+    title: "OAuth Test",
+    sidebarLabel: "OAuth Test",
+  },
   DEBUG: {
     path: "/admin/debug",
     icon: SvgDownload,

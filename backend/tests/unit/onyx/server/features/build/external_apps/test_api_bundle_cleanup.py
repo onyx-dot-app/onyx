@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import io
 from types import SimpleNamespace
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -26,10 +25,9 @@ def test_create_custom_external_app_cleans_new_bundle_on_failure(
     monkeypatch.setattr(
         "onyx.skills.ingest.ingest_skill_bundle",
         lambda *_args, **_kwargs: IngestedBundle(
-            slug="helper-skill",
+            canonical_name="helper-skill",
             bundle_file_id="new-bundle",
             bundle_sha256="0" * 64,
-            name="Helper Skill",
             description="Bundle description",
         ),
     )
@@ -77,10 +75,9 @@ def test_replace_custom_app_bundle_cleans_new_bundle_on_failure(
     monkeypatch.setattr(
         "onyx.skills.ingest.ingest_skill_bundle",
         lambda *_args, **_kwargs: IngestedBundle(
-            slug="helper-skill",
+            canonical_name="helper-skill",
             bundle_file_id="replacement-bundle",
             bundle_sha256="1" * 64,
-            name="Helper Skill",
             description="Bundle description",
         ),
     )

@@ -13,8 +13,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import remove_llm_provider, upsert_llm_provider
 from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver

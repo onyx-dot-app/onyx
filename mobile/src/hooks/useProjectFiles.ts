@@ -21,7 +21,7 @@ import {
 } from "@/state/userFileStore";
 
 export interface UseProjectFiles {
-  // In-flight uploads first, then the committed files (resolved to their live store records).
+  // In-flight uploads first, then committed files as live store records.
   files: ProjectFile[];
   addDocuments: () => Promise<void>;
   addImages: () => Promise<void>;
@@ -29,9 +29,8 @@ export interface UseProjectFiles {
   removeFile: (fileId: string) => Promise<void>;
 }
 
-// Project file panel. The store owns file DATA; this lens owns the project's membership: renders each
-// committed file (from useProjectDetails) as its live store record (fresh status from the poll), with
-// in-flight uploads prepended.
+// Store owns file data; this hook owns project membership — committed files rendered as their live
+// store records (fresh poll status), with in-flight uploads prepended.
 export function useProjectFiles(
   projectId: number | null,
   committedFiles: ProjectFile[] | null | undefined,
@@ -45,8 +44,7 @@ export function useProjectFiles(
     [projectId],
   );
 
-  // Seed the store from the committed list (records + identity index) and clear this project's
-  // finished uploads (once committed, so they can't resurrect as phantom optimistic rows).
+  // Seed the store from the committed list; clears finished uploads so they can't resurrect as phantom optimistic rows.
   const upsert = useUserFileStore((state) => state.upsert);
   useEffect(() => {
     if (projectId != null && committedFiles) {
@@ -114,6 +112,13 @@ export function useProjectFiles(
   const removeFile = useCallback(
     async (fileId: string) => {
       if (projectId == null) return;
+      // An in-flight upload is keyed by a client temp id and isn't on the server yet — cancel it
+      // locally; unlinking would send the temp id to the server (4xx) and leave the chip stuck.
+      const store = useUserFileStore.getState();
+      if (store.tasksById[fileId]?.status === "uploading") {
+        store.removeFile(fileId, { kind: "project", projectId });
+        return;
+      }
       try {
         await unlinkFileFromProject(projectId, fileId);
         await invalidateProject();

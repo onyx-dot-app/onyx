@@ -1,27 +1,22 @@
 """Composes recognition + policy resolution into a single verdict for an
 outbound request."""
 
-from collections.abc import Iterable
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.enums import POLICY_SEVERITY
+from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, ExternalAppType
 from onyx.db.external_app import get_policies
 from onyx.db.models import ExternalApp
-from onyx.external_apps.matching.request import MatchContext
-from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
-from onyx.external_apps.providers.registry import effective_policy
-from onyx.external_apps.providers.registry import get_endpoint_catalog
-from onyx.external_apps.providers.registry import get_provider_for_app
+from onyx.external_apps.providers.registry import (
+    effective_policy,
+    get_endpoint_catalog,
+    get_provider_for_app,
+)
 
 # action_type for a domain-matched request that hit no catalog action.
 WHOLE_DOMAIN_ACTION_TYPE = "unspecified"

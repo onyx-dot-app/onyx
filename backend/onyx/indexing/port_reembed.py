@@ -38,23 +38,27 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import RETURN_SEPARATOR
-from onyx.connectors.models import convert_metadata_list_of_strings_to_dict
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.configs.constants import RETURN_SEPARATOR, DocumentSource
+from onyx.connectors.models import (
+    Document,
+    TextSection,
+    convert_metadata_list_of_strings_to_dict,
+)
 from onyx.db.models import SearchSettings
-from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.chunk_content_enrichment import (
+    cleanup_content_for_chunks,
     generate_enriched_content_for_chunk_text,
 )
-from onyx.document_index.opensearch.schema import DocumentChunk
-from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
-from onyx.indexing.chunker import get_metadata_suffix_for_document_index
-from onyx.indexing.chunker import MAX_METADATA_PERCENTAGE
+from onyx.document_index.opensearch.schema import (
+    DocumentChunk,
+    DocumentChunkWithoutVectors,
+)
+from onyx.indexing.chunker import (
+    MAX_METADATA_PERCENTAGE,
+    get_metadata_suffix_for_document_index,
+)
 from onyx.indexing.embedder import IndexingEmbedder
-from onyx.indexing.models import DocAwareChunk
-from onyx.indexing.models import IndexChunk
+from onyx.indexing.models import DocAwareChunk, IndexChunk
 
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM

@@ -11,24 +11,23 @@ directly — a lighter-weight flow with optional query expansion.
 """
 
 import json
-from datetime import timezone
 from typing import cast
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.chat.emitter import NullEmitter
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import PersonaSearchInfo
+from onyx.context.search.models import BaseFilters, PersonaSearchInfo, TimeRange
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.llm import can_user_access_llm_provider
-from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import fetch_user_group_ids
+from onyx.db.llm import (
+    can_user_access_llm_provider,
+    fetch_existing_llm_provider,
+    fetch_user_group_ids,
+)
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
@@ -36,20 +35,19 @@ from onyx.db.tools import get_tools
 from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.factory import get_default_llm
-from onyx.llm.factory import get_llm_for_persona
-from onyx.llm.factory import llm_from_provider
-from onyx.server.features.search.models import SearchRequest
-from onyx.server.features.search.models import SearchResponse
-from onyx.server.features.search.models import SearchResult
+from onyx.llm.factory import get_default_llm, get_llm_for_persona, llm_from_provider
+from onyx.server.features.search.models import (
+    SearchRequest,
+    SearchResponse,
+    SearchResult,
+)
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
-from onyx.tools.models import ChatMinimalTextMessage
-from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -124,17 +122,16 @@ def search(
         llm_provider_api_key=llm.config.api_key,
     )
 
-    # 3. Build filters. See SearchRequest.time_cutoff for the naive-→-UTC
-    # contract; we apply it here so downstream comparison against tz-aware
-    # document timestamps works.
-    time_cutoff = request.time_cutoff
-    if time_cutoff is not None and time_cutoff.tzinfo is None:
-        time_cutoff = time_cutoff.replace(tzinfo=timezone.utc)
-
+    # 3. Build filters. The public time_cutoff maps onto the internal
+    # updated_at_range lower bound; TimeRange coerces naive bounds to UTC.
     base_filters = BaseFilters(
         source_type=request.sources,
         document_set=request.document_sets,
-        time_cutoff=time_cutoff,
+        updated_at_range=(
+            TimeRange(start=request.time_cutoff)
+            if request.time_cutoff is not None
+            else None
+        ),
         tags=request.tags,
     )
 

@@ -1,30 +1,34 @@
 import fnmatch
 import itertools
 from collections import deque
-from collections.abc import Iterable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import TypeVar
+from collections.abc import Iterable, Iterator
+from datetime import datetime, timezone
+from typing import Any, TypeVar
 
 import gitlab
 import pytz
 from gitlab.v4.objects import Project
 
-from onyx.configs.app_configs import GITLAB_CONNECTOR_INCLUDE_CODE_FILES
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import (
+    GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
+    INDEX_BATCH_SIZE,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 T = TypeVar("T")
@@ -73,11 +77,7 @@ def _gitlab_datetime_to_utc(value: Any) -> datetime | None:
     if value is None:
         return None
     if isinstance(value, datetime):
-        return (
-            value.replace(tzinfo=timezone.utc)
-            if value.tzinfo is None
-            else value.astimezone(timezone.utc)
-        )
+        return datetime_to_utc(value)
     return time_str_to_utc(value)
 
 

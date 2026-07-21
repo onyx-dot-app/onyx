@@ -8,7 +8,7 @@ dependencies = [
     "cohere==7.0.5",
     "fastapi==0.133.1",
     "google-genai==1.52.0",
-    "litellm[google]==1.89.4",
+    "litellm[google]==1.93.0",
     "openai==2.38.0",
     "pydantic==2.11.7",
     # Shared so structured JSON logging (LOG_FORMAT=json) works in the
@@ -33,6 +33,7 @@ backend = [
     "azure-cognitiveservices-speech==1.50.0",
     "beautifulsoup4==4.12.3",
     "boto3==1.39.11",
+    "boxsdk==10.12.0",
     "celery==5.5.1",
     "chardet==5.2.0",
     "chonkie==1.0.10",
@@ -91,6 +92,7 @@ backend = [
     "pypdf==6.13.3",
     "pypdfium2==5.9.0",
     "python-dotenv==1.2.2",
+    "python-slugify==8.0.4",
     "pywikibot==11.4.2",
     "readerwriterlock==1.0.9",
     "redis==5.0.8",
@@ -128,7 +130,7 @@ backend = [
 # Dev tools
 dev = [
     "boto3-stubs[s3]==1.39.11",
-    "celery-types==0.19.0",
+    "celery-types==0.26.0",
     "faker==40.1.2",
     "hatchling==1.28.0",
     "ipykernel==6.29.5",
@@ -150,7 +152,7 @@ dev = [
     "release-tag==0.5.2",
     # Keep in sync with the pinned `ruff==` in the ruff / ruff-format hooks in
     # .pre-commit-config.yaml, which install ruff into an isolated overlay.
-    "ruff==0.12.0",
+    "ruff==0.15.21",
     "types-docker==7.1.0.20260518",
     "types-beautifulsoup4==4.12.0.3",
     "types-html5lib==1.1.11.13",
@@ -286,8 +288,6 @@ ignore = [
 select = ["ARG", "E", "F", "G004", "I", "S", "W"]
 
 [tool.ruff.lint.isort]
-force-single-line = true
-order-by-type = false
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 
 [tool.ruff.lint.per-file-ignores]

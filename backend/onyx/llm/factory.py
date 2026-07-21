@@ -7,24 +7,26 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
-from onyx.db.llm import can_user_access_llm_provider
-from onyx.db.llm import fetch_default_contextual_rag_model
-from onyx.db.llm import fetch_default_llm_model
-from onyx.db.llm import fetch_default_vision_model
-from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import fetch_existing_models
-from onyx.db.llm import fetch_model_configuration_by_id
-from onyx.db.llm import fetch_user_group_ids
+from onyx.db.llm import (
+    can_user_access_llm_provider,
+    fetch_default_contextual_rag_model,
+    fetch_default_llm_model,
+    fetch_default_vision_model,
+    fetch_existing_llm_provider,
+    fetch_existing_models,
+    fetch_model_configuration_by_id,
+    fetch_user_group_ids,
+)
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import Persona
-from onyx.db.models import SearchSettings
-from onyx.db.models import User
+from onyx.db.models import Persona, SearchSettings, User
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.utils import get_max_input_tokens_from_llm_provider
-from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import (
+    get_max_input_tokens_from_llm_provider,
+    model_supports_image_input,
+)
 from onyx.llm.well_known_providers.constants import (
     PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING,
 )
@@ -401,9 +403,8 @@ def get_llm(
 
     extra_headers = build_llm_extra_headers(additional_headers)
 
-    # NOTE: this is needed since Ollama API key is optional
-    # User may access Ollama cloud via locally hosted instance (logged in)
-    # or just via the cloud API (not logged in, using API key)
+    # Some providers (e.g. LM Studio) carry an optional Bearer token in
+    # custom_config that must be turned into an Authorization header.
     provider_extra_headers = _build_provider_extra_headers(provider, custom_config)
     if provider_extra_headers:
         extra_headers.update(provider_extra_headers)

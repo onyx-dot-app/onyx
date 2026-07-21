@@ -6,15 +6,14 @@
  */
 import React from "react";
 import { render, screen, waitFor, setupUser } from "@tests/setup/test-utils";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { EmailPasswordForm } from "@/lib/auth/components";
-import { AuthType } from "@/lib/auth/types";
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn(), refresh: jest.fn() }),
 }));
 
-jest.mock("@/hooks/useToast", () => ({
+jest.mock("@opal/layouts/toast/store", () => ({
   toast: { error: jest.fn(), success: jest.fn() },
 }));
 
@@ -22,8 +21,7 @@ jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({
     user: null,
     authTypeMetadata: {
-      authType: AuthType.BASIC,
-      autoRedirect: false,
+      multiTenant: false,
       requiresVerification: false,
       anonymousUserEnabled: null,
       passwordMinLength: 8,
