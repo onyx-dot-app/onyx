@@ -4,6 +4,7 @@ export interface ImageProvider {
   provider_name: string;
   title: string;
   description: string;
+  deprecated?: boolean; // Hidden unless already connected (model no longer offered upstream)
 }
 
 export interface ProviderGroup {
@@ -81,12 +82,21 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
           "Gemini 2.5 Flash Image (Nano Banana) model is designed for speed and efficiency.",
       },
       {
+        image_provider_id: "gemini-3-pro-image",
+        model_name: "gemini-3-pro-image",
+        provider_name: "vertex_ai",
+        title: "Gemini 3 Pro Image",
+        description:
+          "Gemini 3 Pro Image (Nano Banana Pro) is designed for professional asset production.",
+      },
+      {
         image_provider_id: "gemini-3-pro-image-preview",
         model_name: "gemini-3-pro-image-preview",
         provider_name: "vertex_ai",
         title: "Gemini 3 Pro Image Preview",
         description:
-          "Gemini 3 Pro Image Preview (Nano Banana Pro) is designed for professional asset production.",
+          "Discontinued by Google Cloud on July 17, 2026. Switch to Gemini 3 Pro Image.",
+        deprecated: true,
       },
     ],
   },
