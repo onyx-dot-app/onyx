@@ -86,7 +86,7 @@ class AllMatchedActions(BaseModel):
     ) -> "AllMatchedActions":
         """Construct with the strictest-first sort applied, so every producer
         upholds the ``actions[0]`` verdict invariant."""
-        ordered = tuple(
+        ordered: tuple[MatchedAction, ...] = tuple(
             sorted(actions, key=lambda a: POLICY_SEVERITY[a.policy], reverse=True)
         )
         return cls(actions=ordered, target=target, payload=payload or {})

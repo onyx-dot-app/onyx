@@ -270,3 +270,23 @@ def test_evaluator_failure_after_attribution_denies(
     assert matched.governing_action.policy is EndpointPolicy.DENY
     assert matched.governing_action.action_type == MCP_UNCLASSIFIABLE_ACTION_TYPE
     assert matched.target.key == (GatedAppKind.MCP_SERVER, server.id)
+
+
+def test_duplicate_tool_calls_surface_multiplicity(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    """A batch invoking one tool twice yields a single action (grants key by
+    tool name) whose description carries the invocation count, so the approval
+    card doesn't understate the request."""
+    user = create_test_user(db_session, "mcp_eval_dupes")
+    server = craft_server()
+
+    matched = _evaluate(
+        _request(
+            _server_host(server), body=_tool_call_body("send_email", "send_email")
+        ),
+        user.id,
+    )
+    assert matched is not None
+    assert [a.action_type for a in matched.actions] == ["send_email"]
+    assert "invokes it 2 times" in matched.governing_action.description

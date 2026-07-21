@@ -7,6 +7,7 @@ lockdown, not this heuristic.
 
 import json
 import re
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from typing import Any, Protocol
 from urllib.parse import parse_qs
@@ -218,14 +219,21 @@ def _mcp_tool_actions(
             ),
         )
     stored = get_mcp_tool_policies(server.id, db)
+    # One action per distinct tool (grants and policies key by tool name), with
+    # the batch multiplicity surfaced so the approval card doesn't understate a
+    # request that invokes the same tool several times.
+    counts: Counter[str] = Counter(classification.tool_names)
     return tuple(
         MatchedAction(
             action_type=tool_name,
             display_name=tool_name,
-            description=f"Call the “{tool_name}” tool on {server.name}.",
+            description=(
+                f"Call the “{tool_name}” tool on {server.name}."
+                + (f" This request invokes it {count} times." if count > 1 else "")
+            ),
             policy=effective_mcp_tool_policy(tool_name, stored),
         )
-        for tool_name in dict.fromkeys(classification.tool_names)
+        for tool_name, count in counts.items()
     )
 
 

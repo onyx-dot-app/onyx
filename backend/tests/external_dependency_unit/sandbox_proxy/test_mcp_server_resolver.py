@@ -9,6 +9,7 @@ credentials fail closed with agent-facing prose naming the server.
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable, Generator
 from typing import Any
@@ -166,9 +167,23 @@ def _ctx(user: User) -> InjectionContext:
 
 
 def _request(
-    host: str, path: str = "/mcp", port: int = 443, scheme: str = "https"
+    host: str,
+    path: str = "/mcp",
+    port: int = 443,
+    scheme: str = "https",
+    method: str = "GET",
+    raw_content: bytes | None = None,
 ) -> MagicMock:
-    return MagicMock(host=host, port=port, path=path, scheme=scheme)
+    # Defaults model the SSE stream (bodyless GET): plumbing, so the ungated
+    # injection path resolves. Tool calls must arrive gated (matched_actions).
+    return MagicMock(
+        host=host,
+        port=port,
+        path=path,
+        scheme=scheme,
+        method=method,
+        raw_content=raw_content,
+    )
 
 
 def test_admin_api_token_injects_stored_headers(
@@ -699,3 +714,29 @@ def test_gated_request_injects_for_the_evaluated_server(
     assert resolver.resolve(_request(host, path="/other"), ctx) == {
         "Authorization": "Bearer admin-token"
     }
+
+
+def test_ungated_tool_call_never_gets_credentials(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    """A tools/call reaching injection without a gate verdict (evaluator crash →
+    gate fail-open) must be blocked, not forwarded with credentials."""
+    user = create_test_user(db_session, "mcp_resolver_ungated")
+    server = craft_server(
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    _attach_admin_config(
+        db_session,
+        server,
+        MCPConnectionData(headers={"Authorization": "Bearer admin-token"}),
+    )
+    body = json.dumps(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "x"}}
+    ).encode()
+
+    with pytest.raises(CredentialUnavailableError, match="without a gate verdict"):
+        MCPServerResolver().resolve(
+            _request(_server_host(server), method="POST", raw_content=body),
+            _ctx(user),
+        )

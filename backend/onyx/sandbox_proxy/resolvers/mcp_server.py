@@ -38,6 +38,7 @@ from onyx.sandbox_proxy.credential_injection import (
     InjectionContext,
 )
 from onyx.sandbox_proxy.logging_utils import short_log_id
+from onyx.sandbox_proxy.mcp_jsonrpc import McpRpcKind, classify_mcp_request
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
     AmbiguousMCPTargetError,
     CraftMCPTarget,
@@ -84,6 +85,20 @@ class MCPServerResolver(CredentialResolver):
             # (fresh attribution), never a re-match against this resolver's
             # 30s target cache — a stale cache could pick a different server.
             return self._resolve_for_server(actions.target.id, ctx)
+        # Ungated requests only get credentials for protocol plumbing. A tool
+        # call (or anything unclassifiable) reaching injection ungated means the
+        # evaluator failed and the gate fell open — fail closed here so no
+        # invocation ever forwards with credentials but without a verdict.
+        classification = classify_mcp_request(request.method or "", request.raw_content)
+        if classification.kind is not McpRpcKind.PLUMBING:
+            raise CredentialUnavailableError(
+                f"non-plumbing MCP request on {request.host} reached credential "
+                "injection without a gate verdict; blocked",
+                sandbox_detail=(
+                    "This MCP request could not be verified by the approval "
+                    "gate. Retry the tool call."
+                ),
+            )
         try:
             target = match_request(self._targets(ctx.sandbox.tenant_id), request)
         except AmbiguousMCPTargetError as e:
