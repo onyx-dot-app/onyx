@@ -498,6 +498,7 @@ def test_container_kwargs_env_is_a_minimal_allowlist(
     assert set(env.keys()) == {
         "ONYX_PAT",
         "ONYX_SERVER_URL",
+        "ONYX_API_PREFIX",
         "OPENCODE_SERVER_PASSWORD",
         "OPENCODE_CONFIG_CONTENT",
     }
@@ -759,6 +760,7 @@ def test_proxy_kwargs_env_is_a_locked_allowlist(
         # Legacy core
         "ONYX_PAT",
         "ONYX_SERVER_URL",
+        "ONYX_API_PREFIX",
         "OPENCODE_SERVER_PASSWORD",
         "OPENCODE_CONFIG_CONTENT",
         # firewall-init.sh contract

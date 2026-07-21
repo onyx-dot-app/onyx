@@ -140,6 +140,8 @@ template:
         env:
           - { name: ONYX_PAT, value: "replaced_by_egress_proxy" }
           - { name: ONYX_SERVER_URL, value: "{{ $serverUrl }}" }
+          {{/* The URL carries any API path prefix; pin the CLI's default off. */}}
+          - { name: ONYX_API_PREFIX, value: "" }
           - { name: GH_TOKEN, value: "replaced_by_egress_proxy" }
           - { name: GH_NO_UPDATE_NOTIFIER, value: "1" }
           - { name: OPENCODE_DATA_HOME, value: "/workspace/opencode-data" }
