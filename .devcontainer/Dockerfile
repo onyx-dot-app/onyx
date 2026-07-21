@@ -140,13 +140,6 @@ RUN useradd -m -s /bin/zsh dev && \
   echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && \
   chmod 0440 /etc/sudoers.d/dev
 
-# The Rust toolchain (cargo/rustc + clippy/rustfmt) is installed via apt in the block above,
-# for the Tauri desktop crate's `cargo build`/`cargo fmt`/`cargo clippy` (pre-commit hooks + CI
-# gates added in the desktop app PR). It comes from Ubuntu's repos rather than the upstream rust
-# image because that image is a cold repo in CI's ECR pull-through cache, which can't resolve
-# images by digest until they've first been pulled by tag.
-RUN cargo --version && rustc --version && cargo clippy --version && cargo fmt --version
-
 ENV DEVCONTAINER=true
 
 RUN mkdir -p /workspace && \
