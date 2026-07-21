@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -148,6 +149,7 @@ export default function SkillEditorPage({
     string | null
   >(null);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const restoringHistory = useRef(false);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
     setName(nextSkill.name);
@@ -202,6 +204,34 @@ export default function SkillEditorPage({
     !!description.trim() &&
     !!instructionsMarkdown.trim() &&
     !isSaving;
+
+  useEffect(() => {
+    if (!isCreating || !isDirty) return;
+
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+    }
+
+    function confirmBrowserBack() {
+      if (restoringHistory.current) {
+        restoringHistory.current = false;
+        return;
+      }
+      if (window.confirm("Discard unsaved changes?")) {
+        if (draftId) discardSkillCreationDraft(draftId);
+        return;
+      }
+      restoringHistory.current = true;
+      window.history.forward();
+    }
+
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    window.addEventListener("popstate", confirmBrowserBack);
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+      window.removeEventListener("popstate", confirmBrowserBack);
+    };
+  }, [draftId, isCreating, isDirty]);
 
   function leaveEditor() {
     if (draftId) discardSkillCreationDraft(draftId);
