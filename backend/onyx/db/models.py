@@ -687,8 +687,8 @@ class UserSkillPreference(Base):
 
     __table_args__ = (
         ForeignKeyConstraint(
-            ["skill_id", "name"],
-            ["skill.id", "skill.name"],
+            ["name", "skill_id"],
+            ["skill.name", "skill.id"],
             name="fk_user_skill_preference_skill_name",
             ondelete="CASCADE",
         ),
@@ -4580,8 +4580,7 @@ class Skill(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("id", "name", name="uq_skill_id_name"),
-        Index("ix_skill_name", "name"),
+        UniqueConstraint("name", "id", name="uq_skill_name_id"),
         CheckConstraint(
             "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
             name="ck_skill_definition_source",

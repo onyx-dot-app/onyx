@@ -38,15 +38,13 @@ def upgrade() -> None:
     )
 
     op.drop_constraint("uq_skill_slug", "skill", type_="unique")
-    op.execute("UPDATE skill SET name = slug")
     op.alter_column(
         "skill",
         "name",
         existing_type=sa.String(),
         type_=sa.String(length=64),
-        nullable=False,
+        postgresql_using="slug",
     )
-    op.create_index("ix_skill_name", "skill", ["name"])
 
     op.add_column(
         "user_skill_preference",
@@ -66,7 +64,7 @@ def upgrade() -> None:
         existing_type=sa.String(length=64),
         nullable=False,
     )
-    op.create_unique_constraint("uq_skill_id_name", "skill", ["id", "name"])
+    op.create_unique_constraint("uq_skill_name_id", "skill", ["name", "id"])
     op.drop_constraint(
         "user_skill_preference_skill_id_fkey",
         "user_skill_preference",
@@ -76,8 +74,8 @@ def upgrade() -> None:
         "fk_user_skill_preference_skill_name",
         "user_skill_preference",
         "skill",
-        ["skill_id", "name"],
-        ["id", "name"],
+        ["name", "skill_id"],
+        ["name", "id"],
         ondelete="CASCADE",
     )
     op.create_index(
@@ -102,19 +100,7 @@ def downgrade() -> None:
         existing_type=sa.String(length=64),
         nullable=False,
     )
-    op.execute(
-        """
-        DO $$
-        BEGIN
-            IF EXISTS (
-                SELECT 1 FROM skill GROUP BY slug HAVING count(*) > 1
-            ) THEN
-                RAISE EXCEPTION
-                    'Cannot downgrade while duplicate skill names exist';
-            END IF;
-        END$$
-        """
-    )
+    op.create_unique_constraint("uq_skill_slug", "skill", ["slug"])
     op.drop_index(
         "uq_user_skill_preference_enabled_name",
         table_name="user_skill_preference",
@@ -132,15 +118,13 @@ def downgrade() -> None:
         ["id"],
         ondelete="CASCADE",
     )
-    op.drop_constraint("uq_skill_id_name", "skill", type_="unique")
+    op.drop_constraint("uq_skill_name_id", "skill", type_="unique")
     op.drop_column("user_skill_preference", "name")
-    op.drop_index("ix_skill_name", table_name="skill")
     op.alter_column(
         "skill",
         "name",
         existing_type=sa.String(length=64),
         type_=sa.String(),
-        nullable=False,
     )
     op.execute(
         """
@@ -150,5 +134,4 @@ def downgrade() -> None:
         WHERE external_app.skill_id = skill.id
         """
     )
-    op.create_unique_constraint("uq_skill_slug", "skill", ["slug"])
     op.drop_column("external_app", "name")
