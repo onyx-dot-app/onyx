@@ -219,7 +219,10 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
     It supports uploading files from the chat session and downloading generated files.
     """
 
-    NAME = "python"
+    # OpenAI reserves the function name "python" for its own harness and
+    # rejects requests that define a tool with that name (400 invalid_request_error,
+    # enforced server-side since 2026-07-21) — never rename this back to "python".
+    NAME = "run_python"
     DISPLAY_NAME = "Code Interpreter"
     DESCRIPTION = "Execute Python code in an isolated sandbox environment."
 

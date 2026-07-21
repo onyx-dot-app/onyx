@@ -1,5 +1,5 @@
 import {
-  CODE_INTERPRETER_TOOL_TYPES,
+  isCodeInterpreterToolType,
   Packet,
   PacketType,
   ToolCallArgumentDelta,
@@ -47,8 +47,7 @@ export const isPythonToolPackets = (packets: Packet[]): boolean =>
     (p) =>
       p.obj.type === PacketType.PYTHON_TOOL_START ||
       (p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
-        (p.obj as ToolCallArgumentDelta).tool_type ===
-          CODE_INTERPRETER_TOOL_TYPES.PYTHON)
+        isCodeInterpreterToolType((p.obj as ToolCallArgumentDelta).tool_type))
   );
 
 // Check if packets belong to reasoning
@@ -61,8 +60,7 @@ export const stepSupportsCollapsedStreaming = (packets: Packet[]): boolean =>
     (p) =>
       COLLAPSED_STREAMING_PACKET_TYPES.has(p.obj.type as PacketType) ||
       (p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
-        (p.obj as ToolCallArgumentDelta).tool_type ===
-          CODE_INTERPRETER_TOOL_TYPES.PYTHON)
+        isCodeInterpreterToolType((p.obj as ToolCallArgumentDelta).tool_type))
   );
 
 // Check if packets have content worth rendering in collapsed streaming mode.
@@ -103,8 +101,7 @@ export const stepHasCollapsedStreamingContent = (
     packets.some(
       (p) =>
         p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
-        (p.obj as ToolCallArgumentDelta).tool_type ===
-          CODE_INTERPRETER_TOOL_TYPES.PYTHON
+        isCodeInterpreterToolType((p.obj as ToolCallArgumentDelta).tool_type)
     )
   ) {
     return true;
