@@ -292,13 +292,7 @@ def workspace_invite_only_enabled() -> bool:
     return settings.invite_only_enabled
 
 
-def verify_email_is_invited(email: str, *, sso_managed: bool = False) -> None:
-    # An SSO provider manages membership for users it provisions, and its
-    # allowed_email_domains is the admin's per-provider control, so the
-    # workspace invite list does not apply.
-    if sso_managed:
-        return
-
+def verify_email_is_invited(email: str) -> None:
     if not workspace_invite_only_enabled():
         return
 
@@ -333,12 +327,14 @@ def verify_email_is_invited(email: str, *, sso_managed: bool = False) -> None:
     )
 
 
-def verify_email_in_whitelist(
-    email: str, tenant_id: str, *, sso_managed: bool = False
-) -> None:
+def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-        if not get_user_by_email(email, db_session):
-            verify_email_is_invited(email, sso_managed=sso_managed)
+        user = get_user_by_email(email, db_session)
+        # A permission-sync placeholder is not a member: appearing in a
+        # connector's ACLs must not satisfy invite-only, so the invite check
+        # applies until the person actually joins.
+        if user is None or not user.account_type.is_web_login():
+            verify_email_is_invited(email)
 
 
 def verify_email_domain(
@@ -560,8 +556,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user_create: schemas.UC | UserCreate,
         safe: bool = False,
         request: Optional[Request] = None,
-        *,
-        sso_managed: bool = False,
     ) -> User:
         # Check for disposable emails FIRST so obvious throwaway domains are
         # rejected before hitting Google's siteverify API. Cheap local check.
@@ -646,13 +640,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user_count = await get_user_count()
                     if user_count > 0:
                         # Tenant already has users - require invite for new users
-                        verify_email_is_invited(
-                            user_create.email, sso_managed=sso_managed
-                        )
+                        verify_email_is_invited(user_create.email)
                 else:
-                    # Single-tenant: the gate self-skips for SSO-managed users
-                    # and when invite-only is off
-                    verify_email_is_invited(user_create.email, sso_managed=sso_managed)
+                    # Single-tenant: the gate self-skips when invite-only is off
+                    verify_email_is_invited(user_create.email)
                 if MULTI_TENANT:
                     tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
                         db_session, User, OAuthAccount
@@ -884,7 +875,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         associate_by_email: bool = False,
         is_verified_by_default: bool = False,
         allowed_email_domains_override: Sequence[str] | None = None,
-        sso_managed: bool = False,
     ) -> User:
         referral_source = (
             getattr(request.state, "referral_source", None) if request else None
@@ -908,7 +898,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         async with get_async_session_context_manager(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-            verify_email_in_whitelist(account_email, tenant_id, sso_managed=sso_managed)
+            verify_email_in_whitelist(account_email, tenant_id)
             oauth_security_settings = get_security_settings()
             effective_valid_email_domains = (
                 allowed_email_domains_override
@@ -1058,8 +1048,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                 # Refresh the async user object so downstream code
                 # (e.g. oidc_expiry check) sees the updated fields.
+                # Cache id before expire. Accessing attrs on an expired object
+                # triggers a sync lazy-load which raises MissingGreenlet in this
+                # async context.
+                refreshed_user_id = user.id
                 self.user_db.session.expire(user)
-                user = await self.user_db.get(user.id)
+                user = await self.user_db.get(refreshed_user_id)
                 assert user is not None
 
             # this is needed if an organization toggles track_external_idp_expiry from
@@ -2388,7 +2382,6 @@ async def complete_login_flow(
     associate_by_email: bool,
     is_verified_by_default: bool,
     allowed_email_domains_override: Sequence[str] | None = None,
-    sso_managed: bool = False,
 ) -> RedirectResponse:
     """Shared post-token OAuth/OIDC login: read the verified identity, create or
     authenticate the user, and return a web or mobile redirect."""
@@ -2438,7 +2431,6 @@ async def complete_login_flow(
             associate_by_email=associate_by_email,
             is_verified_by_default=is_verified_by_default,
             allowed_email_domains_override=allowed_email_domains_override,  # ty: ignore[unknown-argument]
-            sso_managed=sso_managed,  # ty: ignore[unknown-argument]
         )
     except UserAlreadyExists:
         raise OnyxError(
