@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useState, useEffect, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { cn } from "@opal/utils";
 import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { PageLoader } from "@opal/layouts";
@@ -27,8 +26,6 @@ import { DiscordChannelsTable } from "@/app/admin/discord-bot/[guild-id]/Discord
 import { DiscordChannelConfig } from "@/app/admin/discord-bot/types";
 import { useAdminAgents } from "@/lib/agents/hooks";
 import { Agent } from "@/lib/agents/types";
-import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
-import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 
 interface Props {
   params: Promise<{ "guild-id": string }>;
@@ -153,7 +150,6 @@ function GuildDetailContent({
 }
 
 export default function Page({ params }: Props) {
-  const router = useRouter();
   const unwrappedParams = use(params);
   const guildId = Number(unwrappedParams["guild-id"]);
   const { data: guild, refreshGuild } = useDiscordGuild(guildId);
@@ -204,9 +200,6 @@ export default function Page({ params }: Props) {
     }
     return false;
   }, [localChannels, originalChannels]);
-  const unsavedChanges = useUnsavedChangesGuard({
-    isDirty: hasUnsavedChanges,
-  });
 
   // Get list of changed channels for bulk update
   const getChangedChannels = useCallback(() => {
@@ -346,7 +339,7 @@ export default function Page({ params }: Props) {
         icon={SvgServer}
         title={guild?.guild_name || `Server #${guildId}`}
         description={registeredText}
-        backButton={() => unsavedChanges.requestLeave(() => router.back())}
+        backButton
         rightChildren={
           <Button disabled={isUpdateDisabled} onClick={handleSaveChanges}>
             Update Configuration
@@ -419,11 +412,6 @@ export default function Page({ params }: Props) {
           />
         </div>
       </SettingsLayouts.Body>
-      <UnsavedChangesModal
-        open={unsavedChanges.confirmationOpen}
-        onCancel={unsavedChanges.cancelLeave}
-        onDiscard={unsavedChanges.discardAndLeave}
-      />
     </SettingsLayouts.Root>
   );
 }
