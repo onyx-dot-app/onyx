@@ -13,7 +13,7 @@ enabled, and a unique index enforces at most one selection per ``(user_id,
 name)`` while preserving UUID-based skill identity.
 
 Revision ID: b72c72cd6ef6
-Revises: eec4fc85ef28
+Revises: bc9e56f2fb96
 Create Date: 2026-07-20 16:32:40.354227
 
 """
@@ -24,7 +24,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "b72c72cd6ef6"
-down_revision = "eec4fc85ef28"
+down_revision = "bc9e56f2fb96"
 branch_labels = None
 depends_on = None
 
