@@ -645,3 +645,29 @@ def fetch_all_supported_build_llm_providers(
             p, user_group_ids, persona=None, is_admin=is_admin
         )
     ]
+
+
+def fetch_accessible_build_llm_provider_by_id(
+    db_session: Session, user: User, provider_id: int
+) -> LLMProviderView | None:
+    provider_model = db_session.scalar(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.id == provider_id)
+        .options(
+            selectinload(LLMProviderModel.model_configurations),
+            selectinload(LLMProviderModel.groups),
+            selectinload(LLMProviderModel.personas),
+        )
+    )
+    if provider_model is None:
+        return None
+
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    if not can_user_access_llm_provider(
+        provider_model,
+        user_group_ids,
+        persona=None,
+        is_admin=user.role == UserRole.ADMIN,
+    ):
+        return None
+    return LLMProviderView.from_model(provider_model)
