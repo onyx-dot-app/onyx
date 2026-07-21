@@ -126,6 +126,16 @@ describe("getDefaultLlmSelection", () => {
     expect(getDefaultLlmSelection([])).toBeNull();
     expect(getDefaultLlmSelection(undefined)).toBeNull();
   });
+
+  it("orders providers by codepoint like the backend, not locale rules", () => {
+    // localeCompare puts "aäb" before "azb"; codepoint order ("z" < "ä") —
+    // what Python's sorted() uses in _gateway_provider_order — is the reverse.
+    const result = getDefaultLlmSelection([
+      { ...provider("openai", [model("gpt-5.5")], 1), name: "aäb" },
+      { ...provider("openai", [model("gpt-5.6-sol")], 2), name: "azb" },
+    ]);
+    expect(result?.providerId).toBe(2);
+  });
 });
 
 describe("craftRecommendedModels", () => {
@@ -180,6 +190,29 @@ describe("resolveSessionLlmSelection", () => {
         provider("bedrock", [model("hidden", { visible: false })], 7),
       ])
     ).toBeNull();
+  });
+
+  it("prefers the same-type provider that hosts a legacy session's model", () => {
+    expect(
+      resolveSessionLlmSelection("openai", "gpt-5.5", [
+        provider("openai", [model("gpt-4o")], 1),
+        provider("openai", [model("gpt-5.5")], 2),
+      ])
+    ).toEqual({
+      providerId: 2,
+      providerName: "openai",
+      provider: "openai",
+      modelName: "gpt-5.5",
+    });
+  });
+
+  it("falls back to any same-type provider when none hosts the legacy model", () => {
+    expect(
+      resolveSessionLlmSelection("openai", "gpt-5.5", [
+        provider("anthropic", [model("claude-fable-5")], 1),
+        provider("openai", [model("gpt-4o")], 2),
+      ])?.providerId
+    ).toBe(2);
   });
 });
 

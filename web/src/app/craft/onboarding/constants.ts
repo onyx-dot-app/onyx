@@ -80,12 +80,15 @@ export function getDefaultLlmSelection(
 ): BuildLlmSelection | null {
   if (!llmProviders) return null;
 
-  const candidates = [...llmProviders].sort(
-    (left, right) =>
-      craftProviderDisplayName(left).localeCompare(
-        craftProviderDisplayName(right)
-      ) || left.id - right.id
-  );
+  // Codepoint compare on the lowercased name, then id — mirrors the backend's
+  // casefold ordering in _gateway_provider_order (localeCompare diverges on
+  // punctuation and locale-sensitive characters).
+  const candidates = [...llmProviders].sort((left, right) => {
+    const leftName = craftProviderDisplayName(left).toLowerCase();
+    const rightName = craftProviderDisplayName(right).toLowerCase();
+    if (leftName !== rightName) return leftName < rightName ? -1 : 1;
+    return left.id - right.id;
+  });
 
   for (const provider of candidates) {
     const modelName = craftRecommendedModels(provider.model_configurations)[0]
@@ -130,9 +133,19 @@ export function resolveSessionLlmSelection(
     agentProvider === CRAFT_GATEWAY_PROVIDER &&
     separatorIndex > 0 &&
     Number.isInteger(qualifiedProviderId);
+  // Legacy sessions stored only the provider type; prefer a same-type
+  // provider that actually hosts the model so the next turn's explicit
+  // provider_id doesn't route to one that lacks it.
   const provider = isGatewayModel
     ? llmProviders.find((candidate) => candidate.id === qualifiedProviderId)
-    : llmProviders.find((candidate) => candidate.provider === agentProvider);
+    : (llmProviders.find(
+        (candidate) =>
+          candidate.provider === agentProvider &&
+          candidate.model_configurations.some(
+            (model) => model.is_visible && model.name === agentModel
+          )
+      ) ??
+      llmProviders.find((candidate) => candidate.provider === agentProvider));
   if (!provider) return null;
   const modelName = isGatewayModel
     ? agentModel.slice(separatorIndex + 1)
