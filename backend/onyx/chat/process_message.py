@@ -98,6 +98,7 @@ from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
+from onyx.tools.built_in_tools import llm_tool_name
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile
@@ -745,7 +746,10 @@ def handle_stream_message_objects(
                     available_files.user_file_ids.append(uf.id)
 
         all_tools = get_tools(db_session)
-        tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
+        tool_id_to_name_map = {
+            tool.id: llm_tool_name(tool.in_code_tool_id, tool.name)
+            for tool in all_tools
+        }
 
         search_tool_id = next(
             (tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID),
@@ -1127,7 +1131,10 @@ def llm_loop_completion_handle(
     if compression_params.should_compress:
         # Build tool mapping for formatting messages
         all_tools = get_tools(db_session)
-        tool_id_to_name = {tool.id: tool.name for tool in all_tools}
+        tool_id_to_name = {
+            tool.id: llm_tool_name(tool.in_code_tool_id, tool.name)
+            for tool in all_tools
+        }
 
         compress_chat_history(
             db_session=db_session,
