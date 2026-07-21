@@ -246,38 +246,40 @@ class MCPToolCreateRequest(BaseModel):
             self.auth_type == MCPAuthenticationType.API_TOKEN
             and self.auth_performer == MCPAuthenticationPerformer.ADMIN
         ):
-            if self.auth_template is None:
-                self.auth_template = MCPAuthTemplate(
-                    headers={"Authorization": "Bearer {api_key}"},
-                    required_fields=["api_key"],
-                )
-
-            placeholders = {
-                match
-                for value in self.auth_template.headers.values()
-                for match in _PLACEHOLDER_RE.findall(value)
-            }
-            unsupported_placeholders = placeholders - {"api_key"}
-            if unsupported_placeholders:
-                raise ValueError(
-                    "Shared API-token header templates only support the "
-                    f"{{api_key}} placeholder; unsupported placeholders: "
-                    f"{', '.join(sorted(unsupported_placeholders))}"
-                )
-            if not any(
-                "{api_key}" in value for value in self.auth_template.headers.values()
-            ):
-                raise ValueError(
-                    "Shared API-token header templates must include the {api_key} placeholder"
-                )
-            if any(
-                not name.strip() or name.strip().lower() in DENYLISTED_MCP_HEADERS
-                for name in self.auth_template.headers
-            ):
-                raise ValueError(
-                    "Shared API-token header templates contain an invalid header name"
-                )
-            self.auth_template.required_fields = ["api_key"]
+            # An omitted template is resolved against the existing server
+            # configuration during an update, or defaults to Bearer when a
+            # server is created. Do not materialize that default here, since
+            # doing so makes an omitted template look like an explicit edit.
+            if self.auth_template is not None:
+                placeholders = {
+                    match
+                    for value in self.auth_template.headers.values()
+                    for match in _PLACEHOLDER_RE.findall(value)
+                }
+                unsupported_placeholders = placeholders - {"api_key"}
+                if unsupported_placeholders:
+                    raise ValueError(
+                        "Shared API-token header templates only support the "
+                        f"{{api_key}} placeholder; unsupported placeholders: "
+                        f"{', '.join(sorted(unsupported_placeholders))}"
+                    )
+                if not any(
+                    "{api_key}" in value
+                    for value in self.auth_template.headers.values()
+                ):
+                    raise ValueError(
+                        "Shared API-token header templates must include the {api_key} placeholder"
+                    )
+                if any(
+                    not name.strip()
+                    or any(char in name for char in "\r\n")
+                    or name.strip().lower() in DENYLISTED_MCP_HEADERS
+                    for name in self.auth_template.headers
+                ):
+                    raise ValueError(
+                        "Shared API-token header templates contain an invalid header name"
+                    )
+                self.auth_template.required_fields = ["api_key"]
 
         # Validate that API token is not provided for per-user auth
         if (

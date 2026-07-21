@@ -117,7 +117,11 @@ from onyx.server.features.mcp.oauth import (
 )
 from onyx.server.features.mcp.ssrf import validate_mcp_outbound_url
 from onyx.server.features.tool.models import ToolSnapshot
-from onyx.utils.encryption import mask_string, reject_masked_credentials
+from onyx.utils.encryption import (
+    is_masked_credential,
+    mask_string,
+    reject_masked_credentials,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import BLOCKED_HOSTNAMES, SSRFException
 from onyx.utils.variable_functionality import (
@@ -308,12 +312,45 @@ def _resolve_shared_api_token(
     existing_config: MCPConnectionData | None,
 ) -> str | None:
     """Preserve masked shared tokens when only configuration is edited."""
-    if not request_api_token_changed and existing_config:
+    if request_api_token_changed:
+        if request_api_token:
+            reject_masked_credentials({"api_token": request_api_token})
+        return request_api_token
+
+    # A real token in the request takes precedence during auth-mode
+    # conversion, even when older clients omit the changed flag.
+    if request_api_token and not is_masked_credential(request_api_token):
+        return request_api_token
+
+    if existing_config and (
+        "api_token" in existing_config
+        or "Authorization" in existing_config.get("headers", {})
+    ):
         return _extract_shared_api_token(existing_config)
 
     if request_api_token:
         reject_masked_credentials({"api_token": request_api_token})
     return request_api_token
+
+
+def _resolve_shared_api_token_template(
+    *,
+    request_template: MCPAuthTemplate | None,
+    existing_config: MCPConnectionData | None,
+) -> MCPAuthTemplate | None:
+    """Preserve an existing shared header template when omitted on update."""
+    if request_template is not None:
+        return request_template
+
+    if existing_config:
+        stored_template = existing_config.get("header_template")
+        if stored_template:
+            return MCPAuthTemplate(
+                headers=stored_template,
+                required_fields=["api_key"],
+            )
+
+    return None
 
 
 def _build_shared_api_token_config_data(
@@ -1846,6 +1883,14 @@ def _upsert_mcp_server(
             request.auth_type == MCPAuthenticationType.API_TOKEN
             and request.auth_performer == MCPAuthenticationPerformer.ADMIN
         ):
+            request.auth_template = _resolve_shared_api_token_template(
+                request_template=request.auth_template,
+                existing_config=(
+                    existing_admin_config_dict
+                    if mcp_server.admin_connection_config
+                    else None
+                ),
+            )
             request.api_token = _resolve_shared_api_token(
                 request_api_token=request.api_token,
                 request_api_token_changed=request.api_token_changed,

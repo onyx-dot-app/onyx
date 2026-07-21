@@ -34,7 +34,7 @@ export interface MCPServer {
   oauth_additional_auth_params?: Record<string, string>;
   is_authenticated: boolean;
   user_authenticated?: boolean;
-  auth_template?: MCPAuthTemplate;
+  auth_template?: MCPAuthTemplate | null;
   admin_credentials?: Record<string, string>;
   user_credentials?: Record<string, string>;
   status: MCPServerStatus;
