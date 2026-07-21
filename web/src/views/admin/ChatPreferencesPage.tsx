@@ -802,7 +802,7 @@ export default function ChatPreferencesPage() {
 
       try {
         const response = await fetch("/api/admin/settings", {
-          method: "PUT",
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(newSettings),
         });

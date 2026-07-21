@@ -124,7 +124,7 @@ export async function disconnectEmbeddingProvider(
 
 export async function saveAdminSettings(settings: Settings) {
   const response = await fetch("/api/admin/settings", {
-    method: "PUT",
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });

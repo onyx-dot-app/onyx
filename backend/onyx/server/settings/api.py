@@ -39,7 +39,11 @@ from onyx.server.settings.models import (
     Tier,
     UserSettings,
 )
-from onyx.server.settings.store import load_settings, store_settings
+from onyx.server.settings.store import (
+    load_settings,
+    settings_write_lock,
+    store_settings,
+)
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.audit import (
     AuditAction,
@@ -61,70 +65,74 @@ admin_router = APIRouter(prefix="/admin/settings")
 basic_router = APIRouter(prefix="/settings")
 
 
-@admin_router.put("")
-def admin_put_settings(
+@admin_router.patch("")
+def admin_patch_settings(
     settings: Settings,
     current_user: User = Depends(
         require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
     ),
 ) -> None:
-    if (
-        settings.user_file_max_upload_size_mb is not None
-        and settings.user_file_max_upload_size_mb > 0
-        and settings.user_file_max_upload_size_mb > MAX_ALLOWED_UPLOAD_SIZE_MB
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"File upload size limit cannot exceed {MAX_ALLOWED_UPLOAD_SIZE_MB} MB",
-        )
-
     if global_version.is_ee_version():
         from ee.onyx.utils.tier import get_tier
 
         current_tier = get_tier()
     else:
         current_tier = Tier.COMMUNITY
-    existing = load_settings()
 
-    # These fields are access control: a PUT that omits one (e.g. an older
-    # client, or a partial write) must not silently reset it to the pydantic
-    # default. invite_only_enabled off-by-default would let uninvited users in.
-    if "craft_default_enabled" not in settings.model_fields_set:
-        settings.craft_default_enabled = existing.craft_default_enabled
-    if "craft_instructions" not in settings.model_fields_set:
-        settings.craft_instructions = existing.craft_instructions
-    if "invite_only_enabled" not in settings.model_fields_set:
-        settings.invite_only_enabled = existing.invite_only_enabled
-    # Search Mode is Business+; Chat Retention is Enterprise-only.
-    # Use the same error code (FEATURE_NOT_AVAILABLE / 402) the tier_gate
-    # middleware uses, so the FE has one shape to handle for tier-rejected
-    # writes.
-    if settings.search_ui_enabled != existing.search_ui_enabled and not tier_at_least(
-        current_tier, Tier.BUSINESS
-    ):
-        raise OnyxError(
-            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
-            "Search Mode requires the Business or Enterprise plan.",
-        )
-    if (
-        settings.maximum_chat_retention_days != existing.maximum_chat_retention_days
-        and not tier_at_least(current_tier, Tier.ENTERPRISE)
-    ):
-        raise OnyxError(
-            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
-            "Chat history retention requires the Enterprise plan.",
+    # Serialize the read-modify-write so two concurrent partial patches cannot
+    # each merge onto a stale snapshot and drop the other's field.
+    with settings_write_lock():
+        # Fail closed: a settings-read error must not fall back to defaults and
+        # silently disable an access-control field like invite_only_enabled.
+        existing = load_settings(raise_on_error=True)
+        # Merge only the fields the caller sent so omitted fields keep their
+        # stored value. Access-control fields rely on this: a partial write
+        # must not silently reset them to pydantic defaults.
+        merged = existing.model_copy(
+            update={
+                field: getattr(settings, field) for field in settings.model_fields_set
+            }
         )
 
-    store_settings(settings)
+        if (
+            merged.user_file_max_upload_size_mb is not None
+            and merged.user_file_max_upload_size_mb > 0
+            and merged.user_file_max_upload_size_mb > MAX_ALLOWED_UPLOAD_SIZE_MB
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"File upload size limit cannot exceed {MAX_ALLOWED_UPLOAD_SIZE_MB} MB",
+            )
 
-    if settings.craft_default_enabled != existing.craft_default_enabled:
-        emit_audit_event(
-            AuditAction.CRAFT_DEFAULT_CHANGE,
-            AuditOutcome.SUCCESS,
-            actor=actor_from_user(current_user),
-            resource_type="settings",
-            extra={"craft_default_enabled": settings.craft_default_enabled},
-        )
+        # Search Mode is Business+, Chat Retention is Enterprise-only. Same error
+        # code (FEATURE_NOT_AVAILABLE / 402) the tier_gate middleware uses, so the
+        # FE has one shape to handle for tier-rejected writes.
+        if merged.search_ui_enabled != existing.search_ui_enabled and not tier_at_least(
+            current_tier, Tier.BUSINESS
+        ):
+            raise OnyxError(
+                OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+                "Search Mode requires the Business or Enterprise plan.",
+            )
+        if (
+            merged.maximum_chat_retention_days != existing.maximum_chat_retention_days
+            and not tier_at_least(current_tier, Tier.ENTERPRISE)
+        ):
+            raise OnyxError(
+                OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+                "Chat history retention requires the Enterprise plan.",
+            )
+
+        store_settings(merged)
+
+        if merged.craft_default_enabled != existing.craft_default_enabled:
+            emit_audit_event(
+                AuditAction.CRAFT_DEFAULT_CHANGE,
+                AuditOutcome.SUCCESS,
+                actor=actor_from_user(current_user),
+                resource_type="settings",
+                extra={"craft_default_enabled": merged.craft_default_enabled},
+            )
 
 
 def apply_license_status_to_settings(settings: Settings) -> Settings:
