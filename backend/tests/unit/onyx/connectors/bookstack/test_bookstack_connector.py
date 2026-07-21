@@ -24,7 +24,7 @@ def test_get_doc_batch_uses_datetime_updated_at_filters() -> None:
         transformer=_unused_transformer,
         start_ind=20,
         start=0,
-        end=1711974896,
+        end=1711974896.789123,
     )
 
     assert docs == []
@@ -35,8 +35,8 @@ def test_get_doc_batch_uses_datetime_updated_at_filters() -> None:
             "count": "10",
             "offset": "20",
             "sort": "+id",
-            "filter[updated_at:gte]": "1970-01-01T00:00:00Z",
-            "filter[updated_at:lte]": "2024-04-01T12:34:56Z",
+            "filter[updated_at:gte]": "1970-01-01T00:00:00.000000Z",
+            "filter[updated_at:lte]": "2024-04-01T12:34:56.789123Z",
         },
     )
 

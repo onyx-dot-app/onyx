@@ -51,7 +51,7 @@ class BookstackConnector(LoadConnector, PollConnector):
     def _format_bookstack_datetime(timestamp: SecondsSinceUnixEpoch) -> str:
         return (
             datetime.fromtimestamp(timestamp, tz=timezone.utc)
-            .isoformat(timespec="seconds")
+            .isoformat(timespec="microseconds")
             .replace("+00:00", "Z")
         )
 
