@@ -1,3 +1,8 @@
+// Tauri command handlers must take IPC-deserialized args (`String`) and
+// extractors (`State`/`WebviewWindow`/`AppHandle`/`Window`) by value -- that's
+// the framework's calling convention, not an oversight.
+#![allow(clippy::needless_pass_by_value)]
+
 use crate::config::{get_config_dir, get_config_path, save_config, AppConfig, ConfigState};
 use crate::window::{build_and_setup_window, open_in_default_browser};
 use serde::Serialize;
@@ -8,7 +13,7 @@ use url::Url;
 #[tauri::command]
 pub async fn check_server_reachable(state: tauri::State<'_, ConfigState>) -> Result<(), String> {
     let url = state.config().server_url;
-    let parsed = Url::parse(&url).map_err(|e| format!("Invalid URL: {}", e))?;
+    let parsed = Url::parse(&url).map_err(|e| format!("Invalid URL: {e}"))?;
     match parsed.scheme() {
         "http" | "https" => {}
         _ => return Err("URL must use http or https".to_string()),
@@ -17,16 +22,15 @@ pub async fn check_server_reachable(state: tauri::State<'_, ConfigState>) -> Res
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
-        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
 
     match client.head(parsed).send().await {
-        Ok(_) => Ok(()),
         // Only definitive "server didn't answer" errors count as unreachable.
         // TLS / decode / redirect errors imply the server is listening — the
         // webview, which has its own trust store, is likely to succeed even
         // when rustls rejects a self-signed cert.
         Err(e) if e.is_connect() || e.is_timeout() => Err(e.to_string()),
-        Err(_) => Ok(()),
+        _ => Ok(()),
     }
 }
 
@@ -61,8 +65,8 @@ pub struct BootstrapState {
 #[tauri::command]
 pub fn get_bootstrap_state(state: tauri::State<ConfigState>) -> BootstrapState {
     let server_url = state.config().server_url;
-    let config_exists = state.is_config_initialized()
-        && get_config_path().map(|path| path.exists()).unwrap_or(false);
+    let config_exists =
+        state.is_config_initialized() && get_config_path().is_some_and(|path| path.exists());
 
     BootstrapState {
         server_url,
@@ -109,7 +113,7 @@ pub fn open_config_file() -> Result<(), String> {
             .arg("-t")
             .arg(&config_path)
             .spawn()
-            .map_err(|e| format!("Failed to open config: {}", e))?;
+            .map_err(|e| format!("Failed to open config: {e}"))?;
     }
 
     #[cfg(target_os = "linux")]
@@ -117,7 +121,7 @@ pub fn open_config_file() -> Result<(), String> {
         std::process::Command::new("xdg-open")
             .arg(&config_path)
             .spawn()
-            .map_err(|e| format!("Failed to open config: {}", e))?;
+            .map_err(|e| format!("Failed to open config: {e}"))?;
     }
 
     #[cfg(target_os = "windows")]
@@ -125,7 +129,7 @@ pub fn open_config_file() -> Result<(), String> {
         std::process::Command::new("notepad")
             .arg(&config_path)
             .spawn()
-            .map_err(|e| format!("Failed to open config: {}", e))?;
+            .map_err(|e| format!("Failed to open config: {e}"))?;
     }
 
     Ok(())
@@ -137,14 +141,14 @@ pub fn open_config_directory() -> Result<(), String> {
     let config_dir = get_config_dir().ok_or("Could not determine config directory")?;
 
     // Ensure directory exists
-    fs::create_dir_all(&config_dir).map_err(|e| format!("Failed to create config dir: {}", e))?;
+    fs::create_dir_all(&config_dir).map_err(|e| format!("Failed to create config dir: {e}"))?;
 
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
             .arg(&config_dir)
             .spawn()
-            .map_err(|e| format!("Failed to open directory: {}", e))?;
+            .map_err(|e| format!("Failed to open directory: {e}"))?;
     }
 
     #[cfg(target_os = "linux")]
@@ -152,7 +156,7 @@ pub fn open_config_directory() -> Result<(), String> {
         std::process::Command::new("xdg-open")
             .arg(&config_dir)
             .spawn()
-            .map_err(|e| format!("Failed to open directory: {}", e))?;
+            .map_err(|e| format!("Failed to open directory: {e}"))?;
     }
 
     #[cfg(target_os = "windows")]
@@ -160,7 +164,7 @@ pub fn open_config_directory() -> Result<(), String> {
         std::process::Command::new("explorer")
             .arg(&config_dir)
             .spawn()
-            .map_err(|e| format!("Failed to open directory: {}", e))?;
+            .map_err(|e| format!("Failed to open directory: {e}"))?;
     }
 
     Ok(())
@@ -170,8 +174,8 @@ pub fn open_config_directory() -> Result<(), String> {
 #[tauri::command]
 pub fn navigate_to(window: tauri::WebviewWindow, state: tauri::State<ConfigState>, path: &str) {
     let base_url = state.config().server_url;
-    let url = format!("{}{}", base_url, path);
-    if let Err(e) = window.eval(format!("window.location.href = '{}'", url)) {
+    let url = format!("{base_url}{path}");
+    if let Err(e) = window.eval(format!("window.location.href = '{url}'")) {
         crate::debug_log::log_backend_error(
             window.app_handle(),
             &format!("Failed to navigate to {path}: {e}"),

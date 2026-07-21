@@ -1,3 +1,7 @@
+// Config load/save runs before any `AppHandle` (and thus `log_backend_error`)
+// exists, so failures here go straight to stderr instead.
+#![allow(clippy::print_stderr)]
+
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -26,7 +30,7 @@ fn default_window_title() -> String {
     "Onyx".to_string()
 }
 
-fn default_show_menu_bar() -> bool {
+const fn default_show_menu_bar() -> bool {
     true
 }
 
@@ -53,11 +57,8 @@ pub fn get_config_path() -> Option<PathBuf> {
 
 /// Load config from file, or create default if it doesn't exist
 pub fn load_config() -> (AppConfig, bool) {
-    let config_path = match get_config_path() {
-        Some(path) => path,
-        None => {
-            return (AppConfig::default(), false);
-        }
+    let Some(config_path) = get_config_path() else {
+        return (AppConfig::default(), false);
     };
 
     if !config_path.exists() {
@@ -91,12 +92,12 @@ pub fn save_config(config: &AppConfig) -> Result<(), String> {
     let config_path = config_dir.join(CONFIG_FILE_NAME);
 
     // Ensure config directory exists
-    fs::create_dir_all(&config_dir).map_err(|e| format!("Failed to create config dir: {}", e))?;
+    fs::create_dir_all(&config_dir).map_err(|e| format!("Failed to create config dir: {e}"))?;
 
     let json = serde_json::to_string_pretty(config)
-        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+        .map_err(|e| format!("Failed to serialize config: {e}"))?;
 
-    fs::write(&config_path, json).map_err(|e| format!("Failed to write config: {}", e))?;
+    fs::write(&config_path, json).map_err(|e| format!("Failed to write config: {e}"))?;
 
     Ok(())
 }
@@ -118,7 +119,7 @@ pub struct ConfigState {
 }
 
 impl ConfigState {
-    pub fn new(
+    pub const fn new(
         config: AppConfig,
         config_initialized: bool,
         debug_mode: bool,
@@ -140,13 +141,16 @@ impl ConfigState {
     pub fn config(&self) -> AppConfig {
         self.config
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 
     /// Apply `f` to the config and return the resulting snapshot.
     pub fn update_config(&self, f: impl FnOnce(&mut AppConfig)) -> AppConfig {
-        let mut guard = self.config.write().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self
+            .config
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         f(&mut guard);
         guard.clone()
     }
@@ -156,7 +160,10 @@ impl ConfigState {
     /// this save (which would otherwise leave `config.json` not matching
     /// whichever update actually happened last in memory).
     pub fn update_and_persist(&self, f: impl FnOnce(&mut AppConfig)) -> Result<AppConfig, String> {
-        let _guard = self.persist_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = self
+            .persist_lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let config = self.update_config(f);
         save_config(&config)?;
         Ok(config)
@@ -166,24 +173,27 @@ impl ConfigState {
         *self
             .config_initialized
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     pub fn set_config_initialized(&self, value: bool) {
         *self
             .config_initialized
             .write()
-            .unwrap_or_else(|e| e.into_inner()) = value;
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = value;
     }
 
     pub fn app_base_url(&self) -> Option<Url> {
         self.app_base_url
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 
     pub fn set_app_base_url(&self, url: Option<Url>) {
-        *self.app_base_url.write().unwrap_or_else(|e| e.into_inner()) = url;
+        *self
+            .app_base_url
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = url;
     }
 }

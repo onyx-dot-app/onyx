@@ -1,3 +1,8 @@
+// This module IS the app's error/debug logging facility (there's no
+// `tracing`/`log` crate elsewhere in this codebase) -- printing to stderr is
+// the point, not an oversight.
+#![allow(clippy::print_stderr)]
+
 use crate::config::{get_config_dir, ConfigState};
 use crate::window::open_in_default_browser;
 use std::fs;
@@ -59,11 +64,14 @@ pub fn format_utc_timestamp() -> String {
     let mins = (secs_of_day % 3600) / 60;
     let secs = secs_of_day % 60;
 
-    // Days since Unix epoch -> Y/M/D via civil calendar arithmetic
-    let z = days as i64 + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    // Days since Unix epoch -> Y/M/D via civil calendar arithmetic.
+    // `days` fits comfortably in `i64` for millions of years, so the cast
+    // can't actually wrap.
+    #[allow(clippy::cast_possible_wrap)]
+    let z = days as i64 + 719_468;
+    let era = z / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
     let y = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
@@ -71,10 +79,7 @@ pub fn format_utc_timestamp() -> String {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
 
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-        y, m, d, hours, mins, secs, millis
-    )
+    format!("{y:04}-{m:02}-{d:02}T{hours:02}:{mins:02}:{secs:02}.{millis:03}Z")
 }
 
 /// Surface a Rust-side failure the same way frontend errors already are:
@@ -82,7 +87,7 @@ pub fn format_utc_timestamp() -> String {
 /// Used in place of silently swallowing a `Result` with `let _ = ...` for
 /// failures worth knowing about.
 pub fn log_backend_error(app: &AppHandle, message: &str) {
-    eprintln!("[ONYX ERROR] {}", message);
+    eprintln!("[ONYX ERROR] {message}");
 
     let state = app.state::<ConfigState>();
     if !state.debug_mode {
@@ -98,7 +103,7 @@ pub fn log_backend_error(app: &AppHandle, message: &str) {
     if let Ok(mut guard) = lock_result {
         if let Some(ref mut file) = *guard {
             let line = format!("[{}] [ERROR] {}", format_utc_timestamp(), message);
-            let _ = writeln!(file, "{}", line);
+            let _ = writeln!(file, "{line}");
             let _ = file.flush();
         }
     }
@@ -131,7 +136,7 @@ pub fn handle_toggle_devtools(app: &AppHandle) {
     #[cfg(any(debug_assertions, feature = "devtools"))]
     {
         let windows: Vec<_> = app.webview_windows().into_values().collect();
-        let any_open = windows.iter().any(|w| w.is_devtools_open());
+        let any_open = windows.iter().any(tauri::WebviewWindow::is_devtools_open);
         for window in &windows {
             if any_open {
                 window.close_devtools();
@@ -147,25 +152,34 @@ pub fn handle_toggle_devtools(app: &AppHandle) {
 }
 
 pub fn handle_open_debug_log() {
-    let log_path = match get_debug_log_path() {
-        Some(p) => p,
-        None => return,
+    let Some(log_path) = get_debug_log_path() else {
+        return;
     };
 
     if !log_path.exists() {
-        eprintln!("[ONYX DEBUG] Log file does not exist yet: {:?}", log_path);
+        eprintln!(
+            "[ONYX DEBUG] Log file does not exist yet: {}",
+            log_path.display()
+        );
         return;
     }
 
     let url_path = log_path.to_string_lossy().replace('\\', "/");
     if !open_in_default_browser(&format!("file:///{}", url_path.trim_start_matches('/'))) {
-        eprintln!("[ONYX ERROR] Failed to open debug log at {:?}", log_path);
+        eprintln!(
+            "[ONYX ERROR] Failed to open debug log at {}",
+            log_path.display()
+        );
     }
 }
 
 /// Mirrors `console.log`/`warn`/`error`/etc. captured from the webview (see
 /// `scripts/console_capture.js`) to stderr and the debug log file. Only
 /// active in debug mode -- this is high-volume and not meant for normal runs.
+// Tauri command handlers must take IPC-deserialized args (`String`) and
+// extractors (`State`) by value -- that's the framework's calling
+// convention, not an oversight.
+#[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
 pub fn log_from_frontend(level: String, message: String, state: tauri::State<ConfigState>) {
     if !state.debug_mode {
@@ -174,11 +188,11 @@ pub fn log_from_frontend(level: String, message: String, state: tauri::State<Con
     let timestamp = format_utc_timestamp();
     let log_line = format!("[{}] [{}] {}", timestamp, level.to_uppercase(), message);
 
-    eprintln!("{}", log_line);
+    eprintln!("{log_line}");
 
     if let Ok(mut guard) = state.debug_log_file.lock() {
         if let Some(ref mut file) = *guard {
-            let _ = writeln!(file, "{}", log_line);
+            let _ = writeln!(file, "{log_line}");
             let _ = file.flush();
         }
     }

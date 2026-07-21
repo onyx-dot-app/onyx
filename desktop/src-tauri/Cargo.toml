@@ -4,6 +4,12 @@ version = "0.0.0-dev"
 description = "Lightweight desktop app for Onyx Cloud"
 authors = ["you"]
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/onyx-dot-app/onyx"
+readme = "../README.md"
+keywords = ["desktop", "tauri", "onyx"]
+categories = ["gui"]
+publish = false
 
 [build-dependencies]
 tauri-build = { version = "2.6", features = [] }
@@ -29,3 +35,18 @@ gtk = "0.18"
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 devtools = ["tauri/devtools"]
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+exit = "warn"

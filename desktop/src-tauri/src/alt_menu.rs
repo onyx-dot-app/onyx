@@ -35,14 +35,14 @@ impl AltAloneTracker {
     /// tracking, and pressing Alt while another modifier is already held
     /// (e.g. Ctrl-then-Alt) must not start it -- otherwise releasing Alt
     /// first would toggle the menu even though Ctrl is still held.
-    pub fn on_key_press(&mut self, is_alt: bool, other_modifier_held: bool) {
+    pub const fn on_key_press(&mut self, is_alt: bool, other_modifier_held: bool) {
         self.held_alone = is_alt && !other_modifier_held;
     }
 
     /// Feed a key-release event. `is_alt` is whether the released key is
     /// Alt. Returns `true` when this release completes a clean,
     /// uninterrupted Alt-alone press and the menu bar should toggle.
-    pub fn on_key_release(&mut self, is_alt: bool) -> bool {
+    pub const fn on_key_release(&mut self, is_alt: bool) -> bool {
         if !is_alt || !self.held_alone {
             return false;
         }

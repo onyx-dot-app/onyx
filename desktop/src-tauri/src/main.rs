@@ -1,5 +1,8 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Tauri/wry's own dependency tree pulls duplicate versions of common crates
+// (e.g. `base64`, `syn`, `windows-sys`) that we don't control.
+#![allow(clippy::multiple_crate_versions)]
 
 mod alt_menu;
 mod commands;
@@ -29,7 +32,7 @@ struct Cli {
     #[arg(short = 'v', long)]
     version: bool,
 
-    /// Enable verbose logging, auto-open DevTools, and capture webview console output
+    /// Enable verbose logging, auto-open `DevTools`, and capture webview console output
     #[arg(long)]
     debug: bool,
 }
@@ -68,6 +71,9 @@ fn fetch_server_version(server_url: &str) -> Result<Option<String>, String> {
 
 /// Print client and (if reachable) server version, mirroring the CLI's
 /// `--version` output.
+// This is the actual implementation of `--version` -- printing to stdout is
+// the point.
+#[allow(clippy::print_stdout)]
 fn print_version_info() {
     println!("Client version: {}", env!("CARGO_PKG_VERSION"));
 
@@ -75,21 +81,71 @@ fn print_version_info() {
     let server_url = config.server_url;
 
     match fetch_server_version(&server_url) {
-        Ok(Some(version)) => println!("Server version: {}", version),
-        Ok(None) => println!(
-            "Server version: unknown (empty response from {})",
-            server_url
-        ),
-        Err(_) => println!(
-            "Server version: unknown (could not fetch from {})",
-            server_url
-        ),
+        Ok(Some(version)) => println!("Server version: {version}"),
+        Ok(None) => println!("Server version: unknown (empty response from {server_url})"),
+        Err(_) => println!("Server version: unknown (could not fetch from {server_url})"),
     }
 }
 
 // ============================================================================
 // Main
 // ============================================================================
+
+// Printed before the app (and thus `log_backend_error`'s `AppHandle`) exists,
+// so this can't go through the usual logging path.
+#[allow(clippy::print_stderr)]
+fn print_debug_startup_banner() {
+    eprintln!("[ONYX DEBUG] Debug mode enabled");
+    if let Some(path) = debug_log::get_debug_log_path() {
+        eprintln!("[ONYX DEBUG] Frontend logs: {}", path.display());
+    }
+    eprintln!("[ONYX DEBUG] DevTools will open automatically");
+    eprintln!("[ONYX DEBUG] Capturing console.log/warn/error/info/debug from webview");
+}
+
+/// Everything that runs once the Tauri app is up: menu/tray, the main
+/// window's platform tweaks, and Alt-menu/devtools wiring. Every failure here
+/// is logged and non-fatal, so this never needs to return a `Result`.
+fn setup_app(app: &tauri::AppHandle) {
+    if let Err(e) = menu::setup_app_menu(app) {
+        debug_log::log_backend_error(app, &format!("Failed to setup menu: {e}"));
+    }
+
+    if let Err(e) = menu::setup_tray_icon(app) {
+        debug_log::log_backend_error(app, &format!("Failed to setup tray icon: {e}"));
+    }
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    #[cfg(target_os = "macos")]
+    if let Err(e) = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None) {
+        debug_log::log_backend_error(app, &format!("Failed to apply vibrancy effect: {e}"));
+    }
+
+    if let Ok(url) = window.url() {
+        let mut base_url = url;
+        base_url.set_query(None);
+        base_url.set_fragment(None);
+        base_url.set_path("/");
+        app.state::<ConfigState>().set_app_base_url(Some(base_url));
+    }
+
+    #[cfg(target_os = "macos")]
+    window::inject_titlebar(window.clone());
+
+    window::apply_settings_to_window(app, &window);
+
+    #[cfg(target_os = "linux")]
+    alt_menu::setup_alt_menu_toggle(app, &window);
+
+    debug_log::maybe_open_devtools(app, &window);
+
+    if let Err(e) = window.set_focus() {
+        debug_log::log_backend_error(app, &format!("Failed to focus main window: {e}"));
+    }
+}
 
 fn main() {
     let cli = Cli::parse();
@@ -103,17 +159,16 @@ fn main() {
     let debug_mode = debug_log::is_debug_mode(cli.debug);
 
     let debug_log_file = if debug_mode {
-        eprintln!("[ONYX DEBUG] Debug mode enabled");
-        if let Some(path) = debug_log::get_debug_log_path() {
-            eprintln!("[ONYX DEBUG] Frontend logs: {}", path.display());
-        }
-        eprintln!("[ONYX DEBUG] DevTools will open automatically");
-        eprintln!("[ONYX DEBUG] Capturing console.log/warn/error/info/debug from webview");
+        print_debug_startup_banner();
         debug_log::init_debug_log_file()
     } else {
         None
     };
 
+    // Fatal: if the Tauri runtime can't start there's nothing else to do.
+    // `tauri::generate_context!()` also expands to code that calls
+    // `std::process::exit` internally on some platforms.
+    #[allow(clippy::expect_used, clippy::exit)]
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(
@@ -125,9 +180,11 @@ fn main() {
 
                     if window::should_open_in_external_browser(&current_url, destination_url) {
                         if !window::open_in_default_browser(destination_url.as_str()) {
-                            eprintln!(
-                                "Failed to open external URL in default browser: {}",
-                                destination_url
+                            debug_log::log_backend_error(
+                                webview.app_handle(),
+                                &format!(
+                                    "Failed to open external URL in default browser: {destination_url}"
+                                ),
                             );
                         }
                         return false;
@@ -175,56 +232,8 @@ fn main() {
             debug_log::MENU_OPEN_DEBUG_LOG_ID => debug_log::handle_open_debug_log(),
             _ => {}
         })
-        .setup(move |app| {
-            let app_handle = app.handle().clone();
-
-            if let Err(e) = menu::setup_app_menu(&app_handle) {
-                debug_log::log_backend_error(&app_handle, &format!("Failed to setup menu: {e}"));
-            }
-
-            if let Err(e) = menu::setup_tray_icon(&app_handle) {
-                debug_log::log_backend_error(
-                    &app_handle,
-                    &format!("Failed to setup tray icon: {e}"),
-                );
-            }
-
-            if let Some(window) = app.get_webview_window("main") {
-                #[cfg(target_os = "macos")]
-                if let Err(e) = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None)
-                {
-                    debug_log::log_backend_error(
-                        &app_handle,
-                        &format!("Failed to apply vibrancy effect: {e}"),
-                    );
-                }
-
-                if let Ok(url) = window.url() {
-                    let mut base_url = url;
-                    base_url.set_query(None);
-                    base_url.set_fragment(None);
-                    base_url.set_path("/");
-                    app.state::<ConfigState>().set_app_base_url(Some(base_url));
-                }
-
-                #[cfg(target_os = "macos")]
-                window::inject_titlebar(window.clone());
-
-                window::apply_settings_to_window(&app_handle, &window);
-
-                #[cfg(target_os = "linux")]
-                alt_menu::setup_alt_menu_toggle(&app_handle, &window);
-
-                debug_log::maybe_open_devtools(&app_handle, &window);
-
-                if let Err(e) = window.set_focus() {
-                    debug_log::log_backend_error(
-                        &app_handle,
-                        &format!("Failed to focus main window: {e}"),
-                    );
-                }
-            }
-
+        .setup(|app| {
+            setup_app(&app.handle().clone());
             Ok(())
         })
         .on_page_load(|webview: &Webview, _payload: &PageLoadPayload| {

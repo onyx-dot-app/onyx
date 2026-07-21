@@ -34,8 +34,8 @@ pub fn trigger_new_chat(app: &AppHandle) {
     let server_url = app.state::<ConfigState>().config().server_url;
 
     if let Some(window) = app.get_webview_window("main") {
-        let url = format!("{}/chat", server_url);
-        if let Err(e) = window.eval(format!("window.location.href = '{}'", url)) {
+        let url = format!("{server_url}/chat");
+        if let Err(e) = window.eval(format!("window.location.href = '{url}'")) {
             log_backend_error(app, &format!("Failed to navigate to new chat: {e}"));
         }
     }
@@ -58,8 +58,8 @@ pub fn open_chat_window(app: &AppHandle) {
         match build_and_setup_window(&handle) {
             Ok(window) => {
                 let server_url = handle.state::<ConfigState>().config().server_url;
-                let url = format!("{}/chat", server_url);
-                if let Err(e) = window.eval(format!("window.location.href = '{}'", url)) {
+                let url = format!("{server_url}/chat");
+                if let Err(e) = window.eval(format!("window.location.href = '{url}'")) {
                     log_backend_error(&handle, &format!("Failed to navigate to new chat: {e}"));
                 }
             }
@@ -289,6 +289,7 @@ pub fn apply_settings_to_window(app: &AppHandle, window: &WebviewWindow) {
 mod tests {
     use super::*;
 
+    #[allow(clippy::unwrap_used)]
     fn url(s: &str) -> Url {
         Url::parse(s).unwrap()
     }
