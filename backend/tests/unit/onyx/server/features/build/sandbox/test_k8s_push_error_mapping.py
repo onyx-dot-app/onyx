@@ -49,7 +49,6 @@ from onyx.server.features.build.sandbox.kubernetes.sidecar_client import Sidecar
 from onyx.server.features.build.sandbox.models import (
     FatalWriteError,
     FileSet,
-    LLMProviderConfig,
     RetriableWriteError,
 )
 
@@ -71,6 +70,15 @@ def _generate_dev_push_key_b64() -> str:
         encryption_algorithm=NoEncryption(),
     )
     return base64.b64encode(seed).decode()
+
+
+@pytest.fixture(autouse=True)
+def _skip_api_url_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The provision-time ONYX_SERVER_URL probe makes a real HTTP call;
+    unit tests must never hit the network."""
+    import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
+
+    monkeypatch.setattr(ksm, "validate_sandbox_api_url", lambda *_: None)
 
 
 @pytest.fixture(autouse=True)
@@ -782,12 +790,6 @@ def test_provision_cleans_up_pod_when_opencode_history_restore_fails(
             sandbox_id=sandbox_id,
             user_id=_sandbox_id(),
             tenant_id="tenant-test",
-            llm_config=LLMProviderConfig(
-                provider="openai",
-                model_name="gpt-5-mini",
-                api_key=None,
-                api_base=None,
-            ),
             onyx_pat="pat",
         )
 
@@ -819,12 +821,6 @@ def test_provision_existing_healthy_pod_does_not_restore_opencode_history(
         sandbox_id=sandbox_id,
         user_id=_sandbox_id(),
         tenant_id="tenant-test",
-        llm_config=LLMProviderConfig(
-            provider="openai",
-            model_name="gpt-5-mini",
-            api_key=None,
-            api_base=None,
-        ),
         onyx_pat="pat",
     )
 
@@ -868,12 +864,6 @@ def test_provision_conflicting_healthy_pod_skips_startup_restore(
         sandbox_id=sandbox_id,
         user_id=_sandbox_id(),
         tenant_id="tenant-test",
-        llm_config=LLMProviderConfig(
-            provider="openai",
-            model_name="gpt-5-mini",
-            api_key=None,
-            api_base=None,
-        ),
         onyx_pat="pat",
     )
 
@@ -931,12 +921,6 @@ def test_provision_conflicting_not_ready_pod_runs_startup_restore(
         sandbox_id=sandbox_id,
         user_id=_sandbox_id(),
         tenant_id="tenant-test",
-        llm_config=LLMProviderConfig(
-            provider="openai",
-            model_name="gpt-5-mini",
-            api_key=None,
-            api_base=None,
-        ),
         onyx_pat="pat",
     )
 
@@ -979,12 +963,6 @@ def test_provision_conflicting_not_ready_pod_restore_failure_does_not_cleanup(
             sandbox_id=sandbox_id,
             user_id=_sandbox_id(),
             tenant_id="tenant-test",
-            llm_config=LLMProviderConfig(
-                provider="openai",
-                model_name="gpt-5-mini",
-                api_key=None,
-                api_base=None,
-            ),
             onyx_pat="pat",
         )
 

@@ -11,6 +11,7 @@ from uuid import UUID
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.users import fetch_user_by_id
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
 )
@@ -228,6 +229,20 @@ def _drive_interactive_turn(
             if not touch_turn(cache=cache, turn_id=turn_id, runner_id=runner_id):
                 logger.info("Interactive turn %s runner ownership lost", turn_id)
                 return
+
+            session = session_manager.get_session(session_id, user_id)
+            user = fetch_user_by_id(db_session, user_id)
+            if session is None or user is None:
+                raise RuntimeError("Craft session owner or session no longer exists")
+            session_manager.reconcile_session_llm_config(
+                sandbox,
+                session,
+                user,
+                None,
+                None,
+                None,
+            )
+            db_session.commit()
 
             update_session_activity(session_id, db_session)
 

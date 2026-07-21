@@ -49,7 +49,7 @@ import tarfile
 import tempfile
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
@@ -73,7 +73,6 @@ from onyx.server.features.build.configs import (
     SANDBOX_NEXTJS_PORT_END,
     SANDBOX_NEXTJS_PORT_START,
     SANDBOX_PROXY_HOST,
-    SANDBOX_PROXY_INJECTED_PLACEHOLDER,
     SANDBOX_PROXY_NAMESPACE,
     SANDBOX_SERVICE_ACCOUNT_NAME,
 )
@@ -108,6 +107,7 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_TENANT_ID,
 )
 from onyx.server.features.build.sandbox.models import (
+    CraftMCPServerConfig,
     FatalWriteError,
     FileSet,
     FilesystemEntry,
@@ -130,7 +130,8 @@ from onyx.server.features.build.sandbox.util.api_url_check import (
     validate_sandbox_api_url,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_multi_provider_opencode_config,
+    build_opencode_base_config,
+    build_session_opencode_config,
 )
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -230,21 +231,6 @@ def _provisioning_lock(sandbox_id: UUID, tenant_id: str) -> Iterator[None]:
                 sandbox_id,
                 exc_info=True,
             )
-
-
-def _placeholder_llm_configs(
-    configs: list[LLMProviderConfig],
-) -> list[LLMProviderConfig]:
-    """
-    Swaps real LLM keys for the proxy placeholder before the opencode config
-    reaches the pod; provider/model/api_base stay so routing is unchanged.
-    """
-    return [
-        c.model_copy(update={"api_key": SANDBOX_PROXY_INJECTED_PLACEHOLDER})
-        if c.api_key
-        else c
-        for c in configs
-    ]
 
 
 _MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MiB
@@ -1006,10 +992,7 @@ class KubernetesSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
-        *,
-        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -1028,7 +1011,6 @@ class KubernetesSandboxManager(SandboxManager):
             sandbox_id: Unique identifier for the sandbox
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
-            llm_config: LLM provider configuration
             onyx_pat: Required by the interface and the Docker backend; on K8s
                 the pod ships a placeholder and the proxy injects the real PAT,
                 so this is only checked as a provisioning precondition.
@@ -1110,22 +1092,15 @@ class KubernetesSandboxManager(SandboxManager):
                     self._terminated_sandboxes.discard(sandbox_id)
                 self._invalidate_serve_connection_info(sandbox_id)
 
-                # Secret must exist before the Pod (secretKeyRef). Pre-load every
-                # provider for cross-provider model overrides; keys are swapped for
-                # the proxy placeholder so the pod never holds them.
-                providers = _placeholder_llm_configs(all_llm_configs or [llm_config])
-                opencode_config_json = json.dumps(
-                    build_multi_provider_opencode_config(
-                        providers=providers,
-                        default_provider=llm_config.provider,
-                        default_model=llm_config.model_name,
-                        disabled_tools=OPENCODE_DISABLED_TOOLS,
-                        plugins=[
-                            _OPENCODE_CONNECT_APP_PLUGIN_PATH,
-                            _OPENCODE_SESSION_TAG_PLUGIN_PATH,
-                        ],
-                    )
+                # Secret must exist before the Pod (secretKeyRef).
+                opencode_config = build_opencode_base_config(
+                    disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    plugins=[
+                        _OPENCODE_CONNECT_APP_PLUGIN_PATH,
+                        _OPENCODE_SESSION_TAG_PLUGIN_PATH,
+                    ],
                 )
+                opencode_config_json = json.dumps(opencode_config)
                 self._provision_opencode_secret(str(sandbox_id), opencode_config_json)
 
                 # 1. Create Pod (user-level only, no session setup)
@@ -1381,6 +1356,7 @@ class KubernetesSandboxManager(SandboxManager):
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
@@ -1418,6 +1394,13 @@ class KubernetesSandboxManager(SandboxManager):
         )
 
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
+        session_opencode_config = build_session_opencode_config(
+            llm_config, OPENCODE_DISABLED_TOOLS, mcp_servers, str(session_id)
+        )
+        session_opencode_config_setup = (
+            f"printf '%s' {shlex.quote(session_opencode_config)} > "
+            f"{session_path}/opencode.json"
+        )
 
         # Copy outputs template from baked-in location and install npm dependencies
         outputs_setup = f"""
@@ -1479,6 +1462,8 @@ echo "Linked user_library to /workspace/managed/user_library"
 # Write agent instructions
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
+
+{session_opencode_config_setup}
 
 # Start Next.js dev server
 {nextjs_start_script}
@@ -1838,6 +1823,7 @@ echo "Session cleanup complete"
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         connectable_apps_section: str,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Restore a FileStore-backed snapshot through the sidecar filesystem API.
 
@@ -1890,6 +1876,8 @@ echo "Session cleanup complete"
                 agent_model=llm_config.model_name,
                 nextjs_port=nextjs_port,
                 connectable_apps_section=connectable_apps_section,
+                llm_config=llm_config,
+                mcp_servers=mcp_servers,
             )
 
             if nextjs_port is not None:
@@ -1920,6 +1908,8 @@ echo "Session cleanup complete"
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        llm_config: LLMProviderConfig | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Rewrite generated session configuration and managed symlinks."""
         pod_name = self._get_pod_name(str(sandbox_id))
@@ -1934,6 +1924,19 @@ echo "Session cleanup complete"
         )
 
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
+        session_opencode_config = (
+            build_session_opencode_config(
+                llm_config, OPENCODE_DISABLED_TOOLS, mcp_servers, str(session_id)
+            )
+            if llm_config is not None
+            else None
+        )
+        session_opencode_config_setup = (
+            f"printf '%s' {shlex.quote(session_opencode_config)} > "
+            f"{session_path}/opencode.json"
+            if session_opencode_config is not None
+            else ""
+        )
         attachments_content_b64 = base64.b64encode(
             ATTACHMENTS_SECTION_CONTENT.encode()
         ).decode()
@@ -1943,6 +1946,7 @@ mkdir -p {session_path}/.opencode
 ln -sfn /workspace/managed/skills {session_path}/.opencode/skills
 ln -sfn /workspace/managed/user_library {session_path}/user_library
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
+{session_opencode_config_setup}
 if [ -n "$(find {session_path}/attachments -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
     printf '\n\n' >> {session_path}/AGENTS.md
     echo '{attachments_content_b64}' | base64 -d >> {session_path}/AGENTS.md

@@ -50,12 +50,13 @@ Usage
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import Any, cast
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
 from onyx.server.features.build.sandbox.models import (
+    CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
     LLMProviderConfig,
@@ -280,19 +281,14 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
-        *,
-        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         self.provision_count += 1
         self.last_provision_payload = {
             "sandbox_id": sandbox_id,
             "user_id": user_id,
             "tenant_id": tenant_id,
-            "llm_config": llm_config,
             "onyx_pat": onyx_pat,
-            "all_llm_configs": all_llm_configs,
         }
         if self.provision_returns is None:
             raise _not_configured("provision")
@@ -313,6 +309,7 @@ class StubSandboxManager(SandboxManager):
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         self.setup_session_workspace_count += 1
         self.last_setup_session_workspace_payload = {
@@ -322,6 +319,7 @@ class StubSandboxManager(SandboxManager):
             "nextjs_port": nextjs_port,
             "connectable_apps_section": connectable_apps_section,
             "user_name": user_name,
+            "mcp_servers": mcp_servers,
         }
         if not self.setup_session_workspace_silent:
             raise _not_configured("setup_session_workspace")
@@ -349,6 +347,8 @@ class StubSandboxManager(SandboxManager):
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        llm_config: LLMProviderConfig | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         self.regenerate_session_config_count += 1
         self.last_regenerate_session_config_payload = {
@@ -359,6 +359,8 @@ class StubSandboxManager(SandboxManager):
             "nextjs_port": nextjs_port,
             "connectable_apps_section": connectable_apps_section,
             "user_name": user_name,
+            "llm_config": llm_config,
+            "mcp_servers": mcp_servers,
         }
         if not self.regenerate_session_config_silent:
             raise _not_configured("regenerate_session_config")
@@ -412,6 +414,7 @@ class StubSandboxManager(SandboxManager):
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         connectable_apps_section: str,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         self.restore_snapshot_count += 1
         self.last_restore_snapshot_payload = {
@@ -421,6 +424,7 @@ class StubSandboxManager(SandboxManager):
             "nextjs_port": nextjs_port,
             "llm_config": llm_config,
             "connectable_apps_section": connectable_apps_section,
+            "mcp_servers": mcp_servers,
         }
         if not self.restore_snapshot_silent:
             raise _not_configured("restore_snapshot")

@@ -7,8 +7,6 @@ import json
 import re
 from collections import defaultdict
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
-from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -20,13 +18,7 @@ from onyx.db.mcp import (
 )
 from onyx.db.models import MCPServer, User
 from onyx.server.features.build.sandbox.models import CraftMCPServerConfig
-from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_session_mcp_config,
-)
 from onyx.utils.logger import setup_logger
-
-if TYPE_CHECKING:
-    from onyx.server.features.build.sandbox.base import SandboxManager
 
 logger = setup_logger()
 
@@ -83,26 +75,6 @@ def resolve_craft_mcp_servers(
         )
         for server in servers
     ]
-
-
-def write_session_mcp_config(
-    sandbox_manager: SandboxManager,
-    db_session: Session,
-    user: User,
-    sandbox_id: UUID,
-    session_id: UUID,
-) -> None:
-    """Render ``session_id``'s craft MCP config and write it to the session's
-    project ``opencode.json`` (``sessions/<id>/opencode.json``). opencode merges
-    it with the pod-global config and re-reads it when the session's instance is
-    disposed, so writing this then ``dispose_opencode_instance`` hot-reloads the
-    MCP set without a pod re-provision. Done on cold session setup and every
-    skills/MCP reload."""
-    servers = resolve_craft_mcp_servers(db_session, user)
-    config_json = json.dumps(build_session_mcp_config(servers, str(session_id)))
-    sandbox_manager.write_sandbox_file(
-        sandbox_id, f"sessions/{session_id}/opencode.json", config_json
-    )
 
 
 def craft_mcp_fingerprint(mcp_servers: Sequence[CraftMCPServerConfig]) -> str:

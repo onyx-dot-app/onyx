@@ -29,7 +29,6 @@ from onyx.sandbox_proxy.request_evaluator import (
     McpRequestEvaluator,
 )
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
-from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
 from onyx.server.features.build.configs import (
@@ -170,7 +169,6 @@ def build_resolvers() -> list[CredentialResolver]:
     """
     return [
         OnyxPatResolver(),
-        LLMProviderKeyResolver(),
         MCPServerResolver(),
         ExternalAppResolver(),
     ]

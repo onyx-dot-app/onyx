@@ -100,7 +100,7 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
         request=MessageRequest(
             content="hello",
             client_request_id="req-1",
-            provider="openai",
+            provider_id=17,
             model="gpt-5-mini",
         ),
         user=cast(User, SimpleNamespace(id=user_id)),
@@ -111,11 +111,76 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
     assert response.status == "QUEUED"
     assert response.turn_index == 2
     assert persisted == [(2, "hello")]
-    assert session.agent_provider == "openai"
-    assert session.agent_model == "gpt-5-mini"
+    assert session.agent_provider == "onyx"
+    assert session.agent_model == "17/gpt-5-mini"
     assert db_session.commits == 1
     start_runner.assert_called_once()
     assert str(start_runner.call_args.args[0]) == response.turn_id
+
+
+def test_send_message_preserves_legacy_provider_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+    db_session = _FakeDbSession(user_message_count=0)
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
+    monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
+    monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
+
+    messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(
+            content="hello",
+            client_request_id="req-legacy",
+            provider="anthropic",
+            model="claude-fable-5",
+        ),
+        user=cast(User, SimpleNamespace(id=user_id)),
+        db_session=cast(Session, db_session),
+    )
+
+    assert session.agent_provider == "anthropic"
+    assert session.agent_model == "claude-fable-5"
+
+
+def test_send_message_prefers_provider_id_over_legacy_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+    db_session = _FakeDbSession(user_message_count=0)
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
+    monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
+    monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
+
+    messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(
+            content="hello",
+            client_request_id="req-new",
+            provider="anthropic",
+            provider_id=17,
+            model="claude-fable-5",
+        ),
+        user=cast(User, SimpleNamespace(id=user_id)),
+        db_session=cast(Session, db_session),
+    )
+
+    assert session.agent_provider == "onyx"
+    assert session.agent_model == "17/claude-fable-5"
 
 
 def test_send_message_rejects_second_active_turn(

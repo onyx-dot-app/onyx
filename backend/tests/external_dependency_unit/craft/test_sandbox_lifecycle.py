@@ -42,7 +42,6 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
 )
 from onyx.skills.push import SKILLS_MOUNT_PATH
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.common.craft.payloads import default_llm_config
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
@@ -77,7 +76,6 @@ class TestProvisionTransitions:
             user=test_user,
             user_id=test_user.id,
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            all_llm_configs=[default_llm_config()],
         )
         db_session.commit()
         db_session.refresh(sandbox)
@@ -111,7 +109,6 @@ class TestProvisionFailureRollback:
                 user=test_user,
                 user_id=test_user.id,
                 tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-                all_llm_configs=[default_llm_config()],
             )
 
         # The endpoint's exception handler rolls back. Simulate that here.
@@ -546,7 +543,6 @@ class TestManagedContentPushOrdering:
             user=test_user,
             user_id=test_user.id,
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            all_llm_configs=[default_llm_config()],
         )
         db_session.commit()
         db_session.refresh(row)

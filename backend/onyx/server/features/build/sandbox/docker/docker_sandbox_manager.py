@@ -32,16 +32,14 @@ Sandbox containers run with:
   ``ONYX_API_PREFIX``,
   opencode auth/config only)
 - only the dedicated sandbox bridge network — never compose's default
-  network. As a result api_server / postgres / redis / minio /
-  model_server are NOT reachable by service name from inside the sandbox.
+  network. ``onyx-craft-api`` is the supported API endpoint on that bridge;
+  postgres, redis, minio, and model_server remain unreachable by service name.
 
 Threat model — Docker vs Kubernetes parity gap
 ----------------------------------------------
-The LLM provider ``api_key`` is passed into the container via
-``OPENCODE_CONFIG_CONTENT`` (a plaintext Docker env var visible to ``docker
-inspect``). K8s loads the same config from an RBAC-scoped ``Secret``. Treat host
-access to the Docker daemon as access to the key; see
-``docs/craft/docker-opencode-serve.md`` for the operator-facing note.
+``OPENCODE_CONFIG_CONTENT`` contains only the Onyx gateway placeholder. The
+egress proxy replaces it with the sandbox PAT; provider credentials never enter
+the sandbox container.
 
 Outbound communication is intentionally limited to:
 
@@ -70,7 +68,7 @@ import shlex
 import tarfile
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from pathlib import Path
 from typing import TypedDict
 from uuid import UUID
@@ -122,6 +120,7 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_TENANT_ID,
 )
 from onyx.server.features.build.sandbox.models import (
+    CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
     LLMProviderConfig,
@@ -139,7 +138,8 @@ from onyx.server.features.build.sandbox.util.api_url_check import (
     validate_sandbox_api_url,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_multi_provider_opencode_config,
+    build_opencode_base_config,
+    build_session_opencode_config,
 )
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -265,30 +265,6 @@ def _sandbox_container_name(sandbox_id: str | UUID) -> str:
 def _sandbox_volume_name(sandbox_id: str | UUID) -> str:
     """Per-sandbox named volume holding ``/workspace/sessions``."""
     return f"{SANDBOX_DOCKER_VOLUME_PREFIX}{str(sandbox_id)[:8]}"
-
-
-def _container_llm_configs(
-    all_llm_configs: list[LLMProviderConfig] | None,
-    llm_config: LLMProviderConfig,
-    *,
-    proxy_enabled: bool,
-) -> list[LLMProviderConfig]:
-    """Provider configs to bake into the container's opencode.json.
-
-    The Docker analog of K8s ``_placeholder_llm_configs``: when the egress proxy
-    is enabled, real keys are swapped for the placeholder (the proxy injects the
-    live key on the wire); ``api_key=None`` providers (e.g. Ollama) are left
-    untouched so the placeholder never reaches the LLM.
-    """
-    configs = all_llm_configs or [llm_config]
-    if not proxy_enabled:
-        return configs
-    return [
-        c.model_copy(update={"api_key": SANDBOX_PROXY_INJECTED_PLACEHOLDER})
-        if c.api_key
-        else c
-        for c in configs
-    ]
 
 
 def _sanitize_relative_path(path: str) -> str:
@@ -497,8 +473,9 @@ def build_container_create_kwargs(
 
     Legacy (proxy disabled, default in tests/dev without proxy stack):
 
-    - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL, plus
-      ``OPENCODE_SERVER_PASSWORD`` and ``OPENCODE_CONFIG_CONTENT``.
+    - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL,
+      ONYX_API_PREFIX, ``OPENCODE_SERVER_PASSWORD``, and
+      ``OPENCODE_CONFIG_CONTENT``.
       No caller can inject anything else. No S3/MinIO/Postgres/Redis
       credentials. No compose service hostnames.
     - **No host mounts**: only the per-sandbox named volume mounted at
@@ -507,8 +484,8 @@ def build_container_create_kwargs(
       ``security_opt=no-new-privileges``, ``privileged=False``.
     - **Single network**: joins only the caller-supplied ``network`` (the
       dedicated ``onyx_craft_sandbox`` bridge). Does NOT join compose's default
-      network; api_server / postgres / redis / minio are unreachable by service
-      name.
+      network; the dedicated API alias is supported there, while postgres,
+      redis, and minio remain unreachable by service name.
 
     Proxy-enabled (``sandbox_proxy_host`` set; production self-host compose with
     ``--include-craft``):
@@ -516,12 +493,10 @@ def build_container_create_kwargs(
     - Env layered with ``HTTPS_PROXY`` / SDK CA vars + the ``firewall-init.sh``
       contract vars (``SANDBOX_PROXY_HOST``, ``SANDBOX_PROXY_PORT``,
       ``SANDBOX_PROXY_BOOTSTRAP_MODE=entrypoint``, ``CA_BUNDLE_SRC``/``DST``).
-      The legacy 4-key core is preserved; proxy keys
+      The legacy 5-key core is preserved; proxy keys
       are layered on top.
-    - ``ONYX_PAT`` and the opencode ``api_key`` are replaced with
-      ``SANDBOX_PROXY_INJECTED_PLACEHOLDER``; the proxy reads the real values
-      from Postgres and injects them on the wire (OnyxPatResolver,
-      LLMProviderKeyResolver). The sandbox never sees the raw credentials.
+    - ``ONYX_PAT`` is replaced with ``SANDBOX_PROXY_INJECTED_PLACEHOLDER``;
+      the proxy reads the real value from Postgres and injects it on the wire.
     - ``entrypoint=["/workspace/firewall-init.sh"]`` overrides the image's baked
       ENTRYPOINT (which Docker would otherwise prepend to ``command``, silently
       bypassing the init); ``command=["/workspace/entrypoint.sh"]`` becomes the
@@ -552,9 +527,9 @@ def build_container_create_kwargs(
     ``opencode_password`` is generated per-provision by the manager and injected
     as the env var named by ``OPENCODE_SERVER_PASSWORD``. The api_server reads
     it back via ``docker inspect`` rather than persisting it on disk.
-    ``opencode_config_json`` is the full ``opencode.json`` content
-    (single-provider for Docker today), surfaced as ``OPENCODE_CONFIG_CONTENT``
-    for opencode-serve to load at startup.
+    ``opencode_config_json`` is the base ``opencode.json`` content surfaced as
+    ``OPENCODE_CONFIG_CONTENT`` for opencode-serve to load at startup; each
+    workspace provides its gateway catalog in a session-local config.
     """
     if _looks_like_internal_compose_host(api_server_url):
         logger.warning(
@@ -564,7 +539,6 @@ def build_container_create_kwargs(
             "https://onyx.your-org.com/api.",
             api_server_url,
         )
-
     env: dict[str, str] = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
@@ -830,10 +804,7 @@ class DockerSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
-        *,
-        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning.")
@@ -867,25 +838,14 @@ class DockerSandboxManager(SandboxManager):
             plugins = [_OPENCODE_CONNECT_APP_PLUGIN_PATH]
             if SANDBOX_PROXY_HOST:
                 plugins.append(_OPENCODE_SESSION_TAG_PLUGIN_PATH)
-            # Proxy posture: Real PAT + LLM api_key never enter the sandbox. The
-            # proxy reads `Sandbox.encrypted_pat` and the per-provider key from
-            # Postgres, swaps the placeholder for the real bearer on the wire
-            # (OnyxPatResolver, LLMProviderKeyResolver).
             container_onyx_pat = (
                 SANDBOX_PROXY_INJECTED_PLACEHOLDER if SANDBOX_PROXY_HOST else onyx_pat
             )
-            provider_configs = _container_llm_configs(
-                all_llm_configs, llm_config, proxy_enabled=bool(SANDBOX_PROXY_HOST)
+            opencode_config = build_opencode_base_config(
+                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                plugins=plugins,
             )
-            opencode_config_json = json.dumps(
-                build_multi_provider_opencode_config(
-                    providers=provider_configs,
-                    default_provider=llm_config.provider,
-                    default_model=llm_config.model_name,
-                    disabled_tools=OPENCODE_DISABLED_TOOLS,
-                    plugins=plugins,
-                )
-            )
+            opencode_config_json = json.dumps(opencode_config)
             self._ensure_sandbox_image()
             self._ensure_sandbox_network()
             volume_name = self._ensure_sandbox_volume(sandbox_id, tenant_id)
@@ -1095,6 +1055,7 @@ class DockerSandboxManager(SandboxManager):
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
@@ -1104,6 +1065,13 @@ class DockerSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
+        )
+        session_opencode_config = build_session_opencode_config(
+            llm_config, OPENCODE_DISABLED_TOOLS, mcp_servers, str(session_id)
+        )
+        session_opencode_config_setup = (
+            f"printf '%s' {shlex.quote(session_opencode_config)} > "
+            f"{session_path}/opencode.json"
         )
 
         nextjs_start = (
@@ -1139,6 +1107,7 @@ fi
 ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 ln -sf {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
+{session_opencode_config_setup}
 {nextjs_start}
 echo "Session workspace setup complete"
 """
@@ -1442,6 +1411,7 @@ echo "Session cleanup complete"
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         connectable_apps_section: str,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
@@ -1509,6 +1479,8 @@ fi
             agent_model=llm_config.model_name,
             nextjs_port=nextjs_port,
             connectable_apps_section=connectable_apps_section,
+            llm_config=llm_config,
+            mcp_servers=mcp_servers,
         )
 
         if nextjs_port is not None:
@@ -1533,6 +1505,8 @@ fi
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        llm_config: LLMProviderConfig | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Rewrite generated session configuration and managed symlinks."""
         container = self._require_container(sandbox_id)
@@ -1544,6 +1518,19 @@ fi
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
+        session_opencode_config = (
+            build_session_opencode_config(
+                llm_config, OPENCODE_DISABLED_TOOLS, mcp_servers, str(session_id)
+            )
+            if llm_config is not None
+            else None
+        )
+        session_opencode_config_setup = (
+            f"printf '%s' {shlex.quote(session_opencode_config)} > "
+            f"{session_path}/opencode.json"
+            if session_opencode_config is not None
+            else ""
+        )
         attachments_content_b64 = base64.b64encode(
             ATTACHMENTS_SECTION_CONTENT.encode()
         ).decode()
@@ -1553,6 +1540,7 @@ mkdir -p {session_path}/.opencode
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
+{session_opencode_config_setup}
 if [ -n "$(find {session_path}/attachments -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
     printf '\n\n' >> {session_path}/AGENTS.md
     echo '{attachments_content_b64}' | base64 -d >> {session_path}/AGENTS.md
