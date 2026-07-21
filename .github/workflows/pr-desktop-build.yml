@@ -34,11 +34,10 @@ jobs:
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             args: "--bundles deb,rpm"
-          # TODO: Fix and enable the macOS build.
-          #- platform: macos
-          #  os: macos-latest
-          #  target: universal-apple-darwin
-          #  args: "--target universal-apple-darwin"
+          - platform: macos
+            os: macos-latest
+            target: universal-apple-darwin
+            args: "--target universal-apple-darwin"
           # TODO: Fix and enable the Windows build.
           #- platform: windows
           #  os: windows-latest
@@ -60,7 +59,10 @@ jobs:
         uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
         with:
           toolchain: stable
-          targets: ${{ matrix.target }}
+          # `universal-apple-darwin` is a Tauri-only pseudo-target (lipo of two
+          # real triples), not something rustup can install -- install the
+          # actual per-arch targets on macOS instead.
+          targets: ${{ matrix.platform == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
           components: clippy, rustfmt
 
       - name: Cache Cargo registry and build
@@ -118,6 +120,7 @@ jobs:
           name: desktop-build-${{ matrix.platform }}-${{ github.run_id }}
           path: |
             desktop/src-tauri/target/release/bundle/
+            desktop/src-tauri/target/universal-apple-darwin/release/bundle/
           retention-days: 7
           if-no-files-found: ignore
 
