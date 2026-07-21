@@ -31,6 +31,8 @@ backend = [
     "asyncpg==0.30.0",
     "atlassian-python-api==4.0.7",
     "azure-cognitiveservices-speech==1.50.0",
+    "azure-identity>=1.23.0,<2.0.0",
+    "azure-storage-blob>=12.24.0,<13.0.0",
     "beautifulsoup4==4.12.3",
     "boto3==1.39.11",
     "boxsdk==10.12.0",
