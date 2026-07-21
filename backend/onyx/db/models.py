@@ -5510,6 +5510,8 @@ class MCPConnectionConfig(Base):
     #   "refresh_token": "<token>",  # OAuth only
     #   "access_token": "<token>",   # OAuth only
     #   "headers": {"key": "value", "key2": "value2"},
+    #   "header_template": {"Authorization": "Bearer {api_key}"}, # shared API-token config
+    #   "api_token": "<token>",  # shared API-token config
     #   "header_substitutions": {"<key>": "<value>"}, # stored header template substitutions
     #   "request_body": ["path/in/body:value", "path2/in2/body2:value2"] # TBD
     #   "client_id": "<id>",  # For dynamically registered OAuth clients

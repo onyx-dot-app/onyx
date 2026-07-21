@@ -17,11 +17,13 @@ interface PerUserAuthConfigProps {
     field: keyof MCPAuthFormValues | string,
     value: unknown
   ) => void;
+  mode?: "per-user" | "shared";
 }
 
 export function PerUserAuthConfig({
   values,
   setFieldValue,
+  mode = "per-user",
 }: PerUserAuthConfigProps) {
   // Use draft state for KeyValue array (like in LLMConnectionFieldsCustom)
   const [headersDraft, setHeadersDraft] = useState<KeyValue[]>(
@@ -117,22 +119,28 @@ export function PerUserAuthConfig({
           />
         </FormField.Control>
         <FormField.Description>
-          Format headers for each user to fill in their individual credentials.
+          {mode === "per-user"
+            ? "Format headers for each user to fill in their individual credentials."
+            : "Format the headers sent with your organization's shared credentials."}{" "}
           Use placeholders like{" "}
           <Text text03 secondaryMono className="inline">
             {"{api_key}"}
           </Text>{" "}
-          or{" "}
-          <Text text03 secondaryMono className="inline">
-            {"{user_email}"}
-          </Text>
-          . Users will be prompted to provide values for placeholders (except
-          user_email).
+          {mode === "per-user" && (
+            <>
+              or{" "}
+              <Text text03 secondaryMono className="inline">
+                {"{user_email}"}
+              </Text>
+              . Users will be prompted to provide values for placeholders
+              (except user_email).
+            </>
+          )}
         </FormField.Description>
       </FormField>
 
       {/* Only show user credentials section if there are required fields */}
-      {requiredFields.length > 0 && (
+      {mode === "per-user" && requiredFields.length > 0 && (
         <>
           <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
