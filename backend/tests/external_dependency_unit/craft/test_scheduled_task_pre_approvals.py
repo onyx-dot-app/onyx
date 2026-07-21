@@ -9,6 +9,7 @@ this file pins the queries those stubs stand in for.
 from __future__ import annotations
 
 from typing import Callable
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete, select
@@ -22,9 +23,11 @@ from onyx.db.enums import (
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
+from onyx.db.gated_app import get_or_create_gated_app_id
 from onyx.db.models import (
     BuildSession,
     ExternalApp,
+    MCPServer,
     ScheduledTask,
     ScheduledTaskPreApprovedApp,
     User,
@@ -292,6 +295,74 @@ def test_resubmitting_existing_grant_is_idempotent(
     db_session.commit()
 
     assert set(updated.pre_approved_app_ids) == {app_a, app_b}
+
+
+def test_mcp_grants_survive_external_app_replacement(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    """``set_pre_approved_apps`` manages only EXTERNAL_APP grants: an MCP-server
+    grant (seeded directly — no API writes these yet) survives a wholesale
+    external-app replacement, stays out of ``pre_approved_app_ids``, and reaches
+    the gate through ``get_live_scheduled_run_grants`` as its (kind, id) target.
+    """
+    user = make_user(db_session)
+    bs = build_session_with_user(user=user)
+    app_a, app_b = _make_app(db_session), _make_app(db_session)
+    task = _seed_task(db_session, user, pre_approved_app_ids=[app_a])
+
+    server = MCPServer(
+        owner=user.email,
+        name=f"pre_approval_mcp_{uuid4().hex[:8]}",
+        server_url="https://example.com/mcp",
+        is_public=False,
+    )
+    db_session.add(server)
+    db_session.flush()
+    mcp_gated_app_id = get_or_create_gated_app_id(
+        db_session, GatedAppKind.MCP_SERVER, server.id
+    )
+    db_session.add(
+        ScheduledTaskPreApprovedApp(
+            scheduled_task_id=task.id, gated_app_id=mcp_gated_app_id
+        )
+    )
+    db_session.commit()
+
+    updated = update_scheduled_task(
+        db_session=db_session,
+        task_id=task.id,
+        user_id=user.id,
+        pre_approved_app_ids=[app_b],
+    )
+    db_session.commit()
+
+    assert updated.pre_approved_app_ids == [app_b]  # MCP grant excluded
+    assert {g.gated_app.target_key for g in updated.pre_approved_apps} == {
+        (GatedAppKind.EXTERNAL_APP, app_b),
+        (GatedAppKind.MCP_SERVER, server.id),
+    }
+
+    run = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+    )
+    mark_run_status(
+        db_session=db_session,
+        run_id=run.id,
+        status=ScheduledTaskRunStatus.RUNNING,
+        session_id=bs.id,
+    )
+    db_session.commit()
+
+    grants = get_live_scheduled_run_grants(db_session=db_session, session_id=bs.id)
+    assert grants is not None
+    assert grants[1] == {
+        (GatedAppKind.EXTERNAL_APP, app_b),
+        (GatedAppKind.MCP_SERVER, server.id),
+    }
 
 
 def test_create_persists_grants(

@@ -6589,7 +6589,9 @@ class GatedApp(Base):
     pre-approvals) references this single id instead of a per-catalog FK, so a
     new target type adds one nullable column here rather than a column on every
     consumer table. Rows are created lazily via
-    ``onyx.db.gated_app.get_or_create_gated_app_id``.
+    ``onyx.db.gated_app.get_or_create_gated_app_id`` (the migration backfilled
+    pre-existing targets), so a row's existence doesn't imply the target was
+    ever policied or approved.
 
     Exactly one of ``external_app_id`` / ``mcp_server_id`` is set; ``kind`` is
     derived from which. Deleting the underlying target CASCADEs this row away,
@@ -6603,16 +6605,17 @@ class GatedApp(Base):
         Integer,
         ForeignKey("external_app.id", ondelete="CASCADE"),
         nullable=True,
-        unique=True,
     )
     mcp_server_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("mcp_server.id", ondelete="CASCADE"),
         nullable=True,
-        unique=True,
     )
 
+    # Constraints are named to match the live schema created by the migration.
     __table_args__ = (
+        UniqueConstraint("external_app_id", name="uq_gated_app_external_app"),
+        UniqueConstraint("mcp_server_id", name="uq_gated_app_mcp_server"),
         CheckConstraint(
             "num_nonnulls(external_app_id, mcp_server_id) = 1",
             name="ck_gated_app_single_target",
