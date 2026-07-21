@@ -26,6 +26,7 @@ from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
+from onyx.db.gated_app import get_gated_app_id
 from onyx.db.notification import create_notification
 from onyx.db.scheduled_task import ScheduledRunGrants, get_live_scheduled_run_grants
 from onyx.external_apps.matching.engine import (
@@ -728,8 +729,9 @@ class GateAddon:
         grants = self._live_grants(db, ctx.session_id)
         if grants is None:
             return None
-        run_id, granted_app_ids = grants
-        if matched_actions.external_app_id not in granted_app_ids:
+        run_id, granted_targets = grants
+        target = matched_actions.target
+        if target.key not in granted_targets:
             return None
         return _ApprovalGrant(
             decided_via=ApprovalDecidedVia.PRE_APPROVAL,
@@ -737,7 +739,8 @@ class GateAddon:
             notification_title=f"Scheduled task used {matched_actions.app_name} (pre-approved)",
             notification_data={
                 "run_id": str(run_id),
-                "external_app_id": matched_actions.external_app_id,
+                "target_kind": target.kind.value,
+                "target_id": target.id,
             },
         )
 
@@ -748,12 +751,14 @@ class GateAddon:
         action_types = actions_requiring_approval(matched_actions.actions)
         if not action_types:
             return None
+        target = matched_actions.target
         cache: CacheBackend | None = None
         try:
             cache = self._cache_factory(ctx.tenant_id)
             if approval_cache.cached_session_grants_cover(
                 session_id=ctx.session_id,
-                external_app_id=matched_actions.external_app_id,
+                kind=target.kind,
+                target_id=target.id,
                 action_types=action_types,
                 cache=cache,
             ):
@@ -761,10 +766,11 @@ class GateAddon:
         except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
                 "approval_grant_cache_error tenant=%s session=%s "
-                "external_app_id=%s operation=%s error=%r",
+                "target=%s:%s operation=%s error=%r",
                 ctx.tenant_id,
                 short_log_id(ctx.session_id),
-                matched_actions.external_app_id,
+                target.kind.value,
+                target.id,
                 "check",
                 str(e),
             )
@@ -772,38 +778,17 @@ class GateAddon:
         grant_source_rows = action_approval.list_session_grant_action_approvals(
             db,
             session_id=ctx.session_id,
-            external_app_id=matched_actions.external_app_id,
+            gated_app_id=get_gated_app_id(db, target.kind, target.id),
         )
-        granted_action_types: set[str] = set()
-        for grant_source_row in grant_source_rows:
-            granted_action_types.update(
-                actions_requiring_approval(grant_source_row.actions)
-            )
+        granted_action_types = approval_cache.hydrate_session_grants(
+            session_id=ctx.session_id,
+            kind=target.kind,
+            target_id=target.id,
+            rows=grant_source_rows,
+            cache=cache,
+        )
         if not set(action_types).issubset(granted_action_types):
             return None
-
-        if cache is not None:
-            try:
-                for grant_source_row in grant_source_rows:
-                    approval_cache.cache_session_grant_actions(
-                        session_id=ctx.session_id,
-                        external_app_id=matched_actions.external_app_id,
-                        action_types=actions_requiring_approval(
-                            grant_source_row.actions
-                        ),
-                        source_approval_id=grant_source_row.approval_id,
-                        cache=cache,
-                    )
-            except CACHE_TRANSIENT_ERRORS as e:
-                logger.warning(
-                    "approval_grant_cache_error tenant=%s session=%s "
-                    "external_app_id=%s operation=%s error=%r",
-                    ctx.tenant_id,
-                    short_log_id(ctx.session_id),
-                    matched_actions.external_app_id,
-                    "hydrate",
-                    str(e),
-                )
         return _ApprovalGrant(decided_via=ApprovalDecidedVia.SESSION_GRANT)
 
     async def _apply_approval_grant(
@@ -856,7 +841,7 @@ class GateAddon:
                     ],
                     app_name=matched_actions.app_name,
                     payload=matched_actions.payload,
-                    external_app_id=matched_actions.external_app_id,
+                    target=matched_actions.target.key,
                     decision=ApprovalDecision.APPROVED,
                     decided_via=grant.decided_via,
                 )
@@ -912,7 +897,7 @@ class GateAddon:
                 actions=actions_payload,
                 app_name=matched_actions.app_name,
                 payload=matched_actions.payload,
-                external_app_id=matched_actions.external_app_id,
+                target=matched_actions.target.key,
             )
             approval_id = row.approval_id
             db.commit()
@@ -934,14 +919,15 @@ class GateAddon:
 
         logger.info(
             "approval_requested tenant=%s sandbox=%s session=%s approval=%s "
-            "app_name=%r external_app_id=%s action_type=%s action_count=%s "
+            "app_name=%r target=%s:%s action_type=%s action_count=%s "
             "proxy_instance=%s session_id=%s approval_id=%s",
             ctx.tenant_id,
             sandbox_log_label(ctx),
             short_log_id(ctx.session_id),
             short_log_id(approval_id),
             matched_actions.app_name,
-            matched_actions.external_app_id,
+            matched_actions.target.kind.value,
+            matched_actions.target.id,
             matched_actions.governing_action.action_type,
             len(matched_actions.actions),
             self._proxy_instance_id,

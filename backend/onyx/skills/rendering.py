@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource, DocumentSourceDescription
 from onyx.db.connector import _INTERNAL_ONLY_SOURCES
 from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
-from onyx.db.enums import EndpointPolicy, ExternalAppType
-from onyx.db.external_app import get_policies
+from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
+from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, User
 from onyx.external_apps.providers.registry import action_policy_views
 from onyx.utils.logger import setup_logger
@@ -112,7 +112,11 @@ def render_external_app_skill(
     ``skill_dir`` is the skill's on-disk directory (holds ``SKILL.md.template``).
     """
     template = (skill_dir / "SKILL.md.template").read_text()
-    stored = get_policies(db_session, external_app.id) if external_app else {}
+    stored = (
+        get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app.id)
+        if external_app
+        else {}
+    )
     section = build_action_availability_section(app_type, stored)
     if section:
         return template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)

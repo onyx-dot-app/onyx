@@ -26,13 +26,15 @@ import pytest
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
-from onyx.db.models import ExternalApp, ExternalAppPolicy, User
+from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
+from onyx.db.gated_app import get_or_create_gated_app_id
+from onyx.db.models import ExternalApp, GatedActionPolicy, User
 from onyx.external_apps.credentials import app_is_available
 from onyx.external_apps.matching import engine as matching_engine
 from onyx.external_apps.matching.engine import (
     WHOLE_DOMAIN_ACTION_TYPE,
     AllMatchedActions,
+    GatedTarget,
     MatchedAction,
     recognize_actions,
 )
@@ -73,9 +75,12 @@ def _set_policy(
     action_id: str,
     policy: EndpointPolicy,
 ) -> None:
+    gated_app_id = get_or_create_gated_app_id(
+        db_session, GatedAppKind.EXTERNAL_APP, app.id
+    )
     db_session.add(
-        ExternalAppPolicy(
-            external_app_id=app.id,
+        GatedActionPolicy(
+            gated_app_id=gated_app_id,
             action_id=action_id,
             policy=policy,
         )
@@ -103,8 +108,7 @@ def test_match_stored_override_wins(
                 policy=EndpointPolicy.ALWAYS,
             ),
         ),
-        app_name="Slack",
-        external_app_id=app.id,
+        target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name="Slack"),
     )
 
 
@@ -309,7 +313,7 @@ def test_external_app_matcher_resolves_app_and_verdict(
     assert [a.action_type for a in matched_actions.actions] == ["slack.messages.write"]
     assert matched_actions.actions[0].policy == EndpointPolicy.DENY
     assert matched_actions.app_name == "Slack"
-    assert matched_actions.external_app_id == app.id
+    assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, app.id)
     assert matched_actions.payload == {"channel": "C1", "text": "hi"}
 
 
@@ -368,7 +372,7 @@ def test_external_app_matcher_off_catalog_synthesizes_whole_domain(
     assert matched_actions is not None
     assert matched_actions.actions[0].action_type == WHOLE_DOMAIN_ACTION_TYPE
     assert matched_actions.actions[0].policy == EndpointPolicy.ASK
-    assert matched_actions.external_app_id == app.id
+    assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, app.id)
 
 
 def test_external_app_matcher_credentialless_app_is_gated(
@@ -397,6 +401,6 @@ def test_external_app_matcher_credentialless_app_is_gated(
     assert matched_actions is not None
     assert matched_actions.actions[0].action_type == WHOLE_DOMAIN_ACTION_TYPE
     assert matched_actions.actions[0].policy == EndpointPolicy.ASK
-    assert matched_actions.external_app_id == app.id
+    assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, app.id)
     # CUSTOM apps have no provider; the name comes from the linked skill.
     assert matched_actions.app_name == skill.name

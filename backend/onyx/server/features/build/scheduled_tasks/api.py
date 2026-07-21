@@ -301,7 +301,7 @@ def _detail(
         next_run_at=task.next_run_at,
         next_runs=next_runs,
         last_run=RunSummary.from_model(last_run) if last_run is not None else None,
-        pre_approved_app_ids=task.pre_approved_app_ids,
+        pre_approved_app_ids=task.pre_approved_external_app_ids,
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
@@ -405,7 +405,7 @@ def create_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        pre_approved_app_ids=_validated_app_ids(
+        pre_approved_external_app_ids=_validated_app_ids(
             db_session, request.pre_approved_app_ids
         ),
     )
@@ -468,7 +468,7 @@ def patch_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        pre_approved_app_ids=(
+        pre_approved_external_app_ids=(
             _validated_app_ids(db_session, request.pre_approved_app_ids)
             if request.pre_approved_app_ids is not None
             else None
