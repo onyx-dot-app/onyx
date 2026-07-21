@@ -78,8 +78,8 @@ pub fn set_server_url(state: tauri::State<ConfigState>, url: String) -> Result<S
         return Err("URL must start with http:// or https://".to_string());
     }
 
-    let config = state.update_config(|c| c.server_url = url.trim_end_matches('/').to_string());
-    save_config(&config)?;
+    let config =
+        state.update_and_persist(|c| c.server_url = url.trim_end_matches('/').to_string())?;
     state.set_config_initialized(true);
 
     Ok(config.server_url)
@@ -221,8 +221,7 @@ pub async fn new_window(app: tauri::AppHandle) -> Result<(), String> {
 /// Reset config to defaults
 #[tauri::command]
 pub fn reset_config(state: tauri::State<ConfigState>) -> Result<(), String> {
-    let config = state.update_config(|c| *c = AppConfig::default());
-    save_config(&config)?;
+    state.update_and_persist(|c| *c = AppConfig::default())?;
     state.set_config_initialized(true);
     Ok(())
 }
@@ -231,4 +230,11 @@ pub fn reset_config(state: tauri::State<ConfigState>) -> Result<(), String> {
 #[tauri::command]
 pub async fn start_drag_window(window: tauri::Window) -> Result<(), String> {
     window.start_dragging().map_err(|e| e.to_string())
+}
+
+/// Windows-only DOM-listener fallback for the Alt-alone menu-bar toggle (see
+/// `scripts/alt_menu_windows.js`); Linux hooks the native GTK window instead.
+#[tauri::command]
+pub fn toggle_menu_bar(app: tauri::AppHandle) {
+    crate::menu::handle_menu_bar_toggle(&app);
 }

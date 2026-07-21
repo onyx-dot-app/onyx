@@ -23,11 +23,14 @@ impl AltAloneTracker {
         Self::default()
     }
 
-    /// Feed a key-press event. `is_alt` is whether the pressed key is Alt.
-    /// Pressing any other key while Alt may or may not be held cancels the
-    /// "alone" tracking.
-    pub fn on_key_press(&mut self, is_alt: bool) {
-        self.held_alone = is_alt;
+    /// Feed a key-press event. `is_alt` is whether the pressed key is Alt;
+    /// `other_modifier_held` is whether Ctrl/Shift/Super/etc. was already
+    /// down when this key went down. Pressing any other key cancels "alone"
+    /// tracking, and pressing Alt while another modifier is already held
+    /// (e.g. Ctrl-then-Alt) must not start it -- otherwise releasing Alt
+    /// first would toggle the menu even though Ctrl is still held.
+    pub fn on_key_press(&mut self, is_alt: bool, other_modifier_held: bool) {
+        self.held_alone = is_alt && !other_modifier_held;
     }
 
     /// Feed a key-release event. `is_alt` is whether the released key is
@@ -81,9 +84,16 @@ mod linux {
 
         let press_tracker = tracker.clone();
         gtk_window.connect_key_press_event(move |_win, event| {
+            let other_modifier_held = event.state().intersects(
+                gdk::ModifierType::CONTROL_MASK
+                    | gdk::ModifierType::SHIFT_MASK
+                    | gdk::ModifierType::SUPER_MASK
+                    | gdk::ModifierType::META_MASK
+                    | gdk::ModifierType::HYPER_MASK,
+            );
             press_tracker
                 .borrow_mut()
-                .on_key_press(is_alt(event.keyval()));
+                .on_key_press(is_alt(event.keyval()), other_modifier_held);
             glib::Propagation::Proceed
         });
 
@@ -101,6 +111,29 @@ mod linux {
 #[cfg(target_os = "linux")]
 pub use linux::setup_alt_menu_toggle;
 
+// Windows has no toplevel-key-event hook equivalent to the Linux GTK
+// approach above, so it keeps the previous DOM-level listener (see git
+// history predating the Linux native rework) instead of losing the toggle
+// entirely.
+#[cfg(target_os = "windows")]
+mod windows {
+    use tauri::Webview;
+
+    const ALT_MENU_SCRIPT: &str = include_str!("scripts/alt_menu_windows.js");
+
+    pub fn inject_alt_menu_script(webview: &Webview) {
+        if let Err(e) = webview.eval(ALT_MENU_SCRIPT) {
+            crate::debug_log::log_backend_error(
+                webview.app_handle(),
+                &format!("Failed to inject Alt-menu toggle script: {e}"),
+            );
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub use windows::inject_alt_menu_script;
+
 #[cfg(test)]
 mod tests {
     use super::AltAloneTracker;
@@ -108,23 +141,31 @@ mod tests {
     #[test]
     fn alone_press_and_release_toggles() {
         let mut tracker = AltAloneTracker::new();
-        tracker.on_key_press(true);
+        tracker.on_key_press(true, false);
         assert!(tracker.on_key_release(true));
     }
 
     #[test]
     fn press_other_key_then_release_alt_does_not_toggle() {
         let mut tracker = AltAloneTracker::new();
-        tracker.on_key_press(true);
-        tracker.on_key_press(false); // e.g. Tab pressed while Alt is held
+        tracker.on_key_press(true, false);
+        tracker.on_key_press(false, false); // e.g. Tab pressed while Alt is held
+        assert!(!tracker.on_key_release(true));
+    }
+
+    #[test]
+    fn other_modifier_held_before_alt_press_does_not_toggle() {
+        let mut tracker = AltAloneTracker::new();
+        tracker.on_key_press(false, false); // Ctrl pressed first
+        tracker.on_key_press(true, true); // Alt pressed while Ctrl is held
         assert!(!tracker.on_key_release(true));
     }
 
     #[test]
     fn key_repeat_does_not_retrigger() {
         let mut tracker = AltAloneTracker::new();
-        tracker.on_key_press(true);
-        tracker.on_key_press(true); // simulated repeat of the Alt press
+        tracker.on_key_press(true, false);
+        tracker.on_key_press(true, false); // simulated repeat of the Alt press
         assert!(tracker.on_key_release(true));
         // A second release call (no matching press) must not fire again.
         assert!(!tracker.on_key_release(true));
@@ -133,7 +174,7 @@ mod tests {
     #[test]
     fn releasing_a_non_alt_key_does_not_toggle() {
         let mut tracker = AltAloneTracker::new();
-        tracker.on_key_press(true);
+        tracker.on_key_press(true, false);
         assert!(!tracker.on_key_release(false));
         // Alt is still considered held-alone afterwards.
         assert!(tracker.on_key_release(true));

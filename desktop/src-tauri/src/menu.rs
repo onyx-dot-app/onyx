@@ -1,6 +1,6 @@
-use crate::config::{save_config, ConfigState};
+use crate::config::ConfigState;
 use crate::debug_log::{log_backend_error, MENU_OPEN_DEBUG_LOG_ID, MENU_TOGGLE_DEVTOOLS_ID};
-use crate::window::{focus_main_window, trigger_new_chat};
+use crate::window::{focus_main_window, open_chat_window};
 use tauri::image::Image;
 use tauri::menu::{
     CheckMenuItem, Menu, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder, HELP_SUBMENU_ID,
@@ -187,12 +187,12 @@ pub fn handle_menu_bar_toggle(app: &AppHandle) {
         return;
     }
     let state = app.state::<ConfigState>();
-    let show = {
-        let config = state.update_config(|c| c.show_menu_bar = !c.show_menu_bar);
-        if let Err(e) = save_config(&config) {
+    let show = match state.update_and_persist(|c| c.show_menu_bar = !c.show_menu_bar) {
+        Ok(config) => config.show_menu_bar,
+        Err(e) => {
             log_backend_error(app, &format!("Failed to save config: {e}"));
+            state.config().show_menu_bar
         }
-        config.show_menu_bar
     };
 
     for (_, window) in app.webview_windows() {
@@ -217,13 +217,14 @@ pub fn handle_menu_bar_toggle(app: &AppHandle) {
 #[cfg(target_os = "linux")]
 pub fn handle_decorations_toggle(app: &AppHandle) {
     let state = app.state::<ConfigState>();
-    let hide = {
-        let config =
-            state.update_config(|c| c.hide_window_decorations = !c.hide_window_decorations);
-        if let Err(e) = save_config(&config) {
+    let hide = match state
+        .update_and_persist(|c| c.hide_window_decorations = !c.hide_window_decorations)
+    {
+        Ok(config) => config.hide_window_decorations,
+        Err(e) => {
             log_backend_error(app, &format!("Failed to save config: {e}"));
+            state.config().hide_window_decorations
         }
-        config.hide_window_decorations
     };
 
     for (_, window) in app.webview_windows() {
@@ -257,7 +258,7 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         None::<&str>,
     )?;
     // Keep it visible/pinned without letting users uncheck (avoids orphaning the tray)
-    let _ = show_in_menu_bar.set_enabled(false);
+    show_in_menu_bar.set_enabled(false)?;
     let quit = PredefinedMenuItem::quit(app, Some("Quit Onyx"))?;
 
     MenuBuilder::new(app)
@@ -276,8 +277,7 @@ fn handle_tray_menu_event(app: &AppHandle, id: &str) {
             focus_main_window(app);
         }
         TRAY_MENU_OPEN_CHAT_ID => {
-            focus_main_window(app);
-            trigger_new_chat(app);
+            open_chat_window(app);
         }
         TRAY_MENU_QUIT_ID => {
             app.exit(0);
@@ -305,9 +305,8 @@ pub fn setup_tray_icon(app: &AppHandle) -> tauri::Result<()> {
         }
     }
 
-    if let Ok(menu) = build_tray_menu(app) {
-        builder = builder.menu(&menu);
-    }
+    let menu = build_tray_menu(app)?;
+    builder = builder.menu(&menu);
 
     builder
         .on_tray_icon_event(|tray, event| {

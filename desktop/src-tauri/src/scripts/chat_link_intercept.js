@@ -7,8 +7,14 @@
 
   function isChatSessionPage() {
     try {
+      const trustedOrigin = window.__ONYX_TRUSTED_ORIGIN__;
+      if (!trustedOrigin) {
+        return false;
+      }
+
       const currentUrl = new URL(window.location.href);
       return (
+        currentUrl.origin === trustedOrigin &&
         currentUrl.pathname.startsWith("/app") &&
         currentUrl.searchParams.has("chatId")
       );

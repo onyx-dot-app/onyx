@@ -67,9 +67,21 @@ pub fn load_config() -> (AppConfig, bool) {
     match fs::read_to_string(&config_path) {
         Ok(contents) => match serde_json::from_str(&contents) {
             Ok(config) => (config, true),
-            Err(_) => (AppConfig::default(), false),
+            Err(e) => {
+                eprintln!(
+                    "[ONYX ERROR] Failed to parse config file {}: {e}",
+                    config_path.display()
+                );
+                (AppConfig::default(), false)
+            }
         },
-        Err(_) => (AppConfig::default(), false),
+        Err(e) => {
+            eprintln!(
+                "[ONYX ERROR] Failed to read config file {}: {e}",
+                config_path.display()
+            );
+            (AppConfig::default(), false)
+        }
     }
 }
 
@@ -98,6 +110,11 @@ pub struct ConfigState {
     app_base_url: RwLock<Option<Url>>,
     pub debug_mode: bool,
     pub debug_log_file: Mutex<Option<fs::File>>,
+    /// Serializes update-then-persist-to-disk sequences. Without it, two
+    /// concurrent `update_config` + `save_config` callers can interleave so
+    /// the last disk write doesn't match the last in-memory update (A and B
+    /// both update, B saves, then A's stale snapshot saves last).
+    persist_lock: Mutex<()>,
 }
 
 impl ConfigState {
@@ -113,6 +130,7 @@ impl ConfigState {
             app_base_url: RwLock::new(None),
             debug_mode,
             debug_log_file: Mutex::new(debug_log_file),
+            persist_lock: Mutex::new(()),
         }
     }
 
@@ -131,6 +149,17 @@ impl ConfigState {
         let mut guard = self.config.write().unwrap_or_else(|e| e.into_inner());
         f(&mut guard);
         guard.clone()
+    }
+
+    /// Apply `f` and persist the result to disk as one atomic step, so a
+    /// concurrent caller can't save its own update in between this update and
+    /// this save (which would otherwise leave `config.json` not matching
+    /// whichever update actually happened last in memory).
+    pub fn update_and_persist(&self, f: impl FnOnce(&mut AppConfig)) -> Result<AppConfig, String> {
+        let _guard = self.persist_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let config = self.update_config(f);
+        save_config(&config)?;
+        Ok(config)
     }
 
     pub fn is_config_initialized(&self) -> bool {

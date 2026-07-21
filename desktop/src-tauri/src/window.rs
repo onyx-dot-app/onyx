@@ -41,6 +41,35 @@ pub fn trigger_new_chat(app: &AppHandle) {
     }
 }
 
+/// Focus the main window and navigate it to `/chat`, building it first if it
+/// doesn't exist. Building and navigating must happen in the same task --
+/// doing them as the two independent fire-and-forget steps `focus_main_window`
+/// / `trigger_new_chat` normally are lets the navigation run against a window
+/// that hasn't finished being created yet, silently dropping it.
+pub fn open_chat_window(app: &AppHandle) {
+    if app.get_webview_window("main").is_some() {
+        focus_main_window(app);
+        trigger_new_chat(app);
+        return;
+    }
+
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        match build_and_setup_window(&handle) {
+            Ok(window) => {
+                let server_url = handle.state::<ConfigState>().config().server_url;
+                let url = format!("{}/chat", server_url);
+                if let Err(e) = window.eval(format!("window.location.href = '{}'", url)) {
+                    log_backend_error(&handle, &format!("Failed to navigate to new chat: {e}"));
+                }
+            }
+            Err(e) => {
+                log_backend_error(&handle, &format!("Failed to open new window: {e}"));
+            }
+        }
+    });
+}
+
 /// Build a new Onyx window (title, size, platform-specific transparency /
 /// titlebar / background-color quirks, vibrancy, the Alt-menu toggle, and
 /// devtools) and apply current settings to it. The single source of truth
@@ -180,10 +209,23 @@ pub fn open_in_default_browser(url: &str) -> bool {
     false
 }
 
+/// Scopes the chat-link-intercept script to the configured Onyx server's
+/// origin, not just its path shape -- otherwise a page from any other origin
+/// that happens to have an `/app` path with a `chatId` query param would be
+/// treated as a trusted chat session and get the native-link override.
 pub fn inject_chat_link_intercept(webview: &Webview) {
-    if let Err(e) = webview.eval(CHAT_LINK_INTERCEPT_SCRIPT) {
+    let app = webview.app_handle();
+    let trusted_origin = app
+        .state::<ConfigState>()
+        .app_base_url()
+        .map(|url| url.origin().ascii_serialization());
+    let origin_json = serde_json::to_string(&trusted_origin).unwrap_or_else(|_| "null".to_string());
+    let script =
+        format!("window.__ONYX_TRUSTED_ORIGIN__ = {origin_json};\n{CHAT_LINK_INTERCEPT_SCRIPT}");
+
+    if let Err(e) = webview.eval(&script) {
         log_backend_error(
-            webview.app_handle(),
+            app,
             &format!("Failed to inject chat-link-intercept script: {e}"),
         );
     }

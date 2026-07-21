@@ -147,6 +147,7 @@ fn main() {
             commands::new_window,
             commands::reset_config,
             commands::start_drag_window,
+            commands::toggle_menu_bar,
             debug_log::log_from_frontend
         ])
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -222,6 +223,9 @@ fn main() {
 
             #[cfg(target_os = "macos")]
             window::eval_titlebar_script(webview);
+
+            #[cfg(target_os = "windows")]
+            alt_menu::inject_alt_menu_script(webview);
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

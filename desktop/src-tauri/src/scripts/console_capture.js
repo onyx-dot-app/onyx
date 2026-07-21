@@ -17,7 +17,7 @@
             try { return typeof a === 'string' ? a : JSON.stringify(a); }
             catch { return String(a); }
           }).join(' ');
-          invoke('log_from_frontend', { level, message });
+          invoke('log_from_frontend', { level, message }).catch(() => {});
         }
       } catch {}
     };
@@ -31,7 +31,7 @@
         invoke('log_from_frontend', {
           level: 'error',
           message: `[uncaught] ${event.message} at ${event.filename}:${event.lineno}:${event.colno}`
-        });
+        }).catch(() => {});
       }
     } catch {}
   });
@@ -44,7 +44,7 @@
         invoke('log_from_frontend', {
           level: 'error',
           message: `[unhandled rejection] ${event.reason}`
-        });
+        }).catch(() => {});
       }
     } catch {}
   });

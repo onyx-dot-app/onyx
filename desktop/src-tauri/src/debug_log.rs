@@ -22,13 +22,28 @@ pub fn get_debug_log_path() -> Option<PathBuf> {
 pub fn init_debug_log_file() -> Option<fs::File> {
     let log_path = get_debug_log_path()?;
     if let Some(parent) = log_path.parent() {
-        let _ = fs::create_dir_all(parent);
+        if let Err(e) = fs::create_dir_all(parent) {
+            eprintln!(
+                "[ONYX ERROR] Failed to create debug log directory {}: {e}",
+                parent.display()
+            );
+        }
     }
-    fs::OpenOptions::new()
+
+    match fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&log_path)
-        .ok()
+    {
+        Ok(file) => Some(file),
+        Err(e) => {
+            eprintln!(
+                "[ONYX ERROR] Failed to open debug log file {}: {e}",
+                log_path.display()
+            );
+            None
+        }
+    }
 }
 
 pub fn format_utc_timestamp() -> String {
