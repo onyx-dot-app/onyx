@@ -26,7 +26,7 @@ from onyx.server.features.skill.api import (
     upload_current_user_skill_files,
 )
 from onyx.server.features.skill.models import SkillEnableRequest, SkillPatchRequest
-from onyx.skills.bundle import build_single_file_bundle, build_skill_md, SKILL_MD_NAME
+from onyx.skills.bundle import SKILL_MD_NAME, build_single_file_bundle, build_skill_md
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_group,

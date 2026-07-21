@@ -25,19 +25,19 @@ from enum import Enum
 from uuid import UUID
 
 from sqlalchemy import (
-    and_,
     ColumnElement,
+    Select,
+    and_,
     delete,
     exists,
     func,
     or_,
-    Select,
     select,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.auth.schemas import UserRole
 from onyx.db.engine.sql_engine import get_session_with_current_tenant

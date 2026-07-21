@@ -15,7 +15,7 @@ from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import Token
 from enum import Enum
-from typing import cast, Final
+from typing import Final, cast
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -85,7 +85,7 @@ from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import log_onyx_error, OnyxError
+from onyx.error_handling.exceptions import OnyxError, log_onyx_error
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.models import ChatFileType, InMemoryChatFile
 from onyx.file_store.utils import (
@@ -93,16 +93,21 @@ from onyx.file_store.utils import (
     load_in_memory_chat_files,
     verify_user_files,
 )
-from onyx.hooks.executor import execute_hook, HookSkipped, HookSoftFailed
+from onyx.hooks.executor import HookSkipped, HookSoftFailed, execute_hook
 from onyx.hooks.points.query_processing import (
     QueryProcessingPayload,
     QueryProcessingResponse,
 )
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.models import LLMErrorInfo
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.request_context import reset_llm_mock_response, set_llm_mock_response
-from onyx.llm.utils import litellm_exception_to_error_msg
+from onyx.llm.utils import (
+    collect_credential_values,
+    litellm_exception_to_safe_error,
+    scrub_sensitive_values,
+)
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
@@ -118,9 +123,9 @@ from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     AgentResponseStart,
     CitationInfo,
-    heartbeat_packet,
     OverallStop,
     Packet,
+    heartbeat_packet,
 )
 from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
@@ -128,10 +133,10 @@ from onyx.server.utils import get_json_line
 from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
 from onyx.tools.models import ChatFile, SearchToolUsage
 from onyx.tools.tool_constructor import (
-    construct_tools,
     CustomToolConfig,
     FileReaderToolConfig,
     SearchToolConfig,
+    construct_tools,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -1113,9 +1118,9 @@ def _run_models(
     # Set to True when a model raises an exception (distinct from "still running").
     # Used in the stop-button path to avoid calling completion for errored models.
     model_errored: list[bool] = [False] * n_models
-    # Per-model classified (message, error_code, is_retryable), set in _run_model
-    # and reused by the streamed packet and the persisted message.
-    model_error_info: list[tuple[str, str, bool] | None] = [None] * n_models
+    # Per-model classification set in _run_model and reused by the streamed
+    # packet and the persisted message.
+    model_error_info: list[LLMErrorInfo | None] = [None] * n_models
     persist_lock = threading.Lock()
     persisted: list[bool] = [False] * n_models
     post_steps_done = threading.Event()
@@ -1299,16 +1304,9 @@ def _run_models(
 
         except Exception as e:
             model_errored[model_idx] = True
-            message, error_code, is_retryable = litellm_exception_to_error_msg(
+            model_error_info[model_idx] = litellm_exception_to_safe_error(
                 e, model_llm, fallback_to_error_msg=True
             )
-            # Redact here so both the streamed and persisted error are safe:
-            # the fallback path returns str(e) verbatim, which can embed the key.
-            if model_llm.config.api_key and len(model_llm.config.api_key) > 2:
-                message = message.replace(
-                    model_llm.config.api_key, "[REDACTED_API_KEY]"
-                )
-            model_error_info[model_idx] = (message, error_code, is_retryable)
             merged_queue.put((model_idx, e))
 
         finally:
@@ -1325,7 +1323,7 @@ def _run_models(
                 if msg is not None:
                     info = model_error_info[model_idx]
                     detail = (
-                        info[0]
+                        info.message
                         if info is not None
                         else "model encountered an error during generation."
                     )
@@ -1413,30 +1411,26 @@ def _run_models(
                     model_llm = setup.llms[model_idx]
                     # Classified in _run_model; fall back to a generic error.
                     info = model_error_info[model_idx]
-                    if info is not None:
-                        error_msg, err_code, err_retryable = info
-                    else:
-                        error_msg, err_code, err_retryable = (
-                            str(item),
-                            "MODEL_ERROR",
-                            True,
+                    if info is None:
+                        info = LLMErrorInfo(
+                            message=str(item),
+                            error_code="MODEL_ERROR",
+                            is_retryable=True,
                         )
                     stack_trace = "".join(
                         traceback.format_exception(type(item), item, item.__traceback__)
                     )
-                    if model_llm.config.api_key and len(model_llm.config.api_key) > 2:
-                        error_msg = error_msg.replace(
-                            model_llm.config.api_key, "[REDACTED_API_KEY]"
-                        )
-                        stack_trace = stack_trace.replace(
-                            model_llm.config.api_key, "[REDACTED_API_KEY]"
-                        )
+                    secrets = collect_credential_values(
+                        model_llm.config.api_key, model_llm.config.custom_config
+                    )
+                    error_msg = scrub_sensitive_values(info.message, secrets)
+                    stack_trace = scrub_sensitive_values(stack_trace, secrets)
                     _publish(
                         StreamingError(
                             error=error_msg,
                             stack_trace=stack_trace,
-                            error_code=err_code,
-                            is_retryable=err_retryable,
+                            error_code=info.error_code,
+                            is_retryable=info.is_retryable,
                             details={
                                 "model": model_llm.config.model_name,
                                 "provider": model_llm.config.model_provider,
@@ -1700,21 +1694,16 @@ def _stream_chat_turn(
 
         llm = setup.llms[0] if setup else None
         if llm:
-            client_error_msg, error_code, is_retryable = litellm_exception_to_error_msg(
-                e, llm
+            error_info = litellm_exception_to_safe_error(e, llm)
+            stack_trace = scrub_sensitive_values(
+                stack_trace,
+                collect_credential_values(llm.config.api_key, llm.config.custom_config),
             )
-            if llm.config.api_key and len(llm.config.api_key) > 2:
-                client_error_msg = client_error_msg.replace(
-                    llm.config.api_key, "[REDACTED_API_KEY]"
-                )
-                stack_trace = stack_trace.replace(
-                    llm.config.api_key, "[REDACTED_API_KEY]"
-                )
             yield StreamingError(
-                error=client_error_msg,
+                error=error_info.message,
                 stack_trace=stack_trace,
-                error_code=error_code,
-                is_retryable=is_retryable,
+                error_code=error_info.error_code,
+                is_retryable=error_info.is_retryable,
                 details={
                     "model": llm.config.model_name,
                     "provider": llm.config.model_provider,

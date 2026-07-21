@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
-from onyx.configs.constants import MessageType, PUBLIC_API_TAGS
+from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -30,13 +30,13 @@ from onyx.server.features.build.interactive_turns.executor import (
 )
 from onyx.server.features.build.interactive_turns.models import InteractiveTurnResponse
 from onyx.server.features.build.interactive_turns.state import (
+    TURN_STATUS_FAILED,
+    InteractiveTurnLockError,
     acquire_active_turn_lock,
     create_interactive_turn,
     finish_turn,
     get_active_turn,
     get_turn_for_request,
-    InteractiveTurnLockError,
-    TURN_STATUS_FAILED,
 )
 from onyx.server.features.build.session.errors import RateLimitError
 from onyx.server.features.build.session.llm_config import normalize_agent_selection
@@ -231,6 +231,7 @@ def send_subagent_message(
                 sandbox = get_sandbox_by_user_id(db_session, user.id)
                 if sandbox and sandbox.status.is_active():
                     update_sandbox_heartbeat(db_session, sandbox.id)
+                    db_session.commit()
 
                 session_manager = SessionManager(db_session)
                 for chunk in session_manager.send_subagent_message(

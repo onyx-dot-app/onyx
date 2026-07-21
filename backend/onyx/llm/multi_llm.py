@@ -3,8 +3,8 @@ import os
 import re
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
-from typing import Any, cast, TYPE_CHECKING, Union
+from contextlib import AbstractContextManager, contextmanager, nullcontext
+from typing import TYPE_CHECKING, Any, Union, cast
 
 from readerwriterlock import rwlock
 
@@ -18,10 +18,14 @@ from onyx.configs.chat_configs import (
 )
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.cost import calculate_llm_cost_cents
+from onyx.llm.cost import compute_cost_cents
+from onyx.llm.custom_config_mapping import (
+    UI_ONLY_CONFIG_KEYS,
+    map_custom_config_to_model_kwargs,
+)
 from onyx.llm.interfaces import (
-    LanguageModelInput,
     LLM,
+    LanguageModelInput,
     LLMConfig,
     LLMUserIdentity,
     ReasoningEffort,
@@ -36,23 +40,7 @@ from onyx.llm.models import (
 )
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
-from onyx.llm.well_known_providers.constants import (
-    AWS_ACCESS_KEY_ID_KWARG,
-    AWS_ACCESS_KEY_ID_KWARG_ENV_VAR_FORMAT,
-    AWS_BEARER_TOKEN_BEDROCK_KWARG_ENV_VAR_FORMAT,
-    AWS_REGION_NAME_KWARG,
-    AWS_REGION_NAME_KWARG_ENV_VAR_FORMAT,
-    AWS_SECRET_ACCESS_KEY_KWARG,
-    AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
-    LM_STUDIO_API_KEY_CONFIG_KEY,
-    OLLAMA_API_KEY_CONFIG_KEY,
-    VERTEX_AUTH_METHOD_KWARG,
-    VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY,
-    VERTEX_CREDENTIALS_FILE_KWARG,
-    VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT,
-    VERTEX_LOCATION_KWARG,
-    VERTEX_PROJECT_KWARG,
-)
+from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.utils.encryption import mask_env_value_for_logging, mask_string
 from onyx.utils.logger import setup_logger
 
@@ -305,6 +293,25 @@ def _anthropic_omits_sampling_params(model_name: str) -> bool:
     return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
 
 
+def _env_injection_enabled() -> bool:
+    # Deferred import: the security store pulls in the DB layer, which this
+    # module must not import at module load.
+    from onyx.server.security.store import llm_custom_config_env_injection_enabled
+
+    return llm_custom_config_env_injection_enabled()
+
+
+def _warn_dropped_env_only_keys(
+    model_provider: str, dropped_keys: tuple[str, ...]
+) -> None:
+    logger.warning(
+        "Dropping custom_config key(s) with no LiteLLM kwarg equivalent for "
+        "provider %s (env injection is disabled on this deployment): %s",
+        model_provider,
+        list(dropped_keys),
+    )
+
+
 class LitellmLLM(LLM):
     """Uses Litellm library to allow easy configuration to use a multitude of LLMs
     See https://python.langchain.com/docs/integrations/chat/litellm"""
@@ -350,51 +357,23 @@ class LitellmLLM(LLM):
         # Create a dictionary for model-specific arguments if it's None
         model_kwargs = model_kwargs or {}
 
-        vertex_auth_method = (
-            (custom_config or {}).get(VERTEX_AUTH_METHOD_KWARG)
-            if model_provider == LlmProviderNames.VERTEX_AI
-            else None
+        custom_config_mapping = map_custom_config_to_model_kwargs(
+            model_provider=model_provider,
+            custom_config=custom_config,
+            api_key=api_key,
+            api_base=api_base,
         )
-        vertex_is_workload_identity = (
-            vertex_auth_method == VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
-        )
-
-        if custom_config:
-            for k, v in custom_config.items():
-                if model_provider == LlmProviderNames.VERTEX_AI:
-                    # In Workload Identity mode, omit vertex_credentials so LiteLLM
-                    # falls back to google.auth.default() (the GKE metadata server).
-                    if k == VERTEX_CREDENTIALS_FILE_KWARG:
-                        if not vertex_is_workload_identity:
-                            model_kwargs[k] = v
-                    elif k == VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT:
-                        if not vertex_is_workload_identity:
-                            model_kwargs[VERTEX_CREDENTIALS_FILE_KWARG] = v
-                    elif k == VERTEX_LOCATION_KWARG:
-                        model_kwargs[k] = v
-                    elif k == VERTEX_PROJECT_KWARG:
-                        model_kwargs[k] = v
-                elif model_provider == LlmProviderNames.OLLAMA_CHAT:
-                    if k == OLLAMA_API_KEY_CONFIG_KEY:
-                        model_kwargs["api_key"] = v
-                elif model_provider == LlmProviderNames.LM_STUDIO:
-                    if k == LM_STUDIO_API_KEY_CONFIG_KEY:
-                        model_kwargs["api_key"] = v
-                elif model_provider == LlmProviderNames.BEDROCK:
-                    if k == AWS_REGION_NAME_KWARG:
-                        model_kwargs[k] = v
-                    elif k == AWS_REGION_NAME_KWARG_ENV_VAR_FORMAT:
-                        model_kwargs[AWS_REGION_NAME_KWARG] = v
-                    elif k == AWS_BEARER_TOKEN_BEDROCK_KWARG_ENV_VAR_FORMAT:
-                        model_kwargs["api_key"] = v
-                    elif k == AWS_ACCESS_KEY_ID_KWARG:
-                        model_kwargs[k] = v
-                    elif k == AWS_ACCESS_KEY_ID_KWARG_ENV_VAR_FORMAT:
-                        model_kwargs[AWS_ACCESS_KEY_ID_KWARG] = v
-                    elif k == AWS_SECRET_ACCESS_KEY_KWARG:
-                        model_kwargs[k] = v
-                    elif k == AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT:
-                        model_kwargs[AWS_SECRET_ACCESS_KEY_KWARG] = v
+        model_kwargs.update(custom_config_mapping.model_kwargs)
+        # Keys with no LiteLLM kwarg equivalent. Injected into os.environ during
+        # the call on deployments that allow it; dropped (with a warning at call
+        # time) otherwise. UI-only form-state keys are neither injected nor
+        # warned about.
+        self._env_only_custom_config: dict[str, str] = {
+            k: v
+            for k, v in (custom_config or {}).items()
+            if k not in custom_config_mapping.consumed_keys
+            and k not in UI_ONLY_CONFIG_KEYS
+        }
 
         # LM Studio: LiteLLM defaults to "fake-api-key" when no key is provided,
         # which LM Studio rejects. Ensure we always pass an explicit key (or empty
@@ -479,20 +458,26 @@ class LitellmLLM(LLM):
             return
         # Import here to avoid circular imports
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
-        from onyx.db.usage import increment_usage, UsageType
+        from onyx.db.usage import UsageType, increment_usage
 
-        # Calculate cost in cents
-        cost_cents = calculate_llm_cost_cents(
-            model_name=self._model_version,
-            prompt_tokens=usage.prompt_tokens,
-            completion_tokens=usage.completion_tokens,
-        )
-
-        if cost_cents <= 0:
-            return
+        cache_read = usage.cache_read_input_tokens
+        # prompt_tokens is cache-inclusive; price non-cached + cache separately.
+        non_cached_input = max(usage.prompt_tokens - cache_read, 0)
+        provider = self._custom_llm_provider or self._model_provider
 
         try:
             with get_session_with_current_tenant() as db_session:
+                input_cents, output_cents = compute_cost_cents(
+                    self._model_version,
+                    provider,
+                    non_cached_input,
+                    usage.completion_tokens,
+                    cache_read_tokens=cache_read,
+                    db_session=db_session,
+                )
+                cost_cents = input_cents + output_cents
+                if cost_cents <= 0:
+                    return
                 increment_usage(db_session, UsageType.LLM_COST, cost_cents)
                 db_session.commit()
         except Exception as e:
@@ -775,7 +760,20 @@ class LitellmLLM(LLM):
             if tools and tool_choice is not None:
                 optional_kwargs["tool_choice"] = tool_choice
 
-            with temporary_env_and_lock(self._custom_config or {}):
+            # Injection disabled means no env writer exists anywhere in the
+            # process, so skip the rwlock entirely.
+            env_ctx: AbstractContextManager[None]
+            if _env_injection_enabled():
+                env_ctx = temporary_env_and_lock(self._env_only_custom_config)
+            else:
+                if self._env_only_custom_config:
+                    _warn_dropped_env_only_keys(
+                        self._model_provider,
+                        tuple(sorted(self._env_only_custom_config)),
+                    )
+                env_ctx = nullcontext()
+
+            with env_ctx:
                 response = litellm.completion(
                     mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
@@ -871,11 +869,12 @@ class LitellmLLM(LLM):
             client = HTTPHandler(timeout=timeout_override or self._timeout)
 
         try:
-            # When custom_config is set, env vars are temporarily injected
-            # under a global lock. Using stream=True here means the lock is
-            # only held during connection setup (not the full inference).
-            # The chunks are then collected outside the lock and reassembled
-            # into a single ModelResponse via stream_chunk_builder.
+            # When env-only custom_config keys are injected (self-hosted
+            # deployments only), they are set under a global lock. Using
+            # stream=True here means the lock is only held during connection
+            # setup (not the full inference). The chunks are then collected
+            # outside the lock and reassembled into a single ModelResponse
+            # via stream_chunk_builder.
             from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
             from litellm import stream_chunk_builder
 

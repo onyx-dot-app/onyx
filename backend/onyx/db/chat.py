@@ -4,9 +4,9 @@ from typing import Tuple
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete, desc, func, nullsfirst, or_, Row, select, update
+from sqlalchemy import Row, delete, desc, func, nullsfirst, or_, select, update
 from sqlalchemy.exc import MultipleResultsFound
-from sqlalchemy.orm import joinedload, selectinload, Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType

@@ -7,7 +7,7 @@ import discord
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 TEST_TENANT_ID: str = "public"

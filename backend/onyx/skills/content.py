@@ -6,10 +6,10 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.bundle import (
-    read_custom_bundle_instructions,
     SKILL_MD_NAME,
-    strip_skill_md_frontmatter,
     TEMPLATE_SUFFIX,
+    read_custom_bundle_instructions,
+    strip_skill_md_frontmatter,
 )
 
 

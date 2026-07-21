@@ -10,9 +10,9 @@ from box_sdk_gen.schemas.user_mini import UserMini
 from ee.onyx.external_permissions.box import group_sync as group_sync_module
 from ee.onyx.external_permissions.box.group_sync import box_group_sync
 from onyx.connectors.box.connector import (
+    BoxConnector,
     box_all_enterprise_users_group_id,
     box_group_id,
-    BoxConnector,
 )
 from onyx.db.models import ConnectorCredentialPair
 from tests.unit.onyx.connectors.box.fake_box_client import FakeBoxClient

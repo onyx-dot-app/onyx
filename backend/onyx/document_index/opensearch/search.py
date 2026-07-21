@@ -8,7 +8,7 @@ from onyx.configs.app_configs import (
     OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED,
     OPENSEARCH_PROFILING_DISABLED,
 )
-from onyx.configs.constants import DocumentSource, INDEX_SEPARATOR
+from onyx.configs.constants import INDEX_SEPARATOR, DocumentSource
 from onyx.context.search.models import IndexFilters, Tag, TimeRange
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import (

@@ -99,7 +99,7 @@ def set_sandbox_skills_hashes__no_commit(
     db_session: Session,
     skills_hashes: dict[UUID, str],
 ) -> None:
-    """Record the contents successfully hydrated into each sandbox."""
+    """Record the skill runtime state successfully synchronized to each sandbox."""
     if not skills_hashes:
         return
     sandboxes = db_session.scalars(
@@ -155,13 +155,13 @@ def update_sandbox_status__no_commit(
 
 
 def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
-    """Update sandbox last_heartbeat to now."""
+    """Update the heartbeat without committing the caller's transaction."""
     sandbox = get_sandbox_by_id(db_session, sandbox_id)
     if not sandbox:
         raise ValueError(f"Sandbox {sandbox_id} not found")
 
     sandbox.last_heartbeat = datetime.datetime.now(datetime.timezone.utc)
-    db_session.commit()
+    db_session.flush()
     return sandbox
 
 

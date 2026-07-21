@@ -51,9 +51,9 @@ from onyx.document_index.interfaces_new import (
 )
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.opensearch_document_index import (
-    generate_opensearch_filtered_access_control_list,
     OpenSearchDocumentIndex,
     OpenSearchIndexPair,
+    generate_opensearch_filtered_access_control_list,
 )
 from onyx.document_index.opensearch.schema import (
     DocumentChunk,

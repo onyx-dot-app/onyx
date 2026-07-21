@@ -88,15 +88,15 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
     SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
     SIDECAR_SNAPSHOT_CREATE_PATH,
-    sidecar_snapshot_restore_path,
     SnapshotCreateRequest,
+    sidecar_snapshot_restore_path,
 )
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
 from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
-    get_push_key_pair,
     SidecarClient,
     SidecarRequestError,
     SidecarStatusError,
+    get_push_key_pair,
 )
 from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_COMPONENT,
@@ -1560,12 +1560,14 @@ echo "Session cleanup complete"
             if e.status == 404:
                 # Pod not found, nothing to clean up
                 logger.debug("Pod %s not found, skipping cleanup", pod_name)
-            else:
-                logger.warning(
-                    "Error cleaning up session workspace %s: %s", session_id, e
-                )
+                return
+            raise RuntimeError(
+                f"Failed to clean up session workspace {session_id}"
+            ) from e
         except Exception as e:
-            logger.warning("Error cleaning up session workspace %s: %s", session_id, e)
+            raise RuntimeError(
+                f"Failed to clean up session workspace {session_id}"
+            ) from e
 
     def create_snapshot(
         self,

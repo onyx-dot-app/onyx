@@ -14,11 +14,11 @@ from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.interactive_turns import api as turns_api
 from onyx.server.features.build.interactive_turns.state import (
+    TURN_STATUS_FAILED,
+    TURN_STATUS_SUCCEEDED,
     claim_turn_for_runner,
     create_interactive_turn,
     finish_turn,
-    TURN_STATUS_FAILED,
-    TURN_STATUS_SUCCEEDED,
 )
 from tests.unit.fakes import FakeCache
 

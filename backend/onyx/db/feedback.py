@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import and_, asc, delete, desc, exists, Select, select
-from sqlalchemy.orm import aliased, Session
+from sqlalchemy import Select, and_, asc, delete, desc, exists, select
+from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.constants import MessageType, SearchFeedbackType
 from onyx.db.chat import get_chat_message

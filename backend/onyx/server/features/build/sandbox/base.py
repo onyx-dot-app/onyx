@@ -196,6 +196,9 @@ class SandboxManager(_ServeMixin, ABC):
         Implementations MUST call ``self._close_session_buses(sandbox_id,
         session_id)`` — otherwise the per-session ``PodEventBus`` (reader
         thread + httpx connection) leaks until api_server restarts.
+
+        Raises when cleanup fails while the sandbox is reachable. A missing
+        sandbox is already clean and should be treated as success.
         """
         ...
 

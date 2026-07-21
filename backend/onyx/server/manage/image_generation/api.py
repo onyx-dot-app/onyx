@@ -15,10 +15,13 @@ from onyx.db.image_generation import (
 from onyx.db.llm import remove_llm_provider
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.factory import get_image_generation_provider, validate_credentials
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.model_capabilities import get_max_input_tokens
+from onyx.llm.utils import collect_credential_values, litellm_exception_to_safe_error
 from onyx.server.manage.image_generation.models import (
     ImageGenerationConfigCreate,
     ImageGenerationConfigUpdate,
@@ -293,13 +296,11 @@ def test_image_generation(
     except HTTPException:
         raise
     except Exception as e:
-        # Log only exception type to avoid exposing sensitive data
-        # (LiteLLM errors may contain URLs with API keys or auth tokens)
         logger.warning("Image generation test failed: %s", type(e).__name__)
-        raise HTTPException(
-            status_code=400,
-            detail=f"Image generation test failed: {type(e).__name__}",
+        safe_error = litellm_exception_to_safe_error(
+            e, secrets=collect_credential_values(api_key, custom_config)
         )
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, safe_error.message)
 
 
 @admin_router.post("/config")

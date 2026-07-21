@@ -10,11 +10,11 @@ from unittest.mock import AsyncMock
 import pytest
 
 from onyx.server.manage.voice.websocket_api import (
-    ChunkedTranscriber,
-    pcm16_rms,
     PCM_BYTES_PER_SECOND,
     PCM_SAMPLE_RATE,
     SILENCE_RMS_THRESHOLD,
+    ChunkedTranscriber,
+    pcm16_rms,
     trim_pcm16_silence,
 )
 

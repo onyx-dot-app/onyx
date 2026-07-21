@@ -31,17 +31,20 @@ from onyx.server.features.build.db.build_session import (
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
+from onyx.server.features.build.session import locks as session_locks
 from onyx.server.features.build.session.api import (
     reload_session_skills,
     restore_session,
+)
+from onyx.server.features.build.session.locks import (
+    SessionCreationLockAcquisitionError,
+    get_session_creation_lock,
+    session_creation_lock,
 )
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.sandbox_lifecycle import hydrate_managed_content
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.craft.redis_helpers import (
-    assert_lock_serializes_two_threads,
-)
 
 # Built-in skill rows are seeded by ``setup_postgres`` (run once per
 # tenant in ``full_setup``) and persist across tests. The session
@@ -54,7 +57,7 @@ from tests.external_dependency_unit.craft.redis_helpers import (
 # =============================================================================
 
 
-def test_warm_skill_hydration_changes_only_live_session_staleness(
+def test_warm_content_hash_change_marks_only_live_session_stale(
     db_session: Session,
     test_user: User,
     sandbox: Callable[..., Sandbox],
@@ -68,6 +71,7 @@ def test_warm_skill_hydration_changes_only_live_session_staleness(
         sandbox_row.id,
         test_user,
         db_session,
+        connectable_apps_section="first apps",
         skills_files={"first/SKILL.md": b"first"},
     )
     db_session.commit()
@@ -93,7 +97,8 @@ def test_warm_skill_hydration_changes_only_live_session_staleness(
         sandbox_row.id,
         test_user,
         db_session,
-        skills_files={"second/SKILL.md": b"second"},
+        connectable_apps_section="second apps",
+        skills_files={"first/SKILL.md": b"first"},
     )
     db_session.commit()
     db_session.refresh(sandbox_row)
@@ -943,16 +948,29 @@ class TestConcurrentCreateLock:
         self,
         db_session: Session,  # noqa: ARG002
         test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # Same lock contract as sessions_api.create_session: lock key is
-        # ``session_create:{user_id}``. Two threads contend; the second
-        # observes the first holding it.
         redis_client = get_redis_client(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
         )
-        lock_key = f"session_create:{test_user.id}"
+        held_lock = get_session_creation_lock(redis_client, test_user.id)
+        assert held_lock.acquire(blocking=False)
 
-        assert_lock_serializes_two_threads(redis_client, lock_key)
+        monkeypatch.setattr(
+            session_locks,
+            "SESSION_CREATE_LOCK_WAIT_SECONDS",
+            0.05,
+        )
+        try:
+            with pytest.raises(SessionCreationLockAcquisitionError):
+                with session_creation_lock(test_user.id):
+                    pytest.fail("contending session creation acquired the lock")
+        finally:
+            held_lock.release()
+
+        # Exiting the owner releases the lock for the next session creation.
+        with session_creation_lock(test_user.id):
+            pass
 
 
 # =============================================================================

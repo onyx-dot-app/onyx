@@ -6,16 +6,16 @@ import time
 from typing import Any, cast
 
 from celery import (
-    bootsteps,  # ty: ignore[unresolved-import]
     Task,
+    bootsteps,
 )
-from celery.app import trace  # ty: ignore[unresolved-import]
+from celery.app import trace
 from celery.exceptions import WorkerShutdown
 from celery.signals import before_task_publish, task_postrun, task_prerun
 from celery.states import READY_STATES
 from celery.utils.log import get_task_logger
-from celery.worker import strategy  # ty: ignore[unresolved-import]
-from celery.worker.control import control_command  # ty: ignore[unresolved-import]
+from celery.worker import strategy
+from celery.worker.control import control_command
 from redis.lock import Lock as RedisLock
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sqlalchemy import text
@@ -55,10 +55,10 @@ from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import (
     ColoredFormatter,
-    get_json_formatter,
-    get_log_level_from_str,
     LoggerContextVars,
     PlainFormatter,
+    get_json_formatter,
+    get_log_level_from_str,
     setup_logger,
 )
 from shared_configs.configs import (
@@ -99,7 +99,7 @@ def clear_revoked(state: Any, **kwargs: Any) -> dict[str, Any]:  # noqa: ARG001
     Intentionally ungated, like Celery's built-in shutdown/terminate/revoke control
     commands: the trust boundary is broker access, not a per-command check.
     """
-    from celery.worker import state as worker_state  # ty: ignore[unresolved-import]
+    from celery.worker import state as worker_state
 
     count = len(worker_state.revoked)
     worker_state.revoked.clear()
@@ -699,7 +699,7 @@ class LivenessProbe(bootsteps.StartStopStep):
         self.task_tref = None
         self.path = make_probe_path("liveness", worker.hostname)
 
-    def start(self, worker: Any) -> None:
+    def start(self, worker: Any) -> None:  # ty: ignore[invalid-method-override]
         self.task_tref = worker.timer.call_repeatedly(
             15.0,
             self.update_liveness_file,
@@ -707,7 +707,7 @@ class LivenessProbe(bootsteps.StartStopStep):
             priority=10,
         )
 
-    def stop(self, worker: Any) -> None:  # noqa: ARG002
+    def stop(self, worker: Any) -> None:  # noqa: ARG002  # ty: ignore[invalid-method-override]
         self.path.unlink(missing_ok=True)
         if self.task_tref:
             self.task_tref.cancel()

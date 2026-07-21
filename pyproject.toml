@@ -8,7 +8,7 @@ dependencies = [
     "cohere==7.0.5",
     "fastapi==0.133.1",
     "google-genai==1.52.0",
-    "litellm[google]==1.89.4",
+    "litellm[google]==1.93.0",
     "openai==2.38.0",
     "pydantic==2.11.7",
     # Shared so structured JSON logging (LOG_FORMAT=json) works in the
@@ -130,7 +130,7 @@ backend = [
 # Dev tools
 dev = [
     "boto3-stubs[s3]==1.39.11",
-    "celery-types==0.19.0",
+    "celery-types==0.26.0",
     "faker==40.1.2",
     "hatchling==1.28.0",
     "ipykernel==6.29.5",
@@ -288,7 +288,6 @@ ignore = [
 select = ["ARG", "E", "F", "G004", "I", "S", "W"]
 
 [tool.ruff.lint.isort]
-order-by-type = false
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 
 [tool.ruff.lint.per-file-ignores]

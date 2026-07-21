@@ -1160,11 +1160,9 @@ echo "Session cleanup complete"
                 ["/bin/sh", "-c", cleanup_script],
             )
         except ExecError as e:
-            logger.warning(
-                "cleanup_session_workspace exec failed for session %s: %s",
-                session_id,
-                e,
-            )
+            raise RuntimeError(
+                f"Failed to clean up session workspace {session_id}"
+            ) from e
 
     def session_workspace_exists(
         self,

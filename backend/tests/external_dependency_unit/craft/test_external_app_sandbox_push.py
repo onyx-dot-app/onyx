@@ -10,6 +10,7 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import User
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
+    UpdateExternalAppRequest,
     UpsertUserCredentialsRequest,
 )
 from tests.external_dependency_unit.craft.db_helpers import (
@@ -92,6 +93,44 @@ def test_create_refreshes_the_created_skill(
         db_session=db_session,
     )
 
+    assert pushed_skill_ids == [skill.id]
+
+
+def test_admin_toggle_updates_app_and_refreshes_affected_sandboxes(
+    db_session: Session,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    skill = make_built_in_skill_row(
+        db_session,
+        built_in_skill_id=f"toggle-push-{uuid4().hex[:8]}",
+        is_public=True,
+    )
+    app = make_external_app(
+        db_session,
+        skill=skill,
+        app_type=ExternalAppType.SLACK,
+        auth_template={"Authorization": "Bearer {token}"},
+    )
+    db_session.commit()
+
+    pushed_skill_ids: list[UUID] = []
+    monkeypatch.setattr(api, "MULTI_TENANT", False)
+    monkeypatch.setattr(
+        api,
+        "push_skill_to_affected_sandboxes",
+        lambda pushed_skill, _db: pushed_skill_ids.append(pushed_skill.id),
+    )
+
+    response = api.update_external_app_admin(
+        external_app_id=app.id,
+        request=UpdateExternalAppRequest(enabled=False),
+        _=test_user,
+        db_session=db_session,
+    )
+
+    assert response.enabled is False
+    assert app.enabled is False
     assert pushed_skill_ids == [skill.id]
 
 

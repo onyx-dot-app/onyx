@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from onyx.image_gen.interfaces import (
     ImageGenerationProvider,
@@ -112,6 +112,7 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
                 flow=LLMFlow.IMAGE_EDIT,
                 model=deployment,
                 provider="azure",
+                image_count=n,
                 input_messages=[{"role": "user", "content": prompt}],
             ):
                 return image_edit(
@@ -133,6 +134,7 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
             flow=LLMFlow.IMAGE_GENERATION,
             model=deployment,
             provider="azure",
+            image_count=n,
             input_messages=[{"role": "user", "content": prompt}],
         ):
             return image_generation(

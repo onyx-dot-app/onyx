@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from pydantic import BaseModel
 

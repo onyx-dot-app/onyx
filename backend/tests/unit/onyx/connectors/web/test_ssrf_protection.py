@@ -15,10 +15,10 @@ import pytest
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.web import connector as web_connector
 from onyx.connectors.web.connector import (
-    check_internet_connection,
-    extract_urls_from_sitemap,
     WEB_CONNECTOR_VALID_SETTINGS,
     WebConnector,
+    check_internet_connection,
+    extract_urls_from_sitemap,
 )
 from onyx.server.security.models import SSRFProtectionLevel
 

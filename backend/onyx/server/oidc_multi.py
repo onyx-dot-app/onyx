@@ -22,19 +22,19 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.oidc_client import VerifiedEmailOpenID
 from onyx.auth.users import (
-    auth_backend,
-    complete_login_flow,
     CSRF_TOKEN_COOKIE_NAME,
     CSRF_TOKEN_KEY,
+    STATE_TOKEN_LIFETIME_SECONDS,
+    OAuth2AuthorizeResponse,
+    UserManager,
+    auth_backend,
+    complete_login_flow,
     decode_and_validate_oauth_state,
     generate_csrf_token,
     generate_pkce_pair,
     generate_state_token,
     get_pkce_cookie_name,
     get_user_manager,
-    OAuth2AuthorizeResponse,
-    STATE_TOKEN_LIFETIME_SECONDS,
-    UserManager,
 )
 from onyx.configs.app_configs import (
     GOOGLE_LOGIN_BASE_SCOPES,

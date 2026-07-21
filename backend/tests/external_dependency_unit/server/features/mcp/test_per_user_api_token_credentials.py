@@ -20,8 +20,8 @@ from onyx.db.enums import (
 from onyx.db.mcp import extract_connection_data, get_user_connection_config
 from onyx.db.models import User
 from onyx.server.features.mcp.api import (
-    _upsert_mcp_server,
     HEADER_SUBSTITUTIONS,
+    _upsert_mcp_server,
     save_user_credentials,
 )
 from onyx.server.features.mcp.models import (

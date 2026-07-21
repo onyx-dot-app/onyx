@@ -1,5 +1,5 @@
 from sqlalchemy import select, update
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.models import ImageGenerationConfig, LLMProvider, ModelConfiguration
 from onyx.llm.model_capabilities import get_max_input_tokens

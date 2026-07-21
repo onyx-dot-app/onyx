@@ -9,24 +9,25 @@ from onelogin.saml2.xml_utils import OneLogin_Saml2_XML
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import auth_backend, fastapi_users, get_user_manager, UserManager
+from onyx.auth.login_claims_capture import capture_saml_login_claims
+from onyx.auth.users import UserManager, auth_backend, fastapi_users, get_user_manager
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION, WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider, User
 from onyx.db.sso_provider import (
+    SAMLProviderConfig,
     fetch_sso_provider_by_name,
     fetch_sso_providers,
-    SAMLProviderConfig,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.saml import (
-    _sanitize_relay_state,
     EMAIL_ATTRIBUTE_KEYS,
     EMAIL_ATTRIBUTE_KEYS_LOWER,
-    prepare_from_fastapi_request,
     SAMLAuthorizeResponse,
+    _sanitize_relay_state,
+    prepare_from_fastapi_request,
     upsert_saml_user,
 )
 from onyx.utils.logger import setup_logger
@@ -323,6 +324,10 @@ async def _process_saml_callback(
     _enforce_allowed_email_domain(provider, user_email)
 
     user = await upsert_saml_user(email=user_email)
+    # Best-effort directory-profile capture from the SAML assertion attributes.
+    await capture_saml_login_claims(
+        user_email, auth.get_attributes(), provider.name or "saml"
+    )
     response = await auth_backend.login(strategy, user)
     await user_manager.on_after_login(user, request, response)
     return response

@@ -10,10 +10,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.utils.url import (
+    SSRFException,
     _is_ip_private_or_reserved,
     _validate_and_resolve_url,
     ssrf_safe_get,
-    SSRFException,
     validate_outbound_http_url,
 )
 

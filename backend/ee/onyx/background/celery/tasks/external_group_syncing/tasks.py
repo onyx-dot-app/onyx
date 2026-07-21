@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from uuid import uuid4
 
-from celery import Celery, shared_task, Task
+from celery import Celery, Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import ValidationError
 from redis import Redis
@@ -590,7 +590,7 @@ def _timed_perform_external_group_sync(
                 # Track progress
                 total_groups_processed += 1
                 total_group_memberships_synced += len(external_user_group.user_emails)
-                seen_users = seen_users.union(external_user_group.user_emails)
+                seen_users.update(external_user_group.user_emails)
 
                 if len(external_user_group_batch) >= _EXTERNAL_GROUP_BATCH_SIZE:
                     logger.debug(

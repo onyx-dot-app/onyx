@@ -22,7 +22,7 @@ from onyx.db.external_app import (
 )
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
 from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.utils import none_as_unset, UNSET
+from onyx.db.utils import UNSET, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.models import BuiltInExternalAppDescriptor
@@ -91,6 +91,7 @@ def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
         organization_credentials=(
             {} if managed else app.organization_credentials.get_value(apply_mask=True)
         ),
+        enabled=app.enabled,
         actions=action_policy_views(app.app_type, stored),
         is_onyx_managed=managed,
     )
@@ -193,7 +194,7 @@ def update_external_app_admin(
 ) -> ExternalAppAdminResponse:
     """Partial update of any app (404 if absent). ``None`` fields are left
     untouched. For Onyx-managed built-ins (cloud) the gateway-config fields
-    are Onyx-owned and ignored — only ``action_policies`` apply.
+    are Onyx-owned and ignored — only ``enabled`` and ``action_policies`` apply.
     A custom app's bundle bytes are swapped via ``PUT /admin/apps/{id}/bundle``.
     """
     app = _get_app_or_404(db_session, external_app_id)
@@ -218,6 +219,7 @@ def update_external_app_admin(
         db_session=db_session,
         external_app_id=external_app_id,
         app_type=app.app_type,
+        enabled=none_as_unset(request.enabled),
         name=none_as_unset(request.name),
         description=none_as_unset(request.description),
         # Gateway config is Onyx-owned for managed built-ins; leave it untouched.
@@ -414,6 +416,13 @@ def upsert_user_credentials(
 
     Returns 404 if no app with `external_app_id` exists.
     """
+    app = _get_app_or_404(db_session, external_app_id)
+    if not app.enabled:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This app is currently disabled by an admin.",
+        )
+
     upsert_external_app_user_credential(
         db_session=db_session,
         external_app_id=external_app_id,
@@ -432,12 +441,12 @@ def list_external_apps(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ExternalAppUserResponse]:
-    """List external apps with the calling user's credential state: the
+    """List enabled external apps with the calling user's credential state: the
     keys the user must supply, the values already stored, and an
     ``authenticated`` flag. Org credentials and the raw auth template aren't
     exposed.
     """
-    apps = get_external_apps(db_session=db_session)
+    apps = get_external_apps(db_session=db_session, enabled_only=True)
     user_creds_by_app = get_user_credentials_by_app_id(
         db_session=db_session, user_id=user.id
     )

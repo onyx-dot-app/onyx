@@ -3,10 +3,10 @@ import struct
 import wave
 
 from onyx.voice.providers.openai import (
-    _create_wav_header,
-    _http_to_ws_url,
     OpenAIRealtimeMessageType,
     OpenAIVoiceProvider,
+    _create_wav_header,
+    _http_to_ws_url,
 )
 
 # --- _http_to_ws_url ---

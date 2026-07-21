@@ -26,9 +26,9 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import BashToolDelta, BashToolStart
 from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.bash.bash_tool import (
+    CMD_FIELD,
     BashTool,
     BashToolOverrideKwargs,
-    CMD_FIELD,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     BashExecResponse,

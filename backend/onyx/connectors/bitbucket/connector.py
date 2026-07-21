@@ -3,20 +3,20 @@ from __future__ import annotations
 import copy
 from collections.abc import Callable, Iterator
 from datetime import datetime, timezone
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.bitbucket.utils import (
+    PR_LIST_RESPONSE_FIELDS,
+    SLIM_PR_LIST_RESPONSE_FIELDS,
     build_auth_client,
     list_repositories,
     map_pr_to_document,
     paginate,
     parse_bitbucket_datetime,
-    PR_LIST_RESPONSE_FIELDS,
-    SLIM_PR_LIST_RESPONSE_FIELDS,
 )
 from onyx.connectors.exceptions import (
     CredentialExpiredError,

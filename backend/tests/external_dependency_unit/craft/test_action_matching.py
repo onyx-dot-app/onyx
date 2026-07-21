@@ -31,10 +31,10 @@ from onyx.db.models import ExternalApp, ExternalAppPolicy, User
 from onyx.external_apps.credentials import app_is_available
 from onyx.external_apps.matching import engine as matching_engine
 from onyx.external_apps.matching.engine import (
+    WHOLE_DOMAIN_ACTION_TYPE,
     AllMatchedActions,
     MatchedAction,
     recognize_actions,
-    WHOLE_DOMAIN_ACTION_TYPE,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.sandbox_proxy import request_evaluator as request_evaluator_mod

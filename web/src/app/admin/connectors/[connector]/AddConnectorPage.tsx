@@ -257,6 +257,21 @@ export default function AddConnector({
     router.push("/admin/indexing/status?message=connector-created");
   };
 
+  const closeCredentialModal = () => setCreateCredentialFormToggle(false);
+
+  // Used when the connector supports OAuth but needs no additional_kwargs,
+  // so credential creation should redirect straight into OAuth rather than
+  // show a form. If the redirect fails, open the modal to surface a
+  // retryable error instead of falling back to a contentless form.
+  const attemptOauthRedirect = async () => {
+    const redirectUrl = await getConnectorOauthRedirectUrl(connector, {});
+    if (redirectUrl) {
+      window.location.href = redirectUrl;
+    } else {
+      setCreateCredentialFormToggle(true);
+    }
+  };
+
   const handleAuthorize = async () => {
     // authorize button handler
     // gets an auth url from the server and directs the user to it in a popup
@@ -552,22 +567,14 @@ export default function AddConnector({
                   >
                     {/* Button to pop up a form to manually enter credentials */}
                     <Button
+                      disabled={oauthDetailsLoading}
                       onClick={async () => {
                         if (oauthDetails && oauthDetails.oauth_enabled) {
                           if (oauthDetails.additional_kwargs.length > 0) {
                             setCreateCredentialFormToggle(true);
                           } else {
-                            const redirectUrl =
-                              await getConnectorOauthRedirectUrl(connector, {});
-                            // if redirect is supported, just use it
-                            if (redirectUrl) {
-                              window.location.href = redirectUrl;
-                            } else {
-                              setCreateCredentialFormToggle(
-                                (createConnectorToggle) =>
-                                  !createConnectorToggle
-                              );
-                            }
+                            // no additional_kwargs needed, so go straight to OAuth
+                            await attemptOauthRedirect();
                           }
                         } else {
                           setCreateCredentialFormToggle(
@@ -598,43 +605,48 @@ export default function AddConnector({
                 )}
 
                 {createCredentialFormToggle && (
-                  <Modal
-                    open
-                    onOpenChange={() => setCreateCredentialFormToggle(false)}
-                  >
+                  <Modal open onOpenChange={closeCredentialModal}>
                     <Modal.Content>
                       <Modal.Header
                         icon={SvgKey}
                         title={`Create a ${getSourceDisplayName(
                           connector
                         )} credential`}
-                        onClose={() => setCreateCredentialFormToggle(false)}
+                        onClose={closeCredentialModal}
                       />
                       <Modal.Body>
                         {oauthDetailsLoading ? (
                           <Spinner />
+                        ) : oauthDetails &&
+                          oauthDetails.oauth_enabled &&
+                          oauthDetails.additional_kwargs.length > 0 ? (
+                          <CreateStdOAuthCredential
+                            sourceType={connector}
+                            additionalFields={oauthDetails.additional_kwargs}
+                          />
+                        ) : oauthDetails && oauthDetails.oauth_enabled ? (
+                          // No additional_kwargs means credential creation
+                          // should have redirected straight into OAuth; if
+                          // we're here, that redirect failed.
+                          <div className="flex flex-col items-start gap-4">
+                            <Text as="p" text03>
+                              {`We couldn't redirect you to sign in with ${getSourceDisplayName(
+                                connector
+                              )}. Please try again.`}
+                            </Text>
+                            <Button onClick={attemptOauthRedirect}>
+                              Retry
+                            </Button>
+                          </div>
                         ) : (
-                          <>
-                            {oauthDetails && oauthDetails.oauth_enabled ? (
-                              <CreateStdOAuthCredential
-                                sourceType={connector}
-                                additionalFields={
-                                  oauthDetails.additional_kwargs
-                                }
-                              />
-                            ) : (
-                              <CreateCredential
-                                close
-                                refresh={refresh}
-                                sourceType={connector}
-                                accessType={formikProps.values.access_type}
-                                onSwitch={onSwap}
-                                onClose={() =>
-                                  setCreateCredentialFormToggle(false)
-                                }
-                              />
-                            )}
-                          </>
+                          <CreateCredential
+                            close
+                            refresh={refresh}
+                            sourceType={connector}
+                            accessType={formikProps.values.access_type}
+                            onSwitch={onSwap}
+                            onClose={closeCredentialModal}
+                          />
                         )}
                       </Modal.Body>
                     </Modal.Content>

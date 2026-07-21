@@ -474,6 +474,7 @@ def _refresh_sandbox_heartbeat_best_effort(sandbox_id: UUID) -> None:
     try:
         with get_session_with_current_tenant() as hb_session:
             update_sandbox_heartbeat(hb_session, sandbox_id)
+            hb_session.commit()
     except Exception:
         logger.warning(
             "Failed to refresh heartbeat for sandbox %s", sandbox_id, exc_info=True
@@ -940,6 +941,7 @@ def stream_subagent_turn(
         # Flush the accumulated assistant message tagged with routing _meta.
         finalize_persist(db_session, session_id, state, routing_meta)
         update_sandbox_heartbeat(db_session, sandbox_id)
+        db_session.commit()
 
     except GeneratorExit:
         logger.warning(

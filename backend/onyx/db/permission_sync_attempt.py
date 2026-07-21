@@ -8,7 +8,7 @@ from typing import Any, cast
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.engine.cursor import CursorResult
-from sqlalchemy.orm import joinedload, Session
+from sqlalchemy.orm import Session, joinedload
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import PermissionSyncStatus
@@ -19,7 +19,7 @@ from onyx.db.models import (
     ExternalGroupPermissionSyncAttempt,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry, RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()

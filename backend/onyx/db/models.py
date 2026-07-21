@@ -15,13 +15,10 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
-    desc,
     Enum,
-    event,
     Float,
     ForeignKey,
     ForeignKeyConstraint,
-    func,
     Index,
     Integer,
     Numeric,
@@ -29,9 +26,12 @@ from sqlalchemy import (
     Sequence,
     String,
     Text,
+    UniqueConstraint,
+    desc,
+    event,
+    func,
     text,
     true,
-    UniqueConstraint,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
@@ -40,8 +40,8 @@ from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
-    mapped_column,
     Mapper,
+    mapped_column,
     relationship,
     validates,
 )
@@ -4405,6 +4405,9 @@ class SecuritySettings(Base):
     mask_credential_prefix: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    llm_custom_config_env_injection: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
     valid_email_domains: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True, default=None
     )
@@ -6462,6 +6465,12 @@ class ExternalApp(Base):
         nullable=False,
         default=ExternalAppType.CUSTOM,
         server_default=ExternalAppType.CUSTOM.value,
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
     )
     # CUSTOM apps store URL globs here (translated to regexes at match time).
     upstream_url_patterns: Mapped[list[str]] = mapped_column(

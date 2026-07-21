@@ -82,9 +82,9 @@ from onyx.server.features.build.session.llm_config import build_onyx_gateway_con
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.naming import generate_session_name
 from onyx.server.features.build.session.sandbox_lifecycle import (
+    ProvisioningPolicy,
     ensure_sandbox_ready,
     hydrate_managed_content,
-    ProvisioningPolicy,
 )
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.skills.push import build_user_skills_payload
@@ -326,6 +326,7 @@ class SessionManager:
             )
 
         update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
 
         prompt_slot = (
             self._sandbox_manager.prompt_slot(
@@ -369,7 +370,7 @@ class SessionManager:
                     )
                     raise OnyxError(
                         OnyxErrorCode.BAD_GATEWAY,
-                        "Failed to reload session skills.",
+                        "Failed to reload session.",
                     ) from exc
 
             session.skills_hash = skills_hash
@@ -518,6 +519,7 @@ class SessionManager:
             sandbox.id,
             user,
             self._db_session,
+            connectable_apps_section=connectable_apps_section,
             skills_files=skills_files,
         )
         self._sandbox_manager.setup_session_workspace(
@@ -812,7 +814,10 @@ class SessionManager:
                     # Log but don't fail - session can still be deleted even if
                     # workspace cleanup fails (e.g., if pod is already terminated)
                     logger.warning(
-                        "Failed to cleanup session workspace %s: %s", session_id, e
+                        "Failed to cleanup session workspace %s: %s",
+                        session_id,
+                        e,
+                        exc_info=True,
                     )
 
                 ensure_prompt_slot_owned()
@@ -1611,6 +1616,7 @@ class SessionManager:
 
         # Update heartbeat - file upload is user activity that keeps sandbox alive
         update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
 
         return relative_path, len(content)
 
@@ -1649,5 +1655,6 @@ class SessionManager:
             # SandboxManager already logs the deletion details
             # Update heartbeat - file deletion is user activity that keeps sandbox alive
             update_sandbox_heartbeat(self._db_session, sandbox.id)
+            self._db_session.commit()
 
         return deleted

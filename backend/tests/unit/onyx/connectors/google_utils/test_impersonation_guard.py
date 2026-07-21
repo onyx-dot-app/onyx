@@ -5,8 +5,8 @@ from google.auth.exceptions import RefreshError
 
 from onyx.connectors.google_utils.resources import (
     ImpersonationError,
-    make_user_removal_checker,
     UserRemovedError,
+    make_user_removal_checker,
 )
 from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
 

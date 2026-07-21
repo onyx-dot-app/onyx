@@ -19,8 +19,8 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 from onyx.utils.logger import setup_logger
 from tests.integration.tests.craft.k8s.k8s_fixtures import (
     OwnedLivePod,
-    pod_exec,
     PoolSession,
+    pod_exec,
     wait_for_pod_deletion,
     wait_until_healthy,
 )

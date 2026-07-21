@@ -6,7 +6,7 @@ Value at TENANT_TIER_KEY is a JSON blob:
 
 import json
 from datetime import datetime
-from typing import cast, NamedTuple
+from typing import NamedTuple, cast
 
 from ee.onyx.server.license.models import CustomerTier
 from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client

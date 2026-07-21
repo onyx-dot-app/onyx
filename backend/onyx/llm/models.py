@@ -4,6 +4,12 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+class LLMErrorInfo(BaseModel):
+    message: str
+    error_code: str
+    is_retryable: bool
+
+
 class ToolChoiceOptions(str, Enum):
     REQUIRED = "required"
     AUTO = "auto"

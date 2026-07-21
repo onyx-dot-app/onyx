@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from uuid import UUID
 
+from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.db.enums import SandboxStatus
@@ -19,6 +20,7 @@ from onyx.server.features.build.configs import (
 )
 from onyx.server.features.build.db.build_session import (
     clear_nextjs_ports_for_user,
+    get_orphan_build_session_ids,
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.db.sandbox import (
@@ -41,8 +43,8 @@ from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.errors import SandboxProvisioningError
 from onyx.skills.push import (
-    build_skills_fileset_for_user,
-    compute_skills_hash,
+    build_user_skills_payload,
+    compute_skill_runtime_hash,
     hydrate_sandbox_skills,
 )
 from onyx.utils.logger import setup_logger
@@ -145,6 +147,8 @@ def hydrate_managed_content(
     sandbox_id: UUID,
     user: User,
     db_session: DBSession,
+    *,
+    connectable_apps_section: str | None = None,
     skills_files: FileSet | None = None,
 ) -> bool:
     """Push managed skills + user library into a sandbox.
@@ -152,13 +156,25 @@ def hydrate_managed_content(
     Must complete before the sandbox is reported RUNNING: turns dispatch as
     soon as RUNNING is visible, and opencode scans the skills directory once
     per instance, so a turn started mid-push permanently misses managed
-    skills. Each push is best-effort — failures are logged, never raised.
+    skills. The persisted hash also covers the connectable-app guidance used
+    to regenerate ``AGENTS.md`` on reload.
+
+    ``connectable_apps_section`` and ``skills_files`` must be supplied together
+    or both omitted; mismatched nullity is a programmer error and raises
+    ``ValueError`` eagerly. Runtime push failures are logged, never raised.
     """
+    if (connectable_apps_section is None) != (skills_files is None):
+        raise ValueError(
+            "connectable_apps_section and skills_files must be provided together"
+        )
+    if connectable_apps_section is None or skills_files is None:
+        connectable_apps_section, skills_files = build_user_skills_payload(
+            user, db_session
+        )
+
     skills_hydrated = False
     try:
-        if skills_files is None:
-            skills_files = build_skills_fileset_for_user(user, db_session)
-        skills_hash = compute_skills_hash(skills_files)
+        skills_hash = compute_skill_runtime_hash(skills_files, connectable_apps_section)
         result = hydrate_sandbox_skills(
             sandbox_id,
             user,
@@ -393,11 +409,56 @@ def is_sandbox_idle(sandbox: Sandbox, now: datetime) -> bool:
     return reference < now - timedelta(seconds=SANDBOX_IDLE_TIMEOUT_SECONDS)
 
 
+def list_snapshotable_session_workspaces(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    sandbox: Sandbox,
+    session_creation_lock: RedisLock,
+) -> list[UUID]:
+    """List snapshotable workspaces while session creation is excluded."""
+    if not session_creation_lock.owned():
+        raise RuntimeError(
+            f"Session creation lock is not owned for sandbox user {sandbox.user_id}"
+        )
+
+    workspace_session_ids = sandbox_manager.list_session_workspaces(sandbox.id)
+    orphan_session_ids = get_orphan_build_session_ids(
+        workspace_session_ids,
+        sandbox.user_id,
+        db_session,
+    )
+
+    existing_session_ids: list[UUID] = []
+    for session_id in workspace_session_ids:
+        if session_id not in orphan_session_ids:
+            existing_session_ids.append(session_id)
+            continue
+
+        logger.warning(
+            "Removing orphan workspace for session %s from sandbox %s",
+            session_id,
+            sandbox.id,
+        )
+        try:
+            sandbox_manager.cleanup_session_workspace(sandbox.id, session_id)
+        except Exception:
+            logger.warning(
+                "Failed to remove orphan workspace for session %s from sandbox %s; "
+                "skipping it",
+                session_id,
+                sandbox.id,
+                exc_info=True,
+            )
+
+    return existing_session_ids
+
+
 def sleep_sandbox(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
     sandbox: Sandbox,
     tenant_id: str,
+    session_creation_lock: RedisLock,
 ) -> None:
     """Snapshot an idle ``RUNNING`` sandbox, terminate its pod, and mark it
     ``SLEEPING``. Commits on success; on abort the sandbox stays ``RUNNING``.
@@ -433,7 +494,22 @@ def sleep_sandbox(
                 e,
             )
 
-    session_ids = sandbox_manager.list_session_workspaces(sandbox_id)
+    if not session_creation_lock.acquire(blocking=False):
+        logger.info(
+            "Skipping idle sandbox %s while a session is being created",
+            sandbox_id,
+        )
+        return
+    try:
+        session_ids = list_snapshotable_session_workspaces(
+            db_session,
+            sandbox_manager,
+            sandbox,
+            session_creation_lock,
+        )
+    finally:
+        if session_creation_lock.owned():
+            session_creation_lock.release()
 
     snapshot_failed = False
     for session_id in session_ids:
@@ -468,6 +544,7 @@ def sleep_sandbox(
     # retry next cycle — unless the pod is unreachable, where snapshots can
     # never succeed and the workspace is already gone, so don't pin it
     # RUNNING forever.
+    pod_unreachable = False
     if snapshot_failed:
         if sandbox_manager.health_check(
             sandbox_id, timeout=_HEALTHCHECK_TIMEOUT_SECONDS
@@ -478,6 +555,7 @@ def sleep_sandbox(
                 sandbox_id,
             )
             return
+        pod_unreachable = True
         logger.warning(
             "Sandbox %s pod is unreachable; "
             "terminating despite snapshot failure (cannot recover "
@@ -485,30 +563,59 @@ def sleep_sandbox(
             sandbox_id,
         )
 
-    # Snapshotting above can take minutes; re-check idleness right before
-    # the kill.
-    db_session.refresh(sandbox)
-    if sandbox.status != SandboxStatus.RUNNING or not is_sandbox_idle(
-        sandbox, datetime.now(timezone.utc)
-    ):
-        logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
+    # Do not block session creation during snapshots. Reacquire its lock before
+    # the final check so a workspace cannot appear between the rescan and kill.
+    if not session_creation_lock.acquire(blocking=False):
+        logger.info(
+            "Sandbox %s has a session creation in progress; skipping reap",
+            sandbox_id,
+        )
         return
+    try:
+        if not pod_unreachable:
+            current_session_ids = list_snapshotable_session_workspaces(
+                db_session,
+                sandbox_manager,
+                sandbox,
+                session_creation_lock,
+            )
+            new_session_ids = set(current_session_ids) - set(session_ids)
+            if new_session_ids:
+                logger.info(
+                    "Sandbox %s gained %s session workspace(s) during snapshot; "
+                    "skipping reap",
+                    sandbox_id,
+                    len(new_session_ids),
+                )
+                return
 
-    # Terminate the pod (but keep the sandbox record).
-    sandbox_manager.terminate(sandbox_id)
+        # Snapshotting above can take minutes; re-check idleness right before
+        # the kill.
+        db_session.refresh(sandbox)
+        if sandbox.status != SandboxStatus.RUNNING or not is_sandbox_idle(
+            sandbox, datetime.now(timezone.utc)
+        ):
+            logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
+            return
 
-    # Ports are no longer in use once the pod is gone.
-    cleared = clear_nextjs_ports_for_user(db_session, sandbox.user_id)
-    logger.debug(
-        "Cleared %s nextjs_port allocations for user %s", cleared, sandbox.user_id
-    )
+        # Terminate the pod (but keep the sandbox record).
+        sandbox_manager.terminate(sandbox_id)
 
-    idled = mark_user_sessions_idle__no_commit(db_session, sandbox.user_id)
-    logger.debug("Marked %s sessions as IDLE for user %s", idled, sandbox.user_id)
+        # Ports are no longer in use once the pod is gone.
+        cleared = clear_nextjs_ports_for_user(db_session, sandbox.user_id)
+        logger.debug(
+            "Cleared %s nextjs_port allocations for user %s", cleared, sandbox.user_id
+        )
 
-    update_sandbox_status__no_commit(db_session, sandbox_id, SandboxStatus.SLEEPING)
-    db_session.commit()
-    logger.info("Sandbox %s is now sleeping", sandbox_id)
+        idled = mark_user_sessions_idle__no_commit(db_session, sandbox.user_id)
+        logger.debug("Marked %s sessions as IDLE for user %s", idled, sandbox.user_id)
+
+        update_sandbox_status__no_commit(db_session, sandbox_id, SandboxStatus.SLEEPING)
+        db_session.commit()
+        logger.info("Sandbox %s is now sleeping", sandbox_id)
+    finally:
+        if session_creation_lock.owned():
+            session_creation_lock.release()
 
 
 def mark_sandbox_provisioning(db_session: DBSession, sandbox: Sandbox) -> None:

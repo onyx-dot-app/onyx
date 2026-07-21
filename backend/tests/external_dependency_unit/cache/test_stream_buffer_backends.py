@@ -5,7 +5,7 @@ the Postgres (lite) backend."""
 from uuid import uuid4
 
 from onyx.cache.interface import CacheBackend
-from onyx.chat.stream_buffer import _chunk_key, read_stream_chunks, StreamBufferWriter
+from onyx.chat.stream_buffer import StreamBufferWriter, _chunk_key, read_stream_chunks
 
 
 def test_roundtrip_and_done(cache: CacheBackend) -> None:

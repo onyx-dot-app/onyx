@@ -4,8 +4,8 @@ from typing import TypeVarTuple
 
 from fastapi import HTTPException
 from pydantic import BaseModel
-from sqlalchemy import delete, desc, exists, func, Select, select, update
-from sqlalchemy.orm import aliased, joinedload, selectinload, Session
+from sqlalchemy import Select, delete, desc, exists, func, select, update
+from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource
 from onyx.db.connector import fetch_connector_by_id

@@ -153,7 +153,7 @@ export async function reloadSessionSkills(
   );
 
   if (!res.ok) {
-    throw new Error(await errorDetail(res, "Failed to reload session skills"));
+    throw new Error(await errorDetail(res, "Failed to reload session"));
   }
 
   return res.json();

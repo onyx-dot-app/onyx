@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from onyx.image_gen.interfaces import (
     ImageGenerationProvider,
@@ -99,6 +99,7 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
                 flow=LLMFlow.IMAGE_EDIT,
                 model=normalized_model,
                 provider="openai",
+                image_count=n,
                 input_messages=[{"role": "user", "content": prompt}],
             ):
                 return image_edit(
@@ -119,6 +120,7 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
             flow=LLMFlow.IMAGE_GENERATION,
             model=normalized_model,
             provider="openai",
+            image_count=n,
             input_messages=[{"role": "user", "content": prompt}],
         ):
             return image_generation(

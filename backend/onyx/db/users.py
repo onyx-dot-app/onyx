@@ -4,9 +4,9 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import case, func, Select, select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
 from sqlalchemy.sql.expression import or_
@@ -17,6 +17,7 @@ from onyx.configs.constants import (
     ANONYMOUS_USER_EMAIL,
     DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
     NO_AUTH_PLACEHOLDER_USER_EMAIL,
+    SLACK_SERVICE_ACCOUNT_EMAIL,
 )
 from onyx.db.enums import AccountType
 from onyx.db.models import (
@@ -327,13 +328,15 @@ def fetch_user_by_id(db_session: Session, user_id: UUID) -> User | None:
     )
 
 
+def _generate_password_hash() -> str:
+    password_helper = PasswordHelper()
+    return password_helper.hash(password_helper.generate())
+
+
 def _generate_slack_user(email: str) -> User:
-    fastapi_users_pw_helper = PasswordHelper()
-    password = fastapi_users_pw_helper.generate()
-    hashed_pass = fastapi_users_pw_helper.hash(password)
     return User(
         email=email,
-        hashed_password=hashed_pass,
+        hashed_password=_generate_password_hash(),
         role=UserRole.SLACK_USER,
         account_type=AccountType.BOT,
     )
@@ -369,6 +372,31 @@ def add_slack_user_if_not_exists(
     db_session.add(user)
     db_session.commit()
     return user
+
+
+def get_or_create_slack_service_account(db_session: Session) -> User:
+    user = get_user_by_email(SLACK_SERVICE_ACCOUNT_EMAIL, db_session)
+    if user is not None:
+        return user
+
+    user = User(
+        email=SLACK_SERVICE_ACCOUNT_EMAIL,
+        hashed_password=_generate_password_hash(),
+        is_active=True,
+        is_verified=True,
+        role=UserRole.LIMITED,
+        account_type=AccountType.SERVICE_ACCOUNT,
+    )
+    db_session.add(user)
+    try:
+        db_session.commit()
+        return user
+    except IntegrityError:
+        db_session.rollback()
+        concurrent_user = get_user_by_email(SLACK_SERVICE_ACCOUNT_EMAIL, db_session)
+        if concurrent_user is None:
+            raise
+        return concurrent_user
 
 
 def _get_users_by_emails(

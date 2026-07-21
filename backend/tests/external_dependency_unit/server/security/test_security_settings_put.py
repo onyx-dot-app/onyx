@@ -198,6 +198,31 @@ def test_put_multi_tenant_accepts_tenant_editable_field(
     assert _load_row_as_dict() == {"user_directory_admin_only": True}
 
 
+def test_put_multi_tenant_rejects_llm_env_injection_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """llm_custom_config_env_injection cannot be changed on multi-tenant."""
+    monkeypatch.setattr(security_api, "MULTI_TENANT", True)
+    monkeypatch.setattr(security_store, "MULTI_TENANT", True)
+
+    with pytest.raises(OnyxError) as exc_info:
+        _put({"llm_custom_config_env_injection": True})
+    assert exc_info.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    assert "llm_custom_config_env_injection" in str(exc_info.value)
+
+    assert _load_row_as_dict() is None
+
+
+def test_put_single_tenant_changes_llm_env_injection() -> None:
+    """On single-tenant the setting is editable: off, then back to on."""
+    result = _put({"llm_custom_config_env_injection": False})
+    assert result.llm_custom_config_env_injection is False
+    assert _load_row_as_dict() == {"llm_custom_config_env_injection": False}
+
+    result = _put({"llm_custom_config_env_injection": True})
+    assert result.llm_custom_config_env_injection is True
+
+
 # -----------------------------------------------------------------------------
 # Concurrency: lock serializes writers, both disjoint writes land
 # -----------------------------------------------------------------------------

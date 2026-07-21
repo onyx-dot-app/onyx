@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import copy
 from enum import IntEnum
-from typing import cast, Union
+from typing import Union, cast
 
-from .tokenize import _Input, json_token_type_to_string, JsonTokenType, Tokenizer
+from .tokenize import JsonTokenType, Tokenizer, _Input, json_token_type_to_string
 
 # Type definitions for JSON values
 JsonValue = Union[None, bool, float, str, list["JsonValue"], dict[str, "JsonValue"]]

@@ -11,7 +11,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, computed_field, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -22,7 +22,7 @@ from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.matching.engine import actions_requiring_approval, MatchedAction
+from onyx.external_apps.matching.engine import MatchedAction, actions_requiring_approval
 from onyx.external_apps.presentation.decode import decode_payload
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS

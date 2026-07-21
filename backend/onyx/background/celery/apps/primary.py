@@ -3,10 +3,10 @@ import os
 from typing import Any, cast
 
 from celery import (
-    bootsteps,  # ty: ignore[unresolved-import]
     Celery,
-    signals,
     Task,
+    bootsteps,
+    signals,
 )
 from celery.apps.worker import Worker
 from celery.exceptions import WorkerShutdown
@@ -21,11 +21,11 @@ from onyx.background.celery.tasks.vespa.document_sync import reset_document_sync
 from onyx.configs.app_configs import CELERY_WORKER_PRIMARY_POOL_OVERFLOW
 from onyx.configs.constants import (
     CELERY_PRIMARY_WORKER_LOCK_TIMEOUT,
+    POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME,
     OnyxRedisConstants,
     OnyxRedisLocks,
-    POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME,
 )
-from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.index_attempt import get_index_attempt, mark_attempt_canceled
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
@@ -280,7 +280,7 @@ class HubPeriodicTask(bootsteps.StartStopStep):
         self.interval = CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 8  # Interval in seconds
         self.task_tref = None
 
-    def start(self, worker: Any) -> None:
+    def start(self, worker: Any) -> None:  # ty: ignore[invalid-method-override]
         if not celery_is_worker_primary(worker):
             return
 
@@ -331,7 +331,7 @@ class HubPeriodicTask(bootsteps.StartStopStep):
         except Exception:
             task_logger.exception("Periodic task failed.")
 
-    def stop(self, worker: Any) -> None:  # noqa: ARG002
+    def stop(self, worker: Any) -> None:  # noqa: ARG002  # ty: ignore[invalid-method-override]
         # Cancel the scheduled task when the worker stops
         if self.task_tref:
             self.task_tref.cancel()

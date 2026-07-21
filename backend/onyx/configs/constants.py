@@ -2,7 +2,7 @@ import os
 import platform
 import re
 import socket
-from enum import auto, Enum
+from enum import Enum, auto
 
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"
@@ -107,6 +107,11 @@ DANSWER_API_KEY_PREFIX = "API_KEY__"
 DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN = "onyxapikey.ai"
 UNNAMED_KEY_PLACEHOLDER = "Unnamed"
 DISCORD_SERVICE_API_KEY_NAME = "discord-bot-service"
+SLACK_SERVICE_ACCOUNT_NAME = "slack-bot-service"
+SLACK_SERVICE_ACCOUNT_EMAIL = (
+    f"{DANSWER_API_KEY_PREFIX}{SLACK_SERVICE_ACCOUNT_NAME}"
+    f"@{DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN}"
+).lower()
 
 # Key-Value store keys
 KV_REINDEX_KEY = "needs_reindexing"
@@ -526,6 +531,7 @@ class OnyxRedisLocks:
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES_BEAT_LOCK = "da_lock:cleanup_idle_sandboxes_beat"
+    SESSION_CREATE_LOCK_PREFIX = "session_create"
 
 
 class OnyxRedisSignals:

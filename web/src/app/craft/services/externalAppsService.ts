@@ -117,6 +117,7 @@ export async function replaceCustomAppBundle(
 
 interface UpdateExternalAppBody {
   // Every field is optional; omit to leave the stored value untouched.
+  enabled?: boolean;
   name?: string;
   description?: string;
   upstream_url_patterns?: string[];

@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload, Session
+from sqlalchemy.orm import Session, joinedload
 
 from onyx.db.constants import (
     DEFAULT_PERSONA_SLACK_CHANNEL_NAME,

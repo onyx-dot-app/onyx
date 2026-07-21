@@ -5,7 +5,7 @@ tested without a DB. Covers the residual math, the in-span component set, the
 clamp, and the absent-BATCH_TOTAL case.
 """
 
-from onyx.db.index_attempt_metrics_models import IndexAttemptStage, STAGE_SCOPE
+from onyx.db.index_attempt_metrics_models import STAGE_SCOPE, IndexAttemptStage
 from onyx.server.documents.models import (
     _BATCH_TOTAL_COMPONENT_STAGES,
     IndexAttemptStageMetricSnapshot,

@@ -8,7 +8,7 @@ import uuid
 from collections.abc import AsyncGenerator, Sequence
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from typing import Any, cast, Dict, List, Literal, Optional, Protocol, Tuple, TypeVar
+from typing import Any, Dict, List, Literal, Optional, Protocol, Tuple, TypeVar, cast
 from urllib.parse import urlparse
 
 import jwt
@@ -20,19 +20,19 @@ from fastapi import (
     Query,
     Request,
     Response,
-    status,
     WebSocket,
+    status,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.routing import APIRoute
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import (
     BaseUserManager,
-    exceptions,
     FastAPIUsers,
+    UUIDIDMixin,
+    exceptions,
     models,
     schemas,
-    UUIDIDMixin,
 )
 from fastapi_users.authentication import (
     AuthenticationBackend,
@@ -47,7 +47,7 @@ from fastapi_users.authentication.strategy.db import (
     DatabaseStrategy,
 )
 from fastapi_users.exceptions import UserAlreadyExists
-from fastapi_users.jwt import decode_jwt, generate_jwt, SecretType
+from fastapi_users.jwt import SecretType, decode_jwt, generate_jwt
 from fastapi_users.manager import UserManagerDependency
 from fastapi_users.openapi import OpenAPIResponseType
 from fastapi_users.router.common import ErrorCode, ErrorModel
@@ -70,15 +70,17 @@ from onyx.auth.email_utils import (
 )
 from onyx.auth.invited_users import get_invited_users, remove_user_from_invited_users
 from onyx.auth.jwt import verify_jwt_token
+from onyx.auth.login_claims_capture import capture_oauth_login_claims
 from onyx.auth.mobile_sso.sso_completion import (
     apply_mobile_state,
     complete_mobile_sso,
     is_mobile_sso,
 )
-from onyx.auth.oauth_claims_capture import capture_oauth_login_claims
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend, UserCreate, UserRole
 from onyx.auth.session_tokens import (
+    SESSION_TOKEN_GRACE_PERIOD_SECONDS,
+    SessionRejection,
     build_session_rejection_error,
     build_session_token_value,
     build_session_tombstone_value,
@@ -87,8 +89,6 @@ from onyx.auth.session_tokens import (
     may_be_session_token,
     physical_session_ttl_seconds,
     record_session_rejection,
-    SESSION_TOKEN_GRACE_PERIOD_SECONDS,
-    SessionRejection,
 )
 from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
 from onyx.configs.app_configs import (
@@ -111,18 +111,18 @@ from onyx.configs.constants import (
     DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
     DANSWER_API_KEY_PREFIX,
     FASTAPI_USERS_AUTH_COOKIE_NAME,
-    MilestoneRecordType,
-    OnyxRedisLocks,
     PASSWORD_SPECIAL_CHARS,
     UNNAMED_KEY_PLACEHOLDER,
+    MilestoneRecordType,
+    OnyxRedisLocks,
 )
 from onyx.db.api_key import fetch_user_for_api_key
 from onyx.db.auth import (
+    SQLAlchemyUserAdminDB,
     get_access_token_db,
     get_default_admin_user_emails,
     get_user_count,
     get_user_db,
-    SQLAlchemyUserAdminDB,
 )
 from onyx.db.engine.async_sql_engine import (
     get_async_session,
@@ -142,9 +142,9 @@ from onyx.db.users import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import (
+    OnyxError,
     log_onyx_error,
     onyx_error_to_json_response,
-    OnyxError,
 )
 from onyx.redis.redis_pool import get_async_redis_connection, retrieve_ws_token_data
 from onyx.server.security.store import get_security_settings
@@ -153,21 +153,22 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import (
+    RecordType,
     mt_cloud_identify_user,
     mt_cloud_telemetry,
     optional_telemetry,
-    RecordType,
 )
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params, sanitize_next_url
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import (
-    async_return_default_schema,
     MULTI_TENANT,
     POSTGRES_DEFAULT_SCHEMA,
+    async_return_default_schema,
 )
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
+    CURRENT_USER_ID_CONTEXTVAR,
     get_current_tenant_id,
 )
 
@@ -949,9 +950,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user = await self.user_db.get_by_email(account_email)
                     if user is None:
                         raise exceptions.UserNotExists()
-                    if not associate_by_email:
+                    if not associate_by_email and user.account_type.is_web_login():
                         # Linking a login to an existing same-email account is
                         # an account-takeover vector unless explicitly enabled.
+                        # Non-web-login placeholders (permission-sync
+                        # EXT_PERM_USER, bots) carry no credentials or sessions,
+                        # so there is nothing to take over, and the non-web-login
+                        # upgrade below claims them.
                         raise exceptions.UserAlreadyExists()
 
                     user = await self.user_db.add_oauth_account(
@@ -1989,11 +1994,11 @@ def _scoped_pat_permitted_on_route(
     )
 
 
-async def optional_user(
+async def _resolve_optional_user(
     request: Request,
-    async_db_session: AsyncSession = Depends(get_async_session),
-    user: User | None = Depends(optional_fastapi_current_user),
-    user_manager: BaseUserManager[User, uuid.UUID] = Depends(get_user_manager),
+    async_db_session: AsyncSession,
+    user: User | None,
+    user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
@@ -2028,6 +2033,25 @@ async def optional_user(
     if user is not None:
         await _maybe_refresh_oauth_tokens(user, async_db_session, user_manager)
     return user
+
+
+async def optional_user(
+    request: Request,
+    async_db_session: AsyncSession = Depends(get_async_session),
+    user: User | None = Depends(optional_fastapi_current_user),
+    user_manager: BaseUserManager[User, uuid.UUID] = Depends(get_user_manager),
+) -> AsyncGenerator[User | None, None]:
+    user = await _resolve_optional_user(
+        request,
+        async_db_session,
+        user,
+        user_manager,
+    )
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id) if user is not None else None)
+    try:
+        yield user
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
 
 def get_anonymous_user() -> User:
@@ -2193,11 +2217,11 @@ def is_same_origin(actual: str, expected: str) -> bool:
 async def current_user_from_websocket(
     websocket: WebSocket,
     token: str = Query(..., description="WebSocket authentication token"),
-) -> User:
+) -> AsyncGenerator[User, None]:
     """
     WebSocket authentication dependency using query parameter.
 
-    Validates the WS token from query param and returns the User.
+    Validates the WS token from query param and yields the User.
     Raises BasicAuthenticationError if authentication fails.
 
     The token must be obtained from POST /voice/ws-token before connecting.
@@ -2256,7 +2280,11 @@ async def current_user_from_websocket(
         )
 
     logger.debug("WS auth: authenticated %s", user.email)
-    return user
+    context_token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+    try:
+        yield user
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(context_token)
 
 
 def get_default_admin_user_emails_() -> list[str]:

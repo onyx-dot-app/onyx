@@ -41,9 +41,9 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
 )
 from onyx.server.features.build.sandbox.kubernetes import sidecar_client
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    _build_targz,
-    KubernetesSandboxManager,
     OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
+    KubernetesSandboxManager,
+    _build_targz,
 )
 from onyx.server.features.build.sandbox.kubernetes.sidecar_client import SidecarClient
 from onyx.server.features.build.sandbox.models import (

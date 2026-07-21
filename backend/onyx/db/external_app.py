@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.enums import EndpointPolicy, ExternalAppType, SkillSharePermission
 from onyx.db.models import (
@@ -14,7 +14,7 @@ from onyx.db.models import (
     Skill,
     User,
 )
-from onyx.db.utils import is_set, UNSET, UnsetType
+from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
@@ -164,7 +164,7 @@ def get_connectable_apps_for_user(
     user_creds_by_app = get_user_credentials_by_app_id(db_session, user.id)
     return [
         app
-        for app in get_external_apps(db_session)
+        for app in get_external_apps(db_session, enabled_only=True)
         if app.skill_id in visible_skill_ids
         and not is_user_authenticated_for_app(app, user_creds_by_app.get(app.id))
     ]
@@ -176,7 +176,8 @@ def available_external_app_skill_ids_for_user(
 ) -> list[UUID]:
     """Return app-backed skill IDs whose credentials are ready for this user."""
     rows = db_session.execute(
-        select(ExternalApp, ExternalAppUserCredential).join(
+        select(ExternalApp, ExternalAppUserCredential)
+        .join(
             ExternalAppUserCredential,
             and_(
                 ExternalAppUserCredential.external_app_id == ExternalApp.id,
@@ -184,6 +185,7 @@ def available_external_app_skill_ids_for_user(
             ),
             isouter=True,
         )
+        .where(ExternalApp.enabled.is_(True))
     ).all()
     return [
         app.skill_id
@@ -194,6 +196,8 @@ def available_external_app_skill_ids_for_user(
 
 def get_external_apps(
     db_session: Session,
+    *,
+    enabled_only: bool = False,
 ) -> list[ExternalApp]:
     stmt = (
         select(ExternalApp)
@@ -203,6 +207,8 @@ def get_external_apps(
         )
         .order_by(ExternalApp.id)
     )
+    if enabled_only:
+        stmt = stmt.where(ExternalApp.enabled.is_(True))
     return list(db_session.scalars(stmt).all())
 
 
@@ -339,6 +345,7 @@ def update_external_app(
     db_session: Session,
     external_app_id: int,
     app_type: ExternalAppType,
+    enabled: bool | UnsetType = UNSET,
     name: str | UnsetType = UNSET,
     description: str | UnsetType = UNSET,
     upstream_url_patterns: list[str] | UnsetType = UNSET,
@@ -377,6 +384,8 @@ def update_external_app(
             f"'{app.app_type.value}' to '{app_type.value}'.",
         )
 
+    if is_set(enabled):
+        app.enabled = enabled
     if is_set(name):
         app.skill.name = name
     if is_set(description):

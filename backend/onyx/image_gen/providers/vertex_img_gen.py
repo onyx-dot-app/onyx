@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from datetime import datetime
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
@@ -109,6 +109,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
             flow=LLMFlow.IMAGE_GENERATION,
             model=model,
             provider="vertex_ai",
+            image_count=n,
             input_messages=[{"role": "user", "content": prompt}],
         ):
             return image_generation(
@@ -176,6 +177,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
             flow=LLMFlow.IMAGE_EDIT,
             model=model_name,
             provider="vertex_ai",
+            image_count=n,
             input_messages=[{"role": "user", "content": prompt}],
         ):
             response = client.models.generate_content(

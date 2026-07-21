@@ -6,20 +6,20 @@ import pytest
 
 from ee.onyx.connectors.perm_sync_valid import validate_canvas_perm_sync
 from ee.onyx.external_permissions.canvas.access import (
-    build_course_permission_context,
     CanvasCoursePermissionContext,
+    build_course_permission_context,
 )
 from ee.onyx.external_permissions.canvas.doc_sync import canvas_doc_sync
 from ee.onyx.external_permissions.canvas.group_sync import canvas_group_sync
 from onyx.access.models import DocExternalAccess, ExternalAccess
 from onyx.connectors.canvas.connector import (
+    CanvasAnnouncement,
+    CanvasAssignment,
+    CanvasConnector,
     canvas_all_users_group_id,
     canvas_course_group_id,
     canvas_group_group_id,
     canvas_section_group_id,
-    CanvasAnnouncement,
-    CanvasAssignment,
-    CanvasConnector,
 )
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.models import HierarchyNode, SlimDocument
