@@ -78,24 +78,3 @@ def _build_tool_name_to_class() -> dict[str, Type[BUILT_IN_TOOL_TYPES]]:
 
 
 TOOL_NAME_TO_CLASS: dict[str, Type[BUILT_IN_TOOL_TYPES]] = _build_tool_name_to_class()
-
-_IN_CODE_TOOL_ID_TO_LLM_NAME: dict[str, str] = {
-    in_code_tool_id: _tool_llm_name(cls)
-    for in_code_tool_id, cls in BUILT_IN_TOOL_MAP.items()
-}
-
-
-def llm_tool_name(in_code_tool_id: str | None, db_name: str) -> str:
-    """LLM-facing name for a tool table row.
-
-    For built-in tools the class constant is the source of truth: the DB name
-    column is seeded once by migration and may lag code renames (e.g. the
-    Code Interpreter's "python" -> "run_python" rename after OpenAI reserved
-    the name "python"). Custom/MCP tools have no in-code class, so their DB
-    name is authoritative.
-    """
-    if in_code_tool_id is not None:
-        llm_name = _IN_CODE_TOOL_ID_TO_LLM_NAME.get(in_code_tool_id)
-        if llm_name is not None:
-            return llm_name
-    return db_name

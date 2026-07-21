@@ -67,7 +67,7 @@ def test_cold_startup_default_assistant() -> None:
         assert "read_file" in tool_names, (
             "Default assistant should have FileReaderTool attached"
         )
-        assert "python" in tool_names, (
+        assert "run_python" in tool_names, (
             "Default assistant should have PythonTool attached"
         )
 

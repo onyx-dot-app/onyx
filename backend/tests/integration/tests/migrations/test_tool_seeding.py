@@ -39,7 +39,7 @@ EXPECTED_TOOLS = {
         user_id=None,
     ),
     "PythonTool": ToolSeedingExpectedResult(
-        name="python",
+        name="run_python",
         display_name="Code Interpreter",
         in_code_tool_id="PythonTool",
         user_id=None,
