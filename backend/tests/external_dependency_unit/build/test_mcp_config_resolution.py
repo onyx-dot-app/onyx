@@ -1,8 +1,8 @@
 """External-dependency-unit tests for `resolve_craft_mcp_servers`.
 
-Verifies the DB → opencode-config-input step: only craft-enabled servers are
-emitted, tools split into enabled/disabled by the admin's chat-side curation,
-and the opencode server key is stable + identifier-safe.
+Verifies the DB → opencode-config-input step: only craft-enabled servers the
+user may access are emitted, tools split into enabled/disabled by the admin's
+chat-side curation, and the opencode server key is stable + identifier-safe.
 """
 
 from __future__ import annotations
@@ -19,8 +19,9 @@ from onyx.db.enums import (
     MCPTransport,
 )
 from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
-from onyx.db.models import MCPServer, Tool
+from onyx.db.models import MCPServer, Tool, User
 from onyx.server.features.build.sandbox.util.mcp_config import resolve_craft_mcp_servers
+from tests.external_dependency_unit.conftest import create_test_user
 
 
 @pytest.fixture
@@ -63,12 +64,17 @@ def craft_server(
     db_session.commit()
 
 
+def _basic_user(db_session: Session) -> User:
+    return create_test_user(db_session, "mcp_config")
+
+
 def test_only_craft_enabled_servers_resolved_with_tool_curation(
     db_session: Session,
     craft_server: tuple[MCPServer, MCPServer],
 ) -> None:
     craft, off = craft_server
-    by_url = {c.url: c for c in resolve_craft_mcp_servers(db_session)}
+    user = _basic_user(db_session)
+    by_url = {c.url: c for c in resolve_craft_mcp_servers(db_session, user)}
 
     # The non-craft server is excluded; the craft-enabled one is present.
     assert off.server_url not in by_url
@@ -76,3 +82,26 @@ def test_only_craft_enabled_servers_resolved_with_tool_curation(
     assert config.key == f"linear-mcp-{craft.id}"
     # Only disabled tools are tracked; enabled ones ride the wildcard allow.
     assert config.disabled_tools == ("delete_issue",)
+
+
+def test_private_unshared_server_excluded_for_user(
+    db_session: Session,
+    craft_server: tuple[MCPServer, MCPServer],
+) -> None:
+    """A craft-enabled but private, unshared server is not emitted into another
+    user's sandbox config (the owner still sees it)."""
+    craft, _ = craft_server
+    craft.is_public = False
+    db_session.commit()
+
+    user = _basic_user(db_session)
+    assert craft.server_url not in {
+        c.url for c in resolve_craft_mcp_servers(db_session, user)
+    }
+
+    owner = create_test_user(db_session, "mcp_owner")
+    craft.owner = owner.email
+    db_session.commit()
+    assert craft.server_url in {
+        c.url for c in resolve_craft_mcp_servers(db_session, owner)
+    }

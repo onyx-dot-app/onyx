@@ -249,7 +249,7 @@ def provision_sandbox(
         llm_config=all_llm_configs[0],
         onyx_pat=onyx_pat,
         all_llm_configs=all_llm_configs,
-        mcp_servers=resolve_craft_mcp_servers(db_session),
+        mcp_servers=resolve_craft_mcp_servers(db_session, user),
     )
     if sandbox_info.status == SandboxStatus.RUNNING:
         hydrate_managed_content(sandbox_manager, sandbox.id, user, db_session)

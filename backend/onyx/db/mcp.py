@@ -58,13 +58,20 @@ def get_mcp_servers_by_owner(owner_email: str, db_session: Session) -> list[MCPS
     )
 
 
-def get_craft_enabled_mcp_servers(db_session: Session) -> list[MCPServer]:
-    """Get all MCP servers an admin has made available to the Craft agent"""
-    return list(
-        db_session.scalars(
-            select(MCPServer).where(MCPServer.available_in_craft.is_(True))
-        ).all()
-    )
+def get_craft_enabled_mcp_servers(
+    db_session: Session, user: User | None
+) -> list[MCPServer]:
+    """MCP servers an admin has made available to the Craft agent.
+
+    With ``user``, only servers that user may use (public, shared with them,
+    or owned). ``None`` skips the access filter — reserved for callers that
+    match by host before a user is known (the proxy's claim path); user-facing
+    surfaces must pass the user.
+    """
+    stmt = select(MCPServer).where(MCPServer.available_in_craft.is_(True))
+    if user is not None:
+        stmt = _add_mcp_server_access_filter(stmt, user)
+    return list(db_session.scalars(stmt).all())
 
 
 def get_mcp_servers_for_persona(
