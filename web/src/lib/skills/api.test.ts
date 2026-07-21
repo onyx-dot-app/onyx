@@ -1,5 +1,4 @@
 import {
-  createCustomSkill,
   createCustomSkillFromEditor,
   isSkillNameConflict,
 } from "@/lib/skills/api";
@@ -17,8 +16,7 @@ describe("skills API", () => {
     global.fetch = fetchMock;
   });
 
-  it("sends the confirmed disabled state through both creation APIs", async () => {
-    await createCustomSkill(new File(["bundle"], "skill.zip"), false);
+  it("sends the confirmed disabled state through editor creation", async () => {
     await createCustomSkillFromEditor({
       name: "report-writer",
       description: "Writes reports",
@@ -26,12 +24,11 @@ describe("skills API", () => {
       auto_enable: false,
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0]![0]).toBe("/api/skills/custom");
-    expect(fetchMock.mock.calls[1]![0]).toBe("/api/skills/custom/editor");
-    for (const [, request] of fetchMock.mock.calls) {
-      expect((request!.body as FormData).get("auto_enable")).toBe("false");
-    }
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]![0]).toBe("/api/skills/custom/editor");
+    expect(
+      (fetchMock.mock.calls[0]![1]!.body as FormData).get("auto_enable")
+    ).toBe("false");
   });
 
   it("recognizes only the dedicated skill-name conflict", () => {

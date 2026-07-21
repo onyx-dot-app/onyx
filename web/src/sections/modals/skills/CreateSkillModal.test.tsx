@@ -1,13 +1,18 @@
-import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+import {
+  act,
+  deferred,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+} from "@tests/setup/test-utils";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
-import type { CustomSkill } from "@/lib/skills/types";
+import type { SkillBundleContents } from "@/lib/skills/types";
 
-const mockCreateCustomSkill = jest.fn();
 const mockInspectSkillBundle = jest.fn();
 
 jest.mock("@/lib/skills/api", () => ({
   ...jest.requireActual("@/lib/skills/api"),
-  createCustomSkill: (...args: unknown[]) => mockCreateCustomSkill(...args),
   inspectSkillBundle: (...args: unknown[]) => mockInspectSkillBundle(...args),
 }));
 
@@ -29,104 +34,83 @@ jest.mock("@/sections/skills/SkillBundlePicker", () => ({
   ),
 }));
 
+const inspectedContents: SkillBundleContents = {
+  name: "report-writer",
+  description: "Writes polished reports",
+  instructions_markdown: "# Report writer\n\nWrite the requested report.",
+  files: [
+    { path: "SKILL.md", size: 128 },
+    { path: "references/style.md", size: 64 },
+  ],
+};
+
 describe("CreateSkillModal", () => {
   beforeEach(() => {
-    mockCreateCustomSkill.mockReset();
     mockInspectSkillBundle.mockReset();
   });
 
-  it("confirms before creating a same-name skill disabled", async () => {
+  it("inspects the upload and passes an unsaved editor draft onward", async () => {
     const user = setupUser();
-    const onCreated = jest.fn();
-    const conflict = Object.assign(new Error("Name conflict"), {
-      errorCode: "SKILL_NAME_CONFLICT",
-    });
-    const created = {
-      id: "new-skill-id",
-      name: "report-writer",
-      enabled: false,
-    } as CustomSkill;
-    mockInspectSkillBundle.mockResolvedValue({ name: "report-writer" });
-    mockCreateCustomSkill
-      .mockRejectedValueOnce(conflict)
-      .mockResolvedValueOnce(created);
+    const onContinue = jest.fn();
+    mockInspectSkillBundle.mockResolvedValue(inspectedContents);
 
-    render(<CreateSkillModal open onClose={jest.fn()} onCreated={onCreated} />);
+    render(
+      <CreateSkillModal open onClose={jest.fn()} onContinue={onContinue} />
+    );
     await user.click(screen.getByRole("button", { name: "Select bundle" }));
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Review skill" }));
 
-    expect(
-      await screen.findByText("Create another “report-writer” skill?")
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "The new skill will start disabled. You can switch which one is active from the Skills page."
-      )
-    ).toBeInTheDocument();
-    expect(mockCreateCustomSkill).toHaveBeenCalledTimes(1);
-    expect(mockCreateCustomSkill).toHaveBeenCalledWith(expect.any(File), true);
-    expect(onCreated).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: "Create anyway" }));
-
-    await waitFor(() => {
-      expect(mockCreateCustomSkill).toHaveBeenNthCalledWith(
-        1,
-        expect.any(File),
-        true
-      );
-      expect(mockCreateCustomSkill).toHaveBeenNthCalledWith(
-        2,
-        expect.any(File),
-        false
-      );
-      expect(onCreated).toHaveBeenCalledWith(created);
-    });
-    expect(mockInspectSkillBundle).toHaveBeenCalledTimes(1);
-  });
-
-  it("returns to the upload without creating when confirmation is canceled", async () => {
-    const user = setupUser();
-    const onCreated = jest.fn();
-    mockInspectSkillBundle.mockResolvedValue({ name: "report-writer" });
-    mockCreateCustomSkill.mockRejectedValue(
-      Object.assign(new Error("Name conflict"), {
-        errorCode: "SKILL_NAME_CONFLICT",
+    await waitFor(() => expect(onContinue).toHaveBeenCalledTimes(1));
+    const draft = onContinue.mock.calls[0]![0];
+    expect(draft.contents).toEqual(inspectedContents);
+    expect(draft.upload).toEqual(
+      expect.objectContaining({
+        displayName: "skill.zip",
+        entries: inspectedContents.files,
+        containsSkillMd: true,
       })
     );
-
-    render(<CreateSkillModal open onClose={jest.fn()} onCreated={onCreated} />);
-    await user.click(screen.getByRole("button", { name: "Select bundle" }));
-    await user.click(screen.getByRole("button", { name: "Create" }));
-    await screen.findByText("Create another “report-writer” skill?");
-
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-
-    expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
-    expect(mockCreateCustomSkill).toHaveBeenCalledTimes(1);
-    expect(onCreated).not.toHaveBeenCalled();
+    expect(draft.upload.file).toBeInstanceOf(File);
+    expect(mockInspectSkillBundle).toHaveBeenCalledWith(draft.upload.file);
   });
 
-  it("creates immediately when the name is available", async () => {
+  it("keeps the modal open and reports inspection failures", async () => {
     const user = setupUser();
-    const onCreated = jest.fn();
-    const created = {
-      id: "new-skill-id",
-      name: "available-skill",
-      enabled: true,
-    } as CustomSkill;
-    mockInspectSkillBundle.mockResolvedValue({ name: "available-skill" });
-    mockCreateCustomSkill.mockResolvedValue(created);
+    const onContinue = jest.fn();
+    mockInspectSkillBundle.mockRejectedValue(
+      new Error("SKILL.md is missing its description")
+    );
 
-    render(<CreateSkillModal open onClose={jest.fn()} onCreated={onCreated} />);
+    render(
+      <CreateSkillModal open onClose={jest.fn()} onContinue={onContinue} />
+    );
     await user.click(screen.getByRole("button", { name: "Select bundle" }));
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Review skill" }));
 
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(created));
-    expect(mockCreateCustomSkill).toHaveBeenCalledTimes(1);
-    expect(mockCreateCustomSkill).toHaveBeenCalledWith(expect.any(File), true);
-    expect(
-      screen.queryByText(/Create another .* skill\?/)
-    ).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "SKILL.md is missing its description"
+    );
+    expect(onContinue).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled();
+  });
+
+  it("prevents duplicate review submissions while inspection is pending", async () => {
+    const user = setupUser();
+    const inspection = deferred<SkillBundleContents>();
+    mockInspectSkillBundle.mockReturnValue(inspection.promise);
+
+    render(
+      <CreateSkillModal open onClose={jest.fn()} onContinue={jest.fn()} />
+    );
+    await user.click(screen.getByRole("button", { name: "Select bundle" }));
+    await user.click(screen.getByRole("button", { name: "Review skill" }));
+
+    expect(screen.getByRole("button", { name: "Opening…" })).toBeDisabled();
+    expect(mockInspectSkillBundle).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      inspection.resolve(inspectedContents);
+      await inspection.promise;
+    });
   });
 });

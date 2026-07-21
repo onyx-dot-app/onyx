@@ -44,21 +44,6 @@ async function handle<T>(res: Response): Promise<T> {
 // Mutations
 // ---------------------------------------------------------------------------
 
-export async function createCustomSkill(
-  bundle: File,
-  autoEnable = true
-): Promise<CustomSkill> {
-  const form = new FormData();
-  form.append("bundle", bundle);
-  form.append("auto_enable", String(autoEnable));
-
-  const res = await fetch("/api/skills/custom", {
-    method: "POST",
-    body: form,
-  });
-  return handle<CustomSkill>(res);
-}
-
 export interface CreateCustomSkillInput {
   name: string;
   description: string;

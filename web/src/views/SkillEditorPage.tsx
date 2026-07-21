@@ -49,6 +49,10 @@ import {
 } from "@/lib/skills/api";
 import type { SkillEditableDetail } from "@/lib/skills/types";
 import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
+import {
+  discardSkillCreationDraft,
+  getSkillCreationDraft,
+} from "@/lib/skills/creationDraft";
 import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
@@ -61,6 +65,7 @@ import { ConfirmationModalLayout } from "@opal/layouts";
 
 interface SkillEditorPageProps {
   skillId?: string;
+  draftId?: string;
 }
 
 function getSharingStatus(skill: SkillEditableDetail): {
@@ -97,9 +102,16 @@ function getSharingStatus(skill: SkillEditableDetail): {
   };
 }
 
-export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
+export default function SkillEditorPage({
+  skillId,
+  draftId,
+}: SkillEditorPageProps) {
   const isCreating = skillId === undefined;
   const router = useRouter();
+  const creationDraft = useMemo(
+    () => (isCreating && draftId ? getSkillCreationDraft(draftId) : undefined),
+    [draftId, isCreating]
+  );
   const { mutate } = useSWRConfig();
   const {
     data: skill,
@@ -111,9 +123,13 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     errorHandlingFetcher
   );
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [instructionsMarkdown, setInstructionsMarkdown] = useState("");
+  const [name, setName] = useState(creationDraft?.contents.name ?? "");
+  const [description, setDescription] = useState(
+    creationDraft?.contents.description ?? ""
+  );
+  const [instructionsMarkdown, setInstructionsMarkdown] = useState(
+    creationDraft?.contents.instructions_markdown ?? ""
+  );
   const [instructionsDisplayMode, setInstructionsDisplayMode] =
     useState<InstructionsDisplayMode>("raw");
   const [hydratedSkillId, setHydratedSkillId] = useState<string | null>(null);
@@ -123,7 +139,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const [isPreparingFiles, setIsPreparingFiles] = useState(false);
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
   const [pendingFilesUpload, setPendingFilesUpload] =
-    useState<PreparedSkillFilesUpload | null>(null);
+    useState<PreparedSkillFilesUpload | null>(creationDraft?.upload ?? null);
   const [filesUploadToConfirm, setFilesUploadToConfirm] =
     useState<PreparedSkillFilesUpload | null>(null);
   const [removingFilePath, setRemovingFilePath] = useState<string | null>(null);
@@ -131,6 +147,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const [conflictingSkillName, setConflictingSkillName] = useState<
     string | null
   >(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
     setName(nextSkill.name);
@@ -159,6 +176,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     description,
     instructionsMarkdown,
     isCreating,
+    name,
     pendingFilesUpload,
     skill,
   ]);
@@ -185,8 +203,18 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     !!instructionsMarkdown.trim() &&
     !isSaving;
 
-  function navigateBack() {
+  function leaveEditor() {
+    if (draftId) discardSkillCreationDraft(draftId);
     router.push("/craft/v1/skills" as Route);
+  }
+
+  function handleCancel() {
+    if (isSaving || isPreparingFiles || isUploadingFiles) return;
+    if (isCreating && isDirty) {
+      setDiscardOpen(true);
+      return;
+    }
+    leaveEditor();
   }
 
   async function refreshSkillList() {
@@ -212,9 +240,12 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
           pendingFilesUpload?.file
         );
         setConflictingSkillName(null);
-        await refreshSkillList();
+        if (draftId) discardSkillCreationDraft(draftId);
+        void refreshSkillList().catch((error: unknown) => {
+          console.error("Failed to refresh skill list after creation", error);
+        });
         toast.success(`Created "${created.name}"`);
-        router.replace(`/craft/v1/skills/edit/${created.id}` as Route);
+        router.replace("/craft/v1/skills" as Route);
         return;
       }
 
@@ -356,7 +387,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
   const saveTooltip = isSaving
     ? isCreating
-      ? "Creating skill..."
+      ? "Saving skill..."
       : "Saving changes..."
     : !isCreating && !skill
       ? undefined
@@ -411,24 +442,19 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
               <Button
                 prominence="secondary"
                 type="button"
-                onClick={navigateBack}
+                disabled={isSaving || isPreparingFiles || isUploadingFiles}
+                onClick={handleCancel}
               >
                 Cancel
               </Button>
               <Tooltip tooltip={saveTooltip} side="bottom">
                 <Button disabled={!canSave} type="submit">
-                  {isSaving
-                    ? isCreating
-                      ? "Creating..."
-                      : "Saving..."
-                    : isCreating
-                      ? "Create"
-                      : "Save"}
+                  {isSaving ? "Saving..." : "Save"}
                 </Button>
               </Tooltip>
             </div>
           }
-          backButton
+          backButton={handleCancel}
           divider
         />
 
@@ -449,7 +475,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
           {(isCreating || skill) && !isLoading && !error && (
             <>
-              {isCreating && (
+              {isCreating && !creationDraft && (
                 <>
                   <Section gap={0.5} alignItems="stretch" height="auto">
                     <Card border="solid" rounding="lg" padding="sm">
@@ -738,6 +764,22 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
           onConfirm={() => void handleSave(undefined, true)}
           pending={isSaving}
         />
+      )}
+
+      {discardOpen && (
+        <ConfirmationModalLayout
+          icon={SvgAlertTriangle}
+          title="Discard unsaved changes?"
+          onClose={() => setDiscardOpen(false)}
+          submit={
+            <Button type="button" variant="danger" onClick={leaveEditor}>
+              Discard changes
+            </Button>
+          }
+        >
+          This skill has not been saved. If you leave now, your changes will be
+          lost.
+        </ConfirmationModalLayout>
       )}
 
       {skill && deleteOpen && (
