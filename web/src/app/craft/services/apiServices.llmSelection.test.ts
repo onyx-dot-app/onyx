@@ -23,8 +23,9 @@ describe("Craft LLM selection payloads", () => {
   it("fails safely on old backends while sending the exact provider id", async () => {
     await createTurn("session-id", "hello", "request-id", undefined, selection);
 
-    const request = jest.mocked(global.fetch).mock.calls[0]?.[1];
-    expect(JSON.parse(String(request?.body))).toMatchObject({
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const request = jest.mocked(global.fetch).mock.calls[0]![1];
+    expect(JSON.parse(String(request!.body))).toMatchObject({
       provider: "onyx",
       provider_id: 13,
       model: "gpt-5-mini",

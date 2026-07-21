@@ -280,21 +280,22 @@ def _stream_worker(
     cancelled: threading.Event,
 ) -> None:
     with llm_generation_span(
-        llm, flow=LLMFlow.CRAFT_LLM_GATEWAY, input_messages=messages, tools=tools
+        llm, flow=LLMFlow.CRAFT_LLM_GENERATION, input_messages=messages, tools=tools
     ) as span:
         accumulated_content: list[str] = []
         final_usage: Usage | None = None
         tool_call_buffer: dict[int, ChatCompletionDeltaToolCall] = {}
         sent_role = False
-        upstream = llm.stream(
-            prompt=messages,
-            tools=tools,
-            tool_choice=tool_choice,
-            structured_response_format=structured_response_format,
-            max_tokens=max_tokens,
-            reasoning_effort=reasoning_effort,
-        )
+        upstream: Iterator[ModelResponseStream] | None = None
         try:
+            upstream = llm.stream(
+                prompt=messages,
+                tools=tools,
+                tool_choice=tool_choice,
+                structured_response_format=structured_response_format,
+                max_tokens=max_tokens,
+                reasoning_effort=reasoning_effort,
+            )
             for chunk in upstream:
                 if cancelled.is_set():
                     break
@@ -442,7 +443,7 @@ def gateway_chat_completions(
     try:
         with llm_generation_span(
             llm,
-            flow=LLMFlow.CRAFT_LLM_GATEWAY,
+            flow=LLMFlow.CRAFT_LLM_GENERATION,
             input_messages=messages,
             tools=request.tools,
         ) as span:
