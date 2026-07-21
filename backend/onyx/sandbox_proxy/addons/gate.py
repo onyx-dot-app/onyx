@@ -596,8 +596,13 @@ class GateAddon:
         # ALWAYS / DENY / off-catalog terminate here; ASK falls through to the
         # approval pipeline in `request()`.
         if matched_actions is None:
-            injection = self._dispatch_injection_or_block(
-                flow, sandbox=sandbox, matched_actions=None
+            # Off-thread like the ALWAYS path: host-claiming resolvers may hit
+            # the DB or refresh an expiring OAuth token before injecting.
+            injection = await asyncio.to_thread(
+                self._dispatch_injection_or_block,
+                flow,
+                sandbox=sandbox,
+                matched_actions=None,
             )
             if injection is InjectionOutcome.BLOCKED:
                 logger.warning(
@@ -1046,16 +1051,18 @@ class GateAddon:
         matched_actions: AllMatchedActions | None,
     ) -> InjectionOutcome:
         """Runs the credential dispatcher; Fails closed with a 403 on BLOCKED."""
-        outcome = self._credential_dispatcher.apply(
+        result = self._credential_dispatcher.apply(
             flow,
             InjectionContext(
                 sandbox=sandbox,
                 matched_actions=matched_actions,
             ),
         )
-        if outcome is InjectionOutcome.BLOCKED:
-            flow.response = http_403(SandboxProxyError.CREDENTIAL_ERROR)
-        return outcome
+        if result.outcome is InjectionOutcome.BLOCKED:
+            flow.response = http_403(
+                SandboxProxyError.CREDENTIAL_ERROR, detail=result.block_detail
+            )
+        return result.outcome
 
     def _terminalize_after_unhandled_error(
         self, approval_id: UUID, tenant_id: str
