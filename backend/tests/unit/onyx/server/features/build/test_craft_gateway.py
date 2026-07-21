@@ -7,15 +7,13 @@ import pytest
 from fastapi import Request
 
 from onyx.db.enums import Permission
+from onyx.db.llm import fetch_accessible_llm_provider_by_id
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.models import ReasoningEffort
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import CRAFT_GATEWAY_CONSUMER
-from onyx.server.features.build.db.build_session import (
-    fetch_accessible_build_llm_provider_by_id,
-)
 from onyx.tracing.flows import LLMFlow
 
 
@@ -68,7 +66,4 @@ def test_craft_consumer_defaults_to_medium_reasoning_effort() -> None:
 
 
 def test_craft_consumer_uses_build_provider_accessibility() -> None:
-    assert (
-        CRAFT_GATEWAY_CONSUMER.fetch_provider
-        is fetch_accessible_build_llm_provider_by_id
-    )
+    assert CRAFT_GATEWAY_CONSUMER.fetch_provider is fetch_accessible_llm_provider_by_id

@@ -596,6 +596,25 @@ def fetch_existing_llm_provider_by_id(
     return provider_model
 
 
+def fetch_accessible_llm_provider_by_id(
+    db_session: Session, user: User, provider_id: int
+) -> LLMProviderView | None:
+    """``provider_id``'s view when ``user`` may access it (is_public / group
+    rules; persona-restricted providers are excluded — no persona context)."""
+    provider_model = fetch_existing_llm_provider_by_id(provider_id, db_session)
+    if provider_model is None:
+        return None
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    if not can_user_access_llm_provider(
+        provider_model,
+        user_group_ids,
+        persona=None,
+        is_admin=user.role == UserRole.ADMIN,
+    ):
+        return None
+    return LLMProviderView.from_model(provider_model)
+
+
 def fetch_existing_llm_provider_by_name_and_type(
     name: str, provider_type: str, db_session: Session
 ) -> LLMProviderModel | None:

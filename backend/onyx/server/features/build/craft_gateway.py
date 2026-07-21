@@ -2,13 +2,11 @@ from fastapi import Request
 
 from onyx.auth.permissions import resolve_effective_permissions
 from onyx.db.enums import Permission
+from onyx.db.llm import fetch_accessible_llm_provider_by_id
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.models import ReasoningEffort
-from onyx.server.features.build.db.build_session import (
-    fetch_accessible_build_llm_provider_by_id,
-)
 from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.server.gateway.consumers import GatewayConsumer
 from onyx.tracing.flows import LLMFlow
@@ -39,6 +37,6 @@ CRAFT_GATEWAY_CONSUMER = GatewayConsumer(
     flow=LLMFlow.CRAFT_LLM_GENERATION,
     matches=_token_grants_gateway,
     authorize=_require_craft_enabled,
-    fetch_provider=fetch_accessible_build_llm_provider_by_id,
+    fetch_provider=fetch_accessible_llm_provider_by_id,
     default_reasoning_effort=ReasoningEffort.MEDIUM,
 )
