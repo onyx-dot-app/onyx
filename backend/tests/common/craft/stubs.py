@@ -279,19 +279,14 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
-        *,
-        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         self.provision_count += 1
         self.last_provision_payload = {
             "sandbox_id": sandbox_id,
             "user_id": user_id,
             "tenant_id": tenant_id,
-            "llm_config": llm_config,
             "onyx_pat": onyx_pat,
-            "all_llm_configs": all_llm_configs,
         }
         if self.provision_returns is None:
             raise _not_configured("provision")
@@ -348,6 +343,7 @@ class StubSandboxManager(SandboxManager):
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        llm_config: LLMProviderConfig | None = None,
     ) -> None:
         self.regenerate_session_config_count += 1
         self.last_regenerate_session_config_payload = {
@@ -358,6 +354,7 @@ class StubSandboxManager(SandboxManager):
             "nextjs_port": nextjs_port,
             "connectable_apps_section": connectable_apps_section,
             "user_name": user_name,
+            "llm_config": llm_config,
         }
         if not self.regenerate_session_config_silent:
             raise _not_configured("regenerate_session_config")

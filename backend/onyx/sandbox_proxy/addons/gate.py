@@ -323,7 +323,7 @@ class GateAddon:
         default `eager` connection strategy mitmproxy completes the upstream TLS
         handshake before the client's ClientHello is available; connecting by bare IP
         makes the upstream cert check fail and mitmproxy silently falls back to a raw
-        passthrough tunnel — which skips credential injection (the LLM provider key is
+        passthrough tunnel — which skips credential injection (the sandbox PAT is
         never swapped in, so the sandbox's placeholder leaks and the call 401s).
         Leaving the hostname in place keeps interception (and key injection) working.
         The cost is a residual rebind window between this resolution and mitmproxy's

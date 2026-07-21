@@ -33,13 +33,15 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     MAX_TOTAL_UPLOAD_SIZE_BYTES,
     MAX_UPLOAD_FILES_PER_SESSION,
+    ONYX_GATEWAY_PROVIDER_ID,
+    OPENCODE_DISABLED_TOOLS,
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
 )
 from onyx.server.features.build.db.build_session import (
     allocate_nextjs_port,
     create_build_session__no_commit,
     delete_build_session__no_commit,
-    fetch_all_supported_build_llm_providers,
+    fetch_all_accessible_build_llm_providers,
     get_build_session,
     get_empty_session_for_user,
     get_session_messages,
@@ -67,16 +69,16 @@ from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
+from onyx.server.features.build.sandbox.util.opencode_config import (
+    build_session_opencode_config,
+)
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import (
     RateLimitError,
     UploadLimitExceededError,
 )
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
-from onyx.server.features.build.session.llm_config import (
-    get_all_build_mode_llm_configs,
-    select_default_llm_config,
-)
+from onyx.server.features.build.session.llm_config import build_onyx_gateway_config
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.naming import generate_session_name
 from onyx.server.features.build.session.sandbox_lifecycle import (
@@ -186,19 +188,20 @@ class SessionManager:
         user: User,
         requested_provider_type: str | None = None,
         requested_model_name: str | None = None,
-    ) -> tuple[LLMProviderConfig, list[LLMProviderConfig]]:
-        """Single access-scoped fetch → (default config, all pre-registered
-        configs). ``configs[0]`` is the default. Used at provision time so the
-        default and the cross-provider override list share one DB read.
-
-        Raises:
-            OnyxError: If no accessible supported provider is configured.
-        """
-        providers = fetch_all_supported_build_llm_providers(self._db_session, user)
-        default = select_default_llm_config(
-            providers, requested_provider_type, requested_model_name
+        requested_provider_id: int | None = None,
+    ) -> LLMProviderConfig:
+        gateway_config = build_onyx_gateway_config(
+            fetch_all_accessible_build_llm_providers(self._db_session, user),
+            requested_provider_id=requested_provider_id,
+            requested_provider_type=requested_provider_type,
+            requested_model_name=requested_model_name,
         )
-        return default, get_all_build_mode_llm_configs(providers, default)
+        if gateway_config is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "No accessible LLM provider with a visible model is configured.",
+            )
+        return gateway_config
 
     # =========================================================================
     # Session CRUD Operations
@@ -244,6 +247,66 @@ class SessionManager:
             session.opencode_session_id = opencode_session_id
             session.skills_hash = sandbox.skills_hash
             self._db_session.flush()
+
+    def reconcile_session_llm_config(
+        self,
+        sandbox: Sandbox,
+        session: BuildSession,
+        user: User,
+        requested_provider_type: str | None,
+        requested_model_name: str | None,
+        requested_provider_id: int | None,
+    ) -> None:
+        if requested_model_name is None and session.agent_model:
+            requested_model_name = session.agent_model
+            requested_provider_type = session.agent_provider
+            if session.agent_provider == ONYX_GATEWAY_PROVIDER_ID:
+                provider_id, separator, model_name = session.agent_model.partition("/")
+                if separator and provider_id.isdigit() and model_name:
+                    requested_provider_id = int(provider_id)
+                    requested_provider_type = None
+                    requested_model_name = model_name
+        llm_config = self.build_llm_configs(
+            user,
+            requested_provider_type=requested_provider_type,
+            requested_model_name=requested_model_name,
+            requested_provider_id=requested_provider_id,
+        )
+        expected = build_session_opencode_config(llm_config, OPENCODE_DISABLED_TOOLS)
+
+        try:
+            current = self._sandbox_manager.read_file(
+                sandbox.id, session.id, "opencode.json"
+            ).decode()
+        except (UnicodeDecodeError, ValueError):
+            current = None
+        if current == expected:
+            if (
+                session.agent_provider != llm_config.provider
+                or session.agent_model != llm_config.model_name
+            ):
+                session.agent_provider = llm_config.provider
+                session.agent_model = llm_config.model_name
+                self._db_session.flush()
+            return
+
+        self._sandbox_manager.regenerate_session_config(
+            sandbox_id=sandbox.id,
+            session_id=session.id,
+            agent_provider=llm_config.provider,
+            agent_model=llm_config.model_name,
+            nextjs_port=session.nextjs_port,
+            connectable_apps_section=build_connectable_apps_list(
+                get_connectable_apps_for_user(self._db_session, user)
+            ),
+            user_name=user.personal_name,
+            llm_config=llm_config,
+        )
+        if session.opencode_session_id is not None:
+            self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
+        session.agent_provider = llm_config.provider
+        session.agent_model = llm_config.model_name
+        self._db_session.flush()
 
     def reload_session_skills(self, session_id: UUID, user: User) -> bool:
         """Reload one runtime and report whether its skills remain stale."""
@@ -355,12 +418,10 @@ class SessionManager:
         user = fetch_user_by_id(self._db_session, user_id)
         if user is None:
             raise ValueError(f"User {user_id} not found")
-        _, all_llm_configs = self.build_llm_configs(user)
         sandbox = ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
             user_id,
-            all_llm_configs,
             policy=ProvisioningPolicy.POLL,
             provisioning_wait_seconds=provisioning_wait_seconds,
             user=user,
@@ -371,8 +432,6 @@ class SessionManager:
         self,
         user_id: UUID,
         name: str | None = None,
-        llm_provider_type: str | None = None,
-        llm_model_name: str | None = None,
         origin: SessionOrigin = SessionOrigin.INTERACTIVE,
         headless: bool = False,
     ) -> BuildSession:
@@ -386,8 +445,6 @@ class SessionManager:
         Args:
             user_id: The user ID
             name: Optional session name
-            llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
-            llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
             origin: Provenance of the session. INTERACTIVE (default) sessions
                 appear in the Craft sidebar; SCHEDULED (scheduled-tasks
                 executor) and SLACK (Slack bot) sessions are excluded.
@@ -404,10 +461,7 @@ class SessionManager:
         if not user:
             raise ValueError(f"User {user_id} not found")
 
-        # Resolve the default + all pre-registered provider configs in one read.
-        llm_config, all_llm_configs = self.build_llm_configs(
-            user, llm_provider_type, llm_model_name
-        )
+        llm_config = self.build_llm_configs(user)
 
         # Allocate port for this session (per-session port allocation).
         # Both LOCAL and KUBERNETES backends use the same port allocation
@@ -447,7 +501,6 @@ class SessionManager:
             self._db_session,
             self._sandbox_manager,
             user_id,
-            all_llm_configs,
             policy=ProvisioningPolicy.FAIL,
             user=user,
         )
@@ -490,8 +543,6 @@ class SessionManager:
     def get_or_create_empty_session(
         self,
         user_id: UUID,
-        llm_provider_type: str | None = None,
-        llm_model_name: str | None = None,
         headless: bool = False,
     ) -> BuildSession:
         """Get existing empty session or create a new one with provisioned sandbox.
@@ -504,9 +555,6 @@ class SessionManager:
 
         Args:
             user_id: The user ID
-            llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
-            llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
-
         Returns:
             BuildSession (existing empty or newly created)
 
@@ -541,6 +589,14 @@ class SessionManager:
                         hydrate_managed_content(
                             self._sandbox_manager, sandbox.id, user, self._db_session
                         )
+                        self.reconcile_session_llm_config(
+                            sandbox,
+                            existing,
+                            user,
+                            None,
+                            None,
+                            None,
+                        )
                     self._prewarm_opencode_session(sandbox, existing)
                     logger.info(
                         "Returning existing empty session %s for user %s",
@@ -574,8 +630,6 @@ class SessionManager:
 
         return self.create_session__no_commit(
             user_id=user_id,
-            llm_provider_type=llm_provider_type,
-            llm_model_name=llm_model_name,
             headless=headless,
         )
 

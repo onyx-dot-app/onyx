@@ -37,7 +37,6 @@ from onyx.server.features.build.db.sandbox import (
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import (
     FileSet,
-    LLMProviderConfig,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
@@ -227,11 +226,8 @@ def provision_sandbox(
     user: User,
     user_id: UUID,
     tenant_id: str,
-    all_llm_configs: list[LLMProviderConfig],
 ) -> None:
-    """Ensure a PAT exists, then provision the pod with every accessible
-    provider pre-loaded so per-prompt model overrides can cross providers
-    without a pod restart. ``all_llm_configs[0]`` is the default.
+    """
 
     Managed content (skills, user library) is pushed before the row is
     flipped to RUNNING so no turn can start against a pod that is still
@@ -245,9 +241,7 @@ def provision_sandbox(
         sandbox_id=sandbox.id,
         user_id=user_id,
         tenant_id=tenant_id,
-        llm_config=all_llm_configs[0],
         onyx_pat=onyx_pat,
-        all_llm_configs=all_llm_configs,
     )
     if sandbox_info.status == SandboxStatus.RUNNING:
         hydrate_managed_content(sandbox_manager, sandbox.id, user, db_session)
@@ -311,7 +305,6 @@ def ensure_sandbox_ready(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
     user_id: UUID,
-    all_llm_configs: list[LLMProviderConfig],
     *,
     policy: ProvisioningPolicy,
     provisioning_wait_seconds: float = 30.0,
@@ -405,7 +398,6 @@ def ensure_sandbox_ready(
         user,
         user_id,
         tenant_id,
-        all_llm_configs,
     )
     return sandbox
 

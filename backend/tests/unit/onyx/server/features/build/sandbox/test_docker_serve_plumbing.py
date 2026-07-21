@@ -30,9 +30,19 @@ from onyx.server.features.build.configs import (
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     DockerSandboxManager,
 )
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import (
+    GatewayModelConfig,
+    LLMProviderConfig,
+)
 
 _SBX = UUID("12345678-1234-1234-1234-1234567890ab")
+
+
+@pytest.fixture(autouse=True)
+def _skip_api_url_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The provision-time SANDBOX_API_SERVER_URL probe makes a real HTTP call;
+    unit tests must never hit the network."""
+    monkeypatch.setattr(dsm, "validate_sandbox_api_url", lambda *_: None)
 
 
 def _bare_manager() -> DockerSandboxManager:
@@ -46,6 +56,8 @@ def _bare_manager() -> DockerSandboxManager:
     mgr._agent_instructions_template_path = (  # type: ignore[attr-defined]
         dsm.Path(dsm.__file__).parent.parent.parent / "AGENTS.template.md"
     )
+    mgr._image_checked = True  # type: ignore[attr-defined]
+    mgr._image_check_lock = dsm.threading.Lock()  # type: ignore[attr-defined]
     mgr._init_serve_state()
     return mgr
 
@@ -231,10 +243,6 @@ def llm_config() -> LLMProviderConfig:
 def test_render_agents_md_returns_escaped_string(
     llm_config: LLMProviderConfig,
 ) -> None:
-    """
-    opencode.json is not rendered per-session; only AGENTS.md is, with single
-    quotes shell-escaped for ``printf '%s' '...'``.
-    """
     mgr = _bare_manager()
     agents_md = mgr._render_agents_md(
         agent_provider=llm_config.provider,
@@ -247,6 +255,50 @@ def test_render_agents_md_returns_escaped_string(
     assert "'" not in agents_md or "'\\''" in agents_md
     assert "## Skills" not in agents_md
     assert "{{AVAILABLE_SKILLS_SECTION}}" not in agents_md
+
+
+def test_setup_writes_fresh_gateway_catalog_before_instance_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_script = ""
+
+    def capture_script(_container: object, command: list[str]) -> MagicMock:
+        nonlocal captured_script
+        captured_script = command[2]
+        return MagicMock()
+
+    monkeypatch.setattr(dsm, "_run_in_container_as_sandbox_user", capture_script)
+    manager = _bare_manager()
+    monkeypatch.setattr(
+        manager, "_require_container", MagicMock(return_value=MagicMock())
+    )
+    monkeypatch.setattr(
+        manager, "_render_agents_md", MagicMock(return_value="instructions")
+    )
+    gateway = LLMProviderConfig(
+        provider="onyx",
+        model_name="13/gpt-5-mini",
+        api_key="proxy-placeholder",
+        api_base="https://onyx.example.com/build/llm-gateway/v1",
+        npm_package="@ai-sdk/openai-compatible",
+        models=[
+            GatewayModelConfig(
+                id="13/gpt-5-mini",
+                display_name="GPT-5 Mini",
+            )
+        ],
+    )
+
+    manager.setup_session_workspace(
+        sandbox_id=_SBX,
+        session_id=UUID("00000000-0000-0000-0000-000000000013"),
+        llm_config=gateway,
+        nextjs_port=None,
+        connectable_apps_section="",
+    )
+
+    assert '"13/gpt-5-mini"' in captured_script
+    assert "/opencode.json" in captured_script
 
 
 def test_attachments_section_is_inserted_before_connectable_apps(
@@ -308,7 +360,6 @@ def test_prompt_slot_serializes_on_docker() -> None:
 
 def test_provision_generates_fresh_password_and_injects_into_container_env(
     monkeypatch: pytest.MonkeyPatch,
-    llm_config: LLMProviderConfig,
 ) -> None:
     """
     ``provision()`` must mint a per-call HTTP Basic password and thread it
@@ -360,7 +411,6 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
         sandbox_id=_SBX,
         user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
         tenant_id="tenant-abc",
-        llm_config=llm_config,
         onyx_pat="pat-redacted",
     )
 
@@ -375,6 +425,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     assert set(env.keys()) == {
         "ONYX_PAT",
         "ONYX_SERVER_URL",
+        "ONYX_API_PREFIX",
         OPENCODE_SERVER_PASSWORD,
         "OPENCODE_CONFIG_CONTENT",
     }
@@ -390,7 +441,8 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     assert " " not in pw
     # OPENCODE_CONFIG_CONTENT is valid JSON the agent can parse.
     config = json.loads(env["OPENCODE_CONFIG_CONTENT"])
-    assert "provider" in config
+    assert "provider" not in config
+    assert "permission" in config
 
     # Fresh-per-call is stdlib's contract for ``secrets.token_urlsafe``;
     # asserting it across two provisions is just re-stating that.
@@ -465,7 +517,6 @@ def test_reuse_existing_container_starts_exited() -> None:
 
 def test_provision_removes_container_when_history_restore_fails(
     monkeypatch: pytest.MonkeyPatch,
-    llm_config: LLMProviderConfig,
 ) -> None:
     """
     If opencode-history restore fails on a fresh container, provision must
@@ -502,7 +553,6 @@ def test_provision_removes_container_when_history_restore_fails(
             sandbox_id=_SBX,
             user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             tenant_id="tenant-abc",
-            llm_config=llm_config,
             onyx_pat="pat-redacted",
         )
 

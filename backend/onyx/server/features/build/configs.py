@@ -80,14 +80,8 @@ ENABLE_BROWSER = os.environ.get("ENABLE_BROWSER", "true").lower() == "true"
 SANDBOX_PUSH_PRIVATE_KEY = os.environ.get("ONYX_SANDBOX_PUSH_PRIVATE_KEY", "")
 
 
-# Provider types Craft supports. The recommended models per type come from the
-# shared recommended-models config (served via /build/recommended-models).
-BUILD_MODE_ALLOWED_PROVIDER_TYPES = ["anthropic", "openai", "openrouter"]
-
-# apiKey sentinel for a supported provider the org hasn't configured. We register
-# every supported provider so a cross-provider override never hits "model not
-# found"; an unconfigured one fails closed instead (proxy 403 / upstream 401).
-BUILD_MODE_NOT_CONFIGURED_API_KEY = "onyx-provider-not-configured"
+ONYX_GATEWAY_PROVIDER_ID = "onyx"
+ONYX_GATEWAY_PATH_PREFIX = "/build/llm-gateway"
 
 # Dev/debug-only: exposes an SSE endpoint that tails the sandbox pod's
 # opencode-serve container logs. Never enable in prod — the logs include LLM I/O
@@ -97,8 +91,12 @@ ENABLE_OPENCODE_DEBUGGING = (
     os.environ.get("ENABLE_OPENCODE_DEBUGGING", "false").lower() == "true"
 )
 
-# Must be set when SANDBOX_BACKEND=kubernetes (no default — varies per
-# deployment).
+# The full base URL a sandbox client uses to reach the Onyx API, path prefix
+# included — exactly the string `curl <URL>/build/...` would use. Examples:
+# "https://onyx.example/api" (through the public reverse proxy, which serves
+# the API under /api) or "http://onyx-api-service.onyx.svc.cluster.local:8080"
+# (directly at the API service, no prefix). Must be set when Craft is enabled
+# (no default — varies per deployment).
 SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
 
 # ==============================================================================

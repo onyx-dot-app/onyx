@@ -1,6 +1,6 @@
 """Permission scoping for Craft provider selection (real DB).
 
-``fetch_all_supported_build_llm_providers`` must respect LLM-provider access
+``fetch_all_accessible_build_llm_providers`` must respect LLM-provider access
 control (is_public / group membership) so a user never gets a sandbox keyed
 with a provider's API key they aren't entitled to use.
 """
@@ -25,7 +25,7 @@ from onyx.db.models import (
     UserRole,
 )
 from onyx.server.features.build.db.build_session import (
-    fetch_all_supported_build_llm_providers,
+    fetch_all_accessible_build_llm_providers,
 )
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
@@ -63,7 +63,7 @@ def _make_group_restricted_anthropic_provider(
 def _has_provider(db_session: Session, user: User, provider_id: int) -> bool:
     return any(
         view.id == provider_id
-        for view in fetch_all_supported_build_llm_providers(db_session, user)
+        for view in fetch_all_accessible_build_llm_providers(db_session, user)
     )
 
 

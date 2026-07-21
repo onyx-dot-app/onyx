@@ -18,7 +18,6 @@ from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.configs import (
-    BUILD_MODE_ALLOWED_PROVIDER_TYPES,
     SANDBOX_NEXTJS_PORT_END,
     SANDBOX_NEXTJS_PORT_START,
 )
@@ -616,17 +615,11 @@ def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:
     return result
 
 
-def fetch_all_supported_build_llm_providers(
+def fetch_all_accessible_build_llm_providers(
     db_session: Session, user: User
 ) -> list[LLMProviderView]:
-    """Every provider of a Craft-supported type (anthropic, openai, openrouter)
-    that the ``user`` can access. Respects is_public / group restrictions so a
-    user never gets a sandbox keyed with a provider they can't use. Providers
-    are ordered by ID so provisioning and proxy credential selection agree on
-    the first provider of each type."""
     provider_models = db_session.scalars(
         select(LLMProviderModel)
-        .where(LLMProviderModel.provider.in_(BUILD_MODE_ALLOWED_PROVIDER_TYPES))
         .order_by(LLMProviderModel.id.asc())
         .options(
             selectinload(LLMProviderModel.model_configurations),
@@ -636,8 +629,6 @@ def fetch_all_supported_build_llm_providers(
     )
     user_group_ids = fetch_user_group_ids(db_session, user)
     is_admin = user.role == UserRole.ADMIN
-    # persona=None: Craft has no persona context, so a provider restricted to
-    # specific personas is intentionally excluded even when otherwise public.
     return [
         LLMProviderView.from_model(p)
         for p in provider_models
@@ -645,3 +636,29 @@ def fetch_all_supported_build_llm_providers(
             p, user_group_ids, persona=None, is_admin=is_admin
         )
     ]
+
+
+def fetch_accessible_build_llm_provider_by_id(
+    db_session: Session, user: User, provider_id: int
+) -> LLMProviderView | None:
+    provider_model = db_session.scalar(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.id == provider_id)
+        .options(
+            selectinload(LLMProviderModel.model_configurations),
+            selectinload(LLMProviderModel.groups),
+            selectinload(LLMProviderModel.personas),
+        )
+    )
+    if provider_model is None:
+        return None
+
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    if not can_user_access_llm_provider(
+        provider_model,
+        user_group_ids,
+        persona=None,
+        is_admin=user.role == UserRole.ADMIN,
+    ):
+        return None
+    return LLMProviderView.from_model(provider_model)

@@ -12,10 +12,12 @@ import re
 import threading
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
+import yaml
 
 import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
@@ -47,6 +49,9 @@ from onyx.server.features.build.sandbox.labels import (
 SANDBOX_ID = UUID("12345678-1234-1234-1234-1234567890ab")
 USER_ID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 TENANT_ID = "tenant-abc"
+REPO_ROOT = next(
+    parent for parent in Path(__file__).parents if (parent / "deployment").is_dir()
+)
 
 
 def _bare_manager_with_image(image: str) -> tuple[dsm.DockerSandboxManager, MagicMock]:
@@ -493,6 +498,7 @@ def test_container_kwargs_env_is_a_minimal_allowlist(
     assert set(env.keys()) == {
         "ONYX_PAT",
         "ONYX_SERVER_URL",
+        "ONYX_API_PREFIX",
         "OPENCODE_SERVER_PASSWORD",
         "OPENCODE_CONFIG_CONTENT",
     }
@@ -526,7 +532,6 @@ def test_container_kwargs_mounts_tmp_as_tmpfs(
 def test_container_kwargs_warns_on_internal_compose_host(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Deployers that point SANDBOX_API_SERVER_URL at compose DNS get warned."""
     import logging
 
     with caplog.at_level(logging.WARNING):
@@ -545,7 +550,7 @@ def test_container_kwargs_warns_on_internal_compose_host(
             opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
     assert any(
-        "looks like an internal compose hostname" in r.getMessage()
+        "looks like an unsupported Compose service hostname" in r.getMessage()
         for r in caplog.records
     )
 
@@ -572,8 +577,34 @@ def test_container_kwargs_no_warning_for_public_url(
             opencode_config_json=_OPENCODE_CONFIG_JSON,
         )
     assert not any(
-        "looks like an internal compose hostname" in r.getMessage()
+        "looks like an unsupported Compose service hostname" in r.getMessage()
         for r in caplog.records
+    )
+
+
+def test_container_kwargs_no_warning_for_craft_api_alias(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+
+    with caplog.at_level(logging.WARNING):
+        build_container_create_kwargs(
+            sandbox_id=SANDBOX_ID,
+            user_id=USER_ID,
+            tenant_id=TENANT_ID,
+            image="onyxdotapp/sandbox:test",
+            onyx_pat="pat",
+            api_server_url="http://onyx-craft-api:8080",
+            network="onyx_craft_sandbox",
+            volume_name="vol",
+            memory_limit="2g",
+            cpu_limit=1.0,
+            opencode_password=_OPENCODE_PASSWORD,
+            opencode_config_json=_OPENCODE_CONFIG_JSON,
+        )
+    assert not any(
+        "looks like an unsupported Compose service hostname" in record.getMessage()
+        for record in caplog.records
     )
 
 
@@ -729,6 +760,7 @@ def test_proxy_kwargs_env_is_a_locked_allowlist(
         # Legacy core
         "ONYX_PAT",
         "ONYX_SERVER_URL",
+        "ONYX_API_PREFIX",
         "OPENCODE_SERVER_PASSWORD",
         "OPENCODE_CONFIG_CONTENT",
         # firewall-init.sh contract
@@ -753,6 +785,30 @@ def test_proxy_kwargs_env_is_a_locked_allowlist(
         "GH_TOKEN",
         "GH_NO_UPDATE_NOTIFIER",
     }
+
+
+def test_compose_uses_internal_api_alias_for_craft() -> None:
+    compose_path = REPO_ROOT / "deployment/docker_compose/docker-compose.craft.yml"
+    compose = yaml.safe_load(compose_path.read_text())
+    services = compose["services"]
+
+    api_network = services["api_server"]["networks"]["onyx_craft_sandbox"]
+    assert api_network["aliases"] == ["onyx-craft-api"]
+
+    expected_url = (
+        "SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-http://onyx-craft-api:8080}"
+    )
+    for service_name in ("api_server", "background"):
+        environment = services[service_name]["environment"]
+        assert expected_url in environment
+        assert "SANDBOX_PROXY_HOST=${SANDBOX_PROXY_HOST-sandbox-proxy}" in environment
+
+    proxy_environment = services["sandbox-proxy"]["environment"]
+    assert expected_url in proxy_environment
+    assert "onyx_craft_sandbox" in services["sandbox-proxy"]["networks"]
+    assert services["api_server"]["depends_on"]["sandbox-proxy"]["condition"] == (
+        "service_healthy"
+    )
 
 
 def test_no_proxy_kwargs_omit_cap_add(kwargs: ContainerCreateKwargs) -> None:
