@@ -348,7 +348,7 @@ def fetch_skill(
     return db_session.scalars(stmt).one_or_none()
 
 
-def add_skill__no_commit(
+def add_new_skill__no_commit(
     skill: Skill,
     db_session: Session,
     *,
@@ -376,31 +376,23 @@ def add_skill__no_commit(
     return skill
 
 
-def create_skill__no_commit(
-    *,
-    name: str,
-    description: str,
-    bundle_file_id: str,
-    bundle_sha256: str,
-    public_permission: SkillSharePermission | None = None,
-    author_user_id: UUID | None,
+def enable_new_skill_if_name_available__no_commit(
+    skill: Skill,
+    user_id: UUID,
     db_session: Session,
-    is_external_app_backing: bool = False,
-) -> Skill:
-    skill = Skill(
-        name=name,
-        description=description,
-        bundle_file_id=bundle_file_id,
-        bundle_sha256=bundle_sha256,
-        is_valid=True,
-        public_permission=public_permission,
-        author_user_id=author_user_id,
+) -> bool:
+    inserted_user_id = db_session.scalar(
+        insert(UserSkillPreference)
+        .values(user_id=user_id, skill_id=skill.id, name=skill.name)
+        .on_conflict_do_nothing(
+            index_elements=[
+                UserSkillPreference.user_id,
+                UserSkillPreference.name,
+            ]
+        )
+        .returning(UserSkillPreference.user_id)
     )
-    return add_skill__no_commit(
-        skill,
-        db_session,
-        is_external_app_backing=is_external_app_backing,
-    )
+    return inserted_user_id is not None
 
 
 def replace_skill_bundle(
@@ -493,7 +485,7 @@ def set_skill_enabled_for_user(
     db_session.execute(
         select(User)
         .where(User.id == user.id)  # ty: ignore[invalid-argument-type]
-        .with_for_update()
+        .with_for_update(of=User)
     )
     skill = fetch_skill(
         skill_id,

@@ -25,6 +25,7 @@ jest.mock("@/hooks/useUserSkills", () => ({
 }));
 
 jest.mock("@/lib/skills/api", () => ({
+  ...jest.requireActual("@/lib/skills/api"),
   setSkillEnabled: (...args: unknown[]) => mockSetSkillEnabled(...args),
 }));
 

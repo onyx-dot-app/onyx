@@ -223,8 +223,8 @@ def test_duplicate_name_across_users(
     second = SkillManager.create_personal(other_basic_user, name=name)
 
     assert first.id != second.id
-    assert first.enabled is False
-    assert second.enabled is False
+    assert first.enabled is True
+    assert second.enabled is True
 
 
 def test_same_name_enable_requires_explicit_replacement(
@@ -232,8 +232,26 @@ def test_same_name_enable_requires_explicit_replacement(
 ) -> None:
     name = f"personal-switch-{uuid4().hex[:6]}"
     first = SkillManager.create_personal(basic_user, name=name)
-    second = SkillManager.create_personal(basic_user, name=name)
-    SkillManager.set_enabled(first, basic_user, True)
+    with pytest.raises(httpx.HTTPStatusError) as create_exc_info:
+        SkillManager.create_personal(basic_user, name=name)
+    assert create_exc_info.value.response.status_code == 409
+    assert create_exc_info.value.response.json()["error_code"] == "SKILL_NAME_CONFLICT"
+    after_rejection = [
+        skill
+        for skill in SkillManager.list_for_user(basic_user).customs
+        if skill.name == name
+    ]
+    assert [(skill.id, skill.enabled) for skill in after_rejection] == [
+        (first.id, True)
+    ]
+
+    second = SkillManager.create_personal(
+        basic_user,
+        name=name,
+        auto_enable=False,
+    )
+    assert first.enabled is True
+    assert second.enabled is False
 
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
         SkillManager.set_enabled(second, basic_user, True)
@@ -246,6 +264,7 @@ def test_same_name_enable_requires_explicit_replacement(
         for skill in SkillManager.list_for_user(basic_user).customs
         if skill.name == name
     ]
+    assert len(matching) == 2
     assert [skill.id for skill in matching if skill.enabled] == [second.id]
 
 
@@ -264,7 +283,7 @@ def test_personal_and_shared_skills_can_have_the_same_name(
         if skill.name == name
     ]
     assert {skill.id for skill in visible} == {shared.id, personal.id}
-    assert not [skill for skill in visible if skill.enabled]
+    assert [skill.id for skill in visible if skill.enabled] == [personal.id]
 
 
 def test_admin_can_hard_delete_personal_skill(
@@ -317,8 +336,7 @@ def test_owner_can_toggle_personal_skill(
     name = f"personal-toggle-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, name=name)
 
-    toggled = SkillManager.set_enabled(skill, basic_user, True)
-    assert toggled.enabled is True
+    assert skill.enabled is True
     toggled = SkillManager.set_enabled(skill, basic_user, False)
     assert toggled.enabled is False
     assert toggled.is_personal is True
@@ -355,7 +373,6 @@ def test_user_enablement_is_independent(
         SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
     )
 
-    SkillManager.set_enabled(skill, basic_user, True)
     SkillManager.set_enabled(skill, admin_user, False)
     own = [
         skill

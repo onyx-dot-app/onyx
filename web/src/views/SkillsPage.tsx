@@ -36,7 +36,7 @@ import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { setSkillEnabled } from "@/lib/skills/api";
+import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -153,13 +153,7 @@ export default function SkillsPage() {
         );
       });
     } catch (error) {
-      if (
-        enabled &&
-        !replaceConflict &&
-        error instanceof Error &&
-        "errorCode" in error &&
-        error.errorCode === "SKILL_NAME_CONFLICT"
-      ) {
+      if (enabled && !replaceConflict && isSkillNameConflict(error)) {
         setPendingSwitchTarget(item);
         return;
       }

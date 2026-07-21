@@ -12,6 +12,7 @@ from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill__User, Skill__UserGroup, UserSkillPreference
 from onyx.db.skill import (
     SkillAccessPolicy,
+    enable_new_skill_if_name_available__no_commit,
     list_skills,
     replace_skill_shares,
     set_skill_enabled_for_user,
@@ -78,6 +79,30 @@ def test_skill_user_states_resolve_defaults_and_visibility(
     assert states[invalid_custom.id].can_toggle is False
     assert states[built_in.id].enabled is True
     assert states[built_in.id].can_toggle is False
+
+
+def test_new_skill_is_enabled_only_when_name_is_available(
+    db_session: Session,
+) -> None:
+    user = make_user(db_session)
+    name = f"auto-enable-{uuid4().hex[:8]}"
+    first_skill = make_skill(db_session, name=name, is_public=True)
+    second_skill = make_skill(db_session, name=name, is_public=True)
+
+    assert enable_new_skill_if_name_available__no_commit(
+        first_skill, user.id, db_session
+    )
+    assert not enable_new_skill_if_name_available__no_commit(
+        second_skill, user.id, db_session
+    )
+    assert set(
+        db_session.scalars(
+            select(UserSkillPreference.skill_id).where(
+                UserSkillPreference.user_id == user.id,
+                UserSkillPreference.name == name,
+            )
+        )
+    ) == {first_skill.id}
 
 
 def test_orphaned_private_skill_has_boolean_admin_state(

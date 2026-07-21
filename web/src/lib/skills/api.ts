@@ -44,9 +44,13 @@ async function handle<T>(res: Response): Promise<T> {
 // Mutations
 // ---------------------------------------------------------------------------
 
-export async function createCustomSkill(bundle: File): Promise<CustomSkill> {
+export async function createCustomSkill(
+  bundle: File,
+  autoEnable = true
+): Promise<CustomSkill> {
   const form = new FormData();
   form.append("bundle", bundle);
+  form.append("auto_enable", String(autoEnable));
 
   const res = await fetch("/api/skills/custom", {
     method: "POST",
@@ -59,6 +63,7 @@ export interface CreateCustomSkillInput {
   name: string;
   description: string;
   instructions_markdown: string;
+  auto_enable?: boolean;
 }
 
 export async function createCustomSkillFromEditor(
@@ -69,6 +74,7 @@ export async function createCustomSkillFromEditor(
   form.append("name", input.name);
   form.append("description", input.description);
   form.append("instructions_markdown", input.instructions_markdown);
+  form.append("auto_enable", String(input.auto_enable ?? true));
   if (upload) form.append("upload", upload);
 
   const res = await fetch("/api/skills/custom/editor", {
@@ -76,6 +82,14 @@ export async function createCustomSkillFromEditor(
     body: form,
   });
   return handle<SkillEditableDetail>(res);
+}
+
+export function isSkillNameConflict(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "errorCode" in error &&
+    error.errorCode === "SKILL_NAME_CONFLICT"
+  );
 }
 
 export interface PatchCustomSkillInput {

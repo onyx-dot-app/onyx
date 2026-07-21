@@ -14,9 +14,10 @@ from onyx.db.enums import AccountType, Permission, SkillSharePermission
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
     SkillAccessPolicy,
+    add_new_skill__no_commit,
     affected_user_ids_for_skill,
-    create_skill__no_commit,
     delete_skill,
+    enable_new_skill_if_name_available__no_commit,
     fetch_skill,
     list_skills,
     replace_skill_bundle,
@@ -200,6 +201,7 @@ def preview_skill_for_current_user(
 @user_router.post("/custom")
 def create_custom_skill(
     bundle: UploadFile = File(...),
+    auto_enable: Annotated[bool, Form()] = True,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
@@ -209,14 +211,29 @@ def create_custom_skill(
         bundle.filename,
         file_store,
     ) as ingested:
-        skill = create_skill__no_commit(
-            name=ingested.canonical_name,
-            description=ingested.description,
-            bundle_file_id=ingested.bundle_file_id,
-            bundle_sha256=ingested.bundle_sha256,
-            author_user_id=user.id,
-            db_session=db_session,
+        skill = add_new_skill__no_commit(
+            Skill(
+                name=ingested.canonical_name,
+                description=ingested.description,
+                bundle_file_id=ingested.bundle_file_id,
+                bundle_sha256=ingested.bundle_sha256,
+                is_valid=True,
+                author_user_id=user.id,
+            ),
+            db_session,
         )
+        auto_enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
+            skill, user.id, db_session
+        )
+        if auto_enable and not auto_enabled:
+            raise OnyxError(
+                OnyxErrorCode.SKILL_NAME_CONFLICT,
+                f"A skill named '{skill.name}' is already enabled.",
+            )
+        db_session.commit()
+
+    if auto_enabled:
+        push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 
     return skill_response_for_user(
@@ -233,6 +250,7 @@ def create_custom_skill_from_editor(
     description: Annotated[str, Form(min_length=1)],
     instructions_markdown: Annotated[str, Form(min_length=1)],
     upload: Annotated[UploadFile | None, File()] = None,
+    auto_enable: Annotated[bool, Form()] = True,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
@@ -275,14 +293,29 @@ def create_custom_skill_from_editor(
         file_store,
         expected_name=canonical_name,
     ) as ingested:
-        skill = create_skill__no_commit(
-            name=ingested.canonical_name,
-            description=ingested.description,
-            bundle_file_id=ingested.bundle_file_id,
-            bundle_sha256=ingested.bundle_sha256,
-            author_user_id=user.id,
-            db_session=db_session,
+        skill = add_new_skill__no_commit(
+            Skill(
+                name=ingested.canonical_name,
+                description=ingested.description,
+                bundle_file_id=ingested.bundle_file_id,
+                bundle_sha256=ingested.bundle_sha256,
+                is_valid=True,
+                author_user_id=user.id,
+            ),
+            db_session,
         )
+        auto_enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
+            skill, user.id, db_session
+        )
+        if auto_enable and not auto_enabled:
+            raise OnyxError(
+                OnyxErrorCode.SKILL_NAME_CONFLICT,
+                f"A skill named '{skill.name}' is already enabled.",
+            )
+        db_session.commit()
+
+    if auto_enabled:
+        push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 
     return _editable_skill_response(skill, user, db_session)

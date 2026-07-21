@@ -42,6 +42,7 @@ import {
   createCustomSkillFromEditor,
   deleteUserSkill,
   inspectSkillBundle,
+  isSkillNameConflict,
   patchUserSkill,
   removeUserSkillFile,
   uploadUserSkillFiles,
@@ -52,6 +53,7 @@ import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import SkillNameConflictModal from "@/sections/modals/skills/SkillNameConflictModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import SkillFileTree from "@/sections/skills/SkillFileTree";
 import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
@@ -126,6 +128,9 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     useState<PreparedSkillFilesUpload | null>(null);
   const [removingFilePath, setRemovingFilePath] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [conflictingSkillName, setConflictingSkillName] = useState<
+    string | null
+  >(null);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
     setName(nextSkill.name);
@@ -188,7 +193,10 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     await mutate(SWR_KEYS.userSkills);
   }
 
-  async function handleSave(event?: FormEvent<HTMLFormElement>) {
+  async function handleSave(
+    event?: FormEvent<HTMLFormElement>,
+    createDisabled = false
+  ) {
     event?.preventDefault();
     if (!canSave) return;
     setIsSaving(true);
@@ -199,6 +207,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
             name,
             description,
             instructions_markdown: instructionsMarkdown,
+            auto_enable: !createDisabled,
           },
           pendingFilesUpload?.file
         );
@@ -223,6 +232,11 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
       await refreshSkillList();
       toast.success(`Saved "${updated.name}"`);
     } catch (err) {
+      if (isCreating && !createDisabled && isSkillNameConflict(err)) {
+        setConflictingSkillName(name.trim());
+        return;
+      }
+      if (createDisabled) setConflictingSkillName(null);
       console.error("Failed to save skill", err);
       toast.error(err instanceof Error ? err.message : "Failed to save skill");
     } finally {
@@ -715,6 +729,17 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
             ? "This upload includes SKILL.md. Continuing will replace the current name, description, instructions, and files with the uploaded bundle."
             : "This upload must use the same skill name. Continuing will replace the description, instructions, and files with the uploaded bundle."}
         </ConfirmationModalLayout>
+      )}
+
+      {conflictingSkillName && (
+        <SkillNameConflictModal
+          skillName={conflictingSkillName}
+          onClose={() => setConflictingSkillName(null)}
+          onConfirm={() => {
+            setConflictingSkillName(null);
+            void handleSave(undefined, true);
+          }}
+        />
       )}
 
       {skill && deleteOpen && (

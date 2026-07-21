@@ -287,10 +287,7 @@ def create_external_app(
     ``DUPLICATE_RESOURCE``. CUSTOM apps get a bundle-backed skill using
     ``skill_name``, or a generated ``custom-<uuid>`` name when omitted.
     """
-    from onyx.db.skill import (
-        add_skill__no_commit,
-        create_skill__no_commit,
-    )
+    from onyx.db.skill import add_new_skill__no_commit
 
     # No existing app to restore from on create, so a masked value is rejected.
     organization_credentials = resolve_masked_credentials(
@@ -299,7 +296,7 @@ def create_external_app(
 
     built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app_type)
     if built_in_skill_id is not None:
-        skill = add_skill__no_commit(
+        skill = add_new_skill__no_commit(
             Skill(
                 name=built_in_skill_id,
                 description=description,
@@ -317,14 +314,17 @@ def create_external_app(
         # CUSTOM: use the bundle's canonical name supplied by ingestion, falling
         # back to a generated name when no bundle is supplied.
         custom_skill_name = skill_name or f"{app_type.value.lower()}-{uuid4().hex[:8]}"
-        skill = create_skill__no_commit(
-            name=custom_skill_name,
-            description=description,
-            bundle_file_id=bundle_file_id,
-            bundle_sha256=bundle_sha256,
-            public_permission=(SkillSharePermission.VIEWER if is_public else None),
-            author_user_id=author_user_id,
-            db_session=db_session,
+        skill = add_new_skill__no_commit(
+            Skill(
+                name=custom_skill_name,
+                description=description,
+                bundle_file_id=bundle_file_id,
+                bundle_sha256=bundle_sha256,
+                is_valid=True,
+                public_permission=(SkillSharePermission.VIEWER if is_public else None),
+                author_user_id=author_user_id,
+            ),
+            db_session,
             is_external_app_backing=True,
         )
     app = ExternalApp(

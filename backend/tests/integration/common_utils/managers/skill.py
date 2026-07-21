@@ -64,6 +64,7 @@ class SkillManager:
         instructions_markdown: str,
         upload_bytes: bytes | None = None,
         upload_filename: str = "supporting-file.txt",
+        auto_enable: bool = True,
     ) -> SkillResponse:
         create_request = SkillCreateRequest(
             name=name,
@@ -76,6 +77,7 @@ class SkillManager:
         files: dict[str, tuple[str | None, object, str | None]] = {
             field: (None, value, None) for field, value in form_fields.items()
         }
+        files["auto_enable"] = (None, str(auto_enable).lower(), None)
         if upload_bytes is not None:
             files["upload"] = (
                 upload_filename,
@@ -100,6 +102,7 @@ class SkillManager:
         group_ids: list[int] | None = None,
         bundle_bytes: bytes | None = None,
         filename: str | None = None,
+        auto_enable: bool = True,
     ) -> SkillResponse:
         name = name or f"test-skill-{uuid4().hex[:8]}"
         if bundle_bytes is None:
@@ -111,11 +114,12 @@ class SkillManager:
         response = client.post(
             f"{API_SERVER_URL}/skills/custom",
             files={
+                "auto_enable": (None, str(auto_enable).lower(), None),
                 "bundle": (
                     filename or f"{name}.zip",
                     io.BytesIO(bundle_bytes),
                     "application/zip",
-                )
+                ),
             },
             headers=headers,
         )
@@ -390,6 +394,7 @@ class SkillManager:
         description: str | None = None,
         bundle_bytes: bytes | None = None,
         filename: str | None = None,
+        auto_enable: bool = True,
     ) -> SkillResponse:
         name = name or f"personal-skill-{uuid4().hex[:8]}"
         if bundle_bytes is None:
@@ -401,11 +406,12 @@ class SkillManager:
         response = client.post(
             f"{API_SERVER_URL}/skills/custom",
             files={
+                "auto_enable": (None, str(auto_enable).lower(), None),
                 "bundle": (
                     filename or f"{name}.zip",
                     io.BytesIO(bundle_bytes),
                     "application/zip",
-                )
+                ),
             },
             headers=headers,
         )
