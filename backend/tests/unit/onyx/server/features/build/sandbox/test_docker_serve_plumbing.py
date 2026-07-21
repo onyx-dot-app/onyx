@@ -38,6 +38,13 @@ from onyx.server.features.build.sandbox.models import (
 _SBX = UUID("12345678-1234-1234-1234-1234567890ab")
 
 
+@pytest.fixture(autouse=True)
+def _skip_api_url_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The provision-time SANDBOX_API_SERVER_URL probe makes a real HTTP call;
+    unit tests must never hit the network."""
+    monkeypatch.setattr(dsm, "validate_sandbox_api_url", lambda *_: None)
+
+
 def _bare_manager() -> DockerSandboxManager:
     """
     DockerSandboxManager without touching the Docker socket: skips

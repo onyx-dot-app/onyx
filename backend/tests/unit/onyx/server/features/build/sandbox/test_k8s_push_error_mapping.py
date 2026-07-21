@@ -73,6 +73,15 @@ def _generate_dev_push_key_b64() -> str:
 
 
 @pytest.fixture(autouse=True)
+def _skip_api_url_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The provision-time SANDBOX_API_SERVER_URL probe makes a real HTTP call;
+    unit tests must never hit the network."""
+    import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
+
+    monkeypatch.setattr(ksm, "validate_sandbox_api_url", lambda *_: None)
+
+
+@pytest.fixture(autouse=True)
 def _push_private_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Set the push private key env var and clear the cached key module globals.
 

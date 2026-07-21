@@ -70,7 +70,6 @@ import time
 from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict
-from urllib.parse import urlparse
 from uuid import UUID
 
 from docker import DockerClient
@@ -132,6 +131,9 @@ from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
     generate_agent_instructions,
+)
+from onyx.server.features.build.sandbox.util.api_url_check import (
+    validate_sandbox_api_url,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_base_config,
@@ -531,16 +533,6 @@ def build_container_create_kwargs(
             "Use the Craft overlay's onyx-craft-api alias or an externally reachable URL.",
             api_server_url,
         )
-    elif api_server_url.startswith("https://") and not urlparse(
-        api_server_url
-    ).path.strip("/"):
-        logger.warning(
-            "SANDBOX_API_SERVER_URL=%s has no path prefix. Public Onyx URLs "
-            "usually serve the API under /api — include it in the URL "
-            "(e.g. https://onyx.example/api) or Craft turns will 404.",
-            api_server_url,
-        )
-
     env: dict[str, str] = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
@@ -814,6 +806,7 @@ class DockerSandboxManager(SandboxManager):
             raise ValueError(
                 "SANDBOX_API_SERVER_URL must be set for Docker sandbox provisioning."
             )
+        validate_sandbox_api_url(SANDBOX_API_SERVER_URL)
 
         logger.info(
             "Provisioning Docker sandbox %s for user %s, tenant %s.",
