@@ -13,7 +13,6 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.gated_app import (
-    get_action_policies,
     get_or_create_gated_app_id,
     replace_action_policies__no_commit,
 )
@@ -140,7 +139,7 @@ def get_external_app_by_skill_id(
 ) -> ExternalApp | None:
     """The external-app gateway backing ``skill_id``, or None if the skill isn't
     an external app. Returns just the row — callers that need its policies fetch
-    them via ``get_policies``."""
+    them via ``get_action_policies``."""
     stmt = select(ExternalApp).where(ExternalApp.skill_id == skill_id)
     return db_session.scalar(stmt)
 
@@ -425,15 +424,6 @@ def set_external_app_organization_credentials(
     # assignment shape as update_external_app's masked-credential restore).
     app.organization_credentials = organization_credentials  # ty: ignore[invalid-assignment]
     db_session.flush()
-
-
-def get_policies(
-    db_session: Session, external_app_ids: list[int]
-) -> dict[int, dict[str, EndpointPolicy]]:
-    """The apps' stored per-action policy overrides as
-    ``{external_app_id: {action_id: policy}}``. Sparse — only actions the admin
-    has set; apps with no overrides are absent. One query regardless of count."""
-    return get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app_ids)
 
 
 def _write_policies__no_commit(

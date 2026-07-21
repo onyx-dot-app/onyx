@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, ExternalAppType, GatedAppKind
-from onyx.db.external_app import get_policies
+from onyx.db.gated_app import get_action_policies_for_target
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
@@ -158,7 +158,9 @@ def recognize_actions(
     it via ``model_copy``.
     """
     context = MatchContext(request)
-    stored = get_policies(db_session, [app.id]).get(app.id, {})
+    stored = get_action_policies_for_target(
+        db_session, GatedAppKind.EXTERNAL_APP, app.id
+    )
     catalog = get_endpoint_catalog(app.app_type)
     matched = [
         MatchedAction(

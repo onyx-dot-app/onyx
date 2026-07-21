@@ -59,7 +59,7 @@ def create_scheduled_task(
     cron_expression: str,
     editor_mode: EditorMode,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
-    pre_approved_app_ids: list[int] | None = None,
+    pre_approved_external_app_ids: list[int] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Insert a new ``ScheduledTask``.
@@ -84,13 +84,15 @@ def create_scheduled_task(
         status=status,
         next_run_at=next_run_at,
     )
-    set_pre_approved_apps(db_session, task, pre_approved_app_ids or [])
+    set_pre_approved_external_apps(
+        db_session, task, pre_approved_external_app_ids or []
+    )
     db_session.add(task)
     db_session.flush()
     return task
 
 
-def set_pre_approved_apps(
+def set_pre_approved_external_apps(
     db_session: Session, task: ScheduledTask, app_ids: list[int]
 ) -> None:
     """Replace a task's EXTERNAL-APP pre-approval grants with ``app_ids``
@@ -168,7 +170,7 @@ def update_scheduled_task(
     cron_expression: str | None = None,
     editor_mode: EditorMode | None = None,
     status: ScheduledTaskStatus | None = None,
-    pre_approved_app_ids: list[int] | None = None,
+    pre_approved_external_app_ids: list[int] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Apply a partial update to a scheduled task.
@@ -178,7 +180,7 @@ def update_scheduled_task(
         ``next_run_at`` is recomputed from ``now``.
       - If ``status`` transitions to PAUSED, ``next_run_at`` is set to NULL.
       - If ``status`` transitions to ACTIVE, ``next_run_at`` is recomputed.
-      - ``pre_approved_app_ids`` follows normal patch semantics: supplied
+      - ``pre_approved_external_app_ids`` follows normal patch semantics: supplied
         replaces the set, omitted leaves it unchanged.
 
     Raises:
@@ -194,8 +196,8 @@ def update_scheduled_task(
         task.name = name
     if prompt is not None:
         task.prompt = prompt
-    if pre_approved_app_ids is not None:
-        set_pre_approved_apps(db_session, task, pre_approved_app_ids)
+    if pre_approved_external_app_ids is not None:
+        set_pre_approved_external_apps(db_session, task, pre_approved_external_app_ids)
     if editor_mode is not None:
         task.editor_mode = editor_mode
     if cron_expression is not None and cron_expression != task.cron_expression:

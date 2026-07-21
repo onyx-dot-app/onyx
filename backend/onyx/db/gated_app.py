@@ -8,12 +8,24 @@ columns.
 
 from __future__ import annotations
 
-from sqlalchemy import delete, select
+from pydantic import BaseModel
+from sqlalchemy import delete, insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.db.enums import EndpointPolicy, GatedAppKind
 from onyx.db.models import GatedActionPolicy, GatedApp
+
+
+class StoredActionPolicies(BaseModel):
+    """Stored per-action policy overrides as ``{target_id: {action_id: policy}}``.
+    Sparse — only actions an admin has explicitly set; targets with no stored
+    overrides are absent."""
+
+    by_target_id: dict[int, dict[str, EndpointPolicy]]
+
+    def for_target(self, target_id: int) -> dict[str, EndpointPolicy]:
+        return self.by_target_id.get(target_id, {})
 
 
 def _target_column(kind: GatedAppKind) -> InstrumentedAttribute[int | None]:
@@ -29,8 +41,6 @@ def get_gated_app_id(
 ) -> int | None:
     """The ``gated_app`` row id for ``(kind, target_id)``, or ``None`` when the
     target has no identity row yet (nothing has policied/approved it)."""
-    # A None id renders as IS NULL and would match a row of the *other* kind.
-    assert target_id is not None, "target must be flushed before gating"
     return db_session.scalar(
         select(GatedApp.id).where(_target_column(kind) == target_id)
     )
@@ -55,32 +65,43 @@ def get_or_create_gated_app_id(
     )
     db_session.flush()
     created = get_gated_app_id(db_session, kind, target_id)
-    assert created is not None  # just inserted, or a concurrent writer did
+    if created is None:
+        # Unreachable barring a concurrent delete: we just inserted, or a
+        # concurrent writer did.
+        raise RuntimeError(
+            f"gated_app row missing after insert for kind {kind} target_id {target_id}"
+        )
     return created
 
 
 def get_action_policies(
     db_session: Session, kind: GatedAppKind, target_ids: list[int]
-) -> dict[int, dict[str, EndpointPolicy]]:
-    """The targets' stored per-action policy overrides as
-    ``{target_id: {action_id: policy}}``. Sparse — only actions an admin has
-    explicitly set; targets with no stored overrides are absent.
+) -> StoredActionPolicies:
+    """The targets' stored per-action policy overrides.
 
     Single query regardless of target count: joins ``gated_action_policy`` to
     ``gated_app`` so resolving the identity rows and reading their policies is
     one round trip (this runs on the request matching path)."""
     if not target_ids:
-        return {}
+        return StoredActionPolicies(by_target_id={})
     target_column = _target_column(kind)
     rows = db_session.execute(
         select(target_column, GatedActionPolicy.action_id, GatedActionPolicy.policy)
         .join(GatedApp, GatedApp.id == GatedActionPolicy.gated_app_id)
         .where(target_column.in_(target_ids))
     ).all()
-    result: dict[int, dict[str, EndpointPolicy]] = {}
+    by_target_id: dict[int, dict[str, EndpointPolicy]] = {}
     for target_id, action_id, policy in rows:
-        result.setdefault(target_id, {})[action_id] = policy
-    return result
+        by_target_id.setdefault(target_id, {})[action_id] = policy
+    return StoredActionPolicies(by_target_id=by_target_id)
+
+
+def get_action_policies_for_target(
+    db_session: Session, kind: GatedAppKind, target_id: int
+) -> dict[str, EndpointPolicy]:
+    """Single-target convenience over ``get_action_policies``: the target's
+    stored ``{action_id: policy}`` overrides, ``{}`` when none are set."""
+    return get_action_policies(db_session, kind, [target_id]).for_target(target_id)
 
 
 def replace_action_policies__no_commit(
@@ -90,18 +111,18 @@ def replace_action_policies__no_commit(
 ) -> None:
     """Replace ``gated_app_id``'s per-action policy rows with exactly ``policies``.
 
-    DELETEs and flushes before inserting so a re-set action can't collide with
-    its not-yet-deleted row on ``uq_gated_action_policy``. No commit — runs
+    DELETE then one bulk INSERT, emitted in order so a re-set action can't
+    collide with its old row on ``uq_gated_action_policy``. No commit — runs
     inside the caller's transaction.
     """
     db_session.execute(
         delete(GatedActionPolicy).where(GatedActionPolicy.gated_app_id == gated_app_id)
     )
-    db_session.flush()
-    for action_id, policy in policies.items():
-        db_session.add(
-            GatedActionPolicy(
-                gated_app_id=gated_app_id, action_id=action_id, policy=policy
-            )
+    if policies:
+        db_session.execute(
+            insert(GatedActionPolicy),
+            [
+                {"gated_app_id": gated_app_id, "action_id": action_id, "policy": policy}
+                for action_id, policy in policies.items()
+            ],
         )
-    db_session.flush()

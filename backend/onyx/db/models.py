@@ -6090,9 +6090,12 @@ class ScheduledTask(Base):
     )
 
     @property
-    def pre_approved_app_ids(self) -> list[int]:
+    def pre_approved_external_app_ids(self) -> list[int]:
         """Granted external-app ids in grant order. MCP-server grants are
-        excluded. Set via ``onyx.db.scheduled_task.set_pre_approved_apps``."""
+        excluded — their target ids live in a different id space, and this
+        property backs the API's external-app-id field (the gate reads all
+        grants regardless of kind via ``get_running_scheduled_run_grants``).
+        Set via ``onyx.db.scheduled_task.set_pre_approved_external_apps``."""
         return [
             grant.gated_app.external_app_id
             for grant in self.pre_approved_apps
@@ -6219,8 +6222,9 @@ class ScheduledTaskPreApprovedApp(Base):
     task: Mapped[ScheduledTask] = relationship(
         "ScheduledTask", back_populates="pre_approved_apps"
     )
-    # selectin: pre_approved_app_ids and set_pre_approved_apps read gated_app for
-    # every grant, so batch them in one SELECT rather than one per grant.
+    # selectin: pre_approved_external_app_ids and set_pre_approved_external_apps
+    # read gated_app for every grant, so batch them in one SELECT rather than
+    # one per grant.
     gated_app: Mapped["GatedApp"] = relationship("GatedApp", lazy="selectin")
 
     __table_args__ = (
