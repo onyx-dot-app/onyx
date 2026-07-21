@@ -1258,10 +1258,10 @@ class SharepointConnector(
         # Ensure sites are sharepoint urls
         for site_url in self.sites:
             if not site_url.startswith("https://") or not (
-                "/sites/" in site_url or "/teams/" in site_url
+                "/sites/" in site_url or "/teams/" in site_url or "/personal/" in site_url
             ):
                 raise ConnectorValidationError(
-                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site or https://your-tenant.sharepoint.com/teams/your-team)"
+                    "Site URLs must be full Sharepoint/OneDrive URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site, https://your-tenant.sharepoint.com/teams/your-team or https://your-tenant-my.sharepoint.com/personal/your-user)"
                 )
             try:
                 validate_outbound_http_url(site_url, https_only=True)
@@ -1491,14 +1491,14 @@ class SharepointConnector(
 
             lower_parts = [part.lower() for part in parts]
             site_type_index = None
-            for site_token in ("sites", "teams"):
+            for site_token in ("sites", "teams", "personal"):
                 if site_token in lower_parts:
                     site_type_index = lower_parts.index(site_token)
                     break
 
             if site_type_index is None or len(parts) <= site_type_index + 1:
                 logger.warning(
-                    "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)",
+                    "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name>, /teams/<name>, or /personal/<name>)",
                     url,
                 )
                 continue
@@ -1551,6 +1551,21 @@ class SharepointConnector(
                 and SHARED_DOCUMENTS_MAP[d.name] == drive_name
             )
         ]
+        if not matched and drives:
+            # Fallback for OneDrive for Business personal sites:
+            # Graph API returns the drive name as "OneDrive" or "documentLibrary",
+            # but the browser/SharePoint URL uses "Documents".
+            if "/personal/" in site_descriptor.url.lower():
+                matched = [drives[0]]
+            else:
+                onedrive_matches = [
+                    d
+                    for d in drives
+                    if d.name and d.name.lower() in ("onedrive", "onedrive for business", "documentlibrary")
+                ]
+                if onedrive_matches:
+                    matched = [onedrive_matches[0]]
+
         if not matched:
             logger.warning("Drive '%s' not found", drive_name)
             return None
