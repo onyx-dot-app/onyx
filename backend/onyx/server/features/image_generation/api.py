@@ -23,7 +23,7 @@ from onyx.image_gen.generation import (
     generate_images_with_default_config,
 )
 from onyx.image_gen.interfaces import ImageShape, ReferenceImage
-from onyx.utils.b64 import get_image_type
+from onyx.utils.b64 import get_image_type, get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -72,8 +72,15 @@ class ImageGenerationResponse(BaseModel):
 def _decode_reference_images(
     payloads: list[ReferenceImagePayload],
 ) -> list[ReferenceImage]:
+    size_error = OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        f"reference image exceeds {_MAX_REFERENCE_IMAGE_BYTES // (1024 * 1024)} MB",
+    )
     references: list[ReferenceImage] = []
     for payload in payloads:
+        # base64 inflates by 4/3; reject before allocating the decoded copy.
+        if len(payload.data_base64) > _MAX_REFERENCE_IMAGE_BYTES * 4 // 3 + 4:
+            raise size_error
         try:
             data = base64.b64decode(payload.data_base64, validate=True)
         except (binascii.Error, ValueError):
@@ -82,12 +89,9 @@ def _decode_reference_images(
                 "reference image is not valid base64",
             )
         if len(data) > _MAX_REFERENCE_IMAGE_BYTES:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"reference image exceeds {_MAX_REFERENCE_IMAGE_BYTES // (1024 * 1024)} MB",
-            )
+            raise size_error
         try:
-            mime_type = payload.mime_type or get_image_type(payload.data_base64)
+            mime_type = payload.mime_type or get_image_type_from_bytes(data)
         except ValueError:
             mime_type = "image/png"
         references.append(ReferenceImage(data=data, mime_type=mime_type))
@@ -166,8 +170,9 @@ class _GenerationRun:
 
 def _keepalive_stream(run: _GenerationRun) -> Iterator[bytes]:
     deadline = time.monotonic() + _MAX_STREAM_DURATION_S
-    while not run.done.wait(_KEEPALIVE_INTERVAL_S):
-        if time.monotonic() > deadline:
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
             logger.error(
                 "Image generation exceeded %ss; abandoning stream",
                 _MAX_STREAM_DURATION_S,
@@ -176,6 +181,8 @@ def _keepalive_stream(run: _GenerationRun) -> Iterator[bytes]:
                 OnyxError(OnyxErrorCode.GATEWAY_TIMEOUT, "Image generation timed out.")
             )
             return
+        if run.done.wait(min(_KEEPALIVE_INTERVAL_S, remaining)):
+            break
         yield b" "
     if run.error is not None:
         yield _error_envelope(_map_generation_error(run.error))

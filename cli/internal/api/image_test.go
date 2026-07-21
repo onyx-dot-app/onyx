@@ -101,6 +101,24 @@ func TestGenerateImage_InBandNotFoundEnvelope(t *testing.T) {
 	}
 }
 
+func TestGenerateImage_InBandTimeoutEnvelope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`  {"error_code": "GATEWAY_TIMEOUT", "detail": "Image generation timed out."}`))
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
+	var apiErr *api.OnyxAPIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("want *OnyxAPIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 504 {
+		t.Errorf("status = %d, want 504", apiErr.StatusCode)
+	}
+}
+
 func TestGenerateImage_EmptyBodyIsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

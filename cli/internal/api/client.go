@@ -175,6 +175,8 @@ func (c *Client) GenerateImage(ctx context.Context, req models.ImageGenerationRe
 			statusCode = 404
 		case "INVALID_INPUT":
 			statusCode = 400
+		case "GATEWAY_TIMEOUT":
+			statusCode = 504
 		default:
 			statusCode = 502
 		}
