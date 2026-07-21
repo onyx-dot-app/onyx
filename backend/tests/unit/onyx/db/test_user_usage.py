@@ -149,6 +149,18 @@ class TestAggregation:
             db_session, user_id, "model-a", "CHAT", "anthropic", 100, 50, 0, 1.0, day1
         )
         _seed_usage(
+            db_session,
+            user_id,
+            "model-a",
+            "CHAT",
+            "anthropic",
+            25,
+            10,
+            0,
+            0.5,
+            day1 + datetime.timedelta(hours=1),
+        )
+        _seed_usage(
             db_session, user_id, "model-b", "CHAT", "anthropic", 200, 60, 0, 2.0, day1
         )
         _seed_usage(
@@ -165,10 +177,10 @@ class TestAggregation:
             UserUsageByDay(
                 day="2026-06-01",
                 model="model-a",
-                input_tokens=100,
-                output_tokens=50,
+                input_tokens=125,
+                output_tokens=60,
                 cache_read_tokens=0,
-                cost_cents=1.0,
+                cost_cents=1.5,
             ),
             UserUsageByDay(
                 day="2026-06-01",
