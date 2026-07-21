@@ -29,6 +29,7 @@ from onyx.prompts.compression_prompts import PROGRESSIVE_USER_REMINDER
 from onyx.prompts.compression_prompts import SUMMARIZATION_CUTOFF_MARKER
 from onyx.prompts.compression_prompts import SUMMARIZATION_PROMPT
 from onyx.prompts.compression_prompts import USER_REMINDER
+from onyx.tools.built_in_tools import llm_tool_name
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.llm_utils import llm_generation_span
@@ -399,7 +400,8 @@ def compress_chat_history(
                 )
                 all_tools = get_tools(read_session)
                 tool_id_to_name: dict[int, str] = {
-                    tool.id: tool.name for tool in all_tools
+                    tool.id: llm_tool_name(tool.in_code_tool_id, tool.name)
+                    for tool in all_tools
                 }
 
             summary_content = get_messages_to_summarize(

@@ -1201,7 +1201,7 @@ def test_code_interpreter_receives_chat_files(
     ):
         mock_llm.add_response(
             LLMToolCallResponse(
-                tool_name="python",
+                tool_name="run_python",
                 tool_call_id="call_test_1",
                 tool_call_argument_tokens=[json.dumps({"code": code})],
             )
@@ -1282,7 +1282,7 @@ def test_code_interpreter_replay_packets_include_code_and_output(
             # Phase 1: LLM requests python tool execution.
             handler.add_response(
                 LLMToolCallResponse(
-                    tool_name="python",
+                    tool_name="run_python",
                     tool_call_id="call_replay_test",
                     tool_call_argument_tokens=[json.dumps({"code": code})],
                 )
@@ -1290,7 +1290,7 @@ def test_code_interpreter_replay_packets_include_code_and_output(
                 Packet(
                     placement=create_placement(0),
                     obj=ToolCallArgumentDelta(
-                        tool_type="python",
+                        tool_type="run_python",
                         argument_deltas={"code": code},
                     ),
                 ),
@@ -1405,7 +1405,7 @@ def test_code_interpreter_streaming_fallback_to_batch(
     ):
         mock_llm.add_response(
             LLMToolCallResponse(
-                tool_name="python",
+                tool_name="run_python",
                 tool_call_id="call_fallback",
                 tool_call_argument_tokens=[json.dumps({"code": code})],
             )
