@@ -6649,6 +6649,12 @@ class SSOProvider(Base):
         postgresql.ARRAY(String), nullable=False, default=list
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # When true, a login through this provider may adopt an existing account
+    # with the same IdP-verified email. Safe only because linking is gated on
+    # allowed_email_domains and email verification, both enforced before linking.
+    allow_email_link: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

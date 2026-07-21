@@ -12,6 +12,7 @@ export interface SSOProviderResponse {
   provider_type: SSOProviderType;
   enabled: boolean;
   allowed_email_domains: string[];
+  allow_email_link: boolean;
   config: Record<string, string>;
   redirect_uri: string;
 }
@@ -22,10 +23,12 @@ export interface SSOProviderCreateRequest {
   provider_type: SSOProviderType;
   config: Record<string, string>;
   allowed_email_domains: string[];
+  allow_email_link: boolean;
 }
 
 export interface SSOProviderUpdateRequest {
   display_name?: string;
   allowed_email_domains?: string[];
   config?: Record<string, string>;
+  allow_email_link?: boolean;
 }

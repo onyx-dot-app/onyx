@@ -4,8 +4,10 @@ verified, and the discovery document's issuer must own the configured
 discovery URL, so one provider's tokens cannot be replayed against another
 provider's callback (OIDC mix-up defense)."""
 
+from typing import Any
 from urllib.parse import unquote, urlsplit
 
+from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES, OpenID
 from httpx_oauth.exceptions import GetIdEmailError
 
@@ -141,3 +143,67 @@ class VerifiedEmailOpenID(OpenID):
                 )
 
             return sub, email
+
+
+class VerifiedEmailGoogleOAuth2(GoogleOAuth2):
+    """Google login client that returns the primary email only when Google marks
+    it verified, and rejects a malformed People API body with a controlled login
+    error. The stock client trusts the email unconditionally, the same
+    unverified-email takeover vector VerifiedEmailOpenID guards against."""
+
+    async def get_id_email(self, token: str) -> tuple[str, str | None]:
+        async with self.get_httpx_client() as client:
+            response = await client.get(
+                "https://people.googleapis.com/v1/people/me",
+                params={"personFields": "emailAddresses"},
+                headers={**self.request_headers, "Authorization": f"Bearer {token}"},
+            )
+
+            if response.status_code >= 400:
+                raise GetIdEmailError(response=response)
+
+            try:
+                data = response.json()
+            except ValueError as e:
+                raise GetIdEmailError(
+                    "People API response was not valid JSON", response=response
+                ) from e
+            if not isinstance(data, dict):
+                raise GetIdEmailError(
+                    "People API response was not a JSON object", response=response
+                )
+
+            user_id = data.get("resourceName")
+            if not isinstance(user_id, str) or not user_id:
+                raise GetIdEmailError(
+                    "People API response missing a string 'resourceName'",
+                    response=response,
+                )
+
+            emails = data.get("emailAddresses")
+            if not isinstance(emails, list):
+                raise GetIdEmailError(
+                    "People API response missing 'emailAddresses'", response=response
+                )
+
+            primary_email = _select_primary_verified_email(emails)
+            if primary_email is None:
+                raise GetIdEmailError(
+                    "Google did not return a primary verified email",
+                    response=response,
+                )
+
+            return user_id, primary_email
+
+
+def _select_primary_verified_email(emails: list[Any]) -> str | None:
+    for entry in emails:
+        if not isinstance(entry, dict):
+            continue
+        metadata = entry.get("metadata")
+        value = entry.get("value")
+        if not isinstance(metadata, dict) or not isinstance(value, str) or not value:
+            continue
+        if metadata.get("primary") is True and metadata.get("verified") is True:
+            return value
+    return None

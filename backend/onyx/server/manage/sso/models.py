@@ -15,12 +15,14 @@ class SSOProviderCreateRequest(BaseModel):
     provider_type: SSOProviderType
     config: dict[str, Any]
     allowed_email_domains: list[str]
+    allow_email_link: bool = False
 
 
 class SSOProviderUpdateRequest(BaseModel):
     display_name: str | None = None
     allowed_email_domains: list[str] | None = None
     config: dict[str, Any] | None = None
+    allow_email_link: bool | None = None
 
 
 class SSOProviderEnabledRequest(BaseModel):
@@ -34,6 +36,7 @@ class SSOProviderResponse(BaseModel):
     provider_type: SSOProviderType
     enabled: bool
     allowed_email_domains: list[str]
+    allow_email_link: bool
     config: dict[str, Any]
     redirect_uri: str
 
@@ -51,6 +54,7 @@ class SSOProviderResponse(BaseModel):
             provider_type=provider.provider_type,
             enabled=provider.enabled,
             allowed_email_domains=provider.allowed_email_domains,
+            allow_email_link=provider.allow_email_link,
             config=config,
             redirect_uri=redirect_uri,
         )

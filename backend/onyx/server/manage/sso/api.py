@@ -85,6 +85,7 @@ def create_sso_provider_endpoint(
             provider_type=request.provider_type,
             config=request.config,
             allowed_email_domains=request.allowed_email_domains,
+            allow_email_link=request.allow_email_link,
         )
     except IntegrityError as e:
         db_session.rollback()
@@ -128,6 +129,7 @@ def update_sso_provider_endpoint(
             display_name=request.display_name,
             config=merged_config,
             allowed_email_domains=request.allowed_email_domains,
+            allow_email_link=request.allow_email_link,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e

@@ -15,12 +15,11 @@ from fastapi import APIRouter, Depends, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from fastapi_users.authentication import Strategy
-from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError
 from sqlalchemy.orm import Session
 
-from onyx.auth.oidc_client import VerifiedEmailOpenID
+from onyx.auth.oidc_client import VerifiedEmailGoogleOAuth2, VerifiedEmailOpenID
 from onyx.auth.users import (
     CSRF_TOKEN_COOKIE_NAME,
     CSRF_TOKEN_KEY,
@@ -60,9 +59,6 @@ from shared_configs.contextvars import get_current_tenant_id
 router = APIRouter(prefix="/auth/oidc")
 
 _CLIENT_CACHE_TTL_SECONDS = 600
-# Hardcoded off: linking a second IdP to an existing account by verified email is
-# an account-takeover vector when two IdPs can assert one domain.
-_ALLOW_AUTO_LINK = False
 
 _CLIENT_CACHE: TTLCache[tuple[str, str, SSOProviderType, str], BaseOAuth2[Any]] = (
     TTLCache(maxsize=128, ttl=_CLIENT_CACHE_TTL_SECONDS)
@@ -96,6 +92,13 @@ def _resolve_oidc_provider(
     return provider, config
 
 
+def _should_link_by_email(provider: SSOProvider) -> bool:
+    """Whether a login through this provider may claim an existing same-email
+    account. Gated on the admin enabling it AND scoping the provider to email
+    domains, so a provider can only adopt accounts in domains it owns."""
+    return provider.allow_email_link and bool(provider.allowed_email_domains)
+
+
 def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[Any]:
     if provider.provider_type is SSOProviderType.OIDC:
         # Env override lets deployments request extra API scopes (e.g. MS Graph
@@ -111,7 +114,7 @@ def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[A
             base_scopes=scopes,
         )
     if provider.provider_type is SSOProviderType.GOOGLE_OAUTH:
-        return GoogleOAuth2(
+        return VerifiedEmailGoogleOAuth2(
             config["client_id"],
             config["client_secret"],
             scopes=list(GOOGLE_OAUTH_SCOPE_OVERRIDE or GOOGLE_LOGIN_BASE_SCOPES),
@@ -347,7 +350,7 @@ async def oidc_login_callback_for_provider(
         user_manager=user_manager,
         backend=auth_backend,
         strategy=strategy,
-        associate_by_email=_ALLOW_AUTO_LINK,
+        associate_by_email=_should_link_by_email(provider),
         is_verified_by_default=True,
         allowed_email_domains_override=provider.allowed_email_domains,
         # Provider rows delegate membership to the IdP.

@@ -111,6 +111,16 @@ def _normalize_domains(domains: list[str]) -> list[str]:
     return sorted({domain.strip().lower() for domain in domains if domain.strip()})
 
 
+def _validate_email_link_scope(
+    allow_email_link: bool, allowed_email_domains: list[str]
+) -> None:
+    """allow_email_link lets a login claim an existing same-email account, so it
+    must be scoped to domains the provider is authoritative for. Without a domain
+    allowlist any verified email could adopt any account, so refuse the combo."""
+    if allow_email_link and not allowed_email_domains:
+        raise ValueError("allow_email_link requires at least one allowed email domain")
+
+
 def fetch_sso_providers(
     db_session: Session, enabled_only: bool = False
 ) -> list[SSOProvider]:
@@ -139,14 +149,18 @@ def create_sso_provider(
     provider_type: SSOProviderType,
     config: dict[str, Any],
     allowed_email_domains: list[str],
+    allow_email_link: bool = False,
 ) -> SSOProvider:
     validate_sso_provider_name(name)
+    normalized_domains = _normalize_domains(allowed_email_domains)
+    _validate_email_link_scope(allow_email_link, normalized_domains)
     provider = SSOProvider(
         name=name,
         display_name=display_name,
         provider_type=provider_type,
         config=validate_sso_config(provider_type, config),
-        allowed_email_domains=_normalize_domains(allowed_email_domains),
+        allowed_email_domains=normalized_domains,
+        allow_email_link=allow_email_link,
     )
     db_session.add(provider)
     db_session.commit()
@@ -159,6 +173,7 @@ def update_sso_provider(
     display_name: str | None = None,
     config: dict[str, Any] | None = None,
     allowed_email_domains: list[str] | None = None,
+    allow_email_link: bool | None = None,
 ) -> SSOProvider:
     """Partial update. Name and provider_type are immutable: linked login
     accounts and the login URL reference the name, and the type fixes the config
@@ -168,6 +183,18 @@ def update_sso_provider(
     if provider is None:
         raise ValueError(f"SSO provider {provider_id} does not exist")
 
+    # Validate the resulting combination against whichever of the two coupled
+    # fields the caller is changing, falling back to the stored value.
+    effective_domains = (
+        _normalize_domains(allowed_email_domains)
+        if allowed_email_domains is not None
+        else provider.allowed_email_domains
+    )
+    effective_link = (
+        allow_email_link if allow_email_link is not None else provider.allow_email_link
+    )
+    _validate_email_link_scope(effective_link, effective_domains)
+
     if display_name is not None:
         provider.display_name = display_name
     if config is not None:
@@ -175,7 +202,9 @@ def update_sso_provider(
             provider.provider_type, config
         )
     if allowed_email_domains is not None:
-        provider.allowed_email_domains = _normalize_domains(allowed_email_domains)
+        provider.allowed_email_domains = effective_domains
+    if allow_email_link is not None:
+        provider.allow_email_link = effective_link
 
     db_session.commit()
     return provider

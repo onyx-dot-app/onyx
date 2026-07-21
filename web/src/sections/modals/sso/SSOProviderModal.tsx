@@ -24,6 +24,7 @@ import {
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
+import UnlabeledCheckboxField from "@/refresh-components/form/CheckboxField";
 import InputChipField, {
   type ChipItem,
 } from "@/refresh-components/inputs/InputChipField";
@@ -44,6 +45,7 @@ interface SSOProviderFormValues {
   display_name: string;
   config: Record<string, string>;
   allowed_email_domains: string[];
+  allow_email_link: boolean;
 }
 
 // Every config key across all provider types (deduped by name, since provider
@@ -94,6 +96,19 @@ const SSO_VALIDATION_SCHEMA = Yup.object({
     ([type], schema) => CONFIG_SCHEMA_BY_TYPE[type as string] ?? schema
   ),
   allowed_email_domains: Yup.array().of(Yup.string()).optional(),
+  // Mirrors the backend: linking existing accounts by email is only allowed
+  // when the provider is scoped to specific domains it is authoritative for.
+  allow_email_link: Yup.boolean().test(
+    "requires-domains",
+    "Add at least one allowed email domain to enable account linking",
+    function (value) {
+      if (!value) {
+        return true;
+      }
+      const domains = this.parent.allowed_email_domains as string[] | undefined;
+      return Array.isArray(domains) && domains.length > 0;
+    }
+  ),
 });
 
 // The backend masks every config string on read and restores any value sent
@@ -157,6 +172,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
     display_name: provider?.display_name ?? "",
     config: initialConfig(provider?.config ?? {}),
     allowed_email_domains: provider?.allowed_email_domains ?? [],
+    allow_email_link: provider?.allow_email_link ?? false,
   };
 
   async function handleSubmit(
@@ -173,6 +189,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
           provider_type: providerType,
           config,
           allowed_email_domains: values.allowed_email_domains,
+          allow_email_link: values.allow_email_link,
         };
         await createSSOProvider(request);
         toast.success("SSO provider created");
@@ -181,6 +198,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
           display_name: values.display_name.trim(),
           allowed_email_domains: values.allowed_email_domains,
           config,
+          allow_email_link: values.allow_email_link,
         };
         await updateSSOProvider(provider.id, request);
         toast.success("SSO provider updated");
@@ -348,6 +366,14 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                       onChange={setDomainInput}
                       placeholder="Add a domain (e.g. onyx.app)"
                     />
+                  </InputVertical>
+
+                  <InputVertical
+                    title="Link Existing Accounts by Email"
+                    description="Let a user whose account was created another way (a different provider, SAML, or password) sign in through this provider. Requires allowed email domains, since the provider can only claim accounts in domains it is authoritative for."
+                    withLabel="allow_email_link"
+                  >
+                    <UnlabeledCheckboxField name="allow_email_link" />
                   </InputVertical>
 
                   {provider?.redirect_uri && (
