@@ -33,6 +33,7 @@ from sqlalchemy import (
     func,
     or_,
     select,
+    true,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert
@@ -480,13 +481,6 @@ def set_skill_enabled_for_user(
     user: User,
     db_session: Session,
 ) -> Skill:
-    # Serialize selection changes so a confirmed same-name replacement is
-    # atomic even when requests arrive concurrently.
-    db_session.execute(
-        select(User)
-        .where(User.id == user.id)  # ty: ignore[invalid-argument-type]
-        .with_for_update(of=User)
-    )
     skill = fetch_skill(
         skill_id,
         policy=SkillAccessPolicy.VIEW,
@@ -515,42 +509,30 @@ def set_skill_enabled_for_user(
         )
         return skill
 
-    conflicting_skill_id = db_session.scalar(
-        select(UserSkillPreference.skill_id)
-        .where(
-            UserSkillPreference.user_id == user.id,
-            UserSkillPreference.name == skill.name,
-            UserSkillPreference.skill_id != skill.id,
-        )
-        .limit(1)
+    preference_insert = insert(UserSkillPreference).values(
+        user_id=user.id,
+        skill_id=skill.id,
+        name=skill.name,
     )
-    if conflicting_skill_id is not None and not replace_conflict:
+    enabled_skill_id = db_session.scalar(
+        preference_insert.on_conflict_do_update(
+            index_elements=[
+                UserSkillPreference.user_id,
+                UserSkillPreference.name,
+            ],
+            set_={"skill_id": preference_insert.excluded.skill_id},
+            where=(
+                true()
+                if replace_conflict
+                else UserSkillPreference.skill_id == preference_insert.excluded.skill_id
+            ),
+        ).returning(UserSkillPreference.skill_id)
+    )
+    if enabled_skill_id is None:
         raise OnyxError(
             OnyxErrorCode.SKILL_NAME_CONFLICT,
             f"Another skill named '{skill.name}' is already enabled.",
         )
-    if conflicting_skill_id is not None:
-        db_session.execute(
-            delete(UserSkillPreference).where(
-                UserSkillPreference.user_id == user.id,
-                UserSkillPreference.name == skill.name,
-            )
-        )
-
-    db_session.execute(
-        insert(UserSkillPreference)
-        .values(
-            user_id=user.id,
-            skill_id=skill.id,
-            name=skill.name,
-        )
-        .on_conflict_do_nothing(
-            index_elements=[
-                UserSkillPreference.user_id,
-                UserSkillPreference.skill_id,
-            ],
-        )
-    )
     return skill
 
 

@@ -318,6 +318,12 @@ def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> Non
         db_session=db_session,
     )
     set_skill_enabled_for_user(
+        skill_id=first_skill.id,
+        enabled=True,
+        user=first_user,
+        db_session=db_session,
+    )
+    set_skill_enabled_for_user(
         skill_id=second_skill.id,
         enabled=True,
         user=second_user,
@@ -351,6 +357,15 @@ def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> Non
             db_session=db_session,
         )
     assert exc_info.value.error_code == OnyxErrorCode.SKILL_NAME_CONFLICT
+    assert (
+        db_session.scalar(
+            select(UserSkillPreference.skill_id).where(
+                UserSkillPreference.user_id == first_user.id,
+                UserSkillPreference.name == name,
+            )
+        )
+        == first_skill.id
+    )
 
     set_skill_enabled_for_user(
         skill_id=second_skill.id,

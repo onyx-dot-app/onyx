@@ -222,17 +222,16 @@ def create_custom_skill(
             ),
             db_session,
         )
-        auto_enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
+        if auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
-        )
-        if auto_enable and not auto_enabled:
+        ):
             raise OnyxError(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 f"A skill named '{skill.name}' is already enabled.",
             )
         db_session.commit()
 
-    if auto_enabled:
+    if auto_enable:
         push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 
@@ -304,17 +303,16 @@ def create_custom_skill_from_editor(
             ),
             db_session,
         )
-        auto_enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
+        if auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
-        )
-        if auto_enable and not auto_enabled:
+        ):
             raise OnyxError(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 f"A skill named '{skill.name}' is already enabled.",
             )
         db_session.commit()
 
-    if auto_enabled:
+    if auto_enable:
         push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 
