@@ -2,6 +2,8 @@ use crate::config::ConfigState;
 use crate::debug_log::{log_backend_error, MENU_OPEN_DEBUG_LOG_ID, MENU_TOGGLE_DEVTOOLS_ID};
 use crate::window::{focus_main_window, open_chat_window};
 use tauri::image::Image;
+#[cfg(not(target_os = "macos"))]
+use tauri::menu::AboutMetadataBuilder;
 use tauri::menu::{
     CheckMenuItem, Menu, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder, HELP_SUBMENU_ID,
 };
@@ -10,6 +12,10 @@ use tauri::{AppHandle, Manager, Wry};
 
 const TRAY_ID: &str = "onyx-tray";
 const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray-icon.png");
+// GTK's AboutDialog renders the logo at the image's native size (muda does no
+// scaling), so embed the 128px asset rather than the 256px @2x one.
+#[cfg(not(target_os = "macos"))]
+const ABOUT_ICON_BYTES: &[u8] = include_bytes!("../icons/128x128.png");
 const TRAY_MENU_OPEN_APP_ID: &str = "tray_open_app";
 const TRAY_MENU_OPEN_CHAT_ID: &str = "tray_open_chat";
 const TRAY_MENU_SHOW_IN_BAR_ID: &str = "tray_show_in_menu_bar";
@@ -146,6 +152,26 @@ fn build_help_menu(app: &AppHandle, menu: &Menu<Wry>) -> tauri::Result<()> {
         .get(HELP_SUBMENU_ID)
         .and_then(|item| item.as_submenu().cloned())
     {
+        // Off macOS, `Menu::default` seeds this Help menu with a predefined
+        // "About" item (at index 0) whose metadata carries no icon, so the
+        // About dialog shows no logo. Rebuild that metadata -- keeping the name,
+        // version, and copyright `Menu::default` set -- with the Onyx icon added.
+        // (On macOS the About item lives in the app menu, not Help.)
+        #[cfg(not(target_os = "macos"))]
+        {
+            let pkg_info = app.package_info();
+            let config = app.config();
+            let about_metadata = AboutMetadataBuilder::new()
+                .name(Some(pkg_info.name.clone()))
+                .version(Some(pkg_info.version.to_string()))
+                .copyright(config.bundle.copyright.clone())
+                .authors(config.bundle.publisher.clone().map(|p| vec![p]))
+                .icon(Image::from_bytes(ABOUT_ICON_BYTES).ok())
+                .build();
+            let about_item = PredefinedMenuItem::about(app, None, Some(about_metadata))?;
+            help_menu.remove_at(0)?;
+            help_menu.insert(&about_item, 0)?;
+        }
         help_menu.append(&docs_item)?;
     } else {
         let help_menu = SubmenuBuilder::with_id(app, HELP_SUBMENU_ID, "Help")
