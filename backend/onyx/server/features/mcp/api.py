@@ -330,7 +330,7 @@ def _resolve_shared_api_token_template(
         return request_template
 
     if existing_config:
-        stored_template = existing_config.get("header_template")
+        stored_template: dict[str, str] | None = existing_config.get("header_template")
         if stored_template:
             return MCPAuthTemplate(
                 headers=stored_template,
