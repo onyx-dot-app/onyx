@@ -133,13 +133,12 @@
   @apply flex-1;
 }
 
-/* Applied to the ShadowDiv scroll container, which provides overflow-y-auto */
+/* Applied to the ShadowDiv scroll container, which provides overflow-y-auto.
+   Thin themed scrollbar keeps position/drag affordance without the default bar. */
 .opal-sidebar-body__scroll {
   @apply flex-1 min-h-0 flex flex-col;
-  scrollbar-width: none;
-}
-.opal-sidebar-body__scroll::-webkit-scrollbar {
-  display: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-02) transparent;
 }
 
 .opal-sidebar-body__content {
