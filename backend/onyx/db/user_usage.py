@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User, User__UserGroup, UserUsage
-from onyx.utils.datetime import datetime_to_utc
+from onyx.utils.datetime import datetime_to_utc, get_window_start
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -21,6 +21,7 @@ logger = setup_logger()
 USER_USAGE_BUCKET_SECONDS = 24 * 60 * 60
 USER_USAGE_BUCKET_HOURS = USER_USAGE_BUCKET_SECONDS // (60 * 60)
 TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
+COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
 
 
@@ -43,6 +44,27 @@ def get_token_window_start(now: datetime, period_hours: int) -> datetime:
         hour=0, minute=0, second=0, microsecond=0
     )
     return current_bucket - timedelta(hours=period_hours - USER_USAGE_BUCKET_HOURS)
+
+
+def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
+    """Start of the UTC-day buckets in a cost-budget window."""
+    period_seconds = period_hours * 60 * 60
+    if (
+        period_seconds < USER_USAGE_BUCKET_SECONDS
+        or period_seconds % USER_USAGE_BUCKET_SECONDS
+    ):
+        raise ValueError(COST_BUDGET_PERIOD_ERROR)
+
+    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
+    return current_bucket - timedelta(
+        seconds=period_seconds - USER_USAGE_BUCKET_SECONDS
+    )
+
+
+def get_next_cost_bucket_start(now: datetime) -> datetime:
+    return get_window_start(now, USER_USAGE_BUCKET_SECONDS) + timedelta(
+        seconds=USER_USAGE_BUCKET_SECONDS
+    )
 
 
 class UserUsageByDay(BaseModel):

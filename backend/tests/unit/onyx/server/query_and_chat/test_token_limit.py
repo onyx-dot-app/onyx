@@ -18,17 +18,21 @@ from sqlalchemy.orm import Session, sessionmaker
 
 import onyx.server.query_and_chat.token_limit as token_limit
 from onyx.db.models import TokenRateLimit, TokenRateLimitScope, UserUsage
-from onyx.db.user_usage import record_user_usage
+from onyx.db.user_usage import (
+    TokenUsageBucket,
+    get_cost_window_start,
+    get_next_cost_bucket_start,
+    get_token_window_start,
+    record_user_usage,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat.token_limit import _worst_triggered_limit
-from onyx.utils.datetime import get_window_start
-from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 
 def _is_rate_limited(
     rate_limits: list[TokenRateLimit],
-    usage: list[tuple[datetime.datetime, int]],
+    usage: list[TokenUsageBucket],
 ) -> bool:
     return _worst_triggered_limit(rate_limits, usage) is not None
 
@@ -67,9 +71,9 @@ def _make_limit(token_budget: int) -> TokenRateLimit:
     )
 
 
-def _usage(token_count: int) -> list[tuple[datetime.datetime, int]]:
+def _usage(token_count: int) -> list[TokenUsageBucket]:
     now = datetime.datetime.now(tz=datetime.timezone.utc)
-    return [(now, token_count)]
+    return [TokenUsageBucket(window_start=now, tokens=token_count)]
 
 
 class TestIsRateLimitedUnit:
@@ -132,49 +136,89 @@ class TestIsRateLimitedUnit:
             worst = _worst_triggered_limit(order, _usage(10_000))
             assert worst is not None and worst.period_hours == 24
 
+    def test_thirty_day_token_window_is_unchanged(self) -> None:
+        limit = _make_limit(token_budget=1)
+        limit.period_hours = 30 * 24
+        now = datetime.datetime.now(datetime.timezone.utc)
 
-def _assert_structured_429(exc: OnyxError, scope: str, period_hours: int) -> None:
-    """The 429 the FE banner binds to: RATE_LIMITED + scope + reset fields + header."""
+        assert _is_rate_limited(
+            [limit],
+            [
+                TokenUsageBucket(
+                    window_start=now - datetime.timedelta(days=29), tokens=1_000
+                )
+            ],
+        )
+        assert not _is_rate_limited(
+            [limit],
+            [
+                TokenUsageBucket(
+                    window_start=now - datetime.timedelta(days=31), tokens=1_000
+                )
+            ],
+        )
+
+
+def _structured_reset_at(exc: OnyxError, scope: str) -> datetime.datetime:
     assert exc.error_code is OnyxErrorCode.RATE_LIMITED
     assert exc.status_code == 429
     assert scope in exc.detail
 
     extra = exc.extra or {}
     assert extra["scope"] == scope
-    assert extra["retry_after_seconds"] == period_hours * 3600
-
     reset_at = datetime.datetime.fromisoformat(cast(str, extra["reset_at"]))
+    retry_after_seconds = cast(int, extra["retry_after_seconds"])
+    assert exc.headers == {"Retry-After": str(retry_after_seconds)}
+    return reset_at
+
+
+def _assert_token_reset(exc: OnyxError, scope: str, period_hours: int) -> None:
+    reset_at = _structured_reset_at(exc, scope)
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     expected = now + datetime.timedelta(hours=period_hours)
-    # Allow a few seconds of execution slop.
     assert abs((reset_at - expected).total_seconds()) < 60
 
-    assert exc.headers == {"Retry-After": str(period_hours * 3600)}
+
+def _assert_cost_reset(exc: OnyxError, scope: str) -> None:
+    reset_at = _structured_reset_at(exc, scope)
+    expected = get_next_cost_bucket_start(
+        datetime.datetime.now(tz=datetime.timezone.utc)
+    )
+    assert reset_at == expected
 
 
 class TestRaiseRateLimited:
     def test_global_scope_shape(self) -> None:
+        reset_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            hours=2
+        )
         with pytest.raises(OnyxError) as ei:
-            token_limit.raise_rate_limited("organization", period_hours=2)
-        _assert_structured_429(ei.value, "organization", 2)
+            token_limit.raise_rate_limited("organization", reset_at)
+        assert _structured_reset_at(ei.value, "organization") == reset_at
 
 
-class TestRaiseForLongestWindow:
-    """Token + cost gates are evaluated together; the reported reset is the
-    longest window, so a short token limit can't mask a longer cost reset."""
+class TestRaiseForLatestReset:
+    """Independent limits report the latest relevant reset."""
 
-    def test_longest_of_token_and_cost_wins(self) -> None:
+    def test_latest_reset_wins(self) -> None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        latest = now + datetime.timedelta(hours=24)
         with pytest.raises(OnyxError) as ei:
-            token_limit._raise_for_longest_window("user", 1, 24)
-        _assert_structured_429(ei.value, "user", 24)
+            token_limit._raise_for_latest_reset(
+                "user", now + datetime.timedelta(hours=1), latest
+            )
+        assert _structured_reset_at(ei.value, "user") == latest
 
-    def test_skips_none_windows(self) -> None:
+    def test_skips_none_resets(self) -> None:
+        reset_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            hours=5
+        )
         with pytest.raises(OnyxError) as ei:
-            token_limit._raise_for_longest_window("user", None, 5)
-        _assert_structured_429(ei.value, "user", 5)
+            token_limit._raise_for_latest_reset("user", None, reset_at)
+        assert _structured_reset_at(ei.value, "user") == reset_at
 
     def test_no_trigger_does_not_raise(self) -> None:
-        token_limit._raise_for_longest_window("user", None, None)  # no raise
+        token_limit._raise_for_latest_reset("user", None, None)
 
 
 class _SessionCtx:
@@ -209,7 +253,7 @@ class TestGlobalRejectionPath:
 
         with pytest.raises(OnyxError) as ei:
             token_limit._user_is_rate_limited_by_global()
-        _assert_structured_429(ei.value, "organization", 3)
+        _assert_token_reset(ei.value, "organization", 3)
 
     def test_under_global_budget_does_not_raise(
         self, monkeypatch: pytest.MonkeyPatch
@@ -231,8 +275,8 @@ class TestGlobalRejectionPath:
 def _cost_limit(
     cost_budget_cents: float | None,
     scope: TokenRateLimitScope,
-    period_hours: int = 1,
-    token_budget: int = 10**12,  # effectively unbounded so only cost can trigger
+    period_hours: int = 24,
+    token_budget: int | None = 10**12,
 ) -> TokenRateLimit:
     limit = TokenRateLimit(
         enabled=True,
@@ -292,7 +336,7 @@ class TestGlobalCostRejectionPath:
     """CE global path: a global cost budget summed across the tenant raises."""
 
     def test_over_global_cost_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        limit = _cost_limit(500.0, TokenRateLimitScope.GLOBAL, period_hours=3)
+        limit = _cost_limit(500.0, TokenRateLimitScope.GLOBAL)
         monkeypatch.setattr(
             token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
         )
@@ -309,7 +353,7 @@ class TestGlobalCostRejectionPath:
 
         with pytest.raises(OnyxError) as ei:
             token_limit._user_is_rate_limited_by_global()
-        _assert_structured_429(ei.value, "organization", 3)
+        _assert_cost_reset(ei.value, "organization")
 
     def test_under_global_cost_does_not_raise(
         self, monkeypatch: pytest.MonkeyPatch
@@ -338,7 +382,7 @@ class TestGlobalCostRejectionPath:
             enabled=True,
             token_budget=None,
             cost_budget_cents=500.0,
-            period_hours=1,
+            period_hours=24,
             scope=TokenRateLimitScope.GLOBAL,
         )
         monkeypatch.setattr(
@@ -359,6 +403,55 @@ class TestGlobalCostRejectionPath:
         )
 
         token_limit._user_is_rate_limited_by_global()  # no raise, no token query
+
+    def test_long_token_window_does_not_widen_cost_query(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        token_limit_row = _make_limit(token_budget=1)
+        token_limit_row.period_hours = 30 * 24
+        cost_limit_row = _cost_limit(
+            500.0, TokenRateLimitScope.GLOBAL, token_budget=None
+        )
+        token_cutoffs: list[datetime.datetime] = []
+        cost_cutoffs: list[datetime.datetime] = []
+
+        monkeypatch.setattr(
+            token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
+        )
+        monkeypatch.setattr(
+            token_limit,
+            "fetch_all_global_token_rate_limits",
+            lambda **_: [token_limit_row, cost_limit_row],
+        )
+
+        def _fetch_tokens(
+            cutoff: datetime.datetime, _session: object
+        ) -> list[TokenUsageBucket]:
+            token_cutoffs.append(cutoff)
+            return [
+                TokenUsageBucket(
+                    window_start=now - datetime.timedelta(days=29), tokens=1_000
+                )
+            ]
+
+        def _fetch_cost(
+            _session: object, cutoff: datetime.datetime
+        ) -> list[tuple[datetime.datetime, float]]:
+            cost_cutoffs.append(cutoff)
+            return [(get_cost_window_start(now, 24), 1.0)]
+
+        monkeypatch.setattr(token_limit, "_fetch_global_usage", _fetch_tokens)
+        monkeypatch.setattr(
+            token_limit, "get_total_cost_cents_buckets_since", _fetch_cost
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            token_limit._user_is_rate_limited_by_global()
+
+        _assert_token_reset(exc_info.value, "organization", 30 * 24)
+        assert token_cutoffs == [get_token_window_start(now, 30 * 24)]
+        assert cost_cutoffs == [get_cost_window_start(now, 24)]
 
 
 class _RealLedgerSessionCtx:
@@ -386,19 +479,15 @@ def ledger_session() -> Generator[Session, None, None]:
 
 
 class TestCostEnforcementRealLedgerPath:
-    """The global cost gate, end-to-end through the real cost source — the
-    regression that the prior exact-window read fail-opened on a sub-grid
-    budget period."""
+    """The global cost gate reads UTC-day buckets from the real ledger query."""
 
-    def test_sub_grid_period_blocks_against_real_ledger(
+    def test_current_day_blocks_against_real_ledger(
         self, monkeypatch: pytest.MonkeyPatch, ledger_session: Session
     ) -> None:
-        # Ledger row written at the weekly grid (as the real processor does),
-        # but the admin's budget period is 24h. The sliding cutoff still reads it.
         import uuid
 
         now = datetime.datetime.now(tz=datetime.timezone.utc)
-        ledger_window = get_window_start(now, USAGE_LIMIT_WINDOW_SECONDS)
+        ledger_window = get_cost_window_start(now, 24)
         record_user_usage(
             ledger_session,
             str(uuid.uuid4()),
@@ -425,7 +514,7 @@ class TestCostEnforcementRealLedgerPath:
 
         with pytest.raises(OnyxError) as ei:
             token_limit._user_is_rate_limited_by_global()
-        _assert_structured_429(ei.value, "organization", 24)
+        _assert_cost_reset(ei.value, "organization")
 
     def test_window_rollover_does_not_count(
         self, monkeypatch: pytest.MonkeyPatch, ledger_session: Session
@@ -433,10 +522,8 @@ class TestCostEnforcementRealLedgerPath:
         import uuid
 
         now = datetime.datetime.now(tz=datetime.timezone.utc)
-        current = get_window_start(now, USAGE_LIMIT_WINDOW_SECONDS)
-        # Two grids back: always before the (period + one-grid) relaxed cutoff,
-        # regardless of weekday. A 24h budget must not see last-period spend.
-        prior = current - datetime.timedelta(days=14)
+        current = get_cost_window_start(now, 24)
+        prior = current - datetime.timedelta(days=1)
         record_user_usage(
             ledger_session, str(uuid.uuid4()), "m", "CHAT", None, 1, 1, 0, 9999.0, prior
         )
@@ -471,6 +558,17 @@ class TestTokenRateLimitArgsValidation:
             enabled=True, token_budget=None, period_hours=24, cost_budget_cents=500.0
         )
         assert args.token_budget is None and args.cost_budget_cents == 500.0
+
+    def test_cost_period_must_be_whole_days(self) -> None:
+        from onyx.server.token_rate_limits.models import TokenRateLimitArgs
+
+        with pytest.raises(ValueError, match="whole UTC days"):
+            TokenRateLimitArgs(
+                enabled=True,
+                token_budget=None,
+                period_hours=25,
+                cost_budget_cents=500.0,
+            )
 
     def test_token_only_accepted(self) -> None:
         from onyx.server.token_rate_limits.models import TokenRateLimitArgs

@@ -17,12 +17,15 @@ from onyx.db.models import (
     User__UserGroup,
     UserGroup,
 )
-from onyx.db.user_usage import record_user_usage
+from onyx.db.user_usage import (
+    TokenUsageBucket,
+    get_cost_window_start,
+    get_next_cost_bucket_start,
+    record_user_usage,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.tracing.flows import LLMFlow
-from onyx.utils.datetime import get_window_start
-from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 from tests.external_dependency_unit.conftest import create_test_user
 
 pytestmark = pytest.mark.usefixtures("tenant_context")
@@ -30,7 +33,7 @@ pytestmark = pytest.mark.usefixtures("tenant_context")
 _TEST_MODEL = "cost-budget-test-model"
 
 
-def _cost_limit(scope: TokenRateLimitScope, period_hours: int = 1) -> TokenRateLimit:
+def _cost_limit(scope: TokenRateLimitScope, period_hours: int = 24) -> TokenRateLimit:
     return TokenRateLimit(
         enabled=True,
         token_budget=None,
@@ -41,9 +44,7 @@ def _cost_limit(scope: TokenRateLimitScope, period_hours: int = 1) -> TokenRateL
 
 
 def _record_cost(db_session: Session, user: User, cost_cents: float) -> None:
-    window_start = get_window_start(
-        datetime.now(timezone.utc), USAGE_LIMIT_WINDOW_SECONDS
-    )
+    window_start = get_cost_window_start(datetime.now(timezone.utc), 24)
     record_user_usage(
         db_session=db_session,
         user_id=str(user.id),
@@ -63,13 +64,18 @@ def _fail_token_query(*_args: object) -> NoReturn:
     raise AssertionError("cost-only enforcement queried token usage")
 
 
-def _assert_rate_limited(
-    error: OnyxError, scope: TokenRateLimitScope, period_hours: int
-) -> None:
+def _assert_rate_limited(error: OnyxError, scope: TokenRateLimitScope) -> None:
     assert error.error_code is OnyxErrorCode.RATE_LIMITED
     assert error.extra is not None
     assert error.extra["scope"] == scope.value
-    assert error.extra["retry_after_seconds"] == period_hours * 3600
+
+
+def _assert_cost_rate_limited(error: OnyxError, scope: TokenRateLimitScope) -> None:
+    _assert_rate_limited(error, scope)
+    assert error.extra is not None
+    assert datetime.fromisoformat(str(error.extra["reset_at"])) == (
+        get_next_cost_bucket_start(datetime.now(timezone.utc))
+    )
 
 
 def test_user_cost_isolated_and_longest_window_reported(
@@ -78,8 +84,8 @@ def test_user_cost_isolated_and_longest_window_reported(
     user = create_test_user(db_session, "cost_budget_user")
     other_user = create_test_user(db_session, "cost_budget_other")
     limits = [
-        _cost_limit(TokenRateLimitScope.USER, period_hours=1),
         _cost_limit(TokenRateLimitScope.USER, period_hours=24),
+        _cost_limit(TokenRateLimitScope.USER, period_hours=48),
     ]
     monkeypatch.setattr(
         ee_token_limit, "fetch_all_user_token_rate_limits", lambda **_: limits
@@ -93,7 +99,7 @@ def test_user_cost_isolated_and_longest_window_reported(
     _record_cost(db_session, user, 50.0)
     with pytest.raises(OnyxError) as exc_info:
         ee_token_limit._user_is_rate_limited(user.id)
-    _assert_rate_limited(exc_info.value, TokenRateLimitScope.USER, 24)
+    _assert_cost_rate_limited(exc_info.value, TokenRateLimitScope.USER)
 
 
 def _create_group(db_session: Session, name: str) -> UserGroup:
@@ -131,8 +137,8 @@ def test_group_blocks_only_when_every_group_is_over_budget(
             User__UserGroup(user_id=spender.id, user_group_id=over_budget_group.id),
         ]
     )
-    _add_group_limit(db_session, over_budget_group, period_hours=5)
-    _add_group_limit(db_session, under_budget_group, period_hours=1)
+    _add_group_limit(db_session, over_budget_group, period_hours=48)
+    _add_group_limit(db_session, under_budget_group, period_hours=24)
     db_session.commit()
     _record_cost(db_session, spender, 150.0)
     monkeypatch.setattr(ee_token_limit, "_fetch_user_group_usage", _fail_token_query)
@@ -148,7 +154,7 @@ def test_group_blocks_only_when_every_group_is_over_budget(
     db_session.commit()
     with pytest.raises(OnyxError) as exc_info:
         ee_token_limit._user_is_rate_limited_by_group(user.id)
-    _assert_rate_limited(exc_info.value, TokenRateLimitScope.USER_GROUP, 5)
+    _assert_cost_rate_limited(exc_info.value, TokenRateLimitScope.USER_GROUP)
 
 
 def test_user_token_limit_behavior_is_unchanged(
@@ -170,9 +176,18 @@ def test_user_token_limit_behavior_is_unchanged(
     monkeypatch.setattr(
         ee_token_limit,
         "_fetch_user_usage",
-        lambda *_: [(datetime.now(timezone.utc), 1_000)],
+        lambda *_: [
+            TokenUsageBucket(
+                window_start=datetime.now(timezone.utc),
+                tokens=1_000,
+            )
+        ],
     )
 
     with pytest.raises(OnyxError) as exc_info:
         ee_token_limit._user_is_rate_limited(user.id)
-    _assert_rate_limited(exc_info.value, TokenRateLimitScope.USER, 2)
+    _assert_rate_limited(exc_info.value, TokenRateLimitScope.USER)
+    assert exc_info.value.extra is not None
+    retry_after_seconds = exc_info.value.extra["retry_after_seconds"]
+    assert isinstance(retry_after_seconds, int)
+    assert abs(retry_after_seconds - 2 * 60 * 60) <= 1

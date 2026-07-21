@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -13,19 +13,22 @@ from onyx.db.token_limit import (
 )
 from onyx.db.user_usage import (
     TokenUsageBucket,
+    get_cost_window_start,
     get_group_cost_cents_buckets_since,
     get_group_token_buckets_since,
     get_user_cost_cents_buckets_since,
     get_user_token_buckets_since,
 )
 from onyx.server.query_and_chat.token_limit import (
-    _LEDGER_GRID,
+    _cost_reset_at,
     _get_cutoff_time,
     _has_token_budget,
-    _raise_for_longest_window,
+    _raise_for_latest_reset,
+    _token_reset_at,
     _user_is_rate_limited_by_global,
     _worst_triggered_cost_limit,
     _worst_triggered_limit,
+    raise_rate_limited,
 )
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -78,16 +81,19 @@ def _user_is_rate_limited(user_id: UUID) -> None:
             limit for limit in user_rate_limits if limit.cost_budget_cents is not None
         ]
         if cost_limits:
-            cost_cutoff = _get_cutoff_time(cost_limits) - _LEDGER_GRID
+            cost_cutoff = get_cost_window_start(
+                datetime.now(timezone.utc),
+                max(limit.period_hours for limit in cost_limits),
+            )
             cost_buckets = get_user_cost_cents_buckets_since(
                 db_session, str(user_id), cost_cutoff
             )
             cost_triggered = _worst_triggered_cost_limit(user_rate_limits, cost_buckets)
 
-        _raise_for_longest_window(
+        _raise_for_latest_reset(
             TokenRateLimitScope.USER.value,
-            token_triggered.period_hours if token_triggered else None,
-            cost_triggered.period_hours if cost_triggered else None,
+            _token_reset_at(token_triggered),
+            _cost_reset_at(cost_triggered),
         )
 
 
@@ -130,12 +136,15 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
             limit for limit in all_rate_limits if limit.cost_budget_cents is not None
         ]
         if cost_limits:
-            cost_cutoff = _get_cutoff_time(cost_limits) - _LEDGER_GRID
+            cost_cutoff = get_cost_window_start(
+                datetime.now(timezone.utc),
+                max(limit.period_hours for limit in cost_limits),
+            )
             group_cost_usage = get_group_cost_cents_buckets_since(
                 db_session, user_group_ids, cost_cutoff
             )
 
-        triggered_periods: list[int] = []
+        group_resets: list[datetime] = []
         for user_group_id, rate_limits in group_rate_limits.items():
             token_triggered = _worst_triggered_limit(
                 rate_limits, group_token_usage.get(user_group_id, [])
@@ -145,14 +154,17 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
             )
             if token_triggered is None and cost_triggered is None:
                 return
-            if token_triggered:
-                triggered_periods.append(token_triggered.period_hours)
-            if cost_triggered:
-                triggered_periods.append(cost_triggered.period_hours)
+            resets = [
+                reset
+                for reset in (
+                    _token_reset_at(token_triggered),
+                    _cost_reset_at(cost_triggered),
+                )
+                if reset is not None
+            ]
+            group_resets.append(max(resets))
 
-        _raise_for_longest_window(
-            TokenRateLimitScope.USER_GROUP.value, *triggered_periods
-        )
+        raise_rate_limited(TokenRateLimitScope.USER_GROUP.value, min(group_resets))
 
 
 def _fetch_user_group_usage(

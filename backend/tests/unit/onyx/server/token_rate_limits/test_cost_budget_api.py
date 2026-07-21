@@ -7,11 +7,9 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy import Table
+from sqlalchemy import Table, create_engine
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from onyx.auth.users import current_user
@@ -87,3 +85,19 @@ def test_cost_budget_optional_defaults_null(db_session: Session) -> None:
     )
     assert created.status_code == 200
     assert created.json()["cost_budget_cents"] is None
+
+
+def test_cost_budget_rejects_partial_day_period(db_session: Session) -> None:
+    client = TestClient(_make_app(db_session))
+
+    response = client.post(
+        "/admin/token-rate-limits/global",
+        json={
+            "enabled": True,
+            "token_budget": None,
+            "period_hours": 25,
+            "cost_budget_cents": 500.0,
+        },
+    )
+
+    assert response.status_code == 422
