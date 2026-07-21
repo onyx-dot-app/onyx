@@ -31,6 +31,7 @@ import {
   MCPServerStatus,
   MCPServer,
   MCPServersResponse,
+  MCPAuthTemplate,
 } from "@/lib/tools/interfaces";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
@@ -43,11 +44,6 @@ interface MCPAuthenticationModalProps {
   skipOverlay?: boolean;
   onTriggerFetchTools?: (serverId: number) => Promise<void> | void;
   mutateMcpServers: KeyedMutator<MCPServersResponse>;
-}
-
-interface MCPAuthTemplate {
-  headers: Record<string, string>;
-  required_fields: string[];
 }
 
 export interface MCPAuthFormValues {
@@ -303,6 +299,9 @@ export default function MCPAuthenticationModal({
     const isPerUserApiToken =
       values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
       authType === MCPAuthenticationType.API_TOKEN;
+    const isAdminApiToken =
+      values.auth_performer === MCPAuthenticationPerformer.ADMIN &&
+      authType === MCPAuthenticationType.API_TOKEN;
     const isKnownProviderOauth =
       authType === MCPAuthenticationType.OAUTH &&
       values.oauth_provider_mode === MCPOAuthProviderMode.KNOWN_PROVIDER;
@@ -342,12 +341,14 @@ export default function MCPAuthenticationModal({
       transport: values.transport,
       auth_type: values.auth_type,
       auth_performer: values.auth_performer,
-      api_token:
-        authType === MCPAuthenticationType.API_TOKEN &&
-        values.auth_performer === MCPAuthenticationPerformer.ADMIN
-          ? values.api_token
+      api_token: isAdminApiToken ? values.api_token : undefined,
+      api_token_changed: isAdminApiToken
+        ? values.api_token !== initialValues.api_token
+        : false,
+      auth_template:
+        authType === MCPAuthenticationType.API_TOKEN
+          ? values.auth_template
           : undefined,
-      auth_template: isPerUserApiToken ? values.auth_template : undefined,
       admin_credentials: isPerUserApiToken
         ? values.user_credentials || {}
         : undefined,
@@ -892,7 +893,12 @@ export default function MCPAuthenticationModal({
 
                         {/* Admin Tab Content */}
                         <Tabs.Content value="admin">
-                          <div className="flex flex-col gap-4 px-2 py-2 bg-background-tint-00 rounded-12">
+                          <div className="flex flex-col gap-4">
+                            <PerUserAuthConfig
+                              values={values}
+                              setFieldValue={setFieldValue}
+                              mode="shared"
+                            />
                             <FormField
                               name="api_token"
                               state={
