@@ -4,13 +4,18 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill__User, Skill__UserGroup, UserSkillPreference
 from onyx.db.skill import (
+    SkillAccessPolicy,
+    enable_new_skill_if_name_available__no_commit,
+    list_skills,
     replace_skill_shares,
+    set_skill_enabled_for_user,
     skill_user_states,
     transfer_skill_ownership,
 )
@@ -54,7 +59,7 @@ def test_skill_user_states_resolve_defaults_and_visibility(
     invalid_custom = make_skill(
         db_session,
         is_public=True,
-        slug=f"invalid-{uuid4().hex[:8]}",
+        name=f"invalid-{uuid4().hex[:8]}",
     )
     invalid_custom.is_valid = False
     built_in = make_built_in_skill_row(
@@ -74,6 +79,30 @@ def test_skill_user_states_resolve_defaults_and_visibility(
     assert states[invalid_custom.id].can_toggle is False
     assert states[built_in.id].enabled is True
     assert states[built_in.id].can_toggle is False
+
+
+def test_new_skill_is_enabled_only_when_name_is_available(
+    db_session: Session,
+) -> None:
+    user = make_user(db_session)
+    name = f"auto-enable-{uuid4().hex[:8]}"
+    first_skill = make_skill(db_session, name=name, is_public=True)
+    second_skill = make_skill(db_session, name=name, is_public=True)
+
+    assert enable_new_skill_if_name_available__no_commit(
+        first_skill, user.id, db_session
+    )
+    assert not enable_new_skill_if_name_available__no_commit(
+        second_skill, user.id, db_session
+    )
+    assert set(
+        db_session.scalars(
+            select(UserSkillPreference.skill_id).where(
+                UserSkillPreference.user_id == user.id,
+                UserSkillPreference.name == name,
+            )
+        )
+    ) == {first_skill.id}
 
 
 def test_orphaned_private_skill_has_boolean_admin_state(
@@ -218,7 +247,7 @@ def test_transfer_skill_ownership_removes_new_owner_direct_share_and_upgrades_pr
     assert direct_shares == {previous_owner.id: SkillSharePermission.EDITOR}
 
 
-def test_transfer_skill_ownership_adds_previous_owner_editor_share(
+def test_transfer_skill_ownership_does_not_enable_skill_for_new_owner(
     db_session: Session,
 ) -> None:
     previous_owner = make_user(db_session)
@@ -238,11 +267,10 @@ def test_transfer_skill_ownership_adds_previous_owner_editor_share(
         UserSkillPreference,
         {"user_id": new_owner.id, "skill_id": skill.id},
     )
-    assert preference is not None
-    assert preference.enabled is True
+    assert preference is None
 
 
-def test_transfer_skill_ownership_preserves_new_owner_explicit_disable(
+def test_transfer_skill_ownership_preserves_new_owner_selection(
     db_session: Session,
 ) -> None:
     previous_owner = make_user(db_session)
@@ -255,7 +283,7 @@ def test_transfer_skill_ownership_preserves_new_owner_explicit_disable(
     preference = UserSkillPreference(
         user_id=new_owner.id,
         skill_id=skill.id,
-        enabled=False,
+        name=skill.name,
     )
     db_session.add(preference)
     db_session.flush()
@@ -267,7 +295,164 @@ def test_transfer_skill_ownership_preserves_new_owner_explicit_disable(
     )
 
     assert skill.author_user_id == new_owner.id
-    assert preference.enabled is False
+    assert (
+        db_session.get(
+            UserSkillPreference,
+            {"user_id": new_owner.id, "skill_id": skill.id},
+        )
+        is preference
+    )
+
+
+def test_same_name_skills_switch_atomically_per_user(db_session: Session) -> None:
+    first_user = make_user(db_session)
+    second_user = make_user(db_session)
+    name = f"shared-name-{uuid4().hex[:8]}"
+    first_skill = make_skill(db_session, name=name, is_public=True)
+    second_skill = make_skill(db_session, name=name, is_public=True)
+
+    set_skill_enabled_for_user(
+        skill_id=first_skill.id,
+        enabled=True,
+        user=first_user,
+        db_session=db_session,
+    )
+    set_skill_enabled_for_user(
+        skill_id=first_skill.id,
+        enabled=True,
+        user=first_user,
+        db_session=db_session,
+    )
+    set_skill_enabled_for_user(
+        skill_id=second_skill.id,
+        enabled=True,
+        user=second_user,
+        db_session=db_session,
+    )
+
+    assert {
+        skill.id
+        for skill in list_skills(
+            policy=SkillAccessPolicy.USE,
+            user=first_user,
+            db_session=db_session,
+        )
+        if skill.name == name
+    } == {first_skill.id}
+    assert {
+        skill.id
+        for skill in list_skills(
+            policy=SkillAccessPolicy.USE,
+            user=second_user,
+            db_session=db_session,
+        )
+        if skill.name == name
+    } == {second_skill.id}
+
+    with pytest.raises(OnyxError) as exc_info:
+        set_skill_enabled_for_user(
+            skill_id=second_skill.id,
+            enabled=True,
+            user=first_user,
+            db_session=db_session,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.SKILL_NAME_CONFLICT
+    assert (
+        db_session.scalar(
+            select(UserSkillPreference.skill_id).where(
+                UserSkillPreference.user_id == first_user.id,
+                UserSkillPreference.name == name,
+            )
+        )
+        == first_skill.id
+    )
+
+    set_skill_enabled_for_user(
+        skill_id=second_skill.id,
+        enabled=True,
+        replace_conflict=True,
+        user=first_user,
+        db_session=db_session,
+    )
+
+    preferences = list(
+        db_session.scalars(
+            select(UserSkillPreference)
+            .where(UserSkillPreference.user_id == first_user.id)
+            .where(UserSkillPreference.name == name)
+        )
+    )
+    assert {preference.skill_id for preference in preferences} == {second_skill.id}
+
+
+def test_disabling_skill_deletes_selection(db_session: Session) -> None:
+    user = make_user(db_session)
+    skill = make_skill(db_session, is_public=True)
+    set_skill_enabled_for_user(
+        skill_id=skill.id,
+        enabled=True,
+        user=user,
+        db_session=db_session,
+    )
+
+    set_skill_enabled_for_user(
+        skill_id=skill.id,
+        enabled=False,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert (
+        db_session.get(
+            UserSkillPreference,
+            {"user_id": user.id, "skill_id": skill.id},
+        )
+        is None
+    )
+
+
+def test_database_rejects_two_same_name_preferences(
+    db_session: Session,
+) -> None:
+    user = make_user(db_session)
+    name = f"constrained-name-{uuid4().hex[:8]}"
+    first_skill = make_skill(db_session, name=name, is_public=True)
+    second_skill = make_skill(db_session, name=name, is_public=True)
+    db_session.add(
+        UserSkillPreference(
+            user_id=user.id,
+            skill_id=first_skill.id,
+            name=name,
+        )
+    )
+    db_session.flush()
+
+    with pytest.raises(IntegrityError):
+        with db_session.begin_nested():
+            db_session.add(
+                UserSkillPreference(
+                    user_id=user.id,
+                    skill_id=second_skill.id,
+                    name=name,
+                )
+            )
+            db_session.flush()
+
+
+def test_preference_name_must_match_skill_name(db_session: Session) -> None:
+    user = make_user(db_session)
+    skill = make_skill(db_session, is_public=True)
+
+    with pytest.raises(IntegrityError):
+        with db_session.begin_nested():
+            db_session.add(
+                UserSkillPreference(
+                    user_id=user.id,
+                    skill_id=skill.id,
+                    name="different-name",
+                )
+            )
+            db_session.flush()
 
 
 def test_transfer_skill_ownership_self_transfer_preserves_direct_share(

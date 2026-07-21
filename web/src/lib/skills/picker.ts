@@ -43,7 +43,7 @@ export function toPickerSections(
     if (!b.is_available || !b.enabled) continue;
     skills.push({
       kind: "skill",
-      slug: b.slug,
+      slug: b.name,
       name: b.name,
       description: b.description,
     });
@@ -53,7 +53,7 @@ export function toPickerSections(
     if (!c.enabled || c.is_valid === false) continue;
     skills.push({
       kind: "skill",
-      slug: c.slug,
+      slug: c.name,
       name: c.name,
       description: c.description,
     });

@@ -1,14 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Text } from "@opal/components";
+import { Button, Modal, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import { toast } from "@opal/layouts";
-import { createCustomSkill } from "@/lib/skills/api";
+import {
+  createCustomSkill,
+  inspectSkillBundle,
+  isSkillNameConflict,
+} from "@/lib/skills/api";
 import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
 import type { CustomSkill } from "@/lib/skills/types";
-import { Modal } from "@opal/components";
 import SkillBundlePicker from "@/sections/skills/SkillBundlePicker";
+import SkillNameConflictModal from "@/sections/modals/skills/SkillNameConflictModal";
 
 interface CreateSkillModalProps {
   open: boolean;
@@ -25,10 +29,14 @@ export default function CreateSkillModal({
   const [preparing, setPreparing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [conflictingSkillName, setConflictingSkillName] = useState<
+    string | null
+  >(null);
 
   function reset() {
     setBundle(null);
     setErrorMessage(null);
+    setConflictingSkillName(null);
   }
 
   function handleClose() {
@@ -37,18 +45,25 @@ export default function CreateSkillModal({
     onClose();
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(autoEnable = true, knownSkillName?: string) {
     if (!bundle) return;
     setSubmitting(true);
     setErrorMessage(null);
+    let skillName = knownSkillName;
     try {
-      const created = await createCustomSkill(bundle.file);
+      skillName ??= (await inspectSkillBundle(bundle.file)).name;
+      const created = await createCustomSkill(bundle.file, autoEnable);
       toast.success(`Created "${created.name}"`);
       reset();
       onCreated(created);
       onClose();
     } catch (error) {
+      if (autoEnable && skillName && isSkillNameConflict(error)) {
+        setConflictingSkillName(skillName);
+        return;
+      }
       console.error("Failed to create skill", error);
+      setConflictingSkillName(null);
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to create skill"
       );
@@ -58,70 +73,87 @@ export default function CreateSkillModal({
   }
 
   return (
-    <Modal open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <Modal.Content width="sm">
-        <Modal.Header
-          icon={SvgUploadCloud}
-          title="Create skill"
-          description="Upload a SKILL.md file, ZIP file, or skill folder. New skills are private until you choose to share them."
-          onClose={handleClose}
-        />
-        <Modal.Body>
-          <SkillBundlePicker
-            value={bundle}
-            disabled={submitting}
-            onPreparingChange={setPreparing}
-            onChange={(nextBundle) => {
-              setBundle(nextBundle);
-              setErrorMessage(null);
-            }}
-            onError={(message) => {
-              setBundle(null);
-              setErrorMessage(message);
-            }}
-          />
-          <div className="mt-3">
-            <Text as="p" font="main-ui-body" color="text-02">
-              File requirements
-            </Text>
-            <ul className="mt-1 list-disc space-y-1 pl-5">
-              <Text as="li" font="secondary-body" color="text-03">
-                SKILL.md must include valid frontmatter with a name and
-                description.
-              </Text>
-              <Text as="li" font="secondary-body" color="text-03">
-                ZIP files must contain a SKILL.md file.
-              </Text>
-              <Text as="li" font="secondary-body" color="text-03">
-                Upload one skill at a time.
-              </Text>
-            </ul>
-          </div>
-          {errorMessage && (
-            <div className="mt-2">
-              <Text as="p" font="secondary-body" color="status-error-05">
-                {errorMessage}
-              </Text>
-            </div>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            prominence="secondary"
-            disabled={preparing || submitting}
-            onClick={handleClose}
-          >
-            Cancel
-          </Button>
-          <Button
-            disabled={preparing || submitting || !bundle}
-            onClick={handleSubmit}
+    <>
+      <Modal
+        open={open && conflictingSkillName === null}
+        onOpenChange={(isOpen) => !isOpen && handleClose()}
+      >
+        <Modal.Content width="sm">
+          <Modal.Header
             icon={SvgUploadCloud}
-          >
-            {submitting ? "Creating…" : "Create"}
-          </Button>
-        </Modal.Footer>
-      </Modal.Content>
-    </Modal>
+            title="Create skill"
+            description="Upload a SKILL.md file, ZIP file, or skill folder. New skills are private until you choose to share them."
+            onClose={handleClose}
+          />
+          <Modal.Body>
+            <SkillBundlePicker
+              value={bundle}
+              disabled={submitting}
+              onPreparingChange={setPreparing}
+              onChange={(nextBundle) => {
+                setBundle(nextBundle);
+                setErrorMessage(null);
+              }}
+              onError={(message) => {
+                setBundle(null);
+                setErrorMessage(message);
+              }}
+            />
+            <div className="mt-3">
+              <Text as="p" font="main-ui-body" color="text-02">
+                File requirements
+              </Text>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                <Text as="li" font="secondary-body" color="text-03">
+                  SKILL.md must include valid frontmatter with a name and
+                  description.
+                </Text>
+                <Text as="li" font="secondary-body" color="text-03">
+                  ZIP files must contain a SKILL.md file.
+                </Text>
+                <Text as="li" font="secondary-body" color="text-03">
+                  Upload one skill at a time.
+                </Text>
+              </ul>
+            </div>
+            {errorMessage && (
+              <div className="mt-2">
+                <Text as="p" font="secondary-body" color="status-error-05">
+                  {errorMessage}
+                </Text>
+              </div>
+            )}
+          </Modal.Body>
+          <Modal.Footer>
+            <Button
+              prominence="secondary"
+              disabled={preparing || submitting}
+              onClick={handleClose}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={preparing || submitting || !bundle}
+              onClick={() => void handleSubmit()}
+              icon={SvgUploadCloud}
+            >
+              {submitting ? "Creating…" : "Create"}
+            </Button>
+          </Modal.Footer>
+        </Modal.Content>
+      </Modal>
+
+      {open && conflictingSkillName && (
+        <SkillNameConflictModal
+          skillName={conflictingSkillName}
+          onClose={() => setConflictingSkillName(null)}
+          onConfirm={() => {
+            const skillName = conflictingSkillName;
+            setConflictingSkillName(null);
+            void handleSubmit(false, skillName);
+          }}
+        />
+      )}
+    </>
   );
 }

@@ -29,10 +29,10 @@ def _external_app(
         ExternalApp,
         SimpleNamespace(
             id=1,
+            name="Test App",
             skill=SimpleNamespace(
-                name="Test App",
+                name="test-app",
                 description="Test description",
-                slug="test-app",
             ),
             app_type=app_type,
             auth_template=auth_template,

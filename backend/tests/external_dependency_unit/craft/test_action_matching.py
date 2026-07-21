@@ -402,5 +402,5 @@ def test_external_app_matcher_credentialless_app_is_gated(
     assert matched_actions.actions[0].action_type == WHOLE_DOMAIN_ACTION_TYPE
     assert matched_actions.actions[0].policy == EndpointPolicy.ASK
     assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, app.id)
-    # CUSTOM apps have no provider; the name comes from the linked skill.
-    assert matched_actions.app_name == skill.name
+    # CUSTOM apps have no provider; the name comes from app display metadata.
+    assert matched_actions.app_name == app.name

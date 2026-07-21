@@ -33,6 +33,7 @@ from sqlalchemy import (
     func,
     or_,
     select,
+    true,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert
@@ -53,12 +54,10 @@ from onyx.db.models import (
     User__UserGroup,
     UserSkillPreference,
 )
-from onyx.db.utils import is_fk_violation, is_unique_violation
+from onyx.db.utils import is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
-
-SKILL_SLUG_UNIQUE_CONSTRAINT = "uq_skill_slug"
 
 
 class SkillAccessPolicy(str, Enum):
@@ -172,20 +171,13 @@ def _is_editable_by_user(user: User) -> ColumnElement[bool]:
 
 
 def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
-    explicit_preference = (
-        select(UserSkillPreference.enabled)
-        .where(
-            UserSkillPreference.user_id == user.id,
-            UserSkillPreference.skill_id == Skill.id,
-        )
-        .correlate(Skill)
-        .scalar_subquery()
-    )
     return or_(
-        explicit_preference.is_(True),
-        and_(
-            explicit_preference.is_(None),
-            Skill.built_in_skill_id.isnot(None),
+        Skill.built_in_skill_id.isnot(None),
+        exists(
+            select(UserSkillPreference.user_id).where(
+                UserSkillPreference.user_id == user.id,
+                UserSkillPreference.skill_id == Skill.id,
+            )
         ),
     )
 
@@ -217,7 +209,7 @@ def _skill_select_with_eager_load(*, order_by_name: bool) -> Select[tuple[Skill]
         selectinload(Skill.group_shares).selectinload(Skill__UserGroup.user_group),
     )
     if order_by_name:
-        stmt = stmt.order_by(Skill.name)
+        stmt = stmt.order_by(Skill.name, Skill.id)
     return stmt
 
 
@@ -357,66 +349,51 @@ def fetch_skill(
     return db_session.scalars(stmt).one_or_none()
 
 
-def _add_skill(skill: Skill, db_session: Session) -> Skill:
+def add_new_skill__no_commit(
+    skill: Skill,
+    db_session: Session,
+    *,
+    is_external_app_backing: bool = False,
+) -> Skill:
+    # App-backed skills share the sandbox directory namespace until their
+    # lifecycle is decoupled, so they cannot share a name with another skill.
+    existing_name = select(Skill.id).where(Skill.name == skill.name)
+    if not is_external_app_backing:
+        existing_name = existing_name.join(
+            ExternalApp,
+            ExternalApp.skill_id == Skill.id,
+        )
+    if db_session.scalar(existing_name.limit(1)) is not None:
+        conflicting_resource = (
+            "another skill" if is_external_app_backing else "an external app"
+        )
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            f"The skill name '{skill.name}' is already used by {conflicting_resource}.",
+        )
+
     db_session.add(skill)
-    try:
-        db_session.flush()
-    except IntegrityError as exc:
-        if is_unique_violation(exc, SKILL_SLUG_UNIQUE_CONSTRAINT):
-            raise OnyxError(
-                OnyxErrorCode.DUPLICATE_RESOURCE,
-                f"A skill with slug '{skill.slug}' already exists.",
-            ) from exc
-        raise
+    db_session.flush()
     return skill
 
 
-def create_skill__no_commit(
-    *,
-    slug: str,
-    name: str,
-    description: str,
-    bundle_file_id: str,
-    bundle_sha256: str,
-    public_permission: SkillSharePermission | None = None,
-    author_user_id: UUID | None,
+def enable_new_skill_if_name_available__no_commit(
+    skill: Skill,
+    user_id: UUID,
     db_session: Session,
-) -> Skill:
-    skill = Skill(
-        slug=slug,
-        name=name,
-        description=description,
-        bundle_file_id=bundle_file_id,
-        bundle_sha256=bundle_sha256,
-        is_valid=True,
-        public_permission=public_permission,
-        author_user_id=author_user_id,
+) -> bool:
+    inserted_user_id = db_session.scalar(
+        insert(UserSkillPreference)
+        .values(user_id=user_id, skill_id=skill.id, name=skill.name)
+        .on_conflict_do_nothing(
+            index_elements=[
+                UserSkillPreference.user_id,
+                UserSkillPreference.name,
+            ]
+        )
+        .returning(UserSkillPreference.user_id)
     )
-    return _add_skill(skill, db_session)
-
-
-def create_built_in_skill_row__no_commit(
-    *,
-    built_in_skill_id: str,
-    name: str,
-    description: str,
-    author_user_id: UUID | None = None,
-    public_permission: SkillSharePermission | None = None,
-    db_session: Session,
-) -> Skill:
-    """Create an on-demand built-in row without bundle storage."""
-    skill = Skill(
-        slug=built_in_skill_id,
-        name=name,
-        description=description,
-        built_in_skill_id=built_in_skill_id,
-        bundle_file_id=None,
-        bundle_sha256=None,
-        is_valid=True,
-        public_permission=public_permission,
-        author_user_id=author_user_id,
-    )
-    return _add_skill(skill, db_session)
+    return inserted_user_id is not None
 
 
 def replace_skill_bundle(
@@ -437,7 +414,7 @@ def replace_skill_bundle(
     if skill.built_in_skill_id is not None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.slug}' is a built-in and has no bundle.",
+            f"Skill '{skill.name}' is a built-in and has no bundle.",
         )
 
     # Custom rows always have a bundle (XOR check constraint), but guard
@@ -445,7 +422,7 @@ def replace_skill_bundle(
     if skill.bundle_file_id is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.slug}' has no bundle to replace.",
+            f"Skill '{skill.name}' has no bundle to replace.",
         )
 
     old_bundle_file_id = skill.bundle_file_id
@@ -500,6 +477,7 @@ def set_skill_enabled_for_user(
     *,
     skill_id: UUID,
     enabled: bool,
+    replace_conflict: bool = False,
     user: User,
     db_session: Session,
 ) -> Skill:
@@ -523,46 +501,40 @@ def set_skill_enabled_for_user(
             "This skill cannot be enabled or disabled.",
         )
 
-    preference_upsert = (
-        insert(UserSkillPreference)
-        .values(
-            user_id=user.id,
-            skill_id=skill.id,
-            enabled=enabled,
+    if not enabled:
+        db_session.execute(
+            delete(UserSkillPreference).where(
+                UserSkillPreference.user_id == user.id,
+                UserSkillPreference.skill_id == skill.id,
+            )
         )
-        .on_conflict_do_update(
+        return skill
+
+    preference_insert = insert(UserSkillPreference).values(
+        user_id=user.id,
+        skill_id=skill.id,
+        name=skill.name,
+    )
+    enabled_skill_id = db_session.scalar(
+        preference_insert.on_conflict_do_update(
             index_elements=[
                 UserSkillPreference.user_id,
-                UserSkillPreference.skill_id,
+                UserSkillPreference.name,
             ],
-            set_={"enabled": enabled},
-        )
-        .returning(UserSkillPreference)
+            set_={"skill_id": preference_insert.excluded.skill_id},
+            where=(
+                true()
+                if replace_conflict
+                else UserSkillPreference.skill_id == preference_insert.excluded.skill_id
+            ),
+        ).returning(UserSkillPreference.skill_id)
     )
-    db_session.scalars(
-        preference_upsert,
-        execution_options={"populate_existing": True},
-    ).one()
+    if enabled_skill_id is None:
+        raise OnyxError(
+            OnyxErrorCode.SKILL_NAME_CONFLICT,
+            f"Another skill named '{skill.name}' is already enabled.",
+        )
     return skill
-
-
-def enable_skill_for_user_if_unset__no_commit(
-    skill: Skill, user_id: UUID, db_session: Session
-) -> None:
-    db_session.execute(
-        insert(UserSkillPreference)
-        .values(
-            user_id=user_id,
-            skill_id=skill.id,
-            enabled=True,
-        )
-        .on_conflict_do_nothing(
-            index_elements=[
-                UserSkillPreference.user_id,
-                UserSkillPreference.skill_id,
-            ]
-        )
-    )
 
 
 def _flush_shares(db_session: Session, fk_violation_detail: str) -> None:
@@ -613,7 +585,7 @@ def transfer_skill_ownership(
     if skill.built_in_skill_id is not None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.slug}' is a built-in and cannot have its ownership transferred.",
+            f"Skill '{skill.name}' is a built-in and cannot have its ownership transferred.",
         )
 
     previous_owner_user_id = skill.author_user_id
@@ -622,11 +594,6 @@ def transfer_skill_ownership(
 
     try:
         skill.author_user_id = new_owner_user_id
-        enable_skill_for_user_if_unset__no_commit(
-            skill,
-            new_owner_user_id,
-            db_session,
-        )
         db_session.execute(
             delete(Skill__User).where(
                 Skill__User.skill_id == skill.id,

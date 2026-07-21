@@ -142,7 +142,6 @@ def test_preference_commit_succeeds_when_sandbox_push_fails(
     )
     assert response.enabled is True
     assert preference is not None
-    assert preference.enabled is True
 
 
 def test_create_reserved_name_rejects_from_bundle_metadata(

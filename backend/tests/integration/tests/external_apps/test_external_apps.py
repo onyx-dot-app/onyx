@@ -189,8 +189,8 @@ def test_external_app_is_excluded_from_skill_management_apis(
         SkillManager.list_for_user(basic_user),
         SkillManager.list_all(admin_user),
     ):
-        listed_slugs = {skill.slug for skill in [*skills.builtins, *skills.customs]}
-        assert user_app.slug not in listed_slugs
+        listed_names = {skill.name for skill in [*skills.builtins, *skills.customs]}
+        assert user_app.slug not in listed_names
 
 
 # =============================================================================

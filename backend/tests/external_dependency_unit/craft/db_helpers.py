@@ -131,7 +131,7 @@ def make_sandbox(
 def make_skill(
     db_session: Session,
     *,
-    slug: str | None = None,
+    name: str | None = None,
     is_public: bool = False,
     public_permission: SkillSharePermission = SkillSharePermission.VIEWER,
     author_user_id: UUID | None = None,
@@ -144,8 +144,7 @@ def make_skill(
     """
     skill = Skill(
         id=uuid4(),
-        slug=slug or f"helper-skill-{uuid4().hex[:8]}",
-        name=slug or "helper-skill",
+        name=name or f"helper-skill-{uuid4().hex[:8]}",
         description="d",
         bundle_file_id=f"bundle-{uuid4().hex[:8]}",
         bundle_sha256="0" * 64,
@@ -161,19 +160,17 @@ def make_built_in_skill_row(
     db_session: Session,
     *,
     built_in_skill_id: str,
-    slug: str | None = None,
     name: str | None = None,
     description: str = "test built-in",
     is_public: bool = True,
 ) -> Skill:
     """Insert a built-in-style ``Skill`` row pointing at a
-    ``built_in_skill_id``. Slug defaults to ``built_in_skill_id`` (the
+    ``built_in_skill_id``. Name defaults to ``built_in_skill_id`` (the
     default seeder convention), but can be overridden to test the
     multi-row case where several skills share the same built-in id.
     Bundle fields stay NULL (required by the XOR check constraint)."""
     skill = Skill(
         id=uuid4(),
-        slug=slug or built_in_skill_id,
         name=name or built_in_skill_id,
         description=description,
         built_in_skill_id=built_in_skill_id,
@@ -190,24 +187,22 @@ def reset_built_in_skill_row(
     db_session: Session,
     *,
     built_in_skill_id: str,
-    slug: str | None = None,
     name: str | None = None,
     description: str = "test built-in",
     is_public: bool = True,
 ) -> Skill:
     """Idempotently (re)create a built-in row for ``built_in_skill_id``.
 
-    Deletes any existing row with the same slug first, so tests stay
+    Deletes any existing row with the same name first, so tests stay
     robust whether or not the migration-seeded canonical row is present
     (it always is on a migrated DB, but another test's teardown may have
     removed it). Returns the freshly inserted row.
     """
-    target_slug = slug or built_in_skill_id
-    db_session.execute(delete(Skill).where(Skill.slug == target_slug))
+    target_name = name or built_in_skill_id
+    db_session.execute(delete(Skill).where(Skill.name == target_name))
     return make_built_in_skill_row(
         db_session,
         built_in_skill_id=built_in_skill_id,
-        slug=slug,
         name=name,
         description=description,
         is_public=is_public,
@@ -229,6 +224,7 @@ def make_external_app(
     policy overrides in ``action_policies`` (``{action_id: policy}``)."""
     app = ExternalApp(
         skill_id=skill.id,
+        name=skill.name,
         app_type=app_type,
         enabled=enabled,
         upstream_url_patterns=upstream_url_patterns or [],

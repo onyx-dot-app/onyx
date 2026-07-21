@@ -32,11 +32,11 @@ from tests.external_dependency_unit.craft.db_helpers import (
 # Slack ships on-disk skill content; require a single user-supplied key.
 _AUTH_TEMPLATE = {"Authorization": "Bearer {token}"}
 _FULL_CREDS = {"token": "xoxp-test"}
-_SLACK_ID = SLACK.built_in_skill_id  # == slug == on-disk dir ("slack")
+_SLACK_ID = SLACK.built_in_skill_id  # Also the skill name and on-disk directory.
 
 
 def _slack_skill(db_session: Session) -> Skill:
-    """A built-in Slack skill row (slug == built_in_skill_id), mirroring what
+    """A built-in Slack skill row (name == built_in_skill_id), mirroring what
     ``create_external_app`` makes for a connected Slack app. ``reset_*`` keeps
     it independent of the migration-seeded built-in rows."""
     return reset_built_in_skill_row(

@@ -28,7 +28,6 @@ class SkillGroupShare(BaseModel):
 class SkillResponse(BaseModel):
     source: Literal["builtin", "custom"]
     id: UUID
-    slug: str
     name: str
     description: str
 
@@ -62,7 +61,6 @@ class SkillResponse(BaseModel):
         return cls(
             source="builtin",
             id=skill.id,
-            slug=skill.slug,
             name=skill.name,
             description=skill.description,
             is_available=definition.is_available(db_session),
@@ -104,7 +102,6 @@ class SkillResponse(BaseModel):
         return cls(
             source="custom",
             id=skill.id,
-            slug=skill.slug,
             name=skill.name,
             description=skill.description,
             is_valid=skill.is_valid,
@@ -192,6 +189,7 @@ class SkillBundleInspectResponse(BaseModel):
 
 class SkillEnableRequest(BaseModel):
     enabled: bool
+    replace_conflict: bool = False
 
 
 class SkillCreateRequest(BaseModel):

@@ -91,7 +91,7 @@ def _to_admin_response(
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
     return ExternalAppAdminResponse(
         id=app.id,
-        name=app.skill.name,
+        name=app.name,
         description=app.skill.description,
         app_type=app.app_type,
         # Managed built-ins: hide Onyx-owned config/creds. Else mask secrets — the
@@ -131,9 +131,9 @@ def _to_user_response(
 
     return ExternalAppUserResponse(
         id=app.id,
-        name=app.skill.name,
+        name=app.name,
         description=app.skill.description,
-        slug=app.skill.slug,
+        slug=app.skill.name,
         app_type=app.app_type,
         credential_keys=required_keys,
         credential_values=credential_values,
@@ -317,7 +317,7 @@ def create_custom_external_app(
             auth_template=parsed_auth_template,
             organization_credentials=parsed_org_credentials,
             is_public=True,
-            slug=ingested.canonical_name,
+            skill_name=ingested.canonical_name,
         )
         # Push before commit so a failure rolls back the create + orphaned blob.
         push_skill_to_affected_sandboxes(app.skill, db_session)
@@ -334,7 +334,7 @@ def replace_custom_app_bundle(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ExternalAppAdminResponse:
-    """Replace a CUSTOM app's bundle bytes, keeping its slug. Multipart-only
+    """Replace a CUSTOM app's bundle bytes, keeping its skill name. Multipart-only
     channel for bundle swaps; field edits use ``PATCH /admin/apps/{id}``. 404 if
     absent; rejects built-in apps (no bundle).
     """
@@ -350,7 +350,7 @@ def replace_custom_app_bundle(
         read_bundle_file(bundle.file),
         bundle.filename,
         file_store,
-        expected_name=app.skill.slug,
+        expected_name=app.skill.name,
     ) as ingested:
         app, old_bundle_file_id = update_external_app(
             db_session=db_session,

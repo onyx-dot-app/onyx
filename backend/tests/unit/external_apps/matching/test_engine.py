@@ -32,7 +32,7 @@ def test_rejects_empty_actions() -> None:
 
 
 def _app(app_type: ExternalAppType = ExternalAppType.SLACK) -> ExternalApp:
-    app = ExternalApp(app_type=app_type)
+    app = ExternalApp(name="Slack", app_type=app_type)
     app.id = 1
     return app
 
@@ -68,6 +68,16 @@ def test_apply_gate_serveable_no_catalog_synthesizes_whole_domain_ask() -> None:
     assert matched_actions.governing_action.policy == EndpointPolicy.ASK
     assert matched_actions.app_name == "Slack"
     assert matched_actions.target.key == (GatedAppKind.EXTERNAL_APP, 1)
+
+
+def test_apply_gate_uses_custom_app_display_name() -> None:
+    app = _app(ExternalAppType.CUSTOM)
+    app.name = "Customer CRM"
+
+    matched_actions = apply_credential_gate(app, _request(), None, is_available=True)
+
+    assert matched_actions is not None
+    assert matched_actions.app_name == "Customer CRM"
 
 
 def test_apply_gate_not_serveable_no_catalog_forwards_bare() -> None:

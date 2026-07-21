@@ -12,7 +12,7 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillSharePermission
-from onyx.db.models import FileRecord, Skill
+from onyx.db.models import Skill
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.models import SkillPatchRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -53,39 +53,27 @@ def _bundle_blob_exists(bundle_file_id: str) -> bool:
     )
 
 
-def _skill_bundle_blob_ids() -> set[str]:
-    """Return the set of all file IDs for SKILL_BUNDLE blobs in the file store."""
-    with get_session_with_current_tenant() as db_session:
-        rows = (
-            db_session.execute(
-                select(FileRecord.file_id).where(
-                    FileRecord.file_origin == FileOrigin.SKILL_BUNDLE
-                )
-            )
-            .scalars()
-            .all()
-        )
-    return set(rows)
-
-
 # ---------------------------------------------------------------------------
 # Existing tests preserved
 # ---------------------------------------------------------------------------
 
 
 def test_create_and_list_skill(admin_user: DATestUser) -> None:
-    slug = f"test-create-{uuid4().hex[:6]}"
-    skill = SkillManager.create_custom(admin_user, slug=slug)
-    assert skill.slug == slug
+    name = f"test-create-{uuid4().hex[:6]}"
+    skill = SkillManager.create_custom(admin_user, name=name)
+    assert skill.name == name
     assert skill.enabled is True
 
     skills_list = SkillManager.list_all(admin_user)
-    custom_slugs = [skill.slug for skill in skills_list.customs]
-    assert slug in custom_slugs
+    [listed_skill] = [
+        candidate for candidate in skills_list.customs if candidate.id == skill.id
+    ]
+    assert listed_skill.name == name
+    assert listed_skill.enabled is True
 
 
 def test_patch_skill_metadata(admin_user: DATestUser) -> None:
-    skill = SkillManager.create_custom(admin_user, slug=f"patch-test-{uuid4().hex[:6]}")
+    skill = SkillManager.create_custom(admin_user, name=f"patch-test-{uuid4().hex[:6]}")
 
     public = SkillManager.patch_custom(
         skill,
@@ -100,7 +88,7 @@ def test_invalid_skill_is_manageable_but_not_toggleable(
 ) -> None:
     skill = SkillManager.create_custom(
         admin_user,
-        slug=f"invalid-toggle-{uuid4().hex[:6]}",
+        name=f"invalid-toggle-{uuid4().hex[:6]}",
     )
     _mark_skill_invalid(skill.id)
 
@@ -119,27 +107,26 @@ def test_invalid_skill_is_manageable_but_not_toggleable(
 
 
 def test_replace_bundle_updates_metadata(admin_user: DATestUser) -> None:
-    slug = f"bundle-test-{uuid4().hex[:6]}"
+    name = f"bundle-test-{uuid4().hex[:6]}"
     skill = SkillManager.create_custom(
         admin_user,
-        slug=slug,
+        name=name,
         description="Original desc",
     )
-    new_bundle = build_minimal_bundle(slug, description="Updated desc")
+    new_bundle = build_minimal_bundle(name, description="Updated desc")
     updated = SkillManager.replace_bundle(skill, new_bundle, admin_user)
-    assert updated.slug == slug
-    assert updated.name == slug
+    assert updated.name == name
     assert updated.description == "Updated desc"
 
 
 def test_delete_skill(admin_user: DATestUser) -> None:
-    slug = f"delete-test-{uuid4().hex[:6]}"
-    skill = SkillManager.create_custom(admin_user, slug=slug)
+    name = f"delete-test-{uuid4().hex[:6]}"
+    skill = SkillManager.create_custom(admin_user, name=name)
     SkillManager.delete_custom(skill, admin_user)
 
     skills_list = SkillManager.list_all(admin_user)
-    custom_slugs = [skill.slug for skill in skills_list.customs]
-    assert slug not in custom_slugs
+    custom_names = [skill.name for skill in skills_list.customs]
+    assert name not in custom_names
 
 
 def test_bundle_missing_skill_md(admin_user: DATestUser) -> None:
@@ -150,14 +137,14 @@ def test_bundle_missing_skill_md(admin_user: DATestUser) -> None:
 
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
         SkillManager.create_custom(
-            admin_user, slug=f"bad-bundle-{uuid4().hex[:6]}", bundle_bytes=bad_bundle
+            admin_user, name=f"bad-bundle-{uuid4().hex[:6]}", bundle_bytes=bad_bundle
         )
     assert exc_info.value.response.status_code == 400
 
 
 def test_group_shares_replace(admin_user: DATestUser) -> None:
     skill = SkillManager.create_custom(
-        admin_user, slug=f"group-shares-test-{uuid4().hex[:6]}", is_public=False
+        admin_user, name=f"group-shares-test-{uuid4().hex[:6]}", is_public=False
     )
     updated = SkillManager.replace_group_shares(skill, [], admin_user)
     assert updated.group_shares == []
@@ -166,7 +153,7 @@ def test_group_shares_replace(admin_user: DATestUser) -> None:
 def test_metadata_from_bundle_frontmatter(admin_user: DATestUser) -> None:
     bundle = build_minimal_bundle("from-frontmatter", description="From bundle desc")
     skill = SkillManager.create_custom(
-        admin_user, slug="from-frontmatter", bundle_bytes=bundle
+        admin_user, name="from-frontmatter", bundle_bytes=bundle
     )
     assert skill.name == "from-frontmatter"
     assert skill.description == "From bundle desc"
@@ -183,10 +170,10 @@ def test_create_skill_201_persists_row_group_shares_bundle(
     """POST -> row persisted with bundle blob and group shares visible in DB."""
     group = UserGroupManager.create(admin_user, name="create-shares-group")
 
-    slug = f"persist-{uuid4().hex[:8]}"
+    name = f"persist-{uuid4().hex[:8]}"
     skill = SkillManager.create_custom(
         admin_user,
-        slug=slug,
+        name=name,
         is_public=False,
         group_ids=[group.id],
     )
@@ -195,7 +182,7 @@ def test_create_skill_201_persists_row_group_shares_bundle(
 
     row = _fetch_skill_row(skill.id)
     assert row is not None, "skill row missing after create"
-    assert row.slug == slug
+    assert row.name == name
     assert row.public_permission is None
     assert row.bundle_file_id, "skill row has no bundle_file_id"
     assert _bundle_blob_exists(row.bundle_file_id), (
@@ -203,25 +190,34 @@ def test_create_skill_201_persists_row_group_shares_bundle(
     )
 
 
-def test_create_skill_rejects_reserved_slug(admin_user: DATestUser) -> None:
+def test_create_skill_rejects_reserved_name(admin_user: DATestUser) -> None:
     reserved = "company-search"
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.create_custom(admin_user, slug=reserved)
+        SkillManager.create_custom(admin_user, name=reserved)
     response = exc_info.value.response
     assert response.status_code == 400
     body = response.json()
     detail = str(body.get("detail") or body)
     assert reserved in detail, (
-        f"error message must name the reserved slug; got {detail!r}"
+        f"error message must name the reserved name; got {detail!r}"
     )
 
 
-def test_create_skill_409_on_duplicate_slug(admin_user: DATestUser) -> None:
-    slug = f"dup-409-{uuid4().hex[:8]}"
-    SkillManager.create_custom(admin_user, slug=slug)
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.create_custom(admin_user, slug=slug)
-    assert exc_info.value.response.status_code == 409
+def test_create_skill_allows_disabled_duplicate_name(admin_user: DATestUser) -> None:
+    name = f"duplicate-{uuid4().hex[:8]}"
+
+    first = SkillManager.create_custom(admin_user, name=name)
+    second = SkillManager.create_custom(admin_user, name=name, auto_enable=False)
+
+    assert first.id != second.id
+    assert first.enabled is True
+    assert second.enabled is False
+    matching = [
+        skill
+        for skill in SkillManager.list_all(admin_user).customs
+        if skill.name == name
+    ]
+    assert {skill.id for skill in matching} == {first.id, second.id}
 
 
 def test_create_skill_413_on_oversized_bundle(admin_user: DATestUser) -> None:
@@ -247,70 +243,10 @@ def test_create_skill_413_on_oversized_bundle(admin_user: DATestUser) -> None:
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
         SkillManager.create_custom(
             admin_user,
-            slug=f"too-big-{uuid4().hex[:8]}",
+            name=f"too-big-{uuid4().hex[:8]}",
             bundle_bytes=big_bundle,
         )
     assert exc_info.value.response.status_code == 413
-
-
-def test_create_skill_failure_cleans_up_orphan_blob(
-    admin_user: DATestUser,
-) -> None:
-    """Force the DB step to fail post-blob-write; verify the blob is gone.
-
-    The cheapest reproducible "DB fails after blob written" is a duplicate
-    slug: the first create succeeds (and persists a blob), the second create
-    is forced to validate + write its own blob and *then* hits the unique
-    constraint on slug at the DB layer — the rollback path must delete the
-    new blob (regression for SHA `d45bbe1b15`).
-
-    We observe the orphan-cleanup by snapshotting the file store before and
-    after the failing call, asserting the set of skill-bundle file ids did
-    not grow.
-    """
-    slug = f"orphan-{uuid4().hex[:8]}"
-
-    # First create — succeeds and saves blob #1.
-    first = SkillManager.create_custom(admin_user, slug=slug)
-    first_row = _fetch_skill_row(first.id)
-    assert first_row is not None
-    first_blob_id = first_row.bundle_file_id
-    assert first_blob_id is not None  # custom skills always have a bundle
-
-    # Snapshot file store blobs before the failing create.
-    blobs_before = _skill_bundle_blob_ids()
-
-    # Second create — bundle is fine, but the DB insert fails on the
-    # unique-slug check after the blob has already been written. The except
-    # branch should delete the just-written blob before re-raising.
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.create_custom(admin_user, slug=slug)
-    assert exc_info.value.response.status_code == 409
-
-    # First skill's blob is untouched.
-    assert _bundle_blob_exists(first_blob_id), (
-        "first skill's blob should be intact after the failing duplicate create"
-    )
-
-    # The orphan blob was cleaned up from the file store: no new blob IDs
-    # appeared after the failing create.
-    blobs_after = _skill_bundle_blob_ids()
-    orphan_blobs = blobs_after - blobs_before
-    assert not orphan_blobs, (
-        f"Orphan blob(s) leaked into the file store: {orphan_blobs}"
-    )
-
-    # And the failing create's blob was cleaned up: the only skill row for
-    # this slug is the original, and its blob is the only one tied to it.
-    # We assert by counting Skill rows with this slug.
-    with get_session_with_current_tenant() as db_session:
-        rows = (
-            db_session.execute(select(Skill).where(Skill.slug == slug)).scalars().all()
-        )
-    assert len(rows) == 1, (
-        f"expected exactly one skill row with slug {slug}; got {len(rows)}"
-    )
-    assert rows[0].bundle_file_id == first_blob_id
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +263,7 @@ def test_replace_group_shares_400_on_unknown_group_id(
     INVALID_INPUT, not a 500.
     """
     skill = SkillManager.create_custom(
-        admin_user, slug=f"unknown-grp-{uuid4().hex[:8]}", is_public=False
+        admin_user, name=f"unknown-grp-{uuid4().hex[:8]}", is_public=False
     )
 
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
@@ -363,7 +299,7 @@ def test_delete_skill_404_for_nonexistent(admin_user: DATestUser) -> None:
 
 def test_basic_user_can_create_private_skill(basic_user: DATestUser) -> None:
     skill = SkillManager.create_custom(
-        basic_user, slug=f"basic-create-{uuid4().hex[:6]}"
+        basic_user, name=f"basic-create-{uuid4().hex[:6]}"
     )
     assert skill.public_permission is None
     assert skill.user_permission == "OWNER"
@@ -382,7 +318,7 @@ def test_curator_can_post_skill(
     )
     try:
         skill = SkillManager.create_custom(
-            curator, slug=f"curator-create-{uuid4().hex[:6]}"
+            curator, name=f"curator-create-{uuid4().hex[:6]}"
         )
         assert skill.enabled is True
     finally:
