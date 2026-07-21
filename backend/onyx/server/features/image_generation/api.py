@@ -146,6 +146,9 @@ class _GenerationRun:
         self._reference_images = reference_images
         self._context = contextvars.copy_context()
         self.done = threading.Event()
+        # Set when the stream gives up; a run still queued in the executor
+        # skips the provider call instead of generating for a dead client.
+        self.abandoned = threading.Event()
         self.images: list[GeneratedImageData] | None = None
         self.error: Exception | None = None
 
@@ -153,6 +156,9 @@ class _GenerationRun:
         _generation_executor.submit(self._run)
 
     def _run(self) -> None:
+        if self.abandoned.is_set():
+            self.done.set()
+            return
         try:
             self.images = self._context.run(
                 generate_images_with_default_config,
@@ -177,6 +183,7 @@ def _keepalive_stream(run: _GenerationRun) -> Iterator[bytes]:
                 "Image generation exceeded %ss; abandoning stream",
                 _MAX_STREAM_DURATION_S,
             )
+            run.abandoned.set()
             yield _error_envelope(
                 OnyxError(OnyxErrorCode.GATEWAY_TIMEOUT, "Image generation timed out.")
             )
