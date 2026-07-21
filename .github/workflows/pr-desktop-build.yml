@@ -120,3 +120,70 @@ jobs:
             desktop/src-tauri/target/release/bundle/
           retention-days: 7
           if-no-files-found: ignore
+
+  # Post a single PR comment linking to every desktop-build-* artifact produced
+  # by the matrix above, so reviewers don't have to dig through the Actions tab.
+  comment-build-artifacts:
+    name: Comment Build Artifact Links
+    needs: [build-desktop]
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.build-desktop.result != 'cancelled' &&
+      needs.build-desktop.result != 'skipped'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - name: Post PR comment with artifact download links
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          MARKER="<!-- desktop-build-artifacts -->"
+
+          TABLE_ROWS=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
+            | jq -r --arg repo "${REPO}" --arg run_id "${RUN_ID}" '
+                [.artifacts[] | select(.name | startswith("desktop-build-"))]
+                | map("| `\(.name)` | [Download](https://github.com/\($repo)/actions/runs/\($run_id)/artifacts/\(.id)) |")
+                | join("\n")
+              ')
+
+          if [ -z "${TABLE_ROWS}" ]; then
+            echo "No desktop-build-* artifacts found for this run -- skipping PR comment."
+            exit 0
+          fi
+
+          BODY=$(printf '%s\n' \
+            "${MARKER}" \
+            "### 📦 Desktop Build Artifacts" \
+            "" \
+            "Artifacts expire 7 days after this run." \
+            "" \
+            "| Artifact | Link |" \
+            "|----------|------|" \
+            "${TABLE_ROWS}")
+
+          # Upsert: find existing comment with the marker, or create a new one
+          EXISTING_COMMENT_ID=$(gh api \
+            "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" \
+            2>/dev/null | head -1)
+
+          if [ -n "${EXISTING_COMMENT_ID}" ]; then
+            gh api \
+              --method PATCH \
+              "repos/${REPO}/issues/comments/${EXISTING_COMMENT_ID}" \
+              -f body="${BODY}"
+          else
+            gh api \
+              --method POST \
+              "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+              -f body="${BODY}"
+          fi
