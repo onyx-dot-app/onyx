@@ -99,14 +99,17 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.built_in_tools import llm_tool_name
-from onyx.tools.constants import FILE_READER_TOOL_ID
 from onyx.tools.constants import SEARCH_TOOL_ID
+from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile
 from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import FileReaderToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
+    FileReaderTool,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
