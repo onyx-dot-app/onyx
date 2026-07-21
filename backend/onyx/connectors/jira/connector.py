@@ -28,7 +28,7 @@ class JiraServiceManagementConnector(PollConnector):
         
         if not all([self.username, self.api_token, self.url, self.project_key]):
             logger.error("Jira JSM: Missing required credentials in db_credentials.")
-
+            raise ValueError("Jira JSM: missing required credentials in db_credentials")
     def poll(self) -> List[Document]:
         """Entry point for the Onyx indexing pipeline."""
         all_docs = []
