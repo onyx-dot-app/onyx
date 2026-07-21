@@ -3,8 +3,8 @@
 # Hub rate limits.
 ARG BASE_IMAGE_REGISTRY=docker.io
 
-# bun + node binary sources. Pinned via the registry prefix in their own stages because buildx
-# rejects variable expansion directly in `COPY --from=` -- the ARG is only expandable in a FROM.
+# bun + node binary sources. Pinned via the registry prefix in their own stages because
+# buildx rejects variable expansion directly in `COPY --from=` -- the ARG is only expandable in a FROM.
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
 FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:05c08ce4291e9a58f59456a7985176defb12cdd42271f35ff81a3e167ea61d4c AS node_source
 
@@ -13,6 +13,7 @@ FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:cc925e589b7543b910fea57a
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
   ca-certificates \
+  cargo \
   cmake \
   curl \
   default-jre \
@@ -21,11 +22,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   fd-find \
   fzf \
   git \
+  gobject-introspection \
   iproute2 \
   ipset \
   iptables \
   jq \
   less \
+  libayatana-appindicator3-dev \
+  libgirepository1.0-dev \
+  libglib2.0-dev \
+  libgtk-3-dev \
+  libjavascriptcoregtk-4.1-dev \
+  libwebkit2gtk-4.1-dev \
   libxmlsec1-dev \
   make \
   neovim \
@@ -33,10 +41,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   pkg-config \
   postgresql-client \
   ripgrep \
+  rust-clippy \
+  rustfmt \
   socat \
   sudo \
   unzip \
   wget \
+  xdg-utils \
   zsh \
   && install -m 0755 -d /etc/apt/keyrings \
   && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
@@ -128,6 +139,13 @@ RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
 RUN useradd -m -s /bin/zsh dev && \
   echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && \
   chmod 0440 /etc/sudoers.d/dev
+
+# The Rust toolchain (cargo/rustc + clippy/rustfmt) is installed via apt in the block above,
+# for the Tauri desktop crate's `cargo build`/`cargo fmt`/`cargo clippy` (pre-commit hooks + CI
+# gates added in the desktop app PR). It comes from Ubuntu's repos rather than the upstream rust
+# image because that image is a cold repo in CI's ECR pull-through cache, which can't resolve
+# images by digest until they've first been pulled by tag.
+RUN cargo --version && rustc --version && cargo clippy --version && cargo fmt --version
 
 ENV DEVCONTAINER=true
 
