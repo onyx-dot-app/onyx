@@ -35,8 +35,8 @@ type Client struct {
 }
 
 // NewClient creates a new API client from config.
-// ServerURL is the server origin (e.g. "https://cloud.onyx.app").
-// APIURL appends the /api prefix to form the API base URL.
+// ServerURL is the full API base URL, path prefix included
+// (e.g. "https://cloud.onyx.app/api").
 func NewClient(cfg config.OnyxCliConfig) *Client {
 	var transport *http.Transport
 	if t, ok := http.DefaultTransport.(*http.Transport); ok {

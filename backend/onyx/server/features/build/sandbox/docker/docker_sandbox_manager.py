@@ -28,7 +28,7 @@ Sandbox containers run with:
 - ``user=1000:1000``
 - no Docker socket mount
 - no S3 / MinIO / Postgres / Redis / FileStore credentials in env
-- a fixed env allowlist (``ONYX_PAT``, ``ONYX_SERVER_URL``, ``ONYX_API_PREFIX``,
+- a fixed env allowlist (``ONYX_PAT``, ``ONYX_SERVER_URL``,
   opencode auth/config only)
 - only the dedicated sandbox bridge network — never compose's default
   network. ``onyx-craft-api`` is the supported API endpoint on that bridge;
@@ -469,7 +469,7 @@ def build_container_create_kwargs(
     Legacy (proxy disabled, default in tests/dev without proxy stack):
 
     - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL,
-      ONYX_API_PREFIX, ``OPENCODE_SERVER_PASSWORD``, and
+      ``OPENCODE_SERVER_PASSWORD``, and
       ``OPENCODE_CONFIG_CONTENT``.
       No caller can inject anything else. No S3/MinIO/Postgres/Redis
       credentials. No compose service hostnames.
@@ -544,9 +544,6 @@ def build_container_create_kwargs(
     env: dict[str, str] = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
-        # The URL already carries any API path prefix; pin the CLI's prefix to
-        # empty so it doesn't append its "/api" default on top.
-        "ONYX_API_PREFIX": "",
         OPENCODE_SERVER_PASSWORD: opencode_password,
         "OPENCODE_CONFIG_CONTENT": opencode_config_json,
     }
