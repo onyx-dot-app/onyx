@@ -83,11 +83,8 @@ def path_matches(request_path: str, path_prefix: str) -> bool:
 def host_targets(
     targets: tuple[CraftMCPTarget, ...], scheme: str, host: str, port: int
 ) -> list[CraftMCPTarget]:
-    """Targets on the request's exact scheme + host + port.
-
-    Scheme must match so an HTTPS server's bearer is never injected onto a
-    plaintext request to the same host:port.
-    """
+    """Scheme must match so an HTTPS server's bearer is never injected onto a
+    plaintext request to the same host:port."""
     scheme = scheme.lower()
     host = host.lower()
     return [
@@ -95,26 +92,20 @@ def host_targets(
     ]
 
 
-def match_target(
-    targets: tuple[CraftMCPTarget, ...],
-    *,
-    scheme: str,
-    host: str,
-    port: int,
-    path: str,
+def match_request(
+    targets: tuple[CraftMCPTarget, ...], request: http.Request
 ) -> CraftMCPTarget | None:
-    """The craft-enabled server owning ``path`` on this host, or ``None``.
+    """The craft server owning ``request``, or ``None`` — the single attribution
+    the gate evaluator and the credential resolver both key off.
 
-    Longest configured path prefix wins when servers share a host. ``path`` must
-    already be normalized (see ``normalized_request_path``).
-
-    Raises ``AmbiguousMCPTargetError`` on a tie at the longest prefix — two
-    configs claim the same endpoint and picking one would gate as (or inject
-    credentials of) an arbitrary server.
+    Longest configured path prefix wins when servers share a host. Raises
+    ``AmbiguousMCPTargetError`` on a tie at the longest prefix — picking one
+    would gate as (or inject credentials of) an arbitrary server.
     """
+    path = normalized_request_path(request.path or "")
     candidates = [
         t
-        for t in host_targets(targets, scheme, host, port)
+        for t in host_targets(targets, request.scheme, request.host, request.port)
         if path_matches(path, t.path_prefix)
     ]
     if not candidates:
@@ -122,22 +113,7 @@ def match_target(
     longest = max(len(t.path_prefix) for t in candidates)
     winners = [t for t in candidates if len(t.path_prefix) == longest]
     if len(winners) > 1:
-        raise AmbiguousMCPTargetError(host, path, sorted(w.server_id for w in winners))
+        raise AmbiguousMCPTargetError(
+            request.host, path, sorted(w.server_id for w in winners)
+        )
     return winners[0]
-
-
-def match_request(
-    targets: tuple[CraftMCPTarget, ...], request: http.Request
-) -> CraftMCPTarget | None:
-    """The craft server owning this mitmproxy ``request``, or ``None``.
-
-    The single request→(scheme, host, port, path) attribution both the gate
-    evaluator and the credential resolver key off, so they can't disagree.
-    """
-    return match_target(
-        targets,
-        scheme=request.scheme,
-        host=request.host,
-        port=request.port,
-        path=normalized_request_path(request.path or ""),
-    )

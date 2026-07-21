@@ -1,13 +1,11 @@
 """Classify an MCP streamable-HTTP request into a gate verdict input.
 
-The proxy is the sole approval authority for MCP: every tool invocation is a
-JSON-RPC ``tools/call`` carrying the exact tool name, so the gate parses the
-body (precedent: ``external_apps/matching/graphql_parsing.py``) rather than
-guessing from the URL. Protocol plumbing (handshake, discovery, resources)
-passes ungated; anything on a matched MCP host that is neither recognizable
-plumbing nor a parseable ``tools/call`` is UNCLASSIFIABLE and the gate fails
-closed — credential injection covers the whole host, so an unclassifiable
-request must never be forwarded with injected credentials.
+Every tool invocation is a JSON-RPC ``tools/call`` carrying the exact tool
+name, so the gate parses the body (precedent:
+``external_apps/matching/graphql_parsing.py``) rather than guessing from the
+URL. Protocol plumbing passes ungated; anything else on a matched MCP host is
+UNCLASSIFIABLE and fails closed — credential injection covers the whole host,
+so an unrecognized request must never forward with credentials.
 """
 
 from __future__ import annotations

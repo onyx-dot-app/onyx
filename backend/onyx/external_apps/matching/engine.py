@@ -77,6 +77,20 @@ class AllMatchedActions(BaseModel):
             raise ValueError("AllMatchedActions.actions must be non-empty")
         return self
 
+    @classmethod
+    def from_actions(
+        cls,
+        actions: Iterable[MatchedAction],
+        target: GatedTarget,
+        payload: dict[str, Any] | None = None,
+    ) -> "AllMatchedActions":
+        """Construct with the strictest-first sort applied, so every producer
+        upholds the ``actions[0]`` verdict invariant."""
+        ordered = tuple(
+            sorted(actions, key=lambda a: POLICY_SEVERITY[a.policy], reverse=True)
+        )
+        return cls(actions=ordered, target=target, payload=payload or {})
+
     @property
     def governing_action(self) -> MatchedAction:
         """The action whose policy drove the verdict (head of the sorted list)."""
@@ -158,12 +172,9 @@ def recognize_actions(
     ]
     if not matched:
         return None
-    matched.sort(key=lambda a: POLICY_SEVERITY[a.policy], reverse=True)
-    return AllMatchedActions(
-        actions=tuple(matched),
-        target=GatedTarget(
-            kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)
-        ),
+    return AllMatchedActions.from_actions(
+        matched,
+        GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)),
     )
 
 

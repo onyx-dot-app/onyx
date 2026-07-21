@@ -16,7 +16,7 @@ from mitmproxy import http
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, GatedAppKind
+from onyx.db.enums import EndpointPolicy, GatedAppKind
 from onyx.db.external_app import get_external_apps
 from onyx.db.mcp import (
     effective_mcp_tool_policy,
@@ -133,12 +133,7 @@ class ExternalAppRequestEvaluator(RequestEvaluator):
             if matched_actions is None:
                 return None
 
-        # Engine leaves `payload` empty — we own the raw content + content-type.
-        payload = _decode_body(
-            request.raw_content or b"",
-            (request.headers.get("content-type") or "").lower(),
-        )
-        return matched_actions.model_copy(update={"payload": payload or {}})
+        return matched_actions.model_copy(update={"payload": _request_payload(request)})
 
 
 class McpRequestEvaluator(RequestEvaluator):
@@ -191,15 +186,8 @@ class McpRequestEvaluator(RequestEvaluator):
                 kind=GatedAppKind.MCP_SERVER, id=server.id, app_name=server.name
             )
 
-        sorted_actions = tuple(
-            sorted(actions, key=lambda a: POLICY_SEVERITY[a.policy], reverse=True)
-        )
-        payload = _decode_body(
-            request.raw_content or b"",
-            (request.headers.get("content-type") or "").lower(),
-        )
-        return AllMatchedActions(
-            actions=sorted_actions, target=gated_target, payload=payload or {}
+        return AllMatchedActions.from_actions(
+            actions, gated_target, _request_payload(request)
         )
 
 
@@ -209,9 +197,7 @@ def _mcp_tool_actions(
     request: http.Request,
     db: Session,
 ) -> tuple[MatchedAction, ...]:
-    """MatchedActions for a gated MCP request: a single DENY for an
-    unclassifiable body (fail closed), else one per invoked tool carrying its
-    effective per-tool policy (admin override else default ASK)."""
+    """One MatchedAction per invoked tool; a single DENY when unclassifiable."""
     if classification.kind is McpRpcKind.UNCLASSIFIABLE:
         return (
             MatchedAction(
@@ -232,12 +218,17 @@ def _mcp_tool_actions(
             description=f"Call the “{tool_name}” tool on {server.name}.",
             policy=effective_mcp_tool_policy(tool_name, stored),
         )
-        for tool_name in _dedupe_preserving_order(classification.tool_names)
+        for tool_name in dict.fromkeys(classification.tool_names)
     )
 
 
-def _dedupe_preserving_order(names: tuple[str, ...]) -> list[str]:
-    return list(dict.fromkeys(names))
+def _request_payload(request: http.Request) -> dict[str, Any]:
+    # The engine leaves `payload` empty — evaluators own raw content + type.
+    decoded = _decode_body(
+        request.raw_content or b"",
+        (request.headers.get("content-type") or "").lower(),
+    )
+    return decoded or {}
 
 
 def _decode_body(body: bytes, content_type: str) -> dict[str, Any] | None:
