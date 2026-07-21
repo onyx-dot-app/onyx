@@ -336,6 +336,9 @@ class MCPServerSimpleUpdateRequest(BaseModel):
         default=None,
         description="User IDs allowed to use this server when not public",
     )
+    available_in_craft: Optional[bool] = Field(
+        None, description="Whether the Craft agent may use this server"
+    )
 
 
 class MCPToolResponse(BaseModel):
@@ -499,6 +502,7 @@ class MCPServer(BaseModel):
     is_public: bool = True
     groups: list[int] = Field(default_factory=list)
     users: list[UUID] = Field(default_factory=list)
+    available_in_craft: bool = False
     last_refreshed_at: Optional[datetime.datetime] = None
     tool_count: int = Field(
         default=0, description="Number of tools associated with this server"
