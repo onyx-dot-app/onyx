@@ -19,7 +19,7 @@ from onyx.db.enums import (
     MCPTransport,
 )
 from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
-from onyx.db.models import MCPServer, Tool, User
+from onyx.db.models import MCPServer, Tool
 from onyx.server.features.build.sandbox.util.mcp_config import resolve_craft_mcp_servers
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -64,19 +64,14 @@ def craft_server(
     db_session.commit()
 
 
-def _basic_user(db_session: Session) -> User:
-    return create_test_user(db_session, "mcp_config")
-
-
 def test_only_craft_enabled_servers_resolved_with_tool_curation(
     db_session: Session,
     craft_server: tuple[MCPServer, MCPServer],
 ) -> None:
     craft, off = craft_server
-    user = _basic_user(db_session)
+    user = create_test_user(db_session, "mcp_config")
     by_url = {c.url: c for c in resolve_craft_mcp_servers(db_session, user)}
 
-    # The non-craft server is excluded; the craft-enabled one is present.
     assert off.server_url not in by_url
     config = by_url[craft.server_url]
     assert config.key == f"linear-mcp-{craft.id}"
@@ -94,7 +89,7 @@ def test_private_unshared_server_excluded_for_user(
     craft.is_public = False
     db_session.commit()
 
-    user = _basic_user(db_session)
+    user = create_test_user(db_session, "mcp_config")
     assert craft.server_url not in {
         c.url for c in resolve_craft_mcp_servers(db_session, user)
     }

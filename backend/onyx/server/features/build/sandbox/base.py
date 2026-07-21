@@ -131,8 +131,8 @@ class SandboxManager(_ServeMixin, ABC):
         the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
 
         ``mcp_servers``: craft-enabled MCP servers to pre-register as remote
-        MCP endpoints in opencode's startup config (URL only; the proxy injects
-        credentials). Like ``all_llm_configs``, pre-loaded once at provision.
+        MCP endpoints in opencode's startup config (URL only; the proxy
+        injects credentials).
 
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces

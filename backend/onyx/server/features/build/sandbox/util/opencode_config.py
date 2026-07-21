@@ -120,9 +120,8 @@ def _build_permissions(
     if disabled_tools:
         for tool in disabled_tools:
             permissions[tool] = "deny"
-    # MCP tool ids are ``<serverKey>_<toolName>``. Allow each server's tools
-    # wholesale (the proxy is the sole gate; the wildcard also covers tools
-    # discovered at runtime), hard-denying the admin-disabled ones.
+    # MCP tool ids are ``<serverKey>_<toolName>``. The wildcard allow defers
+    # gating to the proxy and covers tools discovered at runtime.
     for server in mcp_servers:
         permissions[f"{server.key}_*"] = "allow"
         for tool_name in server.disabled_tools:

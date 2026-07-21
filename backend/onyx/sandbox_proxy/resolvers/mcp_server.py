@@ -167,8 +167,7 @@ class MCPServerResolver(CredentialResolver):
                     f"sandbox user {short_log_id(user_id)} not found"
                 )
             if not user_can_access_mcp_server(user, server.id, db):
-                # Craft-enabled but not shared with this user: never inject
-                # the admin's credentials for them.
+                # Not shared with this user — never inject admin creds for them.
                 raise CredentialUnavailableError(
                     f"user {short_log_id(user_id)} lacks access to MCP server "
                     f"{server.id}"
@@ -248,8 +247,7 @@ class MCPServerResolver(CredentialResolver):
 
     def _load_targets(self, tenant_id: str) -> tuple[_CraftMCPTarget, ...]:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            # No user yet at claim time — host matching only; per-user access
-            # is enforced in resolve().
+            # No user at claim time; access is enforced in resolve().
             servers = get_craft_enabled_mcp_servers(db, None)
             parsed = [_parse_target(s.id, s.server_url) for s in servers]
         return tuple(t for t in parsed if t is not None)

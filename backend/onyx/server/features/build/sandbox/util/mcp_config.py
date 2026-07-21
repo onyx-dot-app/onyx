@@ -27,10 +27,9 @@ def resolve_craft_mcp_servers(
     """Craft-enabled MCP servers ``user`` may use, as opencode config input.
     Two queries: the servers, then a bulk fetch of their tools.
 
-    Access (public / shared / owned) is filtered here; authentication is not —
-    auth state changes mid-session (connect, token expiry) while this config is
-    baked at provision, so the proxy enforces credentials per request and
-    surfaces a "connect this server" detail for unauthenticated ones."""
+    Access is filtered here; authentication is not — auth state changes
+    mid-session while this config is baked at provision, so the proxy enforces
+    credentials per request."""
     servers = get_craft_enabled_mcp_servers(db_session, user)
     disabled_by_server: dict[int, list[str]] = defaultdict(list)
     for tool in get_mcp_tools_for_servers([s.id for s in servers], db_session):

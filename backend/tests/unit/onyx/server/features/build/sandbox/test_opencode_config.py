@@ -269,7 +269,6 @@ def test_mcp_servers_emit_remote_entries_without_headers() -> None:
         default_model="claude-opus-4-7",
         mcp_servers=[_mcp("linear-7", url="https://mcp.linear.app/mcp")],
     )
-    # No auth headers — the proxy injects credentials.
     assert config["mcp"] == {
         "linear-7": {
             "type": "remote",
