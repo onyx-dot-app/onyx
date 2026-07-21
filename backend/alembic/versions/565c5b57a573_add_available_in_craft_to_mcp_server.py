@@ -1,7 +1,7 @@
 """add available_in_craft to mcp_server
 
 Revision ID: 565c5b57a573
-Revises: eec4fc85ef28
+Revises: e2875ce6454b
 Create Date: 2026-07-15 14:56:39.502921
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "565c5b57a573"
-down_revision = "eec4fc85ef28"
+down_revision = "e2875ce6454b"
 branch_labels = None
 depends_on = None
 
