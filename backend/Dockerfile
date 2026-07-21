@@ -136,19 +136,14 @@ RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
-# Pre-downloading models for setups with limited egress
-RUN python -c "from tokenizers import Tokenizer; \
-Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
-
-# Pre-downloading NLTK for setups with limited egress
-RUN python -c "import nltk; \
-    nltk.download('stopwords', quiet=True); \
-    nltk.download('punkt_tab', quiet=True);"
-# nltk.download('wordnet', quiet=True); introduce this back if lemmatization is needed
-
-# Pre-downloading tiktoken for setups with limited egress
-RUN python -c "import tiktoken; \
-tiktoken.get_encoding('cl100k_base')"
+# Pre-download models to a world-readable path so non-root runtime users (uid 10100
+# enforced by the bash-app Helm chart) can access the cache without re-downloading.
+ENV HF_HOME=/app/.cache/huggingface
+RUN mkdir -p /app/.cache/huggingface && \
+    python -c "from tokenizers import Tokenizer; Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')" && \
+    python -c "import nltk; nltk.download('stopwords', quiet=True); nltk.download('punkt_tab', quiet=True);" && \
+    python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')" && \
+    chmod -R 755 /app/.cache
 
 # Set up application files
 WORKDIR /app
