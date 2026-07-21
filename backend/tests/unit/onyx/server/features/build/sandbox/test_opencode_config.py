@@ -21,7 +21,7 @@ def _gateway(*, default: str = "7/gpt-5.5") -> LLMProviderConfig:
         model_name=default,
         api_key="proxy-placeholder",
         api_base="https://onyx.test/api/build/llm-gateway/v1",
-        npm="@ai-sdk/openai-compatible",
+        npm_package="@ai-sdk/openai-compatible",
         display_name="Onyx",
         models=[
             GatewayModelConfig(id="7/gpt-5.5", display_name="GPT-5.5"),

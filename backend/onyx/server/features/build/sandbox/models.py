@@ -23,7 +23,7 @@ class LLMProviderConfig(BaseModel):
     model_name: str
     api_key: str | None
     api_base: str | None
-    npm: str | None = None
+    npm_package: str | None = None
     display_name: str | None = None
     models: list[GatewayModelConfig] | None = None
 

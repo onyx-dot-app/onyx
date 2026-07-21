@@ -176,7 +176,7 @@ def build_onyx_gateway_config(
         # sandbox PAT; the key here is never used.
         api_key=SANDBOX_PROXY_INJECTED_PLACEHOLDER,
         api_base=api_base,
-        npm="@ai-sdk/openai-compatible",
+        npm_package="@ai-sdk/openai-compatible",
         display_name="Onyx",
         models=models,
     )

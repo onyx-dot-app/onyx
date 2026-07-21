@@ -118,7 +118,7 @@ def _build_permissions(
 def _build_provider_block(
     provider_config: LLMProviderConfig,
 ) -> dict[str, Any]:
-    if provider_config.npm is not None:
+    if provider_config.npm_package is not None:
         return _build_custom_provider_block(provider_config)
     block: dict[str, Any] = {}
     if provider_config.api_key:
@@ -141,7 +141,9 @@ def _build_custom_provider_block(
         options["apiKey"] = provider_config.api_key
     if provider_config.api_base:
         options["baseURL"] = provider_config.api_base
-    block: dict[str, Any] = {"npm": provider_config.npm, "options": options}
+    # "npm" is opencode's config key for the AI-SDK package implementing
+    # a custom provider's wire protocol.
+    block: dict[str, Any] = {"npm": provider_config.npm_package, "options": options}
     if provider_config.display_name:
         block["name"] = provider_config.display_name
     models: dict[str, Any] = {}

@@ -273,7 +273,7 @@ def test_setup_writes_fresh_gateway_catalog_before_instance_start(
         model_name="13/gpt-5-mini",
         api_key="proxy-placeholder",
         api_base="https://onyx.example.com/build/llm-gateway/v1",
-        npm="@ai-sdk/openai-compatible",
+        npm_package="@ai-sdk/openai-compatible",
         models=[
             GatewayModelConfig(
                 id="13/gpt-5-mini",
