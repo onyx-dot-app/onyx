@@ -1,12 +1,4 @@
-"""opencode.json builders.
-
-opencode-serve loads config once at startup and does not hot-reload
-(sst/opencode#22213), so both the K8s and docker paths pre-load every
-supported provider — real key (or proxy placeholder) when configured, dummy
-key otherwise — letting per-prompt model overrides cross providers without a
-restart.
-"""
-
+import json
 from typing import Any
 
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
@@ -15,6 +7,8 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 _ADAPTIVE_THINKING_MODELS = frozenset(
     {"claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6"}
 )
+
+_GATEWAY_DEFAULT_MAX_OUTPUT_TOKENS = 32000
 
 
 def _model_options(provider: str, model_name: str) -> dict[str, Any]:
@@ -120,6 +114,8 @@ def _build_permissions(
 def _build_provider_block(
     provider_config: LLMProviderConfig,
 ) -> dict[str, Any]:
+    if provider_config.npm is not None:
+        return _build_custom_provider_block(provider_config)
     block: dict[str, Any] = {}
     if provider_config.api_key:
         block["options"] = {"apiKey": provider_config.api_key}
@@ -131,51 +127,82 @@ def _build_provider_block(
     return block
 
 
-def build_multi_provider_opencode_config(
-    providers: list[LLMProviderConfig],
-    default_provider: str,
-    default_model: str,
+def _build_custom_provider_block(
+    provider_config: LLMProviderConfig,
+) -> dict[str, Any]:
+    """Unlike native providers, a custom provider's baseURL goes in
+    ``options`` and its model list must be explicit (no models.dev entry)."""
+    options: dict[str, Any] = {}
+    if provider_config.api_key:
+        options["apiKey"] = provider_config.api_key
+    if provider_config.api_base:
+        options["baseURL"] = provider_config.api_base
+    block: dict[str, Any] = {"npm": provider_config.npm, "options": options}
+    if provider_config.display_name:
+        block["name"] = provider_config.display_name
+    models: dict[str, Any] = {}
+    for model in provider_config.models or []:
+        entry: dict[str, Any] = {"name": model.display_name}
+        if model.supports_reasoning:
+            entry["options"] = {"reasoningEffort": "high"}
+        if model.max_input_tokens:
+            # opencode's schema requires both keys when "limit" is present.
+            entry["limit"] = {
+                "context": model.max_input_tokens,
+                "output": _GATEWAY_DEFAULT_MAX_OUTPUT_TOKENS,
+            }
+        models[model.id] = entry
+    block["models"] = models
+    return block
+
+
+def build_opencode_base_config(
     disabled_tools: list[str] | None = None,
     dev_mode: bool = False,
     plugins: list[str] | None = None,
 ) -> dict[str, Any]:
-    """opencode.json with every provider pre-registered so per-prompt
-    ``body["model"]`` overrides can target any of them.
-
-    ``plugins`` is an optional list of opencode plugin specs (npm names or
-    absolute file paths) loaded once per session Instance.
-
-    Raises:
-        ValueError: If ``providers`` is empty or ``default_provider`` is
-            not in ``providers``.
-    """
-    if not providers:
-        raise ValueError("providers must contain at least one entry")
-
-    seen: set[str] = set()
-    duplicates = [
-        p.provider for p in providers if p.provider in seen or seen.add(p.provider)
-    ]  # type: ignore[func-returns-value]
-    if duplicates:
-        raise ValueError(
-            f"duplicate provider entries: {duplicates!r} — opencode.json "
-            "uses one block per providerID; merge them at the call site"
-        )
-
-    provider_names = {p.provider for p in providers}
-    if default_provider not in provider_names:
-        raise ValueError(
-            f"default_provider={default_provider!r} not in providers"
-            f" {sorted(provider_names)}"
-        )
-
     config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
-        "model": f"{default_provider}/{default_model}",
-        "provider": {p.provider: _build_provider_block(p) for p in providers},
-        "enabled_providers": sorted(provider_names),
         "permission": _build_permissions(disabled_tools, dev_mode),
     }
     if plugins:
         config["plugin"] = list(plugins)
     return config
+
+
+def build_provider_opencode_config(
+    provider_config: LLMProviderConfig,
+    disabled_tools: list[str] | None = None,
+    dev_mode: bool = False,
+    plugins: list[str] | None = None,
+) -> dict[str, Any]:
+    if provider_config.models is not None and provider_config.model_name not in {
+        model.id for model in provider_config.models
+    }:
+        raise ValueError(
+            f"default model {provider_config.model_name!r} is not in the provider catalog"
+        )
+
+    config = build_opencode_base_config(disabled_tools, dev_mode, plugins)
+    config.update(
+        {
+            "model": f"{provider_config.provider}/{provider_config.model_name}",
+            "provider": {
+                provider_config.provider: _build_provider_block(provider_config)
+            },
+            "enabled_providers": [provider_config.provider],
+        }
+    )
+    return config
+
+
+def build_session_opencode_config(
+    provider_config: LLMProviderConfig,
+    disabled_tools: list[str],
+) -> str:
+    return json.dumps(
+        build_provider_opencode_config(
+            provider_config,
+            disabled_tools=disabled_tools,
+        )
+    )

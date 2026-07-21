@@ -43,12 +43,12 @@ from onyx.server.features.build.sandbox.kubernetes import sidecar_client
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     _build_targz,
     KubernetesSandboxManager,
+    OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
 )
 from onyx.server.features.build.sandbox.kubernetes.sidecar_client import SidecarClient
 from onyx.server.features.build.sandbox.models import (
     FatalWriteError,
     FileSet,
-    LLMProviderConfig,
     RetriableWriteError,
 )
 
@@ -703,7 +703,7 @@ def test_restore_opencode_history_posts_archive_to_sidecar(
         assert archive_file.read() == archive_body
         assert sha256_hex == hashlib.sha256(archive_body).hexdigest()
         assert operation_label == "opencode history restore"
-        assert timeout_seconds == 300.0
+        assert timeout_seconds == OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
         calls.append("restore")
 
     sidecar_client = MagicMock()
@@ -737,7 +737,7 @@ def test_restore_opencode_history_marks_sidecar_ready_when_no_snapshot(
         assert sandbox_id == expected_sandbox_id
         assert endpoint_path == SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH
         assert operation_label == "opencode history restore marker"
-        assert timeout_seconds == 300.0
+        assert timeout_seconds == OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
 
     sidecar_client = MagicMock()
     sidecar_client.post_empty.side_effect = fake_mark_restored
@@ -780,12 +780,6 @@ def test_provision_cleans_up_pod_when_opencode_history_restore_fails(
             sandbox_id=sandbox_id,
             user_id=_sandbox_id(),
             tenant_id="tenant-test",
-            llm_config=LLMProviderConfig(
-                provider="openai",
-                model_name="gpt-5-mini",
-                api_key=None,
-                api_base=None,
-            ),
             onyx_pat="pat",
         )
 
@@ -816,12 +810,6 @@ def test_provision_existing_healthy_pod_does_not_restore_opencode_history(
         sandbox_id=sandbox_id,
         user_id=_sandbox_id(),
         tenant_id="tenant-test",
-        llm_config=LLMProviderConfig(
-            provider="openai",
-            model_name="gpt-5-mini",
-            api_key=None,
-            api_base=None,
-        ),
         onyx_pat="pat",
     )
 
@@ -864,12 +852,6 @@ def test_provision_conflicting_healthy_pod_skips_startup_restore(
         sandbox_id=sandbox_id,
         user_id=_sandbox_id(),
         tenant_id="tenant-test",
-        llm_config=LLMProviderConfig(
-            provider="openai",
-            model_name="gpt-5-mini",
-            api_key=None,
-            api_base=None,
-        ),
         onyx_pat="pat",
     )
 
@@ -926,12 +908,6 @@ def test_provision_conflicting_not_ready_pod_runs_startup_restore(
         sandbox_id=sandbox_id,
         user_id=_sandbox_id(),
         tenant_id="tenant-test",
-        llm_config=LLMProviderConfig(
-            provider="openai",
-            model_name="gpt-5-mini",
-            api_key=None,
-            api_base=None,
-        ),
         onyx_pat="pat",
     )
 
@@ -973,12 +949,6 @@ def test_provision_conflicting_not_ready_pod_restore_failure_does_not_cleanup(
             sandbox_id=sandbox_id,
             user_id=_sandbox_id(),
             tenant_id="tenant-test",
-            llm_config=LLMProviderConfig(
-                provider="openai",
-                model_name="gpt-5-mini",
-                api_key=None,
-                api_base=None,
-            ),
             onyx_pat="pat",
         )
 

@@ -44,6 +44,7 @@ configMap:
   DISABLE_MODEL_SERVER: "true"
   # Sandbox pods call the chart-managed API service, matching production.
   SANDBOX_API_SERVER_URL: "http://onyx-api-service.onyx.svc.cluster.local:8080"
+  SANDBOX_API_PREFIX: ""
   # Sandbox image the kind cluster pulls (built+pushed by the CI workflow).
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
   # Tiny requests so the sandbox pod schedules alongside the full Onyx stack on

@@ -1594,9 +1594,11 @@ configMap:
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
+  # Public Onyx URLs expose API routes under /api. Set empty only when
+  # SANDBOX_API_SERVER_URL points directly at the API service.
+  SANDBOX_API_PREFIX: "/api"
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
-
 # -- Craft sandbox RBAC (rendered when configMap.ENABLE_CRAFT=true).
 craft:
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.

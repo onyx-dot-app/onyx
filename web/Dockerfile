@@ -1,15 +1,10 @@
-# Registry prefix for the bun binary source below. Defaults to Docker Hub; CI overrides it to
-# the ECR pull-through cache to dodge rate limits. Applies only to `bun_source` -- the DHI Node
-# bases come from dhi.io, a separate registry not served by the cache (see the FROM lines below).
 ARG BASE_IMAGE_REGISTRY=docker.io
 
 # bun binary source, in its own stage because buildx only expands the registry ARG in a FROM,
-# not in `COPY --from=`. Use the glibc (Debian) build so it runs on the glibc DHI node images.
+# not in `COPY --from=`. Use the glibc build so it runs on the Debian Node images.
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
 
-# Build stage. The DHI "-dev" variant runs as root and ships a shell, apt, and npm/npx.
-# Refresh the digest with: docker buildx imagetools inspect dhi.io/node:24-debian13-dev
-FROM dhi.io/node:24-debian13-dev@sha256:25a83f18150669e9ce3c9437327add4d75ae4ea26cbdb5e8747b66d3b74a567a AS builder
+FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie@sha256:eb2c73a27cf714b4b6b030f88ab72e62192c38b7d313ea3456695b8ae03c5f3c AS builder
 COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=bun_source /usr/local/bin/bunx /usr/local/bin/bunx
 WORKDIR /app
@@ -97,10 +92,7 @@ RUN --mount=type=secret,id=sentry_auth_token \
     fi && \
     NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
-# Runtime stage. The DHI runtime variant is near-distroless: no shell or package manager, runs
-# as the non-root `node` user (uid 1000) with WORKDIR /app pre-set.
-# Refresh the digest with: docker buildx imagetools inspect dhi.io/node:24-debian13
-FROM dhi.io/node:24-debian13@sha256:805278f24c1146c6d3c96577b6256f8f97c43196fff88315fe3291a1ce118ddd AS runner
+FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573 AS runner
 
 LABEL com.onyx.maintainer="founders@onyx.app"
 LABEL com.onyx.description="This image is the web/frontend container of Onyx which \
@@ -190,5 +182,6 @@ ENV ONYX_VERSION=${ONYX_VERSION}
 # name only — breaking loopback healthchecks. Force 0.0.0.0 instead.
 ENV HOSTNAME="0.0.0.0"
 
-# The DHI runtime image sets no default ENTRYPOINT, so invoke node explicitly.
+USER node
+
 CMD ["node", "server.js"]

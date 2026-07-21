@@ -5,6 +5,7 @@
 import { ModelConfiguration } from "@/lib/languageModels/types";
 
 export interface BuildLlmSelection {
+  providerId: number;
   providerName: string; // LLMProviderDescriptor.name (any configured provider)
   provider: string; // e.g., "anthropic"
   modelName: string; // e.g., "claude-opus-4-7"
@@ -12,9 +13,25 @@ export interface BuildLlmSelection {
 
 export type ProviderKey = "anthropic" | "openai" | "openrouter";
 
-// Craft-supported provider types (mirrors backend BUILD_MODE_ALLOWED_PROVIDER_TYPES)
-// in priority order, plus the api-key placeholder for onboarding. Which model is
-// recommended comes from the backend `is_recommended_default` flag on each model.
+export const CRAFT_GATEWAY_PROVIDER = "onyx";
+
+export const CRAFT_RECOMMENDED_MODEL_NAMES = new Set([
+  "gpt-5.6-sol",
+  "gpt-5.5",
+  "claude-fable-5",
+  "claude-opus-4-8",
+  "moonshotai/kimi-k3",
+  "z-ai/glm-5.2",
+]);
+
+export function craftRecommendedModels(
+  models: ModelConfiguration[]
+): ModelConfiguration[] {
+  return models.filter(
+    (model) => model.is_visible && CRAFT_RECOMMENDED_MODEL_NAMES.has(model.name)
+  );
+}
+
 export const CRAFT_PROVIDERS: {
   key: ProviderKey;
   apiKeyPlaceholder: string;
@@ -28,9 +45,19 @@ export const CRAFT_PROVIDERS: {
 const CRAFT_PROVIDER_KEYS = new Set<string>(CRAFT_PROVIDERS.map((p) => p.key));
 
 interface MinimalLlmProvider {
+  id: number;
   name: string | null;
   provider: string;
+  provider_display_name?: string | null;
   model_configurations: ModelConfiguration[];
+}
+
+export function craftProviderDisplayName(provider: {
+  name: string | null;
+  provider: string;
+  provider_display_name?: string | null;
+}): string {
+  return provider.name || provider.provider_display_name || provider.provider;
 }
 
 export function isSupportedProviderType(provider: string): boolean {
@@ -38,42 +65,78 @@ export function isSupportedProviderType(provider: string): boolean {
 }
 
 export function hasSupportedCraftProvider(
-  llmProviders: { provider: string }[] | undefined
+  llmProviders:
+    | { provider: string; model_configurations?: ModelConfiguration[] }[]
+    | undefined
 ): boolean {
-  return !!llmProviders?.some((p) => isSupportedProviderType(p.provider));
-}
-
-// The Craft-recommended model name for a provider's model list (the one the
-// backend flagged), falling back to the first visible model.
-export function craftModelName(models: ModelConfiguration[]): string | null {
-  return (
-    models.find((m) => m.is_recommended_default)?.name ??
-    models.find((m) => m.is_visible)?.name ??
-    null
+  return !!llmProviders?.some((provider) =>
+    provider.model_configurations?.some((model) => model.is_visible)
   );
 }
 
-// Highest-priority configured craft provider, with its recommended model.
 // Access control is enforced server-side at session create.
 export function getDefaultLlmSelection(
   llmProviders: MinimalLlmProvider[] | undefined
 ): BuildLlmSelection | null {
   if (!llmProviders) return null;
 
-  for (const { key } of CRAFT_PROVIDERS) {
-    const match = llmProviders.find((p) => p.provider === key);
-    if (match) {
-      const modelName = craftModelName(match.model_configurations);
-      if (!modelName) continue;
-      return {
-        providerName: match.name ?? "",
-        provider: match.provider,
-        modelName,
-      };
-    }
+  const candidates = [...llmProviders].sort(
+    (left, right) =>
+      craftProviderDisplayName(left).localeCompare(
+        craftProviderDisplayName(right)
+      ) || left.id - right.id
+  );
+
+  for (const provider of candidates) {
+    const modelName = craftRecommendedModels(provider.model_configurations)[0]
+      ?.name;
+    if (!modelName) continue;
+    return {
+      providerId: provider.id,
+      providerName: provider.name ?? "",
+      provider: provider.provider,
+      modelName,
+    };
   }
 
   return null;
+}
+
+export function resolveSessionLlmSelection(
+  agentProvider: string | null | undefined,
+  agentModel: string | null | undefined,
+  llmProviders: MinimalLlmProvider[] | undefined
+): BuildLlmSelection | null {
+  if (!agentProvider || !agentModel || !llmProviders) return null;
+
+  const separatorIndex = agentModel.indexOf("/");
+  const qualifiedProviderId = Number(agentModel.slice(0, separatorIndex));
+  const isGatewayModel =
+    agentProvider === CRAFT_GATEWAY_PROVIDER &&
+    separatorIndex > 0 &&
+    Number.isInteger(qualifiedProviderId);
+  const provider = isGatewayModel
+    ? llmProviders.find((candidate) => candidate.id === qualifiedProviderId)
+    : llmProviders.find((candidate) => candidate.provider === agentProvider);
+  if (!provider) return null;
+  const modelName = isGatewayModel
+    ? agentModel.slice(separatorIndex + 1)
+    : agentModel;
+  if (
+    isGatewayModel &&
+    !provider.model_configurations.some(
+      (model) => model.is_visible && model.name === modelName
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    providerId: provider.id,
+    providerName: provider.name ?? provider.provider,
+    provider: provider.provider,
+    modelName,
+  };
 }
 
 // =============================================================================

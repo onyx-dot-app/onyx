@@ -1202,25 +1202,41 @@ fi
 # Function to check if a port is available
 is_port_available() {
     local port=$1
+    local host=${PORT_CHECK_HOST:-0.0.0.0}
+    local probe_host=$host
+    local curl_host=$host
+
+    if [ -z "$host" ] || [ "$host" = "0.0.0.0" ] || [ "$host" = "::" ]; then
+        if command -v lsof &> /dev/null; then
+            if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+                return 1
+            fi
+            return 0
+        fi
+        probe_host=127.0.0.1
+        curl_host=127.0.0.1
+    elif [[ "$curl_host" == *:* ]]; then
+        curl_host="[$curl_host]"
+    fi
 
     # Try netcat first if available
     if command -v nc &> /dev/null; then
         # Try to connect to the port, if it fails, the port is available
-        if nc -z localhost "$port" 2>/dev/null; then
+        if nc -z "$probe_host" "$port" 2>/dev/null; then
             return 1
         fi
         return 0
     # Fallback using curl/telnet approach
     elif command -v curl &> /dev/null; then
         # Try to connect with curl, if it fails, the port might be available
-        if curl -s --max-time 1 --connect-timeout 1 "http://localhost:$port" >/dev/null 2>&1; then
+        if curl -s --max-time 1 --connect-timeout 1 "http://$curl_host:$port" >/dev/null 2>&1; then
             return 1
         fi
         return 0
     # Final fallback using lsof if available
     elif command -v lsof &> /dev/null; then
         # Check if any process is listening on the port
-        if lsof -i ":$port" >/dev/null 2>&1; then
+        if lsof -nP -iTCP@"$host":"$port" -sTCP:LISTEN >/dev/null 2>&1; then
             return 1
         fi
         return 0
@@ -1262,16 +1278,39 @@ fi
 
 # Find available port for nginx
 print_step "Checking for available ports"
-AVAILABLE_PORT=$(find_available_port 3000)
+CONFIGURED_HOST_PORT=$(
+    grep -E '^HOST_PORT=' "$ENV_FILE" 2>/dev/null |
+        head -1 |
+        cut -d= -f2- |
+        tr -d ' "'"'"'' || true
+)
+REQUESTED_HOST_PORT="${HOST_PORT:-${CONFIGURED_HOST_PORT:-3000}}"
+if ! printf '%s' "$REQUESTED_HOST_PORT" | grep -qE '^[0-9]+$' ||
+    [ "$REQUESTED_HOST_PORT" -lt 1 ] || [ "$REQUESTED_HOST_PORT" -gt 65535 ]; then
+    print_warning "Invalid HOST_PORT=$REQUESTED_HOST_PORT; using 3000"
+    REQUESTED_HOST_PORT=3000
+fi
+CONFIGURED_HOST_IP=$(
+    grep -E '^HOST_IP=' "$ENV_FILE" 2>/dev/null |
+        head -1 |
+        cut -d= -f2- |
+        tr -d ' "'"'"'' || true
+)
+PORT_CHECK_HOST="${HOST_IP:-${CONFIGURED_HOST_IP:-0.0.0.0}}"
+AVAILABLE_PORT=$(find_available_port "$REQUESTED_HOST_PORT")
 
-if [ "$AVAILABLE_PORT" != "3000" ]; then
-    print_info "Port 3000 is in use, found available port: $AVAILABLE_PORT"
+if [ "$AVAILABLE_PORT" != "$REQUESTED_HOST_PORT" ]; then
+    print_info "Port $REQUESTED_HOST_PORT is in use, found available port: $AVAILABLE_PORT"
 else
-    print_info "Port 3000 is available"
+    print_info "Port $REQUESTED_HOST_PORT is available"
 fi
 
-# Export HOST_PORT for docker-compose
-export HOST_PORT=$AVAILABLE_PORT
+if grep -q "^#* *HOST_PORT=" "$ENV_FILE"; then
+    sed -i.bak "s/^#* *HOST_PORT=.*/HOST_PORT=$AVAILABLE_PORT/" "$ENV_FILE"
+else
+    echo "HOST_PORT=$AVAILABLE_PORT" >> "$ENV_FILE"
+fi
+export HOST_PORT="$AVAILABLE_PORT"
 print_success "Using port $AVAILABLE_PORT for nginx"
 
 # Determine if we're using a floating tag (edge, latest) that should force pull.
@@ -1385,10 +1424,16 @@ else
 fi
 echo ""
 print_info "Access Onyx at:"
-echo -e "   ${BOLD}http://localhost:${HOST_PORT}${NC}"
+ACCESS_HOST="${PORT_CHECK_HOST:-localhost}"
+if [ "$ACCESS_HOST" = "0.0.0.0" ] || [ "$ACCESS_HOST" = "::" ]; then
+    ACCESS_HOST=localhost
+elif [[ "$ACCESS_HOST" == *:* ]]; then
+    ACCESS_HOST="[$ACCESS_HOST]"
+fi
+echo -e "   ${BOLD}http://${ACCESS_HOST}:${HOST_PORT}${NC}"
 echo ""
 print_info "If authentication is enabled, you can create your admin account here:"
-echo "   • Visit http://localhost:${HOST_PORT}/auth/signup to create your admin account"
+echo "   • Visit http://${ACCESS_HOST}:${HOST_PORT}/auth/signup to create your admin account"
 echo "   • The first user created will automatically have admin privileges"
 echo ""
 if [[ "$LITE_MODE" = true ]]; then

@@ -2,11 +2,13 @@
  * @jest-environment jsdom
  */
 import {
-  craftModelName,
+  CRAFT_RECOMMENDED_MODEL_NAMES,
+  craftRecommendedModels,
   getCraftOnboardingSeen,
   getDefaultLlmSelection,
   hasSupportedCraftProvider,
   isSupportedProviderType,
+  resolveSessionLlmSelection,
   setCraftOnboardingSeen,
 } from "@/app/craft/onboarding/constants";
 import { ModelConfiguration } from "@/lib/languageModels/types";
@@ -26,8 +28,13 @@ function model(
   };
 }
 
-function provider(providerType: string, models: ModelConfiguration[]) {
+function provider(
+  providerType: string,
+  models: ModelConfiguration[],
+  id: number = 1
+) {
   return {
+    id,
     name: providerType,
     provider: providerType,
     model_configurations: models,
@@ -44,60 +51,116 @@ describe("isSupportedProviderType", () => {
 });
 
 describe("hasSupportedCraftProvider", () => {
-  it("is true when a configured provider is a craft type", () => {
-    expect(hasSupportedCraftProvider([{ provider: "anthropic" }])).toBe(true);
+  it("accepts any configured provider with a visible model", () => {
+    expect(
+      hasSupportedCraftProvider([provider("azure", [model("gpt-5")])])
+    ).toBe(true);
   });
 
-  it("is false for unsupported-only or empty/undefined", () => {
-    expect(hasSupportedCraftProvider([{ provider: "azure" }])).toBe(false);
+  it("rejects providers without a visible model", () => {
+    expect(
+      hasSupportedCraftProvider([
+        provider("azure", [model("hidden", { visible: false })]),
+      ])
+    ).toBe(false);
     expect(hasSupportedCraftProvider([])).toBe(false);
     expect(hasSupportedCraftProvider(undefined)).toBe(false);
   });
 });
 
-describe("craftModelName", () => {
-  it("prefers the is_recommended_default model", () => {
-    expect(craftModelName([model("a"), model("b", { craft: true })])).toBe("b");
-  });
-
-  it("falls back to the first visible model", () => {
-    expect(
-      craftModelName([model("hidden", { visible: false }), model("v")])
-    ).toBe("v");
-  });
-
-  it("returns null when nothing is visible or recommended", () => {
-    expect(craftModelName([model("hidden", { visible: false })])).toBeNull();
-    expect(craftModelName([])).toBeNull();
-  });
-});
-
 describe("getDefaultLlmSelection", () => {
-  it("picks the highest-priority craft provider (anthropic) with its recommended model", () => {
+  it("picks the first recommended model from the first alphabetical provider", () => {
     const result = getDefaultLlmSelection([
-      provider("openai", [model("gpt-5.5", { craft: true })]),
-      provider("anthropic", [
-        model("claude-opus-4-8", { craft: true }),
-        model("claude-sonnet-4-6"),
-      ]),
+      {
+        ...provider("openai", [model("gpt-5.5")], 2),
+        name: "Zulu OpenAI",
+      },
+      {
+        ...provider(
+          "bedrock",
+          [model("unrecommended"), model("claude-opus-4-8")],
+          3
+        ),
+        name: "Alpha Bedrock",
+      },
+      {
+        ...provider("anthropic", [model("claude-haiku-4-5")], 1),
+        name: "Aardvark Without Recommendations",
+      },
     ]);
     expect(result).toEqual({
-      providerName: "anthropic",
-      provider: "anthropic",
+      providerId: 3,
+      providerName: "Alpha Bedrock",
+      provider: "bedrock",
       modelName: "claude-opus-4-8",
     });
   });
 
-  it("falls back to first visible model when no is_recommended_default flag", () => {
+  it("returns null when no provider has a recommended model", () => {
     const result = getDefaultLlmSelection([
-      provider("openai", [model("gpt-5.5")]),
+      provider("openai", [model("gpt-5-mini")]),
     ]);
-    expect(result?.modelName).toBe("gpt-5.5");
+    expect(result).toBeNull();
   });
 
   it("returns null with no providers", () => {
     expect(getDefaultLlmSelection([])).toBeNull();
     expect(getDefaultLlmSelection(undefined)).toBeNull();
+  });
+});
+
+describe("craftRecommendedModels", () => {
+  it("uses the explicit six-model Craft allowlist", () => {
+    const names = [
+      "gpt-5.6-sol",
+      "gpt-5.5",
+      "claude-fable-5",
+      "claude-opus-4-8",
+      "moonshotai/kimi-k3",
+      "z-ai/glm-5.2",
+    ];
+    const models = [
+      ...names.map((name) => model(name)),
+      model("gpt-5.6-terra"),
+      model("claude-haiku-4-5"),
+    ];
+
+    expect([...CRAFT_RECOMMENDED_MODEL_NAMES]).toEqual(names);
+    expect(craftRecommendedModels(models).map(({ name }) => name)).toEqual(
+      names
+    );
+  });
+
+  it("omits hidden allowlisted models", () => {
+    expect(
+      craftRecommendedModels([
+        model("gpt-5.5", { visible: false }),
+        model("gpt-5.6-sol"),
+      ]).map(({ name }) => name)
+    ).toEqual(["gpt-5.6-sol"]);
+  });
+});
+
+describe("resolveSessionLlmSelection", () => {
+  it("decodes a qualified gateway model without losing slashes", () => {
+    expect(
+      resolveSessionLlmSelection("onyx", "7/anthropic/claude-sonnet", [
+        provider("bedrock", [model("anthropic/claude-sonnet")], 7),
+      ])
+    ).toEqual({
+      providerId: 7,
+      providerName: "bedrock",
+      provider: "bedrock",
+      modelName: "anthropic/claude-sonnet",
+    });
+  });
+
+  it("rejects a stored model that is no longer visible", () => {
+    expect(
+      resolveSessionLlmSelection("onyx", "7/hidden", [
+        provider("bedrock", [model("hidden", { visible: false })], 7),
+      ])
+    ).toBeNull();
   });
 });
 

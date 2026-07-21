@@ -432,8 +432,8 @@ services:
       - NGINX_PROXY_SEND_TIMEOUT=${NGINX_PROXY_SEND_TIMEOUT:-300}
       - NGINX_PROXY_READ_TIMEOUT=${NGINX_PROXY_READ_TIMEOUT:-300}
     ports:
-      - "${HOST_PORT_80:-80}:80"
-      - "${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
+      - "${HOST_IP:-0.0.0.0}:${HOST_PORT_80:-80}:80"
+      - "${HOST_IP:-0.0.0.0}:${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
     volumes:
       # Mount templates read-only; the startup command copies them into
       # the writable /etc/nginx/conf.d/ inside the container.  This avoids

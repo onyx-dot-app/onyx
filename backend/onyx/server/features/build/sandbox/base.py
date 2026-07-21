@@ -116,17 +116,9 @@ class SandboxManager(_ServeMixin, ABC):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
-        *,
-        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
-
-        ``all_llm_configs``: the full set of LLM providers the user has
-        configured. K8s pre-loads each into opencode-serve's startup config
-        so per-prompt model overrides can cross providers without restarting
-        the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
 
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces
@@ -138,7 +130,6 @@ class SandboxManager(_ServeMixin, ABC):
             sandbox_id: Unique identifier for the sandbox
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
-            llm_config: LLM provider configuration (for default config)
             onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the sandbox
 
         Returns:
@@ -219,6 +210,7 @@ class SandboxManager(_ServeMixin, ABC):
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        llm_config: LLMProviderConfig | None = None,
     ) -> None:
         """Rewrite generated session configuration without replacing outputs."""
         ...

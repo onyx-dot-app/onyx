@@ -18,7 +18,6 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
     KubernetesSandboxManager,
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.common.craft.payloads import default_llm_config
 
 
 @pytest.fixture()
@@ -280,14 +279,11 @@ class TestEnsureSandboxPat:
             KubernetesSandboxManager, "_pod_exists_and_healthy", _no_pod
         )
 
-        llm_config = default_llm_config()
-
         with pytest.raises(ValueError, match="onyx_pat"):
             manager.provision(
                 sandbox_id=uuid4(),
                 user_id=uuid4(),
                 tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-                llm_config=llm_config,
                 onyx_pat="",
             )
 

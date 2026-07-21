@@ -30,7 +30,8 @@ data:
   {{- end }}
 {{- range $key, $value := .Values.configMap }}
 {{- $skipCraftProxyKey := and $craftEnabled (or (eq $key "SANDBOX_PROXY_HOST") (eq $key "SANDBOX_PROXY_PORT")) }}
-{{- if and (not (empty $value)) (not $skipCraftProxyKey) }}
+{{- $keepEmptyValue := eq $key "SANDBOX_API_PREFIX" }}
+{{- if and (or $keepEmptyValue (not (empty $value))) (not $skipCraftProxyKey) }}
   {{ $key }}: "{{ $value }}"
 {{- end }}
 {{- end }}
