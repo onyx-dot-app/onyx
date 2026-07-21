@@ -47,6 +47,7 @@ from onyx.db.mcp import (
     delete_mcp_server,
     extract_connection_data,
     get_all_mcp_servers,
+    get_craft_enabled_mcp_servers,
     get_mcp_server_by_id,
     get_mcp_servers_accessible_to_user,
     get_mcp_servers_for_persona,
@@ -1310,6 +1311,7 @@ def _db_mcp_server_to_api_mcp_server(
         is_public=db_server.is_public,
         groups=[group.id for group in db_server.user_groups],
         users=[user.id for user in db_server.users],
+        available_in_craft=db_server.available_in_craft,
         last_refreshed_at=db_server.last_refreshed_at,
         tool_count=tool_count,
         auth_template=auth_template,
@@ -1357,6 +1359,24 @@ def get_mcp_servers_for_user(
     Chat uses ``/servers/persona/{id}`` for servers already on a persona.
     """
     db_mcp_servers = get_mcp_servers_accessible_to_user(user, db)
+    mcp_servers = [
+        _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
+        for db_server in db_mcp_servers
+    ]
+    return MCPServersResponse(mcp_servers=mcp_servers)
+
+
+@router.get("/servers/craft", response_model=MCPServersResponse)
+def get_craft_mcp_servers_for_user(
+    db: Session = Depends(get_session),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> MCPServersResponse:
+    """List MCP servers an admin has made available to the Craft agent, with
+    the current user's connection/auth state. Craft reads the same credential
+    rows as chat, so a server connected in either surface shows as
+    authenticated here.
+    """
+    db_mcp_servers = get_craft_enabled_mcp_servers(db)
     mcp_servers = [
         _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
         for db_server in db_mcp_servers
@@ -2425,6 +2445,7 @@ def create_mcp_server_simple(
         is_public=mcp_server.is_public,
         groups=[group.id for group in mcp_server.user_groups],
         users=[user.id for user in mcp_server.users],
+        available_in_craft=mcp_server.available_in_craft,
         tool_count=0,  # New server, no tools yet
         auth_template=None,
         user_credentials=None,
@@ -2456,6 +2477,7 @@ def update_mcp_server_simple(
         name=request.name,
         description=request.description,
         server_url=request.server_url,
+        available_in_craft=request.available_in_craft,
     )
 
     if any(
