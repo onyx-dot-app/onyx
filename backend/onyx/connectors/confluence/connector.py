@@ -1,6 +1,6 @@
 import copy
 import re
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote
@@ -178,6 +178,10 @@ class ConfluenceConnector(
         labels_to_skip: list[str] = CONFLUENCE_CONNECTOR_LABELS_TO_SKIP,
         timezone_offset: float = CONFLUENCE_TIMEZONE_OFFSET,
         scoped_token: bool = False,
+        # Defaults to True (unlike newer connectors) because Confluence
+        # historically always indexed attachments; existing connector rows
+        # have no include_attachments key and must keep that behavior.
+        include_attachments: bool = True,
     ) -> None:
         self.wiki_base = wiki_base
         self.is_cloud = is_cloud
@@ -189,6 +193,7 @@ class ConfluenceConnector(
         self.labels_to_skip = labels_to_skip
         self.timezone_offset = timezone_offset
         self.scoped_token = scoped_token
+        self.include_attachments = include_attachments
         self._confluence_client: OnyxConfluence | None = None
         self._low_timeout_confluence_client: OnyxConfluence | None = None
         self._fetched_titles: set[str] = set()
@@ -617,6 +622,9 @@ class ConfluenceConnector(
         If there are valid attachments, the page itself is yielded as a hierarchy node
         (since attachments are children of the page in the hierarchy).
         """
+        if not self.include_attachments:
+            return [], []
+
         attachment_query = self._construct_attachment_query(
             _get_page_id(page), start, end
         )
@@ -1179,18 +1187,24 @@ class ConfluenceConnector(
             # Attachments resolve from inline `restrictions` only; no
             # ancestor walk, so per-page mode is a no-op for them.
             page_hierarchy_node_yielded = False
-            attachment_query = self._construct_attachment_query(
-                _get_page_id(page), start, end
-            )
-            for attachment in self.confluence_client.cql_paginate_all_expansions(
-                cql=attachment_query,
-                expand=restrictions_expand,
-                limit=_SLIM_DOC_BATCH_SIZE,
-            ):
-                # If you skip images in the main indexing pass (allow_images
-                # is False), skip them here too. Otherwise the slim path emits
-                # a SlimDocument for an attachment the main path never produces
-                # a Document for, leaving a permanent chunk_count IS NULL row.
+            attachment_results: Iterable[dict[str, Any]] = ()
+            if self.include_attachments:
+                attachment_query = self._construct_attachment_query(
+                    _get_page_id(page), start, end
+                )
+                attachment_results = self.confluence_client.cql_paginate_all_expansions(
+                    cql=attachment_query,
+                    expand=restrictions_expand,
+                    limit=_SLIM_DOC_BATCH_SIZE,
+                )
+            for attachment in attachment_results:
+                # Admission here must mirror the main indexing pass
+                # (include_attachments and allow_images). Otherwise the slim
+                # path emits a SlimDocument for an attachment the main path
+                # never produces a Document for, leaving a permanent
+                # chunk_count IS NULL row — and conversely, omitting docs the
+                # main path indexed is what lets pruning clean them up once
+                # include_attachments is turned off.
                 media_type = attachment.get("metadata", {}).get("mediaType", "")
                 if not self.allow_images and media_type.startswith("image/"):
                     continue

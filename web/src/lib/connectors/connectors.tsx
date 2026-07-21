@@ -142,6 +142,27 @@ export interface ConnectionConfiguration {
   ) => boolean;
 }
 
+// Shared "Include Attachments" checkbox for connectors that support skipping
+// attachment indexing. Backend convention: the connector's __init__ takes an
+// `include_attachments: bool` kwarg that gates both the indexing pass and the
+// slim-doc (pruning / perm-sync) pass. Connectors that historically always
+// indexed attachments must default this to true — existing connector rows have
+// no `include_attachments` key stored, so the backend default is what they
+// get. Connectors that never indexed attachments before should default false.
+export function buildIncludeAttachmentsOption(
+  defaultValue: boolean
+): BooleanOption {
+  return {
+    type: "checkbox",
+    query: "Include attachments?",
+    label: "Include Attachments",
+    name: "include_attachments",
+    description:
+      "Enable processing of page attachments including images and documents",
+    default: defaultValue,
+  };
+}
+
 export const connectorConfigs: Record<
   ConfigurableSources,
   ConnectionConfiguration
@@ -713,6 +734,7 @@ export const connectorConfigs: Record<
         ],
         defaultTab: "space",
       },
+      buildIncludeAttachmentsOption(true),
     ],
     advanced_values: [],
   },
@@ -1087,15 +1109,7 @@ export const connectorConfigs: Record<
           },
         ],
       },
-      {
-        type: "checkbox",
-        query: "Include attachments?",
-        label: "Include Attachments",
-        name: "include_attachments",
-        description:
-          "Enable processing of page attachments including images and documents",
-        default: false,
-      },
+      buildIncludeAttachmentsOption(false),
     ],
     advanced_values: [],
   },
@@ -2118,6 +2132,7 @@ export interface ConfluenceConfig {
   is_cloud?: boolean;
   index_recursively?: boolean;
   cql_query?: string;
+  include_attachments?: boolean;
 }
 
 export interface JiraConfig {
