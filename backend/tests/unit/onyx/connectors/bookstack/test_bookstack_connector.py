@@ -1,5 +1,4 @@
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 from onyx.connectors.bookstack.client import BookStackApiClient
