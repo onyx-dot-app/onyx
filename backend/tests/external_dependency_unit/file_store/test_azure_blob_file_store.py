@@ -17,6 +17,7 @@ import socket
 import uuid
 from collections.abc import Generator
 from io import BytesIO
+from unittest.mock import patch
 from urllib.parse import urlparse
 
 import pytest
@@ -296,6 +297,66 @@ class TestAzureBlobBackedFileStore:
         assert result is not None
         assert result.data == png_header
         assert result.mime_type == "image/png"
+        file_store.delete_file(file_id)
+
+    def test_db_failure_on_fresh_save_cleans_up_blob(
+        self, file_store: AzureBlobBackedFileStore
+    ) -> None:
+        """A failed DB write for a brand-new file must remove the uploaded blob."""
+        file_id = str(uuid.uuid4())
+        object_key = file_store._get_object_key(file_id)
+
+        with patch(
+            "onyx.file_store.azure_blob_file_store.upsert_filerecord",
+            side_effect=RuntimeError("simulated DB failure"),
+        ):
+            with pytest.raises(RuntimeError, match="simulated DB failure"):
+                file_store.save_file(
+                    content=BytesIO(b"never persisted"),
+                    display_name="fresh.txt",
+                    file_origin=FileOrigin.OTHER,
+                    file_type="text/plain",
+                    file_id=file_id,
+                )
+
+        client = file_store._get_blob_service_client()
+        blob_client = client.get_blob_client(
+            container=TEST_CONTAINER_NAME, blob=object_key
+        )
+        assert not blob_client.exists()
+
+    def test_db_failure_on_overwrite_preserves_blob(
+        self, file_store: AzureBlobBackedFileStore
+    ) -> None:
+        """A failed overwrite must NOT delete the blob the existing record references."""
+        file_id = str(uuid.uuid4())
+        file_store.save_file(
+            content=BytesIO(b"original"),
+            display_name="overwrite-fail.txt",
+            file_origin=FileOrigin.OTHER,
+            file_type="text/plain",
+            file_id=file_id,
+        )
+
+        with patch(
+            "onyx.file_store.azure_blob_file_store.upsert_filerecord",
+            side_effect=RuntimeError("simulated DB failure"),
+        ):
+            with pytest.raises(RuntimeError, match="simulated DB failure"):
+                file_store.save_file(
+                    content=BytesIO(b"replacement"),
+                    display_name="overwrite-fail.txt",
+                    file_origin=FileOrigin.OTHER,
+                    file_type="text/plain",
+                    file_id=file_id,
+                )
+
+        # The record survives and its blob is still readable (the upload itself
+        # succeeded before the DB failure, so content is the new version)
+        assert file_store.has_file(
+            file_id=file_id, file_origin=FileOrigin.OTHER, file_type="text/plain"
+        )
+        assert file_store.read_file(file_id).read() == b"replacement"
         file_store.delete_file(file_id)
 
     def test_account_key_auth(
