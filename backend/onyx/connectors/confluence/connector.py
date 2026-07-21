@@ -786,7 +786,9 @@ class ConfluenceConnector(
             # the whole index attempt. Other statuses propagate.
             page_id = _get_page_id(page, allow_missing=True)
             page_title = page.get("title", "unknown")
-            status_code = e.response.status_code if e.response else None
+            # requests.Response is falsy for error statuses (bool == .ok), so
+            # test for existence explicitly to preserve 4xx/5xx status codes.
+            status_code = e.response.status_code if e.response is not None else None
             if status_code in (401, 403):
                 failure_message_prefix = (
                     "Invalid credentials (401)"
@@ -1269,7 +1271,9 @@ class ConfluenceConnector(
             )
             first_space = next(spaces_iter, None)
         except HTTPError as e:
-            status_code = e.response.status_code if e.response else None
+            # requests.Response is falsy for error statuses (bool == .ok), so
+            # test for existence explicitly to preserve the 401/403 status code.
+            status_code = e.response.status_code if e.response is not None else None
             if status_code == 401:
                 raise CredentialExpiredError(
                     "Invalid or expired Confluence credentials (HTTP 401)."

@@ -5,6 +5,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from requests import Response
 from requests.exceptions import HTTPError
 
 from onyx.configs.constants import DocumentSource
@@ -218,13 +219,16 @@ def test_fetch_page_attachments_skips_on_server_error(
 ) -> None:
     """A 5xx while listing a page's attachments should skip that page's
     attachments (recording a ConnectorFailure) rather than failing the whole
-    index attempt."""
+    index attempt. Uses a real Response because requests.Response is falsy for
+    error statuses (bool(resp) == resp.ok), which a truthy MagicMock hides."""
     page = create_mock_page(id="1", title="Page 1")
     confluence_client = confluence_connector._confluence_client
     assert confluence_client is not None, "bad test setup"
 
+    error_response = Response()
+    error_response.status_code = 500
     confluence_client.paginated_cql_retrieval = MagicMock(  # ty: ignore[invalid-assignment]
-        side_effect=HTTPError(response=MagicMock(status_code=500))
+        side_effect=HTTPError(response=error_response)
     )
 
     docs, failures = confluence_connector._fetch_page_attachments(page)
@@ -409,7 +413,9 @@ def test_validate_connector_settings_errors(
     expected_message: str,
 ) -> None:
     """Test validation with various error scenarios"""
-    error = HTTPError(response=MagicMock(status_code=status_code))
+    error_response = Response()
+    error_response.status_code = status_code
+    error = HTTPError(response=error_response)
 
     with patch(
         "onyx.connectors.confluence.onyx_confluence.OnyxConfluence.retrieve_confluence_spaces"
