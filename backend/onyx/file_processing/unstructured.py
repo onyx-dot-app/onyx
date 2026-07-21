@@ -1,6 +1,6 @@
 from typing import IO, TYPE_CHECKING, Any, cast
 
-from onyx.configs.constants import KV_UNSTRUCTURED_API_KEY
+from onyx.configs.constants import KV_UNSTRUCTURED_API_KEY, UNSTRUCTURED_API_URL
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.utils.logger import setup_logger
@@ -10,6 +10,13 @@ if TYPE_CHECKING:
 
 
 logger = setup_logger()
+
+
+def _unstructured_client_kwargs() -> dict[str, str | None]:
+    kwargs: dict[str, str | None] = {"api_key_auth": get_unstructured_api_key()}
+    if UNSTRUCTURED_API_URL:
+        kwargs["server_url"] = UNSTRUCTURED_API_URL
+    return kwargs
 
 
 def get_unstructured_api_key() -> str | None:
@@ -58,7 +65,7 @@ def unstructured_to_text(file: IO[Any], file_name: str) -> str:
     logger.debug("Starting to read file: %s", file_name)
     req = _sdk_partition_request(file, file_name, strategy="fast")
 
-    unstructured_client = UnstructuredClient(api_key_auth=get_unstructured_api_key())
+    unstructured_client = UnstructuredClient(**_unstructured_client_kwargs())
 
     response = unstructured_client.general.partition(request=req)
 

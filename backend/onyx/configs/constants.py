@@ -116,6 +116,7 @@ SLACK_SERVICE_ACCOUNT_EMAIL = (
 # Key-Value store keys
 KV_REINDEX_KEY = "needs_reindexing"
 KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
+UNSTRUCTURED_API_URL = os.environ.get("UNSTRUCTURED_API_URL", "")
 KV_USER_STORE_KEY = "INVITED_USERS"
 KV_PENDING_USERS_KEY = "PENDING_USERS"
 KV_ANONYMOUS_USER_PREFERENCES_KEY = "anonymous_user_preferences"
