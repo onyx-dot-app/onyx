@@ -4,16 +4,22 @@ This file provides guidance to AI agents when working with code in this reposito
 
 ## KEY NOTES
 
-- Python deps live in a `uv`-managed virtualenv at `.venv` (repo root). If it doesn't exist yet, create it \
+- Python deps live in a `uv`-managed virtualenv at `.venv` (repo root). If it doesn't exist yet, create it
   with `uv sync --frozen`, then `source .venv/bin/activate`.
-- To make tests work, check the `.env` file at the root of the project to find an OpenAI key.
+- Test secrets live in gitignored env files: an OpenAI key in `.env` at the repo root, and `.vscode/.env`
+  (used by the test commands below). If `.vscode/.env` doesn't exist, create it by copying
+  `.vscode/env_template.txt` and filling in the values. If a key you need is missing, ask the user rather
+  than skipping tests.
 - If using `playwright` to explore the frontend, log in with username `admin_user@example.com` and password
   `TestPassword123!` (the admin user created by the playwright global setup — see
   `web/tests/e2e/constants.ts`). If it doesn't exist yet, register it via the signup page; the first user
   registered automatically becomes admin. The app can be accessed at `http://localhost:3000`.
 - You should assume that all Onyx services are running. To verify, you can check the `backend/log` directory to
   make sure we see logs coming out from the relevant service.
-- To connect to the Postgres database, use: `docker exec -it onyx-relational_db-1 psql -U postgres -c "<SQL>"`
+- To connect to the Postgres database, use:
+  `PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}" -U postgres -c "<SQL>"`.
+  This works on a host checkout and inside the devcontainer. If no `psql` client is available, fall back to
+  `docker exec onyx-relational_db-1 psql -U postgres -c "<SQL>"` (no `-it` — agent shells have no TTY).
 - When making calls to the backend, always go through the frontend. E.g. make a call to `http://localhost:3000/api/persona` not `http://localhost:8080/api/persona`
 - Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Don't run queries
   outside of those directories.
@@ -24,81 +30,28 @@ This file provides guidance to AI agents when working with code in this reposito
 
 ### Background Workers (Celery)
 
-Onyx uses Celery for asynchronous task processing with multiple specialized workers:
+Onyx uses Celery for asynchronous task processing. Worker apps live in
+`backend/onyx/background/celery/apps/`; the periodic schedule is defined in
+`backend/onyx/background/celery/tasks/beat_schedule.py`.
 
-#### Worker Types
+| Worker | Role |
+| --- | --- |
+| `primary` | Coordinates core background tasks: connector management/deletion, document-index sync, pruning checks, LLM model updates, user file sync |
+| `docfetching` | Fetches documents from connectors, spawns docprocessing tasks; watchdog for stuck connectors |
+| `docprocessing` | Indexing pipeline: upsert docs to Postgres, chunk, embed via model server, write chunks to the document index, update metadata |
+| `light` | Fast lightweight ops: metadata sync, permissions upsert, checkpoint / index-attempt cleanup |
+| `heavy` | Resource-intensive ops: pruning, document permissions sync, external group sync, CSV generation |
+| `monitoring` | System health monitoring & metrics collection |
+| `user_file_processing` | User-uploaded file indexing & project synchronization |
+| `scheduled_tasks` | Executes user-scheduled (Craft) task runs |
+| `beat` | Scheduler for periodic tasks; uses `DynamicTenantScheduler` for multi-tenant support |
 
-1. **Primary Worker** (`celery_app.py`)
+Key facts:
 
-   - Coordinates core background tasks and system-wide operations
-   - Handles connector management, document sync, pruning, and periodic checks
-   - Runs with 4 threads concurrency
-   - Tasks: connector deletion, document-index sync, pruning, LLM model updates, user file sync
-
-2. **Docfetching Worker** (`docfetching`)
-
-   - Fetches documents from external data sources (connectors)
-   - Spawns docprocessing tasks for each document batch
-   - Implements watchdog monitoring for stuck connectors
-   - Configurable concurrency (default from env)
-
-3. **Docprocessing Worker** (`docprocessing`)
-
-   - Processes fetched documents through the indexing pipeline:
-     - Upserts documents to PostgreSQL
-     - Chunks documents and adds contextual information
-     - Embeds chunks via model server
-     - Writes chunks to the OpenSearch-backed document index
-     - Updates document metadata
-   - Configurable concurrency (default from env)
-
-4. **Light Worker** (`light`)
-
-   - Handles lightweight, fast operations
-   - Tasks: document-index metadata sync, connector deletion, doc permissions upsert, checkpoint cleanup, index attempt cleanup
-   - Higher concurrency for quick tasks
-
-5. **Heavy Worker** (`heavy`)
-
-   - Handles resource-intensive operations
-   - Tasks: connector pruning, document permissions sync, external group sync, CSV generation
-   - Runs with 4 threads concurrency
-
-6. **Monitoring Worker** (`monitoring`)
-
-   - System health monitoring and metrics collection
-   - Monitors Celery queues, process memory, and system status
-   - Single thread (monitoring doesn't need parallelism)
-   - Cloud-specific monitoring tasks
-
-7. **User File Processing Worker** (`user_file_processing`)
-
-   - Processes user-uploaded files
-   - Handles user file indexing and project synchronization
-   - Configurable concurrency
-
-8. **Beat Worker** (`beat`)
-   - Celery's scheduler for periodic tasks
-   - Uses DynamicTenantScheduler for multi-tenant support
-   - Schedules tasks like:
-     - Indexing checks (every 15 seconds)
-     - Connector deletion checks (every 20 seconds)
-     - Document-index metadata sync checks (every 20 seconds)
-     - Pruning checks (every 20 seconds)
-     - Monitoring tasks (every 5 minutes)
-     - Cleanup tasks (hourly)
-
-#### Key Features
-
-- **Thread-based Workers**: All workers use thread pools (not processes) for stability
-- **Tenant Awareness**: Multi-tenant support with per-tenant task isolation. There is a
-  middleware layer that automatically finds the appropriate tenant ID when sending tasks
-  via Celery Beat.
-- **Task Prioritization**: High, Medium, Low priority queues
-- **Monitoring**: Built-in heartbeat and liveness checking
-- **Failure Handling**: Automatic retry and failure recovery mechanisms
-- **Redis Coordination**: Inter-process communication via Redis
-- **PostgreSQL State**: Task state and metadata stored in PostgreSQL
+- All workers use thread pools (not processes) — this is why Celery time limits don't work (see below).
+- Multi-tenant: a middleware layer automatically resolves the tenant ID when sending tasks via Celery Beat.
+- Tasks use High/Medium/Low priority queues; Redis coordinates inter-process communication; task state
+  and metadata live in PostgreSQL.
 
 #### Important Notes
 
@@ -117,7 +70,7 @@ function.
 
 **Testing Updates**:
 If you make any updates to a celery worker and you want to test these changes, you will need
-to ask me to restart the celery worker. There is no auto-restart on code-change mechanism.
+to ask the user to restart the celery worker. There is no auto-restart on code-change mechanism.
 
 **Task Time Limits**:
 Since all tasks are executed in thread pools, the time limit features of Celery are silently
@@ -129,6 +82,9 @@ disabled and won't work. Timeout logic must be implemented within the task itsel
 # Install and run pre-commit hooks
 pre-commit install
 pre-commit run --all-files
+
+# Faster: run only on the files you touched
+pre-commit run --files <path> [<path> ...]
 ```
 
 NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
@@ -141,7 +97,7 @@ comments that only describe the instantaneous change (e.g. what was just added/r
 ### Technology Stack
 
 - **Backend**: Python 3.13, FastAPI, SQLAlchemy, Alembic, Celery
-- **Frontend**: Next.js 15+, React 18, TypeScript, Tailwind CSS
+- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
 - **Database**: PostgreSQL with Redis caching
 - **Search**: OpenSearch-backed keyword and vector document index
 - **Auth**: OAuth2, SAML, multi-provider support
@@ -154,25 +110,28 @@ factory/config path explicitly uses them.
 
 ### Directory Structure
 
+A coarse map of the most load-bearing packages. `backend/onyx/` contains many more
+(`deep_research`, `kg`, `indexing`, `mcp_server`, ...) — explore with `ls` rather than
+relying on this list.
+
 ```
 backend/
-├── onyx/
+├── onyx/                        # Core application code (Community Edition)
 │   ├── auth/                    # Authentication & authorization
+│   ├── background/              # Celery apps & tasks
 │   ├── chat/                    # Chat functionality & LLM interactions
 │   ├── connectors/              # Data source connectors
 │   ├── db/                      # Database models & operations
 │   ├── document_index/          # OpenSearch-backed DocumentIndex integration
-│   ├── federated_connectors/    # External search connectors
 │   ├── llm/                     # LLM provider integrations
 │   └── server/                  # API endpoints & routers
-├── ee/                          # Enterprise Edition features
+├── ee/                          # Enterprise Edition features (mirrors onyx/ layout)
 ├── alembic/                     # Database migrations
 └── tests/                       # Test suites
 
-web/
-├── src/app/                     # Next.js app router pages
-├── src/components/              # Reusable React components
-└── src/lib/                     # Utilities & business logic
+web/                             # Next.js frontend (see web/AGENTS.md)
+mobile/                          # React Native + Expo app (see mobile/AGENTS.md)
+desktop/                         # Tauri desktop shell
 ```
 
 ## Frontend Standards
@@ -185,6 +144,8 @@ pixel-valued, not web's rem step scale — expo-router, RN primitives), so do **
 rules apply when working in `mobile/`.
 
 ## Database & Migrations
+
+Run all `alembic` commands from `backend/` (where `alembic.ini` lives) with the virtualenv active.
 
 ### Running Migrations
 
@@ -300,19 +261,13 @@ will be tailing their logs to this file.
 
 ## Security Considerations
 
-- Never commit API keys or secrets to repository
-- Use encrypted credential storage for connector credentials
-- Follow RBAC patterns for new features
-- Implement proper input validation with Pydantic models
-- Use parameterized queries to prevent SQL injection
+- Never commit API keys or secrets to the repository
+- Use the encrypted credential storage for connector credentials
+- Follow existing RBAC patterns for new features
 
 ## AI/LLM Integration
 
-- Multiple LLM providers supported via LiteLLM
-- Configurable models per feature (chat, search, embeddings)
-- Streaming support for real-time responses
-- Token management and rate limiting
-- Custom prompts and agent actions
+LLM calls go through LiteLLM; models are configurable per feature (chat, search, embeddings).
 
 ### Tracing — every LLM invocation must be tagged
 
@@ -329,7 +284,8 @@ Rules:
 
 ## Creating a Plan
 
-When creating a plan in the `plans` directory, make sure to include at least these elements:
+When creating a plan in the `plans` directory (gitignored — create it if it doesn't exist), make sure to
+include at least these elements:
 
 **Issues to Address**
 What the change is meant to do.
