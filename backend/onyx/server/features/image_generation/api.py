@@ -39,7 +39,7 @@ _MAX_REFERENCE_IMAGE_BYTES = 20 * 1024 * 1024
 _KEEPALIVE_INTERVAL_S = 15.0
 # The keepalives defeat the LB idle timeout that used to reap hung provider
 # calls, so the stream needs its own ceiling.
-_MAX_STREAM_DURATION_S = 10 * 60.0
+_MAX_STREAM_DURATION_S = 5 * 60.0
 
 _generation_executor = ThreadPoolExecutor(
     max_workers=32, thread_name_prefix="image-gen"

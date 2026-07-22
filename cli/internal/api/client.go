@@ -60,10 +60,10 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 			Timeout:   5 * time.Minute,
 			Transport: transport,
 		},
-		// Must exceed the server's 10-minute image-generation stream ceiling,
+		// Must exceed the server's 5-minute image-generation stream ceiling,
 		// or the client gives up before the server's timeout envelope arrives.
 		imageHTTPClient: &http.Client{
-			Timeout:   11 * time.Minute,
+			Timeout:   6 * time.Minute,
 			Transport: transport,
 		},
 	}
