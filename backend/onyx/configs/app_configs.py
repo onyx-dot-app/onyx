@@ -1925,6 +1925,24 @@ GCS_SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GCS_SERVICE_ACCOUNT_KEY_PATH") or
 # Service account key as inline JSON string (alternative to file path).
 GCS_SERVICE_ACCOUNT_KEY_JSON = os.environ.get("GCS_SERVICE_ACCOUNT_KEY_JSON") or None
 
+# Azure Blob Storage Configuration
+AZURE_FILE_STORE_CONTAINER_NAME = (
+    os.environ.get("AZURE_FILE_STORE_CONTAINER_NAME") or None
+)
+AZURE_FILE_STORE_PREFIX = os.environ.get("AZURE_FILE_STORE_PREFIX") or "onyx-files"
+AZURE_STORAGE_ACCOUNT_NAME = os.environ.get("AZURE_STORAGE_ACCOUNT_NAME") or None
+# Full blob endpoint URL. When unset, derived from the account name as
+# https://<account>.blob.core.windows.net. Set explicitly for Azurite or
+# sovereign clouds (e.g. *.blob.core.usgovcloudapi.net).
+AZURE_STORAGE_ACCOUNT_URL = os.environ.get("AZURE_STORAGE_ACCOUNT_URL") or None
+# Authentication (priority order): connection string, then account key, then
+# DefaultAzureCredential — supports AKS Workload Identity, managed identity,
+# and local `az login`.
+AZURE_STORAGE_CONNECTION_STRING = (
+    os.environ.get("AZURE_STORAGE_CONNECTION_STRING") or None
+)
+AZURE_STORAGE_ACCOUNT_KEY = os.environ.get("AZURE_STORAGE_ACCOUNT_KEY") or None
+
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
 VESPA_LANGUAGE_OVERRIDE = os.environ.get("VESPA_LANGUAGE_OVERRIDE")
