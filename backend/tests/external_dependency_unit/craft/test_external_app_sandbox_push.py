@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
 from onyx.db.enums import ExternalAppType
-from onyx.db.models import User
+from onyx.db.models import ExternalApp, Skill, User
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
     UpdateExternalAppRequest,
@@ -74,6 +74,20 @@ def test_create_refreshes_the_created_skill(
     pushed_skill_ids: list[UUID] = []
     monkeypatch.setattr(api, "MULTI_TENANT", False)
     monkeypatch.setattr(api, "create_external_app", lambda **_kwargs: app)
+
+    def _associate_built_in_skill(
+        _db: Session,
+        _app: ExternalApp,
+        *,
+        is_public: bool,  # noqa: ARG001
+    ) -> Skill:
+        return skill
+
+    monkeypatch.setattr(
+        api,
+        "associate_built_in_skill__no_commit",
+        _associate_built_in_skill,
+    )
     monkeypatch.setattr(
         api,
         "push_skill_to_affected_sandboxes",

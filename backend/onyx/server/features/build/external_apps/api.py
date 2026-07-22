@@ -1,7 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
-from pydantic import TypeAdapter
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -15,11 +14,11 @@ from onyx.db.enums import (
     SandboxStatus,
 )
 from onyx.db.external_app import (
+    associate_built_in_skill__no_commit,
     create_external_app,
     delete_external_app,
     get_external_app_by_id,
     get_external_apps,
-    get_first_skill_for_external_app,
     get_skills_for_external_app,
     get_user_credentials_by_app_id,
     required_user_credential_keys,
@@ -43,35 +42,28 @@ from onyx.external_apps.providers.registry import (
     resolve_action_overrides,
 )
 from onyx.external_apps.url_glob import UrlGlob
-from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.external_apps.models import (
     ConnectAppDecisionRequest,
     CreateBuiltInExternalAppRequest,
+    CreateCustomExternalAppRequest,
     ExternalAppAdminResponse,
+    ExternalAppAssociatedSkill,
     ExternalAppUserResponse,
     UpdateExternalAppRequest,
     UpsertUserCredentialsRequest,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.skills.bundle import read_bundle_file
-from onyx.skills.ingest import delete_bundle_blob, ingested_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
 from onyx.utils.encryption import mask_string
-from onyx.utils.pydantic_util import parse_json_form_field
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
 
 admin_router = APIRouter()
-
-# Adapters for the structured custom-app form fields, which arrive as JSON
-# strings (multipart can't carry native lists/objects).
-_STR_LIST_ADAPTER = TypeAdapter(list[str])
-_STR_DICT_ADAPTER: TypeAdapter[dict[str, str]] = TypeAdapter(dict[str, str])
 
 
 def _get_app_or_404(db_session: Session, external_app_id: int) -> ExternalApp:
@@ -104,6 +96,13 @@ def _to_admin_response(
         ),
         enabled=app.enabled,
         actions=action_policy_views(app.app_type, stored),
+        associated_skills=[
+            ExternalAppAssociatedSkill(id=skill.id, name=skill.name)
+            for skill in sorted(
+                app.associated_skills,
+                key=lambda skill: (skill.name, str(skill.id)),
+            )
+        ],
         is_onyx_managed=managed,
     )
 
@@ -173,24 +172,19 @@ def create_built_in_external_app(
         request.app_type, request.action_policies, {}
     )
 
-    # Default-public; skill identity is server-derived from app_type. Built-in
-    # skill content carries its own metadata on disk.
     app = create_external_app(
         db_session=db_session,
         name=request.name,
-        bundle_file_id="",
-        bundle_sha256="",
-        is_public=True,
         app_type=request.app_type,
         upstream_url_patterns=request.upstream_url_patterns,
         auth_template=request.auth_template,
         organization_credentials=request.organization_credentials,
         action_policies=action_policies,
     )
+    skill = associate_built_in_skill__no_commit(db_session, app, is_public=True)
 
     # Push before commit so a push failure rolls back the create.
-    for skill in app.associated_skills:
-        push_skill_to_affected_sandboxes(skill, db_session)
+    push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
     # ``action_policies`` is exactly what was persisted — no need to re-read.
     return _to_admin_response(app, stored=action_policies)
@@ -206,7 +200,6 @@ def update_external_app_admin(
     """Partial update of any app (404 if absent). ``None`` fields are left
     untouched. For Onyx-managed built-ins (cloud) the gateway-config fields
     are Onyx-owned and ignored — only ``enabled`` and ``action_policies`` apply.
-    A custom app's bundle bytes are swapped via ``PUT /admin/apps/{id}/bundle``.
     """
     app = _get_app_or_404(db_session, external_app_id)
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
@@ -226,7 +219,7 @@ def update_external_app_admin(
         request.action_policies,
         get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app_id),
     )
-    app, _old = update_external_app(
+    app = update_external_app(
         db_session=db_session,
         external_app_id=external_app_id,
         app_type=app.app_type,
@@ -252,127 +245,39 @@ def update_external_app_admin(
 
 @admin_router.post("/apps/custom")
 def create_custom_external_app(
-    name: str = Form(...),
-    upstream_url_patterns: str = Form(...),
-    auth_template: str = Form(...),
-    organization_credentials: str = Form(...),
-    bundle: UploadFile | None = File(None),
+    request: CreateCustomExternalAppRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ExternalAppAdminResponse:
-    """Create a CUSTOM (bundle-backed) external app. Multipart; structured fields
-    are JSON-encoded form strings and the bundle is required. Field edits use
-    ``PATCH /admin/apps/{id}``; bundle replacement uses
-    ``PUT /admin/apps/{id}/bundle``.
-    """
-    parsed_patterns = parse_json_form_field(
-        upstream_url_patterns, _STR_LIST_ADAPTER, "upstream_url_patterns"
-    )
-    parsed_auth_template = parse_json_form_field(
-        auth_template, _STR_DICT_ADAPTER, "auth_template"
-    )
-    parsed_org_credentials = parse_json_form_field(
-        organization_credentials, _STR_DICT_ADAPTER, "organization_credentials"
-    )
-
-    if not name.strip():
+    """Create a CUSTOM gateway without creating or ingesting a skill."""
+    if not request.name.strip():
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "name is required.")
-    if not parsed_patterns:
+    if not request.upstream_url_patterns:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "At least one upstream URL pattern is required.",
         )
-    if any(not p.strip() for p in parsed_patterns):
+    if any(not pattern.strip() for pattern in request.upstream_url_patterns):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "upstream_url_patterns must not contain empty entries.",
         )
-    # Custom app globs; validate before ingesting the bundle so a bad
-    # pattern fails fast.
-    for pattern in parsed_patterns:
+    for pattern in request.upstream_url_patterns:
         UrlGlob.parse(pattern)
-    validate_auth_template(parsed_auth_template, parsed_org_credentials)
+    validate_auth_template(request.auth_template, request.organization_credentials)
 
-    if bundle is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "A bundle (.zip) is required when creating a custom app.",
-        )
-
-    file_store = get_default_file_store()
-    with ingested_skill_bundle(
-        read_bundle_file(bundle.file),
-        bundle.filename,
-        file_store,
-    ) as ingested:
-        app = create_external_app(
-            db_session=db_session,
-            name=name.strip(),
-            bundle_file_id=ingested.bundle_file_id,
-            bundle_sha256=ingested.bundle_sha256,
-            app_type=ExternalAppType.CUSTOM,
-            upstream_url_patterns=parsed_patterns,
-            auth_template=parsed_auth_template,
-            organization_credentials=parsed_org_credentials,
-            is_public=True,
-            skill_name=ingested.canonical_name,
-            skill_description=ingested.description,
-        )
-        # Push before commit so a failure rolls back the create + orphaned blob.
-        for skill in app.associated_skills:
-            push_skill_to_affected_sandboxes(skill, db_session)
-        db_session.commit()
+    app = create_external_app(
+        db_session=db_session,
+        name=request.name.strip(),
+        app_type=ExternalAppType.CUSTOM,
+        upstream_url_patterns=request.upstream_url_patterns,
+        auth_template=request.auth_template,
+        organization_credentials=request.organization_credentials,
+    )
+    db_session.commit()
 
     # A freshly created custom app has no stored policy overrides.
     return _to_admin_response(app, stored={})
-
-
-@admin_router.put("/apps/{external_app_id}/bundle")
-def replace_custom_app_bundle(
-    external_app_id: int,
-    bundle: UploadFile = File(...),
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> ExternalAppAdminResponse:
-    """Replace a CUSTOM app's bundle bytes, keeping its skill name. Multipart-only
-    channel for bundle swaps; field edits use ``PATCH /admin/apps/{id}``. 404 if
-    absent; rejects built-in apps (no bundle).
-    """
-    app = _get_app_or_404(db_session, external_app_id)
-    if app.app_type != ExternalAppType.CUSTOM:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Only custom apps have a replaceable bundle.",
-        )
-
-    skill = get_first_skill_for_external_app(db_session, app.id)
-    file_store = get_default_file_store()
-    with ingested_skill_bundle(
-        read_bundle_file(bundle.file),
-        bundle.filename,
-        file_store,
-        expected_name=skill.name,
-    ) as ingested:
-        app, old_bundle_file_id = update_external_app(
-            db_session=db_session,
-            external_app_id=external_app_id,
-            app_type=ExternalAppType.CUSTOM,
-            new_bundle_file_id=ingested.bundle_file_id,
-            new_bundle_sha256=ingested.bundle_sha256,
-        )
-        # Push before commit so a failure rolls back the swap + orphaned blob.
-        for associated_skill in app.associated_skills:
-            push_skill_to_affected_sandboxes(associated_skill, db_session)
-        db_session.commit()
-
-    # Drop the superseded blob only after the swap committed.
-    if old_bundle_file_id:
-        delete_bundle_blob(file_store, old_bundle_file_id)
-
-    return _to_admin_response(
-        app,
-        stored=get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, app.id),
-    )
 
 
 @admin_router.get("/apps")
