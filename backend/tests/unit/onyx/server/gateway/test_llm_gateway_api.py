@@ -92,14 +92,16 @@ def test_resolve_model_preserves_slashes_after_provider_id() -> None:
     provider = _provider(23, "openrouter", [model])
     db_session = cast(Session, MagicMock(spec=Session))
     user = cast(User, MagicMock(spec=User))
-    fetch_provider = MagicMock(return_value=provider)
-
-    resolved_provider, resolved_model = gateway_api.resolve_gateway_model(
-        db_session,
-        user,
-        "23/anthropic/claude-3.5-sonnet",
-        fetch_provider=fetch_provider,
-    )
+    with patch.object(
+        gateway_api,
+        "fetch_accessible_llm_provider_by_id",
+        return_value=provider,
+    ) as fetch_provider:
+        resolved_provider, resolved_model = gateway_api.resolve_gateway_model(
+            db_session,
+            user,
+            "23/anthropic/claude-3.5-sonnet",
+        )
 
     assert resolved_provider is provider
     assert resolved_model is model
@@ -115,12 +117,18 @@ def test_resolve_model_rejects_malformed_or_hidden_models(
 ) -> None:
     provider = _provider(23, "anthropic", [_model("hidden", is_visible=False)])
 
-    with pytest.raises(OnyxError) as exc_info:
+    with (
+        patch.object(
+            gateway_api,
+            "fetch_accessible_llm_provider_by_id",
+            return_value=provider,
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
         gateway_api.resolve_gateway_model(
             cast(Session, MagicMock(spec=Session)),
             cast(User, MagicMock(spec=User)),
             requested_model,
-            fetch_provider=MagicMock(return_value=provider),
         )
 
     assert exc_info.value.status_code == 404
@@ -722,12 +730,7 @@ def test_endpoint_applies_craft_policy() -> None:
         )
 
     check_access.assert_called_once_with(http_request, user)
-    resolve_model.assert_called_once_with(
-        db_session,
-        user,
-        "1/test",
-        fetch_provider=gateway_api.fetch_accessible_llm_provider_by_id,
-    )
+    resolve_model.assert_called_once_with(db_session, user, "1/test")
     handle.assert_called_once_with(
         request=request,
         db_session=db_session,

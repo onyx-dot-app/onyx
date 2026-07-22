@@ -45,8 +45,6 @@ logger = setup_logger()
 
 router = APIRouter(prefix=GATEWAY_PATH_PREFIX)
 
-ProviderFetcher = Callable[[Session, User, int], LLMProviderView | None]
-
 # Callers never supply the flow; the endpoint picks it and this mapping
 # enforces the matching credential.
 _FLOW_ACCESS_CHECKS: dict[LLMFlow, Callable[[Request, User], bool]] = {
@@ -62,7 +60,6 @@ def resolve_gateway_model(
     db_session: Session,
     user: User,
     requested_model: str,
-    fetch_provider: ProviderFetcher,
 ) -> tuple[LLMProviderView, ModelConfigurationView]:
     not_found_error = OnyxError(
         OnyxErrorCode.NOT_FOUND,
@@ -82,7 +79,7 @@ def resolve_gateway_model(
         )
         raise not_found_error
 
-    provider = fetch_provider(db_session, user, provider_id)
+    provider = fetch_accessible_llm_provider_by_id(db_session, user, provider_id)
     if provider is None:
         raise not_found_error
     model = next(
@@ -495,12 +492,7 @@ def gateway_chat_completions(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This credential is not authorized to use the Onyx LLM gateway.",
         )
-    provider, model_config = resolve_gateway_model(
-        db_session,
-        user,
-        request.model,
-        fetch_provider=fetch_accessible_llm_provider_by_id,
-    )
+    provider, model_config = resolve_gateway_model(db_session, user, request.model)
     return handle_chat_completion(
         request=request,
         db_session=db_session,
