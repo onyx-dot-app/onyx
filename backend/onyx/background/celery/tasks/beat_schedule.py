@@ -422,6 +422,20 @@ if not MULTI_TENANT:
                     "queue": OnyxCeleryQueues.PRIMARY,
                 },
             },
+            # Hourly tick, but the task self-limits to one telemetry report per
+            # day via a Redis marker. Kept at an hourly cadence because beat
+            # schedule state does not reliably survive restarts, so a daily
+            # interval could fail to ever fire on frequently-restarted instances.
+            {
+                "name": "emit-version-telemetry",
+                "task": OnyxCeleryTask.EMIT_VERSION_TELEMETRY,
+                "schedule": timedelta(hours=1),
+                "options": {
+                    "priority": OnyxCeleryPriority.LOW,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                    "queue": OnyxCeleryQueues.MONITORING,
+                },
+            },
         ]
     )
 

@@ -629,6 +629,7 @@ class OnyxCeleryTask:
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
+    EMIT_VERSION_TELEMETRY = "emit_version_telemetry"
 
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"

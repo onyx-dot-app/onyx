@@ -13,6 +13,7 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from onyx import __version__
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import (
     celery_get_broker_client,
@@ -1149,3 +1150,37 @@ def cloud_monitor_celery_pidbox(
 
     # Enable later in case we want some aggregate metrics
     # task_logger.info(f"Deleted idle pidbox: pidbox={key_str}")
+
+
+"""Version telemetry heartbeat"""
+
+# The api_server emits a VERSION record at startup, but instances that run for a
+# long time without restarting would otherwise go silent. This heartbeat keeps
+# active self-hosted instances reporting the build they are running. The beat
+# entry ticks hourly; the Redis marker (1 day TTL) enforces the daily cadence and
+# is robust to beat schedule state being lost on restarts.
+_VERSION_TELEMETRY_EMITTED_KEY = "monitoring_version_telemetry_emitted"
+
+
+@shared_task(
+    name=OnyxCeleryTask.EMIT_VERSION_TELEMETRY,
+    ignore_result=True,
+    queue=OnyxCeleryQueues.MONITORING,
+)
+def emit_version_telemetry(*, tenant_id: str) -> None:
+    """Daily heartbeat reporting the running build of self-hosted instances."""
+    # Cloud deployment versions are tracked at deploy time; VERSION telemetry
+    # records are only meaningful for self-hosted instances.
+    if MULTI_TENANT:
+        return
+
+    redis_std = get_redis_client(tenant_id=tenant_id)
+    if _has_metric_been_emitted(redis_std, _VERSION_TELEMETRY_EMITTED_KEY):
+        return
+
+    optional_telemetry(
+        record_type=RecordType.VERSION,
+        data={"version": __version__},
+        tenant_id=tenant_id,
+    )
+    _mark_metric_as_emitted(redis_std, _VERSION_TELEMETRY_EMITTED_KEY)
