@@ -323,6 +323,7 @@ def get_user_token_buckets_since(
     user_id: str,
     cutoff: datetime,
 ) -> list[TokenUsageBucket]:
+    """Provider input + output tokens across all recorded flows for one user."""
     rows = db_session.execute(
         select(
             UserUsage.window_start,
@@ -342,6 +343,7 @@ def get_total_token_buckets_since(
     db_session: Session,
     cutoff: datetime,
 ) -> list[TokenUsageBucket]:
+    """Tenant-wide provider input + output tokens across all recorded flows."""
     rows = db_session.execute(
         select(
             UserUsage.window_start,
@@ -362,6 +364,7 @@ def get_group_token_buckets_since(
     user_group_ids: list[int],
     cutoff: datetime,
 ) -> dict[int, list[TokenUsageBucket]]:
+    """Provider input + output tokens across all recorded flows per group."""
     rows = db_session.execute(
         select(
             User__UserGroup.user_group_id,
