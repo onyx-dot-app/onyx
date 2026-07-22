@@ -137,7 +137,7 @@
     "oxfmt": "0.56.0",
     "oxlint": "^1.66.0",
     "stats.js": "^0.17.0",
-    "storybook": "^8.6.18",
+    "storybook": "^10.5.0",
     "tailwindcss": "^4.3.0",
     "ts-unused-exports": "^11.0.1",
     "tsup": "^8.5.1",
