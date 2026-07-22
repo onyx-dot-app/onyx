@@ -64,6 +64,9 @@ def test_patch_updates_config_on_non_managed_built_in(
     monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
     app = _slack_app(db_session)
     app_id = app.id
+    original_skill_description = get_first_skill_for_external_app(
+        db_session, app_id
+    ).description
 
     new_patterns = ["https://slack.com/api/chat.postMessage"]
     new_auth = {"Authorization": "Bearer {access_token}"}
@@ -89,7 +92,7 @@ def test_patch_updates_config_on_non_managed_built_in(
     skill = get_first_skill_for_external_app(db_session, app_id)
     assert stored.name == "Slack — Eng"
     assert skill.name == "slack"
-    assert skill.description == "Slack test app"
+    assert skill.description == original_skill_description
     assert list(stored.upstream_url_patterns) == new_patterns
     assert stored.auth_template == new_auth
     assert stored.organization_credentials.get_value(apply_mask=False) == {
