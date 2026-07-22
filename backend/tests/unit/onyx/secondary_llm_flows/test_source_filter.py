@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
+from onyx.configs.chat_configs import SECONDARY_LLM_FLOW_TIMEOUT_S
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.llm.models import UserMessage
 from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_scope
@@ -17,13 +18,13 @@ def _run_decision(
     connected: list[DocumentSource],
     previous_cycles: list[SearchCycle],
     llm_returns: str,
-) -> tuple[list[DocumentSource] | None, list]:
-    """Run decide_search_scope with the LLM stubbed to return `llm_returns`.
-    Returns (scope, prompt_messages)."""
+) -> tuple[list[DocumentSource] | None, list, dict[str, object]]:
+    """Run decide_search_scope with the LLM stubbed to return `llm_returns`."""
     captured: dict = {}
 
     def fake_invoke(prompt: list, **_kwargs: object) -> MagicMock:
         captured["prompt"] = prompt
+        captured["kwargs"] = _kwargs
         resp = MagicMock()
         resp.choice.message.content = llm_returns
         return resp
@@ -38,7 +39,7 @@ def _run_decision(
         patch("onyx.secondary_llm_flows.source_filter.record_llm_response"),
     ):
         scope = decide_search_scope(history, llm, connected, previous_cycles, ["q"])
-    return scope, captured["prompt"]
+    return scope, captured["prompt"], captured["kwargs"]
 
 
 def test_prompt_excludes_assistant_turns_and_ends_with_user() -> None:
@@ -60,7 +61,7 @@ def test_prompt_excludes_assistant_turns_and_ends_with_user() -> None:
             message_type=MessageType.TOOL_CALL_RESPONSE,
         ),
     ]
-    scope, prompt = _run_decision(history, [A, B], [], "[confluence]")
+    scope, prompt, _kwargs = _run_decision(history, [A, B], [], "[confluence]")
 
     assert all(isinstance(m, UserMessage) for m in prompt)
     assert isinstance(prompt[-1], UserMessage)
@@ -76,7 +77,7 @@ def test_first_search_renders_na_for_previous_cycles() -> None:
             message="Search Confluence.", message_type=MessageType.USER
         )
     ]
-    _scope, prompt = _run_decision(history, [A, B], [], "[]")
+    _scope, prompt, _kwargs = _run_decision(history, [A, B], [], "[]")
     assert "N/A This is the first search" in prompt[-1].content
 
 
@@ -96,7 +97,7 @@ def test_previous_cycles_are_rendered_in_the_prompt() -> None:
             searched_sources=["zendesk"],
         )
     ]
-    scope, prompt = _run_decision(history, [A, B], cycles, "[confluence]")
+    scope, prompt, _kwargs = _run_decision(history, [A, B], cycles, "[confluence]")
     text = prompt[-1].content
     assert "zendesk" in text and "login bug" in text
     assert scope == [B]
@@ -119,7 +120,7 @@ def test_empty_bracket_is_unscoped() -> None:
             message="What's our PTO policy?", message_type=MessageType.USER
         )
     ]
-    scope, _prompt = _run_decision(history, [A, B], [], "[]")
+    scope, _prompt, _kwargs = _run_decision(history, [A, B], [], "[]")
     assert scope is None
 
 
@@ -127,8 +128,18 @@ def test_stray_text_around_list_still_parses() -> None:
     history = [
         ChatMinimalTextMessage(message="Check Zendesk.", message_type=MessageType.USER)
     ]
-    scope, _prompt = _run_decision(history, [A, B], [], "Sure: [zendesk]")
+    scope, _prompt, _kwargs = _run_decision(history, [A, B], [], "Sure: [zendesk]")
     assert scope == [A]
+
+
+def test_scope_decision_passes_timeout() -> None:
+    history = [
+        ChatMinimalTextMessage(message="Check Zendesk.", message_type=MessageType.USER)
+    ]
+    scope, _prompt, kwargs = _run_decision(history, [A, B], [], "[zendesk]")
+
+    assert scope == [A]
+    assert kwargs["timeout_override"] == SECONDARY_LLM_FLOW_TIMEOUT_S
 
 
 def test_only_the_last_five_user_turns_reach_the_prompt() -> None:
@@ -137,7 +148,7 @@ def test_only_the_last_five_user_turns_reach_the_prompt() -> None:
         ChatMinimalTextMessage(message=f"msg {i}", message_type=MessageType.USER)
         for i in range(8)
     ]
-    _scope, prompt = _run_decision(history, [A, B], [], "[]")
+    _scope, prompt, _kwargs = _run_decision(history, [A, B], [], "[]")
 
     text = prompt[-1].content
     # msg 7 is the current query (query reminder); msgs 3-6 are recent history;

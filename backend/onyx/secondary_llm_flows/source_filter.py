@@ -2,6 +2,7 @@ import json
 
 from pydantic import BaseModel
 
+from onyx.configs.chat_configs import SECONDARY_LLM_FLOW_TIMEOUT_S
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ChatCompletionMessage, ReasoningEffort, UserMessage
@@ -114,7 +115,11 @@ def decide_search_scope(
             flow=LLMFlow.SOURCE_FILTER_EXTRACTION,
             input_messages=messages,
         ) as span_generation:
-            response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
+            response = llm.invoke(
+                prompt=messages,
+                reasoning_effort=ReasoningEffort.OFF,
+                timeout_override=SECONDARY_LLM_FLOW_TIMEOUT_S,
+            )
             record_llm_response(span_generation, response)
             content = response.choice.message.content
     except Exception:
