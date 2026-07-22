@@ -166,3 +166,21 @@ export interface LLMContextualCost {
   model_name: string;
   cost: number;
 }
+
+/** Mirrors backend `ReindexProgressCounts`; buckets partition `total`. */
+export interface ReindexProgress {
+  total: number;
+  waiting: number;
+  in_progress: number;
+  completed: number;
+  failed: number;
+}
+
+/** Mirrors backend `ReindexErrorRow`; exactly one of cc_pair_id / user_id set. */
+export interface ReindexErrorRow {
+  scope: "connector" | "user_file";
+  cc_pair_id: number | null;
+  user_id: string | null;
+  name: string;
+  error_msg: string | null;
+}
