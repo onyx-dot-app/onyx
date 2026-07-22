@@ -19,6 +19,11 @@ down_revision = "f0ff4d3e69ac"
 branch_labels = None
 depends_on = None
 
+_EMPTY_BUNDLE_SHA256 = (
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+)
+_PLACEHOLDER_BUNDLE_PREFIX = "downgrade-placeholder-"
+
 
 def upgrade() -> None:
     op.create_table(
@@ -44,8 +49,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
-    # The previous schema requires every app to point to a skill. Create a
-    # contentless provider-named placeholder wherever no association exists.
+    # The previous schema requires every app to point to a skill. Create an
+    # invalid custom placeholder wherever no association exists. Non-null bundle
+    # metadata lets it survive the older migration that restores those columns'
+    # NOT NULL constraints, without creating or deleting a FileStore object.
     apps_without_skills = bind.execute(
         sa.text(
             """
@@ -63,9 +70,12 @@ def downgrade() -> None:
     insert_skill = sa.text(
         """
         INSERT INTO skill (
-            id, name, description, built_in_skill_id, public_permission
+            id, name, description, bundle_file_id, bundle_sha256, is_valid,
+            public_permission
         )
-        VALUES (:skill_id, :name, '', :name, 'VIEWER')
+        VALUES (
+            :skill_id, :name, '', :bundle_file_id, :bundle_sha256, false, 'VIEWER'
+        )
         """
     ).bindparams(sa.bindparam("skill_id", type_=postgresql.UUID(as_uuid=True)))
     insert_association = sa.text(
@@ -80,7 +90,15 @@ def downgrade() -> None:
     for external_app_id, app_type in apps_without_skills:
         skill_id = uuid.uuid4()
         skill_name = app_type.lower().replace("_", "-")
-        bind.execute(insert_skill, {"skill_id": skill_id, "name": skill_name})
+        bind.execute(
+            insert_skill,
+            {
+                "skill_id": skill_id,
+                "name": skill_name,
+                "bundle_file_id": f"{_PLACEHOLDER_BUNDLE_PREFIX}{skill_id}",
+                "bundle_sha256": _EMPTY_BUNDLE_SHA256,
+            },
+        )
         bind.execute(
             insert_association,
             {"external_app_id": external_app_id, "skill_id": skill_id},
