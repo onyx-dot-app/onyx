@@ -14,6 +14,7 @@ const mockRefresh = jest.fn();
 const mockToastError = jest.fn();
 const mockRouterPush = jest.fn();
 const mockUseUserSkills = jest.fn();
+const mockStageSkillCreationDraft = jest.fn();
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -60,9 +61,25 @@ jest.mock("@/sections/cards/SkillCard", () => ({
   ),
 }));
 
+jest.mock("@/lib/skills/creationDraft", () => ({
+  stageSkillCreationDraft: (...args: unknown[]) =>
+    mockStageSkillCreationDraft(...args),
+}));
+
 jest.mock("@/sections/modals/skills/CreateSkillModal", () => ({
   __esModule: true,
-  default: () => null,
+  default: ({
+    open,
+    onContinue,
+  }: {
+    open: boolean;
+    onContinue: (draft: object) => void;
+  }) =>
+    open ? (
+      <button type="button" onClick={() => onContinue({ draft: true })}>
+        Continue upload
+      </button>
+    ) : null,
 }));
 
 jest.mock("@/sections/modals/SkillPreviewModal", () => ({
@@ -126,6 +143,24 @@ describe("SkillsPage preference toggles", () => {
       }
       return skillsData;
     });
+    mockRouterPush.mockReset();
+    mockStageSkillCreationDraft.mockReset();
+    mockStageSkillCreationDraft.mockReturnValue("draft-id");
+  });
+
+  it("routes an uploaded skill draft to the editor without creating it", async () => {
+    const user = setupUser();
+    render(<SkillsPage />);
+
+    await user.click(screen.getByRole("button", { name: "Create skill" }));
+    await user.click(screen.getAllByText("Upload a skill")[0]!);
+    await user.click(screen.getByRole("button", { name: "Continue upload" }));
+
+    expect(mockStageSkillCreationDraft).toHaveBeenCalledWith({ draft: true });
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/craft/v1/skills/new?draft=draft-id"
+    );
+    expect(mockRefresh).not.toHaveBeenCalled();
   });
 
   it("optimistically enables and disables only the pending skill switch", async () => {
