@@ -733,6 +733,93 @@ def test_openai_chat_omits_reasoning_params() -> None:
         assert mock_is_openai.called
 
 
+def _azure_llm(model_name: str, api_version: str | None) -> LitellmLLM:
+    return LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name=model_name,
+        api_base="https://my-resource.openai.azure.us",
+        api_version=api_version,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.AZURE,
+            model_name=model_name,
+        ),
+    )
+
+
+def _stream_and_get_completion_kwargs(llm: LitellmLLM, is_openai: bool) -> dict:
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=is_openai),
+    ):
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages))
+        return mock_completion.call_args.kwargs
+
+
+@pytest.mark.parametrize(
+    "configured_api_version", ["2025-03-01-preview", "2024-08-01-preview"]
+)
+def test_azure_responses_bridge_drops_dated_api_version(
+    configured_api_version: str,
+) -> None:
+    """Responses-bridge calls must target the v1 surface: a dated api-version
+    makes LiteLLM build the legacy /openai/responses URL, which sovereign
+    clouds (e.g. Azure Government) do not serve (#11420). Dropping it defers
+    to LiteLLM's responses default (AZURE_DEFAULT_RESPONSES_API_VERSION)."""
+    llm = _azure_llm("gpt-5.1", api_version=configured_api_version)
+    kwargs = _stream_and_get_completion_kwargs(llm, is_openai=True)
+    assert kwargs["model"] == "azure/responses/gpt-5.1"
+    assert kwargs["api_version"] is None
+
+
+@pytest.mark.parametrize("configured_api_version", ["preview", "latest", "v1"])
+def test_azure_responses_bridge_keeps_v1_api_version(
+    configured_api_version: str,
+) -> None:
+    llm = _azure_llm("gpt-5.1", api_version=configured_api_version)
+    kwargs = _stream_and_get_completion_kwargs(llm, is_openai=True)
+    assert kwargs["api_version"] == configured_api_version
+
+
+def test_azure_responses_bridge_leaves_none_api_version() -> None:
+    """None must stay None so LiteLLM's AZURE_DEFAULT_RESPONSES_API_VERSION
+    env override keeps working."""
+    llm = _azure_llm("gpt-5.1", api_version=None)
+    kwargs = _stream_and_get_completion_kwargs(llm, is_openai=True)
+    assert kwargs["api_version"] is None
+
+
+def test_azure_chat_completions_keeps_dated_api_version() -> None:
+    """Non-bridge Azure calls keep the admin-configured dated api-version."""
+    llm = _azure_llm("mistral-large", api_version="2025-03-01-preview")
+    kwargs = _stream_and_get_completion_kwargs(llm, is_openai=False)
+    assert kwargs["model"] == "azure/mistral-large"
+    assert kwargs["api_version"] == "2025-03-01-preview"
+
+
+def test_non_azure_responses_bridge_keeps_api_version() -> None:
+    """The upgrade is Azure-only: a LiteLLM proxy fronting Azure manages its
+    own upstream routing, so its configured api-version passes through."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name="gpt-5.1",
+        api_base="https://my-proxy.internal",
+        api_version="2025-03-01-preview",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name="gpt-5.1",
+        ),
+    )
+    kwargs = _stream_and_get_completion_kwargs(llm, is_openai=True)
+    assert kwargs["model"] == "litellm_proxy/responses/gpt-5.1"
+    assert kwargs["api_version"] == "2025-03-01-preview"
+
+
 def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
     with (
         patch("litellm.completion") as mock_completion,
