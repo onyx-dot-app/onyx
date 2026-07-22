@@ -10,6 +10,9 @@ import { UserGroup } from "@/lib/types";
 import { Scope } from "./types";
 import { toast } from "@opal/layouts";
 import { SvgSettings } from "@opal/icons";
+
+const HOURS_PER_DAY = 24;
+
 interface CreateRateLimitModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
@@ -67,15 +70,16 @@ export default function CreateRateLimitModal({
         <Formik
           initialValues={{
             enabled: true,
-            period_hours: "",
+            period_days: "",
             token_budget: "",
             target_scope: forSpecificScope || Scope.GLOBAL,
             user_group_id: forSpecificUserGroup,
           }}
           validationSchema={Yup.object().shape({
-            period_hours: Yup.number()
+            period_days: Yup.number()
               .required("Time Window is a required field")
-              .min(1, "Time Window must be at least 1 hour"),
+              .integer("Time Window must be a whole number of days")
+              .min(1, "Time Window must be at least 1 day"),
             token_budget: Yup.number()
               .required("Token Budget is a required field")
               .min(1, "Token Budget must be at least 1"),
@@ -98,7 +102,7 @@ export default function CreateRateLimitModal({
             formikHelpers.setSubmitting(true);
             onSubmit(
               values.target_scope,
-              Number(values.period_hours),
+              Number(values.period_days) * HOURS_PER_DAY,
               Number(values.token_budget),
               Number(values.user_group_id)
             );
@@ -136,8 +140,8 @@ export default function CreateRateLimitModal({
                     />
                   )}
                 <TextFormField
-                  name="period_hours"
-                  label="Time Window (Hours)"
+                  name="period_days"
+                  label="Time Window (UTC Days)"
                   type="number"
                   placeholder=""
                 />

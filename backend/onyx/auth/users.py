@@ -2122,12 +2122,16 @@ async def current_limited_user(
 
 async def current_chat_accessible_user(
     user: User | None = Depends(optional_user),
-) -> User:
+) -> AsyncGenerator[User, None]:
     tenant_id = get_current_tenant_id()
-
-    return await double_check_user(
+    user = await double_check_user(
         user, allow_anonymous_access=anonymous_user_enabled(tenant_id=tenant_id)
     )
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+    try:
+        yield user
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
 
 async def current_user(
