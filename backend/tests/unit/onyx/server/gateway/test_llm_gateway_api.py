@@ -39,7 +39,10 @@ from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build.craft_gateway import is_craft_gateway_request
 from onyx.server.gateway import api as gateway_api
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
-from onyx.server.gateway.models import ChatCompletionRequest
+from onyx.server.gateway.models import (
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+)
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
 
@@ -391,7 +394,9 @@ def test_completion_payload_serializes_openai_shape() -> None:
         usage=_wire_usage(),
     )
 
-    payload = gateway_api._completion_payload(response, "3/gpt-5-mini")
+    payload = ChatCompletionResponse.from_model_response(
+        response, "3/gpt-5-mini"
+    ).to_wire()
 
     assert payload["object"] == "chat.completion"
     assert payload["created"] == 1784577906
@@ -597,8 +602,10 @@ def test_handle_chat_completion_happy_path_serializes_response() -> None:
         "llm_from_provider",
         return_value=_InvokeLLM(response),
     ):
-        payload = _handle_completion_call(request)
+        result = _handle_completion_call(request)
 
+    assert isinstance(result, ChatCompletionResponse)
+    payload = result.to_wire()
     assert payload["object"] == "chat.completion"
     assert payload["model"] == "1/test"
     assert payload["choices"][0]["message"]["content"] == "hello there"
@@ -722,6 +729,7 @@ def test_endpoint_applies_craft_policy() -> None:
         ) as resolve_model,
         patch.object(gateway_api, "handle_chat_completion") as handle,
     ):
+        handle.return_value.to_wire.return_value = {}
         gateway_api.gateway_chat_completions(
             request=request,
             http_request=http_request,

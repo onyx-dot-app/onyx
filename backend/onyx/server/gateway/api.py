@@ -4,8 +4,8 @@ import threading
 from collections.abc import Callable, Iterator
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,6 @@ from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
-    ModelResponse,
     ModelResponseStream,
     Usage,
 )
@@ -30,7 +29,11 @@ from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tracing_wrap import _finalize_tool_calls, _merge_tool_call_delta
 from onyx.server.features.build.craft_gateway import is_craft_gateway_request
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
-from onyx.server.gateway.models import ChatCompletionRequest
+from onyx.server.gateway.models import (
+    ChatCompletionChunk,
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+)
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import (
@@ -138,83 +141,6 @@ def _parse_tool_choice(raw: Any) -> ToolChoiceOptions | None:
     return None
 
 
-def _created_epoch(created: str) -> int:
-    try:
-        return int(float(created))
-    except (TypeError, ValueError):
-        return 0
-
-
-def _usage_payload(usage: Usage) -> dict[str, Any]:
-    return {
-        "prompt_tokens": usage.prompt_tokens,
-        "completion_tokens": usage.completion_tokens,
-        "total_tokens": usage.total_tokens,
-        "prompt_tokens_details": {"cached_tokens": usage.cache_read_input_tokens},
-    }
-
-
-def _completion_payload(response: ModelResponse, model: str) -> dict[str, Any]:
-    message: dict[str, Any] = {
-        "role": response.choice.message.role,
-        "content": response.choice.message.content,
-    }
-    if response.choice.message.reasoning_content:
-        message["reasoning_content"] = response.choice.message.reasoning_content
-    if response.choice.message.tool_calls:
-        message["tool_calls"] = [
-            tc.model_dump() for tc in response.choice.message.tool_calls
-        ]
-    payload: dict[str, Any] = {
-        "id": response.id,
-        "object": "chat.completion",
-        "created": _created_epoch(response.created),
-        "model": model,
-        "choices": [
-            {
-                "index": response.choice.index,
-                "message": message,
-                "finish_reason": response.choice.finish_reason,
-            }
-        ],
-    }
-    if response.usage is not None:
-        payload["usage"] = _usage_payload(response.usage)
-    return payload
-
-
-def _chunk_payload(
-    chunk: ModelResponseStream, model: str, include_role: bool
-) -> dict[str, Any]:
-    delta: dict[str, Any] = {}
-    if include_role:
-        delta["role"] = "assistant"
-    if chunk.choice.delta.content is not None:
-        delta["content"] = chunk.choice.delta.content
-    if chunk.choice.delta.reasoning_content is not None:
-        delta["reasoning_content"] = chunk.choice.delta.reasoning_content
-    if chunk.choice.delta.tool_calls:
-        delta["tool_calls"] = [
-            tc.model_dump(exclude_none=True) for tc in chunk.choice.delta.tool_calls
-        ]
-    payload: dict[str, Any] = {
-        "id": chunk.id,
-        "object": "chat.completion.chunk",
-        "created": _created_epoch(chunk.created),
-        "model": model,
-        "choices": [
-            {
-                "index": chunk.choice.index,
-                "delta": delta,
-                "finish_reason": chunk.choice.finish_reason,
-            }
-        ],
-    }
-    if chunk.usage is not None:
-        payload["usage"] = _usage_payload(chunk.usage)
-    return payload
-
-
 _STREAM_END = object()
 
 
@@ -284,10 +210,12 @@ def _stream_worker(
                     accumulated_reasoning.append(chunk.choice.delta.reasoning_content)
                 for delta_tc in chunk.choice.delta.tool_calls:
                     _merge_tool_call_delta(tool_call_buffer, delta_tc)
-                payload = _chunk_payload(chunk, model, include_role=not sent_role)
+                payload = ChatCompletionChunk.from_stream_chunk(
+                    chunk, model, include_role=not sent_role
+                )
                 sent_role = True
                 if not _put_stream_item(
-                    out, f"data: {json.dumps(payload)}\n\n", cancelled
+                    out, f"data: {json.dumps(payload.to_wire())}\n\n", cancelled
                 ):
                     break
             else:
@@ -411,7 +339,7 @@ def handle_chat_completion(
     provider: LLMProviderView,
     model_config: ModelConfigurationView,
     flow: LLMFlow,
-) -> Any:
+) -> StreamingResponse | ChatCompletionResponse:
     llm = llm_from_provider(
         model_name=model_config.name,
         llm_provider=provider,
@@ -476,7 +404,7 @@ def handle_chat_completion(
         if span is not None:
             record_llm_response(span, response)
 
-    return _completion_payload(response, request.model)
+    return ChatCompletionResponse.from_model_response(response, request.model)
 
 
 @router.post("/v1/chat/completions")
@@ -485,7 +413,7 @@ def gateway_chat_completions(
     http_request: Request,
     user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
-) -> Any:
+) -> Response:
     flow = LLMFlow.CRAFT_LLM_GENERATION
     if not _FLOW_ACCESS_CHECKS[flow](http_request, user):
         raise OnyxError(
@@ -493,10 +421,15 @@ def gateway_chat_completions(
             "This credential is not authorized to use the Onyx LLM gateway.",
         )
     provider, model_config = resolve_gateway_model(db_session, user, request.model)
-    return handle_chat_completion(
+    result = handle_chat_completion(
         request=request,
         db_session=db_session,
         provider=provider,
         model_config=model_config,
         flow=flow,
     )
+    if isinstance(result, StreamingResponse):
+        return result
+    # Serialize explicitly: FastAPI's default model serialization would emit
+    # unset fields as nulls, violating the wire contract's presence semantics.
+    return JSONResponse(content=result.to_wire())
