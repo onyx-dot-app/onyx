@@ -214,7 +214,6 @@ export function BuildLLMPopover({
       <Popover.Content side="bottom" align="start" width="lg">
         <div className="px-3">
           <Section gap={0.5}>
-            {/* Toggle for recommended only */}
             <div className="flex items-center justify-between py-3 gap-3 border-b border-border-01 px-1">
               <Text font="secondary-body" color="text-03">
                 Recommended Models Only
@@ -225,7 +224,6 @@ export function BuildLLMPopover({
               />
             </div>
 
-            {/* Model List */}
             <PopoverMenu scrollContainerRef={scrollContainerRef}>
               {groupedOptions.length === 0
                 ? [
@@ -255,7 +253,6 @@ export function BuildLLMPopover({
                             value={group.groupKey}
                             className="border-none pt-1"
                           >
-                            {/* Group Header */}
                             <AccordionTrigger className="flex items-center rounded-08 hover:no-underline hover:bg-background-tint-02 group [&>svg]:hidden w-full py-1">
                               <div className="flex items-center gap-1 shrink-0">
                                 <div className="flex items-center justify-center size-5 shrink-0">
@@ -281,7 +278,6 @@ export function BuildLLMPopover({
                               </div>
                             </AccordionTrigger>
 
-                            {/* Model Items */}
                             <AccordionContent className="pb-0 pt-0">
                               <div className="flex flex-col gap-1">
                                 {group.options.map(renderModelItem)}

@@ -80,9 +80,8 @@ export function getDefaultLlmSelection(
 ): BuildLlmSelection | null {
   if (!llmProviders) return null;
 
-  // Codepoint compare on the lowercased name, then id — mirrors the backend's
-  // casefold ordering in _gateway_provider_order (localeCompare diverges on
-  // punctuation and locale-sensitive characters).
+  // Must match the backend's casefold-then-id ordering in
+  // _gateway_provider_order; localeCompare would diverge.
   const candidates = [...llmProviders].sort((left, right) => {
     const leftName = craftProviderDisplayName(left).toLowerCase();
     const rightName = craftProviderDisplayName(right).toLowerCase();
