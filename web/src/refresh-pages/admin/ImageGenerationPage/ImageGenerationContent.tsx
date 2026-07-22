@@ -69,6 +69,17 @@ export default function ImageGenerationContent() {
     return new Set(configs.map((c) => c.image_provider_id));
   }, [configs]);
 
+  // Deprecated models stay visible only for admins who already connected them,
+  // so they can still disconnect or switch away.
+  const visibleGroups = useMemo(() => {
+    return IMAGE_PROVIDER_GROUPS.map((group) => ({
+      ...group,
+      providers: group.providers.filter(
+        (p) => !p.deprecated || connectedProviderIds.has(p.image_provider_id)
+      ),
+    })).filter((g) => g.providers.length > 0);
+  }, [connectedProviderIds]);
+
   const defaultConfig = useMemo(() => {
     return configs.find((c) => c.is_default);
   }, [configs]);
@@ -218,7 +229,7 @@ export default function ImageGenerationContent() {
         )}
 
         {/* Provider Groups */}
-        {IMAGE_PROVIDER_GROUPS.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.name} className="flex flex-col gap-2">
             <Content title={group.name} sizePreset="secondary" variant="body" />
             {group.providers.map((provider) => {
