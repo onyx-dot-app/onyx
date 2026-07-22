@@ -214,7 +214,14 @@ class McpRequestEvaluator(RequestEvaluator):
                     server.id,
                     request.host,
                 )
-                actions = (_deny_action("MCP gating failed; blocked."),)
+                actions = (
+                    MatchedAction(
+                        action_type=MCP_UNCLASSIFIABLE_ACTION_TYPE,
+                        display_name="Unrecognized MCP request",
+                        description="MCP gating failed; blocked.",
+                        policy=EndpointPolicy.DENY,
+                    ),
+                )
 
         return AllMatchedActions(
             actions=actions, target=gated_target, payload=_request_payload(request)
@@ -231,9 +238,14 @@ def _mcp_tool_actions(
     if classification.kind is McpRpcKind.UNCLASSIFIABLE:
         path = (request.path or "").split("?", 1)[0]
         return (
-            _deny_action(
-                f"{request.method} {path} could not be parsed "
-                "as an MCP tool call or protocol message; blocked.",
+            MatchedAction(
+                action_type=MCP_UNCLASSIFIABLE_ACTION_TYPE,
+                display_name="Unrecognized MCP request",
+                description=(
+                    f"{request.method} {path} could not be parsed "
+                    "as an MCP tool call or protocol message; blocked."
+                ),
+                policy=EndpointPolicy.DENY,
             ),
         )
     stored = get_action_policies(db, GatedAppKind.MCP_SERVER, server.id)
@@ -252,15 +264,6 @@ def _mcp_tool_actions(
             policy=stored.get(tool_name, MCP_TOOL_DEFAULT_POLICY),
         )
         for tool_name, count in counts.items()
-    )
-
-
-def _deny_action(description: str) -> MatchedAction:
-    return MatchedAction(
-        action_type=MCP_UNCLASSIFIABLE_ACTION_TYPE,
-        display_name="Unrecognized MCP request",
-        description=description,
-        policy=EndpointPolicy.DENY,
     )
 
 
