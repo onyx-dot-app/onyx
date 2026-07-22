@@ -9,6 +9,8 @@ from urllib.parse import unquote, urlsplit
 from httpx_oauth.clients.openid import BASE_SCOPES, OpenID
 from httpx_oauth.exceptions import GetIdEmailError
 
+from onyx.configs.app_configs import OIDC_TRUST_UNVERIFIED_EMAIL
+
 
 class OpenIDConfigurationIssuerMismatch(ValueError):
     """The discovery document's issuer does not own the configured URL."""
@@ -134,7 +136,7 @@ class VerifiedEmailOpenID(OpenID):
                 raise GetIdEmailError(
                     "Userinfo 'email' was not a string", response=response
                 )
-            if email is not None and data.get("email_verified") is not True:
+            if email is not None and not OIDC_TRUST_UNVERIFIED_EMAIL and data.get("email_verified") is not True:
                 raise GetIdEmailError(
                     "Identity provider did not mark the email as verified",
                     response=response,

@@ -261,6 +261,13 @@ if _OIDC_SCOPE_OVERRIDE:
 # backwards compatibility for existing OIDC deployments.
 OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
 
+# OIDC Trust Unverified Email - if true, will allow OIDC sign-ins and bypass the
+# "email_verified" check when it is missing or false. Necessary for OIDC
+# providers that do not provide or support the "email_verified" claim, such as Microsoft Entra ID.
+OIDC_TRUST_UNVERIFIED_EMAIL = (
+    os.environ.get("OIDC_TRUST_UNVERIFIED_EMAIL", "").lower() == "true"
+)
+
 # Opt-in: capture IdP claims at OAuth login and enrich the chat experience
 # with the user's directory profile (country, department, job title, ...) —
 # an "Organization Profile" block in the system prompt plus `{{user.<key>}}`
