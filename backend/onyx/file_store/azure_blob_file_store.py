@@ -51,20 +51,34 @@ class AzureBlobBackedFileStore(FileStore):
         self._blob_service_client: BlobServiceClient | None = None
         self._container_name = container_name
         self._azure_prefix = azure_prefix or "onyx-files"
-        self._account_name = account_name
-        self._account_url = account_url
         self._connection_string = connection_string
-        self._account_key = account_key
 
-    def _get_account_url(self) -> str:
-        if self._account_url:
-            return self._account_url
-        if self._account_name:
-            return f"https://{self._account_name}.blob.core.windows.net"
-        raise RuntimeError(
-            "Azure file store requires AZURE_STORAGE_ACCOUNT_URL or "
-            "AZURE_STORAGE_ACCOUNT_NAME (unless AZURE_STORAGE_CONNECTION_STRING is set)"
-        )
+        # Validate auth config eagerly so misconfiguration fails at
+        # construction (i.e. during startup initialize()) rather than on the
+        # first read/write. A connection string needs neither URL nor key.
+        self._account_url: str | None = None
+        self._account_key_credential: dict[str, str] | None = None
+        if not connection_string:
+            if account_url:
+                self._account_url = account_url
+            elif account_name:
+                self._account_url = f"https://{account_name}.blob.core.windows.net"
+            else:
+                raise RuntimeError(
+                    "Azure file store requires AZURE_STORAGE_ACCOUNT_URL or "
+                    "AZURE_STORAGE_ACCOUNT_NAME (unless "
+                    "AZURE_STORAGE_CONNECTION_STRING is set)"
+                )
+            if account_key:
+                if not account_name:
+                    raise RuntimeError(
+                        "AZURE_STORAGE_ACCOUNT_NAME is required when "
+                        "authenticating with AZURE_STORAGE_ACCOUNT_KEY"
+                    )
+                self._account_key_credential = {
+                    "account_name": account_name,
+                    "account_key": account_key,
+                }
 
     def _get_blob_service_client(self) -> BlobServiceClient:
         """Initialize the Azure Blob service client if not already done.
@@ -85,25 +99,20 @@ class AzureBlobBackedFileStore(FileStore):
                             self._connection_string
                         )
                     )
-                elif self._account_key:
-                    account_name = self._account_name
-                    if not account_name:
-                        raise RuntimeError(
-                            "AZURE_STORAGE_ACCOUNT_NAME is required when "
-                            "authenticating with AZURE_STORAGE_ACCOUNT_KEY"
-                        )
+                elif self._account_url is None:
+                    # Unreachable: __init__ resolves the URL for every auth
+                    # mode except connection string.
+                    raise RuntimeError("Azure account URL was not resolved")
+                elif self._account_key_credential is not None:
                     self._blob_service_client = BlobServiceClient(
-                        account_url=self._get_account_url(),
-                        credential={
-                            "account_name": account_name,
-                            "account_key": self._account_key,
-                        },
+                        account_url=self._account_url,
+                        credential=self._account_key_credential,
                     )
                 else:
                     from azure.identity import DefaultAzureCredential
 
                     self._blob_service_client = BlobServiceClient(
-                        account_url=self._get_account_url(),
+                        account_url=self._account_url,
                         credential=DefaultAzureCredential(),
                     )
 
@@ -151,7 +160,13 @@ class AzureBlobBackedFileStore(FileStore):
                 "Successfully created Azure container '%s'", self._container_name
             )
         except ResourceExistsError:
-            logger.info("Azure container '%s' already exists", self._container_name)
+            # exists() said no just above, so someone else created the
+            # container in between — benign, but surprising enough to flag.
+            logger.warning(
+                "Azure container '%s' was created concurrently after a negative "
+                "existence check",
+                self._container_name,
+            )
         except HttpResponseError as e:
             if e.status_code == 403:
                 logger.warning(

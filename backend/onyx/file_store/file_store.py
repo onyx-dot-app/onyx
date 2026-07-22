@@ -73,7 +73,11 @@ class FileStore(ABC):
         file_type: str,
     ) -> bool:
         """
-        Check if a file exists in the blob store
+        Check if a file record with the given origin and type exists.
+
+        Note: implementations check the metadata record in the database, not
+        the backing blob itself — content is assumed present when the record
+        exists.
 
         Parameters:
         - file_id: Unique ID of the file to check for

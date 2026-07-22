@@ -112,6 +112,20 @@ def file_store(
 
 
 class TestAzureBlobBackedFileStore:
+    def test_constructor_rejects_missing_config(self) -> None:
+        """Misconfiguration must fail at construction, not on first use."""
+        with pytest.raises(RuntimeError, match="AZURE_STORAGE_ACCOUNT_URL or"):
+            AzureBlobBackedFileStore(container_name=TEST_CONTAINER_NAME)
+
+        with pytest.raises(
+            RuntimeError, match="AZURE_STORAGE_ACCOUNT_NAME is required"
+        ):
+            AzureBlobBackedFileStore(
+                container_name=TEST_CONTAINER_NAME,
+                account_url=_azurite_blob_endpoint(),
+                account_key=AZURITE_ACCOUNT_KEY,
+            )
+
     def test_store_initialization_is_idempotent(
         self, file_store: AzureBlobBackedFileStore
     ) -> None:
