@@ -72,10 +72,10 @@ def classify_mcp_request(http_method: str, body: bytes | None) -> McpRpcClassifi
     * anything else (unknown method, malformed body, a ``tools/call`` missing its
       name) → ``UNCLASSIFIABLE``.
     """
-    method = (http_method or "").upper()
-    if method in ("GET", "DELETE"):
+    verb = (http_method or "").upper()
+    if verb in ("GET", "DELETE"):
         return _PLUMBING if not body else _UNCLASSIFIABLE
-    if method != "POST":
+    if verb != "POST":
         return _UNCLASSIFIABLE
 
     messages = _parse_messages(body)
@@ -84,15 +84,15 @@ def classify_mcp_request(http_method: str, body: bytes | None) -> McpRpcClassifi
 
     tool_names: list[str] = []
     for message in messages:
-        method = message.get("method")
-        if not isinstance(method, str):
+        rpc_method = message.get("method")
+        if not isinstance(rpc_method, str):
             return _UNCLASSIFIABLE
-        if method == _TOOL_CALL_METHOD:
+        if rpc_method == _TOOL_CALL_METHOD:
             name = _tool_name(message)
             if name is None:
                 return _UNCLASSIFIABLE
             tool_names.append(name)
-        elif not _is_plumbing(method):
+        elif not _is_plumbing(rpc_method):
             return _UNCLASSIFIABLE
 
     if tool_names:

@@ -39,7 +39,11 @@ from onyx.sandbox_proxy.mcp_jsonrpc import (
     McpRpcKind,
     classify_mcp_request,
 )
-from onyx.sandbox_proxy.resolvers.mcp_matching import match_request, parse_target
+from onyx.sandbox_proxy.resolvers.mcp_matching import (
+    AmbiguousMCPTargetError,
+    match_request,
+    parse_target,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -171,7 +175,13 @@ class McpRequestEvaluator(RequestEvaluator):
                 )
                 if t is not None
             )
-            target = match_request(targets, request)
+            try:
+                target = match_request(targets, request)
+            except AmbiguousMCPTargetError:
+                # Duplicate server configs claim this endpoint — no single target
+                # to attribute a gated DENY to. Leave it off-catalog; the resolver
+                # fails any non-plumbing request closed at injection (see resolve()).
+                return None
             if target is None:
                 return None
             server = servers_by_id[target.server_id]
@@ -212,9 +222,10 @@ def _mcp_tool_actions(
 ) -> tuple[MatchedAction, ...]:
     """One MatchedAction per invoked tool; a single DENY when unclassifiable."""
     if classification.kind is McpRpcKind.UNCLASSIFIABLE:
+        path = (request.path or "").split("?", 1)[0]
         return (
             _deny_action(
-                f"{request.method} {request.path} could not be parsed "
+                f"{request.method} {path} could not be parsed "
                 "as an MCP tool call or protocol message; blocked.",
             ),
         )

@@ -76,7 +76,14 @@ class MCPServerResolver(CredentialResolver):
         actions = ctx.matched_actions
         if actions is not None and actions.target.kind is not GatedAppKind.MCP_SERVER:
             return False
-        return bool(self._host_targets(request, ctx.sandbox.tenant_id))
+        return bool(
+            host_targets(
+                self._targets(ctx.sandbox.tenant_id),
+                request.scheme,
+                request.host,
+                request.port,
+            )
+        )
 
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
         actions = ctx.matched_actions
@@ -195,13 +202,6 @@ class MCPServerResolver(CredentialResolver):
             row_id=server.id,
             user_id=str(user_id),
             auth_type=server.auth_type.value if server.auth_type else None,
-        )
-
-    def _host_targets(
-        self, request: http.Request, tenant_id: str
-    ) -> list[CraftMCPTarget]:
-        return host_targets(
-            self._targets(tenant_id), request.scheme, request.host, request.port
         )
 
     def _targets(self, tenant_id: str) -> tuple[CraftMCPTarget, ...]:

@@ -75,7 +75,7 @@ def normalized_request_path(raw_path: str) -> str:
     return posixpath.normpath(path)
 
 
-def path_matches(request_path: str, path_prefix: str) -> bool:
+def path_within_prefix(request_path: str, path_prefix: str) -> bool:
     if not path_prefix:
         return True
     return request_path == path_prefix or request_path.startswith(path_prefix + "/")
@@ -107,7 +107,7 @@ def match_request(
     candidates = [
         t
         for t in host_targets(targets, request.scheme, request.host, request.port)
-        if path_matches(path, t.path_prefix)
+        if path_within_prefix(path, t.path_prefix)
     ]
     if not candidates:
         return None
