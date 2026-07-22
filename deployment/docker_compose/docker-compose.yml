@@ -1,38 +1,32 @@
 # =============================================================================
 # ONYX DOCKER COMPOSE
 # =============================================================================
-# This is the default configuration for Onyx. This file is fairly configurable,
-# also see env.template for possible settings.
+# Base compose file and single source of truth for all service definitions.
+# Settings live in .env (see env.template). Deployment modes are thin overlay
+# files layered on top with -f:
 #
-# PRODUCTION DEPLOYMENT CHECKLIST:
-# To convert this setup to a production deployment following best practices,
-# follow the checklist below. Note that there are other ways to secure the Onyx
-# deployment so these are not strictly necessary for all teams.
+#   Development (expose service ports on the host):
+#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
 #
-# 1. SECURITY HARDENING:
-#    - Remove all port exposures except nginx (80/443)
-#    - Comment out ports for: api_server, relational_db, cache, minio
-#    - Set strong MinIO/S3 credentials (MINIO_ROOT_* + S3_AWS_*), not minioadmin
+#   Production with Let's Encrypt HTTPS (see env.prod.template and
+#   init-letsencrypt.sh for first-time certificate setup):
+#     docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait
 #
-# 2. SSL/TLS SETUP:
-#    - Uncomment the certbot service (see below)
-#    - Add SSL certificate volumes to nginx service
-#    - Change nginx command from app.conf.template to app.conf.template.prod
+#   Production with user-provided SSL certificates:
+#     docker compose -f docker-compose.yml -f docker-compose.prod-no-letsencrypt.yml up -d --wait
 #
-# 3. ENVIRONMENT CONFIGURATION:
-#    - Replace env_file with explicit environment variables
+#   Minimal deployment (Postgres only; no search, background workers, or
+#   model servers):
+#     docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml up -d
 #
-# 4. AUTHENTICATION:
-#    - Select an authentication method like Basic, Google OAuth, OIDC, or SAML
+#   Craft Docker sandbox backend (opt-in; wired up by install.sh --include-craft):
+#     layer docker-compose.craft.yml on top of any of the above
 #
-# 5. CA CERTIFICATES:
-#    - Uncomment custom CA certificate volumes if needed
+# Instead of repeating -f flags, COMPOSE_FILE can be set in .env, e.g.
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
 #
-# 6. DOMAIN CONFIGURATION:
-#    - Set proper DOMAIN environment variable for nginx
-#    - Configure DNS and SSL certificates
-#
-# For a complete production setup, refer to docker-compose.prod.yml
+# The s3-filestore profile (COMPOSE_PROFILES in .env) controls whether MinIO
+# runs; see env.template.
 # =============================================================================
 
 name: onyx
@@ -207,6 +201,11 @@ services:
     restart: unless-stopped
     environment:
       - INTERNAL_URL=${INTERNAL_URL:-http://api_server:8080}
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
     healthcheck:
       test:
         [
@@ -372,6 +371,11 @@ services:
       retries: 5
     volumes:
       - db_volume:/var/lib/postgresql/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
 
   opensearch:
     image: ${BASE_IMAGE_REGISTRY:-docker.io}/opensearchproject/opensearch:3.6.0
@@ -439,9 +443,8 @@ services:
       # the writable /etc/nginx/conf.d/ inside the container.  This avoids
       # "Permission denied" errors on Windows Docker bind mounts.
       - ../data/nginx:/nginx-templates:ro
-    # PRODUCTION: Add SSL certificate volumes for HTTPS support:
-    #   - ../data/certbot/conf:/etc/letsencrypt
-    #   - ../data/certbot/www:/var/www/certbot
+    # SSL certificate volumes are added by the production overlays
+    # (docker-compose.prod.yml / docker-compose.prod-no-letsencrypt.yml).
     logging:
       driver: json-file
       options:
@@ -450,7 +453,8 @@ services:
     # The specified script waits for the api_server to start up.
     # Without this we've seen issues where nginx shows no error logs but
     # does not receive any traffic
-    # PRODUCTION: Change to app.conf.template.prod for production nginx config
+    # The production overlays switch the template argument to
+    # app.conf.template.prod / app.conf.template.no-letsencrypt.
     command: >
       /bin/sh -c "rm -f /etc/nginx/conf.d/default.conf
       && cp -a /nginx-templates/. /etc/nginx/conf.d/
@@ -534,19 +538,8 @@ services:
     # uncomment below + comment out the above to use the `docker-in-docker` execution mode
     # privileged: true
 
-  # PRODUCTION: Uncomment the following certbot service for SSL certificate management
-  # certbot:
-  #   image: certbot/certbot
-  #   restart: unless-stopped
-  #   volumes:
-  #     - ../data/certbot/conf:/etc/letsencrypt
-  #     - ../data/certbot/www:/var/www/certbot
-  #   logging:
-  #     driver: json-file
-  #     options:
-  #       max-size: "50m"
-  #       max-file: "6"
-  #   entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+  # The certbot service for Let's Encrypt certificate renewal is defined in
+  # the docker-compose.prod.yml overlay.
 
 volumes:
   # Necessary for persisting data for use
