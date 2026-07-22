@@ -52,10 +52,9 @@ def _check_ssrf_safety(endpoint_url: str) -> None:
     ``https_only`` is unconditional at every level.
 
     Validation runs at configuration time only; delivery trusts the stored URL
-    (see ``post_json_to_endpoint``). A hostname that later drifts to a private
-    IP is kept harmless by HTTPS certificate verification at delivery time —
-    revisit with a send-time re-check if cert verification ever becomes
-    optional for hooks.
+    (see ``post_json_to_endpoint``). HTTPS certificate verification does not
+    prevent a validated hostname from later resolving to a private address;
+    preventing DNS rebinding requires validating again at delivery time.
 
     Uses BAD_GATEWAY so the frontend maps the error to the Endpoint URL field.
     """
