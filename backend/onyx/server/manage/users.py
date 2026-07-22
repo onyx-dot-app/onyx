@@ -1,6 +1,5 @@
 import csv
 import io
-import re
 from datetime import datetime, timedelta, timezone
 from typing import cast
 from uuid import UUID
@@ -422,9 +421,11 @@ def list_all_users(
     ]
 
     if q:
-        invited_emails = [
-            email for email in invited_emails if re.search(r"{}".format(q), email, re.I)
-        ]
+        # Plain case-insensitive substring match (mirrors the ilike used for
+        # accepted users). Never compile q as a regex: it is attacker-controlled
+        # and a crafted pattern can cause catastrophic backtracking (ReDoS).
+        q_lower = q.lower()
+        invited_emails = [email for email in invited_emails if q_lower in email.lower()]
 
     accepted_count = len(accepted_emails)
     slack_users_count = len(slack_users_emails)
