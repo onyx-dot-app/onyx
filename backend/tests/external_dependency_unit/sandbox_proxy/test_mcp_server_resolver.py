@@ -9,6 +9,7 @@ credentials fail closed with agent-facing prose naming the server.
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable, Generator
 from typing import Any
@@ -22,6 +23,8 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.db.enums import (
+    EndpointPolicy,
+    GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -35,6 +38,11 @@ from onyx.db.mcp import (
     update_mcp_server__no_commit,
 )
 from onyx.db.models import MCPServer, OAuthAccount, User
+from onyx.external_apps.matching.engine import (
+    AllMatchedActions,
+    GatedTarget,
+    MatchedAction,
+)
 from onyx.sandbox_proxy.credential_injection import (
     CredentialUnavailableError,
     InjectionContext,
@@ -64,6 +72,7 @@ def craft_server(
         host: str | None = None,
         path: str = "/mcp",
         available_in_craft: bool = True,
+        is_public: bool = True,
         oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY,
         oauth_authorization_endpoint: str | None = None,
         oauth_token_endpoint: str | None = None,
@@ -77,6 +86,7 @@ def craft_server(
             transport=MCPTransport.STREAMABLE_HTTP,
             auth_performer=auth_performer,
             db_session=db_session,
+            is_public=is_public,
             oauth_provider_mode=oauth_provider_mode,
             oauth_authorization_endpoint=oauth_authorization_endpoint,
             oauth_token_endpoint=oauth_token_endpoint,
@@ -131,6 +141,20 @@ def _attach_user_config(
     return config.id
 
 
+def _matched(kind: GatedAppKind, target_id: int) -> AllMatchedActions:
+    return AllMatchedActions(
+        actions=(
+            MatchedAction(
+                action_type="x",
+                display_name="X",
+                description="d",
+                policy=EndpointPolicy.ASK,
+            ),
+        ),
+        target=GatedTarget(kind=kind, id=target_id, app_name="srv"),
+    )
+
+
 def _ctx(user: User) -> InjectionContext:
     return InjectionContext(
         sandbox=ResolvedSandbox(
@@ -145,9 +169,23 @@ def _ctx(user: User) -> InjectionContext:
 
 
 def _request(
-    host: str, path: str = "/mcp", port: int = 443, scheme: str = "https"
+    host: str,
+    path: str = "/mcp",
+    port: int = 443,
+    scheme: str = "https",
+    method: str = "GET",
+    raw_content: bytes | None = None,
 ) -> MagicMock:
-    return MagicMock(host=host, port=port, path=path, scheme=scheme)
+    # Defaults model the SSE stream (bodyless GET): plumbing, so the ungated
+    # injection path resolves. Tool calls must arrive gated (matched_actions).
+    return MagicMock(
+        host=host,
+        port=port,
+        path=path,
+        scheme=scheme,
+        method=method,
+        raw_content=raw_content,
+    )
 
 
 def test_admin_api_token_injects_stored_headers(
@@ -347,6 +385,44 @@ def test_duplicate_endpoint_attribution_fails_closed(
     assert "ambiguous" in str(exc_info.value)
 
 
+def test_duplicate_endpoint_disambiguated_by_user_access(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    """Two servers share the URL but only one is reachable by the user — the
+    ungated (plumbing) path attributes to it rather than failing ambiguous, and
+    injects that server's credentials."""
+    user = create_test_user(db_session, "mcp_resolver_access")
+    host = _unique_host()
+    accessible = craft_server(
+        host=host,
+        path="/mcp",
+        is_public=True,
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    _attach_admin_config(
+        db_session,
+        accessible,
+        MCPConnectionData(headers={"Authorization": "Bearer reachable"}),
+    )
+    inaccessible = craft_server(
+        host=host,
+        path="/mcp",
+        is_public=False,  # not shared with this basic user
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    _attach_admin_config(
+        db_session,
+        inaccessible,
+        MCPConnectionData(headers={"Authorization": "Bearer hidden"}),
+    )
+
+    assert MCPServerResolver().resolve(_request(host, path="/mcp"), _ctx(user)) == {
+        "Authorization": "Bearer reachable"
+    }
+
+
 def test_flag_flipped_since_cache_is_blocked(
     db_session: Session, craft_server: CraftServerFactory
 ) -> None:
@@ -373,11 +449,12 @@ def test_flag_flipped_since_cache_is_blocked(
         resolver.resolve(_request(host), _ctx(user))
 
 
-def test_matched_request_is_not_claimed(
+def test_matched_request_claim_depends_on_target_kind(
     db_session: Session, craft_server: CraftServerFactory
 ) -> None:
-    """A request the external-app matcher already attributed belongs to that
-    resolver, even on a shared host — MCP defers."""
+    """A request the external-app matcher attributed belongs to that resolver,
+    even on a shared host — MCP defers. But an MCP `tools/call` the evaluator
+    gated is still MCP's to inject onto."""
     user = create_test_user(db_session, "mcp_resolver_matched")
     server = craft_server(
         auth_type=MCPAuthenticationType.API_TOKEN,
@@ -388,8 +465,17 @@ def test_matched_request_is_not_claimed(
     resolver = MCPServerResolver()
     ctx = _ctx(user)
     assert resolver.claims(_request(host), ctx) is True
-    matched_ctx = InjectionContext(sandbox=ctx.sandbox, matched_actions=MagicMock())
-    assert resolver.claims(_request(host), matched_ctx) is False
+
+    external_ctx = InjectionContext(
+        sandbox=ctx.sandbox, matched_actions=_matched(GatedAppKind.EXTERNAL_APP, 99)
+    )
+    assert resolver.claims(_request(host), external_ctx) is False
+
+    mcp_ctx = InjectionContext(
+        sandbox=ctx.sandbox,
+        matched_actions=_matched(GatedAppKind.MCP_SERVER, server.id),
+    )
+    assert resolver.claims(_request(host), mcp_ctx) is True
 
 
 def test_admin_managed_server_detail_points_to_admin(
@@ -638,3 +724,59 @@ def test_refresh_lock_contention_yields_retry_detail(
     detail = exc_info.value.sandbox_detail or ""
     assert "retry" in detail.lower()
     assert server.name in detail
+
+
+def test_gated_request_injects_for_the_evaluated_server(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    """When the gate attributed the request (``matched_actions`` carries an MCP
+    target), injection uses that server id directly — never a re-match against
+    the resolver's cached targets, which can be stale after a URL change."""
+    user = create_test_user(db_session, "mcp_resolver_attr")
+    server = craft_server(
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    _attach_admin_config(
+        db_session,
+        server,
+        MCPConnectionData(headers={"Authorization": "Bearer admin-token"}),
+    )
+    host = _server_host(server)
+
+    resolver = MCPServerResolver()
+    ctx = InjectionContext(
+        sandbox=_ctx(user).sandbox,
+        matched_actions=_matched(GatedAppKind.MCP_SERVER, server.id),
+    )
+    # A path the resolver's own matching would fail closed on still resolves,
+    # because the gate's attribution wins for gated requests.
+    assert resolver.resolve(_request(host, path="/other"), ctx) == {
+        "Authorization": "Bearer admin-token"
+    }
+
+
+def test_ungated_tool_call_never_gets_credentials(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    """A tools/call reaching injection without a gate verdict (evaluator crash →
+    gate fail-open) must be blocked, not forwarded with credentials."""
+    user = create_test_user(db_session, "mcp_resolver_ungated")
+    server = craft_server(
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    _attach_admin_config(
+        db_session,
+        server,
+        MCPConnectionData(headers={"Authorization": "Bearer admin-token"}),
+    )
+    body = json.dumps(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "x"}}
+    ).encode()
+
+    with pytest.raises(CredentialUnavailableError, match="without a gate verdict"):
+        MCPServerResolver().resolve(
+            _request(_server_host(server), method="POST", raw_content=body),
+            _ctx(user),
+        )
