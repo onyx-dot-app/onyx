@@ -70,11 +70,11 @@ class MCPServerResolver(CredentialResolver):
         self._targets_by_tenant: TTLCache[str, tuple[CraftMCPTarget, ...]] = TTLCache(
             maxsize=10_000, ttl=cache_ttl_s
         )
-        # Attribution (match): scoped to the user's accessible servers, so
-        # ambiguity is only ever raised between servers the user can reach.
-        self._targets_by_user: TTLCache[
-            tuple[str, UUID], tuple[CraftMCPTarget, ...]
-        ] = TTLCache(maxsize=10_000, ttl=cache_ttl_s)
+        # Attribution (match): the host set filtered to these ids, so ambiguity is
+        # only ever raised between servers the user can reach.
+        self._accessible_ids_by_user: TTLCache[tuple[str, UUID], frozenset[int]] = (
+            TTLCache(maxsize=10_000, ttl=cache_ttl_s)
+        )
 
     def claims(self, request: http.Request, ctx: InjectionContext) -> bool:
         # A request the external-app matcher attributed belongs to that resolver
@@ -235,27 +235,28 @@ class MCPServerResolver(CredentialResolver):
     def _user_targets(
         self, tenant_id: str, user_id: UUID
     ) -> tuple[CraftMCPTarget, ...]:
+        accessible = self._accessible_ids(tenant_id, user_id)
+        return tuple(t for t in self._targets(tenant_id) if t.server_id in accessible)
+
+    def _accessible_ids(self, tenant_id: str, user_id: UUID) -> frozenset[int]:
         key = (tenant_id, user_id)
         with self._cache_lock:
-            cached = self._targets_by_user.get(key)
+            cached = self._accessible_ids_by_user.get(key)
         if cached is not None:
             return cached
-        targets = self._load_user_targets(tenant_id, user_id)
+        ids = self._load_accessible_ids(tenant_id, user_id)
         with self._cache_lock:
-            self._targets_by_user[key] = targets
-        return targets
+            self._accessible_ids_by_user[key] = ids
+        return ids
 
-    def _load_user_targets(
-        self, tenant_id: str, user_id: UUID
-    ) -> tuple[CraftMCPTarget, ...]:
+    def _load_accessible_ids(self, tenant_id: str, user_id: UUID) -> frozenset[int]:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             user = fetch_user_by_id(db, user_id)
             # Missing user → no servers; ``None`` would skip the filter, so guard.
             servers = (
                 get_craft_enabled_mcp_servers(db, user) if user is not None else []
             )
-            parsed = [parse_target(s.id, s.server_url) for s in servers]
-        return tuple(t for t in parsed if t is not None)
+            return frozenset(s.id for s in servers)
 
 
 def _refresh_oauth_headers(
