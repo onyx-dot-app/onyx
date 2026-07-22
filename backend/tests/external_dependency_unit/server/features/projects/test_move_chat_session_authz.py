@@ -8,11 +8,12 @@ default agent. The endpoint now verifies project ownership before assigning.
 """
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.db.chat import create_chat_session
 from onyx.db.models import UserProject
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.projects.api import move_chat_session
 from onyx.server.features.projects.models import ChatSessionRequest
 from tests.external_dependency_unit.conftest import create_test_user
@@ -32,14 +33,14 @@ def test_cannot_move_session_into_another_users_project(db_session: Session) -> 
     db_session.add(victim_project)
     db_session.flush()
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(OnyxError) as exc:
         move_chat_session(
             project_id=victim_project.id,
             body=ChatSessionRequest(chat_session_id=str(attacker_session.id)),
             user=attacker,
             db_session=db_session,
         )
-    assert exc.value.status_code == 404
+    assert exc.value.error_code == OnyxErrorCode.NOT_FOUND
 
     # The session must not have been attached to the victim's project.
     db_session.refresh(attacker_session)
