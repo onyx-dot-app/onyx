@@ -28,7 +28,6 @@ from onyx.db.models import (
     User__UserGroup,
     UserRole,
 )
-from onyx.db.users import get_user_by_email
 from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS, MCPConnectionData
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
@@ -155,40 +154,30 @@ def affected_user_ids_for_mcp_server(
     after this server changes (enabled/disabled for craft, tools toggled, URL
     edited). Scoped to running sandboxes so the hot-reload push has somewhere to
     land; access is public / group / direct / owner (mirrors skills)."""
+    stmt = select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
     if server.is_public:
-        stmt = select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
         return set(db_session.scalars(stmt))
 
-    ids: set[UUID] = set()
-    group_stmt = (
-        select(Sandbox.user_id)
-        .join(User__UserGroup, User__UserGroup.user_id == Sandbox.user_id)
+    group_users = (
+        select(User__UserGroup.user_id)
         .join(
             MCPServer__UserGroup,
             MCPServer__UserGroup.user_group_id == User__UserGroup.user_group_id,
         )
         .where(MCPServer__UserGroup.mcp_server_id == server.id)
-        .where(Sandbox.status == SandboxStatus.RUNNING)
     )
-    ids |= set(db_session.scalars(group_stmt))
-
-    user_stmt = (
-        select(Sandbox.user_id)
-        .join(MCPServer__User, MCPServer__User.user_id == Sandbox.user_id)
-        .where(MCPServer__User.mcp_server_id == server.id)
-        .where(Sandbox.status == SandboxStatus.RUNNING)
+    direct_users = select(MCPServer__User.user_id).where(
+        MCPServer__User.mcp_server_id == server.id
     )
-    ids |= set(db_session.scalars(user_stmt))
-
-    owner = get_user_by_email(server.owner, db_session)
-    if owner is not None:
-        owner_stmt = (
-            select(Sandbox.user_id)
-            .where(Sandbox.user_id == owner.id)
-            .where(Sandbox.status == SandboxStatus.RUNNING)
-        )
-        ids |= set(db_session.scalars(owner_stmt))
-    return ids
+    owner_users = select(User.id).where(  # ty: ignore[no-matching-overload]
+        User.email == server.owner
+    )
+    stmt = stmt.where(
+        Sandbox.user_id.in_(group_users)
+        | Sandbox.user_id.in_(direct_users)
+        | Sandbox.user_id.in_(owner_users)
+    )
+    return set(db_session.scalars(stmt))
 
 
 def make_mcp_server_private(

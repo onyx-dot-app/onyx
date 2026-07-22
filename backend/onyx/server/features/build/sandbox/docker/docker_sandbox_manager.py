@@ -1151,27 +1151,6 @@ echo "Session workspace setup complete"
                 f"Failed to setup session workspace {session_id}: {e}"
             ) from e
 
-    def write_session_opencode_config(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        opencode_config_json: str,
-    ) -> None:
-        container = self._require_container(sandbox_id)
-        session_path = f"{SESSIONS_ROOT}/{session_id}"
-        # base64 to sidestep shell-escaping the JSON's quotes/braces.
-        config_b64 = base64.b64encode(opencode_config_json.encode()).decode()
-        script = (
-            f"set -e\nmkdir -p {session_path}\n"
-            f"echo '{config_b64}' | base64 -d > {session_path}/opencode.json\n"
-        )
-        try:
-            _run_in_container_as_sandbox_user(container, ["/bin/sh", "-c", script])
-        except ExecError as e:
-            raise RuntimeError(
-                f"Failed to write session opencode config {session_id}: {e}"
-            ) from e
-
     def cleanup_session_workspace(
         self,
         sandbox_id: UUID,

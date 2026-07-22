@@ -1517,32 +1517,6 @@ echo "Session workspace setup complete"
                 f"Failed to setup session workspace {session_id}: {e}"
             ) from e
 
-    def write_session_opencode_config(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        opencode_config_json: str,
-    ) -> None:
-        pod_name = self._get_pod_name(str(sandbox_id))
-        session_path = shlex.quote(f"/workspace/sessions/{session_id}")
-        # base64 to sidestep shell-escaping the JSON's quotes/braces.
-        config_b64 = base64.b64encode(opencode_config_json.encode()).decode()
-        script = (
-            f"set -e\nmkdir -p {session_path}\n"
-            f"echo '{config_b64}' | base64 -d > {session_path}/opencode.json\n"
-        )
-        k8s_stream(
-            self._stream_core_api.connect_get_namespaced_pod_exec,
-            name=pod_name,
-            namespace=self._namespace,
-            container=_SANDBOX_CONTAINER_NAME,
-            command=["/bin/sh", "-c", script],
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-
     def cleanup_session_workspace(
         self,
         sandbox_id: UUID,

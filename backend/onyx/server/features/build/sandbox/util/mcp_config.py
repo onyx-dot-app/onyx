@@ -7,6 +7,8 @@ import json
 import re
 from collections import defaultdict
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -20,6 +22,9 @@ from onyx.server.features.build.sandbox.models import CraftMCPServerConfig
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_session_mcp_config,
 )
+
+if TYPE_CHECKING:
+    from onyx.server.features.build.sandbox.base import SandboxManager
 
 _NON_IDENTIFIER = re.compile(r"[^a-z0-9]+")
 
@@ -70,6 +75,23 @@ def render_session_mcp_config_json(
     for ``user``, ready to write into ``session_id``'s workspace."""
     servers = resolve_craft_mcp_servers(db_session, user)
     return json.dumps(build_session_mcp_config(servers, session_id))
+
+
+def write_session_mcp_config(
+    sandbox_manager: SandboxManager,
+    db_session: Session,
+    user: User,
+    sandbox_id: UUID,
+    session_id: UUID,
+) -> None:
+    """Render ``session_id``'s craft MCP ``opencode.json`` for ``user`` and write
+    it into the sandbox — the render+write pair done together on cold session
+    setup and on every skills/MCP reload."""
+    sandbox_manager.write_session_opencode_config(
+        sandbox_id,
+        session_id,
+        render_session_mcp_config_json(db_session, user, str(session_id)),
+    )
 
 
 def craft_mcp_fingerprint(mcp_servers: Sequence[CraftMCPServerConfig]) -> str:

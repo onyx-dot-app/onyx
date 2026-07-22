@@ -196,7 +196,6 @@ class SandboxManager(_ServeMixin, ABC):
         """
         ...
 
-    @abstractmethod
     def write_session_opencode_config(
         self,
         sandbox_id: UUID,
@@ -210,7 +209,9 @@ class SandboxManager(_ServeMixin, ABC):
         hot-reloads the MCP set without a pod re-provision. Written on cold session
         setup and rewritten on skills/MCP reload.
         """
-        ...
+        self.write_sandbox_file(
+            sandbox_id, f"sessions/{session_id}/opencode.json", opencode_config_json
+        )
 
     @abstractmethod
     def cleanup_session_workspace(

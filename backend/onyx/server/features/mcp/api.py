@@ -2461,13 +2461,20 @@ def update_mcp_server_simple(
         available_in_craft=request.available_in_craft,
     )
 
-    # Snapshot recipients under the current ACL before mutating it
-    reload_user_ids = affected_user_ids_for_mcp_server(updated_server, db_session)
-
-    if any(
+    acl_changing = any(
         value is not None
         for value in (request.is_public, request.users, request.groups)
-    ):
+    )
+    # Only an ACL change can drop a user's access; snapshot the pre-change
+    # recipients in that case so they're reloaded to lose the server (the
+    # post-update query wouldn't include them).
+    reload_user_ids: set[UUID] = (
+        affected_user_ids_for_mcp_server(updated_server, db_session)
+        if acl_changing
+        else set()
+    )
+
+    if acl_changing:
         _apply_mcp_server_access(
             mcp_server=updated_server,
             acting_user=user,

@@ -40,7 +40,7 @@ from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.sandbox.util.mcp_config import (
-    render_session_mcp_config_json,
+    write_session_mcp_config,
 )
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.locks import (
@@ -472,12 +472,8 @@ def restore_session(
                             llm_config=llm_config,
                             connectable_apps_section=connectable_apps_section,
                         )
-                        sandbox_manager.write_session_opencode_config(
-                            sandbox.id,
-                            session_id,
-                            render_session_mcp_config_json(
-                                db_session, user, str(session_id)
-                            ),
+                        write_session_mcp_config(
+                            sandbox_manager, db_session, user, sandbox.id, session_id
                         )
                         session.status = BuildSessionStatus.ACTIVE
                         session.skills_hash = sandbox.skills_hash
@@ -497,12 +493,8 @@ def restore_session(
                         nextjs_port=session.nextjs_port,
                         connectable_apps_section=connectable_apps_section,
                     )
-                    sandbox_manager.write_session_opencode_config(
-                        sandbox.id,
-                        session_id,
-                        render_session_mcp_config_json(
-                            db_session, user, str(session_id)
-                        ),
+                    write_session_mcp_config(
+                        sandbox_manager, db_session, user, sandbox.id, session_id
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     session.skills_hash = sandbox.skills_hash
