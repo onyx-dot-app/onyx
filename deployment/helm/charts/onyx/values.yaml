@@ -1330,6 +1330,8 @@ auth:
       rootUser: ""
       rootPassword: ""
   oauth:
+    # Legacy pre-v4.4 SSO credentials. Imported into an SSO provider entry on
+    # upgrade. Planned for removal in v4.5.
     # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
     enabled: false
     # -- Overwrite the default secret name, ignored if existingSecret is defined
@@ -1471,13 +1473,14 @@ configMap:
   # overridden only if sandboxes must reach a different proxy host.
   # See deployment/helm/README.md for the external-Redis / ElastiCache path.
 
-  # Auth type: "basic" (default), "google_oauth", "oidc", or "saml"
-  # UPGRADE NOTE: Default changed from "disabled" to "basic" in 0.4.34.
+  # Authentication is always enabled (email/password). SSO (Google/OIDC/SAML)
+  # and its per-provider options are configured in the admin panel (Admin
+  # Panel > Organization > SSO Providers), not through environment variables.
+  # AUTH_TYPE stays as an inert default for the pre-v4.4 SSO import on
+  # upgrade. Planned for removal in v4.5.
   # Set auth.userauth.enabled=true and provide auth.userauth.values.user_auth_secret
-  # before enabling flows that require it.
+  # (signs password reset and email verification tokens and OAuth login state).
   AUTH_TYPE: "basic"
-  # Enable PKCE for OIDC login flow. Leave empty/false for backward compatibility.
-  OIDC_PKCE_ENABLED: ""
   # Opt-in: capture IdP directory claims at OAuth/OIDC login and use them to
   # enrich chat prompts and resolve {{user.<key>}} agent placeholders. Sends
   # directory data to the configured LLM, so off by default.
