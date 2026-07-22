@@ -142,6 +142,23 @@ export interface ConnectionConfiguration {
   ) => boolean;
 }
 
+// Shared "Include Attachments" checkbox. Pair with an `include_attachments`
+// kwarg on the backend connector; see backend/onyx/connectors/README.md for
+// the convention, including how to pick the default.
+export function buildIncludeAttachmentsOption(
+  defaultValue: boolean
+): BooleanOption {
+  return {
+    type: "checkbox",
+    query: "Include attachments?",
+    label: "Include Attachments",
+    name: "include_attachments",
+    description:
+      "Enable processing of page attachments including images and documents",
+    default: defaultValue,
+  };
+}
+
 export const connectorConfigs: Record<
   ConfigurableSources,
   ConnectionConfiguration
@@ -666,6 +683,7 @@ export const connectorConfigs: Record<
         ],
         defaultTab: "space",
       },
+      buildIncludeAttachmentsOption(true),
     ],
     advanced_values: [],
   },
@@ -1040,15 +1058,7 @@ export const connectorConfigs: Record<
           },
         ],
       },
-      {
-        type: "checkbox",
-        query: "Include attachments?",
-        label: "Include Attachments",
-        name: "include_attachments",
-        description:
-          "Enable processing of page attachments including images and documents",
-        default: false,
-      },
+      buildIncludeAttachmentsOption(false),
     ],
     advanced_values: [],
   },
@@ -2023,6 +2033,7 @@ export interface ConfluenceConfig {
   is_cloud?: boolean;
   index_recursively?: boolean;
   cql_query?: string;
+  include_attachments?: boolean;
 }
 
 export interface JiraConfig {
