@@ -20,6 +20,18 @@ import { Text } from "@opal/components";
 import { Spacer } from "@opal/components";
 
 const HOURS_PER_DAY = 24;
+const UTC_DAY_LABEL = "UTC day";
+const HOUR_LABEL = "hour";
+const COST_ONLY_LABEL = "Cost only";
+
+function formatPeriod(tokenRateLimit: TokenRateLimitDisplay): string {
+  const isTokenBudget = tokenRateLimit.token_budget !== null;
+  const value = isTokenBudget
+    ? tokenRateLimit.period_hours / HOURS_PER_DAY
+    : tokenRateLimit.period_hours;
+  const unit = isTokenBudget ? UTC_DAY_LABEL : HOUR_LABEL;
+  return `${value} ${unit}${value === 1 ? "" : "s"}`;
+}
 
 type TokenRateLimitTableArgs = {
   tokenRateLimits: TokenRateLimitDisplay[];
@@ -103,7 +115,7 @@ export const TokenRateLimitTable = ({
           <TableRow>
             <TableHead>Enabled</TableHead>
             {shouldRenderGroupName() && <TableHead>Group Name</TableHead>}
-            <TableHead>Time Window (UTC Days)</TableHead>
+            <TableHead>Time Window</TableHead>
             <TableHead>Token Budget (Thousands)</TableHead>
             {isAdmin && <TableHead>Delete</TableHead>}
           </TableRow>
@@ -148,13 +160,11 @@ export const TokenRateLimitTable = ({
                     {tokenRateLimit.group_name}
                   </TableCell>
                 )}
+                <TableCell>{formatPeriod(tokenRateLimit)}</TableCell>
                 <TableCell>
-                  {tokenRateLimit.period_hours / HOURS_PER_DAY +
-                    " day" +
-                    (tokenRateLimit.period_hours > HOURS_PER_DAY ? "s" : "")}
-                </TableCell>
-                <TableCell>
-                  {tokenRateLimit.token_budget + " thousand tokens"}
+                  {tokenRateLimit.token_budget === null
+                    ? COST_ONLY_LABEL
+                    : `${tokenRateLimit.token_budget} thousand tokens`}
                 </TableCell>
                 {isAdmin && (
                   <TableCell>
