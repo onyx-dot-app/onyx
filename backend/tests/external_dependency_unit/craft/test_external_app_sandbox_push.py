@@ -83,7 +83,6 @@ def test_create_refreshes_the_created_skill(
     api.create_built_in_external_app(
         request=CreateBuiltInExternalAppRequest(
             name="Slack",
-            description="Slack",
             app_type=ExternalAppType.SLACK,
             upstream_url_patterns=[],
             auth_template={"Authorization": "Bearer {token}"},

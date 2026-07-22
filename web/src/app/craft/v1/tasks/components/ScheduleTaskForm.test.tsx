@@ -46,9 +46,8 @@ jest.mock("@/sections/input/EntryPickerPopover", () => ({
           onClick={() =>
             onSelect({
               kind: "app",
-              slug: "slack",
+              externalAppId: 1,
               name: "Slack",
-              description: "Search Slack",
               appType: "SLACK",
               authenticated: true,
             })
@@ -61,9 +60,8 @@ jest.mock("@/sections/input/EntryPickerPopover", () => ({
           onClick={() =>
             onSelect({
               kind: "app",
-              slug: "gmail",
+              externalAppId: 2,
               name: "Gmail",
-              description: "Search Gmail",
               appType: "GMAIL",
               authenticated: false,
             })
@@ -97,7 +95,9 @@ describe("ScheduleTaskForm app picker", () => {
       screen.getByRole("button", { name: "Select connected Slack" })
     );
 
-    await waitFor(() => expect(prompt).toHaveValue("/slack "));
+    await waitFor(() =>
+      expect(prompt).toHaveValue('[Use external app "Slack" (ID: 1)] ')
+    );
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
@@ -109,7 +109,7 @@ describe("ScheduleTaskForm app picker", () => {
     await user.type(prompt, "/");
     await user.click(screen.getByRole("button", { name: "Connect Gmail" }));
 
-    expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/apps?connect=gmail");
+    expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/apps?connect=2");
     expect(prompt).toHaveValue("/");
   });
 });

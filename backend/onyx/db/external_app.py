@@ -16,7 +16,13 @@ from onyx.db.gated_app import (
     get_or_create_gated_app_id,
     replace_action_policies__no_commit,
 )
-from onyx.db.models import ExternalApp, ExternalAppUserCredential, Skill, User
+from onyx.db.models import (
+    ExternalApp,
+    ExternalApp__Skill,
+    ExternalAppUserCredential,
+    Skill,
+    User,
+)
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -127,7 +133,7 @@ def get_external_app_by_id(
 ) -> ExternalApp | None:
     stmt = (
         select(ExternalApp)
-        .options(selectinload(ExternalApp.skill))
+        .options(selectinload(ExternalApp.associated_skills))
         .where(ExternalApp.id == external_app_id)
     )
     return db_session.scalar(stmt)
@@ -140,33 +146,63 @@ def get_external_app_by_skill_id(
     """The external-app gateway backing ``skill_id``, or None if the skill isn't
     an external app. Returns just the row — callers that need its policies fetch
     them via ``get_action_policies``."""
-    stmt = select(ExternalApp).where(ExternalApp.skill_id == skill_id)
+    stmt = (
+        select(ExternalApp)
+        .join(
+            ExternalApp__Skill,
+            ExternalApp__Skill.external_app_id == ExternalApp.id,
+        )
+        .where(ExternalApp__Skill.skill_id == skill_id)
+    )
     return db_session.scalar(stmt)
+
+
+def get_skills_for_external_app(
+    db_session: Session,
+    external_app_id: int,
+) -> list[Skill]:
+    """Return every skill associated with an external app in stable order."""
+    return list(
+        db_session.scalars(
+            select(Skill)
+            .join(
+                ExternalApp__Skill,
+                ExternalApp__Skill.skill_id == Skill.id,
+            )
+            .where(ExternalApp__Skill.external_app_id == external_app_id)
+            .order_by(Skill.name, Skill.id)
+        )
+    )
+
+
+def get_first_skill_for_external_app(
+    db_session: Session,
+    external_app_id: int,
+) -> Skill:
+    """Return the first associated skill for transitional bundle operations."""
+    skills = get_skills_for_external_app(db_session, external_app_id)
+    if not skills:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"External app {external_app_id} has no associated skills.",
+        )
+    return skills[0]
 
 
 def get_connectable_apps_for_user(
     db_session: Session,
     user: User,
 ) -> list[ExternalApp]:
-    """Apps the user could connect but hasn't: visible to them (public /
-    group-granted / personal), requiring per-user credentials the org hasn't
-    pre-filled, with no complete credential row yet.
+    """Enabled organization apps that still require credentials from ``user``.
 
-    Apps whose skill the user can't see are excluded — they'd never be injected
-    even once connected. Org-credentialed apps (no user-required keys) are usable
-    by everyone, so there's nothing to set up."""
-    # Local import breaks the external_app <-> skill module cycle.
-    from onyx.db.skill import skill_visible_to_user
-
-    visible_skill_ids = set(
-        db_session.scalars(select(Skill.id).where(skill_visible_to_user(user)))
-    )
+    Enabled apps are organization-visible independently of whether they have an
+    associated skill. Org-credentialed apps (no user-required keys) are usable by
+    everyone, so there's nothing to set up."""
     user_creds_by_app = get_user_credentials_by_app_id(db_session, user.id)
     return [
         app
         for app in get_external_apps(db_session, enabled_only=True)
-        if app.skill_id in visible_skill_ids
-        and not is_user_authenticated_for_app(app, user_creds_by_app.get(app.id))
+        if not is_user_authenticated_for_app(app, user_creds_by_app.get(app.id))
     ]
 
 
@@ -176,7 +212,11 @@ def available_external_app_skill_ids_for_user(
 ) -> list[UUID]:
     """Return app-backed skill IDs whose credentials are ready for this user."""
     rows = db_session.execute(
-        select(ExternalApp, ExternalAppUserCredential)
+        select(ExternalApp__Skill.skill_id, ExternalApp, ExternalAppUserCredential)
+        .join(
+            ExternalApp,
+            ExternalApp.id == ExternalApp__Skill.external_app_id,
+        )
         .join(
             ExternalAppUserCredential,
             and_(
@@ -188,8 +228,8 @@ def available_external_app_skill_ids_for_user(
         .where(ExternalApp.enabled.is_(True))
     ).all()
     return [
-        app.skill_id
-        for app, credential in rows
+        skill_id
+        for skill_id, app, credential in rows
         if is_user_authenticated_for_app(app, credential)
     ]
 
@@ -201,7 +241,7 @@ def get_external_apps(
 ) -> list[ExternalApp]:
     stmt = (
         select(ExternalApp)
-        .options(selectinload(ExternalApp.skill))
+        .options(selectinload(ExternalApp.associated_skills))
         .order_by(ExternalApp.id)
     )
     if enabled_only:
@@ -228,7 +268,7 @@ def get_built_in_external_app(
         )
     stmt = (
         select(ExternalApp)
-        .options(selectinload(ExternalApp.skill))
+        .options(selectinload(ExternalApp.associated_skills))
         .where(ExternalApp.app_type == app_type)
     )
     return db_session.scalars(stmt).one_or_none()
@@ -264,7 +304,6 @@ def get_external_app_user_credential(
 def create_external_app(
     db_session: Session,
     name: str,
-    description: str,
     bundle_file_id: str,
     bundle_sha256: str,
     app_type: ExternalAppType,
@@ -274,6 +313,7 @@ def create_external_app(
     is_public: bool = False,
     author_user_id: UUID | None = None,
     skill_name: str | None = None,
+    skill_description: str = "",
     action_policies: dict[str, EndpointPolicy] | None = None,
 ) -> ExternalApp:
     """Create the backing Skill row and the ExternalApp that references it (flush
@@ -299,7 +339,7 @@ def create_external_app(
         skill = add_new_skill__no_commit(
             Skill(
                 name=built_in_skill_id,
-                description=description,
+                description=skill_description,
                 built_in_skill_id=built_in_skill_id,
                 bundle_file_id=None,
                 bundle_sha256=None,
@@ -317,7 +357,7 @@ def create_external_app(
         skill = add_new_skill__no_commit(
             Skill(
                 name=custom_skill_name,
-                description=description,
+                description=skill_description,
                 bundle_file_id=bundle_file_id,
                 bundle_sha256=bundle_sha256,
                 is_valid=True,
@@ -328,12 +368,12 @@ def create_external_app(
             is_external_app_backing=True,
         )
     app = ExternalApp(
-        skill_id=skill.id,
         name=name,
         app_type=app_type,
         upstream_url_patterns=upstream_url_patterns,
         auth_template=auth_template,
         organization_credentials=organization_credentials,
+        associated_skills=[skill],
     )
     db_session.add(app)
     # Policies key off the gated_app identity row, which needs app.id.
@@ -349,7 +389,6 @@ def update_external_app(
     app_type: ExternalAppType,
     enabled: bool | UnsetType = UNSET,
     name: str | UnsetType = UNSET,
-    description: str | UnsetType = UNSET,
     upstream_url_patterns: list[str] | UnsetType = UNSET,
     auth_template: dict[str, Any] | UnsetType = UNSET,
     organization_credentials: dict[str, str] | UnsetType = UNSET,
@@ -357,7 +396,7 @@ def update_external_app(
     new_bundle_sha256: str | None = None,
     action_policies: dict[str, EndpointPolicy] | UnsetType = UNSET,
 ) -> tuple[ExternalApp, str | None]:
-    """Partial-update the external app and its linked skill (flush only — the
+    """Partial-update the external app and legacy bundle content (flush only — the
     caller commits after pushing, so a push failure rolls back). Returns
     ``(app, old_bundle_file_id)``.
 
@@ -390,15 +429,14 @@ def update_external_app(
         app.enabled = enabled
     if is_set(name):
         app.name = name
-    if is_set(description):
-        app.skill.description = description
     old_bundle_file_id: str | None = None
     if new_bundle_file_id is not None:
+        skill = get_first_skill_for_external_app(db_session, app.id)
         # Keep the skill name; only the bundle bytes change.
-        old_bundle_file_id = app.skill.bundle_file_id
-        app.skill.bundle_file_id = new_bundle_file_id
-        app.skill.bundle_sha256 = new_bundle_sha256
-        app.skill.is_valid = True
+        old_bundle_file_id = skill.bundle_file_id
+        skill.bundle_file_id = new_bundle_file_id
+        skill.bundle_sha256 = new_bundle_sha256
+        skill.is_valid = True
 
     if is_set(upstream_url_patterns):
         app.upstream_url_patterns = upstream_url_patterns
@@ -451,11 +489,12 @@ def _write_policies__no_commit(
 def delete_external_app(
     db_session: Session,
     external_app_id: int,
-) -> str | None:
-    """Delete the linked Skill (cascade removes the external_app row and user
-    credentials). Flush only — the caller commits after pushing, so a push
-    failure rolls back. Returns the skill's ``bundle_file_id`` for post-commit
-    FileStore cleanup. Raises ``OnyxError(NOT_FOUND)`` if absent.
+) -> list[str]:
+    """Delete the app and its currently associated skills.
+
+    Flush only — the caller commits after pushing, so a push failure rolls back.
+    Returns bundle file IDs for post-commit cleanup. Raises
+    ``OnyxError(NOT_FOUND)`` if absent.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -464,10 +503,13 @@ def delete_external_app(
             f"External app with id {external_app_id} not found.",
         )
 
-    bundle_file_id = app.skill.bundle_file_id
-    db_session.delete(app.skill)
+    skills = get_skills_for_external_app(db_session, app.id)
+    bundle_file_ids = [skill.bundle_file_id for skill in skills if skill.bundle_file_id]
+    db_session.delete(app)
+    for skill in skills:
+        db_session.delete(skill)
     db_session.flush()
-    return bundle_file_id
+    return bundle_file_ids
 
 
 def upsert_external_app_user_credential(

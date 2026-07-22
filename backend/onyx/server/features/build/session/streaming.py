@@ -356,7 +356,7 @@ def merge_events_with_announces(
             output.put(
                 ConnectAppRequestPacket(
                     request_id=request.request_id,
-                    app_slug=request.app_slug,
+                    external_app_id=request.external_app_id,
                     reason=request.reason,
                 )
             )

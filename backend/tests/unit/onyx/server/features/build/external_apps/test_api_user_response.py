@@ -30,10 +30,6 @@ def _external_app(
         SimpleNamespace(
             id=1,
             name="Test App",
-            skill=SimpleNamespace(
-                name="test-app",
-                description="Test description",
-            ),
             app_type=app_type,
             auth_template=auth_template,
             organization_credentials=_sensitive_dict(organization_credentials),

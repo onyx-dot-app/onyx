@@ -5,9 +5,14 @@ from __future__ import annotations
 from uuid import UUID
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User, UserRole
+from onyx.db.external_app import (
+    get_external_app_by_skill_id,
+    get_first_skill_for_external_app,
+)
+from onyx.db.models import ExternalApp__Skill, User, UserRole
 from onyx.db.skill import (
     SkillAccessPolicy,
     fetch_skill,
@@ -112,6 +117,71 @@ def test_use_includes_authenticated_external_app_without_preference(
     make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
 
     assert skill.id in _skill_ids(user, db_session, SkillAccessPolicy.USE)
+
+
+def test_one_external_app_can_gate_multiple_skills(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session)
+    first_skill = make_skill(db_session, is_public=True, name="first-app-skill")
+    second_skill = make_skill(db_session, is_public=True, name="second-app-skill")
+    app = make_external_app(
+        db_session,
+        skill=first_skill,
+        auth_template=_AUTH_TEMPLATE,
+    )
+    db_session.add(ExternalApp__Skill(external_app_id=app.id, skill_id=second_skill.id))
+    db_session.flush()
+
+    assert get_first_skill_for_external_app(db_session, app.id) == first_skill
+    assert not {
+        first_skill.id,
+        second_skill.id,
+    } & _skill_ids(user, db_session, SkillAccessPolicy.USE)
+
+    make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+    db_session.flush()
+
+    assert get_external_app_by_skill_id(db_session, second_skill.id) == app
+    usable = _skill_ids(user, db_session, SkillAccessPolicy.USE)
+    assert {first_skill.id, second_skill.id} <= usable
+
+    app.enabled = False
+    db_session.flush()
+    assert not {
+        first_skill.id,
+        second_skill.id,
+    } & _skill_ids(user, db_session, SkillAccessPolicy.USE)
+
+
+def test_one_skill_cannot_be_associated_with_two_external_apps(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    shared_skill = make_skill(db_session, name="single-app-dependency")
+    first_app = make_external_app(
+        db_session,
+        skill=shared_skill,
+        auth_template={},
+    )
+    second_app = make_external_app(
+        db_session,
+        skill=make_skill(db_session, name="second-app-own-skill"),
+        auth_template={},
+    )
+
+    with pytest.raises(IntegrityError):
+        with db_session.begin_nested():
+            db_session.add(
+                ExternalApp__Skill(
+                    external_app_id=second_app.id,
+                    skill_id=shared_skill.id,
+                )
+            )
+            db_session.flush()
+
+    assert get_external_app_by_skill_id(db_session, shared_skill.id) == first_app
 
 
 def test_use_excludes_disabled_external_app(

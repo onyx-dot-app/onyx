@@ -22,7 +22,6 @@ class CreateBuiltInExternalAppRequest(BaseModel):
     """
 
     name: str
-    description: str
     app_type: ExternalAppType
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
@@ -47,7 +46,6 @@ class UpdateExternalAppRequest(BaseModel):
 
     enabled: bool | None = None
     name: str | None = None
-    description: str | None = None
     upstream_url_patterns: list[str] | None = None
     auth_template: dict[str, Any] | None = None
     organization_credentials: dict[str, str] | None = None
@@ -60,7 +58,6 @@ class ExternalAppAdminResponse(BaseModel):
 
     id: int
     name: str
-    description: str
     app_type: ExternalAppType
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
@@ -98,8 +95,6 @@ class ExternalAppUserResponse(BaseModel):
 
     id: int
     name: str
-    description: str
-    slug: str
     app_type: ExternalAppType
     credential_keys: list[str]
     credential_values: dict[str, Any]

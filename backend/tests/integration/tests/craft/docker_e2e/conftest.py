@@ -116,7 +116,6 @@ def slack_external_app() -> None:
             create_external_app(
                 db_session=db,
                 name="Slack",
-                description="Slack integration for gate-flow e2e tests.",
                 bundle_file_id="",
                 bundle_sha256="",
                 app_type=ExternalAppType.SLACK,

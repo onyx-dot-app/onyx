@@ -19,6 +19,8 @@ from onyx.db.external_app import (
     delete_external_app,
     get_external_app_by_id,
     get_external_apps,
+    get_first_skill_for_external_app,
+    get_skills_for_external_app,
     get_user_credentials_by_app_id,
     required_user_credential_keys,
     update_external_app,
@@ -92,7 +94,6 @@ def _to_admin_response(
     return ExternalAppAdminResponse(
         id=app.id,
         name=app.name,
-        description=app.skill.description,
         app_type=app.app_type,
         # Managed built-ins: hide Onyx-owned config/creds. Else mask secrets — the
         # write path restores masked values echoed back unchanged.
@@ -132,8 +133,6 @@ def _to_user_response(
     return ExternalAppUserResponse(
         id=app.id,
         name=app.name,
-        description=app.skill.description,
-        slug=app.skill.name,
         app_type=app.app_type,
         credential_keys=required_keys,
         credential_values=credential_values,
@@ -174,11 +173,11 @@ def create_built_in_external_app(
         request.app_type, request.action_policies, {}
     )
 
-    # Default-public; skill identity is server-derived from app_type.
+    # Default-public; skill identity is server-derived from app_type. Built-in
+    # skill content carries its own metadata on disk.
     app = create_external_app(
         db_session=db_session,
         name=request.name,
-        description=request.description,
         bundle_file_id="",
         bundle_sha256="",
         is_public=True,
@@ -190,7 +189,8 @@ def create_built_in_external_app(
     )
 
     # Push before commit so a push failure rolls back the create.
-    push_skill_to_affected_sandboxes(app.skill, db_session)
+    for skill in app.associated_skills:
+        push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
     # ``action_policies`` is exactly what was persisted — no need to re-read.
     return _to_admin_response(app, stored=action_policies)
@@ -232,7 +232,6 @@ def update_external_app_admin(
         app_type=app.app_type,
         enabled=none_as_unset(request.enabled),
         name=none_as_unset(request.name),
-        description=none_as_unset(request.description),
         # Gateway config is Onyx-owned for managed built-ins; leave it untouched.
         upstream_url_patterns=(
             UNSET if managed else none_as_unset(request.upstream_url_patterns)
@@ -244,7 +243,8 @@ def update_external_app_admin(
         action_policies=action_policies,
     )
     # Push before commit so a push failure rolls back the change.
-    push_skill_to_affected_sandboxes(app.skill, db_session)
+    for skill in app.associated_skills:
+        push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
     # ``action_policies`` is exactly what was persisted — no need to re-read.
     return _to_admin_response(app, stored=action_policies)
@@ -253,7 +253,6 @@ def update_external_app_admin(
 @admin_router.post("/apps/custom")
 def create_custom_external_app(
     name: str = Form(...),
-    description: str = Form(""),
     upstream_url_patterns: str = Form(...),
     auth_template: str = Form(...),
     organization_credentials: str = Form(...),
@@ -262,9 +261,9 @@ def create_custom_external_app(
     db_session: Session = Depends(get_session),
 ) -> ExternalAppAdminResponse:
     """Create a CUSTOM (bundle-backed) external app. Multipart; structured fields
-    are JSON-encoded form strings, bundle required, blank ``description`` falls
-    back to the bundle's. Field edits use ``PATCH /admin/apps/{id}``, bundle
-    replacement ``PUT /admin/apps/{id}/bundle``.
+    are JSON-encoded form strings and the bundle is required. Field edits use
+    ``PATCH /admin/apps/{id}``; bundle replacement uses
+    ``PUT /admin/apps/{id}/bundle``.
     """
     parsed_patterns = parse_json_form_field(
         upstream_url_patterns, _STR_LIST_ADAPTER, "upstream_url_patterns"
@@ -309,7 +308,6 @@ def create_custom_external_app(
         app = create_external_app(
             db_session=db_session,
             name=name.strip(),
-            description=description.strip() or ingested.description,
             bundle_file_id=ingested.bundle_file_id,
             bundle_sha256=ingested.bundle_sha256,
             app_type=ExternalAppType.CUSTOM,
@@ -318,9 +316,11 @@ def create_custom_external_app(
             organization_credentials=parsed_org_credentials,
             is_public=True,
             skill_name=ingested.canonical_name,
+            skill_description=ingested.description,
         )
         # Push before commit so a failure rolls back the create + orphaned blob.
-        push_skill_to_affected_sandboxes(app.skill, db_session)
+        for skill in app.associated_skills:
+            push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 
     # A freshly created custom app has no stored policy overrides.
@@ -345,12 +345,13 @@ def replace_custom_app_bundle(
             "Only custom apps have a replaceable bundle.",
         )
 
+    skill = get_first_skill_for_external_app(db_session, app.id)
     file_store = get_default_file_store()
     with ingested_skill_bundle(
         read_bundle_file(bundle.file),
         bundle.filename,
         file_store,
-        expected_name=app.skill.name,
+        expected_name=skill.name,
     ) as ingested:
         app, old_bundle_file_id = update_external_app(
             db_session=db_session,
@@ -360,7 +361,8 @@ def replace_custom_app_bundle(
             new_bundle_sha256=ingested.bundle_sha256,
         )
         # Push before commit so a failure rolls back the swap + orphaned blob.
-        push_skill_to_affected_sandboxes(app.skill, db_session)
+        for associated_skill in app.associated_skills:
+            push_skill_to_affected_sandboxes(associated_skill, db_session)
         db_session.commit()
 
     # Drop the superseded blob only after the swap committed.
@@ -414,7 +416,9 @@ def delete_external_app_admin(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx and cannot be deleted.",
         )
-    affected = affected_user_ids_for_skill(app.skill, db_session)
+    affected: set[UUID] = set()
+    for skill in get_skills_for_external_app(db_session, app.id):
+        affected.update(affected_user_ids_for_skill(skill, db_session))
 
     delete_external_app(db_session=db_session, external_app_id=external_app_id)
 

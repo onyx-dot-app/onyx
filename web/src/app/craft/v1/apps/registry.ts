@@ -76,7 +76,6 @@ export interface ActionPolicyView {
 export interface BuiltInExternalAppDescriptor {
   app_type: ExternalAppType;
   name: string;
-  description: string;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   required_org_credential_fields: OrgCredentialFieldDescriptor[];
@@ -87,7 +86,6 @@ export interface BuiltInExternalAppDescriptor {
 export interface ExternalAppAdminResponse {
   id: number;
   name: string;
-  description: string;
   app_type: ExternalAppType;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
@@ -102,8 +100,6 @@ export interface ExternalAppAdminResponse {
 export interface ExternalAppUserResponse {
   id: number;
   name: string;
-  description: string;
-  slug: string;
   app_type: ExternalAppType;
   credential_keys: string[];
   credential_values: Record<string, string>;

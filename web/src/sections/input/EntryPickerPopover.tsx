@@ -14,6 +14,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   filterPickerSections,
   flattenSections,
+  pickerEntryKey,
   type PickerApp,
   type PickerEntry,
   type PickerSections,
@@ -196,7 +197,7 @@ function buildMenuChildren({
     children.push(
       entry.kind === "app" ? (
         <AppRow
-          key={`app-${entry.slug}`}
+          key={pickerEntryKey(entry)}
           app={entry}
           selected={selected}
           onHover={() => onHover(idx)}
@@ -285,7 +286,7 @@ function AppRow({ app, selected, onHover, onPick, rowIndex }: AppRowProps) {
         interactive={false}
         selected={selected}
         emphasized={selected}
-        description={app.description}
+        description={app.authenticated ? "Connected" : "Connection required"}
         onMouseEnter={onHover}
         onMouseDown={(e) => {
           e.preventDefault();
@@ -299,7 +300,7 @@ function AppRow({ app, selected, onHover, onPick, rowIndex }: AppRowProps) {
           ) : undefined
         }
         data-row-index={rowIndex}
-        data-testid={`skill-picker-row-${app.slug}`}
+        data-testid={`app-picker-row-${app.externalAppId}`}
       >
         <span
           className={cn(
@@ -308,7 +309,7 @@ function AppRow({ app, selected, onHover, onPick, rowIndex }: AppRowProps) {
           )}
         >
           <Logo className="h-4 w-4 shrink-0" />
-          <span>{`/${app.slug}`}</span>
+          <span>{app.name}</span>
         </span>
       </LineItem>
     </div>

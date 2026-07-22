@@ -10,7 +10,7 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
-from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalApp, Skill
 from onyx.file_store.file_store import FileStore
 from onyx.server.features.build.external_apps import api as external_apps_api
 from onyx.skills.ingest import IngestedBundle
@@ -41,7 +41,6 @@ def test_create_custom_external_app_cleans_new_bundle_on_failure(
     with pytest.raises(RuntimeError):
         external_apps_api.create_custom_external_app(
             name="Helper Skill",
-            description="",
             upstream_url_patterns='["https://api.example.com/*"]',
             auth_template='{"Authorization": "Bearer {token}"}',
             organization_credentials='{"token": "secret"}',
@@ -66,12 +65,18 @@ def test_replace_custom_app_bundle_cleans_new_bundle_on_failure(
     app = cast(
         ExternalApp,
         SimpleNamespace(
+            id=1,
             app_type=ExternalAppType.CUSTOM,
-            skill=SimpleNamespace(name="helper-skill"),
         ),
     )
+    skill = cast(Skill, SimpleNamespace(name="helper-skill"))
     monkeypatch.setattr(external_apps_api, "get_default_file_store", lambda: file_store)
     monkeypatch.setattr(external_apps_api, "_get_app_or_404", lambda *_args: app)
+    monkeypatch.setattr(
+        external_apps_api,
+        "get_first_skill_for_external_app",
+        lambda *_args: skill,
+    )
     monkeypatch.setattr(
         "onyx.skills.ingest.ingest_skill_bundle",
         lambda *_args, **_kwargs: IngestedBundle(

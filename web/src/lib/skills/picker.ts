@@ -13,9 +13,8 @@ export interface PickerSkill {
 
 export interface PickerApp {
   kind: "app";
-  slug: string;
+  externalAppId: number;
   name: string;
-  description: string;
   appType: ExternalAppType;
   authenticated: boolean;
 }
@@ -62,16 +61,19 @@ export function toPickerSections(
   for (const app of externalApps ?? []) {
     apps.push({
       kind: "app",
-      slug: app.slug,
+      externalAppId: app.id,
       name: app.name,
-      description: app.description,
       appType: app.app_type,
       authenticated: app.authenticated,
     });
   }
 
   skills.sort((a, b) => a.slug.localeCompare(b.slug));
-  apps.sort((a, b) => a.slug.localeCompare(b.slug));
+  apps.sort(
+    (a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
+      a.externalAppId - b.externalAppId
+  );
 
   return { skills, apps };
 }
@@ -102,9 +104,31 @@ export function detectSlashTrigger(
 
 function matchesQuery(entry: PickerEntry, query: string): boolean {
   if (!query) return true;
-  return [entry.slug, entry.name, entry.description].some((field) =>
-    field.toLowerCase().includes(query)
-  );
+  const fields =
+    entry.kind === "skill"
+      ? [entry.slug, entry.name, entry.description]
+      : [String(entry.externalAppId), entry.name];
+  return fields.some((field) => field.toLowerCase().includes(query));
+}
+
+export function pickerEntryKey(entry: PickerEntry): string {
+  return entry.kind === "skill"
+    ? `skill:${entry.slug}`
+    : `app:${entry.externalAppId}`;
+}
+
+export function pickerEntryPromptPrefix(entry: PickerEntry): string {
+  return entry.kind === "skill"
+    ? `/${entry.slug}`
+    : `[Use external app ${JSON.stringify(entry.name)} (ID: ${entry.externalAppId})]`;
+}
+
+export function pickerEntryConnectionPath(
+  entry: PickerEntry
+): `/craft/v1/apps?connect=${number}` | null {
+  return entry.kind === "app" && !entry.authenticated
+    ? `/craft/v1/apps?connect=${entry.externalAppId}`
+    : null;
 }
 
 export function filterPickerSections(

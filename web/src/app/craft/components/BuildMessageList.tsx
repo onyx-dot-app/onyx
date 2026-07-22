@@ -86,13 +86,13 @@ export default function BuildMessageList({
     scrollContainerRef,
   ]);
 
-  // Resolve a connect card's app (oauth-vs-form, credential fields) by slug.
+  // Resolve a connect card's app (oauth-vs-form, credential fields) by ID.
   const { data: connectableApps } = useSWR<ExternalAppUserResponse[]>(
     SWR_KEYS.buildExternalApps,
     errorHandlingFetcher
   );
-  const appsBySlug = useMemo(
-    () => new Map((connectableApps ?? []).map((app) => [app.slug, app])),
+  const appsById = useMemo(
+    () => new Map((connectableApps ?? []).map((app) => [app.id, app])),
     [connectableApps]
   );
 
@@ -230,9 +230,9 @@ export default function BuildMessageList({
             <div key={item.id} className={cn(topMargin)}>
               <SetupCard
                 requestId={item.requestId}
-                appSlug={item.appSlug}
+                externalAppId={item.externalAppId}
                 reason={item.reason}
-                userApp={appsBySlug.get(item.appSlug)}
+                userApp={appsById.get(item.externalAppId)}
               />
             </div>
           );

@@ -24,6 +24,7 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
+    ExternalApp__Skill,
     Sandbox,
     Skill,
     User,
@@ -336,6 +337,7 @@ class TestSkillPush:
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
+        db_session: Session,
     ) -> None:
         handle = running_sandbox()
         user = handle.api_user
@@ -343,15 +345,20 @@ class TestSkillPush:
         app = ExternalAppManager.create(
             user_performing_action=k8s_admin_user,
             name=f"Credential-gated app {uuid4().hex[:8]}",
-            description="External app hydration integration test",
             upstream_url_patterns=["https://api.example.com/*"],
             auth_template={"Authorization": "Bearer {access_token}"},
             organization_credentials={},
             app_type=ExternalAppType.CUSTOM,
         )
         try:
-            user_app = ExternalAppManager.get_for_user(user, app.id)
-            skill_file = _skill_file_path(workspace, user_app.slug)
+            association = (
+                db_session.query(ExternalApp__Skill)
+                .filter(ExternalApp__Skill.external_app_id == app.id)
+                .one()
+            )
+            skill = db_session.get(Skill, association.skill_id)
+            assert skill is not None
+            skill_file = _skill_file_path(workspace, skill.name)
             skill_file.wait_for_absent()
 
             ExternalAppManager.upsert_user_credentials(

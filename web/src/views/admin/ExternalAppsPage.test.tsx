@@ -33,7 +33,6 @@ const mockMutateApps = jest.fn();
 const APP: ExternalAppAdminResponse = {
   id: 1,
   name: "Custom app",
-  description: "",
   app_type: "CUSTOM",
   upstream_url_patterns: [],
   auth_template: {},

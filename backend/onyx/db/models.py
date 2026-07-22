@@ -6567,18 +6567,36 @@ class HookExecutionLog(Base):
     hook: Mapped["Hook"] = relationship("Hook", back_populates="execution_logs")
 
 
+class ExternalApp__Skill(Base):
+    """Non-owning association between an app and its dependent skills.
+
+    One app may support many skills. The unique skill constraint keeps the
+    initial dependency model to at most one external app per skill.
+    """
+
+    __tablename__ = "external_app__skill"
+    __table_args__ = (
+        UniqueConstraint("skill_id", name="uq_external_app__skill_skill_id"),
+    )
+
+    external_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("skill.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+
 class ExternalApp(Base):
     __tablename__ = "external_app"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # App display metadata is independent of the linked skill's canonical name.
     name: Mapped[str] = mapped_column(String, nullable=False)
-    skill_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("skill.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-    )
     # Discriminator for the OAuth-provider dispatch layer. Decoupled
     # from the linked skill's name so renaming the skill doesn't
     # silently break OAuth.
@@ -6631,7 +6649,10 @@ class ExternalApp(Base):
         nullable=False,
     )
 
-    skill: Mapped["Skill"] = relationship("Skill")
+    associated_skills: Mapped[list["Skill"]] = relationship(
+        "Skill",
+        secondary=ExternalApp__Skill.__table__,
+    )
     user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
         "ExternalAppUserCredential",
         back_populates="external_app",

@@ -74,7 +74,6 @@ def _seed_built_in(
     create_external_app(
         db_session=db_session,
         name=app_type.value.title(),
-        description="",
         bundle_file_id="",
         bundle_sha256="",
         app_type=app_type,
@@ -90,7 +89,6 @@ def _seed_built_in(
 def _create_request(
     *,
     name: str = "Gmail",
-    description: str = "",
     upstream_url_patterns: list[str] | None = None,
     auth_template: dict[str, Any] | None = None,
     organization_credentials: dict[str, str] | None = None,
@@ -98,7 +96,6 @@ def _create_request(
     """A GMAIL create request with sensible defaults for the cloud-guard tests."""
     return CreateBuiltInExternalAppRequest(
         name=name,
-        description=description,
         app_type=ExternalAppType.GMAIL,
         upstream_url_patterns=upstream_url_patterns or [],
         auth_template=auth_template or {},

@@ -235,10 +235,6 @@ class GitHubProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             scope_param="scope",
         ),
         descriptor=AdminDescriptorSpec(
-            description=(
-                "Read repositories, issues, and pull requests, open new issues, "
-                "and add comments in GitHub on the user's behalf."
-            ),
             upstream_url_patterns=["https://api\\.github\\.com/.*"],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[
