@@ -125,11 +125,18 @@ function externalAppToConnectable(
 }
 
 function mcpServerToConnectable(server: MCPServer): ConnectableApp | null {
+  // Pass-through OAuth authenticates via the user's Onyx login token at runtime:
+  // always usable, with nothing for the user to connect or disconnect. Its
+  // per-user `user_authenticated` is false (no stored config), so it must not
+  // drive the regular OAuth flow or the connected state.
+  const passThrough = server.auth_type === MCPAuthenticationType.PT_OAUTH;
   const perUser =
+    !passThrough &&
     server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
     server.auth_type !== MCPAuthenticationType.NONE;
   const authenticated =
-    server.user_authenticated ?? server.is_authenticated ?? false;
+    passThrough ||
+    (server.user_authenticated ?? server.is_authenticated ?? false);
   // Org-managed (admin-performed / no-auth) servers with nothing configured
   // aren't actionable for the user — hide rather than show a dead card.
   if (!perUser && !authenticated) return null;
