@@ -571,6 +571,18 @@ def move_chat_session(
     )
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Chat session not found")
+
+    # The target project must belong to the caller; otherwise a user could
+    # attach their session to another user's project and read that project's
+    # instructions back through the default agent.
+    project = (
+        db_session.query(UserProject)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
+        .one_or_none()
+    )
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
     chat_session.project_id = project_id
     db_session.commit()
     return Response(status_code=204)
