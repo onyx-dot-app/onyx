@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import TokenRateLimit, User
+from onyx.db.models import User
 from onyx.db.token_limit import (
     fetch_all_user_token_rate_limits,
     fetch_user_group_token_rate_limits,
@@ -20,14 +20,12 @@ from onyx.db.user_usage import (
     get_user_token_buckets_since,
 )
 from onyx.server.query_and_chat.token_limit import (
-    _cost_reset_at,
+    _cost_budget_reset,
     _get_cutoff_time,
     _has_token_budget,
     _raise_for_latest_reset,
-    _token_reset_at,
+    _token_budget_reset,
     _user_is_rate_limited_by_global,
-    _worst_triggered_cost_limit,
-    _worst_triggered_limit,
     raise_rate_limited,
 )
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -65,7 +63,7 @@ def _user_is_rate_limited(user_id: UUID) -> None:
         if not user_rate_limits:
             return
 
-        token_triggered: TokenRateLimit | None = None
+        token_reset: datetime | None = None
         token_limits = [
             limit
             for limit in user_rate_limits
@@ -74,9 +72,9 @@ def _user_is_rate_limited(user_id: UUID) -> None:
         if token_limits:
             user_cutoff_time = _get_cutoff_time(token_limits)
             user_usage = _fetch_user_usage(user_id, user_cutoff_time, db_session)
-            token_triggered = _worst_triggered_limit(user_rate_limits, user_usage)
+            token_reset = _token_budget_reset(user_rate_limits, user_usage)
 
-        cost_triggered: TokenRateLimit | None = None
+        cost_reset: datetime | None = None
         cost_limits = [
             limit for limit in user_rate_limits if limit.cost_budget_cents is not None
         ]
@@ -88,13 +86,9 @@ def _user_is_rate_limited(user_id: UUID) -> None:
             cost_buckets = get_user_cost_cents_buckets_since(
                 db_session, str(user_id), cost_cutoff
             )
-            cost_triggered = _worst_triggered_cost_limit(user_rate_limits, cost_buckets)
+            cost_reset = _cost_budget_reset(user_rate_limits, cost_buckets)
 
-        _raise_for_latest_reset(
-            TokenRateLimitScope.USER.value,
-            _token_reset_at(token_triggered),
-            _cost_reset_at(cost_triggered),
-        )
+        _raise_for_latest_reset(TokenRateLimitScope.USER, token_reset, cost_reset)
 
 
 def _fetch_user_usage(
@@ -146,25 +140,19 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
 
         group_resets: list[datetime] = []
         for user_group_id, rate_limits in group_rate_limits.items():
-            token_triggered = _worst_triggered_limit(
+            token_reset = _token_budget_reset(
                 rate_limits, group_token_usage.get(user_group_id, [])
             )
-            cost_triggered = _worst_triggered_cost_limit(
+            cost_reset = _cost_budget_reset(
                 rate_limits, group_cost_usage.get(user_group_id, [])
             )
-            if token_triggered is None and cost_triggered is None:
+            # A group the user is under (no exceeded budget) unblocks them entirely.
+            if token_reset is None and cost_reset is None:
                 return
-            resets = [
-                reset
-                for reset in (
-                    _token_reset_at(token_triggered),
-                    _cost_reset_at(cost_triggered),
-                )
-                if reset is not None
-            ]
+            resets = [reset for reset in (token_reset, cost_reset) if reset is not None]
             group_resets.append(max(resets))
 
-        raise_rate_limited(TokenRateLimitScope.USER_GROUP.value, min(group_resets))
+        raise_rate_limited(TokenRateLimitScope.USER_GROUP, min(group_resets))
 
 
 def _fetch_user_group_usage(

@@ -9,17 +9,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
+from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import TokenRateLimit, User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.db.user_usage import (
     TokenUsageBucket,
-    get_cost_window_reset,
+    earliest_window_reset,
     get_cost_window_start,
-    get_token_window_reset,
     get_token_window_start,
     get_total_cost_cents_buckets_since,
     get_total_token_buckets_since,
+    normalize_token_period_hours,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -63,41 +64,36 @@ def _user_is_rate_limited_by_global() -> None:
             db_session=db_session, enabled_only=True, ordered=False
         )
 
-        if global_rate_limits:
-            # Skip the token-usage aggregation when every limit is cost-only.
-            triggered = None
-            if _has_token_budget(global_rate_limits):
-                # Scan the token table only as far back as the widest *token*
-                # window — a longer cost-only window must not widen the scan.
-                token_limits = [
-                    rl
-                    for rl in global_rate_limits
-                    if rl.token_budget is not None and rl.token_budget > 0
-                ]
-                global_cutoff_time = _get_cutoff_time(token_limits)
-                global_usage = _fetch_global_usage(global_cutoff_time, db_session)
-                triggered = _worst_triggered_limit(global_rate_limits, global_usage)
+        if not global_rate_limits:
+            return
 
-            cost_limits = [
-                rl for rl in global_rate_limits if rl.cost_budget_cents is not None
+        # Skip the token-usage aggregation when every limit is cost-only.
+        token_reset: datetime | None = None
+        if _has_token_budget(global_rate_limits):
+            # Scan the token table only as far back as the widest *token*
+            # window — a longer cost-only window must not widen the scan.
+            token_limits = [
+                rl
+                for rl in global_rate_limits
+                if rl.token_budget is not None and rl.token_budget > 0
             ]
-            cost_buckets: list[tuple[datetime, float]] = []
-            if cost_limits:
-                cost_cutoff = get_cost_window_start(
-                    datetime.now(timezone.utc),
-                    max(rl.period_hours for rl in cost_limits),
-                )
-                cost_buckets = get_total_cost_cents_buckets_since(
-                    db_session, cost_cutoff
-                )
-            cost_triggered = _worst_triggered_cost_limit(
-                global_rate_limits, cost_buckets
+            global_cutoff_time = _get_cutoff_time(token_limits)
+            global_usage = _fetch_global_usage(global_cutoff_time, db_session)
+            token_reset = _token_budget_reset(global_rate_limits, global_usage)
+
+        cost_reset: datetime | None = None
+        cost_limits = [
+            rl for rl in global_rate_limits if rl.cost_budget_cents is not None
+        ]
+        if cost_limits:
+            cost_cutoff = get_cost_window_start(
+                datetime.now(timezone.utc),
+                max(rl.period_hours for rl in cost_limits),
             )
-            _raise_for_latest_reset(
-                "organization",
-                _token_reset_at(triggered),
-                _cost_reset_at(cost_triggered),
-            )
+            cost_buckets = get_total_cost_cents_buckets_since(db_session, cost_cutoff)
+            cost_reset = _cost_budget_reset(global_rate_limits, cost_buckets)
+
+        _raise_for_latest_reset(TokenRateLimitScope.GLOBAL, token_reset, cost_reset)
 
 
 def _fetch_global_usage(
@@ -127,15 +123,20 @@ def _has_token_budget(rate_limits: Sequence[TokenRateLimit]) -> bool:
     )
 
 
-def _worst_triggered_limit(
+def _token_budget_reset(
     rate_limits: Sequence[TokenRateLimit], usage: Sequence[TokenUsageBucket]
-) -> TokenRateLimit | None:
-    """Among the exceeded token limits, return the one with the longest window
-    (or None). Picking the longest period_hours makes the reported reset
-    deterministic and conservative: a client that waits it out won't immediately
-    re-trip a still-exceeded longer limit. Carries period_hours for the reset."""
+) -> datetime | None:
+    """The latest exact reset among the exceeded token budgets, or None.
+
+    Each limit's reset is the earliest UTC-day boundary at which its trailing
+    window drops back under budget (see `earliest_window_reset`) — not the full
+    window expiry. Taking the max across all exceeded limits keeps the reported
+    reset safe: a client that waits it out won't immediately re-trip a limit that
+    clears later.
+    """
     now = datetime.now(timezone.utc)
-    worst: TokenRateLimit | None = None
+    buckets = [(bucket.window_start, float(bucket.tokens)) for bucket in usage]
+    resets: list[datetime] = []
     for rate_limit in rate_limits:
         # A null (cost-only) or non-positive token_budget is token-exempt — skip
         # the token check. Guarding <= 0 means a 0 (new cost-only rows store null,
@@ -143,41 +144,35 @@ def _worst_triggered_limit(
         if rate_limit.token_budget is None or rate_limit.token_budget <= 0:
             continue
 
-        cutoff = get_token_window_start(now, rate_limit.period_hours)
-        tokens_used = sum(
-            bucket.tokens for bucket in usage if bucket.window_start >= cutoff
-        )
-
         # The admin enters the budget in THOUSANDS of tokens (Onyx convention),
         # so the stored value is scaled up to the real token count here.
-        if tokens_used >= rate_limit.token_budget * TOKEN_BUDGET_UNIT:
-            if worst is None or rate_limit.period_hours > worst.period_hours:
-                worst = rate_limit
+        budget = rate_limit.token_budget * TOKEN_BUDGET_UNIT
+        cutoff = get_token_window_start(now, rate_limit.period_hours)
+        used = sum(tokens for window_start, tokens in buckets if window_start >= cutoff)
+        if used >= budget:
+            resets.append(
+                earliest_window_reset(
+                    now,
+                    normalize_token_period_hours(rate_limit.period_hours),
+                    buckets,
+                    budget,
+                )
+            )
 
-    return worst
+    return max(resets) if resets else None
 
 
-def _is_rate_limited(
-    rate_limits: Sequence[TokenRateLimit],
-    usage: Sequence[TokenUsageBucket],
-) -> bool:
-    """Whether any provider-token budget is exceeded."""
-    return _worst_triggered_limit(rate_limits, usage) is not None
-
-
-def _worst_triggered_cost_limit(
+def _cost_budget_reset(
     rate_limits: Sequence[TokenRateLimit],
     cost_buckets: Sequence[tuple[datetime, float]],
-) -> TokenRateLimit | None:
-    """Among rows whose cost_budget_cents is set and exceeded, return the one
-    with the longest window (or None) — longest period_hours so the reset is
-    deterministic and conservative, matching _worst_triggered_limit.
+) -> datetime | None:
+    """The latest exact reset among the exceeded cost budgets, or None.
 
-    Cost windows contain whole UTC-day buckets, including the current day.
-    Rows without a cost_budget_cents are cost-exempt.
+    Mirrors `_token_budget_reset`. Cost windows contain whole UTC-day buckets;
+    rows without a cost_budget_cents are cost-exempt.
     """
-    now = datetime.now(tz=timezone.utc)
-    worst: TokenRateLimit | None = None
+    now = datetime.now(timezone.utc)
+    resets: list[datetime] = []
     for rate_limit in rate_limits:
         budget = rate_limit.cost_budget_cents
         if budget is None:
@@ -188,13 +183,25 @@ def _worst_triggered_cost_limit(
             cents for window_start, cents in cost_buckets if window_start >= cutoff
         )
         if cost >= budget:
-            if worst is None or rate_limit.period_hours > worst.period_hours:
-                worst = rate_limit
+            resets.append(
+                earliest_window_reset(
+                    now, rate_limit.period_hours, cost_buckets, budget
+                )
+            )
 
-    return worst
+    return max(resets) if resets else None
 
 
-def raise_rate_limited(scope: str, reset_at: datetime) -> None:
+# Human-readable subject for each scope, used only in the fallback message text.
+# The machine-readable scope value goes in the structured `extra` payload.
+_SCOPE_LABELS: dict[TokenRateLimitScope, str] = {
+    TokenRateLimitScope.GLOBAL: "your organization",
+    TokenRateLimitScope.USER: "your account",
+    TokenRateLimitScope.USER_GROUP: "your user group",
+}
+
+
+def raise_rate_limited(scope: TokenRateLimitScope, reset_at: datetime) -> None:
     """Raise a structured 429 with the next relevant budget reset."""
     retry_after_seconds = max(
         1, ceil((reset_at - datetime.now(timezone.utc)).total_seconds())
@@ -204,9 +211,9 @@ def raise_rate_limited(scope: str, reset_at: datetime) -> None:
         OnyxErrorCode.RATE_LIMITED,
         # Neutral wording, no raw timestamp — the FE renders a friendly reset
         # time from reset_at / retry_after_seconds below.
-        f"You've reached the usage budget for {scope}.",
+        f"You've reached the usage budget for {_SCOPE_LABELS[scope]}.",
         extra={
-            "scope": scope,
+            "scope": scope.value,
             "reset_at": reset_at_iso,
             "retry_after_seconds": retry_after_seconds,
         },
@@ -214,25 +221,9 @@ def raise_rate_limited(scope: str, reset_at: datetime) -> None:
     )
 
 
-def _token_reset_at(limit: TokenRateLimit | None) -> datetime | None:
-    if limit is None:
-        return None
-    return get_token_window_reset(
-        datetime.now(timezone.utc),
-        limit.period_hours,
-    )
-
-
-def _cost_reset_at(limit: TokenRateLimit | None) -> datetime | None:
-    if limit is None:
-        return None
-    return get_cost_window_reset(
-        datetime.now(timezone.utc),
-        limit.period_hours,
-    )
-
-
-def _raise_for_latest_reset(scope: str, *reset_times: datetime | None) -> None:
+def _raise_for_latest_reset(
+    scope: TokenRateLimitScope, *reset_times: datetime | None
+) -> None:
     """Raise after evaluating independent limits that must all recover."""
     resets = [reset for reset in reset_times if reset is not None]
     if resets:
