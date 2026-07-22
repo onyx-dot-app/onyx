@@ -149,9 +149,9 @@ export default function ReindexErrorsModal({
               Nothing needs attention.
             </Text>
           ) : (
-            // Modal.Body aligns children to the start; w-full stops the table
-            // shrinking to content and left-packing.
             <div className="w-full">
+              {/* Modal.Body aligns children to the start; w-full stops the
+                  table shrinking to content and left-packing. */}
               <Table
                 data={rows}
                 columns={COLUMNS}
