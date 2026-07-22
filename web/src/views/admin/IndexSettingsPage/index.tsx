@@ -861,8 +861,12 @@ export default function IndexSettingsPage() {
               // ALWAYS resolved through `resolveProviderName` — see its NOTE
               // for why this is the single source of truth for provider
               // discrimination.
+              const embeddingModelUnchanged =
+                values.model_name === (currentEmbeddingModel?.model_name ?? "");
               const stagedModel =
-                values.custom_model ?? findRegistryModel(values.model_name);
+                values.custom_model ??
+                (embeddingModelUnchanged ? currentEmbeddingModelSpec : null) ??
+                findRegistryModel(values.model_name);
               if (!stagedModel) {
                 toast.error("Could not find the selected model");
                 return;
@@ -873,7 +877,9 @@ export default function IndexSettingsPage() {
               // name against the static registry.
               const providerName =
                 values.custom_model_provider ??
-                resolveProviderName(values.model_name, null);
+                (embeddingModelUnchanged && currentProviderName
+                  ? currentProviderName
+                  : resolveProviderName(values.model_name, null));
 
               const response = await setNewSearchSettings({
                 model: stagedModel,
@@ -1495,6 +1501,7 @@ export default function IndexSettingsPage() {
                                   values.contextual_rag_model_configuration_id
                                 }
                                 disabled={!values.enable_contextual_rag}
+                                requireExplicitSelection
                                 onChange={(opt) =>
                                   void setFieldValue(
                                     "contextual_rag_model_configuration_id",
