@@ -1087,10 +1087,9 @@ def mark_document_as_synced(
     db_session: Session,
     synced_as_of: datetime | None = None,
 ) -> None:
-    """``synced_as_of`` should be the doc's ``last_modified`` as captured when the
-    synced state was read. Stamping that watermark (instead of now()) keeps the
-    doc stale if it was modified again while the index write was in flight, so
-    the newer state gets re-synced instead of silently masked."""
+    """``synced_as_of``: the doc's ``last_modified`` captured when the synced
+    state was read. Stamping that watermark (not now()) keeps a doc that was
+    modified during the index write stale, so the newer state re-syncs."""
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc = db_session.scalar(stmt)
     if doc is None:

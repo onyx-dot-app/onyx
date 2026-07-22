@@ -205,8 +205,7 @@ def document_by_cc_pair_cleanup_task(
                     ),
                 )
 
-                # stamp the phase-1 last_modified watermark so a concurrent
-                # modification during the index write leaves the doc stale
+                # the phase-1 watermark keeps a concurrently-modified doc stale
                 mark_document_as_synced(
                     document_id, db_session, synced_as_of=doc_last_modified
                 )

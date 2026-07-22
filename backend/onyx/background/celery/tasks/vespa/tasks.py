@@ -481,12 +481,9 @@ def document_index_metadata_sync_task(
     completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED
 
     try:
-        # Phase 1: read DB state, then release the connection before the
-        # document-index HTTP call (OpenSearch on cloud, Vespa on legacy
-        # deployments). Holding a pg transaction across the round-trip pins
-        # a connection for up to the full tenacity retry window; under
-        # bulk-deletion fan-out these sessions sit idle-in-transaction for
-        # minutes and other writers queue behind them.
+        # Phase 1: read DB state, then release the connection — holding a pg
+        # transaction across the index I/O pins it for the full retry window
+        # and blocks other document writers.
         update_request: MetadataUpdateRequest | None = None
         doc_last_modified: datetime | None = None
         with get_session_with_current_tenant() as db_session:
@@ -537,10 +534,8 @@ def document_index_metadata_sync_task(
             )
             completion_status = OnyxCeleryTaskCompletionStatus.SKIPPED
         else:
-            # Build document-index clients outside the DB session — construction
-            # can take a few seconds to connect to the document index server,
-            # and we don't want to pin a connection while that happens.
-            # This flow is for updates so we get all indices.
+            # Client construction can be slow, so it also stays outside the
+            # session. This flow is for updates so we get all indices.
             document_indices = get_all_document_indices(
                 search_settings=primary_search_settings,
                 secondary_search_settings=secondary_search_settings,
@@ -576,9 +571,7 @@ def document_index_metadata_sync_task(
             # the sync might repeat again later.
             # Defer only if the doc can still be ported; an INVALID/DELETING-only
             # doc's flag would never clear -> swap deadlock, so mark it synced.
-            # last_synced is stamped with the phase-1 last_modified watermark so a
-            # concurrent modification during the index write leaves the doc stale
-            # and it re-syncs, instead of the stale index write masking it.
+            # The phase-1 watermark keeps a concurrently-modified doc stale.
             with get_session_with_current_tenant() as db_session:
                 if port_index_missing and document_has_indexable_cc_pair(
                     db_session, document_id
