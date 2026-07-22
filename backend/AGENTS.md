@@ -34,9 +34,12 @@ Onyx uses Celery for asynchronous task processing. Worker apps live in
 Key facts:
 
 - All workers use thread pools (not processes) — this is why Celery time limits don't work (see below).
-- Multi-tenant: a middleware layer automatically resolves the tenant ID when sending tasks via Celery Beat.
-- Tasks use High/Medium/Low priority queues; Redis coordinates inter-process communication; task state
-  and metadata live in PostgreSQL.
+- Multi-tenant: `DynamicTenantScheduler` explicitly adds `tenant_id` to each Celery Beat task's
+  kwargs; direct task sends must propagate it themselves (`TenantAwareTask` silently falls back to
+  the default schema when it's absent).
+- Tasks route to named queues and carry a separate High/Medium/Low priority (`OnyxCeleryQueues` /
+  `OnyxCeleryPriority` in `backend/onyx/configs/constants.py`); Redis coordinates inter-process
+  communication; task state and metadata live in PostgreSQL.
 
 ### Defining Tasks
 
@@ -59,26 +62,26 @@ to ask the user to restart the celery worker. There is no auto-restart on code-c
 
 ## Database & Migrations
 
-Run all `alembic` commands from `backend/` (where `alembic.ini` lives), e.g. `uv run alembic upgrade head`.
+Run all `alembic` commands from `backend/` (where `alembic.ini` lives) through `uv run`.
 
 ### Running Migrations
 
 ```bash
 # Standard migrations
-alembic upgrade head
+uv run alembic upgrade head
 
 # Multi-tenant (Enterprise)
-alembic -n schema_private upgrade head
+uv run alembic -n schema_private upgrade head
 ```
 
 ### Creating Migrations
 
 ```bash
 # Create migration
-alembic revision -m "description"
+uv run alembic revision -m "description"
 
 # Multi-tenant migration
-alembic -n schema_private revision -m "description"
+uv run alembic -n schema_private revision -m "description"
 ```
 
 Write the migration manually and place it in the file that alembic creates when running the above command.

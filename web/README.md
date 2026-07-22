@@ -59,30 +59,32 @@ Don't run these tests if you don't want to do this!
 
 Bring up the entire application.
 
-0. Install playwright dependencies
+0. Install playwright dependencies (run `bun install` first so `bunx` resolves to the
+   repo-pinned Playwright in `node_modules` instead of fetching the latest version)
 
 ```bash
+bun install
 bunx playwright install
 ```
 
-1. Run playwright
+1. Run playwright (the `playwright` script expands to `playwright test`)
 
 ```bash
-bunx playwright test
+bun run playwright
 ```
 
 To run a single test:
 
 ```bash
-bunx playwright test landing-page.spec.ts
+bun run playwright landing-page.spec.ts
 ```
 
 If running locally, interactive options can help you see exactly what is happening in
 the test.
 
 ```bash
-bunx playwright test --ui
-bunx playwright test --headed
+bun run playwright --ui
+bun run playwright --headed
 ```
 
 2. Inspect results
