@@ -32,6 +32,7 @@ type Client struct {
 	httpClient          *http.Client
 	searchHTTPClient    *http.Client
 	streamingHTTPClient *http.Client
+	imageHTTPClient     *http.Client
 }
 
 // NewClient creates a new API client from config.
@@ -57,6 +58,12 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 		},
 		streamingHTTPClient: &http.Client{
 			Timeout:   5 * time.Minute,
+			Transport: transport,
+		},
+		// Must exceed the server's 10-minute image-generation stream ceiling,
+		// or the client gives up before the server's timeout envelope arrives.
+		imageHTTPClient: &http.Client{
+			Timeout:   11 * time.Minute,
 			Transport: transport,
 		},
 	}
@@ -153,8 +160,7 @@ func (c *Client) Search(ctx context.Context, req models.SearchRequest) (*models.
 }
 
 // GenerateImage calls POST /image-generation/generate, which generates
-// image(s) using the workspace's default image-gen provider. Uses the 5min
-// client since high-res generation can be slow.
+// image(s) using the workspace's default image-gen provider.
 //
 // The server streams keepalive whitespace before the JSON body (which
 // json.Decoder skips) and reports errors in-band on a 200, since the status
@@ -165,7 +171,7 @@ func (c *Client) GenerateImage(ctx context.Context, req models.ImageGenerationRe
 		ErrorCode string `json:"error_code"`
 		Detail    string `json:"detail"`
 	}
-	if err := c.doJSONWith(ctx, c.streamingHTTPClient, "POST", "/image-generation/generate", req, &resp); err != nil {
+	if err := c.doJSONWith(ctx, c.imageHTTPClient, "POST", "/image-generation/generate", req, &resp); err != nil {
 		return nil, err
 	}
 	if resp.ErrorCode != "" {

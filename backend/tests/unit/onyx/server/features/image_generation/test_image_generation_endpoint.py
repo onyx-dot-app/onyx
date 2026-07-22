@@ -135,6 +135,16 @@ def test_oversized_reference_rejected() -> None:
     assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
 
 
+def test_admission_limit_rejects_with_rate_limited() -> None:
+    with patch(
+        "onyx.server.features.image_generation.api._admission_semaphore",
+        threading.BoundedSemaphore(0),
+    ):
+        with pytest.raises(OnyxError) as exc:
+            generate_image(ImageGenerationRequest(prompt="a cat"))
+    assert exc.value.error_code == OnyxErrorCode.RATE_LIMITED
+
+
 def test_not_configured_raises_before_stream() -> None:
     with patch(_ENSURE, side_effect=ImageGenerationNotConfiguredError("none")):
         with pytest.raises(OnyxError) as exc:

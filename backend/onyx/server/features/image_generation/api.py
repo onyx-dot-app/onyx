@@ -44,6 +44,10 @@ _MAX_STREAM_DURATION_S = 10 * 60.0
 _generation_executor = ThreadPoolExecutor(
     max_workers=32, thread_name_prefix="image-gen"
 )
+# max_workers bounds execution, not admission — without this a burst would
+# queue unbounded 10-minute runs (each retaining its decoded reference images).
+_MAX_PENDING_GENERATIONS = 64
+_admission_semaphore = threading.BoundedSemaphore(_MAX_PENDING_GENERATIONS)
 
 
 class ReferenceImagePayload(BaseModel):
@@ -91,9 +95,9 @@ def _decode_reference_images(
         if len(data) > _MAX_REFERENCE_IMAGE_BYTES:
             raise size_error
         try:
-            mime_type = payload.mime_type or get_image_type_from_bytes(data)
+            mime_type = get_image_type_from_bytes(data)
         except ValueError:
-            mime_type = "image/png"
+            mime_type = payload.mime_type or "image/png"
         references.append(ReferenceImage(data=data, mime_type=mime_type))
     return references
 
@@ -153,13 +157,21 @@ class _GenerationRun:
         self.error: Exception | None = None
 
     def start(self) -> None:
-        _generation_executor.submit(self._run)
+        if not _admission_semaphore.acquire(blocking=False):
+            raise OnyxError(
+                OnyxErrorCode.RATE_LIMITED,
+                "Too many image generations in progress; try again shortly.",
+            )
+        try:
+            _generation_executor.submit(self._run)
+        except BaseException:
+            _admission_semaphore.release()
+            raise
 
     def _run(self) -> None:
-        if self.abandoned.is_set():
-            self.done.set()
-            return
         try:
+            if self.abandoned.is_set():
+                return
             self.images = self._context.run(
                 generate_images_with_default_config,
                 prompt=self._prompt,
@@ -172,6 +184,7 @@ class _GenerationRun:
             self.error = e
         finally:
             self.done.set()
+            _admission_semaphore.release()
 
 
 def _keepalive_stream(run: _GenerationRun) -> Iterator[bytes]:
