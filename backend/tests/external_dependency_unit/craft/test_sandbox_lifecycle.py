@@ -147,7 +147,7 @@ class TestIdempotentProvision:
         stub_sandbox_manager.health_check_returns = True
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
-        stub_sandbox_manager.write_session_opencode_config_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         # First call: provisions a new sandbox row.
         session_manager_with_stub.create_session__no_commit(user_id=test_user.id)
@@ -249,7 +249,7 @@ class TestHealthCheckFailureRecovery:
         stub_sandbox_manager.session_workspace_exists_returns = False
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
-        stub_sandbox_manager.write_session_opencode_config_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         # restore_session reads ``get_sandbox_manager`` from sessions_api.
         monkeypatch.setattr(
@@ -602,7 +602,7 @@ class TestManagedContentPushOrdering:
             stub.restore_snapshot_silent = True
         else:
             stub.setup_session_workspace_silent = True
-        stub.write_session_opencode_config_silent = True
+        stub.write_sandbox_file_silent = True
 
         monkeypatch.setattr(
             "onyx.server.features.build.session.api.get_sandbox_manager",

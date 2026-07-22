@@ -125,7 +125,6 @@ class StubSandboxManager(SandboxManager):
     - ``cleanup_session_workspace_silent``
     - ``dispose_opencode_instance_silent``
     - ``regenerate_session_config_silent``
-    - ``write_session_opencode_config_silent``
     - ``restore_snapshot_silent``
     - ``write_sandbox_file_silent``
     - ``write_files_to_sandbox_silent``
@@ -176,7 +175,6 @@ class StubSandboxManager(SandboxManager):
         self.cleanup_session_workspace_silent: bool = False
         self.dispose_opencode_instance_silent: bool = False
         self.regenerate_session_config_silent: bool = False
-        self.write_session_opencode_config_silent: bool = False
         self.restore_snapshot_silent: bool = False
         self.write_sandbox_file_silent: bool = False
         self.write_files_to_sandbox_silent: bool = False
@@ -194,7 +192,6 @@ class StubSandboxManager(SandboxManager):
         self.terminate_count: int = 0
         self.terminated_sandbox_ids: list[UUID] = []
         self.setup_session_workspace_count: int = 0
-        self.write_session_opencode_config_count: int = 0
         self.cleanup_session_workspace_count: int = 0
         self.regenerate_session_config_count: int = 0
         self.create_snapshot_count: int = 0
@@ -226,7 +223,6 @@ class StubSandboxManager(SandboxManager):
         self.last_provision_payload: dict[str, Any] | None = None
         self.last_terminate_sandbox_id: UUID | None = None
         self.last_setup_session_workspace_payload: dict[str, Any] | None = None
-        self.last_write_session_opencode_config_payload: dict[str, Any] | None = None
         self.last_cleanup_session_workspace_payload: dict[str, Any] | None = None
         self.last_regenerate_session_config_payload: dict[str, Any] | None = None
         self.last_create_snapshot_payload: dict[str, Any] | None = None
@@ -301,21 +297,6 @@ class StubSandboxManager(SandboxManager):
         if self.provision_returns is None:
             raise _not_configured("provision")
         return self.provision_returns
-
-    def write_session_opencode_config(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        opencode_config_json: str,
-    ) -> None:
-        self.write_session_opencode_config_count += 1
-        self.last_write_session_opencode_config_payload = {
-            "sandbox_id": sandbox_id,
-            "session_id": session_id,
-            "opencode_config_json": opencode_config_json,
-        }
-        if not self.write_session_opencode_config_silent:
-            raise _not_configured("write_session_opencode_config")
 
     def terminate(self, sandbox_id: UUID) -> None:
         self.terminate_count += 1

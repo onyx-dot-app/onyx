@@ -129,7 +129,7 @@ class SandboxManager(_ServeMixin, ABC):
         the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
 
         Craft MCP servers are NOT registered here — they live in per-session
-        ``opencode.json`` (see ``write_session_opencode_config``) so they can
+        ``opencode.json`` (see ``write_session_mcp_config``) so they can
         hot-reload without a pod re-provision.
 
         Creates the sandbox container/directory with:
@@ -195,23 +195,6 @@ class SandboxManager(_ServeMixin, ABC):
             RuntimeError: If workspace setup fails
         """
         ...
-
-    def write_session_opencode_config(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        opencode_config_json: str,
-    ) -> None:
-        """Write the per-session project ``opencode.json`` (craft MCP servers +
-        their per-tool permission gates) into ``sessions/$session_id/``. opencode
-        merges it with the pod-global config and re-reads it whenever the session's
-        instance is disposed — so calling this then ``dispose_opencode_instance``
-        hot-reloads the MCP set without a pod re-provision. Written on cold session
-        setup and rewritten on skills/MCP reload.
-        """
-        self.write_sandbox_file(
-            sandbox_id, f"sessions/{session_id}/opencode.json", opencode_config_json
-        )
 
     @abstractmethod
     def cleanup_session_workspace(

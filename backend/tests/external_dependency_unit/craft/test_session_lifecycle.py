@@ -128,7 +128,7 @@ class TestCreateSession:
         )
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
-        stub_sandbox_manager.write_session_opencode_config_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         sm = session_manager_with_stub
         build_session = sm.create_session__no_commit(user_id=test_user.id)
@@ -173,7 +173,7 @@ class TestCreateSession:
         stub_sandbox_manager.health_check_returns = True
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
-        stub_sandbox_manager.write_session_opencode_config_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
         # provision_returns NOT configured — any provision() call would raise.
 
         sm = session_manager_with_stub
@@ -286,7 +286,7 @@ class TestEmptySessionReuse:
         stub_sandbox_manager.cleanup_session_workspace_silent = True
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
-        stub_sandbox_manager.write_session_opencode_config_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         sm = session_manager_with_stub
         new_session = sm.get_or_create_empty_session(user_id=test_user.id)
@@ -414,7 +414,7 @@ class TestReloadSessionSkills:
         )
         stub_sandbox_manager.regenerate_session_config_silent = True
         stub_sandbox_manager.dispose_opencode_instance_silent = True
-        stub_sandbox_manager.write_session_opencode_config_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         response = reload_session_skills(session_row.id, test_user, db_session)
 
@@ -1026,7 +1026,7 @@ class TestRestoreSession:
         stub_sandbox_manager.session_workspace_exists_returns = True
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
-        stub_sandbox_manager.write_session_opencode_config_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
         stub_sandbox_manager.regenerate_session_config_silent = True
         stub_sandbox_manager.dispose_opencode_instance_silent = True
 
@@ -1086,7 +1086,7 @@ class TestRestoreSession:
         stub_sandbox_manager.session_workspace_exists_returns = False
         stub_sandbox_manager.restore_snapshot_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
-        stub_sandbox_manager.write_session_opencode_config_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         monkeypatch.setattr(
             "onyx.server.features.build.session.api.get_sandbox_manager",

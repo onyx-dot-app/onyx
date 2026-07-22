@@ -68,15 +68,6 @@ def resolve_craft_mcp_servers(
     ]
 
 
-def render_session_mcp_config_json(
-    db_session: Session, user: User, session_id: str
-) -> str:
-    """The per-session ``opencode.json`` (craft MCP servers + permission gates)
-    for ``user``, ready to write into ``session_id``'s workspace."""
-    servers = resolve_craft_mcp_servers(db_session, user)
-    return json.dumps(build_session_mcp_config(servers, session_id))
-
-
 def write_session_mcp_config(
     sandbox_manager: SandboxManager,
     db_session: Session,
@@ -84,13 +75,16 @@ def write_session_mcp_config(
     sandbox_id: UUID,
     session_id: UUID,
 ) -> None:
-    """Render ``session_id``'s craft MCP ``opencode.json`` for ``user`` and write
-    it into the sandbox — the render+write pair done together on cold session
-    setup and on every skills/MCP reload."""
-    sandbox_manager.write_session_opencode_config(
-        sandbox_id,
-        session_id,
-        render_session_mcp_config_json(db_session, user, str(session_id)),
+    """Render ``session_id``'s craft MCP config and write it to the session's
+    project ``opencode.json`` (``sessions/<id>/opencode.json``). opencode merges
+    it with the pod-global config and re-reads it when the session's instance is
+    disposed, so writing this then ``dispose_opencode_instance`` hot-reloads the
+    MCP set without a pod re-provision. Done on cold session setup and every
+    skills/MCP reload."""
+    servers = resolve_craft_mcp_servers(db_session, user)
+    config_json = json.dumps(build_session_mcp_config(servers, str(session_id)))
+    sandbox_manager.write_sandbox_file(
+        sandbox_id, f"sessions/{session_id}/opencode.json", config_json
     )
 
 
