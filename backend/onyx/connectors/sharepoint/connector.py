@@ -1255,13 +1255,22 @@ class SharepointConnector(
                 "Please check either 'Include Site Documents' or 'Include Site Pages' (or both)."
             )
 
-        # Ensure sites are sharepoint urls
+        # Ensure sites are sharepoint urls. We allow team sites (/sites/),
+        # team channels (/teams/), and OneDrive for Business personal sites
+        # (/personal/, served from `<tenant>-my.sharepoint.com`). Most SMB
+        # M365 tenants keep their content in personal OneDrive, so without
+        # /personal/ here we're locked out of the most common SMB shape.
         for site_url in self.sites:
             if not site_url.startswith("https://") or not (
-                "/sites/" in site_url or "/teams/" in site_url
+                "/sites/" in site_url
+                or "/teams/" in site_url
+                or "/personal/" in site_url
             ):
                 raise ConnectorValidationError(
-                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site or https://your-tenant.sharepoint.com/teams/your-team)"
+                    "Site URLs must be full Sharepoint URLs "
+                    "(e.g. https://your-tenant.sharepoint.com/sites/your-site, "
+                    "https://your-tenant.sharepoint.com/teams/your-team, or "
+                    "https://your-tenant-my.sharepoint.com/personal/user_tenant_onmicrosoft_com)"
                 )
             try:
                 validate_outbound_http_url(site_url, https_only=True)
@@ -1362,7 +1371,9 @@ class SharepointConnector(
         """Extract the tenant domain from configured site URLs.
 
         Site URLs look like https://{tenant}.sharepoint.com/sites/... so the
-        tenant domain is the first label of the hostname.
+        tenant domain is the first label of the hostname. OneDrive personal
+        sites are served from https://{tenant}-my.sharepoint.com/personal/...
+        so we strip the `-my` suffix if present.
         """
         for site_url in self.sites:
             try:
@@ -1372,6 +1383,8 @@ class SharepointConnector(
             if not hostname:
                 continue
             tenant = hostname.split(".")[0]
+            if tenant.endswith("-my"):
+                tenant = tenant[: -len("-my")]
             if tenant:
                 return tenant
         logger.warning("No tenant domain found from %s sites", len(self.sites))
@@ -1489,16 +1502,20 @@ class SharepointConnector(
             if base_url is None:
                 continue
 
+            # SharePoint site URLs come in three shapes: /sites/<name>,
+            # /teams/<name>, and /personal/<upn_with_underscores> for
+            # OneDrive for Business personal sites.
             lower_parts = [part.lower() for part in parts]
             site_type_index = None
-            for site_token in ("sites", "teams"):
+            for site_token in ("sites", "teams", "personal"):
                 if site_token in lower_parts:
                     site_type_index = lower_parts.index(site_token)
                     break
 
             if site_type_index is None or len(parts) <= site_type_index + 1:
                 logger.warning(
-                    "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)",
+                    "Site URL '%s' is not a valid Sharepoint URL "
+                    "(must contain /sites/<name>, /teams/<name>, or /personal/<upn>)",
                     url,
                 )
                 continue
