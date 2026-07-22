@@ -6,14 +6,12 @@ deletes only those marked chunks for a recorded doc. See
 docs/plans/reindexing/deleted-doc-resurrection-during-port.md.
 """
 
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.document import get_cc_pairs_for_document
-from onyx.db.models import PortOrphanCandidate
-from onyx.db.models import SearchSettings
+from onyx.db.models import PortOrphanCandidate, SearchSettings
 
 
 def port_target_settings_id(
