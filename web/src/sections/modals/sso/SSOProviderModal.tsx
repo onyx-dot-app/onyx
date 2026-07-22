@@ -24,6 +24,7 @@ import {
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
+import SwitchField from "@/refresh-components/form/SwitchField";
 import InputChipField, {
   type ChipItem,
 } from "@/refresh-components/inputs/InputChipField";
@@ -42,7 +43,7 @@ interface SSOProviderFormValues {
   provider_type: SSOProviderType;
   name: string;
   display_name: string;
-  config: Record<string, string>;
+  config: Record<string, string | boolean>;
   allowed_email_domains: string[];
 }
 
@@ -58,8 +59,12 @@ const ALL_CONFIG_FIELDS: SSOConfigField[] = Array.from(
 );
 
 function configSchemaForType(fields: SSOConfigField[]) {
-  const shape: Record<string, Yup.StringSchema> = {};
+  const shape: Record<string, Yup.StringSchema | Yup.BooleanSchema> = {};
   for (const field of fields) {
+    if (field.kind === "switch") {
+      shape[field.name] = Yup.boolean();
+      continue;
+    }
     shape[field.name] = field.optional
       ? Yup.string().optional()
       : Yup.string().required(`${field.label} is required`);
@@ -98,15 +103,22 @@ const SSO_VALIDATION_SCHEMA = Yup.object({
 
 // The backend masks every config string on read and restores any value sent
 // back unchanged, so the form sends its current values as-is. Blank optional
-// keys are omitted rather than sent as empty strings.
+// keys are omitted rather than sent as empty strings. Switch values are always
+// sent: the update endpoint overlays only the keys present, so turning a flag
+// off must send an explicit false.
 function buildConfig(
   providerType: SSOProviderType,
   values: SSOProviderFormValues
-): Record<string, string> {
-  const config: Record<string, string> = {};
+): Record<string, string | boolean> {
+  const config: Record<string, string | boolean> = {};
   for (const field of CONFIG_FIELDS_BY_TYPE[providerType]) {
-    const raw = values.config[field.name] ?? "";
-    const value = field.kind === "password" ? raw : raw.trim();
+    if (field.kind === "switch") {
+      config[field.name] = Boolean(values.config[field.name]);
+      continue;
+    }
+    const raw = values.config[field.name];
+    const str = typeof raw === "string" ? raw : "";
+    const value = field.kind === "password" ? str : str.trim();
     if (field.optional && !value) {
       continue;
     }
@@ -115,10 +127,15 @@ function buildConfig(
   return config;
 }
 
-function initialConfig(config: Record<string, string>): Record<string, string> {
-  const initial: Record<string, string> = {};
+function initialConfig(
+  config: Record<string, string | boolean>
+): Record<string, string | boolean> {
+  const initial: Record<string, string | boolean> = {};
   for (const field of ALL_CONFIG_FIELDS) {
-    initial[field.name] = config[field.name] ?? "";
+    initial[field.name] =
+      field.kind === "switch"
+        ? config[field.name] === true
+        : (config[field.name] ?? "");
   }
   return initial;
 }
@@ -131,6 +148,9 @@ function ConfigInput({
   isEditing: boolean;
 }) {
   const name = `config.${field.name}`;
+  if (field.kind === "switch") {
+    return <SwitchField name={name} />;
+  }
   if (field.kind === "textarea") {
     return <InputTextAreaField name={name} placeholder={field.placeholder} />;
   }
