@@ -13,6 +13,8 @@ import {
   SvgCornerRightUpDot,
   SvgMinusCircle,
 } from "@opal/icons";
+import PolicyToggle from "@/sections/actions/PolicyToggle";
+import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
 
 type ToolItemVariant = "mcp" | "openapi";
 
@@ -67,6 +69,10 @@ export interface ToolItemProps {
   isAvailable?: boolean;
   isEnabled?: boolean;
 
+  // Craft approval policy (rendered when both are provided; MCP variant only)
+  policy?: EndpointPolicy;
+  onPolicyChange?: (policy: EndpointPolicy) => void;
+
   // Variant
   variant?: ToolItemVariant;
   openApiMetadata?: OpenApiMetadata;
@@ -84,6 +90,8 @@ const ToolItem: React.FC<ToolItemProps> = ({
   icon: Icon,
   isAvailable = true,
   isEnabled = true,
+  policy,
+  onPolicyChange,
   variant = "mcp",
   openApiMetadata,
   onToggle,
@@ -220,6 +228,14 @@ const ToolItem: React.FC<ToolItemProps> = ({
               </div>
             </div>
           )}
+
+          {/* Craft approval policy — only meaningful for enabled tools */}
+          {policy !== undefined &&
+            onPolicyChange &&
+            isEnabled &&
+            isAvailable && (
+              <PolicyToggle value={policy} onChange={onPolicyChange} />
+            )}
 
           {/* Switch */}
           <div className="flex items-center justify-center gap-1 h-5 px-0.5 py-0.5">

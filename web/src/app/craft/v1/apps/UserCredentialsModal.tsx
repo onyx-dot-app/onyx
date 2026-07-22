@@ -4,18 +4,21 @@ import { useEffect, useState } from "react";
 import { Modal } from "@opal/components";
 import { Button, MessageCard, Text } from "@opal/components";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import {
-  ExternalAppUserResponse,
-  getAppTypeLogo,
-} from "@/app/craft/v1/apps/registry";
-import { upsertUserCredentials } from "@/app/craft/services/externalAppsService";
+import type { IconFunctionComponent } from "@opal/types";
 
 interface UserCredentialsModalProps {
   open: boolean;
   onClose: () => void;
   /** Invoked after the credentials save so the caller can refresh. */
   onSaved: () => void;
-  userApp: ExternalAppUserResponse;
+  /** Display name for the modal title. */
+  name: string;
+  logo: IconFunctionComponent;
+  /** Credential fields to collect from the user. */
+  credentialKeys: string[];
+  /** Previously stored (masked) values, for pre-filling. */
+  credentialValues: Record<string, string>;
+  save: (values: Record<string, string>) => Promise<void>;
 }
 
 /** Turn a credential key (`discord_token`, `apiKey`) into a readable label. */
@@ -28,15 +31,19 @@ function humanizeKey(key: string): string {
 }
 
 /**
- * Per-user credential entry for apps without an OAuth flow (custom apps).
- * Renders one field per `credential_keys` the app still needs from the user,
- * pre-filled with any value they've already stored, and persists them.
+ * Per-user credential entry for connections without an OAuth flow (custom
+ * external apps, API-token MCP servers). Renders one field per credential key,
+ * pre-filled with any value the user already stored, and persists via `save`.
  */
 export default function UserCredentialsModal({
   open,
   onClose,
   onSaved,
-  userApp,
+  name,
+  logo: Logo,
+  credentialKeys,
+  credentialValues,
+  save,
 }: UserCredentialsModalProps) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -46,23 +53,23 @@ export default function UserCredentialsModal({
   useEffect(() => {
     if (!open) return;
     const initial: Record<string, string> = {};
-    for (const key of userApp.credential_keys) {
-      initial[key] = userApp.credential_values[key] ?? "";
+    for (const key of credentialKeys) {
+      initial[key] = credentialValues[key] ?? "";
     }
     setValues(initial);
     setError(null);
-  }, [open, userApp]);
+  }, [open, credentialKeys, credentialValues]);
 
   const canSave =
-    userApp.credential_keys.length > 0 &&
-    userApp.credential_keys.every((k) => (values[k] ?? "").trim().length > 0) &&
+    credentialKeys.length > 0 &&
+    credentialKeys.every((k) => (values[k] ?? "").trim().length > 0) &&
     !isSaving;
 
-  async function save() {
+  async function saveValues() {
     setIsSaving(true);
     setError(null);
     try {
-      await upsertUserCredentials(userApp.id, values);
+      await save(values);
       onSaved();
       onClose();
     } catch (e) {
@@ -72,20 +79,18 @@ export default function UserCredentialsModal({
     }
   }
 
-  const Logo = getAppTypeLogo(userApp.app_type);
-
   return (
     <Modal open={open} onOpenChange={(o) => !o && onClose()}>
       <Modal.Content width="md">
         <Modal.Header
           icon={Logo}
-          title={`Connect ${userApp.name}`}
+          title={`Connect ${name}`}
           description="Enter your credentials to authorize this app for your account."
         />
         <Modal.Body>
           <div className="flex flex-col gap-4 w-full">
             <div className="flex flex-col gap-3 w-full">
-              {userApp.credential_keys.map((key) => (
+              {credentialKeys.map((key) => (
                 <div key={key} className="flex flex-col gap-1 w-full">
                   <Text font="main-ui-action">{humanizeKey(key)}</Text>
                   <PasswordInputTypeIn
@@ -117,7 +122,7 @@ export default function UserCredentialsModal({
             >
               Cancel
             </Button>
-            <Button onClick={save} disabled={!canSave}>
+            <Button onClick={saveValues} disabled={!canSave}>
               {isSaving ? "Connecting…" : "Connect"}
             </Button>
           </div>

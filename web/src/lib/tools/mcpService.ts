@@ -13,6 +13,8 @@ import {
   MCPAuthenticationPerformer,
   MCPOAuthProviderMode,
 } from "@/lib/tools/interfaces";
+import { parseErrorDetail } from "@/lib/fetcher";
+
 export interface ToolStatusUpdateRequest {
   tool_ids: number[];
   enabled: boolean;
@@ -227,5 +229,60 @@ export async function upsertMCPServer(serverData: {
   } catch (error) {
     console.error("Error creating MCP server:", error);
     return { data: null, error: `Error creating MCP server: ${error}` };
+  }
+}
+
+// ── User-side connect flows (shared by chat and the Craft Apps page) ────────
+
+/** Start the OAuth flow for an MCP server; redirect the browser to the
+ * returned URL. `returnPath` is where the callback lands the user. */
+export async function startMCPUserOAuth(
+  serverId: number,
+  returnPath: string
+): Promise<{ oauth_url: string }> {
+  const res = await fetch("/api/mcp/oauth/connect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      server_id: serverId,
+      return_path: returnPath,
+      include_resource_param: true,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await parseErrorDetail(res, "Failed to start authorization")
+    );
+  }
+  return res.json();
+}
+
+/** Save per-user credentials (API key / template fields) for an MCP server. */
+export async function saveMCPUserCredentials(
+  serverId: number,
+  credentials: Record<string, string>
+): Promise<void> {
+  const res = await fetch("/api/mcp/user-credentials", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      server_id: serverId,
+      credentials,
+      transport: "streamable-http",
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(await parseErrorDetail(res, "Failed to save credentials"));
+  }
+}
+
+/** Disconnect the current user from an MCP server (removes their own
+ * credentials; admin-managed configuration is untouched). */
+export async function disconnectMCPServer(serverId: number): Promise<void> {
+  const res = await fetch(`/api/mcp/user-credentials/${serverId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw new Error(await parseErrorDetail(res, "Failed to disconnect"));
   }
 }

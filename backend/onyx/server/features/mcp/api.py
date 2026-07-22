@@ -40,19 +40,24 @@ from onyx.db.enums import (
     Permission,
 )
 from onyx.db.mcp import (
+    MCP_TOOL_DEFAULT_POLICY,
     create_connection_config,
     create_mcp_server__no_commit,
     delete_all_user_connection_configs_for_server_no_commit,
     delete_connection_config,
     delete_mcp_server,
+    delete_user_connection_configs_for_server,
     extract_connection_data,
     get_all_mcp_servers,
+    get_all_mcp_tools_for_server,
     get_craft_enabled_mcp_servers,
     get_mcp_server_by_id,
     get_mcp_servers_accessible_to_user,
     get_mcp_servers_for_persona,
+    get_mcp_tool_policies,
     get_server_auth_template,
     get_user_connection_config,
+    set_mcp_tool_policies__no_commit,
     update_connection_config,
     update_mcp_server__no_commit,
     upsert_user_connection_config,
@@ -1048,6 +1053,31 @@ def save_user_credentials(
         raise HTTPException(status_code=500, detail="Failed to save user credentials")
 
 
+@router.delete("/user-credentials/{server_id}")
+def delete_user_credentials(
+    server_id: int,
+    db_session: Session = Depends(get_session),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> MCPApiKeyResponse:
+    """Disconnect the caller from an MCP server: remove their own connection
+    configs (OAuth tokens / API keys). Admin template rows are untouched."""
+    try:
+        mcp_server = get_mcp_server_by_id(server_id, db_session)
+    except ValueError:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
+
+    # The helper commits internally.
+    delete_user_connection_configs_for_server(server_id, user.email, db_session)
+
+    return MCPApiKeyResponse(
+        success=True,
+        message="Disconnected",
+        server_id=server_id,
+        server_name=mcp_server.name,
+        authenticated=False,
+    )
+
+
 class MCPToolDescription(BaseModel):
     id: int
     name: str
@@ -1259,6 +1289,9 @@ def _db_mcp_server_to_api_mcp_server(
         groups=[group.id for group in db_server.user_groups],
         users=[user.id for user in db_server.users],
         available_in_craft=db_server.available_in_craft,
+        tool_policies=(
+            get_mcp_tool_policies(db_server.id, db) if can_view_server_details else None
+        ),
         last_refreshed_at=db_server.last_refreshed_at,
         tool_count=tool_count,
         auth_template=auth_template,
@@ -2408,6 +2441,24 @@ def update_mcp_server_simple(
             is_new=False,
             db_session=db_session,
         )
+
+    if request.tool_policies is not None:
+        known = {t.name for t in get_all_mcp_tools_for_server(server_id, db_session)}
+        unknown = sorted(set(request.tool_policies) - known)
+        if unknown:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"unknown tool names for this server: {unknown}",
+            )
+        # Canonicalize at the input boundary so the stored set stays sparse
+        # regardless of which client wrote it: a default (ASK) choice is
+        # equivalent to leaving the tool unlisted.
+        sparse_policies = {
+            tool: policy
+            for tool, policy in request.tool_policies.items()
+            if policy != MCP_TOOL_DEFAULT_POLICY
+        }
+        set_mcp_tool_policies__no_commit(server_id, sparse_policies, db_session)
 
     db_session.commit()
 

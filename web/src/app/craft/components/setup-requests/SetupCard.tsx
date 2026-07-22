@@ -10,6 +10,7 @@ import {
   ConnectAppDecision,
   postConnectAppDecision,
   startExternalAppOAuth,
+  upsertUserCredentials,
 } from "@/app/craft/services/externalAppsService";
 import CometEdge from "@/app/craft/components/CometEdge";
 import {
@@ -257,7 +258,11 @@ export default function SetupCard({
               setBusy(false);
             }}
             onSaved={() => void resolve("connected")}
-            userApp={userApp}
+            name={userApp.name}
+            logo={getAppTypeLogo(userApp.app_type)}
+            credentialKeys={userApp.credential_keys}
+            credentialValues={userApp.credential_values}
+            save={(values) => upsertUserCredentials(userApp.id, values)}
           />
         )}
       </div>

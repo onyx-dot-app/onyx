@@ -7,6 +7,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import useOnMount from "@/hooks/useOnMount";
 import { cn } from "@opal/utils";
+import type { IconFunctionComponent } from "@opal/types";
 import { Button, Card, InputTypeIn, Text } from "@opal/components";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { SvgCheckCircle, SvgPlug, SvgSettings } from "@opal/icons";
@@ -17,7 +18,21 @@ import {
 import {
   disconnectUserFromApp,
   startExternalAppOAuth,
+  upsertUserCredentials,
 } from "@/app/craft/services/externalAppsService";
+import {
+  disconnectMCPServer,
+  saveMCPUserCredentials,
+  startMCPUserOAuth,
+} from "@/lib/tools/mcpService";
+import {
+  MCPAuthenticationPerformer,
+  MCPAuthenticationType,
+  MCPServer,
+  MCPServersResponse,
+} from "@/lib/tools/interfaces";
+import { getActionIcon } from "@/lib/tools/mcpUtils";
+import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { useUser } from "@/providers/UserProvider";
 
@@ -68,30 +83,122 @@ export default function ExternalAppsPage() {
   );
 }
 
+// Normalized view of anything connectable on this page — external apps and
+// craft-enabled MCP servers render through the same card so users see one
+// uniform "Apps" surface.
+interface ConnectableApp {
+  key: string;
+  name: string;
+  description: string;
+  /** Deep-link (`?connect=`) target; external apps only. */
+  slug: string | null;
+  authenticated: boolean;
+  logo: IconFunctionComponent;
+  /** How the user connects; null = nothing for the user to do (org-managed). */
+  connectMode: "oauth" | "credentials" | null;
+  credentialKeys: string[];
+  credentialValues: Record<string, string>;
+  /** Returns the URL to redirect to for OAuth. */
+  startOAuth: () => Promise<string>;
+  saveCredentials: (values: Record<string, string>) => Promise<void>;
+  /** Absent when there is no per-user credential to remove. */
+  disconnect: (() => Promise<void>) | null;
+}
+
+function externalAppToConnectable(
+  app: ExternalAppUserResponse
+): ConnectableApp {
+  return {
+    key: `app-${app.id}`,
+    name: app.name,
+    description: app.description,
+    slug: app.slug,
+    authenticated: app.authenticated,
+    logo: getAppTypeLogo(app.app_type),
+    connectMode: app.app_type === "CUSTOM" ? "credentials" : "oauth",
+    credentialKeys: app.credential_keys,
+    credentialValues: app.credential_values,
+    startOAuth: async () => (await startExternalAppOAuth(app.id)).authorize_url,
+    saveCredentials: (values) => upsertUserCredentials(app.id, values),
+    disconnect: () => disconnectUserFromApp(app.id),
+  };
+}
+
+function mcpServerToConnectable(server: MCPServer): ConnectableApp | null {
+  const perUser =
+    server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+    server.auth_type !== MCPAuthenticationType.NONE;
+  const authenticated =
+    server.user_authenticated ?? server.is_authenticated ?? false;
+  // Org-managed (admin-performed / no-auth) servers with nothing configured
+  // aren't actionable for the user — hide rather than show a dead card.
+  if (!perUser && !authenticated) return null;
+  const credentialKeys: string[] = server.auth_template?.required_fields?.length
+    ? server.auth_template.required_fields
+    : ["api_key"];
+  return {
+    key: `mcp-${server.id}`,
+    name: server.name,
+    description: server.description ?? "",
+    slug: null,
+    authenticated,
+    logo: getActionIcon(server.server_url, server.name),
+    connectMode: !perUser
+      ? null
+      : server.auth_type === MCPAuthenticationType.API_TOKEN
+        ? "credentials"
+        : "oauth",
+    credentialKeys,
+    credentialValues: server.user_credentials ?? {},
+    startOAuth: async () =>
+      (await startMCPUserOAuth(server.id, CRAFT_APPS_PATH)).oauth_url,
+    saveCredentials: (values) => saveMCPUserCredentials(server.id, values),
+    disconnect: perUser ? () => disconnectMCPServer(server.id) : null,
+  };
+}
+
 interface AppConnectionsProps {
   query: string;
 }
 
 function AppConnections({ query }: AppConnectionsProps) {
-  const { data, mutate } = useSWR<ExternalAppUserResponse[]>(
-    SWR_KEYS.buildExternalApps,
+  const { data: externalApps, mutate: mutateApps } = useSWR<
+    ExternalAppUserResponse[]
+  >(SWR_KEYS.buildExternalApps, errorHandlingFetcher, {
+    keepPreviousData: true,
+  });
+  const { data: mcpData, mutate: mutateMcp } = useSWR<MCPServersResponse>(
+    SWR_KEYS.mcpServersCraft,
     errorHandlingFetcher,
     { keepPreviousData: true }
   );
-  const connectAppId = Number(useSearchParams().get("connect"));
+  const connectSlug = useSearchParams().get("connect");
 
-  const { connected, browse } = useMemo(() => {
+  const refresh = () => {
+    void mutateApps();
+    void mutateMcp();
+  };
+
+  const { connected, browse, isLoading, isEmpty } = useMemo(() => {
+    const items = [
+      ...(externalApps ?? []).map(externalAppToConnectable),
+      ...(mcpData?.mcp_servers ?? [])
+        .map(mcpServerToConnectable)
+        .filter((item): item is ConnectableApp => item !== null),
+    ].sort((a, b) => a.name.localeCompare(b.name));
     const q = query.trim().toLowerCase();
-    const filtered = (data ?? []).filter((app) =>
-      q ? app.name.toLowerCase().includes(q) : true
+    const filtered = items.filter((item) =>
+      q ? item.name.toLowerCase().includes(q) : true
     );
     return {
-      connected: filtered.filter((app) => app.authenticated),
-      browse: filtered.filter((app) => !app.authenticated),
+      connected: filtered.filter((item) => item.authenticated),
+      browse: filtered.filter((item) => !item.authenticated),
+      isLoading: externalApps === undefined && mcpData === undefined,
+      isEmpty: items.length === 0,
     };
-  }, [data, query]);
+  }, [externalApps, mcpData, query]);
 
-  if (data === undefined) {
+  if (isLoading) {
     return (
       <Card background="none" border="dashed" rounding="lg">
         <Text font="main-content-body">Loading…</Text>
@@ -99,7 +206,7 @@ function AppConnections({ query }: AppConnectionsProps) {
     );
   }
 
-  if (data.length === 0) {
+  if (isEmpty) {
     return (
       <Card background="none" border="dashed" rounding="lg">
         <Text font="main-content-body" color="text-03">
@@ -117,12 +224,12 @@ function AppConnections({ query }: AppConnectionsProps) {
             Connected
           </Text>
           <div className="flex flex-col gap-2">
-            {connected.map((userApp) => (
+            {connected.map((item) => (
               <ProviderConnectCard
-                key={userApp.id}
+                key={item.key}
                 variant="row"
-                userApp={userApp}
-                onChange={() => mutate()}
+                app={item}
+                onChange={refresh}
               />
             ))}
           </div>
@@ -139,13 +246,13 @@ function AppConnections({ query }: AppConnectionsProps) {
           </Text>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {browse.map((userApp) => (
+            {browse.map((item) => (
               <ProviderConnectCard
-                key={userApp.id}
+                key={item.key}
                 variant="tile"
-                userApp={userApp}
-                highlight={connectAppId === userApp.id}
-                onChange={() => mutate()}
+                app={item}
+                highlight={connectSlug !== null && connectSlug === item.slug}
+                onChange={refresh}
               />
             ))}
           </div>
@@ -156,14 +263,14 @@ function AppConnections({ query }: AppConnectionsProps) {
 }
 
 interface ProviderConnectCardProps {
-  userApp: ExternalAppUserResponse;
+  app: ConnectableApp;
   variant: "row" | "tile";
   highlight?: boolean;
   onChange: () => void;
 }
 
 function ProviderConnectCard({
-  userApp,
+  app,
   variant,
   highlight,
   onChange,
@@ -183,16 +290,13 @@ function ProviderConnectCard({
   }, [highlight]);
 
   async function connect() {
-    // Custom apps have no OAuth provider — collect the user's credentials
-    // directly via a popup instead of redirecting to an authorize URL.
-    if (userApp.app_type === "CUSTOM") {
+    if (app.connectMode === "credentials") {
       setCredModalOpen(true);
       return;
     }
     setIsStarting(true);
     try {
-      const { authorize_url } = await startExternalAppOAuth(userApp.id);
-      window.location.href = authorize_url;
+      window.location.href = await app.startOAuth();
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : "Failed to start authorization"
@@ -201,12 +305,11 @@ function ProviderConnectCard({
     }
   }
 
-  // Overwrite stored creds with `{}` — flips `authenticated` to false
-  // on the next list call. Avoids a dedicated DELETE endpoint.
   async function disconnect() {
+    if (!app.disconnect) return;
     setIsStarting(true);
     try {
-      await disconnectUserFromApp(userApp.id);
+      await app.disconnect();
       onChange();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to disconnect");
@@ -215,7 +318,7 @@ function ProviderConnectCard({
     }
   }
 
-  const Logo = getAppTypeLogo(userApp.app_type);
+  const Logo = app.logo;
 
   return (
     <>
@@ -232,31 +335,31 @@ function ProviderConnectCard({
               <Logo className="w-8 h-8" />
               <div className="flex-1 flex flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  <Text font="main-ui-action">{userApp.name}</Text>
+                  <Text font="main-ui-action">{app.name}</Text>
                   <SvgCheckCircle className="w-4 h-4 text-status-success-05" />
                 </div>
                 <Text font="secondary-body" color="text-03">
                   Connected
                 </Text>
               </div>
-              <Button
-                prominence="secondary"
-                disabled={isStarting}
-                onClick={disconnect}
-              >
-                {isStarting ? "…" : "Disconnect"}
-              </Button>
+              {app.disconnect && (
+                <Button
+                  prominence="secondary"
+                  disabled={isStarting}
+                  onClick={disconnect}
+                >
+                  {isStarting ? "…" : "Disconnect"}
+                </Button>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-3 w-full">
               <div className="flex items-center gap-3">
                 <Logo className="w-8 h-8" />
-                <Text font="main-ui-action">{userApp.name}</Text>
+                <Text font="main-ui-action">{app.name}</Text>
               </div>
               <Text font="secondary-body" color="text-03">
-                {userApp.supports_oauth
-                  ? "Connect with OAuth"
-                  : "Connect with credentials"}
+                {app.description}
               </Text>
               <Button disabled={isStarting} onClick={connect}>
                 {isStarting ? "Redirecting…" : "Connect"}
@@ -270,7 +373,11 @@ function ProviderConnectCard({
         open={credModalOpen}
         onClose={() => setCredModalOpen(false)}
         onSaved={onChange}
-        userApp={userApp}
+        name={app.name}
+        logo={app.logo}
+        credentialKeys={app.credentialKeys}
+        credentialValues={app.credentialValues}
+        save={app.saveCredentials}
       />
     </>
   );
