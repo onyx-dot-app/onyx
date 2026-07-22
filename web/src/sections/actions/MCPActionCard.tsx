@@ -27,9 +27,8 @@ import {
   SvgTrash,
   SvgSimpleLoader,
 } from "@opal/icons";
-import { Button, Switch } from "@opal/components";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
 import { timeAgo } from "@opal/time";
 import { cn } from "@opal/utils";
 import { ConfirmationModalLayout as Modal } from "@opal/layouts";
@@ -80,10 +79,6 @@ export interface MCPActionCardProps {
     mutate: KeyedMutator<ToolSnapshot[]>
   ) => void;
 
-  // Craft availability + per-tool approval policies
-  onCraftToggle?: (enabled: boolean) => void;
-  onToolPolicyChange?: (toolName: string, policy: EndpointPolicy) => void;
-
   // Optional styling
   className?: string;
 }
@@ -108,13 +103,8 @@ export default function MCPActionCard({
   onToolToggle,
   onRefreshTools,
   onUpdateToolsStatus,
-  onCraftToggle,
-  onToolPolicyChange,
   className,
 }: MCPActionCardProps) {
-  const craftEnabled = server.available_in_craft ?? false;
-  // Per-tool policy row shows only when Craft is on and a handler is wired.
-  const showToolPolicy = craftEnabled && !!onToolPolicyChange;
   const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
@@ -302,22 +292,6 @@ export default function MCPActionCard({
         className={className}
         ariaLabel={`${title} MCP server card`}
       >
-        {onCraftToggle && (
-          <div className="flex items-center justify-between w-full p-2 rounded-08 border border-border-01 bg-background-tint-00">
-            <div className="flex flex-col px-0.5">
-              <Text mainUiAction>Available in Craft</Text>
-              <Text text03 secondaryBody>
-                Let the Craft agent use this server&apos;s tools. Each tool call
-                follows its approval policy below.
-              </Text>
-            </div>
-            <Switch
-              checked={craftEnabled}
-              onCheckedChange={onCraftToggle}
-              aria-label={`craft-toggle-${title}`}
-            />
-          </div>
-        )}
         <ToolsList
           isFetching={
             server.status === MCPServerStatus.FETCHING_TOOLS || isLoading
@@ -344,16 +318,6 @@ export default function MCPActionCard({
               icon={tool.icon}
               isAvailable={tool.isAvailable}
               isEnabled={tool.isEnabled}
-              policy={
-                showToolPolicy
-                  ? (server.tool_policies?.[tool.name] ?? "ASK")
-                  : undefined
-              }
-              onPolicyChange={
-                showToolPolicy
-                  ? (policy) => onToolPolicyChange!(tool.name, policy)
-                  : undefined
-              }
               onToggle={(enabled) =>
                 onToolToggle?.(serverId, tool.id, enabled, mutate)
               }

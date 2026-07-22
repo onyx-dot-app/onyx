@@ -12,7 +12,6 @@ import {
   MCPServer,
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
-import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
 import { toast } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
 import MCPAuthenticationModal from "@/sections/actions/modals/MCPAuthenticationModal";
@@ -315,41 +314,6 @@ export default function MCPPageContent() {
     [mutateMcpServers]
   );
 
-  const handleCraftToggle = useCallback(
-    async (server: MCPServer, enabled: boolean) => {
-      try {
-        await updateMCPServer(server.id, { available_in_craft: enabled });
-        await mutateMcpServers();
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to update Craft availability"
-        );
-      }
-    },
-    [mutateMcpServers]
-  );
-
-  const handleToolPolicyChange = useCallback(
-    async (server: MCPServer, toolName: string, policy: EndpointPolicy) => {
-      // Send the full map; the backend drops default (ASK) entries to keep the
-      // stored set sparse, so no client has to special-case that here.
-      const next = { ...server.tool_policies, [toolName]: policy };
-      try {
-        await updateMCPServer(server.id, { tool_policies: next });
-        await mutateMcpServers();
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to update tool policy"
-        );
-      }
-    },
-    [mutateMcpServers]
-  );
-
   const handleToolToggle = useCallback(
     async (
       serverId: number,
@@ -565,12 +529,6 @@ export default function MCPPageContent() {
                   onToolToggle={handleToolToggle}
                   onRefreshTools={handleRefreshTools}
                   onUpdateToolsStatus={handleUpdateToolsStatus}
-                  onCraftToggle={(enabled) =>
-                    handleCraftToggle(server, enabled)
-                  }
-                  onToolPolicyChange={(toolName, policy) =>
-                    handleToolPolicyChange(server, toolName, policy)
-                  }
                 />
               );
             })
