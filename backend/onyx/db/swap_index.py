@@ -32,6 +32,7 @@ from onyx.db.port_attempt import get_latest_port_attempt
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_search_settings_status
+from onyx.db.user_file import any_user_file_reconcile_pending_for_users
 from onyx.db.user_file import fetch_port_scope_user_ids
 from onyx.document_index.factory import get_all_document_indices
 from onyx.key_value_store.factory import get_kv_store
@@ -224,11 +225,12 @@ def _port_swap_ready(
     if not all_user_scopes_ported(db_session, ss_id, required_user_ids):
         return False
 
-    # No user-file secondary-pending gate here yet. The metadata sync only update()s
-    # FUTURE — it can't create a doc the port never copied (a file uploaded after the
-    # user's port settled, or whose id is beyond the attempt's snapshot bound). Such a
-    # file would set secondary_only_sync_pending forever, so gating on it would deadlock
-    # the swap. Gate on it only once new user files are also dual-written to FUTURE.
+    # Hold the swap until every user file's FUTURE copy reconciles. Safe only because new files
+    # dual-write to FUTURE and the reconciler supplies content on a 404, so every flag drains
+    # (an update()-only drain would pin a never-copied file forever and deadlock).
+    if any_user_file_reconcile_pending_for_users(db_session, required_user_ids):
+        return False
+
     return (
         count_secondary_only_sync_pending_documents_for_cc_pairs(
             db_session, [cc_pair.id for cc_pair in required_cc_pairs]
