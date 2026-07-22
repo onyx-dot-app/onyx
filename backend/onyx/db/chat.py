@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import Row, delete, desc, func, nullsfirst, or_, select, update
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -257,7 +256,9 @@ def duplicate_chat_session_for_user_from_slack(
         db_session=db_session,
     )
     if not chat_session.onyxbot_flow and chat_session.slack_thread_id is None:
-        raise HTTPException(status_code=400, detail="Invalid Chat Session ID provided")
+        # Same error as an unauthorized/invalid id above, so the two rejection
+        # paths are indistinguishable and no HTTPException leaks into the DB layer.
+        raise ValueError("Invalid Chat Session ID provided")
 
     # This enforces permissions and sets a default
     new_persona_id = get_best_persona_id_for_user(

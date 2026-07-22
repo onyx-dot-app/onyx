@@ -12,7 +12,6 @@ be a Slack-originated session.
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.db.chat import create_chat_session, duplicate_chat_session_for_user_from_slack
@@ -56,7 +55,7 @@ def test_cannot_seed_from_non_slack_unowned_session(db_session: Session) -> None
         onyxbot_flow=False,
     )
 
-    with pytest.raises(HTTPException):
+    with pytest.raises(ValueError):
         duplicate_chat_session_for_user_from_slack(
             db_session=db_session,
             user=attacker,
