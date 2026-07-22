@@ -19,7 +19,7 @@ import {
   ReindexErrorRow,
   ReindexProgress,
   SavedSearchSettings,
-} from "@/lib/indexing/interfaces";
+} from "@/lib/indexing/types";
 
 /**
  * Determines the SWR `refreshInterval` for the secondary (in-progress)

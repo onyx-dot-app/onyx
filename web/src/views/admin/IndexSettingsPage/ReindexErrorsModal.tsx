@@ -1,8 +1,7 @@
-import Modal from "@/refresh-components/Modal";
-import { Table, createTableColumns, Text } from "@opal/components";
+import { Modal, Table, createTableColumns, Text } from "@opal/components";
 import { SvgAlertCircle } from "@opal/icons";
 import { useReindexErrors } from "@/lib/indexing/hooks";
-import type { ReindexErrorRow } from "@/lib/indexing/interfaces";
+import type { ReindexErrorRow } from "@/lib/indexing/types";
 
 const tc = createTableColumns<ReindexErrorRow>();
 const COLUMNS = [

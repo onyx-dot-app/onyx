@@ -1,5 +1,5 @@
 import { secondaryRefreshInterval } from "@/lib/indexing/hooks";
-import type { EmbeddingModelResponse } from "@/lib/indexing/interfaces";
+import type { EmbeddingModelResponse } from "@/lib/indexing/types";
 
 const embeddingModelResponse: EmbeddingModelResponse = {
   model_name: "text-embedding-3-small",

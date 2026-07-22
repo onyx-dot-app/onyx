@@ -54,7 +54,7 @@ import {
   type EmbeddingModelRequest,
   type EmbeddingModelState,
   type EmbeddingProvider,
-} from "@/lib/indexing/interfaces";
+} from "@/lib/indexing/types";
 import {
   CLOUD_BASED_PROVIDERS,
   CUSTOM_PROVIDER,
