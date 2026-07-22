@@ -52,6 +52,7 @@ def craft_server(
         host: str | None = None,
         path: str = "/mcp",
         available_in_craft: bool = True,
+        is_public: bool = True,
     ) -> MCPServer:
         server = create_mcp_server__no_commit(
             owner_email="admin@example.com",
@@ -62,6 +63,7 @@ def craft_server(
             transport=MCPTransport.STREAMABLE_HTTP,
             auth_performer=MCPAuthenticationPerformer.ADMIN,
             db_session=db_session,
+            is_public=is_public,
         )
         update_mcp_server__no_commit(
             server_id=server.id,
@@ -293,3 +295,34 @@ def test_duplicate_tool_calls_surface_multiplicity(
     assert matched is not None
     assert [a.action_type for a in matched.actions] == ["send_email"]
     assert "invokes it 2 times" in matched.governing_action.description
+
+
+def test_attribution_resolves_by_user_access(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    """Two servers share a URL but only one is reachable by the user: attribution
+    picks the accessible server instead of colliding as ambiguous."""
+    user = create_test_user(db_session, "mcp_eval_access")
+    host = _unique_host()
+    accessible = craft_server(host=host, is_public=True)
+    craft_server(host=host, is_public=False)  # not shared with this basic user
+
+    matched = _evaluate(_request(host, body=_tool_call_body("send_email")), user.id)
+    assert matched is not None
+    assert matched.target.key == (GatedAppKind.MCP_SERVER, accessible.id)
+    assert matched.governing_action.policy is EndpointPolicy.ASK
+
+
+def test_two_accessible_identical_servers_stay_ambiguous(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    """Access can't disambiguate when the user reaches both duplicates — the
+    endpoint is left off-catalog (``None``) so the resolver fails it closed."""
+    user = create_test_user(db_session, "mcp_eval_ambig")
+    host = _unique_host()
+    craft_server(host=host, is_public=True)
+    craft_server(host=host, is_public=True)
+
+    assert (
+        _evaluate(_request(host, body=_tool_call_body("send_email")), user.id) is None
+    )

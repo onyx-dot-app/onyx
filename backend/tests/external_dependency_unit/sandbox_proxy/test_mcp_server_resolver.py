@@ -72,6 +72,7 @@ def craft_server(
         host: str | None = None,
         path: str = "/mcp",
         available_in_craft: bool = True,
+        is_public: bool = True,
         oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY,
         oauth_authorization_endpoint: str | None = None,
         oauth_token_endpoint: str | None = None,
@@ -85,6 +86,7 @@ def craft_server(
             transport=MCPTransport.STREAMABLE_HTTP,
             auth_performer=auth_performer,
             db_session=db_session,
+            is_public=is_public,
             oauth_provider_mode=oauth_provider_mode,
             oauth_authorization_endpoint=oauth_authorization_endpoint,
             oauth_token_endpoint=oauth_token_endpoint,
@@ -381,6 +383,44 @@ def test_duplicate_endpoint_attribution_fails_closed(
     with pytest.raises(CredentialUnavailableError) as exc_info:
         MCPServerResolver().resolve(_request(host, path="/mcp/call"), _ctx(user))
     assert "ambiguous" in str(exc_info.value)
+
+
+def test_duplicate_endpoint_disambiguated_by_user_access(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    """Two servers share the URL but only one is reachable by the user — the
+    ungated (plumbing) path attributes to it rather than failing ambiguous, and
+    injects that server's credentials."""
+    user = create_test_user(db_session, "mcp_resolver_access")
+    host = _unique_host()
+    accessible = craft_server(
+        host=host,
+        path="/mcp",
+        is_public=True,
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    _attach_admin_config(
+        db_session,
+        accessible,
+        MCPConnectionData(headers={"Authorization": "Bearer reachable"}),
+    )
+    inaccessible = craft_server(
+        host=host,
+        path="/mcp",
+        is_public=False,  # not shared with this basic user
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    _attach_admin_config(
+        db_session,
+        inaccessible,
+        MCPConnectionData(headers={"Authorization": "Bearer hidden"}),
+    )
+
+    assert MCPServerResolver().resolve(_request(host, path="/mcp"), _ctx(user)) == {
+        "Authorization": "Bearer reachable"
+    }
 
 
 def test_flag_flipped_since_cache_is_blocked(

@@ -65,9 +65,16 @@ class MCPServerResolver(CredentialResolver):
 
     def __init__(self, cache_ttl_s: float = _TARGET_CACHE_TTL_S) -> None:
         self._cache_lock = threading.Lock()
+        # Host ownership (claims): user-agnostic, so a claimed host never forwards
+        # bare for a user lacking access — it fails closed at resolve() instead.
         self._targets_by_tenant: TTLCache[str, tuple[CraftMCPTarget, ...]] = TTLCache(
             maxsize=10_000, ttl=cache_ttl_s
         )
+        # Attribution (match): scoped to the user's accessible servers, so
+        # ambiguity is only ever raised between servers the user can reach.
+        self._targets_by_user: TTLCache[
+            tuple[str, UUID], tuple[CraftMCPTarget, ...]
+        ] = TTLCache(maxsize=10_000, ttl=cache_ttl_s)
 
     def claims(self, request: http.Request, ctx: InjectionContext) -> bool:
         # A request the external-app matcher attributed belongs to that resolver
@@ -107,7 +114,9 @@ class MCPServerResolver(CredentialResolver):
                 ),
             )
         try:
-            target = match_request(self._targets(ctx.sandbox.tenant_id), request)
+            target = match_request(
+                self._user_targets(ctx.sandbox.tenant_id, ctx.sandbox.user_id), request
+            )
         except AmbiguousMCPTargetError as e:
             raise CredentialUnavailableError(
                 str(e),
@@ -218,8 +227,33 @@ class MCPServerResolver(CredentialResolver):
 
     def _load_targets(self, tenant_id: str) -> tuple[CraftMCPTarget, ...]:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            # No user at claim time; access is enforced in resolve().
+            # ``None`` skips the access filter — every server, for host ownership.
             servers = get_craft_enabled_mcp_servers(db, None)
+            parsed = [parse_target(s.id, s.server_url) for s in servers]
+        return tuple(t for t in parsed if t is not None)
+
+    def _user_targets(
+        self, tenant_id: str, user_id: UUID
+    ) -> tuple[CraftMCPTarget, ...]:
+        key = (tenant_id, user_id)
+        with self._cache_lock:
+            cached = self._targets_by_user.get(key)
+        if cached is not None:
+            return cached
+        targets = self._load_user_targets(tenant_id, user_id)
+        with self._cache_lock:
+            self._targets_by_user[key] = targets
+        return targets
+
+    def _load_user_targets(
+        self, tenant_id: str, user_id: UUID
+    ) -> tuple[CraftMCPTarget, ...]:
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
+            user = fetch_user_by_id(db, user_id)
+            # Missing user → no servers; ``None`` would skip the filter, so guard.
+            servers = (
+                get_craft_enabled_mcp_servers(db, user) if user is not None else []
+            )
             parsed = [parse_target(s.id, s.server_url) for s in servers]
         return tuple(t for t in parsed if t is not None)
 

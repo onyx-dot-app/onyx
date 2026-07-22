@@ -25,6 +25,7 @@ from onyx.db.mcp import (
     get_craft_enabled_mcp_servers,
 )
 from onyx.db.models import ExternalApp, MCPServer
+from onyx.db.users import fetch_user_by_id
 from onyx.external_apps.credentials import app_is_available
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
@@ -145,7 +146,8 @@ class McpRequestEvaluator(RequestEvaluator):
     """Gates craft-enabled MCP servers: proxy-authoritative per-tool approvals.
 
     Attributes a request to a craft MCP server by the same host + path-prefix
-    rule the credential resolver uses, then parses the JSON-RPC body:
+    rule the credential resolver uses, scoped to the servers the sandbox user may
+    access, then parses the JSON-RPC body:
 
     * protocol plumbing (handshake, discovery, resources) → ``None`` (off-catalog;
       the resolver injects credentials and the request forwards ungated);
@@ -162,12 +164,17 @@ class McpRequestEvaluator(RequestEvaluator):
         self,
         request: http.Request,
         tenant_id: str,
-        user_id: UUID,  # noqa: ARG002 — org-level gating; per-user creds resolve later
+        user_id: UUID,
     ) -> AllMatchedActions | None:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            # Attribution only — per-user access is enforced by the credential
-            # resolver, so gate classification sees every craft-enabled server.
-            servers_by_id = {s.id: s for s in get_craft_enabled_mcp_servers(db, None)}
+            # Access-scoped candidates, so duplicate URLs split across groups
+            # attribute to the one the user can reach rather than colliding.
+            user = fetch_user_by_id(db, user_id)
+            # Missing user → no servers; ``None`` would skip the filter, so guard.
+            servers = (
+                get_craft_enabled_mcp_servers(db, user) if user is not None else []
+            )
+            servers_by_id = {s.id: s for s in servers}
             targets = tuple(
                 t
                 for t in (
@@ -178,9 +185,8 @@ class McpRequestEvaluator(RequestEvaluator):
             try:
                 target = match_request(targets, request)
             except AmbiguousMCPTargetError:
-                # Duplicate server configs claim this endpoint — no single target
-                # to attribute a gated DENY to. Leave it off-catalog; the resolver
-                # fails any non-plumbing request closed at injection (see resolve()).
+                # No single target to gate against; the resolver fails any
+                # non-plumbing request closed at injection.
                 return None
             if target is None:
                 return None
