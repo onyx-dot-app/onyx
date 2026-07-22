@@ -371,6 +371,12 @@ jobs:
           COMPOSE_PROFILES=s3-filestore
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
+          # Dev credentials; the compose file fails fast when unset.
+          POSTGRES_PASSWORD=password
+          S3_AWS_ACCESS_KEY_ID=minioadmin
+          S3_AWS_SECRET_ACCESS_KEY=minioadmin
+          MINIO_ROOT_USER=minioadmin
+          MINIO_ROOT_PASSWORD=minioadmin
           INTEGRATION_TESTS_MODE=true
           GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           EXA_API_KEY=${EXA_API_KEY_VALUE}
@@ -552,6 +558,12 @@ jobs:
           COMPOSE_PROFILES=s3-filestore
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
+          # Dev credentials; the compose file fails fast when unset.
+          POSTGRES_PASSWORD=password
+          S3_AWS_ACCESS_KEY_ID=minioadmin
+          S3_AWS_SECRET_ACCESS_KEY=minioadmin
+          MINIO_ROOT_USER=minioadmin
+          MINIO_ROOT_PASSWORD=minioadmin
           INTEGRATION_TESTS_MODE=true
           GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           EXA_API_KEY=${EXA_API_KEY_VALUE}
@@ -708,6 +720,12 @@ jobs:
           cat <<EOF > deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
+          # Dev credentials; the compose file fails fast when unset.
+          POSTGRES_PASSWORD=password
+          S3_AWS_ACCESS_KEY_ID=minioadmin
+          S3_AWS_SECRET_ACCESS_KEY=minioadmin
+          MINIO_ROOT_USER=minioadmin
+          MINIO_ROOT_PASSWORD=minioadmin
           INTEGRATION_TESTS_MODE=true
           GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           MOCK_LLM_RESPONSE=true

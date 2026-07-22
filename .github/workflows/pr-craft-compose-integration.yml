@@ -269,6 +269,10 @@ jobs:
         run: |
           {
             echo 'USER_AUTH_SECRET=craft-compose-ci-only-dummy-secret'
+            echo 'S3_AWS_ACCESS_KEY_ID=minioadmin'
+            echo 'S3_AWS_SECRET_ACCESS_KEY=minioadmin'
+            echo 'MINIO_ROOT_USER=minioadmin'
+            echo 'MINIO_ROOT_PASSWORD=minioadmin'
             echo 'BUILD_MAX_UPLOAD_FILE_SIZE_MB=2'
             echo 'BUILD_MAX_UPLOAD_FILES_PER_SESSION=5'
             echo 'BUILD_MAX_TOTAL_UPLOAD_SIZE_MB=4'

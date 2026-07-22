@@ -73,6 +73,12 @@ jobs:
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
           DISABLE_TELEMETRY=true
+          # Dev credentials; the compose file fails fast when unset.
+          POSTGRES_PASSWORD=password
+          S3_AWS_ACCESS_KEY_ID=minioadmin
+          S3_AWS_SECRET_ACCESS_KEY=minioadmin
+          MINIO_ROOT_USER=minioadmin
+          MINIO_ROOT_PASSWORD=minioadmin
           EOF
 
       - name: Set up Standard Dependencies

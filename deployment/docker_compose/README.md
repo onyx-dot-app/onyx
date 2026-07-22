@@ -3,7 +3,8 @@
 To set up Onyx there are several options, Onyx supports the following for deployment:
 1. Quick guided install via the install.sh script
 2. Pulling the repo and running `docker compose up -d` from the deployment/docker_compose directory
-  - Note, it is recommended to copy over the env.template file to .env and edit the necessary values
+  - Copy the env.template file to .env first and edit the necessary values — the compose file
+    fails fast without the Postgres and MinIO/S3 credentials env.template provides
 3. For large scale deployments leveraging Kubernetes, there are two options, Helm or Terraform.
 
 This README focuses on the easiest guided deployment which is via install.sh.
@@ -41,24 +42,27 @@ commands directly from the directory with the docker-compose.yml file. First ver
 
 ## Compose file layout
 
-`docker-compose.yml` is the base file and the single source of truth for all
-service definitions (services, healthchecks, volumes, defaults). Deployment
-modes are thin overlay files layered on top with `-f`:
+`docker-compose.yml` is the single compose file for both development and
+production; all service definitions, healthchecks, and defaults live there.
+Production mode is selected entirely through `.env` (start from
+`env.prod.template`): the `letsencrypt` profile runs certbot,
+`NGINX_CONFIG_TEMPLATE` selects the HTTPS nginx config, and `DOMAIN` plus
+strong credentials complete the setup. There are no separate production
+compose files.
+
+Optional overlays are layered on top with `-f`:
 
 | File | Purpose |
 | --- | --- |
-| `docker-compose.yml` | Base — every service, healthchecks, dev-friendly defaults |
+| `docker-compose.yml` | The deployment — every service, healthchecks, defaults |
 | `docker-compose.dev.yml` | Exposes service ports on the host for development/testing |
-| `docker-compose.prod.yml` | Production hardening + Let's Encrypt HTTPS + certbot renewal |
-| `docker-compose.prod-no-letsencrypt.yml` | Production hardening + user-provided SSL certificates |
 | `docker-compose.onyx-lite.yml` | Minimal deployment (Postgres only; no search/background/model servers) |
 | `docker-compose.craft.yml` | Opt-in Craft Docker sandbox backend (`install.sh --include-craft`) |
 
-Configuration comes from `.env` in this directory (start from `env.template`,
-or `env.prod.template` for production). The production overlays additionally
-read nginx domain/certificate settings from `.env.nginx` (see
-`env.nginx.template`). The `s3-filestore` entry in `COMPOSE_PROFILES`
-controls whether the bundled MinIO runs.
+The `s3-filestore` entry in `COMPOSE_PROFILES` controls whether the bundled
+MinIO runs. The credentials (`POSTGRES_PASSWORD`, `S3_AWS_*`, `MINIO_ROOT_*`)
+are fail-fast: compose refuses to start when they are unset, so a `.env` is
+effectively required — `env.template` ships the local-dev defaults.
 
 Examples:
 
@@ -66,13 +70,10 @@ Examples:
 # development with exposed service ports
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
 
-# production with Let's Encrypt (run ./init-letsencrypt.sh once first)
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait
+# production (after filling in .env from env.prod.template; for Let's
+# Encrypt, run ./init-letsencrypt.sh once first)
+docker compose up -d --wait
 ```
-
-Instead of repeating `-f` flags, set `COMPOSE_FILE` in `.env`
-(e.g. `COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml`) and use plain
-`docker compose up -d`.
 
 ### Environment variables
 The Docker Compose files try to look for a .env file in the same directory. The `install.sh` script sets it up from a file called env.template which is

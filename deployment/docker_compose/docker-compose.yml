@@ -1,32 +1,24 @@
 # =============================================================================
 # ONYX DOCKER COMPOSE
 # =============================================================================
-# Base compose file and single source of truth for all service definitions.
-# Settings live in .env (see env.template). Deployment modes are thin overlay
-# files layered on top with -f:
+# Single compose file for development and production. Settings live in .env:
+# start from env.template for development and env.prod.template for
+# production.
 #
-#   Development (expose service ports on the host):
-#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
+# Production mode is driven entirely by .env (see env.prod.template):
+#   - COMPOSE_PROFILES=s3-filestore,letsencrypt to run MinIO and certbot
+#   - NGINX_CONFIG_TEMPLATE=app.conf.template.prod for Let's Encrypt HTTPS
+#     (app.conf.template.no-letsencrypt for user-provided certificates)
+#   - DOMAIN, HOST_PORT=80, and strong credentials. The credentials
+#     (POSTGRES_PASSWORD, S3_AWS_*, MINIO_ROOT_*) are required — compose
+#     fails fast when they are unset; env.template ships the weak dev
+#     defaults, so copy it to .env for development.
+#   First-time Let's Encrypt certificate setup: ./init-letsencrypt.sh
 #
-#   Production with Let's Encrypt HTTPS (see env.prod.template and
-#   init-letsencrypt.sh for first-time certificate setup):
-#     docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait
-#
-#   Production with user-provided SSL certificates:
-#     docker compose -f docker-compose.yml -f docker-compose.prod-no-letsencrypt.yml up -d --wait
-#
-#   Minimal deployment (Postgres only; no search, background workers, or
-#   model servers):
-#     docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml up -d
-#
-#   Craft Docker sandbox backend (opt-in; wired up by install.sh --include-craft):
-#     layer docker-compose.craft.yml on top of any of the above
-#
-# Instead of repeating -f flags, COMPOSE_FILE can be set in .env, e.g.
-#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
-#
-# The s3-filestore profile (COMPOSE_PROFILES in .env) controls whether MinIO
-# runs; see env.template.
+# Optional overlays layered on top with -f:
+#   docker-compose.dev.yml        expose service ports on the host (development)
+#   docker-compose.onyx-lite.yml  minimal deployment (Postgres only)
+#   docker-compose.craft.yml      Craft Docker sandbox backend (install.sh --include-craft)
 # =============================================================================
 
 name: onyx
@@ -74,8 +66,8 @@ services:
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - CODE_INTERPRETER_BASE_URL=${CODE_INTERPRETER_BASE_URL:-http://code-interpreter:8000}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
-      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
-      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?missing - copy env.template to .env for the dev default, or set a strong production value}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?missing - copy env.template to .env for the dev default, or set a strong production value}
       # Onyx Craft configuration (disabled by default, set ENABLE_CRAFT=true in .env to enable)
       # Use --include-craft with install script, or manually set in .env file
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
@@ -146,8 +138,8 @@ services:
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
-      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
-      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?missing - copy env.template to .env for the dev default, or set a strong production value}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?missing - copy env.template to .env for the dev default, or set a strong production value}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
       - DISCORD_BOT_INVOKE_CHAR=${DISCORD_BOT_INVOKE_CHAR:-!}
       # API Server connection for Discord bot message processing
@@ -355,10 +347,9 @@ services:
       - path: .env
         required: false
     restart: unless-stopped
-    # PRODUCTION: Override the defaults by passing in the environment variables
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?missing - copy env.template to .env for the dev default, or set a strong production value}
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
     # 2. Uncomment the ports below
@@ -430,7 +421,8 @@ services:
       - path: .env
         required: false
     environment:
-      - DOMAIN=localhost
+      # Public domain nginx serves; production sets this in .env.
+      - DOMAIN=${DOMAIN:-localhost}
       # Nginx proxy timeout settings (in seconds)
       - NGINX_PROXY_CONNECT_TIMEOUT=${NGINX_PROXY_CONNECT_TIMEOUT:-300}
       - NGINX_PROXY_SEND_TIMEOUT=${NGINX_PROXY_SEND_TIMEOUT:-300}
@@ -438,13 +430,20 @@ services:
     ports:
       - "${HOST_PORT_80:-80}:80"
       - "${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
+      # HTTPS, used by the production nginx templates. Override HOST_PORT_443
+      # if 443 is taken on the host.
+      - "${HOST_PORT_443:-443}:443"
     volumes:
       # Mount templates read-only; the startup command copies them into
       # the writable /etc/nginx/conf.d/ inside the container.  This avoids
       # "Permission denied" errors on Windows Docker bind mounts.
       - ../data/nginx:/nginx-templates:ro
-    # SSL certificate volumes are added by the production overlays
-    # (docker-compose.prod.yml / docker-compose.prod-no-letsencrypt.yml).
+      # Certificate mounts, used only by the production nginx templates
+      # (Let's Encrypt via certbot, or user-provided certs in sslcerts).
+      # Harmless empty directories in development.
+      - ../data/certbot/conf:/etc/letsencrypt
+      - ../data/certbot/www:/var/www/certbot
+      - ../data/sslcerts:/etc/nginx/sslcerts
     logging:
       driver: json-file
       options:
@@ -453,14 +452,15 @@ services:
     # The specified script waits for the api_server to start up.
     # Without this we've seen issues where nginx shows no error logs but
     # does not receive any traffic
-    # The production overlays switch the template argument to
-    # app.conf.template.prod / app.conf.template.no-letsencrypt.
+    # NGINX_CONFIG_TEMPLATE selects the nginx config: app.conf.template.prod
+    # (Let's Encrypt HTTPS) or app.conf.template.no-letsencrypt (user-provided
+    # certificates) for production.
     command: >
       /bin/sh -c "rm -f /etc/nginx/conf.d/default.conf
       && cp -a /nginx-templates/. /etc/nginx/conf.d/
       && sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
       && chmod +x /tmp/run-nginx.sh
-      && /tmp/run-nginx.sh app.conf.template"
+      && /tmp/run-nginx.sh ${NGINX_CONFIG_TEMPLATE:-app.conf.template}"
     healthcheck:
       test:
         [
@@ -508,8 +508,8 @@ services:
       - path: .env
         required: false
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?missing - copy env.template to .env for the dev default, or set a strong production value}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?missing - copy env.template to .env for the dev default, or set a strong production value}
       # Note: we've seen the default bucket creation logic not work in some cases
       MINIO_DEFAULT_BUCKETS: ${S3_FILE_STORE_BUCKET_NAME:-onyx-file-store-bucket}
     volumes:
@@ -538,8 +538,23 @@ services:
     # uncomment below + comment out the above to use the `docker-in-docker` execution mode
     # privileged: true
 
-  # The certbot service for Let's Encrypt certificate renewal is defined in
-  # the docker-compose.prod.yml overlay.
+  # Let's Encrypt certificate renewal for production. Activated via
+  # COMPOSE_PROFILES=letsencrypt in .env; run ./init-letsencrypt.sh once for
+  # the initial certificate.
+  # follows https://pentacent.medium.com/nginx-and-lets-encrypt-with-docker-in-less-than-5-minutes-b4b8a60d3a71
+  certbot:
+    image: certbot/certbot
+    profiles: ["letsencrypt"]
+    restart: unless-stopped
+    volumes:
+      - ../data/certbot/conf:/etc/letsencrypt
+      - ../data/certbot/www:/var/www/certbot
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
 volumes:
   # Necessary for persisting data for use

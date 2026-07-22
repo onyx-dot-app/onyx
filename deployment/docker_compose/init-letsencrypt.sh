@@ -1,10 +1,21 @@
 #!/bin/bash
 
-# .env.nginx file must be present in the same directory as this script and
-# must set DOMAIN (and optionally EMAIL)
-set -o allexport
-source .env.nginx
-set +o allexport
+# DOMAIN (and optionally EMAIL) are read from the .env file in this
+# directory (see env.prod.template). A legacy .env.nginx file is still
+# honored as a fallback.
+read_env_value() {
+  grep -E "^$1=" "$2" 2>/dev/null | tail -n1 | cut -d= -f2-
+}
+DOMAIN="$(read_env_value DOMAIN .env)"
+EMAIL="$(read_env_value EMAIL .env)"
+if [[ -z "$DOMAIN" && -f .env.nginx ]]; then
+  DOMAIN="$(read_env_value DOMAIN .env.nginx)"
+  EMAIL="${EMAIL:-$(read_env_value EMAIL .env.nginx)}"
+fi
+if [[ -z "$DOMAIN" ]]; then
+  echo "Error: DOMAIN must be set in .env (see env.prod.template)." >&2
+  exit 1
+fi
 
 docker_compose_cmd() {
   if docker compose version >/dev/null 2>&1; then
@@ -19,8 +30,7 @@ docker_compose_cmd() {
 
 COMPOSE_CMD=$(docker_compose_cmd)
 
-# docker-compose.prod.yml is an overlay on the base docker-compose.yml.
-COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
+COMPOSE_FILES=(-f docker-compose.yml)
 
 # --wait/--wait-timeout are V2-only.
 WAIT_ARGS=(--wait --wait-timeout 300)

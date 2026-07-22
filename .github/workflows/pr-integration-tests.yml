@@ -272,6 +272,12 @@ jobs:
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
           AUTH_TYPE=basic
+          # Dev credentials; the compose file fails fast when unset.
+          POSTGRES_PASSWORD=password
+          S3_AWS_ACCESS_KEY_ID=minioadmin
+          S3_AWS_SECRET_ACCESS_KEY=minioadmin
+          MINIO_ROOT_USER=minioadmin
+          MINIO_ROOT_PASSWORD=minioadmin
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
           REQUIRE_EMAIL_VERIFICATION=false
@@ -466,6 +472,12 @@ jobs:
           cat <<EOF > deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
+          # Dev credentials; the compose file fails fast when unset.
+          POSTGRES_PASSWORD=password
+          S3_AWS_ACCESS_KEY_ID=minioadmin
+          S3_AWS_SECRET_ACCESS_KEY=minioadmin
+          MINIO_ROOT_USER=minioadmin
+          MINIO_ROOT_PASSWORD=minioadmin
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
           REQUIRE_EMAIL_VERIFICATION=false

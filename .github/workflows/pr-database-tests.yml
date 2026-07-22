@@ -86,6 +86,13 @@ jobs:
 
       - name: Start Docker containers
         working-directory: ./deployment/docker_compose
+        # Dev credentials; the compose file fails fast when unset.
+        env:
+          POSTGRES_PASSWORD: password
+          S3_AWS_ACCESS_KEY_ID: minioadmin
+          S3_AWS_SECRET_ACCESS_KEY: minioadmin
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
         run: |
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
             relational_db
