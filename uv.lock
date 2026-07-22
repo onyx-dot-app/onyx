@@ -4574,7 +4574,7 @@ dev = [
     { name = "types-docker", specifier = "==7.1.0.20260518" },
     { name = "types-html5lib", specifier = "==1.1.11.13" },
     { name = "types-oauthlib", specifier = "==3.2.0.9" },
-    { name = "types-openpyxl", specifier = "==3.0.4.7" },
+    { name = "types-openpyxl", specifier = "==3.1.5.20260518" },
     { name = "types-passlib", specifier = "==1.7.7.20240106" },
     { name = "types-pillow", specifier = "==10.2.0.20240822" },
     { name = "types-psutil", specifier = "==7.1.3.20251125" },
@@ -7254,11 +7254,11 @@ wheels = [
 
 [[package]]
 name = "types-openpyxl"
-version = "3.0.4.7"
+version = "3.1.5.20260518"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0d/ae/73e86b0d1e106056fb40734bf90658c453b6d2136490fbf58294ffc02b69/types-openpyxl-3.0.4.7.tar.gz", hash = "sha256:0ad60cf7a76c7b550a66199211c94dcc4facb515a0f09d4981d0181b3bac6b15", size = 53292, upload-time = "2023-02-21T18:20:56.114Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f5/d1/a1e23040a758746ad5bb6b8849a011c3c901775618bc7e1fec3a1a8b7142/types_openpyxl-3.1.5.20260518.tar.gz", hash = "sha256:da9cd644e4e80215a3f60a8c2c2c8e980e941a9b581cffa3876285aa791ca5af", size = 101550, upload-time = "2026-05-18T06:03:57.59Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/55/aa/c477af340dc30bec075fa460c95432ccfb1a33f1fd2cf9b59f178ddca815/types_openpyxl-3.0.4.7-py3-none-any.whl", hash = "sha256:55713e2dfb6c3db2e3e2ade2f8dc20b3dea30c0d1bd3efc5b51d52c010e0a64a", size = 103299, upload-time = "2023-02-21T18:20:54.584Z" },
+    { url = "https://files.pythonhosted.org/packages/96/0e/d745ce95fc74e34df802010fd0387e33db468179e6ff42b708280ab268c7/types_openpyxl-3.1.5.20260518-py3-none-any.whl", hash = "sha256:e6ca4b116c8b979ed57f3045edcd3d49c25917d6dae99e90358f41322a19d375", size = 165744, upload-time = "2026-05-18T06:03:56.036Z" },
 ]
 
 [[package]]
