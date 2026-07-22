@@ -50,12 +50,13 @@ Usage
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import Any, cast
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
 from onyx.server.features.build.sandbox.models import (
+    CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
     LLMProviderConfig,
@@ -283,6 +284,7 @@ class StubSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> SandboxInfo:
         self.provision_count += 1
         self.last_provision_payload = {
@@ -292,6 +294,7 @@ class StubSandboxManager(SandboxManager):
             "llm_config": llm_config,
             "onyx_pat": onyx_pat,
             "all_llm_configs": all_llm_configs,
+            "mcp_servers": mcp_servers,
         }
         if self.provision_returns is None:
             raise _not_configured("provision")

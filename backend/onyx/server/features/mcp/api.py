@@ -1323,7 +1323,7 @@ def get_craft_mcp_servers_for_user(
     rows as chat, so a server connected in either surface shows as
     authenticated here.
     """
-    db_mcp_servers = get_craft_enabled_mcp_servers(db)
+    db_mcp_servers = get_craft_enabled_mcp_servers(db, user)
     mcp_servers = [
         _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
         for db_server in db_mcp_servers

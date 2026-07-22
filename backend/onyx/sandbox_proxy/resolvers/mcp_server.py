@@ -27,6 +27,7 @@ from onyx.db.mcp import (
     get_craft_enabled_mcp_servers,
     get_mcp_server_by_id,
     resolve_mcp_credentials,
+    user_can_access_mcp_server,
 )
 from onyx.db.models import MCPServer
 from onyx.db.users import fetch_user_by_id
@@ -165,6 +166,12 @@ class MCPServerResolver(CredentialResolver):
                 raise CredentialUnavailableError(
                     f"sandbox user {short_log_id(user_id)} not found"
                 )
+            if not user_can_access_mcp_server(user, server.id, db):
+                # Not shared with this user — never inject admin creds for them.
+                raise CredentialUnavailableError(
+                    f"user {short_log_id(user_id)} lacks access to MCP server "
+                    f"{server.id}"
+                )
             try:
                 creds = resolve_mcp_credentials(server, user, db)
             except MCPCredentialsError as e:
@@ -240,7 +247,8 @@ class MCPServerResolver(CredentialResolver):
 
     def _load_targets(self, tenant_id: str) -> tuple[_CraftMCPTarget, ...]:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            servers = get_craft_enabled_mcp_servers(db)
+            # No user at claim time; access is enforced in resolve().
+            servers = get_craft_enabled_mcp_servers(db, None)
             parsed = [_parse_target(s.id, s.server_url) for s in servers]
         return tuple(t for t in parsed if t is not None)
 

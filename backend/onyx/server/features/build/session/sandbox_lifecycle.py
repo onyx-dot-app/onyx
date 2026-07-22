@@ -42,6 +42,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
+from onyx.server.features.build.sandbox.util.mcp_config import resolve_craft_mcp_servers
 from onyx.server.features.build.session.errors import SandboxProvisioningError
 from onyx.skills.push import (
     build_user_skills_payload,
@@ -248,6 +249,7 @@ def provision_sandbox(
         llm_config=all_llm_configs[0],
         onyx_pat=onyx_pat,
         all_llm_configs=all_llm_configs,
+        mcp_servers=resolve_craft_mcp_servers(db_session, user),
     )
     if sandbox_info.status == SandboxStatus.RUNNING:
         hydrate_managed_content(sandbox_manager, sandbox.id, user, db_session)
