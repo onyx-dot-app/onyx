@@ -10,16 +10,10 @@ from sqlalchemy.orm.attributes import flag_modified
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import (
     EndpointPolicy,
-    GatedAppKind,
     MCPAuthenticationPerformer,
     MCPOAuthProviderMode,
     MCPServerStatus,
     MCPTransport,
-)
-from onyx.db.gated_app import (
-    get_action_policies,
-    get_or_create_gated_app_id,
-    replace_action_policies__no_commit,
 )
 from onyx.db.models import (
     MCPAuthenticationType,
@@ -298,42 +292,9 @@ def get_mcp_tools_for_servers(server_ids: list[int], db_session: Session) -> lis
     )
 
 
-# Every MCP tool gates to ASK unless an admin has relaxed it. Unlike external
-# apps, MCP has no curated code catalog of per-tool defaults — the server's
-# `readOnlyHint` is self-declared and never auto-grants (design decision).
+# MCP tools default to ASK; a server's self-declared `readOnlyHint` never
+# auto-grants. Only an admin override relaxes a tool.
 MCP_TOOL_DEFAULT_POLICY = EndpointPolicy.ASK
-
-
-def get_mcp_tool_policies(
-    mcp_server_id: int, db_session: Session
-) -> dict[str, EndpointPolicy]:
-    """The server's stored per-tool policy overrides as ``{tool_name: policy}``.
-    Sparse — only tools an admin has explicitly set; the rest resolve to ASK via
-    ``effective_mcp_tool_policy``. Stored in ``gated_action_policy`` keyed by the
-    server's ``gated_app`` row."""
-    return get_action_policies(db_session, GatedAppKind.MCP_SERVER, mcp_server_id)
-
-
-def effective_mcp_tool_policy(
-    tool_name: str, stored: dict[str, EndpointPolicy]
-) -> EndpointPolicy:
-    """Policy in force for ``tool_name``: the admin's stored override, else the
-    default ASK. Shared by the runtime gate and (later) the admin policy view so
-    they never diverge."""
-    return stored.get(tool_name, MCP_TOOL_DEFAULT_POLICY)
-
-
-def set_mcp_tool_policies__no_commit(
-    mcp_server_id: int,
-    policies: dict[str, EndpointPolicy],
-    db_session: Session,
-) -> None:
-    """Replace ``mcp_server_id``'s per-tool policy rows with exactly ``policies``.
-    No commit — runs inside the caller's transaction."""
-    gated_app_id = get_or_create_gated_app_id(
-        db_session, GatedAppKind.MCP_SERVER, mcp_server_id
-    )
-    replace_action_policies__no_commit(db_session, gated_app_id, policies)
 
 
 def add_user_to_mcp_server(server_id: int, user_id: UUID, db_session: Session) -> None:

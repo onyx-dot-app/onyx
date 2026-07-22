@@ -24,9 +24,9 @@ from onyx.db.enums import (
     MCPAuthenticationType,
     MCPTransport,
 )
+from onyx.db.gated_app import set_action_policies__no_commit
 from onyx.db.mcp import (
     create_mcp_server__no_commit,
-    set_mcp_tool_policies__no_commit,
     update_mcp_server__no_commit,
 )
 from onyx.db.models import MCPServer
@@ -153,7 +153,9 @@ def test_admin_tool_override_is_reflected(
 ) -> None:
     user = create_test_user(db_session, f"mcp_eval_override_{override.value}")
     server = craft_server()
-    set_mcp_tool_policies__no_commit(server.id, {"send_email": override}, db_session)
+    set_action_policies__no_commit(
+        db_session, GatedAppKind.MCP_SERVER, server.id, {"send_email": override}
+    )
     db_session.commit()
 
     matched = _evaluate(
@@ -225,10 +227,11 @@ def test_batched_tool_calls_sorted_strictest_first(
 ) -> None:
     user = create_test_user(db_session, "mcp_eval_batch")
     server = craft_server()
-    set_mcp_tool_policies__no_commit(
+    set_action_policies__no_commit(
+        db_session,
+        GatedAppKind.MCP_SERVER,
         server.id,
         {"safe_read": EndpointPolicy.ALWAYS, "danger_write": EndpointPolicy.DENY},
-        db_session,
     )
     db_session.commit()
 
@@ -261,7 +264,7 @@ def test_evaluator_failure_after_attribution_denies(
     def _boom(*_args: Any, **_kwargs: Any) -> None:
         raise RuntimeError("policy lookup failed")
 
-    monkeypatch.setattr(re_mod, "get_mcp_tool_policies", _boom)
+    monkeypatch.setattr(re_mod, "get_action_policies", _boom)
 
     matched = _evaluate(
         _request(_server_host(server), body=_tool_call_body("send_email")), user.id

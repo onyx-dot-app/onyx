@@ -19,10 +19,10 @@ from sqlalchemy.orm import Session
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import EndpointPolicy, GatedAppKind
 from onyx.db.external_app import get_external_apps
+from onyx.db.gated_app import get_action_policies
 from onyx.db.mcp import (
-    effective_mcp_tool_policy,
+    MCP_TOOL_DEFAULT_POLICY,
     get_craft_enabled_mcp_servers,
-    get_mcp_tool_policies,
 )
 from onyx.db.models import ExternalApp, MCPServer
 from onyx.external_apps.credentials import app_is_available
@@ -209,8 +209,8 @@ class McpRequestEvaluator(RequestEvaluator):
                 )
                 actions = (_deny_action("MCP gating failed; blocked."),)
 
-        return AllMatchedActions.from_actions(
-            actions, gated_target, _request_payload(request)
+        return AllMatchedActions(
+            actions=actions, target=gated_target, payload=_request_payload(request)
         )
 
 
@@ -229,7 +229,7 @@ def _mcp_tool_actions(
                 "as an MCP tool call or protocol message; blocked.",
             ),
         )
-    stored = get_mcp_tool_policies(server.id, db)
+    stored = get_action_policies(db, GatedAppKind.MCP_SERVER, server.id)
     # One action per distinct tool (grants and policies key by tool name), with
     # the batch multiplicity surfaced so the approval card doesn't understate a
     # request that invokes the same tool several times.
@@ -242,7 +242,7 @@ def _mcp_tool_actions(
                 f"Call the “{tool_name}” tool on {server.name}."
                 + (f" This request invokes it {count} times." if count > 1 else "")
             ),
-            policy=effective_mcp_tool_policy(tool_name, stored),
+            policy=stored.get(tool_name, MCP_TOOL_DEFAULT_POLICY),
         )
         for tool_name, count in counts.items()
     )

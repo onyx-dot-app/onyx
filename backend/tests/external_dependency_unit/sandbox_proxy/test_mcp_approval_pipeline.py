@@ -25,12 +25,13 @@ from onyx.db.enums import (
     MCPAuthenticationType,
     MCPTransport,
 )
-from onyx.db.gated_app import get_gated_app_id
+from onyx.db.gated_app import (
+    get_action_policies,
+    get_gated_app_id,
+    set_action_policies__no_commit,
+)
 from onyx.db.mcp import (
     create_mcp_server__no_commit,
-    effective_mcp_tool_policy,
-    get_mcp_tool_policies,
-    set_mcp_tool_policies__no_commit,
     update_mcp_server__no_commit,
 )
 from onyx.db.models import BuildSession, GatedApp, MCPServer
@@ -150,34 +151,33 @@ def test_gated_app_rejects_two_targets(
     db_session.rollback()
 
 
-def test_mcp_tool_policies_default_ask_and_reflect_overrides(
+def test_mcp_tool_policy_storage_round_trips(
     db_session: Session, craft_server: CraftServerFactory
 ) -> None:
     server = craft_server()
-    assert get_mcp_tool_policies(server.id, db_session) == {}
-    assert effective_mcp_tool_policy("anything", {}) is EndpointPolicy.ASK
+    assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {}
 
-    set_mcp_tool_policies__no_commit(
+    set_action_policies__no_commit(
+        db_session,
+        GatedAppKind.MCP_SERVER,
         server.id,
         {"read_inbox": EndpointPolicy.ALWAYS, "wipe": EndpointPolicy.DENY},
-        db_session,
     )
     db_session.commit()
 
-    stored = get_mcp_tool_policies(server.id, db_session)
-    assert stored == {
+    assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {
         "read_inbox": EndpointPolicy.ALWAYS,
         "wipe": EndpointPolicy.DENY,
     }
-    assert effective_mcp_tool_policy("read_inbox", stored) is EndpointPolicy.ALWAYS
-    assert effective_mcp_tool_policy("wipe", stored) is EndpointPolicy.DENY
-    assert effective_mcp_tool_policy("unset_tool", stored) is EndpointPolicy.ASK
 
     # Re-setting replaces the prior rows rather than colliding on the unique key.
-    set_mcp_tool_policies__no_commit(
-        server.id, {"read_inbox": EndpointPolicy.ASK}, db_session
+    set_action_policies__no_commit(
+        db_session,
+        GatedAppKind.MCP_SERVER,
+        server.id,
+        {"read_inbox": EndpointPolicy.ASK},
     )
     db_session.commit()
-    assert get_mcp_tool_policies(server.id, db_session) == {
+    assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {
         "read_inbox": EndpointPolicy.ASK
     }

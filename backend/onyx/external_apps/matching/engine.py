@@ -4,7 +4,7 @@ outbound request."""
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, ExternalAppType, GatedAppKind
@@ -71,25 +71,18 @@ class AllMatchedActions(BaseModel):
     target: GatedTarget
     payload: dict[str, Any] = Field(default_factory=dict)
 
-    @model_validator(mode="after")
-    def _non_empty(self) -> "AllMatchedActions":
-        if not self.actions:
-            raise ValueError("AllMatchedActions.actions must be non-empty")
-        return self
-
+    @field_validator("actions")
     @classmethod
-    def from_actions(
-        cls,
-        actions: Iterable[MatchedAction],
-        target: GatedTarget,
-        payload: dict[str, Any] | None = None,
-    ) -> "AllMatchedActions":
-        """Construct with the strictest-first sort applied, so every producer
-        upholds the ``actions[0]`` verdict invariant."""
-        ordered: tuple[MatchedAction, ...] = tuple(
+    def _strictest_first(
+        cls, actions: tuple[MatchedAction, ...]
+    ) -> tuple[MatchedAction, ...]:
+        """Sort strictest-policy-first and reject empty, so ``actions[0]`` always
+        drives the verdict however a producer built the tuple."""
+        if not actions:
+            raise ValueError("AllMatchedActions.actions must be non-empty")
+        return tuple(
             sorted(actions, key=lambda a: POLICY_SEVERITY[a.policy], reverse=True)
         )
-        return cls(actions=ordered, target=target, payload=payload or {})
 
     @property
     def governing_action(self) -> MatchedAction:
@@ -172,9 +165,11 @@ def recognize_actions(
     ]
     if not matched:
         return None
-    return AllMatchedActions.from_actions(
-        matched,
-        GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)),
+    return AllMatchedActions(
+        actions=tuple(matched),
+        target=GatedTarget(
+            kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)
+        ),
     )
 
 
