@@ -152,7 +152,8 @@ function mcpServerToConnectable(server: MCPServer): ConnectableApp | null {
     credentialValues: server.user_credentials ?? {},
     startOAuth: async () =>
       (await startMCPUserOAuth(server.id, CRAFT_APPS_PATH)).oauth_url,
-    saveCredentials: (values) => saveMCPUserCredentials(server.id, values),
+    saveCredentials: (values) =>
+      saveMCPUserCredentials(server.id, values, server.transport),
     disconnect: perUser ? () => disconnectMCPServer(server.id) : null,
   };
 }

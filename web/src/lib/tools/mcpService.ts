@@ -12,6 +12,7 @@ import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
   MCPOAuthProviderMode,
+  MCPTransportType,
 } from "@/lib/tools/interfaces";
 import { parseErrorDetail } from "@/lib/fetcher";
 
@@ -260,7 +261,8 @@ export async function startMCPUserOAuth(
 /** Save per-user credentials (API key / template fields) for an MCP server. */
 export async function saveMCPUserCredentials(
   serverId: number,
-  credentials: Record<string, string>
+  credentials: Record<string, string>,
+  transport: MCPTransportType = MCPTransportType.STREAMABLE_HTTP
 ): Promise<void> {
   const res = await fetch("/api/mcp/user-credentials", {
     method: "POST",
@@ -268,7 +270,7 @@ export async function saveMCPUserCredentials(
     body: JSON.stringify({
       server_id: serverId,
       credentials,
-      transport: "streamable-http",
+      transport,
     }),
   });
   if (!res.ok) {
