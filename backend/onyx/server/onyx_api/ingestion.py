@@ -208,19 +208,15 @@ def delete_ingestion_doc(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    # Verify the document exists and was created via the ingestion API
     document = get_document(document_id=document_id, db_session=db_session)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    if not document.from_ingestion_api:
-        raise HTTPException(
-            status_code=400,
-            detail="Document was not created via the ingestion API",
-        )
-
-    # Object-level authorization: a scoped curator may only delete a document when
-    # they can edit at least one of its owning cc-pairs (admins bypass entirely).
+    # Object-level authorization runs before the ingestion-API check so an
+    # unauthorized caller gets a uniform not-found response and can't probe a
+    # document's existence or ingestion-API status. A scoped curator may only
+    # delete a document when they can edit at least one of its owning cc-pairs
+    # (admins bypass entirely).
     if user is not None and user.role != UserRole.ADMIN:
         owning_cc_pairs = get_cc_pairs_for_document(db_session, document_id)
         if not any(
@@ -233,6 +229,12 @@ def delete_ingestion_doc(
                 OnyxErrorCode.NOT_FOUND,
                 "Document not found",
             )
+
+    if not document.from_ingestion_api:
+        raise HTTPException(
+            status_code=400,
+            detail="Document was not created via the ingestion API",
+        )
 
     active_search_settings = get_active_search_settings(db_session)
 

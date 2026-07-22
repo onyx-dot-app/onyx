@@ -715,7 +715,7 @@ def get_cc_pair_indexing_errors(
         include_resolved: Whether to include resolved errors in the results
         page_num: Page number for pagination, starting at 0
         page_size: Number of errors to return per page
-        _: Current user, must be curator or admin
+        user: Current user, must be curator or admin
         db_session: Database session
 
     Returns:

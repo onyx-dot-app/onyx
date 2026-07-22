@@ -106,9 +106,18 @@ def submit_targeted_reindex(
             "(all were already resolved, entity-level, or invalid).",
         )
 
+    if len(target_specs_in) > MAX_TARGETS_PER_REQUEST:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Too many targets: %s > %s."
+            % (len(target_specs_in), MAX_TARGETS_PER_REQUEST),
+        )
+
     # Object-level authorization: the caller must be able to edit every cc-pair
     # referenced by the resolved targets (both request-supplied and error-derived),
     # so a scoped curator can't reindex connectors outside the groups they curate.
+    # Runs after the size gate so an oversized request is rejected before we issue
+    # one access query per distinct cc-pair.
     if user:
         target_cc_pair_ids = {spec.cc_pair_id for spec in target_specs_in}
         if any(
@@ -121,13 +130,6 @@ def submit_targeted_reindex(
                 OnyxErrorCode.NOT_FOUND,
                 "CC Pair not found for current user permissions",
             )
-
-    if len(target_specs_in) > MAX_TARGETS_PER_REQUEST:
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "Too many targets: %s > %s."
-            % (len(target_specs_in), MAX_TARGETS_PER_REQUEST),
-        )
 
     try:
         result = create_targeted_reindex_job(
