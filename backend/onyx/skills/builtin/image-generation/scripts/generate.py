@@ -41,7 +41,7 @@ def load_image_as_base64(image_path: str) -> tuple[str, str]:
 def generate_image(
     prompt: str,
     output_path: str,
-    model: str = "gemini-3-pro-image-preview",
+    model: str = "gemini-3-pro-image",
     input_image: str | None = None,
     aspect_ratio: str | None = None,  # noqa: ARG001
     num_images: int = 1,
@@ -181,8 +181,8 @@ Examples:
         "--model",
         "-m",
         type=str,
-        default="gemini-3-pro-image-preview",
-        help="Model to use (default: gemini-3-pro-image-preview).",
+        default="gemini-3-pro-image",
+        help="Model to use (default: gemini-3-pro-image).",
     )
     parser.add_argument(
         "--input-image",
