@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 from enum import Enum
 from http import HTTPStatus
 
@@ -145,6 +146,7 @@ def document_by_cc_pair_cleanup_task(
         # bulk-deletion fan-out across the light worker fleet.
         chunk_count: int | None = None
         update_request: MetadataUpdateRequest | None = None
+        doc_last_modified: datetime | None = None
         with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
             primary_search_settings = active_search_settings.primary
@@ -172,6 +174,7 @@ def document_by_cc_pair_cleanup_task(
                     return False
 
                 action = DocumentCleanupAction.UPDATE
+                doc_last_modified = doc.last_modified
 
                 # the below functions do not include cc_pairs being deleted.
                 # i.e. they will correctly omit access for the current cc_pair
@@ -249,7 +252,10 @@ def document_by_cc_pair_cleanup_task(
                     ),
                 )
 
-                mark_document_as_synced(document_id, db_session)
+                # the phase-1 watermark keeps a concurrently-modified doc stale
+                mark_document_as_synced(
+                    document_id, db_session, synced_as_of=doc_last_modified
+                )
                 # re-link -> doc stays live under another cc_pair; drop its stale candidate
                 _clear_port_orphan_candidate_for_live_doc(
                     db_session, connector_id, credential_id, document_id
