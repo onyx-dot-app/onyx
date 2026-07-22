@@ -9,8 +9,10 @@ Routes and route-only flow helpers stay in `api.py`.
 import asyncio
 import json
 import time
-from typing import Any
-from urllib.parse import urlparse
+from collections.abc import Awaitable, Callable
+from typing import Any, TypedDict
+from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
 import httpx
 from mcp.client.auth import OAuthClientProvider, TokenStorage
@@ -21,7 +23,7 @@ from mcp.shared.auth import (
     OAuthMetadata,
     OAuthToken,
 )
-from pydantic import AnyUrl, BaseModel
+from pydantic import AnyUrl, BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheLockAcquisitionError
@@ -43,7 +45,7 @@ from onyx.server.features.mcp.models import MCPConnectionData, MCPOAuthKeys
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR, get_current_tenant_id
 
 logger = setup_logger()
 
@@ -100,6 +102,77 @@ class MCPOauthState(BaseModel):
     is_admin: bool
     state: str
     code_verifier: str | None = None
+
+
+class MCPRefreshLogContext(TypedDict):
+    mcp_server_id: int | None
+    mcp_server_name: str
+    connection_config_id: int
+    transport: str
+    oauth_provider_mode: str
+
+
+def _refresh_log_context(
+    mcp_server: DbMCPServer, connection_config_id: int
+) -> MCPRefreshLogContext:
+    transport = getattr(mcp_server, "transport", None)
+    provider_mode = getattr(mcp_server, "oauth_provider_mode", None)
+    return {
+        "mcp_server_id": getattr(mcp_server, "id", None),
+        "mcp_server_name": mcp_server.name,
+        "connection_config_id": connection_config_id,
+        "transport": getattr(transport, "value", transport) or "UNKNOWN",
+        "oauth_provider_mode": getattr(provider_mode, "value", provider_mode)
+        or "UNKNOWN",
+    }
+
+
+def _oauth_error_from_response(
+    body: bytes, content_type: str | None
+) -> tuple[str | None, str]:
+    """Extract only the safe OAuth error code and body format from a response."""
+    normalized_content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    body_format = (
+        "form"
+        if normalized_content_type == "application/x-www-form-urlencoded"
+        else "json"
+    )
+
+    try:
+        payload = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        if body_format != "form":
+            body_format = "unknown"
+        form_payload = parse_qs(body.decode("utf-8", errors="replace"))
+        return (form_payload.get("error", [None])[0], body_format)
+
+    if isinstance(payload, dict):
+        return (payload.get("error"), body_format)
+    return None, body_format
+
+
+def _response_request_hostname(response: httpx.Response) -> str | None:
+    """Return the response hostname when httpx attached the originating request."""
+    try:
+        return response.request.url.host
+    except RuntimeError:
+        return None
+
+
+def _oauth_token_from_response(
+    body: bytes, content_type: str | None
+) -> OAuthToken:
+    """Parse JSON or form-encoded OAuth token responses."""
+    normalized_content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if normalized_content_type == "application/x-www-form-urlencoded":
+        form_payload = parse_qs(body.decode("utf-8", errors="replace"))
+        payload = {
+            key: values[0]
+            for key, values in form_payload.items()
+            if values
+        }
+        return OAuthToken.model_validate(payload)
+    return OAuthToken.model_validate_json(body)
 
 
 def _token_dict_with_preserved_refresh(
@@ -267,9 +340,16 @@ class OnyxTokenStorage(TokenStorage):
     store auth info in a particular user's connection config in postgres
     """
 
-    def __init__(self, connection_config_id: int, alt_config_id: int | None = None):
+    def __init__(
+        self,
+        connection_config_id: int,
+        alt_config_id: int | None = None,
+        refresh_log_context: MCPRefreshLogContext | None = None,
+    ):
         self.alt_config_id = alt_config_id
         self.connection_config_id = connection_config_id
+        self.refresh_log_context = refresh_log_context
+        self.refresh_attempt_id: str | None = None
         # When bound, `get_tokens` hydrates its `token_expiry_time` from the
         # config read it already does — no separate query for the expiry.
         self._oauth_context: OAuthContext | None = None
@@ -313,8 +393,12 @@ class OnyxTokenStorage(TokenStorage):
             config = self._ensure_connection_config(db_session)
             config_data = extract_connection_data(config)
             existing_tokens_raw = config_data.get(MCPOAuthKeys.TOKENS.value)
-            config_data[MCPOAuthKeys.TOKENS.value] = _token_dict_with_preserved_refresh(
+            persisted_token_dict = _token_dict_with_preserved_refresh(
                 tokens, existing_tokens_raw
+            )
+            config_data[MCPOAuthKeys.TOKENS.value] = persisted_token_dict
+            token_expires_at_before_refresh = config_data.get(
+                MCPOAuthKeys.TOKEN_EXPIRES_AT.value
             )
             expires_at = _absolute_token_expiry(tokens)
             if expires_at is not None:
@@ -336,6 +420,30 @@ class OnyxTokenStorage(TokenStorage):
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
             }
             update_connection_config(config.id, db_session, config_data)
+
+        if self.refresh_attempt_id and self.refresh_log_context:
+            logger.info(
+                "mcp_oauth.refresh.persisted",
+                extra={
+                    **self.refresh_log_context,
+                    "request_id": ONYX_REQUEST_ID_CONTEXTVAR.get(),
+                    "refresh_attempt_id": self.refresh_attempt_id,
+                    "access_token_persisted": bool(
+                        persisted_token_dict.get("access_token")
+                    ),
+                    "refresh_token_persisted": bool(
+                        persisted_token_dict.get("refresh_token")
+                    ),
+                    "refresh_token_replaced": bool(
+                        tokens.refresh_token
+                        and tokens.refresh_token
+                        != (existing_tokens_raw or {}).get("refresh_token")
+                    ),
+                    "token_expires_at_before_refresh": token_expires_at_before_refresh,
+                    "token_expires_at_after_refresh": expires_at,
+                    "token_expiry_persisted": expires_at is not None,
+                },
+            )
 
         # The shared admin row is intentionally NOT written here: it
         # serves as the OAuth `client_info` registry shared across all
@@ -397,6 +505,110 @@ class OnyxTokenStorage(TokenStorage):
                 update_connection_config(
                     self.alt_config_id, db_session, alt_config_data
                 )
+
+
+class OnyxOAuthClientProvider(OAuthClientProvider):
+    """MCP SDK OAuth provider with safe refresh telemetry and error parsing."""
+
+    def __init__(
+        self,
+        server_url: str,
+        client_metadata: OAuthClientMetadata,
+        storage: TokenStorage,
+        redirect_handler: Callable[[str], Awaitable[None]] | None = None,
+        callback_handler: Callable[[], Awaitable[tuple[str, str | None]]] | None = None,
+        timeout: float = 300.0,
+        client_metadata_url: str | None = None,
+        *,
+        refresh_log_context: MCPRefreshLogContext,
+    ) -> None:
+        super().__init__(
+            server_url=server_url,
+            client_metadata=client_metadata,
+            storage=storage,
+            redirect_handler=redirect_handler,
+            callback_handler=callback_handler,
+            timeout=timeout,
+            client_metadata_url=client_metadata_url,
+        )
+        self.refresh_log_context = refresh_log_context
+        self.refresh_attempt_id: str | None = None
+        self.token_expiry_before_refresh: float | None = None
+
+    def _refresh_log_fields(self, **fields: Any) -> dict[str, Any]:
+        log_fields: dict[str, Any] = {
+            **self.refresh_log_context,
+            "request_id": ONYX_REQUEST_ID_CONTEXTVAR.get(),
+            "refresh_attempt_id": self.refresh_attempt_id,
+        }
+        log_fields.update(fields)
+        return log_fields
+
+    async def _refresh_token(self) -> httpx.Request:
+        self.refresh_attempt_id = uuid4().hex
+        self.token_expiry_before_refresh = self.context.token_expiry_time
+        storage = self.context.storage
+        if isinstance(storage, OnyxTokenStorage):
+            storage.refresh_attempt_id = self.refresh_attempt_id
+
+        request = await super()._refresh_token()
+        logger.info(
+            "mcp_oauth.refresh.started",
+            extra=self._refresh_log_fields(
+                token_expires_at_before_refresh=self.token_expiry_before_refresh,
+                token_endpoint_hostname=request.url.host,
+                access_token_present=bool(
+                    self.context.current_tokens
+                    and self.context.current_tokens.access_token
+                ),
+                refresh_token_present=bool(
+                    self.context.current_tokens
+                    and self.context.current_tokens.refresh_token
+                ),
+            ),
+        )
+        return request
+
+    async def _handle_refresh_response(self, response: httpx.Response) -> bool:
+        """Handle JSON and form-encoded refresh responses without logging secrets."""
+        body = await response.aread()
+        content_type = response.headers.get("content-type")
+        oauth_error, body_format = _oauth_error_from_response(body, content_type)
+        token_endpoint_hostname = _response_request_hostname(response)
+
+        response_fields = self._refresh_log_fields(
+            http_status=response.status_code,
+            response_content_type=content_type,
+            response_body_format=body_format,
+            oauth_error=oauth_error,
+            token_endpoint_hostname=token_endpoint_hostname,
+        )
+
+        if response.status_code != 200:
+            logger.warning("mcp_oauth.refresh.failed", extra=response_fields)
+            self.context.clear_tokens()
+            return False
+
+        try:
+            token_response = _oauth_token_from_response(body, content_type)
+        except ValidationError:
+            logger.warning("mcp_oauth.refresh.invalid_response", extra=response_fields)
+            self.context.clear_tokens()
+            return False
+
+        self.context.current_tokens = token_response
+        self.context.update_token_expiry(token_response)
+        await self.context.storage.set_tokens(token_response)
+        logger.info(
+            "mcp_oauth.refresh.succeeded",
+            extra=self._refresh_log_fields(
+                http_status=response.status_code,
+                response_content_type=content_type,
+                response_body_format=body_format,
+                token_endpoint_hostname=token_endpoint_hostname,
+            ),
+        )
+        return True
 
 
 def make_oauth_provider(
@@ -463,8 +675,14 @@ def make_oauth_provider(
         r.delete(key_auth_url(user_id), key_state(user_id))
         return code, state_obj.state
 
-    storage = OnyxTokenStorage(connection_config_id, admin_config_id)
-    provider = OAuthClientProvider(
+    refresh_log_context = _refresh_log_context(mcp_server, connection_config_id)
+    storage = OnyxTokenStorage(
+        connection_config_id,
+        admin_config_id,
+        refresh_log_context,
+    )
+    provider = OnyxOAuthClientProvider(
+        refresh_log_context=refresh_log_context,
         server_url=mcp_server.server_url,
         client_metadata=OAuthClientMetadata(
             client_name=f"Onyx - {mcp_server.name}",
