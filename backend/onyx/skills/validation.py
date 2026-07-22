@@ -61,13 +61,13 @@ def validate_stored_custom_skill(
     skill: Skill,
     file_store: FileStore,
 ) -> SkillValidationResult:
-    if len(skill.slug) > 64 or not SKILL_NAME_PATTERN.fullmatch(skill.slug):
+    if len(skill.name) > 64 or not SKILL_NAME_PATTERN.fullmatch(skill.name):
         return SkillValidationResult(
             is_valid=False,
             normalized_bundle=None,
             detail="persisted skill name does not match the canonical grammar",
         )
-    if skill.slug in BUILT_IN_SKILLS:
+    if skill.name in BUILT_IN_SKILLS:
         return SkillValidationResult(
             is_valid=False,
             normalized_bundle=None,
@@ -119,7 +119,7 @@ def validate_stored_custom_skill(
             detail=f"stored bundle is invalid: {detail}",
         )
 
-    if document.metadata.name != skill.slug:
+    if document.metadata.name != skill.name:
         return SkillValidationResult(
             is_valid=False,
             normalized_bundle=None,

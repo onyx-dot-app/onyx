@@ -45,14 +45,14 @@ def _isolate_built_in_skill_rows(
 
 def _seed_canonical(db_session: Session) -> None:
     """Insert one default row per codified built-in, mirroring what the
-    migration seeds (slug == built_in_skill_id, public, enabled)."""
+    migration seeds (name == built_in_skill_id, public, enabled)."""
     for built_in_skill_id in BUILT_IN_SKILLS:
         make_built_in_skill_row(db_session, built_in_skill_id=built_in_skill_id)
     db_session.commit()
 
 
 def _row(db_session: Session, built_in_skill_id: str) -> Skill:
-    row = db_session.scalar(select(Skill).where(Skill.slug == built_in_skill_id))
+    row = db_session.scalar(select(Skill).where(Skill.name == built_in_skill_id))
     assert row is not None, f"expected built-in row for {built_in_skill_id}"
     return row
 
@@ -200,7 +200,7 @@ class TestBuiltInIsImmutable:
         db_session: Session,
         test_user: User,
     ) -> None:
-        custom = make_skill(db_session, slug=f"custom-{uuid4().hex[:8]}")
+        custom = make_skill(db_session, name=f"custom-{uuid4().hex[:8]}")
         custom.author_user_id = test_user.id
         db_session.commit()
 
@@ -219,14 +219,12 @@ class TestNonUniqueBuiltInId:
         self, db_session: Session
     ) -> None:
         """``built_in_skill_id`` is not unique — a single built-in can
-        back multiple rows (different slugs / sharing scopes). Slug
-        remains the natural unique key."""
+        back multiple rows with different canonical names and sharing scopes."""
         make_built_in_skill_row(db_session, built_in_skill_id="pptx")
         make_built_in_skill_row(
             db_session,
             built_in_skill_id="pptx",
-            slug="pptx-team-a",
-            name="pptx (team A)",
+            name="pptx-team-a",
             is_public=False,
         )
         db_session.commit()
@@ -235,7 +233,7 @@ class TestNonUniqueBuiltInId:
             db_session.scalars(select(Skill).where(Skill.built_in_skill_id == "pptx"))
         )
         assert len(matches) == 2
-        assert {s.slug for s in matches} == {"pptx", "pptx-team-a"}
+        assert {s.name for s in matches} == {"pptx", "pptx-team-a"}
 
 
 class TestDefinitionSourceInvariant:

@@ -75,6 +75,7 @@ from onyx.db.enums import (
     EmbeddingPrecision,
     EndpointPolicy,
     ExternalAppType,
+    GatedAppKind,
     GrantSource,
     HierarchyNodeType,
     HookFailStrategy,
@@ -678,12 +679,26 @@ class UserSkillPreference(Base):
     )
     skill_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("skill.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    # Denormalized for name uniqueness; the composite FK keeps it exact.
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    __table_args__ = (Index("ix_user_skill_preference_skill_id", "skill_id"),)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["name", "skill_id"],
+            ["skill.name", "skill.id"],
+            name="fk_user_skill_preference_skill_name",
+            ondelete="CASCADE",
+        ),
+        Index("ix_user_skill_preference_skill_id", "skill_id"),
+        Index(
+            "uq_user_skill_preference_name",
+            "user_id",
+            "name",
+            unique=True,
+        ),
+    )
 
 
 class DocumentSet__User(Base):
@@ -4497,9 +4512,8 @@ class Skill(Base):
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
-    # Admin-controlled metadata (editable post-creation via PATCH).
-    slug: Mapped[str] = mapped_column(String(64), nullable=False)
-    name: Mapped[str] = mapped_column(String, nullable=False)
+    # Immutable Agent Skills name and sandbox directory name.
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Discriminator: when set, definition (source files, has_template, etc.)
@@ -4564,7 +4578,7 @@ class Skill(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("slug", name="uq_skill_slug"),
+        UniqueConstraint("name", "id", name="uq_skill_name_id"),
         CheckConstraint(
             "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
             name="ck_skill_definition_source",
@@ -6009,13 +6023,15 @@ class ActionApproval(Base):
         Enum(ApprovalDecidedVia, native_enum=False, name="approvaldecidedvia"),
         nullable=True,
     )
-    # Lookups key off this id, not ``app_name``: the latter isn't unique
-    # across instances (self-hosted GitLab/Jira share an app_type).
-    external_app_id: Mapped[int | None] = mapped_column(
+    # The gated target (external app or MCP server) this request hit, via the
+    # polymorphic ``gated_app`` identity row. Goes NULL when that target is
+    # deleted (SET NULL) — the decided row stays as an audit record.
+    gated_app_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("external_app.id", ondelete="SET NULL"),
+        ForeignKey("gated_app.id", ondelete="SET NULL"),
         nullable=True,
     )
+    gated_app: Mapped["GatedApp | None"] = relationship("GatedApp")
 
 
 class ScheduledTask(Base):
@@ -6087,10 +6103,17 @@ class ScheduledTask(Base):
     )
 
     @property
-    def pre_approved_app_ids(self) -> list[int]:
-        """Granted external-app ids in grant order. Set via
-        ``onyx.db.scheduled_task.set_pre_approved_apps``."""
-        return [grant.external_app_id for grant in self.pre_approved_apps]
+    def pre_approved_external_app_ids(self) -> list[int]:
+        """Granted external-app ids in grant order. MCP-server grants are
+        excluded — their target ids live in a different id space, and this
+        property backs the API's external-app-id field (the gate reads all
+        grants regardless of kind via ``get_running_scheduled_run_grants``).
+        Set via ``onyx.db.scheduled_task.set_pre_approved_apps``."""
+        return [
+            grant.gated_app.external_app_id
+            for grant in self.pre_approved_apps
+            if grant.gated_app.external_app_id is not None
+        ]
 
     __table_args__ = (
         # Dispatcher hot path: WHERE status='active' AND deleted=false
@@ -6183,12 +6206,13 @@ class ScheduledTaskRun(Base):
 
 
 class ScheduledTaskPreApprovedApp(Base):
-    """One (task, app) pre-approval grant: the matched app's ASK-gated
+    """One (task, target) pre-approval grant: the matched target's ASK-gated
     actions skip the approval park for the task's RUNNING runs.
 
-    Deleting the task (CASCADE) or the app (CASCADE) drops the grant; a
-    stale grant on a removed app is meaningless. The unique constraint
-    keeps grants idempotent and its index serves the per-task lookup.
+    The target is a ``gated_app`` row (external app or MCP server). Deleting the
+    task or the target (both CASCADE) drops the grant; a stale grant on a removed
+    target is meaningless. The unique constraint keeps grants idempotent and its
+    index serves the per-task lookup.
     """
 
     __tablename__ = "scheduled_task_pre_approved_app"
@@ -6199,9 +6223,9 @@ class ScheduledTaskPreApprovedApp(Base):
         ForeignKey("scheduled_task.id", ondelete="CASCADE"),
         nullable=False,
     )
-    external_app_id: Mapped[int] = mapped_column(
+    gated_app_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("external_app.id", ondelete="CASCADE"),
+        ForeignKey("gated_app.id", ondelete="CASCADE"),
         nullable=False,
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -6211,11 +6235,15 @@ class ScheduledTaskPreApprovedApp(Base):
     task: Mapped[ScheduledTask] = relationship(
         "ScheduledTask", back_populates="pre_approved_apps"
     )
+    # selectin: pre_approved_external_app_ids and set_pre_approved_apps read
+    # gated_app for every grant, so batch them in one SELECT rather than one
+    # per grant.
+    gated_app: Mapped["GatedApp"] = relationship("GatedApp", lazy="selectin")
 
     __table_args__ = (
         UniqueConstraint(
             "scheduled_task_id",
-            "external_app_id",
+            "gated_app_id",
             name="uq_scheduled_task_pre_approved_app",
         ),
     )
@@ -6438,8 +6466,8 @@ class ExternalApp(Base):
     __tablename__ = "external_app"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # Display and bundle metadata currently live on the linked Skill row.
-    # App availability is independent of user skill preferences.
+    # App display metadata is independent of the linked skill's canonical name.
+    name: Mapped[str] = mapped_column(String, nullable=False)
     skill_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("skill.id", ondelete="CASCADE"),
@@ -6501,11 +6529,6 @@ class ExternalApp(Base):
     skill: Mapped["Skill"] = relationship("Skill")
     user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
         "ExternalAppUserCredential",
-        back_populates="external_app",
-        cascade="all, delete-orphan",
-    )
-    policies: Mapped[list["ExternalAppPolicy"]] = relationship(
-        "ExternalAppPolicy",
         back_populates="external_app",
         cascade="all, delete-orphan",
     )
@@ -6575,26 +6598,93 @@ class ExternalAppUserCredential(Base):
     )
 
 
-class ExternalAppPolicy(Base):
-    """Admin's per-action policy override for an external app.
+class GatedApp(Base):
+    """Polymorphic identity for a gated egress target — one row per external app
+    or MCP server.
+
+    The approval pipeline (per-action policy, approval rows, scheduled-task
+    pre-approvals) references this single id instead of a per-catalog FK, so a
+    new target type adds one nullable column here rather than a column on every
+    consumer table. Rows are created lazily via
+    ``onyx.db.gated_app.get_or_create_gated_app_id`` (the migration backfilled
+    pre-existing targets), so a row's existence doesn't imply the target was
+    ever policied or approved.
+
+    Exactly one of ``external_app_id`` / ``mcp_server_id`` is set; ``kind`` is
+    derived from which. Deleting the underlying target CASCADEs this row away,
+    which in turn CASCADEs its policies and pre-approvals.
+    """
+
+    __tablename__ = "gated_app"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_app_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    mcp_server_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("mcp_server.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+
+    # Constraints are named to match the live schema created by the migration.
+    __table_args__ = (
+        UniqueConstraint("external_app_id", name="uq_gated_app_external_app"),
+        UniqueConstraint("mcp_server_id", name="uq_gated_app_mcp_server"),
+        CheckConstraint(
+            "num_nonnulls(external_app_id, mcp_server_id) = 1",
+            name="ck_gated_app_single_target",
+        ),
+    )
+
+    @property
+    def kind(self) -> GatedAppKind:
+        """Which catalog the target lives in, derived from the populated FK so a
+        kind/column mismatch is unrepresentable."""
+        return (
+            GatedAppKind.EXTERNAL_APP
+            if self.external_app_id is not None
+            else GatedAppKind.MCP_SERVER
+        )
+
+    @property
+    def target_id(self) -> int:
+        """Id of the underlying target row named by ``kind``."""
+        tid = (
+            self.external_app_id
+            if self.external_app_id is not None
+            else self.mcp_server_id
+        )
+        assert tid is not None  # guaranteed by ck_gated_app_single_target
+        return tid
+
+    @property
+    def target_key(self) -> tuple[GatedAppKind, int]:
+        """The ``(kind, target_id)`` pair consumers key grants and lookups off."""
+        return self.kind, self.target_id
+
+
+class GatedActionPolicy(Base):
+    """Admin's per-action policy override for a gated target, keyed by the
+    ``gated_app`` identity row.
 
     Sparse: only actions the admin has set are stored; an action without a row
     resolves to ``ASK`` (the default ask-approval behaviour).
 
-    ``action_id`` is a catalog id; display (name/description) comes from the code
-    catalog. Admin-authored custom-app rules will add their own action
-    name/description/match columns when that feature lands.
+    ``action_id`` is a catalog id (external apps) or a tool name (MCP servers);
+    display (name/description) comes from the code catalog / discovered tools.
     """
 
-    __tablename__ = "external_app_policy"
+    __tablename__ = "gated_action_policy"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    external_app_id: Mapped[int] = mapped_column(
+    gated_app_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("external_app.id", ondelete="CASCADE"),
+        ForeignKey("gated_app.id", ondelete="CASCADE"),
         nullable=False,
     )
-    # Hierarchical action id, e.g. "slack.messages.read".
     action_id: Mapped[str] = mapped_column(Text, nullable=False)
     policy: Mapped[EndpointPolicy] = mapped_column(
         Enum(EndpointPolicy, native_enum=False),
@@ -6612,15 +6702,11 @@ class ExternalAppPolicy(Base):
         nullable=False,
     )
 
-    external_app: Mapped["ExternalApp"] = relationship(
-        "ExternalApp", back_populates="policies"
-    )
-
     __table_args__ = (
         UniqueConstraint(
-            "external_app_id",
+            "gated_app_id",
             "action_id",
-            name="uq_external_app_policy_app_action",
+            name="uq_gated_action_policy",
         ),
     )
 

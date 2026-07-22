@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session, class_mapper
 
 from onyx.db.models import (
     ExternalApp,
-    ExternalAppPolicy,
     ExternalAppUserCredential,
+    GatedActionPolicy,
+    GatedApp,
     Skill,
     Skill__User,
     Skill__UserGroup,
@@ -21,9 +22,10 @@ from onyx.db.models import (
 _SKILL_ISOLATION_MODELS: tuple[type[Any], ...] = (
     Skill,
     ExternalApp,
+    GatedApp,
     Skill__User,
     Skill__UserGroup,
-    ExternalAppPolicy,
+    GatedActionPolicy,
     ExternalAppUserCredential,
 )
 

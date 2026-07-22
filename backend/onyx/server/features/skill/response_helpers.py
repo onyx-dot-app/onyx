@@ -142,7 +142,7 @@ def skills_list_response_for_user(
         ):
             logger.warning(
                 "Skill row %s references unknown built-in %s; hiding from listing",
-                skill.slug,
+                skill.name,
                 skill.built_in_skill_id,
             )
             continue

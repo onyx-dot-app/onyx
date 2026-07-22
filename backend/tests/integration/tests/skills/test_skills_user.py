@@ -29,7 +29,7 @@ def test_get_skills_returns_builtins_plus_accessible_customs(
 ) -> None:
     """The user listing returns both built-ins and visible customs."""
     SkillManager.create_custom(
-        admin_user, slug=f"mixed-public-{uuid4().hex[:6]}", is_public=True
+        admin_user, name=f"mixed-public-{uuid4().hex[:6]}", is_public=True
     )
 
     user_skills = SkillManager.list_for_user(basic_user)
@@ -54,10 +54,10 @@ def test_newly_shared_skill_is_visible_but_disabled(
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
-    slug = f"disabled-{uuid4().hex[:6]}"
-    SkillManager.create_custom(admin_user, slug=slug, is_public=True)
+    name = f"disabled-{uuid4().hex[:6]}"
+    SkillManager.create_custom(admin_user, name=name, is_public=True)
     user_skills = SkillManager.list_for_user(basic_user)
-    [shared_skill] = [skill for skill in user_skills.customs if skill.slug == slug]
+    [shared_skill] = [skill for skill in user_skills.customs if skill.name == name]
     assert shared_skill.enabled is False
     assert shared_skill.can_toggle is True
 
@@ -66,12 +66,12 @@ def test_user_does_not_see_private_skill_without_share(
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
-    slug = f"private-unshared-{uuid4().hex[:6]}"
-    SkillManager.create_custom(admin_user, slug=slug, is_public=False)
+    name = f"private-unshared-{uuid4().hex[:6]}"
+    SkillManager.create_custom(admin_user, name=name, is_public=False)
 
     user_skills = SkillManager.list_for_user(basic_user)
-    custom_slugs = [skill.slug for skill in user_skills.customs]
-    assert slug not in custom_slugs
+    custom_names = [skill.name for skill in user_skills.customs]
+    assert name not in custom_names
 
 
 @pytest.mark.skipif(
@@ -94,16 +94,16 @@ def test_user_sees_private_skill_with_group_share(
     )
     UserGroupManager.add_users(group, [basic_user.id], admin_user)
 
-    slug = f"private-shared-{uuid4().hex[:6]}"
+    name = f"private-shared-{uuid4().hex[:6]}"
     SkillManager.create_custom(
         admin_user,
-        slug=slug,
+        name=name,
         is_public=False,
         group_ids=[group.id],
     )
 
     user_skills = SkillManager.list_for_user(basic_user)
-    [shared_skill] = [skill for skill in user_skills.customs if skill.slug == slug]
+    [shared_skill] = [skill for skill in user_skills.customs if skill.name == name]
     assert shared_skill.enabled is False
     assert shared_skill.can_toggle is True
 
@@ -113,8 +113,8 @@ def test_get_skill_by_id_404_when_not_visible(
     basic_user: DATestUser,
 ) -> None:
     """Direct lookup by UUID obeys the same visibility filter as listing."""
-    slug = f"hidden-id-{uuid4().hex[:6]}"
-    skill = SkillManager.create_custom(admin_user, slug=slug, is_public=False)
+    name = f"hidden-id-{uuid4().hex[:6]}"
+    skill = SkillManager.create_custom(admin_user, name=name, is_public=False)
 
     response = client.get(
         f"{API_SERVER_URL}/skills/{skill.id}",
@@ -128,7 +128,7 @@ def test_non_owner_cannot_delete_skill(
     basic_user: DATestUser,
 ) -> None:
     """Users without edit permissions cannot delete another user's skill."""
-    skill = SkillManager.create_custom(admin_user, slug=f"no-del-{uuid4().hex[:6]}")
+    skill = SkillManager.create_custom(admin_user, name=f"no-del-{uuid4().hex[:6]}")
     response = client.delete(
         f"{API_SERVER_URL}/skills/custom/{skill.id}",
         headers=basic_user.headers,

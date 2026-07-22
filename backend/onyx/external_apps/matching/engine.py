@@ -7,8 +7,8 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, ExternalAppType
-from onyx.db.external_app import get_policies
+from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, ExternalAppType, GatedAppKind
+from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
@@ -34,19 +34,41 @@ class MatchedAction(BaseModel):
     policy: EndpointPolicy
 
 
+class GatedTarget(BaseModel):
+    """The connected app/server a gated request is attributed to.
+
+    ``id`` indexes the table named by ``kind`` — ``external_app`` or
+    ``mcp_server``. Lookups key off ``(kind, id)``, never ``app_name``: the
+    latter isn't unique across instances (self-hosted GitLab/Jira share an
+    app_type, and two MCP servers can share a display name).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: GatedAppKind
+    id: int
+    app_name: str
+
+    @property
+    def key(self) -> tuple[GatedAppKind, int]:
+        """The ``(kind, id)`` pair — same shape as ``GatedApp.target_key``, so
+        live matches compare directly against persisted grants."""
+        return self.kind, self.id
+
+
 class AllMatchedActions(BaseModel):
     """Every catalog action the request matched within the resolved app.
 
     ``actions`` is sorted strictest-policy-first; ``governing_action`` returns the
     head, whose policy drives the gate's verdict. A batched GraphQL POST is
-    the canonical multi-action case.
+    the canonical multi-action case. ``target`` names the connected app/server
+    the whole approval pipeline attributes the request to.
     """
 
     model_config = ConfigDict(frozen=True)
 
     actions: tuple[MatchedAction, ...]
-    app_name: str
-    external_app_id: int
+    target: GatedTarget
     payload: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -59,6 +81,10 @@ class AllMatchedActions(BaseModel):
     def governing_action(self) -> MatchedAction:
         """The action whose policy drove the verdict (head of the sorted list)."""
         return self.actions[0]
+
+    @property
+    def app_name(self) -> str:
+        return self.target.app_name
 
 
 PersistedMatchedAction = Mapping[str, Any]
@@ -96,9 +122,9 @@ def _app_name(app: ExternalApp) -> str:
     provider = get_provider_for_app(app)
     if provider is not None:
         return provider.spec.app_name
-    # CUSTOM apps have no provider; their human name lives on the linked skill.
+    # CUSTOM apps have no provider; use their independently editable display name.
     if app.app_type == ExternalAppType.CUSTOM:
-        return app.skill.name
+        return app.name
     return app.app_type.value
 
 
@@ -118,7 +144,7 @@ def recognize_actions(
     it via ``model_copy``.
     """
     context = MatchContext(request)
-    stored = get_policies(db_session, app.id)
+    stored = get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, app.id)
     catalog = get_endpoint_catalog(app.app_type)
     matched = [
         MatchedAction(
@@ -135,8 +161,9 @@ def recognize_actions(
     matched.sort(key=lambda a: POLICY_SEVERITY[a.policy], reverse=True)
     return AllMatchedActions(
         actions=tuple(matched),
-        app_name=_app_name(app),
-        external_app_id=app.id,
+        target=GatedTarget(
+            kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)
+        ),
     )
 
 
@@ -174,6 +201,7 @@ def apply_credential_gate(
                 policy=EndpointPolicy.ASK,
             ),
         ),
-        app_name=_app_name(app),
-        external_app_id=app.id,
+        target=GatedTarget(
+            kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)
+        ),
     )

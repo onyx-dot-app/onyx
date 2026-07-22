@@ -67,7 +67,7 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
     )
 
     seeded_skill(
-        slug=f"partial-{uuid4().hex[:6]}",
+        name=f"partial-{uuid4().hex[:6]}",
         public=True,
         bundle_files={"SKILL.md": "p\n"},
     )

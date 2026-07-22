@@ -1,17 +1,23 @@
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from threading import RLock
 
 from cachetools import TTLCache
-from dateutil import tz
-from fastapi import Depends, HTTPException
-from sqlalchemy import func, select
+from fastapi import Depends
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import ChatMessage, ChatSession, TokenRateLimit, User
+from onyx.db.models import TokenRateLimit, User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
+from onyx.db.user_usage import (
+    TokenUsageBucket,
+    get_token_window_start,
+    get_total_token_buckets_since,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.contextvars import get_current_tenant_id
@@ -56,31 +62,16 @@ def _user_is_rate_limited_by_global() -> None:
             global_usage = _fetch_global_usage(global_cutoff_time, db_session)
 
             if _is_rate_limited(global_rate_limits, global_usage):
-                raise HTTPException(
-                    status_code=429,
-                    detail="Token budget exceeded for organization. Try again later.",
+                raise OnyxError(
+                    OnyxErrorCode.RATE_LIMITED,
+                    "Token budget exceeded for organization. Try again later.",
                 )
 
 
 def _fetch_global_usage(
     cutoff_time: datetime, db_session: Session
-) -> Sequence[tuple[datetime, int]]:
-    """
-    Fetch global token usage within the cutoff time, grouped by minute
-    """
-    result = db_session.execute(
-        select(
-            func.date_trunc("minute", ChatMessage.time_sent),
-            func.sum(ChatMessage.token_count),
-        )
-        .join(ChatSession, ChatMessage.chat_session_id == ChatSession.id)
-        .filter(
-            ChatMessage.time_sent >= cutoff_time,
-        )
-        .group_by(func.date_trunc("minute", ChatMessage.time_sent))
-    ).all()
-
-    return [(row[0], row[1]) for row in result]
+) -> list[TokenUsageBucket]:
+    return get_total_token_buckets_since(db_session, cutoff_time)
 
 
 """
@@ -90,24 +81,24 @@ Common functions
 
 def _get_cutoff_time(rate_limits: Sequence[TokenRateLimit]) -> datetime:
     max_period_hours = max(rate_limit.period_hours for rate_limit in rate_limits)
-    return datetime.now(tz=timezone.utc) - timedelta(hours=max_period_hours)
+    return get_token_window_start(
+        datetime.now(timezone.utc),
+        max_period_hours,
+    )
 
 
 def _is_rate_limited(
-    rate_limits: Sequence[TokenRateLimit], usage: Sequence[tuple[datetime, int]]
+    rate_limits: Sequence[TokenRateLimit], usage: Sequence[TokenUsageBucket]
 ) -> bool:
-    """
-    If at least one rate limit is exceeded, return True
-    """
+    """Whether any provider-token budget is exceeded."""
+    now = datetime.now(timezone.utc)
     for rate_limit in rate_limits:
         if rate_limit.token_budget is None:
             continue
 
+        cutoff = get_token_window_start(now, rate_limit.period_hours)
         tokens_used = sum(
-            u_token_count
-            for u_date, u_token_count in usage
-            if u_date
-            >= datetime.now(tz=tz.UTC) - timedelta(hours=rate_limit.period_hours)
+            bucket.tokens for bucket in usage if bucket.window_start >= cutoff
         )
 
         if tokens_used >= rate_limit.token_budget * TOKEN_BUDGET_UNIT:

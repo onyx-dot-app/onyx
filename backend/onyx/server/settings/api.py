@@ -86,12 +86,15 @@ def admin_put_settings(
         current_tier = Tier.COMMUNITY
     existing = load_settings()
 
-    # craft_default_enabled is access control: a PUT that omits it (e.g. an
-    # older client) must not silently reset it to the pydantic default.
+    # These fields are access control: a PUT that omits one (e.g. an older
+    # client, or a partial write) must not silently reset it to the pydantic
+    # default. invite_only_enabled off-by-default would let uninvited users in.
     if "craft_default_enabled" not in settings.model_fields_set:
         settings.craft_default_enabled = existing.craft_default_enabled
     if "craft_instructions" not in settings.model_fields_set:
         settings.craft_instructions = existing.craft_instructions
+    if "invite_only_enabled" not in settings.model_fields_set:
+        settings.invite_only_enabled = existing.invite_only_enabled
     # Search Mode is Business+; Chat Retention is Enterprise-only.
     # Use the same error code (FEATURE_NOT_AVAILABLE / 402) the tier_gate
     # middleware uses, so the FE has one shape to handle for tier-rejected

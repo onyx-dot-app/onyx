@@ -103,14 +103,18 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
 }
 
 
-def http_403(code: SandboxProxyError) -> http.Response:
+def http_403(code: SandboxProxyError, detail: str | None = None) -> http.Response:
     """Build a sandbox-visible 403.
 
     The JSON body is `{"error": <code>, "message": <prose>}`: the stable `error`
     code for tooling to match on, and human-readable `message` prose the agent
-    can act on.
+    can act on. `detail`, when given, adds request-specific prose (e.g. which
+    integration is missing credentials) — never secrets or internal ids.
     """
-    body = json.dumps({"error": code.value, "message": code.message}).encode()
+    payload: dict[str, str] = {"error": code.value, "message": code.message}
+    if detail:
+        payload["detail"] = detail
+    body = json.dumps(payload).encode()
     return http.Response.make(
         403,
         content=body,

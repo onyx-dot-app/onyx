@@ -14,21 +14,25 @@ import type {
   SkillSharePermission,
 } from "@/lib/skills/types";
 
-async function readErrorDetail(res: Response): Promise<string> {
-  try {
-    const body = await res.json();
-    if (typeof body?.detail === "string") return body.detail;
-    if (Array.isArray(body?.detail) && body.detail[0]?.msg)
-      return body.detail[0].msg;
-  } catch {
-    // fall through
-  }
-  return `Request failed (${res.status})`;
-}
-
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    throw new Error(await readErrorDetail(res));
+    let errorCode: string | undefined;
+    let detail = `Request failed (${res.status})`;
+    try {
+      const body = await res.json();
+      if (typeof body?.error_code === "string") errorCode = body.error_code;
+      if (typeof body?.detail === "string") detail = body.detail;
+      else if (Array.isArray(body?.detail) && body.detail[0]?.msg) {
+        detail = body.detail[0].msg;
+      }
+    } catch {
+      // Use the generic status message.
+    }
+    const error = new Error(detail) as Error & {
+      errorCode: string | undefined;
+    };
+    error.errorCode = errorCode;
+    throw error;
   }
   if (res.status === 204) {
     return undefined as T;
@@ -40,9 +44,13 @@ async function handle<T>(res: Response): Promise<T> {
 // Mutations
 // ---------------------------------------------------------------------------
 
-export async function createCustomSkill(bundle: File): Promise<CustomSkill> {
+export async function createCustomSkill(
+  bundle: File,
+  autoEnable = true
+): Promise<CustomSkill> {
   const form = new FormData();
   form.append("bundle", bundle);
+  form.append("auto_enable", String(autoEnable));
 
   const res = await fetch("/api/skills/custom", {
     method: "POST",
@@ -55,6 +63,7 @@ export interface CreateCustomSkillInput {
   name: string;
   description: string;
   instructions_markdown: string;
+  auto_enable?: boolean;
 }
 
 export async function createCustomSkillFromEditor(
@@ -65,6 +74,7 @@ export async function createCustomSkillFromEditor(
   form.append("name", input.name);
   form.append("description", input.description);
   form.append("instructions_markdown", input.instructions_markdown);
+  form.append("auto_enable", String(input.auto_enable ?? true));
   if (upload) form.append("upload", upload);
 
   const res = await fetch("/api/skills/custom/editor", {
@@ -72,6 +82,14 @@ export async function createCustomSkillFromEditor(
     body: form,
   });
   return handle<SkillEditableDetail>(res);
+}
+
+export function isSkillNameConflict(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "errorCode" in error &&
+    error.errorCode === "SKILL_NAME_CONFLICT"
+  );
 }
 
 export interface PatchCustomSkillInput {
@@ -82,12 +100,13 @@ export interface PatchCustomSkillInput {
 
 export async function setSkillEnabled(
   skillId: string,
-  enabled: boolean
+  enabled: boolean,
+  replaceConflict = false
 ): Promise<Skill> {
   const res = await fetch(`/api/skills/${skillId}/enabled`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify({ enabled, replace_conflict: replaceConflict }),
   });
   return handle<Skill>(res);
 }

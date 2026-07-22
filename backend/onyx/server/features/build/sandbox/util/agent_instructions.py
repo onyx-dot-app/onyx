@@ -87,7 +87,7 @@ def build_connectable_apps_list(apps: Iterable[ExternalApp]) -> str:
     yet. The heading and explanatory prose live in AGENTS.template.md; this only
     supplies the dynamic ``{{CONNECTABLE_APPS_LIST}}`` value, with a fallback
     line when there are no apps."""
-    entries = sorted((app.skill.slug, _truncate(app.skill.description)) for app in apps)
+    entries = sorted((app.skill.name, _truncate(app.skill.description)) for app in apps)
     if not entries:
         return "No connectable apps available."
     return "\n".join(f"- **{slug}**: {desc}" for slug, desc in entries)

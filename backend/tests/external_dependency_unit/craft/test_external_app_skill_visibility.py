@@ -75,8 +75,8 @@ def test_admin_view_hides_external_apps(
     test_user: User,  # noqa: ARG001
 ) -> None:
     admin = make_user(db_session, role=UserRole.ADMIN)
-    regular = make_skill(db_session, is_public=True, slug="plain-admin-skill")
-    external = make_skill(db_session, is_public=True, slug="ext-admin-hidden")
+    regular = make_skill(db_session, is_public=True, name="plain-admin-skill")
+    external = make_skill(db_session, is_public=True, name="ext-admin-hidden")
     make_external_app(db_session, skill=external, auth_template={})
 
     visible = _skill_ids(admin, db_session, SkillAccessPolicy.VIEW)
@@ -165,13 +165,13 @@ def test_use_includes_external_app_with_no_user_credentials_required(
     empty_template_skill = make_skill(
         db_session,
         is_public=True,
-        slug="ext-empty-template",
+        name="ext-empty-template",
     )
     make_external_app(db_session, skill=empty_template_skill, auth_template={})
     org_filled_skill = make_skill(
         db_session,
         is_public=True,
-        slug="ext-org-fills-all",
+        name="ext-org-fills-all",
     )
     make_external_app(
         db_session,
@@ -190,7 +190,7 @@ def test_regular_shared_skill_still_requires_enabled_preference(
     test_user: User,  # noqa: ARG001
 ) -> None:
     user = make_user(db_session)
-    skill = make_skill(db_session, is_public=True, slug="plain-skill")
+    skill = make_skill(db_session, is_public=True, name="plain-skill")
 
     assert skill.id in _skill_ids(user, db_session, SkillAccessPolicy.VIEW)
     assert skill.id not in _skill_ids(user, db_session, SkillAccessPolicy.USE)

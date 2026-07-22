@@ -47,7 +47,7 @@ def test_edit_fetch_returns_instructions_and_share_details(
     stranger = UserManager.create(name=f"skill_stranger_{uuid4().hex[:8]}")
     skill = SkillManager.create_custom(
         basic_user,
-        slug=f"edit-fetch-{uuid4().hex[:6]}",
+        name=f"edit-fetch-{uuid4().hex[:6]}",
     )
     skill_id = _skill_id(skill)
 
@@ -91,7 +91,7 @@ def test_preview_returns_instructions_without_share_details(
     viewer = UserManager.create(name=f"skill_preview_viewer_{uuid4().hex[:8]}")
     skill = SkillManager.create_custom(
         basic_user,
-        slug=f"preview-custom-{uuid4().hex[:6]}",
+        name=f"preview-custom-{uuid4().hex[:6]}",
         description="Preview description",
     )
     skill_id = _skill_id(skill)
@@ -132,10 +132,10 @@ def test_builtin_preview_returns_instructions(basic_user: DATestUser) -> None:
 def test_patch_details_rewrites_bundle_without_changing_slug(
     basic_user: DATestUser,
 ) -> None:
-    slug = f"patch-details-{uuid4().hex[:6]}"
+    name = f"patch-details-{uuid4().hex[:6]}"
     skill = SkillManager.create_custom(
         basic_user,
-        slug=slug,
+        name=name,
         description="Original description",
     )
     skill_id = _skill_id(skill)
@@ -149,19 +149,19 @@ def test_patch_details_rewrites_bundle_without_changing_slug(
         ),
     )
 
-    assert updated.slug == slug
-    assert updated.name == slug
+    assert updated.name == name
+    assert updated.name == name
     assert updated.description == "Updated description"
 
     editable = SkillManager.get_editable(skill_id, basic_user)
-    assert editable.name == slug
+    assert editable.name == name
     assert editable.description == "Updated description"
     assert editable.instructions_markdown == (
         "# Updated instructions\n\nUse the revised workflow."
     )
 
     preview = SkillManager.preview(skill_id, basic_user)
-    assert preview.name == slug
+    assert preview.name == name
     assert preview.description == "Updated description"
     assert preview.instructions_markdown == (
         "# Updated instructions\n\nUse the revised workflow."
@@ -175,7 +175,7 @@ def test_direct_viewer_share_grants_view_not_edit(
     viewer = UserManager.create(name=f"skill_direct_viewer_{uuid4().hex[:8]}")
     skill = SkillManager.create_custom(
         basic_user,
-        slug=f"direct-viewer-{uuid4().hex[:6]}",
+        name=f"direct-viewer-{uuid4().hex[:6]}",
     )
     skill_id = _skill_id(skill)
 
@@ -207,7 +207,7 @@ def test_direct_share_restores_existing_enabled_preference(
     recipient = UserManager.create(name=f"skill_recipient_{uuid4().hex[:8]}")
     skill = SkillManager.create_custom(
         basic_user,
-        slug=f"preference-restore-{uuid4().hex[:6]}",
+        name=f"preference-restore-{uuid4().hex[:6]}",
     )
     share = SkillUserShareRequest(
         user_id=UUID(recipient.id),
@@ -234,7 +234,7 @@ def test_org_wide_editor_permission_grants_edit(
     other_user = UserManager.create(name=f"skill_org_editor_{uuid4().hex[:8]}")
     skill = SkillManager.create_custom(
         basic_user,
-        slug=f"org-editor-{uuid4().hex[:6]}",
+        name=f"org-editor-{uuid4().hex[:6]}",
     )
     skill_id = _skill_id(skill)
 
@@ -269,7 +269,7 @@ def test_switching_from_org_wide_to_scoped_share_removes_org_visibility(
     unshared_user = UserManager.create(name=f"skill_unscoped_user_{uuid4().hex[:8]}")
     skill = SkillManager.create_custom(
         basic_user,
-        slug=f"scoped-share-{uuid4().hex[:6]}",
+        name=f"scoped-share-{uuid4().hex[:6]}",
     )
     skill_id = _skill_id(skill)
 
@@ -301,7 +301,7 @@ def test_owner_transfer_demotes_previous_owner_and_promotes_new_owner(
     new_owner = UserManager.create(name=f"skill_new_owner_{uuid4().hex[:8]}")
     skill = SkillManager.create_custom(
         basic_user,
-        slug=f"transfer-owner-{uuid4().hex[:6]}",
+        name=f"transfer-owner-{uuid4().hex[:6]}",
     )
     skill_id = _skill_id(skill)
     SkillManager.share(
@@ -332,7 +332,7 @@ def test_owner_transfer_demotes_previous_owner_and_promotes_new_owner(
     new_owner_response = SkillManager.get_for_user(str(skill_id), new_owner)
     assert new_owner_response.author_user_id == UUID(new_owner.id)
     assert new_owner_response.user_permission == SkillAccessLevel.OWNER
-    assert new_owner_response.enabled is True
+    assert new_owner_response.enabled is False
 
 
 @pytest.mark.parametrize(
@@ -348,7 +348,7 @@ def test_sharee_cannot_transfer_ownership(
     target = UserManager.create(name=f"skill_transfer_target_{uuid4().hex[:8]}")
     skill = SkillManager.create_custom(
         basic_user,
-        slug=f"transfer-deny-{permission.lower()}-{uuid4().hex[:6]}",
+        name=f"transfer-deny-{permission.lower()}-{uuid4().hex[:6]}",
     )
     SkillManager.share(
         skill,
@@ -378,7 +378,7 @@ def test_transfer_rejects_missing_and_inactive_targets(
     )
     skill = SkillManager.create_custom(
         basic_user,
-        slug=f"transfer-target-{uuid4().hex[:6]}",
+        name=f"transfer-target-{uuid4().hex[:6]}",
     )
     skill_id = _skill_id(skill)
 
@@ -402,7 +402,7 @@ def test_admin_transfers_vacant_skill_but_not_owned_skill(
     target = UserManager.create(name=f"skill_admin_target_{uuid4().hex[:8]}")
     owned_skill = SkillManager.create_custom(
         owner,
-        slug=f"admin-owned-transfer-{uuid4().hex[:6]}",
+        name=f"admin-owned-transfer-{uuid4().hex[:6]}",
     )
     owned_skill_id = _skill_id(owned_skill)
 

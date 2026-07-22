@@ -14,10 +14,10 @@ from onyx.db.enums import AccountType, Permission, SkillSharePermission
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
     SkillAccessPolicy,
+    add_new_skill__no_commit,
     affected_user_ids_for_skill,
-    create_skill__no_commit,
     delete_skill,
-    enable_skill_for_user_if_unset__no_commit,
+    enable_new_skill_if_name_available__no_commit,
     fetch_skill,
     list_skills,
     replace_skill_bundle,
@@ -111,9 +111,9 @@ def _replace_skill_bundle_from_editor(
     file_store = get_default_file_store()
     with ingested_skill_bundle(
         bundle_bytes,
-        f"{skill.slug}.zip",
+        f"{skill.name}.zip",
         file_store,
-        expected_name=skill.slug,
+        expected_name=skill.name,
     ) as ingested:
         old_file_id = replace_skill_bundle(
             skill=skill,
@@ -154,6 +154,7 @@ def set_skill_enabled_for_current_user(
     skill = set_skill_enabled_for_user(
         skill_id=skill_id,
         enabled=request.enabled,
+        replace_conflict=request.replace_conflict,
         user=user,
         db_session=db_session,
     )
@@ -200,6 +201,7 @@ def preview_skill_for_current_user(
 @user_router.post("/custom")
 def create_custom_skill(
     bundle: UploadFile = File(...),
+    auto_enable: Annotated[bool, Form()] = True,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
@@ -209,20 +211,30 @@ def create_custom_skill(
         bundle.filename,
         file_store,
     ) as ingested:
-        skill = create_skill__no_commit(
-            slug=ingested.canonical_name,
-            name=ingested.canonical_name,
-            description=ingested.description,
-            bundle_file_id=ingested.bundle_file_id,
-            bundle_sha256=ingested.bundle_sha256,
-            author_user_id=user.id,
-            db_session=db_session,
+        skill = add_new_skill__no_commit(
+            Skill(
+                name=ingested.canonical_name,
+                description=ingested.description,
+                bundle_file_id=ingested.bundle_file_id,
+                bundle_sha256=ingested.bundle_sha256,
+                is_valid=True,
+                author_user_id=user.id,
+            ),
+            db_session,
         )
-        enable_skill_for_user_if_unset__no_commit(skill, user.id, db_session)
+        if auto_enable and not enable_new_skill_if_name_available__no_commit(
+            skill, user.id, db_session
+        ):
+            raise OnyxError(
+                OnyxErrorCode.SKILL_NAME_CONFLICT,
+                f"A skill named '{skill.name}' is already enabled.",
+            )
         db_session.commit()
 
-    push_skill_to_affected_sandboxes(skill, db_session)
-    db_session.commit()
+    if auto_enable:
+        push_skill_to_affected_sandboxes(skill, db_session)
+        db_session.commit()
+
     return skill_response_for_user(
         skill,
         user,
@@ -237,6 +249,7 @@ def create_custom_skill_from_editor(
     description: Annotated[str, Form(min_length=1)],
     instructions_markdown: Annotated[str, Form(min_length=1)],
     upload: Annotated[UploadFile | None, File()] = None,
+    auto_enable: Annotated[bool, Form()] = True,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
@@ -279,20 +292,30 @@ def create_custom_skill_from_editor(
         file_store,
         expected_name=canonical_name,
     ) as ingested:
-        skill = create_skill__no_commit(
-            slug=ingested.canonical_name,
-            name=ingested.canonical_name,
-            description=ingested.description,
-            bundle_file_id=ingested.bundle_file_id,
-            bundle_sha256=ingested.bundle_sha256,
-            author_user_id=user.id,
-            db_session=db_session,
+        skill = add_new_skill__no_commit(
+            Skill(
+                name=ingested.canonical_name,
+                description=ingested.description,
+                bundle_file_id=ingested.bundle_file_id,
+                bundle_sha256=ingested.bundle_sha256,
+                is_valid=True,
+                author_user_id=user.id,
+            ),
+            db_session,
         )
-        enable_skill_for_user_if_unset__no_commit(skill, user.id, db_session)
+        if auto_enable and not enable_new_skill_if_name_available__no_commit(
+            skill, user.id, db_session
+        ):
+            raise OnyxError(
+                OnyxErrorCode.SKILL_NAME_CONFLICT,
+                f"A skill named '{skill.name}' is already enabled.",
+            )
         db_session.commit()
 
-    push_skill_to_affected_sandboxes(skill, db_session)
-    db_session.commit()
+    if auto_enable:
+        push_skill_to_affected_sandboxes(skill, db_session)
+        db_session.commit()
+
     return _editable_skill_response(skill, user, db_session)
 
 
@@ -368,7 +391,7 @@ def replace_current_user_skill_bundle(
         read_bundle_file(bundle.file),
         bundle.filename,
         file_store,
-        expected_name=skill.slug,
+        expected_name=skill.name,
     ) as ingested:
         old_file_id = replace_skill_bundle(
             skill=skill,
@@ -494,13 +517,13 @@ def patch_current_user_skill(
                 )
             new_bundle_bytes = rewrite_custom_bundle_skill_md(
                 old_bundle_bytes,
-                canonical_name=skill.slug,
+                canonical_name=skill.name,
                 description=description,
                 instructions_markdown=instructions_markdown,
             )
             new_bundle_file_id = save_skill_bundle_bytes(
                 new_bundle_bytes,
-                display_name=f"{skill.slug}.zip",
+                display_name=f"{skill.name}.zip",
                 file_store=file_store,
             )
             old_bundle_file_id = replace_skill_bundle(
@@ -640,7 +663,7 @@ def transfer_current_user_skill_ownership(
     if skill.built_in_skill_id is not None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.slug}' is a built-in and cannot change ownership.",
+            f"Skill '{skill.name}' is a built-in and cannot change ownership.",
         )
 
     ownership_vacant = (

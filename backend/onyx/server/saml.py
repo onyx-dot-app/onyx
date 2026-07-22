@@ -98,7 +98,6 @@ async def upsert_saml_user(email: str) -> User:
                         role=role,
                         is_verified=True,  # SAML users are pre-verified by their IdP
                     ),
-                    sso_managed=True,
                 )
 
                 return user
