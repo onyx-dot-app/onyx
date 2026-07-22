@@ -480,38 +480,29 @@ def document_index_metadata_sync_task(
     completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED
 
     try:
+        # Phase 1: read DB state, then release the connection before the
+        # document-index HTTP call (OpenSearch on cloud, Vespa on legacy
+        # deployments). Holding a pg transaction across the round-trip pins
+        # a connection for up to the full tenacity retry window; under
+        # bulk-deletion fan-out these sessions sit idle-in-transaction for
+        # minutes and other writers queue behind them.
+        update_request: MetadataUpdateRequest | None = None
         with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
+            primary_search_settings = active_search_settings.primary
+            secondary_search_settings = active_search_settings.secondary
             # INSTANT reindex-port: the promoted primary is still backfilling. Flag it so
             # an update to a not-yet-copied doc defers below instead of clearing needs_sync
             # (which would let the create-only port reinstall a stale ACL). See update().
             primary_backfill_in_progress = (
-                active_search_settings.primary.port_backfill_source_id is not None
+                primary_search_settings.port_backfill_source_id is not None
                 and port_backfill_has_pending_work(
-                    db_session, active_search_settings.primary.id
+                    db_session, primary_search_settings.id
                 )
             )
-            # This flow is for updates so we get all indices.
-            document_indices = get_all_document_indices(
-                search_settings=active_search_settings.primary,
-                secondary_search_settings=active_search_settings.secondary,
-                httpx_client=HttpxPool.get("vespa"),
-                primary_backfill_in_progress=primary_backfill_in_progress,
-            )
-
-            retry_document_indices: list[RetryDocumentIndex] = [
-                RetryDocumentIndex(document_index)
-                for document_index in document_indices
-            ]
 
             doc = get_document(document_id, db_session)
-            if not doc:
-                elapsed = time.monotonic() - start
-                task_logger.info(
-                    f"doc={document_id} action=no_operation elapsed={elapsed:.2f}"
-                )
-                completion_status = OnyxCeleryTaskCompletionStatus.SKIPPED
-            else:
+            if doc:
                 # document set sync
                 doc_sets = fetch_document_sets_for_document(document_id, db_session)
                 update_doc_sets: set[str] = set(doc_sets)
@@ -535,27 +526,53 @@ def document_index_metadata_sync_task(
                     created_at=doc.doc_created_at,
                 )
 
-                # Reindex-port: doc missing from a still-populating index (FUTURE, or the
-                # INSTANT-promoted primary) — defer rather than fail; the fully-populated
-                # index's write already committed in the pair.
-                port_index_missing = False
-                for retry_document_index in retry_document_indices:
-                    try:
-                        # TODO(andrei): Previously there was a comment here saying
-                        # it was ok if a doc did not exist in the document index. I
-                        # don't agree with that claim, so keep an eye on this task
-                        # to see if this raises.
-                        retry_document_index.update([update_request])
-                    except SecondaryIndexDocumentMissingError:
-                        task_logger.debug(
-                            f"doc={document_id} not in a still-porting index; deferring sync."
-                        )
-                        port_index_missing = True
+        if update_request is None:
+            elapsed = time.monotonic() - start
+            task_logger.info(
+                f"doc={document_id} action=no_operation elapsed={elapsed:.2f}"
+            )
+            completion_status = OnyxCeleryTaskCompletionStatus.SKIPPED
+        else:
+            # Build document-index clients outside the DB session — construction
+            # can take a few seconds to connect to the document index server,
+            # and we don't want to pin a connection while that happens.
+            # This flow is for updates so we get all indices.
+            document_indices = get_all_document_indices(
+                search_settings=primary_search_settings,
+                secondary_search_settings=secondary_search_settings,
+                httpx_client=HttpxPool.get("vespa"),
+                primary_backfill_in_progress=primary_backfill_in_progress,
+            )
 
-                # update db last. Worst case = we crash right before this and
-                # the sync might repeat again later.
-                # Defer only if the doc can still be ported; an INVALID/DELETING-only
-                # doc's flag would never clear -> swap deadlock, so mark it synced.
+            retry_document_indices: list[RetryDocumentIndex] = [
+                RetryDocumentIndex(document_index)
+                for document_index in document_indices
+            ]
+
+            # Phase 2: document-index I/O — no DB connection held.
+            # Reindex-port: doc missing from a still-populating index (FUTURE, or the
+            # INSTANT-promoted primary) — defer rather than fail; the fully-populated
+            # index's write already committed in the pair.
+            port_index_missing = False
+            for retry_document_index in retry_document_indices:
+                try:
+                    # TODO(andrei): Previously there was a comment here saying
+                    # it was ok if a doc did not exist in the document index. I
+                    # don't agree with that claim, so keep an eye on this task
+                    # to see if this raises.
+                    retry_document_index.update([update_request])
+                except SecondaryIndexDocumentMissingError:
+                    task_logger.debug(
+                        f"doc={document_id} not in a still-porting index; deferring sync."
+                    )
+                    port_index_missing = True
+
+            # Phase 3: write back to PG in a fresh transaction.
+            # update db last. Worst case = we crash right before this and
+            # the sync might repeat again later.
+            # Defer only if the doc can still be ported; an INVALID/DELETING-only
+            # doc's flag would never clear -> swap deadlock, so mark it synced.
+            with get_session_with_current_tenant() as db_session:
                 if port_index_missing and document_has_indexable_cc_pair(
                     db_session, document_id
                 ):
@@ -563,9 +580,9 @@ def document_index_metadata_sync_task(
                 else:
                     mark_document_as_synced(document_id, db_session)
 
-                elapsed = time.monotonic() - start
-                task_logger.info(f"doc={document_id} action=sync elapsed={elapsed:.2f}")
-                completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
+            elapsed = time.monotonic() - start
+            task_logger.info(f"doc={document_id} action=sync elapsed={elapsed:.2f}")
+            completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
         completion_status = OnyxCeleryTaskCompletionStatus.SOFT_TIME_LIMIT
