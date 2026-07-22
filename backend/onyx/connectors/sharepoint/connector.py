@@ -1570,12 +1570,18 @@ class SharepointConnector(
             # browser/SharePoint URL uses "Documents". Identify the intended
             # drive by its stable driveType (falling back to name), never by
             # position in the /drives response, whose order is not guaranteed.
-            onedrive_matches = [
+            # Prefer driveType matches so a uniquely-typed primary drive is not
+            # made ambiguous by an unrelated library sharing a fallback name;
+            # only consult names when no drive has a primary type.
+            type_matches = [
                 d
                 for d in drives
                 if (d.drive_type or "").lower() in ONEDRIVE_PRIMARY_DRIVE_TYPES
-                or (d.name and d.name.lower() in ONEDRIVE_DRIVE_NAMES)
             ]
+            name_matches = [
+                d for d in drives if d.name and d.name.lower() in ONEDRIVE_DRIVE_NAMES
+            ]
+            onedrive_matches = type_matches or name_matches
             if PERSONAL_SITE_URL_MARKER in site_descriptor.url.lower():
                 # A personal site has exactly one user OneDrive; refuse to guess
                 # when the lookup is ambiguous rather than index an arbitrary

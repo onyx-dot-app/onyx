@@ -318,6 +318,21 @@ def test_resolve_drive_personal_falls_back_to_name_when_type_missing() -> None:
     assert drive_id == onedrive.id
 
 
+def test_resolve_drive_personal_prefers_type_over_name_collision() -> None:
+    """A uniquely-typed primary drive wins even if another library reuses a name."""
+    # Localized primary drive name so resolution must rely on driveType.
+    primary = _FakeDrive("Mon lecteur OneDrive", drive_type="business")
+    # An extra library that happens to carry a fallback OneDrive name but is not
+    # the user's primary drive.
+    extra_library = _FakeDrive("OneDrive", drive_type="documentLibrary")
+
+    result = _resolve_personal([extra_library, primary])
+
+    assert result is not None
+    drive_id, _ = result
+    assert drive_id == primary.id
+
+
 def test_resolve_drive_personal_ambiguous_returns_none() -> None:
     """Refuse to guess when multiple primary-OneDrive candidates exist."""
     first = _FakeDrive("OneDrive", drive_type="business")
