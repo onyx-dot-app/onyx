@@ -419,6 +419,12 @@ _OPENAI_MODELS_REJECTING_REASONING_EFFORT = ("o1-mini", "o1-preview")
 
 
 def openai_model_rejects_reasoning_effort(model_name: str) -> bool:
+    """Deliberately name-only — no provider guard. These names are OpenAI
+    models wherever they're hosted (Azure, LiteLLM proxy, OpenAI-compatible
+    gateways), and a provider guard would reintroduce the 400 behind
+    gateways. The asymmetry favors matching broadly: a false positive only
+    omits an optional parameter, a false negative is a hard request failure.
+    """
     base_model_name = model_name.lower().split("/")[-1]
     return base_model_name.startswith(_OPENAI_MODELS_REJECTING_REASONING_EFFORT)
 
