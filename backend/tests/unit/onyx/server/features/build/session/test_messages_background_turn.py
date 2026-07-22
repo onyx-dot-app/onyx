@@ -131,6 +131,7 @@ def test_send_message_preserves_legacy_provider_selection(
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
     monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
 
@@ -163,6 +164,7 @@ def test_send_message_prefers_provider_id_over_legacy_provider(
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
     monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
 
