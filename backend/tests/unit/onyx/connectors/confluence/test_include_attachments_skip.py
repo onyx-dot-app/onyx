@@ -1,12 +1,6 @@
-"""Tests for the `include_attachments` connector setting.
-
-When include_attachments is False, neither the main indexing pass nor the
-slim-doc pass may emit attachments. The two passes must stay in lockstep:
-slim docs the main pass never indexed become permanent chunk_count IS NULL
-ghost rows, while correctly omitting attachments from the slim pass is what
-lets pruning clean up previously indexed attachment docs after an admin
-turns the setting off.
-"""
+"""Tests that `include_attachments=False` suppresses attachments in both the
+main indexing pass and the slim-doc pass, which must stay in lockstep (see
+the admission comment in `_retrieve_all_slim_docs`)."""
 
 from typing import Any
 from unittest import mock

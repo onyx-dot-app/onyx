@@ -178,9 +178,8 @@ class ConfluenceConnector(
         labels_to_skip: list[str] = CONFLUENCE_CONNECTOR_LABELS_TO_SKIP,
         timezone_offset: float = CONFLUENCE_TIMEZONE_OFFSET,
         scoped_token: bool = False,
-        # Defaults to True (unlike newer connectors) because Confluence
-        # historically always indexed attachments; existing connector rows
-        # have no include_attachments key and must keep that behavior.
+        # default True: configs stored before this option existed must keep
+        # indexing attachments
         include_attachments: bool = True,
     ) -> None:
         self.wiki_base = wiki_base
@@ -1198,13 +1197,10 @@ class ConfluenceConnector(
                     limit=_SLIM_DOC_BATCH_SIZE,
                 )
             for attachment in attachment_results:
-                # Admission here must mirror the main indexing pass
-                # (include_attachments and allow_images). Otherwise the slim
-                # path emits a SlimDocument for an attachment the main path
-                # never produces a Document for, leaving a permanent
-                # chunk_count IS NULL row — and conversely, omitting docs the
-                # main path indexed is what lets pruning clean them up once
-                # include_attachments is turned off.
+                # admission must mirror the main indexing pass
+                # (include_attachments + allow_images): extra slim docs become
+                # permanent chunk_count IS NULL rows, missing ones let pruning
+                # clean up docs the main pass no longer indexes
                 media_type = attachment.get("metadata", {}).get("mediaType", "")
                 if not self.allow_images and media_type.startswith("image/"):
                     continue

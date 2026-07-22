@@ -142,13 +142,9 @@ export interface ConnectionConfiguration {
   ) => boolean;
 }
 
-// Shared "Include Attachments" checkbox for connectors that support skipping
-// attachment indexing. Backend convention: the connector's __init__ takes an
-// `include_attachments: bool` kwarg that gates both the indexing pass and the
-// slim-doc (pruning / perm-sync) pass. Connectors that historically always
-// indexed attachments must default this to true — existing connector rows have
-// no `include_attachments` key stored, so the backend default is what they
-// get. Connectors that never indexed attachments before should default false.
+// Shared "Include Attachments" checkbox. Pair with an `include_attachments`
+// kwarg on the backend connector; see backend/onyx/connectors/README.md for
+// the convention, including how to pick the default.
 export function buildIncludeAttachmentsOption(
   defaultValue: boolean
 ): BooleanOption {
