@@ -13,6 +13,7 @@ LiteLLM, so this is also the guard that a LiteLLM version bump doesn't
 silently change the surface.
 """
 
+from typing import Any
 from urllib.parse import urlparse
 
 import pytest
@@ -57,9 +58,9 @@ def _record_posted_urls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     urls: list[str] = []
     original_post = HTTPHandler.post
 
-    def recording_post(self: HTTPHandler, url: str, *args: object, **kwargs: object):
+    def recording_post(self: HTTPHandler, url: str, *args: Any, **kwargs: Any) -> Any:
         urls.append(str(url))
-        return original_post(self, url, *args, **kwargs)  # type: ignore[arg-type]
+        return original_post(self, url, *args, **kwargs)
 
     monkeypatch.setattr(HTTPHandler, "post", recording_post)
     return urls
