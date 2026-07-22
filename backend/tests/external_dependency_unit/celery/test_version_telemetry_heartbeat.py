@@ -1,8 +1,4 @@
-"""Tests for the self-hosted version telemetry heartbeat task.
-
-Verifies the daily dedupe behavior (Redis marker) and the multi-tenant no-op,
-using a real Redis instance and a mocked telemetry sender.
-"""
+"""Tests for the self-hosted version telemetry heartbeat task."""
 
 from collections.abc import Generator
 from unittest.mock import patch
@@ -44,12 +40,11 @@ def test_emits_version_once_per_day() -> None:
             tenant_id=_TENANT_ID,
         )
 
-        # Marker is set, so subsequent runs within the TTL window are no-ops
         emit_version_telemetry(tenant_id=_TENANT_ID)
         emit_version_telemetry(tenant_id=_TENANT_ID)
         assert mock_telemetry.call_count == 1
 
-    # Once the marker expires (simulated by deleting it), the task emits again
+    # marker expiry (simulated by deleting it) allows the next report
     redis_client = get_redis_client(tenant_id=_TENANT_ID)
     redis_client.delete(_VERSION_TELEMETRY_EMITTED_KEY)
 
@@ -66,8 +61,8 @@ def test_marker_has_expiration() -> None:
         emit_version_telemetry(tenant_id=_TENANT_ID)
 
     redis_client = get_redis_client(tenant_id=_TENANT_ID)
+    # a marker without a TTL would permanently silence the heartbeat
     ttl = redis_client.ttl(_VERSION_TELEMETRY_EMITTED_KEY)
-    # A marker without a TTL (-1) would permanently silence the heartbeat
     assert 0 < ttl <= 24 * 60 * 60
 
 
@@ -90,7 +85,6 @@ def test_noop_on_multi_tenant() -> None:
 
 
 def test_task_is_scheduled_self_hosted() -> None:
-    """The heartbeat must be present in the self-hosted beat schedule."""
     from onyx.background.celery.tasks.beat_schedule import get_tasks_to_schedule
     from onyx.configs.constants import OnyxCeleryTask
 

@@ -1154,11 +1154,6 @@ def cloud_monitor_celery_pidbox(
 
 """Version telemetry heartbeat"""
 
-# The api_server emits a VERSION record at startup, but instances that run for a
-# long time without restarting would otherwise go silent. This heartbeat keeps
-# active self-hosted instances reporting the build they are running. The beat
-# entry ticks hourly; the Redis marker (1 day TTL) enforces the daily cadence and
-# is robust to beat schedule state being lost on restarts.
 _VERSION_TELEMETRY_EMITTED_KEY = "monitoring_version_telemetry_emitted"
 
 
@@ -1168,9 +1163,12 @@ _VERSION_TELEMETRY_EMITTED_KEY = "monitoring_version_telemetry_emitted"
     queue=OnyxCeleryQueues.MONITORING,
 )
 def emit_version_telemetry(*, tenant_id: str) -> None:
-    """Daily heartbeat reporting the running build of self-hosted instances."""
-    # Cloud deployment versions are tracked at deploy time; VERSION telemetry
-    # records are only meaningful for self-hosted instances.
+    """Daily heartbeat reporting the running build of self-hosted instances.
+
+    Scheduled hourly (beat schedule state doesn't survive restarts, so a daily
+    interval could never fire); the 1-day-TTL Redis marker enforces the daily
+    cadence.
+    """
     if MULTI_TENANT:
         return
 
