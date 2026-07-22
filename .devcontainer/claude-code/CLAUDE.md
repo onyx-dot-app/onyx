@@ -7,10 +7,8 @@ Running **inside the Onyx dev container**. These notes are additive to the root
 
 Don't use `docker` / `docker exec` / `docker compose`. Onyx services run as sibling
 containers on the `onyx_default` network, reachable directly by hostname — the root
-guide's `psql` command works as-is here (the env vars below are exported); its
-`docker exec` fallback won't. `POSTGRES_PASSWORD` is *not* exported — the command's
-`password` default matches the dev stack; export it yourself if your database uses a
-different password.
+guide's `psql` command works as-is here (the env vars below plus `POSTGRES_PASSWORD`
+are exported); its `docker exec` fallback won't.
 
 ## Service hostnames (`onyx_default` network)
 
