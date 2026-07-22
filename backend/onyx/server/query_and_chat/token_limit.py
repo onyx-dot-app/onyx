@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from math import ceil
 from threading import RLock
 
@@ -15,7 +15,7 @@ from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.db.user_usage import (
     TokenUsageBucket,
     get_cost_window_start,
-    get_next_cost_bucket_start,
+    get_next_usage_bucket_start,
     get_token_window_start,
     get_total_cost_cents_buckets_since,
     get_total_token_buckets_since,
@@ -216,13 +216,13 @@ def raise_rate_limited(scope: str, reset_at: datetime) -> None:
 def _token_reset_at(limit: TokenRateLimit | None) -> datetime | None:
     if limit is None:
         return None
-    return datetime.now(timezone.utc) + timedelta(hours=limit.period_hours)
+    return get_next_usage_bucket_start(datetime.now(timezone.utc))
 
 
 def _cost_reset_at(limit: TokenRateLimit | None) -> datetime | None:
     if limit is None:
         return None
-    return get_next_cost_bucket_start(datetime.now(timezone.utc))
+    return get_next_usage_bucket_start(datetime.now(timezone.utc))
 
 
 def _raise_for_latest_reset(scope: str, *reset_times: datetime | None) -> None:

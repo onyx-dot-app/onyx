@@ -61,7 +61,7 @@ def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
     )
 
 
-def get_next_cost_bucket_start(now: datetime) -> datetime:
+def get_next_usage_bucket_start(now: datetime) -> datetime:
     return get_window_start(now, USER_USAGE_BUCKET_SECONDS) + timedelta(
         seconds=USER_USAGE_BUCKET_SECONDS
     )

@@ -20,7 +20,7 @@ from onyx.db.models import (
 from onyx.db.user_usage import (
     TokenUsageBucket,
     get_cost_window_start,
-    get_next_cost_bucket_start,
+    get_next_usage_bucket_start,
     record_user_usage,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -74,7 +74,7 @@ def _assert_cost_rate_limited(error: OnyxError, scope: TokenRateLimitScope) -> N
     _assert_rate_limited(error, scope)
     assert error.extra is not None
     assert datetime.fromisoformat(str(error.extra["reset_at"])) == (
-        get_next_cost_bucket_start(datetime.now(timezone.utc))
+        get_next_usage_bucket_start(datetime.now(timezone.utc))
     )
 
 
@@ -188,6 +188,6 @@ def test_user_token_limit_behavior_is_unchanged(
         ee_token_limit._user_is_rate_limited(user.id)
     _assert_rate_limited(exc_info.value, TokenRateLimitScope.USER)
     assert exc_info.value.extra is not None
-    retry_after_seconds = exc_info.value.extra["retry_after_seconds"]
-    assert isinstance(retry_after_seconds, int)
-    assert abs(retry_after_seconds - 2 * 60 * 60) <= 1
+    assert datetime.fromisoformat(str(exc_info.value.extra["reset_at"])) == (
+        get_next_usage_bucket_start(datetime.now(timezone.utc))
+    )
