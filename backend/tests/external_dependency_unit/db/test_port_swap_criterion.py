@@ -61,6 +61,28 @@ from tests.external_dependency_unit.indexing_helpers import (
     make_cc_pair,
     make_future_search_settings,
 )
+from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.models import PortAttempt
+from onyx.db.models import SearchSettings
+from onyx.db.models import User
+from onyx.db.port_attempt import cancel_active_port_attempts
+from onyx.db.port_attempt import create_port_attempt
+from onyx.db.port_attempt import get_active_port_attempt
+from onyx.db.port_attempt import mark_port_canceled
+from onyx.db.port_attempt import mark_port_failed
+from onyx.db.port_attempt import mark_port_in_progress
+from onyx.db.port_attempt import mark_port_succeeded
+from onyx.db.port_attempt import pause_port_attempt
+from onyx.db.port_attempt import request_port_cancel
+from onyx.db.swap_index import _port_swap_ready
+from onyx.db.swap_index import _required_cc_pairs_for_switchover
+from onyx.db.swap_index import check_and_perform_index_swap
+from onyx.kg.models import KGStage
+from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
+from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair_and_future
+from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from tests.external_dependency_unit.indexing_helpers import make_future_search_settings
 
 _PENDING_DOC_PREFIX = "swapdoc-"
 
@@ -122,6 +144,63 @@ def test_port_swap_blocks_on_active_port(
     attempt = create_port_attempt(db_session, cc_pair.id, future_id)
     mark_port_in_progress(db_session, attempt.id)  # active, not terminal
     assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+
+
+def _pause_unit(db_session: Session, cc_pair_id: int, ss_id: int) -> None:
+    """Park a connector unit at PAUSED (FAILED -> PAUSED) for the swap-gate tests."""
+    attempt = create_port_attempt(db_session, cc_pair_id, ss_id)
+    mark_port_in_progress(db_session, attempt.id)
+    mark_port_failed(db_session, attempt.id, error_msg="durable")
+    assert pause_port_attempt(db_session, attempt.id) is True
+
+
+def test_port_swap_paused_connector_blocks_until_success(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A PAUSED connector port blocks the swap (only SUCCESS clears the gate); once the
+    operator Resumes and the fresh attempt SUCCEEDs, the swap unblocks. Guards that PAUSED
+    is not mistaken for a settled/successful state."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+
+    _pause_unit(db_session, cc_pair.id, future_id)
+    assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+
+    # a Resume mints a fresh attempt that eventually SUCCEEDs -> latest is SUCCESS -> ready
+    _make_success_port(db_session, cc_pair.id, future_id)
+    db_session.expire_all()
+    assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+
+
+def test_port_swap_paused_user_blocks(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A PAUSED user port blocks the swap via all_user_scopes_ported (PAUSED isn't settled).
+    Pure regression guard for the user branch."""
+    _cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    user = create_test_user(db_session, "port_paused_user")
+    try:
+        attempt = create_port_attempt(db_session, None, future_id, port_user_id=user.id)
+        mark_port_in_progress(db_session, attempt.id)
+        mark_port_failed(db_session, attempt.id, error_msg="durable")
+        assert pause_port_attempt(db_session, attempt.id) is True
+
+        # no required connectors; the single required user is PAUSED -> blocked
+        assert _port_swap_ready(db_session, future_ss, [], [user.id]) is False
+    finally:
+        db_session.rollback()
+        db_session.query(PortAttempt).filter(
+            PortAttempt.port_user_id == user.id
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+        # delete the user via the ORM object (a User.id column-equality delete trips ty)
+        fresh_user = db_session.get(User, user.id)
+        if fresh_user is not None:
+            db_session.delete(fresh_user)
+            db_session.commit()
 
 
 def test_port_swap_blocks_on_pending_sync_backlog(

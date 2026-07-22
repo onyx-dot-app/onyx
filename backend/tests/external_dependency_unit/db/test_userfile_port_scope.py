@@ -37,6 +37,29 @@ from onyx.db.user_file import (
     mark_user_file_reconcile_pending,
     user_file_port_scope_active,
 )
+from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import SearchSettings
+from onyx.db.models import User
+from onyx.db.models import UserFile
+from onyx.db.port_attempt import count_active_port_attempts
+from onyx.db.port_attempt import create_port_attempt
+from onyx.db.port_attempt import get_active_port_attempt
+from onyx.db.port_attempt import get_latest_port_attempt
+from onyx.db.port_attempt import get_reindex_error_rows
+from onyx.db.port_attempt import get_reindex_progress_counts
+from onyx.db.port_attempt import mark_port_canceled
+from onyx.db.port_attempt import mark_port_failed
+from onyx.db.port_attempt import mark_port_in_progress
+from onyx.db.port_attempt import mark_port_succeeded
+from onyx.db.port_attempt import pause_port_attempt
+from onyx.db.user_file import clear_user_file_reconcile_pending
+from onyx.db.user_file import count_user_files_reconcile_pending
+from onyx.db.user_file import fetch_port_scope_user_ids
+from onyx.db.user_file import filter_existing_user_file_ids
+from onyx.db.user_file import get_max_user_file_id_for_user
+from onyx.db.user_file import get_user_file_ids_for_user_batch
+from onyx.db.user_file import mark_user_file_reconcile_pending
+from onyx.db.user_file import user_file_port_scope_active
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
@@ -317,6 +340,12 @@ def test_reindex_progress_counts_and_errors_both_scopes(
         mark_port_canceled(
             db_session, create_port_attempt(db_session, cc_canceled.id, ss.id).id
         )
+        cc_paused = make_cc_pair(db_session)  # auto-paused -> paused bucket
+        cc_paused_attempt = create_port_attempt(db_session, cc_paused.id, ss.id)
+        mark_port_failed(
+            db_session, cc_paused_attempt.id, error_msg="connector paused boom"
+        )
+        assert pause_port_attempt(db_session, cc_paused_attempt.id) is True
         cc_pairs = [
             cc_waiting,
             cc_no_attempt,
@@ -324,6 +353,7 @@ def test_reindex_progress_counts_and_errors_both_scopes(
             cc_completed,
             cc_failed,
             cc_canceled,
+            cc_paused,
         ]
 
         # Users (per-user scope; a COMPLETED file puts the user in scope).
@@ -344,36 +374,56 @@ def test_reindex_progress_counts_and_errors_both_scopes(
         )
         u_waiting = create_test_user(db_session, "reindexprog")
         _make_user_file(db_session, u_waiting.id)  # no attempt -> waiting
-        users = [u_completed, u_failed, u_waiting]
+        u_paused = create_test_user(db_session, "reindexprog")
+        _make_user_file(db_session, u_paused.id)
+        u_paused_attempt = create_port_attempt(
+            db_session, None, ss.id, port_user_id=u_paused.id
+        )
+        mark_port_failed(db_session, u_paused_attempt.id, error_msg="user paused boom")
+        assert pause_port_attempt(db_session, u_paused_attempt.id) is True
+        users = [u_completed, u_failed, u_waiting, u_paused]
 
         counts = get_reindex_progress_counts(db_session, ss.id)
         # Exact: only this fresh FUTURE's attempts contribute to these buckets.
         assert counts.in_progress == 1
         assert counts.completed == 2
         assert counts.failed == 2
+        assert counts.paused == 2
         assert (
-            counts.waiting + counts.in_progress + counts.completed + counts.failed
+            counts.waiting
+            + counts.in_progress
+            + counts.completed
+            + counts.failed
+            + counts.paused
             == counts.total
         )
-        assert counts.total >= 9
+        assert counts.total >= 11
         assert counts.waiting >= 4
 
         rows = get_reindex_error_rows(db_session, ss.id)
         by_key = {(r.scope, r.name): r for r in rows}
 
-        assert ("connector", cc_failed.name) in by_key
+        # FAILED rows: paused=False
         conn_row = by_key[("connector", cc_failed.name)]
         assert conn_row.cc_pair_id == cc_failed.id
         assert conn_row.user_id is None
         assert conn_row.error_msg == "connector boom"
+        assert conn_row.paused is False
 
-        assert ("user_file", u_failed.email) in by_key
         user_row = by_key[("user_file", u_failed.email)]
         assert user_row.user_id == u_failed.id
         assert user_row.cc_pair_id is None
         assert user_row.error_msg == "user boom"
+        assert user_row.paused is False
 
-        assert len(rows) == counts.failed == 2
+        # PAUSED rows: paused=True, error_msg kept
+        conn_paused_row = by_key[("connector", cc_paused.name)]
+        assert conn_paused_row.paused is True
+        assert conn_paused_row.error_msg == "connector paused boom"
+        user_paused_row = by_key[("user_file", u_paused.email)]
+        assert user_paused_row.paused is True
+
+        assert len(rows) == counts.failed + counts.paused == 4
     finally:
         db_session.rollback()
         db_session.query(SearchSettings).filter(SearchSettings.id == ss.id).delete(
