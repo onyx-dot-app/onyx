@@ -196,8 +196,8 @@ def _user_file_port_has_pending_work(
     — the row-aware form reintroduces the fixed cap-predicate stall. Users have no
     paused concept, so the set is switchover-agnostic.
 
-    Deliberately NOT gated on secondary_only_sync_pending: that flag is drained by the
-    sync path (which writes the promoted index from blob/DB, never the source), so it
+    Deliberately NOT gated on secondary_reconcile_pending: that flag is drained by the
+    reconciler (which writes the promoted index from blob/DB, never the source), so it
     must not pin the source — it gates the non-INSTANT swap instead (_port_swap_ready).
     """
     portable_users = set(fetch_port_scope_user_ids(db_session))
