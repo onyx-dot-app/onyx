@@ -31,6 +31,7 @@ import {
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import {
+  pickerEntryConnectionPath,
   pickerEntryKey,
   pickerEntryPromptPrefix,
   toPickerSections,
@@ -88,6 +89,7 @@ const CraftInputBar = memo(
     ) => {
       const baseRef = useRef<BaseInputBarHandle>(null);
       const fileInputRef = useRef<HTMLInputElement>(null);
+      const router = useRouter();
 
       const {
         currentMessageFiles,
@@ -126,15 +128,23 @@ const CraftInputBar = memo(
       } | null>(null);
       const dismissEntryInfo = useCallback(() => setEntryInfo(null), []);
 
-      const addEntry = useCallback((entry: PickerEntry) => {
-        setActiveEntries((prev) =>
-          prev.some(
-            (candidate) => pickerEntryKey(candidate) === pickerEntryKey(entry)
-          )
-            ? prev
-            : [...prev, entry]
-        );
-      }, []);
+      const addEntry = useCallback(
+        (entry: PickerEntry) => {
+          const connectionPath = pickerEntryConnectionPath(entry);
+          if (connectionPath) {
+            router.push(connectionPath);
+            return;
+          }
+          setActiveEntries((prev) =>
+            prev.some(
+              (candidate) => pickerEntryKey(candidate) === pickerEntryKey(entry)
+            )
+              ? prev
+              : [...prev, entry]
+          );
+        },
+        [router]
+      );
 
       const removeEntry = useCallback((entryKey: string) => {
         setActiveEntries((prev) =>
@@ -211,7 +221,6 @@ const CraftInputBar = memo(
         />
       );
 
-      const router = useRouter();
       const plusMenuItems = useMemo(
         () =>
           buildEntryMenuItems(pickerSections, {

@@ -120,7 +120,15 @@ export function pickerEntryKey(entry: PickerEntry): string {
 export function pickerEntryPromptPrefix(entry: PickerEntry): string {
   return entry.kind === "skill"
     ? `/${entry.slug}`
-    : `[Use external app "${entry.name}" (ID: ${entry.externalAppId})]`;
+    : `[Use external app ${JSON.stringify(entry.name)} (ID: ${entry.externalAppId})]`;
+}
+
+export function pickerEntryConnectionPath(
+  entry: PickerEntry
+): `/craft/v1/apps?connect=${number}` | null {
+  return entry.kind === "app" && !entry.authenticated
+    ? `/craft/v1/apps?connect=${entry.externalAppId}`
+    : null;
 }
 
 export function filterPickerSections(

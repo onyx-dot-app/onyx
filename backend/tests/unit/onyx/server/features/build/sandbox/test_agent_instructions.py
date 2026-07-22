@@ -147,9 +147,11 @@ def test_generate_agent_instructions_fills_connectable_list_from_template() -> N
     """Connectable apps → template-owned blurb renders with the substituted list."""
     content = agent_instructions.generate_agent_instructions(
         template_path=_template_path(),
-        connectable_apps_section="- **slack**: SENTINEL_CONNECTABLE",
+        connectable_apps_section="- External app ID `42`: **SENTINEL_CONNECTABLE**",
     )
 
     assert "## Connectable apps" in content
-    assert "- **slack**: SENTINEL_CONNECTABLE" in content
+    assert "numeric external app ID from the list below" in content
+    assert "with its slug" not in content
+    assert "- External app ID `42`: **SENTINEL_CONNECTABLE**" in content
     assert _unresolved_placeholders(content) == set()

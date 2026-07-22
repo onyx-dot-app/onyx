@@ -156,6 +156,19 @@ describe("parsePacket", () => {
     });
   });
 
+  it.each([undefined, null, 0, -1, 1.5, Number.NaN, "17"])(
+    "rejects connect-app requests with invalid app ID %p",
+    (externalAppId) => {
+      expect(
+        parsePacket({
+          type: "connect_app_request",
+          request_id: "req-1",
+          external_app_id: externalAppId,
+        })
+      ).toEqual({ type: "unknown" });
+    }
+  );
+
   it("parses context_usage from persisted (snake_case) and live (camelCase) shapes", () => {
     expect(parsePacket({ type: "context_usage", used_tokens: 15526 })).toEqual({
       type: "context_usage",

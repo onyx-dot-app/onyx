@@ -77,13 +77,22 @@ export function parsePacket(raw: unknown): ParsedPacket {
           | null,
       };
 
-    case "connect_app_request":
+    case "connect_app_request": {
+      const externalAppId = p.external_app_id;
+      if (
+        typeof externalAppId !== "number" ||
+        !Number.isSafeInteger(externalAppId) ||
+        externalAppId <= 0
+      ) {
+        return { type: "unknown" };
+      }
       return {
         type: "connect_app_request",
         requestId: (p.request_id ?? "") as string,
-        externalAppId: Number(p.external_app_id ?? 0),
+        externalAppId,
         reason: (p.reason ?? null) as string | null,
       };
+    }
 
     case "context_usage":
       return {

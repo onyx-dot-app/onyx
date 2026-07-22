@@ -41,6 +41,30 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    has_non_representable_apps = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                """
+            SELECT EXISTS (
+                SELECT 1
+                FROM external_app
+                LEFT JOIN external_app__skill
+                    ON external_app__skill.external_app_id = external_app.id
+                GROUP BY external_app.id
+                HAVING COUNT(external_app__skill.skill_id) <> 1
+            )
+            """
+            )
+        )
+        .scalar_one()
+    )
+    if has_non_representable_apps:
+        raise RuntimeError(
+            "Cannot downgrade while an external app has zero or multiple "
+            "associated skills; the previous schema requires exactly one."
+        )
+
     op.add_column(
         "external_app",
         sa.Column("skill_id", postgresql.UUID(as_uuid=True), nullable=True),
