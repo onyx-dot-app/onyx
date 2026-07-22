@@ -26,6 +26,7 @@
     "ONYX_DEVCONTAINER_FIREWALL": "${localEnv:ONYX_DEVCONTAINER_FIREWALL}",
     "OPENSEARCH_HOST": "opensearch",
     "POSTGRES_HOST": "relational_db",
+    "POSTGRES_PASSWORD": "${localEnv:POSTGRES_PASSWORD:password}",
     "REDIS_HOST": "cache",
     "S3_ENDPOINT_URL": "http://minio:9000",
     "SSH_AUTH_SOCK": "/tmp/ssh-agent.sock",
