@@ -41,6 +41,10 @@ class OIDCProviderConfig(_ProviderConfig):
     client_secret: str
     openid_config_url: str
     legacy_callback: bool = False
+    # Strict opt-in: reject sign-ins when userinfo omits the optional
+    # email_verified claim (some IdPs, e.g. Microsoft Entra ID, omit it).
+    # Any present value other than true is rejected regardless.
+    require_verified_email: bool = False
 
 
 class SAMLProviderConfig(_ProviderConfig):
