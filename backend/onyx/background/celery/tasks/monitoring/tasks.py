@@ -13,6 +13,7 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from onyx import __version__
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import (
     celery_get_broker_client,
@@ -20,6 +21,7 @@ from onyx.background.celery.celery_redis import (
     celery_get_unacked_task_ids,
 )
 from onyx.background.celery.memory_monitoring import emit_process_memory
+from onyx.configs.app_configs import DISABLE_TELEMETRY
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     ONYX_CLOUD_TENANT_ID,
@@ -1149,3 +1151,45 @@ def cloud_monitor_celery_pidbox(
 
     # Enable later in case we want some aggregate metrics
     # task_logger.info(f"Deleted idle pidbox: pidbox={key_str}")
+
+
+"""Version telemetry heartbeat"""
+
+_VERSION_TELEMETRY_EMITTED_KEY = "monitoring_version_telemetry_emitted"
+_VERSION_TELEMETRY_TTL_SECONDS = 24 * 60 * 60
+
+
+@shared_task(
+    name=OnyxCeleryTask.EMIT_VERSION_TELEMETRY,
+    ignore_result=True,
+    queue=OnyxCeleryQueues.MONITORING,
+)
+def emit_version_telemetry(*, tenant_id: str) -> None:
+    """Daily heartbeat reporting the running build of self-hosted instances.
+
+    Scheduled hourly (beat schedule state doesn't survive restarts, so a daily
+    interval could never fire); the 1-day-TTL Redis marker enforces the daily
+    cadence.
+    """
+    if MULTI_TENANT or DISABLE_TELEMETRY:
+        return
+
+    redis_std = get_redis_client(tenant_id=tenant_id)
+    # atomically claim the daily slot so overlapping runs can't double-report
+    if not redis_std.set(
+        _VERSION_TELEMETRY_EMITTED_KEY,
+        "1",
+        nx=True,
+        ex=_VERSION_TELEMETRY_TTL_SECONDS,
+    ):
+        return
+
+    delivered = optional_telemetry(
+        record_type=RecordType.VERSION,
+        data={"version": __version__},
+        tenant_id=tenant_id,
+        blocking=True,
+    )
+    if not delivered:
+        # release the slot so the next hourly tick retries
+        redis_std.delete(_VERSION_TELEMETRY_EMITTED_KEY)
