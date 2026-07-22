@@ -6,10 +6,11 @@ This file provides guidance to AI agents when working with code in this reposito
 
 - Python deps live in a `uv`-managed virtualenv at `.venv` (repo root). If it doesn't exist yet, create it
   with `uv sync --frozen`, then `source .venv/bin/activate`.
-- Test secrets live in gitignored env files: an OpenAI key in `.env` at the repo root, and `.vscode/.env`
-  (used by the test commands below). If `.vscode/.env` doesn't exist, create it by copying
-  `.vscode/env_template.txt` and filling in the values. If a key you need is missing, ask the user rather
-  than skipping tests.
+- Test secrets (API keys etc.) are resolved by `backend/tests/utils/aws_secrets.py`, in order: process
+  env vars → the gitignored `.vscode/.env` (also used by the test commands below; create it by copying
+  `.vscode/env_template.txt`) → AWS Secrets Manager (requires `aws sso login`). Tests declare what they
+  need via `@pytest.mark.secrets(TestSecret.X)`. If a key you need still can't be resolved, ask the user
+  rather than skipping tests.
 - If using `playwright` to explore the frontend, log in with username `admin_user@example.com` and password
   `TestPassword123!` (the admin user created by the playwright global setup — see
   `web/tests/e2e/constants.ts`). If it doesn't exist yet, register it via the signup page; the first user
