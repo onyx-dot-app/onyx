@@ -47,6 +47,7 @@ from onyx.db.gated_app import (
     replace_action_policies__no_commit,
 )
 from onyx.db.mcp import (
+    affected_user_ids_for_mcp_server,
     create_connection_config,
     create_mcp_server__no_commit,
     delete_all_user_connection_configs_for_server_no_commit,
@@ -364,6 +365,19 @@ router = APIRouter(prefix="/mcp")
 admin_router = APIRouter(prefix="/admin/mcp")
 
 HEADER_SUBSTITUTIONS: Literal["header_substitutions"] = "header_substitutions"
+
+
+def _hot_reload_craft_sessions(user_ids: set[UUID], db_session: Session) -> None:
+    """Push the current craft MCP config to affected users' running sandboxes so
+    a live Craft session picks it up on its next turn (via the skills-reload
+    pipeline) without a pod re-provision. Best-effort — the push pipeline logs
+    and swallows per-sandbox failures. Imported lazily to avoid a build-layer
+    import cycle at module load."""
+    if not user_ids:
+        return
+    from onyx.skills.push import push_skills_for_users
+
+    push_skills_for_users(user_ids, db_session)
 
 
 def _build_headers_from_template(
@@ -870,6 +884,11 @@ async def process_oauth_callback(
         redis_client.delete(key_state(user_id))
 
         db_session.commit()
+
+        # OAuth connect unblocks tool discovery for this user's craft session;
+        # reload it (single sandbox — this user only).
+        _hot_reload_craft_sessions({user.id}, db_session)
+
         return MCPOAuthCallbackResponse(
             success=True,
             server_id=mcp_server.id,
@@ -1046,6 +1065,10 @@ def save_user_credentials(
             "User credentials saved for server %s and user %s", mcp_server.name, email
         )
         db_session.commit()
+
+        # Connecting credentials unblocks tool discovery for this user's craft
+        # session (opencode's startup tools/list is credential-gated); reload it.
+        _hot_reload_craft_sessions({user.id}, db_session)
 
         return MCPApiKeyResponse(
             success=True,
@@ -2474,6 +2497,13 @@ def update_mcp_server_simple(
         replace_action_policies__no_commit(db_session, gated_app_id, sparse_policies)
 
     db_session.commit()
+
+    # Craft availability / URL live in each session's baked opencode.json;
+    # reload affected users so the change reaches running sandboxes. (Tool
+    # policies are enforced live by the proxy and need no reload.)
+    _hot_reload_craft_sessions(
+        affected_user_ids_for_mcp_server(updated_server, db_session), db_session
+    )
 
     # Return the updated server in API format
     return _db_mcp_server_to_api_mcp_server(

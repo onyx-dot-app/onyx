@@ -49,7 +49,7 @@ import tarfile
 import tempfile
 import threading
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
@@ -108,7 +108,6 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_TENANT_ID,
 )
 from onyx.server.features.build.sandbox.models import (
-    CraftMCPServerConfig,
     FatalWriteError,
     FileSet,
     FilesystemEntry,
@@ -1008,7 +1007,6 @@ class KubernetesSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -1122,7 +1120,6 @@ class KubernetesSandboxManager(SandboxManager):
                             _OPENCODE_CONNECT_APP_PLUGIN_PATH,
                             _OPENCODE_SESSION_TAG_PLUGIN_PATH,
                         ],
-                        mcp_servers=mcp_servers,
                     )
                 )
                 self._provision_opencode_secret(str(sandbox_id), opencode_config_json)
@@ -1519,6 +1516,32 @@ echo "Session workspace setup complete"
             raise RuntimeError(
                 f"Failed to setup session workspace {session_id}: {e}"
             ) from e
+
+    def write_session_opencode_config(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_config_json: str,
+    ) -> None:
+        pod_name = self._get_pod_name(str(sandbox_id))
+        session_path = shlex.quote(f"/workspace/sessions/{session_id}")
+        # base64 to sidestep shell-escaping the JSON's quotes/braces.
+        config_b64 = base64.b64encode(opencode_config_json.encode()).decode()
+        script = (
+            f"set -e\nmkdir -p {session_path}\n"
+            f"echo '{config_b64}' | base64 -d > {session_path}/opencode.json\n"
+        )
+        k8s_stream(
+            self._stream_core_api.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=self._namespace,
+            container=_SANDBOX_CONTAINER_NAME,
+            command=["/bin/sh", "-c", script],
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
 
     def cleanup_session_workspace(
         self,

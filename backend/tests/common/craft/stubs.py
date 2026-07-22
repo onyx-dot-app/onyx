@@ -50,13 +50,12 @@ Usage
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable
 from typing import Any, cast
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
 from onyx.server.features.build.sandbox.models import (
-    CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
     LLMProviderConfig,
@@ -192,6 +191,7 @@ class StubSandboxManager(SandboxManager):
         self.terminate_count: int = 0
         self.terminated_sandbox_ids: list[UUID] = []
         self.setup_session_workspace_count: int = 0
+        self.write_session_opencode_config_count: int = 0
         self.cleanup_session_workspace_count: int = 0
         self.regenerate_session_config_count: int = 0
         self.create_snapshot_count: int = 0
@@ -223,6 +223,7 @@ class StubSandboxManager(SandboxManager):
         self.last_provision_payload: dict[str, Any] | None = None
         self.last_terminate_sandbox_id: UUID | None = None
         self.last_setup_session_workspace_payload: dict[str, Any] | None = None
+        self.last_write_session_opencode_config_payload: dict[str, Any] | None = None
         self.last_cleanup_session_workspace_payload: dict[str, Any] | None = None
         self.last_regenerate_session_config_payload: dict[str, Any] | None = None
         self.last_create_snapshot_payload: dict[str, Any] | None = None
@@ -284,7 +285,6 @@ class StubSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> SandboxInfo:
         self.provision_count += 1
         self.last_provision_payload = {
@@ -294,11 +294,23 @@ class StubSandboxManager(SandboxManager):
             "llm_config": llm_config,
             "onyx_pat": onyx_pat,
             "all_llm_configs": all_llm_configs,
-            "mcp_servers": mcp_servers,
         }
         if self.provision_returns is None:
             raise _not_configured("provision")
         return self.provision_returns
+
+    def write_session_opencode_config(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_config_json: str,
+    ) -> None:
+        self.write_session_opencode_config_count += 1
+        self.last_write_session_opencode_config_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+            "opencode_config_json": opencode_config_json,
+        }
 
     def terminate(self, sandbox_id: UUID) -> None:
         self.terminate_count += 1

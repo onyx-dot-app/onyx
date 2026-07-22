@@ -13,6 +13,10 @@ from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.models import BuildSession, Skill, User
 from onyx.server.features.build.db.build_session import skills_are_stale
 from onyx.server.features.build.sandbox.models import FatalWriteError
+from onyx.server.features.build.sandbox.util.mcp_config import (
+    craft_mcp_fingerprint,
+    resolve_craft_mcp_servers,
+)
 from onyx.skills.push import compute_skill_runtime_hash, push_skills_for_users
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
@@ -135,13 +139,20 @@ def test_connectable_app_change_pushes_and_hashes_self_heal(
         changed_user.id: "new apps",
     }
 
+    # Seed the runtime hash with the same craft MCP fingerprint push_skills_for_users
+    # computes per user, so the "unchanged" sandbox is genuinely up to date.
+    def mcp_fp(user: User) -> str:
+        return craft_mcp_fingerprint(resolve_craft_mcp_servers(db_session, user))
+
     unchanged_sandbox.skills_hash = compute_skill_runtime_hash(
         files_for(unchanged_user, db_session),
         "",
+        mcp_fp(unchanged_user),
     )
     changed_sandbox.skills_hash = compute_skill_runtime_hash(
         files_for(changed_user, db_session),
         "old apps",
+        mcp_fp(changed_user),
     )
     unchanged_session.skills_hash = unchanged_sandbox.skills_hash
     changed_session.skills_hash = changed_sandbox.skills_hash

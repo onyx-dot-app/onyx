@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections import defaultdict
+from collections.abc import Sequence
 
 from sqlalchemy.orm import Session
 
-from onyx.db.mcp import get_craft_enabled_mcp_servers, get_mcp_tools_for_servers
+from onyx.db.mcp import (
+    get_craft_enabled_mcp_servers,
+    get_mcp_tools_for_servers,
+    get_user_authenticated_server_ids,
+)
 from onyx.db.models import MCPServer, User
 from onyx.server.features.build.sandbox.models import CraftMCPServerConfig
+from onyx.server.features.build.sandbox.util.opencode_config import (
+    build_session_mcp_config,
+)
 
 _NON_IDENTIFIER = re.compile(r"[^a-z0-9]+")
 
@@ -35,11 +45,47 @@ def resolve_craft_mcp_servers(
     for tool in get_mcp_tools_for_servers([s.id for s in servers], db_session):
         if tool.mcp_server_id is not None and not tool.enabled:
             disabled_by_server[tool.mcp_server_id].append(tool.name)
+    # Per-user credential presence feeds the runtime hash so connecting/
+    # disconnecting credentials hot-reloads the session (opencode re-runs tool
+    # discovery, which is credential-gated).
+    authed_ids = get_user_authenticated_server_ids(
+        [s.id for s in servers], user.email, db_session
+    )
     return [
         CraftMCPServerConfig(
             key=_server_key(server),
             url=server.server_url,
-            disabled_tools=tuple(disabled_by_server.get(server.id, ())),
+            disabled_tools=tuple(sorted(disabled_by_server.get(server.id, ()))),
+            server_id=server.id,
+            authenticated=server.id in authed_ids,
         )
         for server in servers
     ]
+
+
+def render_session_mcp_config_json(
+    db_session: Session, user: User, session_id: str
+) -> str:
+    """The per-session ``opencode.json`` (craft MCP servers + permission gates)
+    for ``user``, ready to write into ``session_id``'s workspace."""
+    servers = resolve_craft_mcp_servers(db_session, user)
+    return json.dumps(build_session_mcp_config(servers, session_id))
+
+
+def craft_mcp_fingerprint(mcp_servers: Sequence[CraftMCPServerConfig]) -> str:
+    """Stable digest of everything about the craft MCP set that a running
+    session must be rebuilt to pick up: the server set (id + url), each server's
+    disabled-tool set, and whether the user is authenticated (tool discovery is
+    credential-gated). Feeds the per-session runtime hash. Order-independent."""
+    payload = sorted(
+        [
+            s.server_id,
+            s.url,
+            list(s.disabled_tools),
+            s.authenticated,
+        ]
+        for s in mcp_servers
+    )
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()

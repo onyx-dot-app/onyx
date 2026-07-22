@@ -67,6 +67,9 @@ from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
+from onyx.server.features.build.sandbox.util.mcp_config import (
+    render_session_mcp_config_json,
+)
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import (
     RateLimitError,
@@ -295,6 +298,15 @@ class SessionManager:
                         ),
                         user_name=user.personal_name,
                     )
+                    # Rewrite the per-session MCP config BEFORE disposing the
+                    # instance so the fresh instance re-reads the current set.
+                    self._sandbox_manager.write_session_opencode_config(
+                        sandbox.id,
+                        session_id,
+                        render_session_mcp_config_json(
+                            self._db_session, user, str(session_id)
+                        ),
+                    )
                     if session.opencode_session_id is not None:
                         self._sandbox_manager.dispose_opencode_instance(
                             sandbox.id, session_id
@@ -476,6 +488,13 @@ class SessionManager:
             nextjs_port=nextjs_port,
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
+        )
+        self._sandbox_manager.write_session_opencode_config(
+            sandbox.id,
+            build_session.id,
+            render_session_mcp_config_json(
+                self._db_session, user, str(build_session.id)
+            ),
         )
         self._prewarm_opencode_session(sandbox, build_session)
 

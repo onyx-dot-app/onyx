@@ -68,7 +68,7 @@ import shlex
 import tarfile
 import threading
 import time
-from collections.abc import Generator, Sequence
+from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict
 from uuid import UUID
@@ -120,7 +120,6 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_TENANT_ID,
 )
 from onyx.server.features.build.sandbox.models import (
-    CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
     LLMProviderConfig,
@@ -827,7 +826,6 @@ class DockerSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning.")
@@ -877,7 +875,6 @@ class DockerSandboxManager(SandboxManager):
                     default_model=llm_config.model_name,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
                     plugins=plugins,
-                    mcp_servers=mcp_servers,
                 )
             )
             self._ensure_sandbox_image()
@@ -1152,6 +1149,27 @@ echo "Session workspace setup complete"
         except ExecError as e:
             raise RuntimeError(
                 f"Failed to setup session workspace {session_id}: {e}"
+            ) from e
+
+    def write_session_opencode_config(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_config_json: str,
+    ) -> None:
+        container = self._require_container(sandbox_id)
+        session_path = f"{SESSIONS_ROOT}/{session_id}"
+        # base64 to sidestep shell-escaping the JSON's quotes/braces.
+        config_b64 = base64.b64encode(opencode_config_json.encode()).decode()
+        script = (
+            f"set -e\nmkdir -p {session_path}\n"
+            f"echo '{config_b64}' | base64 -d > {session_path}/opencode.json\n"
+        )
+        try:
+            _run_in_container_as_sandbox_user(container, ["/bin/sh", "-c", script])
+        except ExecError as e:
+            raise RuntimeError(
+                f"Failed to write session opencode config {session_id}: {e}"
             ) from e
 
     def cleanup_session_workspace(
