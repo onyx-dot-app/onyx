@@ -1,5 +1,6 @@
 import time
 from collections.abc import Callable
+from datetime import datetime
 from http import HTTPStatus
 from typing import Any, cast
 
@@ -487,6 +488,7 @@ def document_index_metadata_sync_task(
         # bulk-deletion fan-out these sessions sit idle-in-transaction for
         # minutes and other writers queue behind them.
         update_request: MetadataUpdateRequest | None = None
+        doc_last_modified: datetime | None = None
         with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
             primary_search_settings = active_search_settings.primary
@@ -503,6 +505,8 @@ def document_index_metadata_sync_task(
 
             doc = get_document(document_id, db_session)
             if doc:
+                doc_last_modified = doc.last_modified
+
                 # document set sync
                 doc_sets = fetch_document_sets_for_document(document_id, db_session)
                 update_doc_sets: set[str] = set(doc_sets)
@@ -572,13 +576,20 @@ def document_index_metadata_sync_task(
             # the sync might repeat again later.
             # Defer only if the doc can still be ported; an INVALID/DELETING-only
             # doc's flag would never clear -> swap deadlock, so mark it synced.
+            # last_synced is stamped with the phase-1 last_modified watermark so a
+            # concurrent modification during the index write leaves the doc stale
+            # and it re-syncs, instead of the stale index write masking it.
             with get_session_with_current_tenant() as db_session:
                 if port_index_missing and document_has_indexable_cc_pair(
                     db_session, document_id
                 ):
-                    mark_document_synced_secondary_pending(document_id, db_session)
+                    mark_document_synced_secondary_pending(
+                        document_id, db_session, synced_as_of=doc_last_modified
+                    )
                 else:
-                    mark_document_as_synced(document_id, db_session)
+                    mark_document_as_synced(
+                        document_id, db_session, synced_as_of=doc_last_modified
+                    )
 
             elapsed = time.monotonic() - start
             task_logger.info(f"doc={document_id} action=sync elapsed={elapsed:.2f}")
