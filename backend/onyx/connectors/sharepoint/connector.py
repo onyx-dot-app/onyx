@@ -94,6 +94,17 @@ SHARED_DOCUMENTS_MAP = {
 }
 SHARED_DOCUMENTS_MAP_REVERSE = {v: k for k, v in SHARED_DOCUMENTS_MAP.items()}
 
+# On OneDrive personal sites the Graph API reports the primary library's name as
+# one of these, while the browser/SharePoint URL uses "Documents".
+ONEDRIVE_DRIVE_NAMES = frozenset(
+    {"onedrive", "onedrive for business", "documentlibrary"}
+)
+# `driveType` values that identify a user's primary OneDrive (as opposed to an
+# extra "documentLibrary" added to the personal site). OneDrive personal returns
+# "personal", OneDrive for Business returns "business".
+ONEDRIVE_PRIMARY_DRIVE_TYPES = frozenset({"personal", "business"})
+PERSONAL_SITE_URL_MARKER = "/personal/"
+
 ASPX_EXTENSION = ".aspx"
 
 
@@ -1258,10 +1269,12 @@ class SharepointConnector(
         # Ensure sites are sharepoint urls
         for site_url in self.sites:
             if not site_url.startswith("https://") or not (
-                "/sites/" in site_url or "/teams/" in site_url
+                "/sites/" in site_url
+                or "/teams/" in site_url
+                or "/personal/" in site_url
             ):
                 raise ConnectorValidationError(
-                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site or https://your-tenant.sharepoint.com/teams/your-team)"
+                    "Site URLs must be full Sharepoint/OneDrive URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site, https://your-tenant.sharepoint.com/teams/your-team or https://your-tenant-my.sharepoint.com/personal/your-user)"
                 )
             try:
                 validate_outbound_http_url(site_url, https_only=True)
@@ -1491,14 +1504,14 @@ class SharepointConnector(
 
             lower_parts = [part.lower() for part in parts]
             site_type_index = None
-            for site_token in ("sites", "teams"):
+            for site_token in ("sites", "teams", "personal"):
                 if site_token in lower_parts:
                     site_type_index = lower_parts.index(site_token)
                     break
 
             if site_type_index is None or len(parts) <= site_type_index + 1:
                 logger.warning(
-                    "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)",
+                    "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name>, /teams/<name>, or /personal/<name>)",
                     url,
                 )
                 continue
@@ -1551,6 +1564,41 @@ class SharepointConnector(
                 and SHARED_DOCUMENTS_MAP[d.name] == drive_name
             )
         ]
+        if not matched and drives:
+            # Fallback for OneDrive personal sites: Graph reports the primary
+            # library's name as "OneDrive"/"documentLibrary" while the
+            # browser/SharePoint URL uses "Documents". Identify the intended
+            # drive by its stable driveType (falling back to name), never by
+            # position in the /drives response, whose order is not guaranteed.
+            # Prefer driveType matches so a uniquely-typed primary drive is not
+            # made ambiguous by an unrelated library sharing a fallback name;
+            # only consult names when no drive has a primary type.
+            type_matches = [
+                d
+                for d in drives
+                if (d.drive_type or "").lower() in ONEDRIVE_PRIMARY_DRIVE_TYPES
+            ]
+            name_matches = [
+                d for d in drives if d.name and d.name.lower() in ONEDRIVE_DRIVE_NAMES
+            ]
+            onedrive_matches = type_matches or name_matches
+            if PERSONAL_SITE_URL_MARKER in site_descriptor.url.lower():
+                # A personal site has exactly one user OneDrive; refuse to guess
+                # when the lookup is ambiguous rather than index an arbitrary
+                # library.
+                if len(onedrive_matches) == 1:
+                    matched = onedrive_matches
+                elif len(onedrive_matches) > 1:
+                    logger.warning(
+                        "Could not unambiguously resolve the primary OneDrive "
+                        "for personal site '%s' (%d candidate drives: %s)",
+                        site_descriptor.url,
+                        len(onedrive_matches),
+                        [d.name for d in onedrive_matches],
+                    )
+            elif onedrive_matches:
+                matched = [onedrive_matches[0]]
+
         if not matched:
             logger.warning("Drive '%s' not found", drive_name)
             return None
