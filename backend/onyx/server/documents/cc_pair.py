@@ -681,9 +681,17 @@ def prune_cc_pair(
 @router.get("/admin/cc-pair/{cc_pair_id}/get-docs-sync-status")
 def get_docs_sync_status(
     cc_pair_id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[DocumentSyncStatus]:
+    if user and not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, get_editable=False
+    ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user permissions",
+        )
+
     all_docs_for_cc_pair = get_documents_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
@@ -697,7 +705,7 @@ def get_cc_pair_indexing_errors(
     include_resolved: bool = Query(False),
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=100),
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptErrorPydantic]:
     """Gives back all errors for a given CC Pair. Allows pagination based on page and page_size params.
@@ -713,6 +721,14 @@ def get_cc_pair_indexing_errors(
     Returns:
         Paginated list of indexing errors for the CC pair.
     """
+    if user and not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, get_editable=False
+    ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user permissions",
+        )
+
     total_count = count_index_attempt_errors_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,

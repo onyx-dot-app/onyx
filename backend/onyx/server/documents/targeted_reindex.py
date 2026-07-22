@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
+from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import User
@@ -104,6 +105,22 @@ def submit_targeted_reindex(
             "No actionable targets after resolving error_ids "
             "(all were already resolved, entity-level, or invalid).",
         )
+
+    # Object-level authorization: the caller must be able to edit every cc-pair
+    # referenced by the resolved targets (both request-supplied and error-derived),
+    # so a scoped curator can't reindex connectors outside the groups they curate.
+    if user:
+        target_cc_pair_ids = {spec.cc_pair_id for spec in target_specs_in}
+        if any(
+            not verify_user_has_access_to_cc_pair(
+                cc_pair_id, db_session, user, get_editable=True
+            )
+            for cc_pair_id in target_cc_pair_ids
+        ):
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                "CC Pair not found for current user permissions",
+            )
 
     if len(target_specs_in) > MAX_TARGETS_PER_REQUEST:
         raise OnyxError(

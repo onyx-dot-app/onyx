@@ -6,15 +6,19 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, PUBLIC_API_TAGS
 from onyx.connectors.models import Document, IndexAttemptMetadata
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair_from_id,
+    verify_user_has_access_to_cc_pair,
+)
 from onyx.db.document import (
     delete_documents_complete,
+    get_cc_pairs_for_document,
     get_document,
     get_documents_by_cc_pair,
     get_ingestion_documents,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.models import User
+from onyx.db.models import User, UserRole
 from onyx.db.port_orphan_candidate import (
     delete_port_orphan_candidates_by_id,
     record_port_orphan_candidates_for_document,
@@ -25,6 +29,8 @@ from onyx.db.search_settings import (
     get_secondary_search_settings,
 )
 from onyx.document_index.factory import get_all_document_indices
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
 )
@@ -48,9 +54,17 @@ router = APIRouter(prefix="/onyx-api", tags=PUBLIC_API_TAGS)
 @router.get("/connector-docs/{cc_pair_id}")
 def get_docs_by_connector_credential_pair(
     cc_pair_id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[DocMinimalInfo]:
+    if user and not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, get_editable=False
+    ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user permissions",
+        )
+
     db_docs = get_documents_by_cc_pair(cc_pair_id=cc_pair_id, db_session=db_session)
     return [
         DocMinimalInfo(
@@ -81,7 +95,7 @@ def get_ingestion_docs(
 @router.post("/ingestion", dependencies=[Depends(require_vector_db)])
 def upsert_ingestion_doc(
     doc_info: IngestionDocument,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> IngestionResult:
     tenant_id = get_current_tenant_id()
@@ -100,6 +114,16 @@ def upsert_ingestion_doc(
     if cc_pair is None:
         raise HTTPException(
             status_code=400, detail="Connector-Credential Pair specified does not exist"
+        )
+
+    # Object-level authorization: a scoped curator may only ingest into cc-pairs
+    # in groups they curate (admins bypass via _add_user_filters).
+    if user and not verify_user_has_access_to_cc_pair(
+        cc_pair.id, db_session, user, get_editable=True
+    ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user permissions",
         )
 
     # Need to index for both the primary and secondary index if possible
@@ -181,7 +205,7 @@ def upsert_ingestion_doc(
 @router.delete("/ingestion/{document_id}", dependencies=[Depends(require_vector_db)])
 def delete_ingestion_doc(
     document_id: str,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     # Verify the document exists and was created via the ingestion API
@@ -194,6 +218,21 @@ def delete_ingestion_doc(
             status_code=400,
             detail="Document was not created via the ingestion API",
         )
+
+    # Object-level authorization: a scoped curator may only delete a document when
+    # they can edit at least one of its owning cc-pairs (admins bypass entirely).
+    if user is not None and user.role != UserRole.ADMIN:
+        owning_cc_pairs = get_cc_pairs_for_document(db_session, document_id)
+        if not any(
+            verify_user_has_access_to_cc_pair(
+                cc_pair.id, db_session, user, get_editable=True
+            )
+            for cc_pair in owning_cc_pairs
+        ):
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                "Document not found",
+            )
 
     active_search_settings = get_active_search_settings(db_session)
 
