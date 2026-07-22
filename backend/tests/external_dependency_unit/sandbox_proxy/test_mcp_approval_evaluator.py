@@ -24,7 +24,10 @@ from onyx.db.enums import (
     MCPAuthenticationType,
     MCPTransport,
 )
-from onyx.db.gated_app import set_action_policies__no_commit
+from onyx.db.gated_app import (
+    get_or_create_gated_app_id,
+    replace_action_policies__no_commit,
+)
 from onyx.db.mcp import (
     create_mcp_server__no_commit,
     update_mcp_server__no_commit,
@@ -155,8 +158,11 @@ def test_admin_tool_override_is_reflected(
 ) -> None:
     user = create_test_user(db_session, f"mcp_eval_override_{override.value}")
     server = craft_server()
-    set_action_policies__no_commit(
-        db_session, GatedAppKind.MCP_SERVER, server.id, {"send_email": override}
+    gated_app_id = get_or_create_gated_app_id(
+        db_session, GatedAppKind.MCP_SERVER, server.id
+    )
+    replace_action_policies__no_commit(
+        db_session, gated_app_id, {"send_email": override}
     )
     db_session.commit()
 
@@ -229,10 +235,12 @@ def test_batched_tool_calls_sorted_strictest_first(
 ) -> None:
     user = create_test_user(db_session, "mcp_eval_batch")
     server = craft_server()
-    set_action_policies__no_commit(
+    gated_app_id = get_or_create_gated_app_id(
+        db_session, GatedAppKind.MCP_SERVER, server.id
+    )
+    replace_action_policies__no_commit(
         db_session,
-        GatedAppKind.MCP_SERVER,
-        server.id,
+        gated_app_id,
         {"safe_read": EndpointPolicy.ALWAYS, "danger_write": EndpointPolicy.DENY},
     )
     db_session.commit()

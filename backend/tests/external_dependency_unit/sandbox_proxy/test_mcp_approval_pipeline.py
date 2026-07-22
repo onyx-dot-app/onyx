@@ -28,7 +28,8 @@ from onyx.db.enums import (
 from onyx.db.gated_app import (
     get_action_policies,
     get_gated_app_id,
-    set_action_policies__no_commit,
+    get_or_create_gated_app_id,
+    replace_action_policies__no_commit,
 )
 from onyx.db.mcp import (
     create_mcp_server__no_commit,
@@ -157,10 +158,12 @@ def test_mcp_tool_policy_storage_round_trips(
     server = craft_server()
     assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {}
 
-    set_action_policies__no_commit(
+    gated_app_id = get_or_create_gated_app_id(
+        db_session, GatedAppKind.MCP_SERVER, server.id
+    )
+    replace_action_policies__no_commit(
         db_session,
-        GatedAppKind.MCP_SERVER,
-        server.id,
+        gated_app_id,
         {"read_inbox": EndpointPolicy.ALWAYS, "wipe": EndpointPolicy.DENY},
     )
     db_session.commit()
@@ -171,11 +174,8 @@ def test_mcp_tool_policy_storage_round_trips(
     }
 
     # Re-setting replaces the prior rows rather than colliding on the unique key.
-    set_action_policies__no_commit(
-        db_session,
-        GatedAppKind.MCP_SERVER,
-        server.id,
-        {"read_inbox": EndpointPolicy.ASK},
+    replace_action_policies__no_commit(
+        db_session, gated_app_id, {"read_inbox": EndpointPolicy.ASK}
     )
     db_session.commit()
     assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {

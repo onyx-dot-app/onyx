@@ -99,16 +99,3 @@ def replace_action_policies__no_commit(
                 for action_id, policy in policies.items()
             ],
         )
-
-
-def set_action_policies__no_commit(
-    db_session: Session,
-    kind: GatedAppKind,
-    target_id: int,
-    policies: dict[str, EndpointPolicy],
-) -> None:
-    """Replace ``(kind, target_id)``'s per-action policy overrides with exactly
-    ``policies``, creating the ``gated_app`` row if absent. No commit — runs
-    inside the caller's transaction."""
-    gated_app_id = get_or_create_gated_app_id(db_session, kind, target_id)
-    replace_action_policies__no_commit(db_session, gated_app_id, policies)
