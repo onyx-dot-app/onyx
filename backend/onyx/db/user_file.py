@@ -234,38 +234,50 @@ def user_file_port_scope_active(db_session: Session, user_id: UUID) -> bool:
     return db_session.get(User, user_id) is not None
 
 
-def mark_user_file_secondary_pending(db_session: Session, user_file_id: UUID) -> None:
+def mark_user_file_reconcile_pending(db_session: Session, user_file_id: UUID) -> None:
     """Flag FUTURE as stale/missing for this file (deferred ACL or missing content).
-    Owned by the sync path, never the port. Mirrors mark_document_synced_secondary_pending."""
+    Owned by the sync/index path, never the port."""
     db_session.execute(
         update(UserFile)
         .where(UserFile.id == user_file_id)
-        .values(secondary_only_sync_pending=True)
+        .values(secondary_reconcile_pending=True)
     )
     db_session.commit()
 
 
-def clear_user_file_secondary_pending(db_session: Session, user_file_id: UUID) -> None:
-    """Clear the flag once FUTURE matches PRESENT. Owned by the sync-path drain."""
+def clear_user_file_reconcile_pending(db_session: Session, user_file_id: UUID) -> None:
+    """Clear the flag once FUTURE matches PRESENT. Owned by the reconciler."""
     db_session.execute(
         update(UserFile)
         .where(UserFile.id == user_file_id)
-        .values(secondary_only_sync_pending=False)
+        .values(secondary_reconcile_pending=False)
     )
     db_session.commit()
 
 
-def count_user_files_secondary_pending(db_session: Session) -> int:
-    """Count of user files whose deferred FUTURE sync hasn't drained (swap progress)."""
+def count_user_files_reconcile_pending(db_session: Session) -> int:
+    """Count of user files whose FUTURE copy hasn't reconciled yet (swap progress)."""
     return db_session.execute(
-        select(func.count()).where(UserFile.secondary_only_sync_pending.is_(True))
+        select(func.count()).where(UserFile.secondary_reconcile_pending.is_(True))
     ).scalar_one()
 
 
-def any_user_file_secondary_pending(db_session: Session) -> bool:
-    """EXISTS over the deferred set — the swap gate's cheap check (partial index)."""
+def any_user_file_reconcile_pending_for_users(
+    db_session: Session, user_ids: list[UUID]
+) -> bool:
+    """Swap-gate check: any un-reconciled COMPLETED file among the port's users? Scoped to
+    required_user_ids like the connector flag's required_cc_pairs. COMPLETED-only because only
+    those are drainable — a flag stuck on a non-COMPLETED row must not wedge the swap."""
+    if not user_ids:
+        return False
     return bool(
         db_session.scalar(
-            select(exists().where(UserFile.secondary_only_sync_pending.is_(True)))
+            select(
+                exists().where(
+                    UserFile.user_id.in_(user_ids),
+                    UserFile.status == UserFileStatus.COMPLETED,
+                    UserFile.secondary_reconcile_pending.is_(True),
+                )
+            )
         )
     )

@@ -6,6 +6,7 @@ active (NOT_STARTED / IN_PROGRESS) attempt per pair; terminal rows accumulate as
 history. Nothing here enqueues celery work — that is the caller's job.
 """
 
+from collections.abc import Collection
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -18,6 +19,7 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.enums import IndexModelStatus, PortAttemptStatus, SwitchoverType
 from onyx.db.models import PortAttempt, SearchSettings
+from onyx.db.user_file import fetch_port_scope_user_ids
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -145,6 +147,58 @@ def count_active_port_attempts(
     ).scalar_one()
 
 
+def _latest_port_status_by_user(
+    db_session: Session,
+    search_settings_id: int,
+    user_ids: Collection[UUID],
+) -> dict[UUID, PortAttemptStatus]:
+    """Latest attempt status per user for the settings, in one DISTINCT ON pass (no
+    per-user N+1). Users with no attempt are absent. Shared by the pending-work +
+    swap-gate helpers so the distinct/tiebreaker contract lives in one place."""
+    if not user_ids:
+        return {}
+    return {
+        user_id: status
+        for user_id, status in db_session.execute(
+            select(PortAttempt.port_user_id, PortAttempt.status)
+            .where(
+                PortAttempt.search_settings_id == search_settings_id,
+                PortAttempt.port_user_id.in_(user_ids),
+            )
+            .distinct(PortAttempt.port_user_id)
+            .order_by(
+                PortAttempt.port_user_id,
+                PortAttempt.time_created.desc(),
+                PortAttempt.id.desc(),
+            )
+        )
+        if user_id is not None
+    }
+
+
+def _user_file_port_has_pending_work(
+    db_session: Session, search_settings_id: int
+) -> bool:
+    """True while some portable user's backlog port hasn't settled. This drives the
+    INSTANT source-pin, so it tracks ONLY the port (the sole reader of the source index).
+
+    User-set-aware, not existing-row-aware (mirrors the connector term): a cap-deferred
+    user has no row yet but still needs a port, so key off portable-users minus settled
+    — the row-aware form reintroduces the fixed cap-predicate stall. Users have no
+    paused concept, so the set is switchover-agnostic.
+
+    Deliberately NOT gated on secondary_reconcile_pending: that flag is drained by the
+    reconciler (which writes the promoted index from blob/DB, never the source), so it
+    must not pin the source — it gates the non-INSTANT swap instead (_port_swap_ready).
+    """
+    portable_users = set(fetch_port_scope_user_ids(db_session))
+    if not portable_users:
+        return False
+    latest = _latest_port_status_by_user(db_session, search_settings_id, portable_users)
+    settled_users = {u for u, s in latest.items() if s in _SETTLED_STATUSES}
+    return bool(portable_users - settled_users)
+
+
 def port_backfill_has_pending_work(
     db_session: Session, search_settings_id: int
 ) -> bool:
@@ -157,6 +211,9 @@ def port_backfill_has_pending_work(
     rest, leaving the live index incomplete. Scope + _SETTLED_STATUSES match check_for_port
     so this never reports pending for a cc_pair it won't act on.
     """
+    # user-file scope first, so a zero-connector tenant still gates on user files
+    if _user_file_port_has_pending_work(db_session, search_settings_id):
+        return True
     settings = db_session.get(SearchSettings, search_settings_id)
     active_only = (
         settings is not None and settings.switchover_type == SwitchoverType.ACTIVE_ONLY
@@ -186,6 +243,20 @@ def port_backfill_has_pending_work(
     }
     # Pending if any in-scope cc_pair has no settled latest attempt (incl. none at all).
     return bool(set(in_scope_cc_pair_ids) - settled_cc_pairs)
+
+
+def all_user_scopes_ported(
+    db_session: Session, search_settings_id: int, user_ids: list[UUID]
+) -> bool:
+    """True iff every user in `user_ids` has a SETTLED latest attempt for the settings —
+    the user-scope swap-gate check. An active or FAILED latest attempt (or none) fails
+    the gate. CANCELED counts as settled (matching the scheduler + pending-work) — else a
+    canceled required user deadlocks the swap, waiting on a SUCCESS no tick produces."""
+    if not user_ids:
+        return True
+    latest = _latest_port_status_by_user(db_session, search_settings_id, user_ids)
+    settled = {u for u, s in latest.items() if s in _SETTLED_STATUSES}
+    return set(user_ids) <= settled
 
 
 def is_active_port_backfill_source(

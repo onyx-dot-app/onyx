@@ -5270,9 +5270,10 @@ class UserFile(Base):
     needs_persona_sync: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
-    # reindex port: FUTURE stale/missing for this file (content and/or ACL); the
-    # swap waits on it. Mirrors Document.secondary_only_sync_pending.
-    secondary_only_sync_pending: Mapped[bool] = mapped_column(
+    # reindex-port dirty bit: the secondary index is stale/missing for this file (content
+    # and/or ACL). The reconciler drains it; the swap waits on it. (Document has an ACL-only
+    # analog, secondary_only_sync_pending — this one is broader, hence "reconcile".)
+    secondary_reconcile_pending: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
     last_project_sync_at: Mapped[datetime.datetime | None] = mapped_column(
@@ -5295,9 +5296,9 @@ class UserFile(Base):
 
     __table_args__ = (
         Index(
-            "ix_user_file_secondary_only_sync_pending",
+            "ix_user_file_secondary_reconcile_pending",
             "id",
-            postgresql_where=text("secondary_only_sync_pending IS TRUE"),
+            postgresql_where=text("secondary_reconcile_pending IS TRUE"),
         ),
         # back the port scheduler's per-user cursor scan + COMPLETED enumeration
         Index("ix_user_file_user_status_id", "user_id", "status", "id"),

@@ -42,14 +42,23 @@ from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.models import Document, HierarchyNode
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
-from onyx.db.models import UserFile
+from onyx.db.models import SearchSettings, UserFile
+from onyx.db.port_attempt import port_backfill_has_pending_work
+from onyx.db.port_orphan_candidate import record_port_orphan_candidates_for_user_file
 from onyx.db.search_settings import (
+    active_secondary_port_target,
     get_active_search_settings,
     get_active_search_settings_list,
 )
-from onyx.db.user_file import fetch_user_files_with_access_relationships
+from onyx.db.user_file import (
+    fetch_user_files_with_access_relationships,
+    mark_user_file_reconcile_pending,
+)
 from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import (
+    MetadataUpdateRequest,
+    SecondaryIndexDocumentMissingError,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import (
     build_tracking_raw_file_callback,
@@ -326,6 +335,46 @@ def _process_user_file_without_vector_db(
     )
 
 
+def _load_user_file_documents(
+    user_file_id: str,
+    file_id: str,
+    file_name: str | None,
+    tenant_id: str,
+) -> tuple[list[Document], list[str]]:
+    """Parse a user file's blob into indexable Documents (id/source stamped), plus the ids of
+    any CSVs staged for tabular sections — the caller reaps them after indexing reads them. A
+    load failure reaps its own staged files before re-raising (the caller gets no id list)."""
+    connector = LocalFileConnector(
+        file_locations=[file_id],
+        file_names=[file_name] if file_name else None,
+    )
+    connector.load_credentials({})
+
+    # User files aren't attempt-scoped, so the docfetching staging reapers don't cover them.
+    staging_callback, staged_csv_ids = build_tracking_raw_file_callback(
+        metadata={"user_file_id": str(user_file_id), "tenant_id": tenant_id}
+    )
+    connector.set_raw_file_callback(staging_callback)
+
+    documents: list[Document] = []
+    try:
+        for batch in connector.load_from_state():
+            documents.extend(
+                [doc for doc in batch if not isinstance(doc, HierarchyNode)]
+            )
+    except Exception:
+        delete_files_best_effort(
+            staged_csv_ids,
+            context=f"user-file load-failure staging cleanup uf={user_file_id}",
+        )
+        raise
+
+    for document in documents:
+        document.id = str(user_file_id)
+        document.source = DocumentSource.USER_FILE
+    return documents, staged_csv_ids
+
+
 def _process_user_file_with_indexing(
     user_file_id: str,
     documents: list[Document],
@@ -397,6 +446,131 @@ def _process_user_file_with_indexing(
                 db_session.commit()
         raise RuntimeError(f"Indexing pipeline failed for user file {user_file_id}")
 
+    _dual_write_new_file_to_secondary(user_file_id, documents, tenant_id)
+
+
+def _index_user_file_to_secondary(
+    user_file_id: str,
+    documents: list[Document],
+    secondary: SearchSettings,
+    tenant_id: str,
+) -> None:
+    """Index one user file into the secondary (reindex-port target) index, re-embedding with
+    its model. `index_to_secondary=True` makes the adapter skip the terminal side-effects the
+    PRESENT pass already applied. Raises on an incomplete write; the caller owns the flag."""
+    embedder = DefaultIndexingEmbedder.from_db_search_settings(
+        search_settings=secondary,
+    )
+    document_indices = get_all_document_indices(
+        secondary,
+        None,
+        httpx_client=HttpxPool.get("vespa"),
+    )
+    with get_session_with_current_tenant() as db_session:
+        adapter = UserFileIndexingAdapter(
+            tenant_id=tenant_id,
+            db_session=db_session,
+        )
+        result = run_indexing_pipeline(
+            embedder=embedder,
+            document_indices=document_indices,
+            ignore_time_skip=True,
+            # skip the content_hash gate, else the PRESENT run's hash no-ops this write
+            index_to_secondary=True,
+            db_session=db_session,
+            tenant_id=tenant_id,
+            document_batch=documents,
+            request_id=None,
+            adapter=adapter,
+        )
+    if (
+        result.failures
+        or result.total_docs != len(documents)
+        or result.total_chunks == 0
+    ):
+        raise RuntimeError(
+            f"secondary index write incomplete for user file {user_file_id}: {result}"
+        )
+
+
+def _dual_write_new_file_to_secondary(
+    user_file_id: str, documents: list[Document], tenant_id: str
+) -> None:
+    """During a reindex-port, also index a freshly-processed file into the secondary target so
+    it isn't missing at swap. Target resolved fresh (catches a file crossing kickoff). Isolated:
+    a failure only flags the file for the reconciler, never touching live status."""
+    with get_session_with_current_tenant() as db_session:
+        secondary = active_secondary_port_target(db_session)
+    if secondary is None:
+        return
+    try:
+        _index_user_file_to_secondary(user_file_id, documents, secondary, tenant_id)
+    except Exception as e:
+        task_logger.exception(
+            f"_dual_write_new_file_to_secondary - failed id={user_file_id}; "
+            f"flagging for reconcile - {e.__class__.__name__}"
+        )
+        with get_session_with_current_tenant() as db_session:
+            mark_user_file_reconcile_pending(db_session, _as_uuid(user_file_id))
+
+
+def _supply_user_file_to_secondary(user_file_id: str, tenant_id: str) -> bool:
+    """The reconciler's 404 fallback: (re)supply a user file's content to the secondary target
+    when a metadata update() found it missing. Returns True if the content landed (flag can
+    clear), False to keep the flag — no target (INSTANT self-heals via the port) or the write
+    failed (retried next scan)."""
+    with get_session_with_current_tenant() as db_session:
+        secondary = active_secondary_port_target(db_session)
+        user_file = db_session.get(UserFile, _as_uuid(user_file_id))
+        file_id = user_file.file_id if user_file is not None else None
+        file_name = user_file.name if user_file is not None else None
+    if secondary is None or file_id is None:
+        return False
+
+    # Fully isolated: any failure keeps the flag and never propagates into the sync task.
+    # The loader self-reaps on a load failure, so staged_csv_ids stays empty there.
+    staged_csv_ids: list[str] = []
+    try:
+        documents, staged_csv_ids = _load_user_file_documents(
+            user_file_id, file_id, file_name, tenant_id
+        )
+        _index_user_file_to_secondary(user_file_id, documents, secondary, tenant_id)
+        return True
+    except Exception as e:
+        task_logger.exception(
+            f"_supply_user_file_to_secondary - failed id={user_file_id} "
+            f"- {e.__class__.__name__}"
+        )
+        return False
+    finally:
+        delete_files_best_effort(
+            staged_csv_ids,
+            context=f"user-file secondary supply staging cleanup uf={user_file_id}",
+        )
+
+
+def _sync_metadata_and_reconcile_secondary(
+    retry_indices: list[RetryDocumentIndex],
+    update_request: MetadataUpdateRequest,
+    user_file_id: str,
+    tenant_id: str,
+) -> bool:
+    """Apply the metadata update to every index; if the secondary is still porting and lacks
+    the doc, supply its content instead. Returns whether the secondary now matches PRESENT."""
+    secondary_missing = False
+    for retry_index in retry_indices:
+        try:
+            retry_index.update([update_request])
+        except SecondaryIndexDocumentMissingError:
+            task_logger.debug(
+                f"user_file={user_file_id} missing from a still-porting index; "
+                "supplying content."
+            )
+            secondary_missing = True
+    if not secondary_missing:
+        return True
+    return _supply_user_file_to_secondary(user_file_id, tenant_id)
+
 
 def process_user_file_impl(
     *, user_file_id: str, tenant_id: str, redis_locking: bool
@@ -449,42 +623,27 @@ def process_user_file_impl(
             file_name = uf.name
         # DB connection returned to pool here; file I/O and indexing run without it.
 
-        connector = LocalFileConnector(
-            file_locations=[file_id],
-            file_names=[file_name] if file_name else None,
-        )
-        connector.load_credentials({})
-
-        # User files aren't attempt-scoped, so the docfetching staging reapers
-        # don't cover them. Track CSVs staged for tabular sections and reap them
-        # ourselves once indexing (which reads them) has run.
-        staging_callback, staged_csv_ids = build_tracking_raw_file_callback(
-            metadata={"user_file_id": str(user_file_id), "tenant_id": tenant_id}
-        )
-        connector.set_raw_file_callback(staging_callback)
-
         try:
-            for batch in connector.load_from_state():
-                documents.extend(
-                    [doc for doc in batch if not isinstance(doc, HierarchyNode)]
+            documents, staged_csv_ids = _load_user_file_documents(
+                user_file_id, file_id, file_name, tenant_id
+            )
+            try:
+                if DISABLE_VECTOR_DB:
+                    _process_user_file_without_vector_db(
+                        user_file_id=user_file_id,
+                        documents=documents,
+                    )
+                else:
+                    _process_user_file_with_indexing(
+                        user_file_id=user_file_id,
+                        documents=documents,
+                        tenant_id=tenant_id,
+                    )
+            finally:
+                delete_files_best_effort(
+                    staged_csv_ids,
+                    context=f"user-file tabular staging cleanup uf={user_file_id}",
                 )
-
-            for document in documents:
-                document.id = str(user_file_id)
-                document.source = DocumentSource.USER_FILE
-
-            if DISABLE_VECTOR_DB:
-                _process_user_file_without_vector_db(
-                    user_file_id=user_file_id,
-                    documents=documents,
-                )
-            else:
-                _process_user_file_with_indexing(
-                    user_file_id=user_file_id,
-                    documents=documents,
-                    tenant_id=tenant_id,
-                )
-
         except Exception as e:
             task_logger.exception(
                 f"process_user_file_impl - Error processing file id={user_file_id} - {e.__class__.__name__}"
@@ -499,11 +658,6 @@ def process_user_file_impl(
                     db_session.add(current_user_file)
                     db_session.commit()
             return
-        finally:
-            delete_files_best_effort(
-                staged_csv_ids,
-                context=f"user-file tabular staging cleanup uf={user_file_id}",
-            )
 
         elapsed = time.monotonic() - start
         task_logger.info(
@@ -705,6 +859,20 @@ def delete_user_file_impl(
                     for document_index in document_indices
                 ]
 
+                # Record the deletion before the index delete (below) so a racing port's
+                # sweep removes any chunk its create-only copy resurrects. No-op when no
+                # port targets this file.
+                if user_file.user_id is not None:
+                    recorded = record_port_orphan_candidates_for_user_file(
+                        db_session,
+                        port_user_id=user_file.user_id,
+                        document_id=str(user_file.id),
+                        primary=active_search_settings.primary,
+                        secondary=active_search_settings.secondary,
+                    )
+                    if recorded:
+                        db_session.commit()
+
         # Phase 2: vector DB deletes + file store deletes (no DB session held).
         # Pass the DB chunk count when known; otherwise None, which each document
         # index resolves itself (Vespa fans out to find chunks, OpenSearch deletes
@@ -803,6 +971,8 @@ def check_for_user_file_project_sync(self: Task, *, tenant_id: str) -> None:
                             sa.or_(
                                 UserFile.needs_project_sync.is_(True),
                                 UserFile.needs_persona_sync.is_(True),
+                                # re-enqueue un-reconciled files so the reconciler retries
+                                UserFile.secondary_reconcile_pending.is_(True),
                             ),
                             UserFile.status == UserFileStatus.COMPLETED,
                         )
@@ -892,15 +1062,19 @@ def project_sync_user_file_impl(
 
             if not skip_vespa:
                 active_search_settings = get_active_search_settings(db_session)
-                # User files are only ever written to the primary index (initial
-                # indexing passes no secondary, and the port flow never copies them).
-                # Targeting the secondary here would raise
-                # SecondaryIndexDocumentMissingError during a reindex and leave
-                # needs_project_sync stuck, retrying for the whole reindex window.
+                # INSTANT-promoted primary still backfilling: defer updates to
+                # not-yet-ported files, else the create-only port reinstalls a stale ACL.
+                primary_backfill_in_progress = (
+                    active_search_settings.primary.port_backfill_source_id is not None
+                    and port_backfill_has_pending_work(
+                        db_session, active_search_settings.primary.id
+                    )
+                )
                 document_indices = get_all_document_indices(
                     search_settings=active_search_settings.primary,
-                    secondary_search_settings=None,
+                    secondary_search_settings=active_search_settings.secondary,
                     httpx_client=HttpxPool.get("vespa"),
+                    primary_backfill_in_progress=primary_backfill_in_progress,
                 )
                 retry_document_indices = [
                     RetryDocumentIndex(document_index)
@@ -913,9 +1087,10 @@ def project_sync_user_file_impl(
                 chunk_count = user_file.chunk_count
                 access_map = build_access_for_user_files([user_file])
                 access = access_map.get(file_id_str)
-        # DB connection returned to pool here; Vespa HTTP calls run without it.
+        # DB connection returned to pool here; index update calls run without it.
 
-        # Phase 2: Vespa HTTP calls (no DB session held)
+        # Phase 2: index update calls (no DB session held)
+        secondary_consistent = True
         if not skip_vespa:
             update_request = MetadataUpdateRequest(
                 document_ids=[file_id_str],
@@ -926,8 +1101,9 @@ def project_sync_user_file_impl(
                 project_ids=set(project_ids),
                 persona_ids=set(persona_ids),
             )
-            for retry_document_index in retry_document_indices:
-                retry_document_index.update([update_request])
+            secondary_consistent = _sync_metadata_and_reconcile_secondary(
+                retry_document_indices, update_request, user_file_id, tenant_id
+            )
 
         task_logger.info(f"project_sync_user_file_impl - User file id={user_file_id}")
 
@@ -939,6 +1115,12 @@ def project_sync_user_file_impl(
                 user_file.needs_persona_sync = False
                 user_file.last_project_sync_at = datetime.datetime.now(
                     datetime.timezone.utc
+                )
+                # Flag only a portable (COMPLETED) file — a non-portable one is never ported,
+                # so its flag would never reconcile (leave it clear instead).
+                user_file.secondary_reconcile_pending = (
+                    not secondary_consistent
+                    and user_file.status == UserFileStatus.COMPLETED
                 )
                 db_session.add(user_file)
                 db_session.commit()

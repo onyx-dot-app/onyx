@@ -245,8 +245,13 @@ class UserFileIndexingAdapter:
         filtered_documents: list[Document],  # noqa: ARG002
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
+        index_to_secondary: bool,
     ) -> None:
         assert isinstance(enrichment, UserFileChunkEnricher)
+        if index_to_secondary:
+            # Secondary (reindex-port) write: chunks are written; the PRESENT pass owns the
+            # terminal side-effects (status/chunk_count/plaintext/notifications) — leave them.
+            return
         user_file_ids = [doc.id for doc in context.updatable_docs]
 
         user_files = (

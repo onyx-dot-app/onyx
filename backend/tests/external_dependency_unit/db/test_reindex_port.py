@@ -1562,13 +1562,13 @@ def test_port_swap_ready_scoped_to_required_cc_pairs(
         db_session.commit()
 
         # not blocked by the INVALID-only deferred doc
-        assert _port_swap_ready(db_session, future_ss, [required_pair]) is True
+        assert _port_swap_ready(db_session, future_ss, [required_pair], []) is True
 
         # a deferred doc on the REQUIRED pair DOES still block the swap
         [req_doc] = _seed_cc_pair_documents(db_session, required_pair, 1, unique=True)
         mark_document_synced_secondary_pending(req_doc, db_session)
         db_session.commit()
-        assert _port_swap_ready(db_session, future_ss, [required_pair]) is False
+        assert _port_swap_ready(db_session, future_ss, [required_pair], []) is False
     finally:
         _cleanup_pairs(db_session, invalid_pair)
 
@@ -1703,6 +1703,7 @@ def test_sweep_port_orphan_candidates_marker_delete_and_clears(
             port_attempt_id=attempt.id,
             search_settings_id=ss.id,
             cc_pair_id=cc_pair.id,
+            port_user_id=None,
             copier=copier,
             log=MagicMock(),
         )

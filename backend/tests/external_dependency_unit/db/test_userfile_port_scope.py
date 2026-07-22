@@ -2,7 +2,7 @@
 
 Covers the scope-polymorphic PortAttempt (exactly-one CHECK, the NULL-distinct
 user-branch active-unique index), the user-file enumeration/survival helpers the port
-scheduler will consume, and the secondary_only_sync_pending flag lifecycle. All dark
+scheduler will consume, and the secondary_reconcile_pending flag lifecycle. All dark
 until PR2 wires the port itself — these assert only the storage/read/write primitives.
 """
 
@@ -24,14 +24,13 @@ from onyx.db.port_attempt import (
     mark_port_succeeded,
 )
 from onyx.db.user_file import (
-    any_user_file_secondary_pending,
-    clear_user_file_secondary_pending,
-    count_user_files_secondary_pending,
+    clear_user_file_reconcile_pending,
+    count_user_files_reconcile_pending,
     fetch_port_scope_user_ids,
     filter_existing_user_file_ids,
     get_max_user_file_id_for_user,
     get_user_file_ids_for_user_batch,
-    mark_user_file_secondary_pending,
+    mark_user_file_reconcile_pending,
     user_file_port_scope_active,
 )
 from tests.external_dependency_unit.conftest import create_test_user
@@ -265,17 +264,16 @@ def test_secondary_pending_flag_round_trip(
     db_session: Session, port_user: User
 ) -> None:
     uf = _make_user_file(db_session, port_user.id)
-    baseline = count_user_files_secondary_pending(db_session)
+    baseline = count_user_files_reconcile_pending(db_session)
 
-    mark_user_file_secondary_pending(db_session, uf.id)
+    mark_user_file_reconcile_pending(db_session, uf.id)
     db_session.expire_all()
     marked = db_session.get(UserFile, uf.id)
-    assert marked is not None and marked.secondary_only_sync_pending is True
-    assert any_user_file_secondary_pending(db_session) is True
-    assert count_user_files_secondary_pending(db_session) == baseline + 1
+    assert marked is not None and marked.secondary_reconcile_pending is True
+    assert count_user_files_reconcile_pending(db_session) == baseline + 1
 
-    clear_user_file_secondary_pending(db_session, uf.id)
+    clear_user_file_reconcile_pending(db_session, uf.id)
     db_session.expire_all()
     cleared = db_session.get(UserFile, uf.id)
-    assert cleared is not None and cleared.secondary_only_sync_pending is False
-    assert count_user_files_secondary_pending(db_session) == baseline
+    assert cleared is not None and cleared.secondary_reconcile_pending is False
+    assert count_user_files_reconcile_pending(db_session) == baseline

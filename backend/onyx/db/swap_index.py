@@ -1,4 +1,5 @@
 import time
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -29,6 +30,7 @@ from onyx.db.llm import (
 )
 from onyx.db.models import ConnectorCredentialPair, SearchSettings
 from onyx.db.port_attempt import (
+    all_user_scopes_ported,
     cancel_active_port_attempts,
     get_active_port_attempt,
     get_latest_port_attempt,
@@ -37,6 +39,10 @@ from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
     update_search_settings_status,
+)
+from onyx.db.user_file import (
+    any_user_file_reconcile_pending_for_users,
+    fetch_port_scope_user_ids,
 )
 from onyx.document_index.factory import get_all_document_indices
 from onyx.key_value_store.factory import get_kv_store
@@ -201,16 +207,23 @@ def _required_cc_pairs_for_switchover(
     return [cc_pair for cc_pair in all_cc_pairs if cc_pair.id in portable_ids]
 
 
+def _required_users_for_switchover(db_session: Session) -> list[UUID]:
+    """Portable users whose port must finish before a port-flow swap — the same set
+    check_for_port ports. Switchover-agnostic (users have no paused concept)."""
+    return fetch_port_scope_user_ids(db_session)
+
+
 def _port_swap_ready(
     db_session: Session,
     new_search_settings: SearchSettings,
     required_cc_pairs: list[ConnectorCredentialPair],
+    required_user_ids: list[UUID],
 ) -> bool:
-    """Port-flow swap gate: True once every required cc_pair's port is SUCCESS (none
-    active) and its deferred metadata-sync backlog has drained. The port copy is the
-    whole bar — no post-port connector index attempt. The drain is scoped to
-    required_cc_pairs: a global count would deadlock on un-portable INVALID/DELETING
-    docs that never reach FUTURE."""
+    """Port-flow swap gate: True once every required cc_pair's AND user's port is SUCCESS
+    (none active) and the connector deferred metadata-sync backlog has drained. The port
+    copy is the whole bar — no post-port connector index attempt. The drain is scoped to
+    required_cc_pairs: a global count would deadlock on un-portable INVALID/DELETING docs
+    that never reach FUTURE."""
     ss_id = new_search_settings.id
     for cc_pair in required_cc_pairs:
         if get_active_port_attempt(db_session, cc_pair.id, ss_id) is not None:
@@ -218,6 +231,15 @@ def _port_swap_ready(
         latest_port = get_latest_port_attempt(db_session, cc_pair.id, ss_id)
         if latest_port is None or not latest_port.status.is_successful():
             return False
+
+    if not all_user_scopes_ported(db_session, ss_id, required_user_ids):
+        return False
+
+    # Hold the swap until every user file's FUTURE copy reconciles. Safe only because new files
+    # dual-write to FUTURE and the reconciler supplies content on a 404, so every flag drains
+    # (an update()-only drain would pin a never-copied file forever and deadlock).
+    if any_user_file_reconcile_pending_for_users(db_session, required_user_ids):
+        return False
 
     return (
         count_secondary_only_sync_pending_documents_for_cc_pairs(
@@ -264,8 +286,10 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
         required_cc_pairs = _required_cc_pairs_for_switchover(
             db_session, all_cc_pairs, switchover_type
         )
-        if not required_cc_pairs or _port_swap_ready(
-            db_session, new_search_settings, required_cc_pairs
+
+        required_user_ids = _required_users_for_switchover(db_session)
+        if _port_swap_ready(
+            db_session, new_search_settings, required_cc_pairs, required_user_ids
         ):
             return _perform_index_swap(
                 db_session=db_session,
