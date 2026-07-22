@@ -132,7 +132,10 @@ def _token_response(**overrides: Any) -> httpx.Response:
     return httpx.Response(200, json=payload)
 
 
-def _form_token_response(**overrides: Any) -> httpx.Response:
+def _form_token_response(
+    *, content_type: str | None = "application/x-www-form-urlencoded; charset=utf-8",
+    **overrides: Any,
+) -> httpx.Response:
     payload: dict[str, Any] = {
         "access_token": "NEW",
         "token_type": "bearer",
@@ -140,11 +143,8 @@ def _form_token_response(**overrides: Any) -> httpx.Response:
         "refresh_token": "REFRESH_2",
     }
     payload.update(overrides)
-    return httpx.Response(
-        200,
-        content=urlencode(payload).encode(),
-        headers={"content-type": "application/x-www-form-urlencoded; charset=utf-8"},
-    )
+    headers = {} if content_type is None else {"content-type": content_type}
+    return httpx.Response(200, content=urlencode(payload).encode(), headers=headers)
 
 
 def test_refreshes_expired_token_with_client_secret_post(
@@ -194,9 +194,14 @@ def test_refreshes_expired_token_with_client_secret_post(
     assert persisted[MCPOAuthKeys.TOKEN_EXPIRES_AT.value] > time.time()
 
 
+@pytest.mark.parametrize(
+    "content_type",
+    ["application/x-www-form-urlencoded; charset=utf-8", None, "application/json"],
+)
 def test_refreshes_form_encoded_token_response_with_rotated_refresh_token(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
+    content_type: str | None,
 ) -> None:
     config_data: dict[str, Any] = {
         "headers": {"Authorization": "Bearer OLD"},
@@ -220,7 +225,9 @@ def test_refreshes_form_encoded_token_response_with_rotated_refresh_token(
         },
     }
     captured = _install_mocks(
-        monkeypatch, config_data, response=_form_token_response()
+        monkeypatch,
+        config_data,
+        response=_form_token_response(content_type=content_type),
     )
 
     header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
