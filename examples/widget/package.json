@@ -8,7 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "next": "^16.2.9",
+    "next": "^16.2.10",
     "react": "^19",
     "react-dom": "^19",
     "react-markdown": "^10.1.0"
