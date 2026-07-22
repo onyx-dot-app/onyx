@@ -58,8 +58,8 @@ node_modules
 # MCP configs
 .playwright-mcp
 
-# plans
-plans/
+# plans (include symlinked plans dir too)
+plans
 
 # Added context for LLMs
 .claude/CLAUDE.md

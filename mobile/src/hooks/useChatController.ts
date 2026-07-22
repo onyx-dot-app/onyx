@@ -1,6 +1,6 @@
-// Send → stream → ~50ms batched flush → stop, plus hydration. runChatStream is module-scope so the stream
-// keeps writing by sessionId after the landing screen unmounts navigating into /chat/[id].
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// runChatStream is module-scope so the stream keeps writing by sessionId after the landing screen
+// unmounts navigating into /chat/[id].
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { router } from "expo-router";
 import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -14,13 +14,14 @@ import {
 import {
   isMessageIdInfo,
   isPacket,
+  isStreamError,
   SendMessageBody,
   streamChatMessage,
 } from "@/api/chat/stream";
 import { DEFAULT_AGENT_ID } from "@/chat/agents";
 import { FLUSH_INTERVAL_MS } from "@/chat/constants";
 import { processRawChatHistory } from "@/chat/chatHistory";
-import { ChatState } from "@/chat/interfaces";
+import { ChatState, FileDescriptor } from "@/chat/interfaces";
 import {
   buildImmediateMessages,
   getLastSuccessfulMessageId,
@@ -111,6 +112,26 @@ async function runChatStream(
         });
         continue;
       }
+      if (isStreamError(event)) {
+        // Backend errored mid-stream: convert the assistant turn to an error node instead of leaving the "…" placeholder stuck.
+        hadError = true;
+        console.warn("chat stream returned a backend error", {
+          sessionId,
+          errorCode: event.error_code ?? null,
+          error: event.error,
+        });
+        pending = [];
+        if (flushTimer) {
+          clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+        store.getState().patchNode(sessionId, agentNodeId, {
+          type: "error",
+          message: event.error,
+          errorCode: event.error_code ?? null,
+        });
+        break;
+      }
       if (isPacket(event)) {
         if (!sawStreaming) {
           sawStreaming = true;
@@ -146,18 +167,19 @@ async function runChatStream(
 export interface ChatController {
   messages: ReturnType<typeof getLatestMessageChain>;
   chatState: ChatState;
-  input: string;
-  setInput: (value: string) => void;
-  // `overrideMessage` sends a specific string (e.g. a tapped starter prompt) instead of
-  // the composer's current input.
-  submit: (overrideMessage?: string) => void;
+  // `onAccepted` fires once, past every early return and before the session-create await, so the
+  // caller can clear the draft optimistically yet only on a committed send.
+  submit: (
+    text: string,
+    files?: FileDescriptor[],
+    onAccepted?: () => void,
+  ) => void;
   stop: () => void;
   isHydrating: boolean;
 }
 
-// `personaId` is the agent to bind when this send creates a new session (ignored for an
-// existing session, whose persona is fixed at creation). `projectId` scopes a new chat to
-// a project.
+// `personaId` binds the agent only when this send creates a new session (ignored for an existing
+// session). `projectId` scopes a new chat to a project.
 export function useChatController(
   sessionId: string | null,
   personaId: number = DEFAULT_AGENT_ID,
@@ -165,9 +187,7 @@ export function useChatController(
   // report a new session here instead of navigating, so a host can transition in place
   onSessionCreated?: (sessionId: string) => void,
 ): ChatController {
-  const [input, setInput] = useState("");
-  // Re-entry guard. The composer path is guarded by clearing input, but the starter override
-  // skips that — without this, two rapid starter taps race through createChatSession (two sessions).
+  // Re-entry guard: without this, two rapid taps race through createChatSession (two sessions).
   const submittingRef = useRef(false);
   const serverUrl = useSession((state) => state.serverUrl);
   const queryClient = useQueryClient();
@@ -206,21 +226,24 @@ export function useChatController(
   const chatState: ChatState = sessionData?.chatState ?? "input";
 
   const submit = useCallback(
-    async (overrideMessage?: string) => {
-      const text = (overrideMessage ?? input).trim();
+    async (
+      overrideText: string,
+      files?: FileDescriptor[],
+      onAccepted?: () => void,
+    ) => {
+      const text = overrideText.trim();
       if (!text) return;
+      const fileDescriptors = files ?? [];
       if (submittingRef.current) return;
       submittingRef.current = true;
       try {
-        // A starter override leaves the composer untouched.
-        if (overrideMessage == null) setInput("");
-
         const isNewSession = sessionId == null;
         let activeId = sessionId;
         if (activeId != null) {
           const current = useChatSessionStore.getState().sessions.get(activeId);
           if (current && current.chatState !== "input") return; // a run is already active
-        } else {
+        }
+        if (activeId == null) {
           activeId = await createChatSession(personaId, projectId);
           // refresh the project (we've navigated away) so the new chat shows on reopen
           if (projectId != null) {
@@ -232,6 +255,9 @@ export function useChatController(
             });
           }
         }
+        // Committed: the session exists and the rest of this path is synchronous → clear the draft.
+        // A failed createChatSession above throws first, so the draft (text + file refs) survives.
+        onAccepted?.();
 
         const store = useChatSessionStore.getState();
         store.ensureSession(activeId);
@@ -250,7 +276,7 @@ export function useChatController(
         const { initialUserNode, initialAgentNode } = buildImmediateMessages(
           parentNodeId,
           text,
-          [],
+          fileDescriptors,
         );
         store.updateSessionTree(
           activeId,
@@ -266,7 +292,7 @@ export function useChatController(
           message: text,
           chat_session_id: activeId,
           parent_message_id: parentMessageId,
-          file_descriptors: [],
+          file_descriptors: fileDescriptors,
           deep_research: false,
           origin: "mobile",
         };
@@ -298,15 +324,7 @@ export function useChatController(
         submittingRef.current = false;
       }
     },
-    [
-      input,
-      sessionId,
-      personaId,
-      projectId,
-      onSessionCreated,
-      serverUrl,
-      queryClient,
-    ],
+    [sessionId, personaId, projectId, onSessionCreated, serverUrl, queryClient],
   );
 
   const stop = useCallback(() => {
@@ -319,8 +337,6 @@ export function useChatController(
   return {
     messages,
     chatState,
-    input,
-    setInput,
     submit,
     stop,
     isHydrating: needsHydration && hydration.isLoading,

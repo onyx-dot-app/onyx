@@ -4,46 +4,46 @@ from __future__ import annotations
 
 import io
 import zipfile
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from pathlib import Path
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import Sandbox
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.skill.models import SkillPatchRequest
-from onyx.server.features.skill.models import SkillResponse
-from onyx.server.features.skill.models import SkillUserShareRequest
-from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.push import build_skills_fileset_for_user
-from onyx.skills.push import push_skill_to_affected_sandboxes
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    ExternalAppType,
+    SandboxStatus,
+    SkillSharePermission,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    Sandbox,
+    Skill,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserGroup__ConnectorCredentialPair,
+)
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
+from onyx.server.features.skill.models import SkillResponse, SkillUserShareRequest
+from onyx.skills.built_in import BUILT_IN_SKILLS, BuiltInSkillDefinition
+from onyx.skills.push import (
+    build_skills_fileset_for_user,
+    push_skill_to_affected_sandboxes,
+)
+from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import DATestUserGroup
-from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
-from tests.integration.tests.craft.k8s.k8s_fixtures import WorkspaceProxy
+from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
+from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle, WorkspaceProxy
 
 pytestmark = [
     pytest.mark.skipif(
@@ -55,23 +55,23 @@ pytestmark = [
 
 
 def _skill_file_path(
-    workspace: WorkspaceProxy, slug: str, name: str = "SKILL.md"
+    workspace: WorkspaceProxy, skill_name: str, file_name: str = "SKILL.md"
 ) -> WorkspaceProxy:
-    return workspace / "managed" / "skills" / slug / name
+    return workspace / "managed" / "skills" / skill_name / file_name
 
 
 def _skills_dir(workspace: WorkspaceProxy) -> WorkspaceProxy:
     return workspace / "managed" / "skills"
 
 
-def _bundle(slug: str, body: bytes | str, **extra_files: bytes | str) -> bytes:
+def _bundle(name: str, body: bytes | str, **extra_files: bytes | str) -> bytes:
     body_bytes = body.encode("utf-8") if isinstance(body, str) else body
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
             "SKILL.md",
             b"---\n"
-            + f"name: {slug}\ndescription: {slug} integration test\n".encode("utf-8")
+            + f"name: {name}\ndescription: {name} integration test\n".encode("utf-8")
             + b"---\n"
             + body_bytes,
         )
@@ -83,7 +83,7 @@ def _bundle(slug: str, body: bytes | str, **extra_files: bytes | str) -> bytes:
 
 def _create_skill(
     admin: DATestUser,
-    slug: str,
+    name: str,
     *,
     body: bytes | str,
     is_public: bool = False,
@@ -91,11 +91,11 @@ def _create_skill(
 ) -> SkillResponse:
     return SkillManager.create_custom(
         admin,
-        slug=slug,
+        name=name,
         is_public=is_public,
         group_ids=group_ids or [],
-        bundle_bytes=_bundle(slug, body),
-        filename=f"{slug}.zip",
+        bundle_bytes=_bundle(name, body),
+        filename=f"{name}.zip",
     )
 
 
@@ -107,7 +107,7 @@ def _replace_bundle(
 ) -> SkillResponse:
     return SkillManager.replace_bundle(
         skill,
-        _bundle(skill.slug, body),
+        _bundle(skill.name, body),
         admin,
     )
 
@@ -115,6 +115,23 @@ def _replace_bundle(
 def _create_users(count: int) -> list[DATestUser]:
     prefix = f"craft-k8s-skill-{uuid4().hex[:8]}"
     return [UserManager.create(name=f"{prefix}-{idx}") for idx in range(count)]
+
+
+def _share_directly(
+    owner: DATestUser,
+    skill: SkillResponse,
+    user: DATestUser,
+) -> SkillResponse:
+    return SkillManager.share(
+        skill,
+        owner,
+        user_shares=[
+            SkillUserShareRequest(
+                user_id=UUID(user.id),
+                permission=SkillSharePermission.VIEWER,
+            )
+        ],
+    )
 
 
 @pytest.fixture
@@ -194,14 +211,12 @@ def _make_private_cc_pair(
 def _make_built_in_skill_row(db_session: Session, *, built_in_skill_id: str) -> Skill:
     skill = Skill(
         id=uuid4(),
-        slug=built_in_skill_id,
         name=built_in_skill_id,
         description="test built-in",
         built_in_skill_id=built_in_skill_id,
         bundle_file_id=None,
         bundle_sha256=None,
         public_permission=SkillSharePermission.VIEWER,
-        enabled=True,
     )
     db_session.add(skill)
     db_session.flush()
@@ -211,14 +226,14 @@ def _make_built_in_skill_row(db_session: Session, *, built_in_skill_id: str) -> 
 def _reset_built_in_skill_row(db_session: Session, *, built_in_skill_id: str) -> Skill:
     from sqlalchemy import delete
 
-    db_session.execute(delete(Skill).where(Skill.slug == built_in_skill_id))
+    db_session.execute(delete(Skill).where(Skill.name == built_in_skill_id))
     return _make_built_in_skill_row(db_session, built_in_skill_id=built_in_skill_id)
 
 
 def _seed_custom_skill(
     db_session: Session,
     *,
-    slug: str,
+    name: str,
     public: bool,
     body: str,
     group: UserGroup | None = None,
@@ -229,24 +244,22 @@ def _seed_custom_skill(
     from onyx.db.models import Skill__UserGroup
     from onyx.file_store.file_store import get_default_file_store
 
-    bundle_bytes = _bundle(slug, body)
+    bundle_bytes = _bundle(name, body)
     file_store = get_default_file_store()
     file_store.initialize()
     bundle_file_id = file_store.save_file(
         content=io.BytesIO(bundle_bytes),
-        display_name=f"{slug}.zip",
+        display_name=f"{name}.zip",
         file_origin=FileOrigin.SKILL_BUNDLE,
         file_type="application/zip",
     )
     skill = Skill(
         id=uuid4(),
-        slug=slug,
-        name=slug,
-        description=f"Seeded skill {slug}",
+        name=name,
+        description=f"Seeded skill {name}",
         bundle_file_id=bundle_file_id,
         bundle_sha256=hashlib.sha256(bundle_bytes).hexdigest(),
         public_permission=SkillSharePermission.VIEWER if public else None,
-        enabled=True,
     )
     db_session.add(skill)
     db_session.flush()
@@ -319,7 +332,39 @@ def _rendered_company_search_lines(db_session: Session, user: User) -> list[str]
 
 
 class TestSkillPush:
-    def test_public_skill_lands_in_every_running_sandbox(
+    def test_external_app_skill_lands_after_user_authenticates(
+        self,
+        k8s_admin_user: DATestUser,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        handle = running_sandbox()
+        user = handle.api_user
+        workspace = handle.workspace_path
+        app = ExternalAppManager.create(
+            user_performing_action=k8s_admin_user,
+            name=f"Credential-gated app {uuid4().hex[:8]}",
+            description="External app hydration integration test",
+            upstream_url_patterns=["https://api.example.com/*"],
+            auth_template={"Authorization": "Bearer {access_token}"},
+            organization_credentials={},
+            app_type=ExternalAppType.CUSTOM,
+        )
+        try:
+            user_app = ExternalAppManager.get_for_user(user, app.id)
+            skill_file = _skill_file_path(workspace, user_app.slug)
+            skill_file.wait_for_absent()
+
+            ExternalAppManager.upsert_user_credentials(
+                user_performing_action=user,
+                app_id=app.id,
+                credentials={"access_token": "integration-test-token"},
+            )
+
+            skill_file.wait_for_file()
+        finally:
+            ExternalAppManager.delete(k8s_admin_user, app.id)
+
+    def test_public_skill_lands_only_after_each_user_enables_it(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
@@ -328,20 +373,22 @@ class TestSkillPush:
         users = _create_users(3)
         workspaces = handle.provision_api_users(users)
 
-        slug = f"public-skill-{uuid4().hex[:6]}"
+        name = f"public-skill-{uuid4().hex[:6]}"
         skill = _create_skill(
             k8s_admin_user,
-            slug,
+            name,
             is_public=True,
             body="public skill body\n",
         )
 
-        for workspace in workspaces:
-            _skill_file_path(workspace, skill.slug).wait_for_bytes(
+        for user, workspace in zip(users, workspaces, strict=True):
+            _skill_file_path(workspace, skill.name).wait_for_absent()
+            SkillManager.set_enabled(skill, user, True)
+            _skill_file_path(workspace, skill.name).wait_for_bytes(
                 b"public skill body\n",
             )
 
-    def test_private_skill_only_lands_in_shared_users_sandboxes(
+    def test_private_skill_only_lands_for_enabled_shared_user(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
@@ -355,18 +402,20 @@ class TestSkillPush:
             [user_a.id],
         )
 
-        slug = f"eng-only-{uuid4().hex[:6]}"
+        name = f"eng-only-{uuid4().hex[:6]}"
         skill = _create_skill(
             k8s_admin_user,
-            slug,
+            name,
             is_public=False,
             group_ids=[group.id],
             body="engineering only\n",
         )
 
-        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"engineering only\n")
-        _skill_file_path(ws_b, skill.slug).wait_for_absent()
-        _skill_file_path(ws_c, skill.slug).wait_for_absent()
+        _skill_file_path(ws_a, skill.name).wait_for_absent()
+        _skill_file_path(ws_b, skill.name).wait_for_absent()
+        _skill_file_path(ws_c, skill.name).wait_for_absent()
+        SkillManager.set_enabled(skill, user_a, True)
+        _skill_file_path(ws_a, skill.name).wait_for_bytes(b"engineering only\n")
 
     def test_disable_skill_removes_files_from_affected_sandboxes(
         self,
@@ -382,23 +431,22 @@ class TestSkillPush:
             [user.id],
         )
 
-        slug = f"disable-me-{uuid4().hex[:6]}"
+        name = f"disable-me-{uuid4().hex[:6]}"
         skill = _create_skill(
             k8s_admin_user,
-            slug,
+            name,
             is_public=False,
             group_ids=[group.id],
             body="to be disabled\n",
         )
-        _skill_file_path(workspace, skill.slug).wait_for_bytes(b"to be disabled\n")
+        SkillManager.set_enabled(skill, user, True)
+        _skill_file_path(workspace, skill.name).wait_for_bytes(b"to be disabled\n")
 
-        SkillManager.patch_custom(
-            skill, k8s_admin_user, SkillPatchRequest(enabled=False)
-        )
+        SkillManager.set_enabled(skill, user, False)
 
-        (_skills_dir(workspace) / skill.slug).wait_for_absent()
+        (_skills_dir(workspace) / skill.name).wait_for_absent()
 
-    def test_share_change_adds_to_newly_shared_and_removes_from_revoked(
+    def test_group_share_change_revokes_old_user_and_new_user_starts_disabled(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
@@ -416,23 +464,27 @@ class TestSkillPush:
             [user_b.id],
         )
 
-        slug = f"shares-flip-{uuid4().hex[:6]}"
+        name = f"shares-flip-{uuid4().hex[:6]}"
         skill = _create_skill(
             k8s_admin_user,
-            slug,
+            name,
             is_public=False,
             group_ids=[group_x.id],
             body="shifting shares\n",
         )
-        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"shifting shares\n")
-        _skill_file_path(ws_b, skill.slug).wait_for_absent()
+        _skill_file_path(ws_a, skill.name).wait_for_absent()
+        _skill_file_path(ws_b, skill.name).wait_for_absent()
+        SkillManager.set_enabled(skill, user_a, True)
+        _skill_file_path(ws_a, skill.name).wait_for_bytes(b"shifting shares\n")
 
         SkillManager.replace_group_shares(skill, [group_y.id], k8s_admin_user)
 
-        _skill_file_path(ws_a, skill.slug).wait_for_absent()
-        _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"shifting shares\n")
+        _skill_file_path(ws_a, skill.name).wait_for_absent()
+        _skill_file_path(ws_b, skill.name).wait_for_absent()
+        SkillManager.set_enabled(skill, user_b, True)
+        _skill_file_path(ws_b, skill.name).wait_for_bytes(b"shifting shares\n")
 
-    def test_direct_user_share_change_adds_to_newly_shared_and_removes_from_revoked(
+    def test_direct_share_change_revokes_old_user_and_new_user_starts_disabled(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
@@ -441,15 +493,15 @@ class TestSkillPush:
         user_a, user_b = _create_users(2)
         [ws_a, ws_b] = handle.provision_api_users([user_a, user_b])
 
-        slug = f"direct-shares-flip-{uuid4().hex[:6]}"
+        name = f"direct-shares-flip-{uuid4().hex[:6]}"
         skill = _create_skill(
             k8s_admin_user,
-            slug,
+            name,
             is_public=False,
             body="direct shifting shares\n",
         )
-        _skill_file_path(ws_a, skill.slug).wait_for_absent()
-        _skill_file_path(ws_b, skill.slug).wait_for_absent()
+        _skill_file_path(ws_a, skill.name).wait_for_absent()
+        _skill_file_path(ws_b, skill.name).wait_for_absent()
 
         skill = SkillManager.share(
             skill,
@@ -462,8 +514,10 @@ class TestSkillPush:
             ],
         )
         assert [str(share.user.id) for share in skill.user_shares] == [user_a.id]
-        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"direct shifting shares\n")
-        _skill_file_path(ws_b, skill.slug).wait_for_absent()
+        _skill_file_path(ws_a, skill.name).wait_for_absent()
+        _skill_file_path(ws_b, skill.name).wait_for_absent()
+        SkillManager.set_enabled(skill, user_a, True)
+        _skill_file_path(ws_a, skill.name).wait_for_bytes(b"direct shifting shares\n")
 
         skill = SkillManager.share(
             skill,
@@ -477,8 +531,10 @@ class TestSkillPush:
         )
         assert [str(share.user.id) for share in skill.user_shares] == [user_b.id]
 
-        _skill_file_path(ws_a, skill.slug).wait_for_absent()
-        _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"direct shifting shares\n")
+        _skill_file_path(ws_a, skill.name).wait_for_absent()
+        _skill_file_path(ws_b, skill.name).wait_for_absent()
+        SkillManager.set_enabled(skill, user_b, True)
+        _skill_file_path(ws_b, skill.name).wait_for_bytes(b"direct shifting shares\n")
 
     def test_replace_bundle_propagates_new_content(
         self,
@@ -489,18 +545,120 @@ class TestSkillPush:
         [user] = _create_users(1)
         [workspace] = handle.provision_api_users([user])
 
-        slug = f"versioned-{uuid4().hex[:6]}"
+        name = f"versioned-{uuid4().hex[:6]}"
         skill = _create_skill(
             k8s_admin_user,
-            slug,
+            name,
             is_public=True,
             body="version one\n",
         )
-        _skill_file_path(workspace, skill.slug).wait_for_bytes(b"version one\n")
+        SkillManager.set_enabled(skill, user, True)
+        _skill_file_path(workspace, skill.name).wait_for_bytes(b"version one\n")
 
         _replace_bundle(k8s_admin_user, skill, body="version two\n")
 
-        _skill_file_path(workspace, skill.slug).wait_for_bytes(b"version two\n")
+        _skill_file_path(workspace, skill.name).wait_for_bytes(b"version two\n")
+
+    def test_owner_file_removal_propagates_to_shared_users_sandbox(
+        self,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        handle = running_sandbox()
+        shared_user, owner = _create_users(2)
+        [workspace] = handle.provision_api_users([shared_user])
+
+        name = f"remove-file-{uuid4().hex[:6]}"
+        skill = SkillManager.create_custom(
+            owner,
+            name=name,
+            bundle_bytes=_bundle(
+                name,
+                "keep these instructions\n",
+                **{"references/context.md": "remove this context\n"},
+            ),
+            filename=f"{name}.zip",
+        )
+        skill = _share_directly(owner, skill, shared_user)
+        SkillManager.set_enabled(skill, shared_user, True)
+
+        skill_md = _skill_file_path(workspace, skill.name)
+        context_file = _skill_file_path(workspace, skill.name, "references/context.md")
+        skill_md.wait_for_bytes(b"keep these instructions\n")
+        context_file.wait_for_bytes(b"remove this context\n")
+
+        SkillManager.remove_file(skill, "references/context.md", owner)
+
+        context_file.wait_for_absent()
+        skill_md.wait_for_bytes(b"keep these instructions\n")
+
+    def test_owner_file_upload_propagates_to_shared_users_sandbox(
+        self,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        handle = running_sandbox()
+        shared_user, owner = _create_users(2)
+        [workspace] = handle.provision_api_users([shared_user])
+
+        name = f"upload-file-{uuid4().hex[:6]}"
+        skill = _create_skill(owner, name, body="keep these instructions\n")
+        skill = _share_directly(owner, skill, shared_user)
+        SkillManager.set_enabled(skill, shared_user, True)
+
+        skill_md = _skill_file_path(workspace, skill.name)
+        context_file = _skill_file_path(workspace, skill.name, "references/context.md")
+        skill_md.wait_for_bytes(b"keep these instructions\n")
+        context_file.wait_for_absent()
+
+        SkillManager.upload_files(
+            skill,
+            b"new shared context\n",
+            "references/context.md",
+            owner,
+        )
+
+        context_file.wait_for_bytes(b"new shared context\n")
+        skill_md.wait_for_bytes(b"keep these instructions\n")
+
+    def test_skill_md_upload_replaces_bundle_in_shared_users_sandbox(
+        self,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        handle = running_sandbox()
+        shared_user, owner = _create_users(2)
+        [workspace] = handle.provision_api_users([shared_user])
+
+        name = f"replace-files-{uuid4().hex[:6]}"
+        skill = SkillManager.create_custom(
+            owner,
+            name=name,
+            bundle_bytes=_bundle(
+                name,
+                "old instructions\n",
+                **{"references/stale.md": "stale context\n"},
+            ),
+            filename=f"{name}.zip",
+        )
+        skill = _share_directly(owner, skill, shared_user)
+        SkillManager.set_enabled(skill, shared_user, True)
+
+        skill_md = _skill_file_path(workspace, skill.name)
+        stale_file = _skill_file_path(workspace, skill.name, "references/stale.md")
+        replacement_file = _skill_file_path(
+            workspace, skill.name, "references/current.md"
+        )
+        skill_md.wait_for_bytes(b"old instructions\n")
+        stale_file.wait_for_bytes(b"stale context\n")
+
+        replacement = _bundle(
+            name,
+            "new instructions\n",
+            **{"references/current.md": "current context\n"},
+        )
+        SkillManager.upload_files(skill, replacement, "replacement.zip", owner)
+
+        skill_md.wait_for_bytes(b"new instructions\n")
+        stale_file.wait_for_absent()
+        replacement_file.wait_for_bytes(b"current context\n")
 
     def test_delete_skill_removes_directory_from_all_affected_sandboxes(
         self,
@@ -511,20 +669,22 @@ class TestSkillPush:
         user_a, user_b = _create_users(2)
         [ws_a, ws_b] = handle.provision_api_users([user_a, user_b])
 
-        slug = f"to-delete-{uuid4().hex[:6]}"
+        name = f"to-delete-{uuid4().hex[:6]}"
         skill = _create_skill(
             k8s_admin_user,
-            slug,
+            name,
             is_public=True,
             body="will be deleted\n",
         )
-        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"will be deleted\n")
-        _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"will be deleted\n")
+        SkillManager.set_enabled(skill, user_a, True)
+        SkillManager.set_enabled(skill, user_b, True)
+        _skill_file_path(ws_a, skill.name).wait_for_bytes(b"will be deleted\n")
+        _skill_file_path(ws_b, skill.name).wait_for_bytes(b"will be deleted\n")
 
         SkillManager.delete_custom(skill, k8s_admin_user)
 
-        (_skills_dir(ws_a) / skill.slug).wait_for_absent()
-        (_skills_dir(ws_b) / skill.slug).wait_for_absent()
+        (_skills_dir(ws_a) / skill.name).wait_for_absent()
+        (_skills_dir(ws_b) / skill.name).wait_for_absent()
 
     def test_user_with_overlapping_shares_receives_skill_once(
         self,
@@ -544,17 +704,18 @@ class TestSkillPush:
             [user.id],
         )
 
-        slug = f"dup-shares-{uuid4().hex[:6]}"
+        name = f"dup-shares-{uuid4().hex[:6]}"
         skill = _create_skill(
             k8s_admin_user,
-            slug,
+            name,
             is_public=False,
             group_ids=[group_x.id, group_y.id],
             body="dedup\n",
         )
 
-        _skill_file_path(workspace, skill.slug).wait_for_bytes(b"dedup\n")
-        skill_dir = _skills_dir(workspace) / skill.slug
+        SkillManager.set_enabled(skill, user, True)
+        _skill_file_path(workspace, skill.name).wait_for_bytes(b"dedup\n")
+        skill_dir = _skills_dir(workspace) / skill.name
         skill_files = [p for p in skill_dir.rglob("*") if p.is_file()]
         assert len(skill_files) == 1
         assert skill_files[0].name == "SKILL.md"
@@ -579,7 +740,7 @@ class TestSkillPushLowLevel:
 
         skill = _seed_custom_skill(
             db_session,
-            slug=f"sleeping-{uuid4().hex[:6]}",
+            name=f"sleeping-{uuid4().hex[:6]}",
             public=True,
             body="anything\n",
         )
@@ -587,7 +748,7 @@ class TestSkillPushLowLevel:
         push_skill_to_affected_sandboxes(skill, db_session)
 
         assert workspace.exists()
-        assert not (_skills_dir(workspace) / skill.slug).exists()
+        assert not (_skills_dir(workspace) / skill.name).exists()
 
     def test_push_skips_terminated_sandboxes(
         self,
@@ -605,7 +766,7 @@ class TestSkillPushLowLevel:
 
         skill = _seed_custom_skill(
             db_session,
-            slug=f"terminated-{uuid4().hex[:6]}",
+            name=f"terminated-{uuid4().hex[:6]}",
             public=True,
             body="anything\n",
         )
@@ -613,7 +774,7 @@ class TestSkillPushLowLevel:
         push_skill_to_affected_sandboxes(skill, db_session)
 
         assert workspace.exists()
-        assert not (_skills_dir(workspace) / skill.slug).exists()
+        assert not (_skills_dir(workspace) / skill.name).exists()
 
     def test_company_search_skill_rendered_per_user(
         self,
@@ -661,14 +822,14 @@ class TestSkillPushLowLevel:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        slug = f"excl-builtin-{uuid4().hex[:6]}"
+        name = f"excl-builtin-{uuid4().hex[:6]}"
         skills_root = tmp_path / "builtin_src"
-        source_dir = skills_root / slug
+        source_dir = skills_root / name
         source_dir.mkdir(parents=True)
 
         # Files the exclusion rule must keep IN.
         (source_dir / "SKILL.md").write_text(
-            f"---\nname: {slug}\ndescription: exclusion test\n---\n# body\n"
+            f"---\nname: {name}\ndescription: exclusion test\n---\n# body\n"
         )
         (source_dir / "script.py").write_text("print('hello')\n")
 
@@ -682,21 +843,21 @@ class TestSkillPushLowLevel:
         monkeypatch.setattr("onyx.skills.built_in.BUILTIN_SKILLS_PATH", skills_root)
         monkeypatch.setitem(
             BUILT_IN_SKILLS,
-            slug,
-            BuiltInSkillDefinition(built_in_skill_id=slug),
+            name,
+            BuiltInSkillDefinition(built_in_skill_id=name),
         )
-        _make_built_in_skill_row(db_session, built_in_skill_id=slug)
+        _make_built_in_skill_row(db_session, built_in_skill_id=name)
 
         [api_user] = _create_users(1)
         user = _orm_user(db_session, api_user)
         db_session.commit()
 
         fileset = build_skills_fileset_for_user(user, db_session)
-        shipped = {Path(rel).name for rel in fileset if rel.startswith(f"{slug}/")}
+        shipped = {Path(rel).name for rel in fileset if rel.startswith(f"{name}/")}
 
         assert "SKILL.md" in shipped
         assert "script.py" in shipped
         assert "notes.template" not in shipped
         assert ".hidden" not in shipped
         assert "foo.pyc" not in shipped
-        assert not any(rel.startswith(f"{slug}/__pycache__/") for rel in fileset)
+        assert not any(rel.startswith(f"{name}/__pycache__/") for rel in fileset)

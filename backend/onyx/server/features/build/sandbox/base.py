@@ -15,30 +15,33 @@ Architecture Note (User-Shared Sandbox Model):
 """
 
 import time
-from abc import ABC
-from abc import abstractmethod
-from collections.abc import Callable
-from collections.abc import Generator
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentPlanUpdate
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import CurrentModeUpdate
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
-from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import PushFailure
-from onyx.server.features.build.sandbox.models import PushResult
-from onyx.server.features.build.sandbox.models import RetriableWriteError
-from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentPlanUpdate,
+    AgentThoughtChunk,
+    CurrentModeUpdate,
+    Error,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
+from onyx.server.features.build.sandbox.models import (
+    CraftMCPServerConfig,
+    FatalWriteError,
+    FileSet,
+    FilesystemEntry,
+    LLMProviderConfig,
+    PushFailure,
+    PushResult,
+    RetriableWriteError,
+    SandboxInfo,
+    SnapshotResult,
+)
 from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
@@ -118,6 +121,7 @@ class SandboxManager(_ServeMixin, ABC):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
@@ -125,6 +129,10 @@ class SandboxManager(_ServeMixin, ABC):
         configured. K8s pre-loads each into opencode-serve's startup config
         so per-prompt model overrides can cross providers without restarting
         the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
+
+        ``mcp_servers``: craft-enabled MCP servers to pre-register as remote
+        MCP endpoints in opencode's startup config (URL only; the proxy
+        injects credentials).
 
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces
@@ -165,7 +173,6 @@ class SandboxManager(_ServeMixin, ABC):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
@@ -183,7 +190,6 @@ class SandboxManager(_ServeMixin, ABC):
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration (passed to AGENTS.md rendering)
             nextjs_port: Port for the Next.js dev server, or None for headless.
-            skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
             connectable_apps_section: Pre-rendered ``{{CONNECTABLE_APPS_LIST}}`` (may be empty).
             user_name: User's name for personalization in AGENTS.md
 
@@ -205,7 +211,25 @@ class SandboxManager(_ServeMixin, ABC):
         Implementations MUST call ``self._close_session_buses(sandbox_id,
         session_id)`` — otherwise the per-session ``PodEventBus`` (reader
         thread + httpx connection) leaks until api_server restarts.
+
+        Raises when cleanup fails while the sandbox is reachable. A missing
+        sandbox is already clean and should be treated as success.
         """
+        ...
+
+    @abstractmethod
+    def regenerate_session_config(
+        self,
+        *,
+        sandbox_id: UUID,
+        session_id: UUID,
+        agent_provider: str | None,
+        agent_model: str | None,
+        nextjs_port: int | None,
+        connectable_apps_section: str,
+        user_name: str | None = None,
+    ) -> None:
+        """Rewrite generated session configuration without replacing outputs."""
         ...
 
     @abstractmethod
@@ -247,7 +271,6 @@ class SandboxManager(_ServeMixin, ABC):
         snapshot_storage_path: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
-        skills_section: str,
         connectable_apps_section: str,
     ) -> None:
         """Restore a session workspace from a snapshot.
@@ -348,6 +371,8 @@ class SandboxManager(_ServeMixin, ABC):
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
+        should_abort_on_teardown: Callable[[], bool] | None = None,
+        turn_timeout_seconds: float | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream typed sandbox events for one user message via
         opencode-serve.
@@ -369,6 +394,8 @@ class SandboxManager(_ServeMixin, ABC):
             agent_model,
             on_opencode_session_resolved=on_opencode_session_resolved,
             should_interrupt=should_interrupt,
+            should_abort_on_teardown=should_abort_on_teardown,
+            turn_timeout_seconds=turn_timeout_seconds,
         )
 
     def send_subagent_message(

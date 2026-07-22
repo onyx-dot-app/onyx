@@ -1,36 +1,35 @@
-from collections.abc import Callable
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import case
-from sqlalchemy import func
-from sqlalchemy import Select
-from sqlalchemy import select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql import expression
-from sqlalchemy.sql.elements import ColumnElement
-from sqlalchemy.sql.elements import KeyedColumnElement
+from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
 from sqlalchemy.sql.expression import or_
 
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import ANONYMOUS_USER_EMAIL
-from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
-from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_EMAIL
+from onyx.configs.constants import (
+    ANONYMOUS_USER_EMAIL,
+    DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
+    NO_AUTH_PLACEHOLDER_USER_EMAIL,
+    SLACK_SERVICE_ACCOUNT_EMAIL,
+)
 from onyx.db.enums import AccountType
-from onyx.db.models import DocumentSet
-from onyx.db.models import DocumentSet__User
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import SamlAccount
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
+from onyx.db.models import (
+    DocumentSet,
+    DocumentSet__User,
+    Persona,
+    Persona__User,
+    SamlAccount,
+    User,
+    User__UserGroup,
+    UserGroup,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -329,13 +328,15 @@ def fetch_user_by_id(db_session: Session, user_id: UUID) -> User | None:
     )
 
 
+def _generate_password_hash() -> str:
+    password_helper = PasswordHelper()
+    return password_helper.hash(password_helper.generate())
+
+
 def _generate_slack_user(email: str) -> User:
-    fastapi_users_pw_helper = PasswordHelper()
-    password = fastapi_users_pw_helper.generate()
-    hashed_pass = fastapi_users_pw_helper.hash(password)
     return User(
         email=email,
-        hashed_password=hashed_pass,
+        hashed_password=_generate_password_hash(),
         role=UserRole.SLACK_USER,
         account_type=AccountType.BOT,
     )
@@ -371,6 +372,31 @@ def add_slack_user_if_not_exists(
     db_session.add(user)
     db_session.commit()
     return user
+
+
+def get_or_create_slack_service_account(db_session: Session) -> User:
+    user = get_user_by_email(SLACK_SERVICE_ACCOUNT_EMAIL, db_session)
+    if user is not None:
+        return user
+
+    user = User(
+        email=SLACK_SERVICE_ACCOUNT_EMAIL,
+        hashed_password=_generate_password_hash(),
+        is_active=True,
+        is_verified=True,
+        role=UserRole.LIMITED,
+        account_type=AccountType.SERVICE_ACCOUNT,
+    )
+    db_session.add(user)
+    try:
+        db_session.commit()
+        return user
+    except IntegrityError:
+        db_session.rollback()
+        concurrent_user = get_user_by_email(SLACK_SERVICE_ACCOUNT_EMAIL, db_session)
+        if concurrent_user is None:
+            raise
+        return concurrent_user
 
 
 def _get_users_by_emails(

@@ -74,8 +74,14 @@ export enum PacketType {
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
+  // Legacy LLM-facing name; still present in sessions persisted before the
+  // rename (OpenAI reserves the function name "python" and rejects it).
   PYTHON: "python",
+  RUN_PYTHON: "run_python",
 } as const;
+
+export const isCodeInterpreterToolType = (toolType: string): boolean =>
+  (Object.values(CODE_INTERPRETER_TOOL_TYPES) as string[]).includes(toolType);
 
 // Basic Message Packets
 export interface MessageStart extends BaseObj {
@@ -136,6 +142,9 @@ export interface SearchToolFilterDelta extends BaseObj {
   type: "search_tool_filter_delta";
   // Connector/source values this search is scoped to (empty == all)
   sources: string[];
+  // Applied time window as ISO datetime strings; either bound may be open-ended
+  time_filter_start?: string | null;
+  time_filter_end?: string | null;
 }
 
 export interface SearchToolDocumentsDelta extends BaseObj {

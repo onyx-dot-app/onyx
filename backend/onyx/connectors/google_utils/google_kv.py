@@ -1,45 +1,37 @@
 import json
-from typing import Any
-from typing import cast
-from urllib.parse import parse_qs
-from urllib.parse import ParseResult
-from urllib.parse import urlparse
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
+from urllib.parse import ParseResult, parse_qs, urlparse
 
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import KV_CRED_KEY
-from onyx.connectors.google_utils.resources import get_drive_service
-from onyx.connectors.google_utils.resources import get_gmail_service
+from onyx.configs.constants import KV_CRED_KEY, DocumentSource
+from onyx.connectors.google_utils.resources import get_drive_service, get_gmail_service
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
-)
-from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
-from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import GOOGLE_SCOPES
-from onyx.connectors.google_utils.shared_constants import (
+    GOOGLE_SCOPES,
+    MISSING_SCOPES_ERROR_STR,
+    ONYX_SCOPE_INSTRUCTIONS,
     GoogleOAuthAuthenticationMethod,
 )
-from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
-from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
-from onyx.db.credentials import fetch_credential_by_id_for_user
-from onyx.db.credentials import update_credential_json
+from onyx.db.credentials import fetch_credential_by_id_for_user, update_credential_json
+from onyx.db.encrypted_kv_store import (
+    delete_encrypted_kv,
+    load_encrypted_kv,
+    upsert_encrypted_kv,
+)
 from onyx.db.models import User
-from onyx.key_value_store.factory import get_kv_store
-from onyx.key_value_store.interface import unwrap_str
-from onyx.server.documents.models import CredentialBase
-from onyx.server.documents.models import GoogleServiceAccountKey
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.server.documents.models import CredentialBase, GoogleServiceAccountKey
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -96,11 +88,51 @@ def _get_current_oauth_user(creds: OAuthCredentials, source: DocumentSource) -> 
     return email
 
 
+# Bounds how long an unused handshake row survives, standing in for the TTL the
+# cache-fronted KV store used to provide.
+_HANDSHAKE_TTL = timedelta(hours=1)
+
+
+def _load_handshake_state(credential_id: int) -> dict[str, Any]:
+    """One-time CSRF/PKCE state for an in-flight authorize; expired rows are
+    dropped and rejected rather than honored."""
+    key = KV_CRED_KEY.format(str(credential_id))
+    try:
+        payload = load_encrypted_kv(key)
+    except KvKeyNotFoundError:
+        # No row: never started, already consumed, or expired-and-dropped.
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "No Google authorization flow is in progress. Restart the authorization.",
+        )
+    issued_at_raw = (
+        payload.get("issued_at")  # ty: ignore[invalid-argument-type]
+        if isinstance(payload, dict)
+        else None
+    )
+    issued_at = (
+        datetime.fromisoformat(issued_at_raw)
+        if isinstance(issued_at_raw, str)
+        else None
+    )
+    if issued_at is None or datetime.now(timezone.utc) - issued_at > _HANDSHAKE_TTL:
+        try:
+            delete_encrypted_kv(key)
+        except KvKeyNotFoundError:
+            pass
+        raise OnyxError(
+            OnyxErrorCode.CSRF_FAILURE,
+            "The Google authorization flow expired. Restart the authorization.",
+        )
+    return cast(dict[str, Any], payload)
+
+
 def verify_csrf(credential_id: int, state: str) -> None:
-    csrf = unwrap_str(get_kv_store().load(KV_CRED_KEY.format(str(credential_id))))
+    csrf = _load_handshake_state(credential_id).get("value")
     if csrf != state:
-        raise PermissionError(
-            "State from Google Drive Connector callback does not match expected"
+        raise OnyxError(
+            OnyxErrorCode.CSRF_FAILURE,
+            "State from Google Drive Connector callback does not match expected",
         )
 
 
@@ -119,12 +151,11 @@ def update_credential_access_tokens(
         redirect_uri=_build_frontend_google_drive_redirect(source),
     )
     # PKCE: the token exchange runs in a separate request from get_auth_url,
-    # so the autogenerated verifier only survives via the KV store.
-    kv_payload = get_kv_store().load(KV_CRED_KEY.format(str(credential_id)))
-    if isinstance(kv_payload, dict):
-        code_verifier = kv_payload.get("code_verifier")  # ty: ignore[invalid-argument-type]
-        if isinstance(code_verifier, str):
-            flow.code_verifier = code_verifier
+    # so the autogenerated verifier only survives via persisted storage.
+    kv_payload = _load_handshake_state(credential_id)
+    code_verifier = kv_payload.get("code_verifier")
+    if isinstance(code_verifier, str):
+        flow.code_verifier = code_verifier
     flow.fetch_token(code=auth_code)
     creds = flow.credentials
     token_json_str = creds.to_json()
@@ -135,7 +166,9 @@ def update_credential_access_tokens(
         email = _get_current_oauth_user(creds, source)
     except Exception as e:
         if MISSING_SCOPES_ERROR_STR in str(e):
-            raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS, ONYX_SCOPE_INSTRUCTIONS
+            ) from e
         raise e
 
     new_creds_dict = {
@@ -148,6 +181,11 @@ def update_credential_access_tokens(
 
     if not update_credential_json(credential_id, new_creds_dict, user, db_session):
         return None
+    # The handshake state is one-time use; drop it so captured values expire here.
+    try:
+        delete_encrypted_kv(KV_CRED_KEY.format(str(credential_id)))
+    except KvKeyNotFoundError:
+        pass
     return creds
 
 
@@ -246,14 +284,14 @@ def get_auth_url(
     parsed_url = cast(ParseResult, urlparse(auth_url))
     params = parse_qs(parsed_url.query)
 
-    get_kv_store().store(
+    upsert_encrypted_kv(
         KV_CRED_KEY.format(credential_id),
         {
             "value": params.get("state", [None])[0],
             # authorization_url() autogenerates a PKCE verifier. Persist it for
             # the callback's token exchange, which runs in a separate request.
             "code_verifier": flow.code_verifier,
+            "issued_at": datetime.now(timezone.utc).isoformat(),
         },
-        encrypt=True,
     )
     return str(auth_url)

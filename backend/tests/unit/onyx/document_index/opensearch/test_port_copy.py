@@ -5,8 +5,7 @@ create-only write (after the slow re-embed) so a doc deleted while the batch was
 being read/embedded is not resurrected into the FUTURE index.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from pydantic import BaseModel
 

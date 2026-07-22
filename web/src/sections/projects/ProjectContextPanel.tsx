@@ -10,7 +10,7 @@ import { Button, Divider, LineItemButton, Text } from "@opal/components";
 import { Content, ContentAction } from "@opal/layouts";
 import AddInstructionModal from "@/sections/modals/AddInstructionModal";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import { FileCard } from "@/sections/cards/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
 import { cn } from "@opal/utils";

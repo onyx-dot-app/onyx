@@ -16,14 +16,24 @@ global:
   host: "0.0.0.0"
 
 # -- Custom (private/internal) CA certificates for outbound TLS.
-# When enabled, every pod that makes outbound TLS connections (api server,
-# celery workers, bots, MCP server, model servers) mounts the referenced
-# Secret/ConfigMap at /usr/local/share/ca-certificates, runs
-# `update-ca-certificates` at startup, and sets REQUESTS_CA_BUNDLE /
-# SSL_CERT_FILE so Python HTTP clients trust the updated bundle.
-# Keys must be PEM certs ending in `.crt`.
-# NOTE: requires the containers to run as root (the chart default);
-# incompatible with runAsNonRoot overrides.
+# When enabled, every pod that makes outbound TLS connections mounts the
+# referenced Secret/ConfigMap and trusts its roots. Keys must be PEM certs
+# ending in `.crt` (model servers also accept `.pem`). Two mechanisms, by pod
+# type:
+#   - Shell-based pods (api server, celery workers, bots, MCP server) mount at
+#     /usr/local/share/ca-certificates, run `update-ca-certificates` at startup,
+#     and get REQUESTS_CA_BUNDLE / SSL_CERT_FILE pointed at the merged system
+#     bundle. These require the container to run as root (the chart default);
+#     incompatible with runAsNonRoot overrides.
+#   - Model servers run on a distroless image with no shell, so they mount at
+#     /etc/onyx/certs and merge the mounted roots with certifi's public roots in
+#     Python at startup (additive — public roots stay trusted). No root required.
+# Version coupling: chart >= 0.7.0 pairs with the distroless model-server image
+# and can't run older ones — the model servers now run nonroot (1001, see their
+# securityContext below) and read ONYX_CUSTOM_CA_CERTS_DIR. Upgrade the chart and
+# the model-server image together: an old chart on the new image crash-loops (no
+# shell for update-ca-certificates), and this chart on an old, root-built image
+# can't write the image's root-owned dirs as 1001.
 customCACerts:
   enabled: false
   # Exactly one of secretName / configMapName must be set when enabled.
@@ -177,13 +187,25 @@ inferenceCapability:
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
-  podSecurityContext: {}
+  # Runs as the image's onyx user (UID 1001), which owns the venv, HF cache, and
+  # /var/log/onyx. customCACerts no longer needs root — the distroless server
+  # merges custom roots in Python, not via update-ca-certificates. NOTE: requires
+  # the distroless model-server image; an older, root-built image can't write its
+  # root-owned dirs as 1001. To run as root, set runAsNonRoot: false and
+  # runAsUser: 0 in both this block and podSecurityContext (setting only
+  # runAsUser: 0 while runAsNonRoot stays true is rejected at admission).
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    fsGroup: 1001
   securityContext:
-    # `privileged` is not needed by this workload and is intentionally omitted.
-    # root is kept only so the optional customCACerts feature can run
-    # update-ca-certificates; to run non-root, override this and
-    # podSecurityContext (see codeInterpreter below for the pattern).
-    runAsUser: 0
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: false
+    runAsNonRoot: true
+    runAsUser: 1001
+    allowPrivilegeEscalation: false
   nodeSelector: {}
   tolerations: []
   affinity: {}
@@ -238,13 +260,25 @@ indexCapability:
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
-  podSecurityContext: {}
+  # Runs as the image's onyx user (UID 1001), which owns the venv, HF cache, and
+  # /var/log/onyx. customCACerts no longer needs root — the distroless server
+  # merges custom roots in Python, not via update-ca-certificates. NOTE: requires
+  # the distroless model-server image; an older, root-built image can't write its
+  # root-owned dirs as 1001. To run as root, set runAsNonRoot: false and
+  # runAsUser: 0 in both this block and podSecurityContext (setting only
+  # runAsUser: 0 while runAsNonRoot stays true is rejected at admission).
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    fsGroup: 1001
   securityContext:
-    # `privileged` is not needed by this workload and is intentionally omitted.
-    # root is kept only so the optional customCACerts feature can run
-    # update-ca-certificates; to run non-root, override this and
-    # podSecurityContext (see codeInterpreter below for the pattern).
-    runAsUser: 0
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: false
+    runAsNonRoot: true
+    runAsUser: 1001
+    allowPrivilegeEscalation: false
   nodeSelector: {}
   tolerations: []
   affinity: {}
@@ -312,7 +346,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "6"
+      onyx.app/nginx-config-version: "7"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -1022,6 +1056,9 @@ mcpServer:
 celery_worker_docfetching:
   extraEnv: []
   replicaCount: 1
+  # Grace for the watchdog to mark its in-flight attempt INTERRUPTED and stop its
+  # subprocess on SIGTERM. Must exceed the watchdog poll interval + subprocess grace.
+  terminationGracePeriodSeconds: 60
   # Per-worker log level override. Empty (default) means use the global
   # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
   # this worker only — this becomes `--loglevel=<value>` on the celery worker
@@ -1417,15 +1454,14 @@ auth:
     values:
       user_auth_secret: ""
   metricsAuth:
-    # -- Bearer token guarding the API server's /metrics endpoint. /metrics
+    # -- Bearer token guarding the API and MCP servers' /metrics endpoints. /metrics
     # returns 401 by default until you either enable this (provide a token) or
     # explicitly opt out via configMap.DISABLE_METRICS_AUTH="true". When enabled,
     # scrapers must send the token as `Authorization: Bearer <token>` (Prometheus
-    # scrape config: `authorization`), and the api ServiceMonitor below is wired
+    # scrape config: `authorization`), and the ServiceMonitors are wired
     # to send it automatically.
     enabled: false
-    # -- Only inject the token into pods that serve the protected /metrics (the
-    # API server), not every backend pod. Routes through onyx.envSecretsRestricted.
+    # -- Only inject the token into pods that serve protected /metrics.
     allPods: false
     # -- Overwrite the default secret name, ignored if existingSecret is defined
     secretName: 'onyx-metrics-auth'
@@ -1478,6 +1514,13 @@ configMap:
   AUTH_TYPE: "basic"
   # Enable PKCE for OIDC login flow. Leave empty/false for backward compatibility.
   OIDC_PKCE_ENABLED: ""
+  # Opt-in: capture IdP directory claims at OAuth/OIDC login and use them to
+  # enrich chat prompts and resolve {{user.<key>}} agent placeholders. Sends
+  # directory data to the configured LLM, so off by default.
+  IDP_PROFILE_ENRICHMENT_ENABLED: ""
+  # Optional JSON overriding the directory claim aliases per profile field, e.g.
+  # '{"department": ["dept", "division"], "country": ["c"]}'.
+  IDP_PROFILE_CLAIM_MAP: ""
   # 1 Day Default
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
@@ -1507,10 +1550,30 @@ configMap:
   # MinIO/S3 Configuration override
   S3_ENDPOINT_URL: ""  # only used if minio is not enabled
   S3_FILE_STORE_BUCKET_NAME: ""
+  # Azure Blob Storage file store (set FILE_STORE_BACKEND: "azure" and
+  # minio.enabled: false). Auth priority: AZURE_STORAGE_CONNECTION_STRING,
+  # then AZURE_STORAGE_ACCOUNT_KEY, then DefaultAzureCredential (AKS Workload
+  # Identity / managed identity). Put the connection string / account key in a
+  # secret rather than here for production.
+  AZURE_FILE_STORE_CONTAINER_NAME: ""
+  AZURE_FILE_STORE_PREFIX: ""
+  AZURE_STORAGE_ACCOUNT_NAME: ""
+  # Derived from the account name when unset; set explicitly for sovereign
+  # clouds (e.g. *.blob.core.usgovcloudapi.net).
+  AZURE_STORAGE_ACCOUNT_URL: ""
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""
   LLM_SOCKET_READ_TIMEOUT: "60"
   MAX_CHUNKS_FED_TO_CHAT: ""
+  # Usage / cost accounting
+  # Records priced generation spans into the per-user usage ledger (default on).
+  # Set to "false" to disable the recording processor entirely.
+  USER_USAGE_TRACKING_ENABLED: ""
+  # Flat per-image cost in cents when litellm has no price for an image model (default 4).
+  DEFAULT_IMAGE_COST_CENTS: ""
+  # Fallback USD per million tokens when litellm can't price a model (default 0 = free).
+  DEFAULT_LLM_INPUT_COST_PER_MTOK: ""
+  DEFAULT_LLM_OUTPUT_COST_PER_MTOK: ""
   # Query Options
   DOC_TIME_DECAY: ""
   HYBRID_ALPHA: ""
@@ -1536,8 +1599,20 @@ configMap:
   CONFLUENCE_CONNECTOR_LABELS_TO_SKIP: ""
   JIRA_CLOUD_API_VERSION: ""
   JIRA_SERVER_API_VERSION: ""
+  CANVAS_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  BOX_CONNECTOR_SIZE_THRESHOLD: ""
+  BOX_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  BOX_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   GONG_CONNECTOR_START_TIME: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
+  # Push every successfully indexed public-connector document to an external
+  # HTTP endpoint (failures never fail indexing). Intended for non-EE
+  # deployments — EE users should configure the Document Push hook in the
+  # admin UI instead. Not supported in multi-tenant deployments.
+  DOCUMENT_PUSH_ENDPOINT_URL: ""
+  DOCUMENT_PUSH_API_KEY: ""
+  DOCUMENT_PUSH_TIMEOUT_SECONDS: ""
   # Worker Parallelism
   CELERY_WORKER_DOCPROCESSING_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
@@ -1635,10 +1710,10 @@ sandboxProxy:
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 512Mi
     limits:
       cpu: 1000m
-      memory: 1Gi
+      memory: 2Gi
   nodeSelector: {}
   tolerations: []
   affinity: {}

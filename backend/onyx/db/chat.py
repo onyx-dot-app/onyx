@@ -1,42 +1,31 @@
 from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import func
-from sqlalchemy import nullsfirst
-from sqlalchemy import or_
-from sqlalchemy import Row
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import Row, delete, desc, func, nullsfirst, or_, select, update
 from sqlalchemy.exc import MultipleResultsFound
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatMessage__SearchDoc
-from onyx.db.models import ChatSession
-from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import Persona
+from onyx.db.models import (
+    ChatMessage,
+    ChatMessage__SearchDoc,
+    ChatSession,
+    ChatSessionSharedStatus,
+    Persona,
+    ToolCall,
+    User,
+)
 from onyx.db.models import SearchDoc as DBSearchDoc
-from onyx.db.models import ToolCall
-from onyx.db.models import User
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
-from onyx.llm.override_models import LLMOverride
-from onyx.llm.override_models import PromptOverride
+from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
@@ -370,7 +359,7 @@ def delete_chat_session(
 
 
 def get_chat_sessions_older_than(
-    days_old: int, db_session: Session
+    days_old: float, db_session: Session, limit: int | None = None
 ) -> list[tuple[UUID | None, UUID]]:
     """
     Retrieves chat sessions whose last activity is older than a specified number of days.
@@ -382,6 +371,9 @@ def get_chat_sessions_older_than(
     Args:
         days_old: The number of days to consider as "old".
         db_session: The database session.
+        limit: Optional cap on the number of sessions returned. When set, the
+            oldest sessions are returned first so callers can drain the backlog
+            in bounded batches without loading every matching row at once.
 
     Returns:
         A list of tuples, where each tuple contains the user_id (can be None) and the chat_session_id of an old chat session.
@@ -391,11 +383,16 @@ def get_chat_sessions_older_than(
     last_activity = func.coalesce(
         func.max(ChatMessage.time_sent), ChatSession.time_created
     )
-    old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
+    stmt = (
         select(ChatSession.user_id, ChatSession.id)
         .outerjoin(ChatMessage, ChatMessage.chat_session_id == ChatSession.id)
         .group_by(ChatSession.id, ChatSession.user_id)
         .having(last_activity < cutoff_time)
+    )
+    if limit is not None:
+        stmt = stmt.order_by(last_activity.asc()).limit(limit)
+    old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
+        stmt
     ).fetchall()
 
     # convert old_sessions to a conventional list of tuples

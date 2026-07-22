@@ -57,9 +57,7 @@ test.describe("Signup flow", () => {
     await page.getByTestId("password").blur();
 
     // Wait for validation error to appear
-    await expect(
-      page.getByText(/must be at least 8 characters/i)
-    ).toBeVisible();
+    await expect(page.getByText(/must be between \d/i)).toBeVisible();
 
     // Verify submit button is disabled
     await expect(

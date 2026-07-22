@@ -1,7 +1,9 @@
-from onyx.prompts.deep_research.dr_tool_prompts import GENERATE_PLAN_TOOL_NAME
-from onyx.prompts.deep_research.dr_tool_prompts import GENERATE_REPORT_TOOL_NAME
-from onyx.prompts.deep_research.dr_tool_prompts import RESEARCH_AGENT_TOOL_NAME
-from onyx.prompts.deep_research.dr_tool_prompts import THINK_TOOL_NAME
+from onyx.prompts.deep_research.dr_tool_prompts import (
+    GENERATE_PLAN_TOOL_NAME,
+    GENERATE_REPORT_TOOL_NAME,
+    RESEARCH_AGENT_TOOL_NAME,
+    THINK_TOOL_NAME,
+)
 
 # ruff: noqa: E501, W605 start
 CLARIFICATION_PROMPT = f"""

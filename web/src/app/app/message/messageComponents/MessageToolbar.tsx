@@ -22,7 +22,7 @@ import { SvgRefreshCw, SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { LlmManager } from "@/lib/hooks";
 import { RegenerationFactory } from "@/app/app/message/messageComponents/AgentMessage";
 import useFeedbackController from "@/hooks/useFeedbackController";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
@@ -30,6 +30,7 @@ import TTSButton from "@/app/app/message/messageComponents/TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { findModelConfigId } from "@/lib/languageModels/options";
+import { getModelIcon } from "@/lib/languageModels";
 
 interface SouurcesTagWrapperProps {
   citations: StreamingCitation[];
@@ -112,6 +113,9 @@ export interface MessageToolbarProps {
   parentMessage?: Message | null;
   llmManager: LlmManager | null;
   currentModelName?: string;
+  /** Provider slug for `currentModelName`, used to resolve the model icon in
+   * the read-only footer chip shown when there's no `llmManager`. */
+  currentModelProvider?: string;
 
   // Citations
   citations: StreamingCitation[];
@@ -134,6 +138,7 @@ export default function MessageToolbar({
   parentMessage,
   llmManager,
   currentModelName,
+  currentModelProvider,
   citations,
   documentMap,
 }: MessageToolbarProps) {
@@ -228,7 +233,7 @@ export default function MessageToolbar({
 
       <div
         data-testid="AgentMessage/toolbar"
-        className="flex md:flex-row justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1"
+        className="flex justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1"
       >
         <TooltipGroup>
           <div className="flex items-center">
@@ -290,6 +295,20 @@ export default function MessageToolbar({
                   removeThinkingTokens(getTextContent(rawPackets)) as string
                 }
               />
+            )}
+
+            {/* Read-only model label for the shared view: no llmManager to
+                power the interactive selector, so surface which model answered. */}
+            {!llmManager && currentModelName && (
+              <OpenButton
+                disabled
+                icon={getModelIcon(
+                  currentModelProvider ?? "",
+                  currentModelName
+                )}
+              >
+                {currentModelName}
+              </OpenButton>
             )}
 
             {onRegenerate &&

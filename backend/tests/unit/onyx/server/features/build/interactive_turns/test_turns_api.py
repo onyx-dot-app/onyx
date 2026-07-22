@@ -5,8 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import cast
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -14,11 +13,13 @@ from sqlalchemy.orm import Session
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.interactive_turns import api as turns_api
-from onyx.server.features.build.interactive_turns.state import claim_turn_for_runner
-from onyx.server.features.build.interactive_turns.state import create_interactive_turn
-from onyx.server.features.build.interactive_turns.state import finish_turn
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_SUCCEEDED
+from onyx.server.features.build.interactive_turns.state import (
+    TURN_STATUS_FAILED,
+    TURN_STATUS_SUCCEEDED,
+    claim_turn_for_runner,
+    create_interactive_turn,
+    finish_turn,
+)
 from tests.unit.fakes import FakeCache
 
 
@@ -324,6 +325,155 @@ def test_get_interactive_turn_events_yields_failed_turn_error_after_stream_chunk
     assert '"type": "error"' in chunks[1]
     assert '"message": "provider model not found"' in chunks[1]
     assert len(chunks) == 2
+
+
+def test_get_interactive_turn_events_retries_runner_start_mid_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    turn_id = _create_running_turn(cache, session_id=session_id, user_id=user_id)
+    started: list[UUID] = []
+
+    fake_monotonic_value = [0.0]
+
+    def fake_monotonic() -> float:
+        fake_monotonic_value[0] += turns_api.LIVE_STREAM_RUNNER_RETRY_SECONDS + 1.0
+        return fake_monotonic_value[0]
+
+    class FakeSessionManager:
+        def __init__(self, db_session: object) -> None:
+            _ = db_session
+
+        def subscribe_to_existing_session_events(
+            self,
+            session_id_arg: UUID,
+            user_id_arg: UUID,
+            keepalive_seconds: float,
+        ) -> Iterator[str]:
+            assert session_id_arg == session_id
+            assert user_id_arg == user_id
+            assert keepalive_seconds == turns_api.LIVE_STREAM_KEEPALIVE_SECONDS
+            for i in range(3):
+                yield (
+                    "event: message\n"
+                    f'data: {{"type":"text_chunk","text":"chunk-{i}"}}\n\n'
+                )
+
+    monkeypatch.setattr(turns_api, "get_cache_backend", lambda: cache)
+    monkeypatch.setattr(
+        turns_api,
+        "start_interactive_turn_runner",
+        lambda turn_id_arg: started.append(turn_id_arg) or False,
+    )
+    monkeypatch.setattr(turns_api, "StreamingResponse", _FakeStreamingResponse)
+    monkeypatch.setattr(
+        turns_api,
+        "time",
+        SimpleNamespace(sleep=lambda _: None, monotonic=fake_monotonic),
+    )
+    monkeypatch.setattr(turns_api, "SessionManager", FakeSessionManager)
+    monkeypatch.setattr(
+        turns_api,
+        "get_session_with_current_tenant",
+        _fake_db_session_scope,
+    )
+    monkeypatch.setattr(
+        turns_api,
+        "get_build_session",
+        lambda *_: SimpleNamespace(id=session_id, opencode_session_id="opencode-1"),
+    )
+
+    response = cast(
+        _FakeStreamingResponse,
+        turns_api.get_interactive_turn_events(
+            session_id=session_id,
+            turn_id=turn_id,
+            user=cast(User, SimpleNamespace(id=user_id)),
+            db_session=cast(Session, SimpleNamespace()),
+        ),
+    )
+
+    chunks = list(response.body)
+
+    assert len(chunks) == 3
+    assert len(started) >= 2
+    assert started[0] == turn_id
+
+
+def test_get_interactive_turn_events_rate_limits_runner_retry_within_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    turn_id = _create_running_turn(cache, session_id=session_id, user_id=user_id)
+    started: list[UUID] = []
+
+    fake_monotonic_value = [0.0]
+
+    def fake_monotonic() -> float:
+        fake_monotonic_value[0] += 0.01
+        return fake_monotonic_value[0]
+
+    class FakeSessionManager:
+        def __init__(self, db_session: object) -> None:
+            _ = db_session
+
+        def subscribe_to_existing_session_events(
+            self,
+            session_id_arg: UUID,
+            user_id_arg: UUID,
+            keepalive_seconds: float,
+        ) -> Iterator[str]:
+            assert session_id_arg == session_id
+            assert user_id_arg == user_id
+            assert keepalive_seconds == turns_api.LIVE_STREAM_KEEPALIVE_SECONDS
+            for i in range(3):
+                yield (
+                    "event: message\n"
+                    f'data: {{"type":"text_chunk","text":"chunk-{i}"}}\n\n'
+                )
+
+    monkeypatch.setattr(turns_api, "get_cache_backend", lambda: cache)
+    monkeypatch.setattr(
+        turns_api,
+        "start_interactive_turn_runner",
+        lambda turn_id_arg: started.append(turn_id_arg) or False,
+    )
+    monkeypatch.setattr(turns_api, "StreamingResponse", _FakeStreamingResponse)
+    monkeypatch.setattr(
+        turns_api,
+        "time",
+        SimpleNamespace(sleep=lambda _: None, monotonic=fake_monotonic),
+    )
+    monkeypatch.setattr(turns_api, "SessionManager", FakeSessionManager)
+    monkeypatch.setattr(
+        turns_api,
+        "get_session_with_current_tenant",
+        _fake_db_session_scope,
+    )
+    monkeypatch.setattr(
+        turns_api,
+        "get_build_session",
+        lambda *_: SimpleNamespace(id=session_id, opencode_session_id="opencode-1"),
+    )
+
+    response = cast(
+        _FakeStreamingResponse,
+        turns_api.get_interactive_turn_events(
+            session_id=session_id,
+            turn_id=turn_id,
+            user=cast(User, SimpleNamespace(id=user_id)),
+            db_session=cast(Session, SimpleNamespace()),
+        ),
+    )
+
+    chunks = list(response.body)
+
+    assert len(chunks) == 3
+    assert started == [turn_id]
 
 
 def test_get_interactive_turn_events_requires_active_turn(

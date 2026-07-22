@@ -23,6 +23,15 @@ class LLMProviderConfig(BaseModel):
     api_base: str | None
 
 
+class CraftMCPServerConfig(BaseModel):
+    """A craft-enabled MCP server resolved for opencode `mcp` emission (URL only;
+    the proxy injects credentials). ``key`` is the opencode server id."""
+
+    key: str
+    url: str
+    disabled_tools: tuple[str, ...] = ()
+
+
 class SandboxInfo(BaseModel):
     """Information about a sandbox instance.
 

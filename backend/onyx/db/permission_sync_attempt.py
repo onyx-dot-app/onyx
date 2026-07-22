@@ -4,25 +4,22 @@ This module contains all CRUD operations for both DocPermissionSyncAttempt
 and ExternalGroupPermissionSyncAttempt models, along with shared utilities.
 """
 
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from sqlalchemy import delete
-from sqlalchemy import func
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.engine.cursor import CursorResult
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import PermissionSyncStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import DocPermissionSyncAttempt
-from onyx.db.models import ExternalGroupPermissionSyncAttempt
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    DocPermissionSyncAttempt,
+    ExternalGroupPermissionSyncAttempt,
+)
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()

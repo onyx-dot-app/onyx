@@ -1,8 +1,13 @@
+/**
+ * @jest-environment jsdom
+ */
 import {
   craftModelName,
+  getCraftOnboardingSeen,
   getDefaultLlmSelection,
   hasSupportedCraftProvider,
   isSupportedProviderType,
+  setCraftOnboardingSeen,
 } from "@/app/craft/onboarding/constants";
 import { ModelConfiguration } from "@/lib/languageModels/types";
 
@@ -93,5 +98,22 @@ describe("getDefaultLlmSelection", () => {
   it("returns null with no providers", () => {
     expect(getDefaultLlmSelection([])).toBeNull();
     expect(getDefaultLlmSelection(undefined)).toBeNull();
+  });
+});
+
+describe("craft intro seen flag", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("is false before being set and true after", () => {
+    expect(getCraftOnboardingSeen("user-1")).toBe(false);
+    setCraftOnboardingSeen("user-1");
+    expect(getCraftOnboardingSeen("user-1")).toBe(true);
+  });
+
+  it("is scoped per user", () => {
+    setCraftOnboardingSeen("user-1");
+    expect(getCraftOnboardingSeen("user-2")).toBe(false);
   });
 });

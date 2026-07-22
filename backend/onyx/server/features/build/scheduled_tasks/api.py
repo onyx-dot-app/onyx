@@ -13,50 +13,46 @@ The router is mounted under the existing ``/build`` prefix (see
 
 from __future__ import annotations
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Query
-from fastapi import Response
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import model_validator
+from fastapi import APIRouter, Depends, Query, Response
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as celery_app
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskStatus
-from onyx.db.enums import ScheduledTaskTriggerSource
+from onyx.db.enums import (
+    Permission,
+    ScheduledTaskRunStatus,
+    ScheduledTaskStatus,
+    ScheduledTaskTriggerSource,
+)
 from onyx.db.external_app import get_external_apps
-from onyx.db.models import ScheduledTask
-from onyx.db.models import ScheduledTaskRun
-from onyx.db.models import User
-from onyx.db.scheduled_task import create_scheduled_task
-from onyx.db.scheduled_task import get_scheduled_task
-from onyx.db.scheduled_task import insert_run
-from onyx.db.scheduled_task import list_runs_for_task
-from onyx.db.scheduled_task import list_scheduled_tasks_for_user
-from onyx.db.scheduled_task import soft_delete_scheduled_task
-from onyx.db.scheduled_task import update_scheduled_task
+from onyx.db.models import ScheduledTask, ScheduledTaskRun, User
+from onyx.db.scheduled_task import (
+    create_scheduled_task,
+    get_scheduled_task,
+    insert_run,
+    list_runs_for_task,
+    list_scheduled_tasks_for_user,
+    soft_delete_scheduled_task,
+    update_scheduled_task,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.scheduled_tasks.schedule import compile_to_cron
-from onyx.server.features.build.scheduled_tasks.schedule import EDITOR_PAYLOAD_MODELS
-from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
-from onyx.server.features.build.scheduled_tasks.schedule import EditorPayload
-from onyx.server.features.build.scheduled_tasks.schedule import human_readable
-from onyx.server.features.build.scheduled_tasks.schedule import next_n_fires
+from onyx.server.features.build.scheduled_tasks.schedule import (
+    EDITOR_PAYLOAD_MODELS,
+    EditorMode,
+    EditorPayload,
+    compile_to_cron,
+    human_readable,
+    next_n_fires,
+)
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -305,7 +301,7 @@ def _detail(
         next_run_at=task.next_run_at,
         next_runs=next_runs,
         last_run=RunSummary.from_model(last_run) if last_run is not None else None,
-        pre_approved_app_ids=task.pre_approved_app_ids,
+        pre_approved_app_ids=task.pre_approved_external_app_ids,
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
@@ -365,9 +361,7 @@ def _parse_cursor(cursor: str | None) -> datetime | None:
             OnyxErrorCode.INVALID_INPUT,
             f"Invalid cursor (expected ISO-8601 datetime): {cursor!r}",
         ) from e
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
+    return datetime_to_utc(parsed)
 
 
 # ---------------------------------------------------------------------------
@@ -411,7 +405,7 @@ def create_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        pre_approved_app_ids=_validated_app_ids(
+        pre_approved_external_app_ids=_validated_app_ids(
             db_session, request.pre_approved_app_ids
         ),
     )
@@ -474,7 +468,7 @@ def patch_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        pre_approved_app_ids=(
+        pre_approved_external_app_ids=(
             _validated_app_ids(db_session, request.pre_approved_app_ids)
             if request.pre_approved_app_ids is not None
             else None

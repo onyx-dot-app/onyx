@@ -6,32 +6,23 @@ wakes the parked proxy via the `approval:wake:{id}` channel; a missed
 wake just falls back to the proxy's wait timeout.
 """
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import Literal
+from datetime import datetime, timedelta, timezone
+from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from pydantic import BaseModel
-from pydantic import computed_field
-from pydantic import ConfigDict
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, ConfigDict, computed_field
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import Permission
-from onyx.db.models import User
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, GatedAppKind, Permission
+from onyx.db.models import ActionApproval, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.matching.engine import actions_requiring_approval
-from onyx.external_apps.matching.engine import MatchedAction
+from onyx.external_apps.matching.engine import MatchedAction, actions_requiring_approval
 from onyx.external_apps.presentation.decode import decode_payload
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
@@ -86,6 +77,12 @@ class ApprovalView(BaseModel):
 
 class ApprovalListResponse(BaseModel):
     items: list[ApprovalView]
+
+
+def _row_target(row: ActionApproval) -> tuple[GatedAppKind, int] | None:
+    """The gated target ``(kind, id)`` a row is attributed to, or ``None`` when
+    its ``gated_app`` was cleared (parent app/server deleted — SET NULL)."""
+    return row.gated_app.target_key if row.gated_app is not None else None
 
 
 def _send_wake_best_effort(approval_id: UUID, decision: ApprovalDecision) -> None:
@@ -214,12 +211,13 @@ def submit_session_grant(
     if current is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "approval request not found")
     session_id = current.session_id
-    external_app_id = current.external_app_id
-    if external_app_id is None:
+    target = _row_target(current)
+    if target is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "approval request cannot be granted for a session",
         )
+    target_kind, target_id = target
     if current.decision is not None:
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
@@ -271,24 +269,11 @@ def submit_session_grant(
     grant_source_rows = action_approval.list_session_grant_action_approvals(
         db_session,
         session_id=session_id,
-        external_app_id=external_app_id,
+        gated_app_id=current.gated_app_id,
     )
-    granted_action_types: set[str] = set()
-    for grant_source_row in grant_source_rows:
-        granted_action_types.update(
-            actions_requiring_approval(grant_source_row.actions)
-        )
-
+    cache: CacheBackend | None = None
     try:
         cache = get_cache_backend(tenant_id=get_current_tenant_id())
-        for grant_source_row in grant_source_rows:
-            approval_cache.cache_session_grant_actions(
-                session_id=session_id,
-                external_app_id=external_app_id,
-                action_types=actions_requiring_approval(grant_source_row.actions),
-                source_approval_id=grant_source_row.approval_id,
-                cache=cache,
-            )
     except CACHE_TRANSIENT_ERRORS as e:
         logger.warning(
             "approval.session_grant_cache_failed approval_id=%s session_id=%s error=%s",
@@ -296,14 +281,21 @@ def submit_session_grant(
             session_id,
             str(e),
         )
+    granted_action_types = approval_cache.hydrate_session_grants(
+        session_id=session_id,
+        kind=target_kind,
+        target_id=target_id,
+        rows=grant_source_rows,
+        cache=cache,
+    )
 
     pending_rows = action_approval.list_session_pending_action_approvals(
-        db_session, session_id, created_after=cutoff
+        db_session, session_id, created_after=cutoff, load_target=True
     )
     for row in pending_rows:
         if row.approval_id == approval_id:
             continue
-        if row.external_app_id != external_app_id:
+        if _row_target(row) != target:
             continue
         row_action_types = set(actions_requiring_approval(row.actions))
         covered = bool(row_action_types) and row_action_types.issubset(
@@ -329,11 +321,12 @@ def submit_session_grant(
 
     logger.info(
         "approval.session_grant_recorded approval_id=%s session_id=%s "
-        "user_id=%s external_app_id=%s action_types=%s approved_count=%s",
+        "user_id=%s target=%s:%s action_types=%s approved_count=%s",
         approval_id,
         session_id,
         user.id,
-        external_app_id,
+        target_kind.value,
+        target_id,
         grant_action_types,
         len(approved_ids),
     )

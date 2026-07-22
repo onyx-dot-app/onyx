@@ -6,8 +6,8 @@ import { Button } from "@opal/components";
 import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import Modal from "@/refresh-components/Modal";
-import { toast } from "@/hooks/useToast";
+import { Modal } from "@opal/components";
+import { toast } from "@opal/layouts";
 import {
   EmbeddingModelRequest,
   EmbeddingProviderName,
@@ -24,7 +24,7 @@ import {
   TextField,
   modelSpecSchemaShape,
 } from "@/views/admin/IndexSettingsPage/shared";
-import { useModalClose } from "@/refresh-components/contexts/ModalContext";
+import { useModalClose } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Shared modal shell — reads `isValid`, `isSubmitting`, `submitForm` from the

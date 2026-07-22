@@ -20,11 +20,7 @@ import time
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from sqlalchemy import case
-from sqlalchemy import cast
-from sqlalchemy import Float
-from sqlalchemy import func
-from sqlalchemy import select
+from sqlalchemy import Float, case, cast, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 

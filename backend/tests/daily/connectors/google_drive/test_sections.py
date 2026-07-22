@@ -1,13 +1,14 @@
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
-from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FOLDER_URL
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_EMAIL,
+    SECTIONS_FOLDER_URL,
+    load_connector_outputs,
+)
 from tests.utils.secret_names import TestSecret
 
 

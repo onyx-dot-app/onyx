@@ -10,19 +10,20 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.models import UserGroup
+from onyx.db.models import Skill, User, UserGroup
+from onyx.db.skill import set_skill_enabled_for_user
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import build_skills_fileset_for_user
-from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
-from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
-from tests.external_dependency_unit.craft.db_helpers import make_group
-from tests.external_dependency_unit.craft.db_helpers import reset_built_in_skill_row
+from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
+    make_built_in_skill_row,
+    make_group,
+    reset_built_in_skill_row,
+)
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
-_FRONTMATTER = "---\nname: {slug}\ndescription: {slug}\n---\n"
+_FRONTMATTER = "---\nname: {name}\ndescription: {name}\n---\n"
 
 
 def _write_skill_dir(
@@ -43,7 +44,7 @@ def _write_skill_dir(
         (source_dir / "SKILL.md.template").write_text(template_body, encoding="utf-8")
     else:
         (source_dir / "SKILL.md").write_text(
-            _FRONTMATTER.format(slug=skill_id), encoding="utf-8"
+            _FRONTMATTER.format(name=skill_id), encoding="utf-8"
         )
     for rel, content in (extra_files or {}).items():
         path = source_dir / rel
@@ -62,7 +63,7 @@ def _register_built_in(
     """Register a fresh synthetic built-in (definition + Skill row) whose
     content lives under ``skills_root/<id>``, redirecting ``BUILTIN_SKILLS_PATH``
     so its computed ``source_dir`` resolves there. Returns the synthetic
-    ``built_in_skill_id`` (also the slug and on-disk dir name).
+    ``built_in_skill_id`` (also the name and on-disk dir name).
     """
     monkeypatch.setattr(built_in_module, "BUILTIN_SKILLS_PATH", skills_root)
     built_in_skill_id = f"test-builtin-{uuid4().hex[:8]}"
@@ -83,14 +84,14 @@ def _register_built_in(
 
 
 class TestBuiltInFromDisk:
-    def test_static_built_in_files_are_included_under_slug_prefix(
+    def test_static_built_in_files_are_included_under_name_prefix(
         self,
         tmp_path: Path,
         db_session: Session,
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        slug = _register_built_in(
+        name = _register_built_in(
             monkeypatch,
             db_session,
             tmp_path,
@@ -99,8 +100,8 @@ class TestBuiltInFromDisk:
 
         files = build_skills_fileset_for_user(test_user, db_session)
 
-        assert f"name: {slug}".encode() in files[f"{slug}/SKILL.md"]
-        assert files[f"{slug}/scripts/preview.py"] == b"print('hi')"
+        assert f"name: {name}".encode() in files[f"{name}/SKILL.md"]
+        assert files[f"{name}/scripts/preview.py"] == b"print('hi')"
 
     def test_excluded_dirs_and_dotfiles_are_skipped(
         self,
@@ -109,7 +110,7 @@ class TestBuiltInFromDisk:
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        slug = _register_built_in(
+        name = _register_built_in(
             monkeypatch,
             db_session,
             tmp_path,
@@ -122,16 +123,16 @@ class TestBuiltInFromDisk:
 
         files = build_skills_fileset_for_user(test_user, db_session)
 
-        assert f"{slug}/SKILL.md" in files
-        assert f"{slug}/__pycache__/cached.pyc" not in files
-        assert f"{slug}/.DS_Store" not in files
-        assert f"{slug}/scripts/.hidden" not in files
+        assert f"{name}/SKILL.md" in files
+        assert f"{name}/__pycache__/cached.pyc" not in files
+        assert f"{name}/.DS_Store" not in files
+        assert f"{name}/scripts/.hidden" not in files
 
 
 class TestBuiltInTemplate:
     """Templated built-ins (company-search) get their SKILL.md rendered
     per-user. The renderer dispatches on ``built_in_skill_id``, so the
-    synthetic slug needs to match a known renderer — here we point at
+    synthetic name needs to match a known renderer — here we point at
     ``company-search`` by directly seeding that row instead of a synthetic."""
 
     def test_template_built_in_is_rendered_per_user(
@@ -142,7 +143,7 @@ class TestBuiltInTemplate:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         template_body = (
-            f"{_FRONTMATTER.format(slug='company-search')}"
+            f"{_FRONTMATTER.format(name='company-search')}"
             "Sources:\n{{AVAILABLE_SOURCES_SECTION}}\n"
         )
         # Redirect BUILTIN_SKILLS_PATH at tmp_path and write the template under
@@ -169,7 +170,7 @@ class TestBuiltInTemplate:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         template_body = (
-            f"{_FRONTMATTER.format(slug='company-search')}"
+            f"{_FRONTMATTER.format(name='company-search')}"
             "{{AVAILABLE_SOURCES_SECTION}}\n"
         )
         monkeypatch.setattr(built_in_module, "BUILTIN_SKILLS_PATH", tmp_path)
@@ -193,35 +194,42 @@ class TestBuiltInTemplate:
 
 
 class TestCustomSkillFileset:
-    def test_custom_bundle_entries_are_added_under_their_slug(
+    def test_custom_bundle_entries_are_added_under_their_name(
         self,
         db_session: Session,
         test_user: User,
         seeded_skill: Callable[..., Skill],
     ) -> None:
-        # Custom skills require a group grant to be visible to a non-admin
-        # user. Set up: user is in group ``team``; skill is granted to
-        # ``team``; the bundle holds two files. A uniquified slug avoids
-        # collisions with leftover rows from prior partial runs.
-        slug = f"my-custom-{uuid4().hex[:8]}"
+        # Custom skills require both visibility and per-user enablement. Set up:
+        # user is in group ``team``; skill is granted to ``team`` and explicitly
+        # enabled for the user; the bundle holds two files. A uniquified name
+        # avoids collisions with leftover rows from prior partial runs.
+        name = f"my-custom-{uuid4().hex[:8]}"
         team_group: UserGroup = make_group(db_session)
         add_user_to_group(db_session, test_user, team_group)
         db_session.commit()
 
-        seeded_skill(
-            slug=slug,
+        skill = seeded_skill(
+            name=name,
             public=False,
             groups=[team_group],
             bundle_files={
-                "SKILL.md": f"---\nname: {slug}\ndescription: c\n---\ncustom body",
+                "SKILL.md": f"---\nname: {name}\ndescription: c\n---\ncustom body",
                 "nested/file.txt": "nested body",
             },
         )
+        set_skill_enabled_for_user(
+            skill_id=skill.id,
+            enabled=True,
+            user=test_user,
+            db_session=db_session,
+        )
+        db_session.commit()
 
         files = build_skills_fileset_for_user(test_user, db_session)
 
-        assert b"custom body" in files[f"{slug}/SKILL.md"]
-        assert files[f"{slug}/nested/file.txt"] == b"nested body"
+        assert b"custom body" in files[f"{name}/SKILL.md"]
+        assert files[f"{name}/nested/file.txt"] == b"nested body"
 
 
 class TestUnknownBuiltInRowIsSkipped:

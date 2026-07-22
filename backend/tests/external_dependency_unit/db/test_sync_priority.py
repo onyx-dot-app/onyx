@@ -20,21 +20,25 @@ from onyx.background.celery.tasks.vespa.document_sync import (
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.db.document import (
     construct_document_id_select_by_needs_sync_or_secondary_pending,
+    count_documents_by_needs_sync,
+    count_documents_by_needs_sync_or_secondary_pending,
+    mark_document_as_modified,
+    mark_document_synced_secondary_pending,
 )
-from onyx.db.document import count_documents_by_needs_sync
-from onyx.db.document import count_documents_by_needs_sync_or_secondary_pending
-from onyx.db.document import mark_document_as_modified
-from onyx.db.document import mark_document_synced_secondary_pending
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
-from onyx.db.port_attempt import any_future_port_in_progress
-from onyx.db.port_attempt import create_port_attempt
-from onyx.db.port_attempt import mark_port_in_progress
-from onyx.db.port_attempt import mark_port_succeeded
+from onyx.db.port_attempt import (
+    any_future_port_in_progress,
+    create_port_attempt,
+    mark_port_in_progress,
+    mark_port_succeeded,
+)
 from onyx.kg.models import KGStage
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair_and_future
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_future_search_settings
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair_and_future,
+    make_cc_pair,
+    make_future_search_settings,
+)
 
 _DOC_PREFIX = "syncdoc-"
 

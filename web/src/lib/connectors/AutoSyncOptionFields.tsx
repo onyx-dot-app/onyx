@@ -12,6 +12,7 @@ export const autoSyncConfigBySource: Record<
     }
   >
 > = {
+  box: {},
   confluence: {},
   jira: {},
   google_drive: {},
@@ -21,4 +22,5 @@ export const autoSyncConfigBySource: Record<
   salesforce: {},
   sharepoint: {},
   teams: {},
+  canvas: {},
 };

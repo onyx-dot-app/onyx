@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import CredentialSubText from "@/components/credentials/CredentialFields";
+import CredentialSubText from "@/lib/credentials/components/CredentialFields";
 import { ConnectionConfiguration } from "@/lib/connectors/connectors";
 import { TextFormField } from "@/components/Field";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";

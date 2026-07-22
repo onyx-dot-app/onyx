@@ -18,8 +18,7 @@ Uses real Postgres + OpenSearch. Mirrors test_port_flow_e2e's index lifecycle.
 """
 
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -27,37 +26,46 @@ from sqlalchemy.orm import Session
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
-from onyx.db.document import count_secondary_only_sync_pending_documents
-from onyx.db.document import document_has_indexable_cc_pair
-from onyx.db.document import mark_document_as_synced
-from onyx.db.document import mark_document_synced_secondary_pending
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.document import (
+    count_secondary_only_sync_pending_documents,
+    document_has_indexable_cc_pair,
+    mark_document_as_synced,
+    mark_document_synced_secondary_pending,
+)
+from onyx.db.enums import ConnectorCredentialPairStatus, EmbeddingPrecision
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    DocumentByConnectorCredentialPair,
+    SearchSettings,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import SearchSettings
-from onyx.db.port_attempt import any_future_port_in_progress
-from onyx.db.port_attempt import create_port_attempt
-from onyx.db.port_attempt import mark_port_in_progress
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
-from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
-from onyx.document_index.interfaces_new import TenantState
+from onyx.db.port_attempt import (
+    any_future_port_in_progress,
+    create_port_attempt,
+    mark_port_in_progress,
+)
+from onyx.document_index.interfaces_new import (
+    MetadataUpdateRequest,
+    SecondaryIndexDocumentMissingError,
+    TenantState,
+)
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.opensearch_document_index import (
+    OpenSearchDocumentIndex,
+    OpenSearchIndexPair,
     generate_opensearch_filtered_access_control_list,
 )
-from onyx.document_index.opensearch.opensearch_document_index import (
-    OpenSearchDocumentIndex,
+from onyx.document_index.opensearch.schema import (
+    DocumentChunk,
+    DocumentSchema,
+    get_opensearch_doc_chunk_id,
 )
-from onyx.document_index.opensearch.opensearch_document_index import OpenSearchIndexPair
-from onyx.document_index.opensearch.schema import DocumentChunk
-from onyx.document_index.opensearch.schema import DocumentSchema
-from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_future_search_settings
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+    make_future_search_settings,
+)
 
 _VECTOR_DIM = 8  # tiny: this test never re-embeds, it only updates metadata
 _CHUNKS_PER_DOC = 2

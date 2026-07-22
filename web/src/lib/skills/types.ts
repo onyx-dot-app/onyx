@@ -24,16 +24,17 @@ export interface SkillGroupShare {
 export interface Skill {
   source: SkillSource;
   id: string;
-  slug: string;
   name: string;
   description: string;
 
   is_available: boolean | null;
   unavailable_reason: string | null;
+  is_valid: boolean | null;
 
   /** True for private personal skills: not public, no direct/group shares. */
   is_personal: boolean;
-  enabled: boolean | null;
+  enabled: boolean;
+  can_toggle: boolean;
   author_user_id: string | null;
   author_email: string | null;
   owner: {
@@ -56,7 +57,6 @@ export type BuiltinSkill = Skill & {
 
 export type CustomSkill = Skill & {
   source: "custom";
-  enabled: boolean;
 };
 
 export interface SkillsList {
@@ -75,4 +75,17 @@ export interface SkillPreview {
 
 export type SkillEditableDetail = CustomSkill & {
   instructions_markdown: string;
+  files: SkillBundleFile[];
 };
+
+export interface SkillBundleFile {
+  path: string;
+  size: number;
+}
+
+export interface SkillBundleContents {
+  name: string;
+  description: string;
+  instructions_markdown: string;
+  files: SkillBundleFile[];
+}

@@ -1,22 +1,23 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from onyx.server.features.build.interactive_turns.state import acquire_active_turn_lock
-from onyx.server.features.build.interactive_turns.state import claim_turn_for_runner
-from onyx.server.features.build.interactive_turns.state import create_interactive_turn
-from onyx.server.features.build.interactive_turns.state import finish_turn
-from onyx.server.features.build.interactive_turns.state import get_active_turn
-from onyx.server.features.build.interactive_turns.state import get_turn
-from onyx.server.features.build.interactive_turns.state import get_turn_for_request
-from onyx.server.features.build.interactive_turns.state import InteractiveTurn
-from onyx.server.features.build.interactive_turns.state import REQUEST_ID_TTL_SECONDS
-from onyx.server.features.build.interactive_turns.state import touch_turn
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_QUEUED
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_RUNNING
+from onyx.server.features.build.interactive_turns.state import (
+    REQUEST_ID_TTL_SECONDS,
+    TURN_STATUS_FAILED,
+    TURN_STATUS_QUEUED,
+    TURN_STATUS_RUNNING,
+    InteractiveTurn,
+    acquire_active_turn_lock,
+    claim_turn_for_runner,
+    create_interactive_turn,
+    finish_turn,
+    get_active_turn,
+    get_turn,
+    get_turn_for_request,
+    touch_turn,
+)
 from tests.unit.fakes import FakeCache
 
 
@@ -135,6 +136,16 @@ def test_claim_turn_for_runner_sets_running_owner() -> None:
     assert claim_turn_for_runner(cache=cache, turn_id=turn.turn_id) is None
 
 
+def test_fresh_claim_is_not_reclaimed() -> None:
+    cache = FakeCache()
+    _, _, turn = _create_turn(cache)
+
+    claimed = claim_turn_for_runner(cache=cache, turn_id=turn.turn_id)
+
+    assert claimed is not None
+    assert claimed.reclaimed is False
+
+
 def test_stale_running_turn_can_be_reclaimed_by_new_runner() -> None:
     cache = FakeCache()
     session_id, user_id, turn = _create_turn(cache)
@@ -151,6 +162,7 @@ def test_stale_running_turn_can_be_reclaimed_by_new_runner() -> None:
     )
 
     assert reclaimed is not None
+    assert reclaimed.reclaimed is True
     assert reclaimed.runner_id is not None
     assert reclaimed.runner_id != first_runner_id
     assert not touch_turn(cache=cache, turn_id=turn.turn_id, runner_id=first_runner_id)
@@ -166,6 +178,24 @@ def test_stale_running_turn_can_be_reclaimed_by_new_runner() -> None:
     active = get_active_turn(cache=cache, session_id=session_id, user_id=user_id)
     assert active is not None
     assert active.runner_id == reclaimed.runner_id
+
+
+def test_reclaimed_flag_is_not_persisted_across_reload() -> None:
+    cache = FakeCache()
+    _, _, turn = _create_turn(cache)
+
+    claim_turn_for_runner(cache=cache, turn_id=turn.turn_id)
+    reclaimed = claim_turn_for_runner(
+        cache=cache,
+        turn_id=turn.turn_id,
+        stale_after_seconds=0,
+    )
+    assert reclaimed is not None
+    assert reclaimed.reclaimed is True
+
+    reloaded = get_turn(cache, turn.turn_id)
+    assert reloaded is not None
+    assert reloaded.reclaimed is False
 
 
 def test_finish_turn_does_not_clobber_concurrent_reclaim() -> None:

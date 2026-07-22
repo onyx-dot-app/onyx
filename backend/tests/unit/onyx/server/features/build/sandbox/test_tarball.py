@@ -9,8 +9,7 @@ import pytest
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     _build_targz,
 )
-from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.server.features.build.sandbox.models import FileSet
+from onyx.server.features.build.sandbox.models import FatalWriteError, FileSet
 
 
 def test_round_trip() -> None:

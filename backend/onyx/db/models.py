@@ -1,123 +1,126 @@
 import datetime
 import json
-from typing import Any
-from typing import Literal
-from typing import NotRequired
-from uuid import UUID
-from uuid import uuid4
+from typing import Any, Literal, NotRequired
+from uuid import UUID, uuid4
 
-from fastapi_users_db_sqlalchemy import SQLAlchemyBaseOAuthAccountTableUUID
-from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
+from fastapi_users_db_sqlalchemy import (
+    SQLAlchemyBaseOAuthAccountTableUUID,
+    SQLAlchemyBaseUserTableUUID,
+)
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
-from pydantic import BaseModel
-from pydantic import ValidationError
-from sqlalchemy import BigInteger
-from sqlalchemy import Boolean
-from sqlalchemy import CheckConstraint
-from sqlalchemy import DateTime
-from sqlalchemy import desc
-from sqlalchemy import Enum
-from sqlalchemy import event
-from sqlalchemy import Float
-from sqlalchemy import ForeignKey
-from sqlalchemy import ForeignKeyConstraint
-from sqlalchemy import func
-from sqlalchemy import Index
-from sqlalchemy import Integer
-from sqlalchemy import Numeric
-from sqlalchemy import PrimaryKeyConstraint
-from sqlalchemy import Sequence
-from sqlalchemy import String
-from sqlalchemy import Text
-from sqlalchemy import text
-from sqlalchemy import true
-from sqlalchemy import UniqueConstraint
+from pydantic import BaseModel, ValidationError
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    Numeric,
+    PrimaryKeyConstraint,
+    Sequence,
+    String,
+    Text,
+    UniqueConstraint,
+    desc,
+    event,
+    func,
+    text,
+    true,
+)
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine.interfaces import Dialect
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import Mapper
-from sqlalchemy.orm import relationship
-from sqlalchemy.orm import validates
-from sqlalchemy.types import LargeBinary
-from sqlalchemy.types import TypeDecorator
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Mapper,
+    mapped_column,
+    relationship,
+    validates,
+)
+from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import ANONYMOUS_USER_UUID
-from onyx.configs.constants import DEFAULT_BOOST
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FederatedConnectorSource
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import NotificationType
-from onyx.configs.constants import SearchFeedbackType
-from onyx.configs.constants import TokenRateLimitScope
+from onyx.configs.constants import (
+    ANONYMOUS_USER_UUID,
+    DEFAULT_BOOST,
+    DocumentSource,
+    FederatedConnectorSource,
+    FileOrigin,
+    MessageType,
+    MilestoneRecordType,
+    NotificationType,
+    SearchFeedbackType,
+    TokenRateLimitScope,
+)
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import AccountType
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import ArtifactType
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import ChatSessionSharedStatus
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import DefaultAppMode
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.enums import GrantSource
-from onyx.db.enums import HierarchyNodeType
-from onyx.db.enums import HookFailStrategy
-from onyx.db.enums import HookPoint
-from onyx.db.enums import IndexingMode
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.enums import LLMModelFlowType
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPOAuthProviderMode
-from onyx.db.enums import MCPServerStatus
-from onyx.db.enums import MCPTransport
-from onyx.db.enums import OpenSearchDocumentMigrationStatus
-from onyx.db.enums import OpenSearchTenantMigrationStatus
-from onyx.db.enums import PatType
-from onyx.db.enums import Permission
-from onyx.db.enums import PermissionSyncStatus
-from onyx.db.enums import PersonaSharePermission
-from onyx.db.enums import PortAttemptStatus
-from onyx.db.enums import ProcessingMode
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskStatus
-from onyx.db.enums import ScheduledTaskTriggerSource
-from onyx.db.enums import SessionOrigin
-from onyx.db.enums import SharingScope
-from onyx.db.enums import SkillSharePermission
-from onyx.db.enums import SwitchoverType
-from onyx.db.enums import SyncStatus
-from onyx.db.enums import SyncType
-from onyx.db.enums import TaskStatus
-from onyx.db.enums import ThemePreference
-from onyx.db.enums import UserFileStatus
+from onyx.db.enums import (
+    AccessType,
+    AccountType,
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    ArtifactType,
+    BuildSessionStatus,
+    ChatSessionSharedStatus,
+    ConnectorCredentialPairStatus,
+    DefaultAppMode,
+    EmbeddingPrecision,
+    EndpointPolicy,
+    ExternalAppType,
+    GatedAppKind,
+    GrantSource,
+    HierarchyNodeType,
+    HookFailStrategy,
+    HookPoint,
+    IndexingMode,
+    IndexingStatus,
+    IndexModelStatus,
+    LLMModelFlowType,
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPOAuthProviderMode,
+    MCPServerStatus,
+    MCPTransport,
+    OpenSearchDocumentMigrationStatus,
+    OpenSearchTenantMigrationStatus,
+    PatType,
+    Permission,
+    PermissionSyncStatus,
+    PersonaSharePermission,
+    PortAttemptStatus,
+    ProcessingMode,
+    SandboxStatus,
+    ScheduledTaskRunStatus,
+    ScheduledTaskStatus,
+    ScheduledTaskTriggerSource,
+    SessionOrigin,
+    SharingScope,
+    SkillSharePermission,
+    SSOProviderType,
+    SwitchoverType,
+    SyncStatus,
+    SyncType,
+    TaskStatus,
+    ThemePreference,
+    UserFileStatus,
+)
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
-from onyx.db.pydantic_type import PydanticListType
-from onyx.db.pydantic_type import PydanticType
+from onyx.db.pydantic_type import PydanticListType, PydanticType
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
-from onyx.kg.models import KGEntityTypeAttributes
-from onyx.kg.models import KGStage
-from onyx.llm.override_models import LLMOverride
-from onyx.llm.override_models import PromptOverride
+from onyx.kg.models import KGEntityTypeAttributes, KGStage
+from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.security.models import SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
-from onyx.utils.encryption import decrypt_bytes_to_string
-from onyx.utils.encryption import encrypt_string_to_bytes
+from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
@@ -326,6 +329,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         nullable=False,
         default=AccountType.STANDARD,
         server_default="STANDARD",
+    )
+    # Admin-controlled per-user Craft override: None = follow the workspace
+    # default (Settings.craft_default_enabled). ANDed with the deployment-level
+    # Craft gate (PostHog flag / ENABLE_CRAFT).
+    craft_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
     )
 
     """
@@ -660,6 +669,36 @@ class Skill__User(Base):
     user: Mapped["User"] = relationship("User")
 
     __table_args__ = (Index("ix_skill__user_user_id", "user_id"),)
+
+
+class UserSkillPreference(Base):
+    __tablename__ = "user_skill_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+    )
+    # Denormalized for name uniqueness; the composite FK keeps it exact.
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["name", "skill_id"],
+            ["skill.name", "skill.id"],
+            name="fk_user_skill_preference_skill_name",
+            ondelete="CASCADE",
+        ),
+        Index("ix_user_skill_preference_skill_id", "skill_id"),
+        Index(
+            "uq_user_skill_preference_name",
+            "user_id",
+            "name",
+            unique=True,
+        ),
+    )
 
 
 class DocumentSet__User(Base):
@@ -1028,6 +1067,11 @@ class Document(Base):
     # with the local last modified time of the doc and any associated metadata
     # it should just be the server timestamp of the source doc
     doc_updated_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Source creation time. Null for docs indexed before this column.
+    doc_created_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
@@ -4359,8 +4403,25 @@ class KVStore(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    # TODO(cleanup): legacy, do not write. Nothing writes it anymore (the encrypt
+    # flag is gone); the only reader is the load() fallback for rows written
+    # before that, when value was null. Slated for a drop migration in a later
+    # release, held back so the drop rolls out after every pod is on this release.
+    # Deferred so it is never SELECTed eagerly, which is what makes that drop safe.
     encrypted_value: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
-        EncryptedJson(), nullable=True
+        EncryptedJson(), nullable=True, deferred=True
+    )
+
+
+class EncryptedKeyValueStore(Base):
+    """Encrypted-at-rest key/value storage for instance-level secrets. Postgres
+    only, never cached, so secrets stay out of Redis."""
+
+    __tablename__ = "encrypted_key_value_store"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
+        EncryptedJson(), nullable=False
     )
 
 
@@ -4395,6 +4456,9 @@ class SecuritySettings(Base):
         default=None,
     )
     mask_credential_prefix: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    llm_custom_config_env_injection: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
     valid_email_domains: Mapped[list[str] | None] = mapped_column(
@@ -4486,9 +4550,8 @@ class Skill(Base):
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
-    # Admin-controlled metadata (editable post-creation via PATCH).
-    slug: Mapped[str] = mapped_column(String(64), nullable=False)
-    name: Mapped[str] = mapped_column(String, nullable=False)
+    # Immutable Agent Skills name and sandbox directory name.
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Discriminator: when set, definition (source files, has_template, etc.)
@@ -4502,6 +4565,8 @@ class Skill(Base):
     # files live on disk under BUILTIN_SKILLS_PATH).
     bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Existing custom rows are classified lazily before sandbox hydration.
+    is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -4512,8 +4577,6 @@ class Skill(Base):
         Enum(SkillSharePermission, native_enum=False),
         nullable=True,
     )
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -4553,7 +4616,7 @@ class Skill(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("slug", name="uq_skill_slug"),
+        UniqueConstraint("name", "id", name="uq_skill_name_id"),
         CheckConstraint(
             "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
             name="ck_skill_definition_source",
@@ -5287,6 +5350,10 @@ class MCPServer(Base):
         nullable=False,
         server_default="CREATED",
     )
+    # Whether the Craft agent may use this server (admin-controlled)
+    available_in_craft: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     # Admin connection config - used for the config page
     # and (when applicable) admin-managed auth
     # and (when applicable) per-user auth
@@ -5294,6 +5361,12 @@ class MCPServer(Base):
         Integer,
         ForeignKey("mcp_connection_config.id", ondelete="SET NULL"),
         nullable=True,
+    )
+
+    # When True, any user may add this server's tools to their agents.
+    # When False, access is limited to the linked users / user_groups.
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
     )
 
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -5610,14 +5683,9 @@ class TenantUsage(Base):
 
 class UserUsage(Base):
     """
-    Per-user LLM usage rollup within a time window — the source of truth for
-    per-user cost/token attribution and budget checks. Mirrors TenantUsage's
-    window-rollup model (one accumulating row per window+dims, not a per-call
-    ledger).
+    Daily per-user LLM usage rollup for cost/token attribution and budget checks.
 
-    One row per (user, window, model, flow, provider), accumulated in place;
-    windows match the tenant-usage alignment so per-user and per-tenant totals
-    reconcile.
+    One accumulating row per (user, window, model, flow, provider), not per call.
     """
 
     __tablename__ = "user_usage"
@@ -5760,8 +5828,8 @@ class BuildSession(Base):
         default=SharingScope.PRIVATE,
         server_default="private",
     )
-    # Distinguishes user-initiated sessions from sessions created by the
-    # scheduled-tasks executor (or any future non-interactive caller). The
+    # Distinguishes user-initiated sessions from sessions created by
+    # non-interactive callers (scheduled-tasks executor, Slack bot). The
     # Craft sidebar filters on origin == INTERACTIVE.
     origin: Mapped[SessionOrigin] = mapped_column(
         Enum(SessionOrigin, native_enum=False, name="sessionorigin"),
@@ -5775,6 +5843,7 @@ class BuildSession(Base):
     opencode_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_provider: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_model: Mapped[str | None] = mapped_column(String, nullable=True)
+    skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
@@ -5828,6 +5897,7 @@ class Sandbox(Base):
     last_heartbeat: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
@@ -5991,13 +6061,15 @@ class ActionApproval(Base):
         Enum(ApprovalDecidedVia, native_enum=False, name="approvaldecidedvia"),
         nullable=True,
     )
-    # Lookups key off this id, not ``app_name``: the latter isn't unique
-    # across instances (self-hosted GitLab/Jira share an app_type).
-    external_app_id: Mapped[int | None] = mapped_column(
+    # The gated target (external app or MCP server) this request hit, via the
+    # polymorphic ``gated_app`` identity row. Goes NULL when that target is
+    # deleted (SET NULL) — the decided row stays as an audit record.
+    gated_app_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("external_app.id", ondelete="SET NULL"),
+        ForeignKey("gated_app.id", ondelete="SET NULL"),
         nullable=True,
     )
+    gated_app: Mapped["GatedApp | None"] = relationship("GatedApp")
 
 
 class ScheduledTask(Base):
@@ -6069,10 +6141,17 @@ class ScheduledTask(Base):
     )
 
     @property
-    def pre_approved_app_ids(self) -> list[int]:
-        """Granted external-app ids in grant order. Set via
-        ``onyx.db.scheduled_task.set_pre_approved_apps``."""
-        return [grant.external_app_id for grant in self.pre_approved_apps]
+    def pre_approved_external_app_ids(self) -> list[int]:
+        """Granted external-app ids in grant order. MCP-server grants are
+        excluded — their target ids live in a different id space, and this
+        property backs the API's external-app-id field (the gate reads all
+        grants regardless of kind via ``get_running_scheduled_run_grants``).
+        Set via ``onyx.db.scheduled_task.set_pre_approved_apps``."""
+        return [
+            grant.gated_app.external_app_id
+            for grant in self.pre_approved_apps
+            if grant.gated_app.external_app_id is not None
+        ]
 
     __table_args__ = (
         # Dispatcher hot path: WHERE status='active' AND deleted=false
@@ -6165,12 +6244,13 @@ class ScheduledTaskRun(Base):
 
 
 class ScheduledTaskPreApprovedApp(Base):
-    """One (task, app) pre-approval grant: the matched app's ASK-gated
+    """One (task, target) pre-approval grant: the matched target's ASK-gated
     actions skip the approval park for the task's RUNNING runs.
 
-    Deleting the task (CASCADE) or the app (CASCADE) drops the grant; a
-    stale grant on a removed app is meaningless. The unique constraint
-    keeps grants idempotent and its index serves the per-task lookup.
+    The target is a ``gated_app`` row (external app or MCP server). Deleting the
+    task or the target (both CASCADE) drops the grant; a stale grant on a removed
+    target is meaningless. The unique constraint keeps grants idempotent and its
+    index serves the per-task lookup.
     """
 
     __tablename__ = "scheduled_task_pre_approved_app"
@@ -6181,9 +6261,9 @@ class ScheduledTaskPreApprovedApp(Base):
         ForeignKey("scheduled_task.id", ondelete="CASCADE"),
         nullable=False,
     )
-    external_app_id: Mapped[int] = mapped_column(
+    gated_app_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("external_app.id", ondelete="CASCADE"),
+        ForeignKey("gated_app.id", ondelete="CASCADE"),
         nullable=False,
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -6193,11 +6273,15 @@ class ScheduledTaskPreApprovedApp(Base):
     task: Mapped[ScheduledTask] = relationship(
         "ScheduledTask", back_populates="pre_approved_apps"
     )
+    # selectin: pre_approved_external_app_ids and set_pre_approved_apps read
+    # gated_app for every grant, so batch them in one SELECT rather than one
+    # per grant.
+    gated_app: Mapped["GatedApp"] = relationship("GatedApp", lazy="selectin")
 
     __table_args__ = (
         UniqueConstraint(
             "scheduled_task_id",
-            "external_app_id",
+            "gated_app_id",
             name="uq_scheduled_task_pre_approved_app",
         ),
     )
@@ -6420,9 +6504,8 @@ class ExternalApp(Base):
     __tablename__ = "external_app"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # Display name, description, and lifecycle (including enabled state
-    # via skill presence) live on the linked Skill row. ON DELETE
-    # CASCADE: removing the skill removes the external_app gateway.
+    # App display metadata is independent of the linked skill's canonical name.
+    name: Mapped[str] = mapped_column(String, nullable=False)
     skill_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("skill.id", ondelete="CASCADE"),
@@ -6447,6 +6530,12 @@ class ExternalApp(Base):
         nullable=False,
         default=ExternalAppType.CUSTOM,
         server_default=ExternalAppType.CUSTOM.value,
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
     )
     # CUSTOM apps store URL globs here (translated to regexes at match time).
     upstream_url_patterns: Mapped[list[str]] = mapped_column(
@@ -6478,11 +6567,6 @@ class ExternalApp(Base):
     skill: Mapped["Skill"] = relationship("Skill")
     user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
         "ExternalAppUserCredential",
-        back_populates="external_app",
-        cascade="all, delete-orphan",
-    )
-    policies: Mapped[list["ExternalAppPolicy"]] = relationship(
-        "ExternalAppPolicy",
         back_populates="external_app",
         cascade="all, delete-orphan",
     )
@@ -6552,26 +6636,93 @@ class ExternalAppUserCredential(Base):
     )
 
 
-class ExternalAppPolicy(Base):
-    """Admin's per-action policy override for an external app.
+class GatedApp(Base):
+    """Polymorphic identity for a gated egress target — one row per external app
+    or MCP server.
+
+    The approval pipeline (per-action policy, approval rows, scheduled-task
+    pre-approvals) references this single id instead of a per-catalog FK, so a
+    new target type adds one nullable column here rather than a column on every
+    consumer table. Rows are created lazily via
+    ``onyx.db.gated_app.get_or_create_gated_app_id`` (the migration backfilled
+    pre-existing targets), so a row's existence doesn't imply the target was
+    ever policied or approved.
+
+    Exactly one of ``external_app_id`` / ``mcp_server_id`` is set; ``kind`` is
+    derived from which. Deleting the underlying target CASCADEs this row away,
+    which in turn CASCADEs its policies and pre-approvals.
+    """
+
+    __tablename__ = "gated_app"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_app_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    mcp_server_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("mcp_server.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+
+    # Constraints are named to match the live schema created by the migration.
+    __table_args__ = (
+        UniqueConstraint("external_app_id", name="uq_gated_app_external_app"),
+        UniqueConstraint("mcp_server_id", name="uq_gated_app_mcp_server"),
+        CheckConstraint(
+            "num_nonnulls(external_app_id, mcp_server_id) = 1",
+            name="ck_gated_app_single_target",
+        ),
+    )
+
+    @property
+    def kind(self) -> GatedAppKind:
+        """Which catalog the target lives in, derived from the populated FK so a
+        kind/column mismatch is unrepresentable."""
+        return (
+            GatedAppKind.EXTERNAL_APP
+            if self.external_app_id is not None
+            else GatedAppKind.MCP_SERVER
+        )
+
+    @property
+    def target_id(self) -> int:
+        """Id of the underlying target row named by ``kind``."""
+        tid = (
+            self.external_app_id
+            if self.external_app_id is not None
+            else self.mcp_server_id
+        )
+        assert tid is not None  # guaranteed by ck_gated_app_single_target
+        return tid
+
+    @property
+    def target_key(self) -> tuple[GatedAppKind, int]:
+        """The ``(kind, target_id)`` pair consumers key grants and lookups off."""
+        return self.kind, self.target_id
+
+
+class GatedActionPolicy(Base):
+    """Admin's per-action policy override for a gated target, keyed by the
+    ``gated_app`` identity row.
 
     Sparse: only actions the admin has set are stored; an action without a row
     resolves to ``ASK`` (the default ask-approval behaviour).
 
-    ``action_id`` is a catalog id; display (name/description) comes from the code
-    catalog. Admin-authored custom-app rules will add their own action
-    name/description/match columns when that feature lands.
+    ``action_id`` is a catalog id (external apps) or a tool name (MCP servers);
+    display (name/description) comes from the code catalog / discovered tools.
     """
 
-    __tablename__ = "external_app_policy"
+    __tablename__ = "gated_action_policy"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    external_app_id: Mapped[int] = mapped_column(
+    gated_app_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("external_app.id", ondelete="CASCADE"),
+        ForeignKey("gated_app.id", ondelete="CASCADE"),
         nullable=False,
     )
-    # Hierarchical action id, e.g. "slack.messages.read".
     action_id: Mapped[str] = mapped_column(Text, nullable=False)
     policy: Mapped[EndpointPolicy] = mapped_column(
         Enum(EndpointPolicy, native_enum=False),
@@ -6589,14 +6740,49 @@ class ExternalAppPolicy(Base):
         nullable=False,
     )
 
-    external_app: Mapped["ExternalApp"] = relationship(
-        "ExternalApp", back_populates="policies"
-    )
-
     __table_args__ = (
         UniqueConstraint(
-            "external_app_id",
+            "gated_app_id",
             "action_id",
-            name="uq_external_app_policy_app_action",
+            name="uq_gated_action_policy",
         ),
+    )
+
+
+class SSOProvider(Base):
+    """A configured SSO identity provider. Providers are rows, not startup
+    wiring: login routes resolve the row at request time, so adding or editing
+    one requires no restart. Fields common to every auth method are columns. The
+    protocol-specific settings live in the encrypted `config` blob, validated
+    per provider_type on write."""
+
+    __tablename__ = "sso_provider"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # URL path segment for the login routes and the oauth_name stored on
+    # linked login accounts. Renaming a provider orphans those links.
+    name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    provider_type: Mapped[SSOProviderType] = mapped_column(
+        Enum(SSOProviderType, native_enum=False), nullable=False
+    )
+    # Protocol-specific settings: OAuth client creds + discovery URL for
+    # GOOGLE/OIDC, or IdP metadata for SAML. Encrypted at rest, validated
+    # against provider_type on write.
+    config: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
+        EncryptedJson(), nullable=False
+    )
+    # Email domains admitted through this provider's login, lowercased
+    allowed_email_domains: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )

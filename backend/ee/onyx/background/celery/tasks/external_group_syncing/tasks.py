@@ -1,15 +1,10 @@
 import time
 import traceback
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import cast
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 from uuid import uuid4
 
-from celery import Celery
-from celery import shared_task
-from celery import Task
+from celery import Celery, Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import ValidationError
 from redis import Redis
@@ -18,63 +13,74 @@ from redis.lock import Lock as RedisLock
 from ee.onyx.background.celery.tasks.external_group_syncing.group_sync_utils import (
     mark_all_relevant_cc_pairs_as_external_group_synced,
 )
-from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
-from ee.onyx.db.connector_credential_pair import get_cc_pairs_by_source
-from ee.onyx.db.external_perm import ExternalUserGroup
-from ee.onyx.db.external_perm import mark_old_external_groups_as_stale
-from ee.onyx.db.external_perm import remove_stale_external_groups
-from ee.onyx.db.external_perm import upsert_external_groups
+from ee.onyx.db.connector_credential_pair import (
+    get_all_auto_sync_cc_pairs,
+    get_cc_pairs_by_source,
+)
+from ee.onyx.db.external_perm import (
+    ExternalUserGroup,
+    mark_old_external_groups_as_stale,
+    remove_stale_external_groups,
+    upsert_external_groups,
+)
 from ee.onyx.external_permissions.sync_params import (
     get_all_cc_pair_agnostic_group_sync_sources,
+    get_source_perm_sync_config,
 )
-from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_redis import celery_find_task
-from onyx.background.celery.celery_redis import celery_get_broker_client
-from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.celery_redis import (
+    celery_find_task,
+    celery_get_broker_client,
+    celery_get_unacked_task_ids,
+)
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.error_logging import emit_background_error
 from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.constants import CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisConstants
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import OnyxRedisSignals
+from onyx.configs.constants import (
+    CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT,
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisConstants,
+    OnyxRedisLocks,
+    OnyxRedisSignals,
+)
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import SyncStatus
-from onyx.db.enums import SyncType
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    SyncStatus,
+    SyncType,
+)
 from onyx.db.models import ConnectorCredentialPair
-from onyx.db.permission_sync_attempt import complete_external_group_sync_attempt
-from onyx.db.permission_sync_attempt import create_external_group_sync_attempt
-from onyx.db.permission_sync_attempt import mark_external_group_sync_attempt_failed
-from onyx.db.permission_sync_attempt import mark_external_group_sync_attempt_in_progress
-from onyx.db.sync_record import insert_sync_record
-from onyx.db.sync_record import update_sync_record_status
+from onyx.db.permission_sync_attempt import (
+    complete_external_group_sync_attempt,
+    create_external_group_sync_attempt,
+    mark_external_group_sync_attempt_failed,
+    mark_external_group_sync_attempt_in_progress,
+)
+from onyx.db.sync_record import insert_sync_record, update_sync_record_status
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
 from onyx.redis.redis_connector_ext_group_sync import (
+    RedisConnectorExternalGroupSync,
     RedisConnectorExternalGroupSyncPayload,
 )
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.server.metrics.perm_sync_metrics import inc_group_sync_errors
-from onyx.server.metrics.perm_sync_metrics import inc_group_sync_groups_processed
-from onyx.server.metrics.perm_sync_metrics import inc_group_sync_users_processed
-from onyx.server.metrics.perm_sync_metrics import observe_group_sync_duration
-from onyx.server.metrics.perm_sync_metrics import observe_group_sync_upsert_duration
+from onyx.server.metrics.perm_sync_metrics import (
+    inc_group_sync_errors,
+    inc_group_sync_groups_processed,
+    inc_group_sync_users_processed,
+    observe_group_sync_duration,
+    observe_group_sync_upsert_duration,
+)
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
-from onyx.utils.logger import format_error_for_logging
-from onyx.utils.logger import setup_logger
+from onyx.utils.logger import format_error_for_logging, setup_logger
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -584,7 +590,7 @@ def _timed_perform_external_group_sync(
                 # Track progress
                 total_groups_processed += 1
                 total_group_memberships_synced += len(external_user_group.user_emails)
-                seen_users = seen_users.union(external_user_group.user_emails)
+                seen_users.update(external_user_group.user_emails)
 
                 if len(external_user_group_batch) >= _EXTERNAL_GROUP_BATCH_SIZE:
                     logger.debug(

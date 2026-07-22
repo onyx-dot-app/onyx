@@ -3,8 +3,7 @@ from enum import Enum
 from http import HTTPStatus
 
 import httpx
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from sqlalchemy.orm import Session
 from tenacity import RetryError
@@ -12,21 +11,24 @@ from tenacity import RetryError
 from onyx.access.access import get_access_for_document
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
-from onyx.configs.constants import ONYX_CELERY_BEAT_HEARTBEAT_KEY
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import ONYX_CELERY_BEAT_HEARTBEAT_KEY, OnyxCeleryTask
 from onyx.db.connector_credential_pair import get_connector_credential_pair
-from onyx.db.document import delete_document_by_connector_credential_pair__no_commit
-from onyx.db.document import delete_documents_complete
-from onyx.db.document import fetch_chunk_count_for_document
-from onyx.db.document import get_document
-from onyx.db.document import get_document_connector_count
-from onyx.db.document import mark_document_as_modified
-from onyx.db.document import mark_document_as_synced
+from onyx.db.document import (
+    delete_document_by_connector_credential_pair__no_commit,
+    delete_documents_complete,
+    fetch_chunk_count_for_document,
+    get_document,
+    get_document_connector_count,
+    mark_document_as_modified,
+    mark_document_as_synced,
+)
 from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.port_orphan_candidate import clear_port_orphan_candidates
-from onyx.db.port_orphan_candidate import port_target_settings_id
-from onyx.db.port_orphan_candidate import record_port_orphan_candidates_for_document
+from onyx.db.port_orphan_candidate import (
+    clear_port_orphan_candidates,
+    port_target_settings_id,
+    record_port_orphan_candidates_for_document,
+)
 from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_all_document_indices

@@ -17,49 +17,51 @@ from typing import Protocol
 from urllib.parse import urlparse
 from uuid import UUID
 
-from cachetools import cachedmethod
-from cachetools import TTLCache
+from cachetools import TTLCache, cachedmethod
 from mitmproxy import http
 from mitmproxy.proxy import server_hooks
 from sqlalchemy.orm import Session
 
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
-from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
+from onyx.db.gated_app import get_gated_app_id
 from onyx.db.notification import create_notification
-from onyx.db.scheduled_task import get_live_scheduled_run_grants
-from onyx.db.scheduled_task import ScheduledRunGrants
-from onyx.external_apps.matching.engine import actions_requiring_approval
-from onyx.external_apps.matching.engine import AllMatchedActions
+from onyx.db.scheduled_task import ScheduledRunGrants, get_live_scheduled_run_grants
+from onyx.external_apps.matching.engine import (
+    AllMatchedActions,
+    actions_requiring_approval,
+)
 from onyx.sandbox_proxy import approval_cache
-from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
-from onyx.sandbox_proxy.credential_injection import InjectionContext
-from onyx.sandbox_proxy.credential_injection import InjectionOutcome
-from onyx.sandbox_proxy.errors import http_403
-from onyx.sandbox_proxy.errors import SandboxProxyError
-from onyx.sandbox_proxy.identity import ResolvedSandbox
-from onyx.sandbox_proxy.identity import SessionContext
-from onyx.sandbox_proxy.logging_utils import approval_decided_args
-from onyx.sandbox_proxy.logging_utils import APPROVAL_DECIDED_FIELDS
-from onyx.sandbox_proxy.logging_utils import credential_outcome_label
-from onyx.sandbox_proxy.logging_utils import egress_approval_matched_args
-from onyx.sandbox_proxy.logging_utils import EGRESS_APPROVAL_MATCHED_FIELDS
-from onyx.sandbox_proxy.logging_utils import egress_matched_args
-from onyx.sandbox_proxy.logging_utils import EGRESS_MATCHED_FIELDS
-from onyx.sandbox_proxy.logging_utils import egress_session_matched_args
-from onyx.sandbox_proxy.logging_utils import EGRESS_SESSION_MATCHED_FIELDS
-from onyx.sandbox_proxy.logging_utils import egress_target_args
-from onyx.sandbox_proxy.logging_utils import EGRESS_TARGET_FIELDS
-from onyx.sandbox_proxy.logging_utils import full_log_id
-from onyx.sandbox_proxy.logging_utils import sandbox_log_label
-from onyx.sandbox_proxy.logging_utils import short_log_id
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialInjectionDispatcher,
+    InjectionContext,
+    InjectionOutcome,
+)
+from onyx.sandbox_proxy.errors import SandboxProxyError, http_403
+from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
+from onyx.sandbox_proxy.logging_utils import (
+    APPROVAL_DECIDED_FIELDS,
+    EGRESS_APPROVAL_MATCHED_FIELDS,
+    EGRESS_MATCHED_FIELDS,
+    EGRESS_SESSION_MATCHED_FIELDS,
+    EGRESS_TARGET_FIELDS,
+    approval_decided_args,
+    credential_outcome_label,
+    egress_approval_matched_args,
+    egress_matched_args,
+    egress_session_matched_args,
+    egress_target_args,
+    full_log_id,
+    sandbox_log_label,
+    short_log_id,
+)
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
-from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
-from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import (
+    SANDBOX_API_SERVER_URL,
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+)
 from onyx.server.features.build.db import action_approval
 from onyx.utils.logger import setup_logger
 
@@ -594,8 +596,13 @@ class GateAddon:
         # ALWAYS / DENY / off-catalog terminate here; ASK falls through to the
         # approval pipeline in `request()`.
         if matched_actions is None:
-            injection = self._dispatch_injection_or_block(
-                flow, sandbox=sandbox, matched_actions=None
+            # Off-thread like the ALWAYS path: host-claiming resolvers may hit
+            # the DB or refresh an expiring OAuth token before injecting.
+            injection = await asyncio.to_thread(
+                self._dispatch_injection_or_block,
+                flow,
+                sandbox=sandbox,
+                matched_actions=None,
             )
             if injection is InjectionOutcome.BLOCKED:
                 logger.warning(
@@ -727,8 +734,9 @@ class GateAddon:
         grants = self._live_grants(db, ctx.session_id)
         if grants is None:
             return None
-        run_id, granted_app_ids = grants
-        if matched_actions.external_app_id not in granted_app_ids:
+        run_id, granted_targets = grants
+        target = matched_actions.target
+        if target.key not in granted_targets:
             return None
         return _ApprovalGrant(
             decided_via=ApprovalDecidedVia.PRE_APPROVAL,
@@ -736,7 +744,8 @@ class GateAddon:
             notification_title=f"Scheduled task used {matched_actions.app_name} (pre-approved)",
             notification_data={
                 "run_id": str(run_id),
-                "external_app_id": matched_actions.external_app_id,
+                "target_kind": target.kind.value,
+                "target_id": target.id,
             },
         )
 
@@ -747,12 +756,14 @@ class GateAddon:
         action_types = actions_requiring_approval(matched_actions.actions)
         if not action_types:
             return None
+        target = matched_actions.target
         cache: CacheBackend | None = None
         try:
             cache = self._cache_factory(ctx.tenant_id)
             if approval_cache.cached_session_grants_cover(
                 session_id=ctx.session_id,
-                external_app_id=matched_actions.external_app_id,
+                kind=target.kind,
+                target_id=target.id,
                 action_types=action_types,
                 cache=cache,
             ):
@@ -760,10 +771,11 @@ class GateAddon:
         except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
                 "approval_grant_cache_error tenant=%s session=%s "
-                "external_app_id=%s operation=%s error=%r",
+                "target=%s:%s operation=%s error=%r",
                 ctx.tenant_id,
                 short_log_id(ctx.session_id),
-                matched_actions.external_app_id,
+                target.kind.value,
+                target.id,
                 "check",
                 str(e),
             )
@@ -771,38 +783,17 @@ class GateAddon:
         grant_source_rows = action_approval.list_session_grant_action_approvals(
             db,
             session_id=ctx.session_id,
-            external_app_id=matched_actions.external_app_id,
+            gated_app_id=get_gated_app_id(db, target.kind, target.id),
         )
-        granted_action_types: set[str] = set()
-        for grant_source_row in grant_source_rows:
-            granted_action_types.update(
-                actions_requiring_approval(grant_source_row.actions)
-            )
+        granted_action_types = approval_cache.hydrate_session_grants(
+            session_id=ctx.session_id,
+            kind=target.kind,
+            target_id=target.id,
+            rows=grant_source_rows,
+            cache=cache,
+        )
         if not set(action_types).issubset(granted_action_types):
             return None
-
-        if cache is not None:
-            try:
-                for grant_source_row in grant_source_rows:
-                    approval_cache.cache_session_grant_actions(
-                        session_id=ctx.session_id,
-                        external_app_id=matched_actions.external_app_id,
-                        action_types=actions_requiring_approval(
-                            grant_source_row.actions
-                        ),
-                        source_approval_id=grant_source_row.approval_id,
-                        cache=cache,
-                    )
-            except CACHE_TRANSIENT_ERRORS as e:
-                logger.warning(
-                    "approval_grant_cache_error tenant=%s session=%s "
-                    "external_app_id=%s operation=%s error=%r",
-                    ctx.tenant_id,
-                    short_log_id(ctx.session_id),
-                    matched_actions.external_app_id,
-                    "hydrate",
-                    str(e),
-                )
         return _ApprovalGrant(decided_via=ApprovalDecidedVia.SESSION_GRANT)
 
     async def _apply_approval_grant(
@@ -855,7 +846,7 @@ class GateAddon:
                     ],
                     app_name=matched_actions.app_name,
                     payload=matched_actions.payload,
-                    external_app_id=matched_actions.external_app_id,
+                    target=matched_actions.target.key,
                     decision=ApprovalDecision.APPROVED,
                     decided_via=grant.decided_via,
                 )
@@ -911,7 +902,7 @@ class GateAddon:
                 actions=actions_payload,
                 app_name=matched_actions.app_name,
                 payload=matched_actions.payload,
-                external_app_id=matched_actions.external_app_id,
+                target=matched_actions.target.key,
             )
             approval_id = row.approval_id
             db.commit()
@@ -933,14 +924,15 @@ class GateAddon:
 
         logger.info(
             "approval_requested tenant=%s sandbox=%s session=%s approval=%s "
-            "app_name=%r external_app_id=%s action_type=%s action_count=%s "
+            "app_name=%r target=%s:%s action_type=%s action_count=%s "
             "proxy_instance=%s session_id=%s approval_id=%s",
             ctx.tenant_id,
             sandbox_log_label(ctx),
             short_log_id(ctx.session_id),
             short_log_id(approval_id),
             matched_actions.app_name,
-            matched_actions.external_app_id,
+            matched_actions.target.kind.value,
+            matched_actions.target.id,
             matched_actions.governing_action.action_type,
             len(matched_actions.actions),
             self._proxy_instance_id,
@@ -1059,16 +1051,18 @@ class GateAddon:
         matched_actions: AllMatchedActions | None,
     ) -> InjectionOutcome:
         """Runs the credential dispatcher; Fails closed with a 403 on BLOCKED."""
-        outcome = self._credential_dispatcher.apply(
+        result = self._credential_dispatcher.apply(
             flow,
             InjectionContext(
                 sandbox=sandbox,
                 matched_actions=matched_actions,
             ),
         )
-        if outcome is InjectionOutcome.BLOCKED:
-            flow.response = http_403(SandboxProxyError.CREDENTIAL_ERROR)
-        return outcome
+        if result.outcome is InjectionOutcome.BLOCKED:
+            flow.response = http_403(
+                SandboxProxyError.CREDENTIAL_ERROR, detail=result.block_detail
+            )
+        return result.outcome
 
     def _terminalize_after_unhandled_error(
         self, approval_id: UUID, tenant_id: str

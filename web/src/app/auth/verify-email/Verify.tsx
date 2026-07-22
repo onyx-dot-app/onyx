@@ -6,7 +6,7 @@ import { Text } from "@opal/components";
 import { Spacer } from "@opal/components";
 import { RequestNewVerificationEmail } from "../waiting-on-verification/RequestNewVerificationEmail";
 import { User } from "@/lib/types";
-import Logo from "@/refresh-components/Logo";
+import { Logo } from "@/lib/app/components";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 export interface VerifyProps {

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import { Table, Button, Divider } from "@opal/components";
-import { IllustrationContent, InputHorizontal } from "@opal/layouts";
+import { IllustrationContent, InputHorizontal, toast } from "@opal/layouts";
 import {
   SvgUsers,
   SvgTrash,
@@ -21,8 +21,7 @@ import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { toast } from "@/hooks/useToast";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
@@ -43,6 +42,7 @@ import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources"
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
 
+const HOURS_PER_DAY = 24;
 const addModeColumns = memberTableColumns;
 
 // ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const [selectedDocSetIds, setSelectedDocSetIds] = useState<number[]>([]);
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
   const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
-    { tokenBudget: null, periodHours: null },
+    { tokenBudget: null, periodDays: null },
   ]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -142,7 +142,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       setTokenLimits(
         tokenRateLimits.map((trl) => ({
           tokenBudget: trl.token_budget,
-          periodHours: trl.period_hours,
+          periodDays: trl.period_hours / HOURS_PER_DAY,
         }))
       );
     }

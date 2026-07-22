@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 
 
 class ActionPolicyView(BaseModel):

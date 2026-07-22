@@ -14,13 +14,14 @@ from onyx.db.security_settings import load_overrides as _db_load_overrides
 from onyx.db.security_settings import upsert_overrides as _db_upsert_overrides
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.security.models import OPERATOR_LOCKED_FIELDS
-from onyx.server.security.models import SecuritySettings
-from onyx.server.security.models import SecuritySettingsOverrides
-from onyx.server.security.models import SSRFProtectionLevel
+from onyx.server.security.models import (
+    OPERATOR_LOCKED_FIELDS,
+    SecuritySettings,
+    SecuritySettingsOverrides,
+    SSRFProtectionLevel,
+)
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
@@ -86,6 +87,7 @@ def _build_env_defaults() -> SecuritySettings:
         track_external_idp_expiry=_cfg.TRACK_EXTERNAL_IDP_EXPIRY,
         ssrf_protection_level=_derive_ssrf_level_from_env(),
         mask_credential_prefix=_cfg.MASK_CREDENTIAL_PREFIX,
+        llm_custom_config_env_injection=not MULTI_TENANT,
         valid_email_domains=tuple(_cfg.VALID_EMAIL_DOMAINS),
         password_min_length=_cfg.PASSWORD_MIN_LENGTH,
         password_max_length=_cfg.PASSWORD_MAX_LENGTH,
@@ -112,6 +114,10 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
             merged[name] = getattr(env, name)
         else:
             merged[name] = override_value
+    # Process-wide env vars are a cross-tenant risk: force injection off on
+    # multi-tenant no matter what any stored or env-derived value says.
+    if MULTI_TENANT:
+        merged["llm_custom_config_env_injection"] = False
     # SecuritySettings types valid_email_domains as tuple; overrides as list.
     if isinstance(merged["valid_email_domains"], list):
         merged["valid_email_domains"] = tuple(merged["valid_email_domains"])
@@ -187,7 +193,7 @@ def apply_patch(
         _store_overrides_unlocked(merged)
         return effective
     finally:
-        # Lease may have expired during the write; unconditional release would
+        # Lease may have expired during the write. Unconditional release would
         # raise LockNotOwnedError and mask a successful save as a 500.
         if lock.owned():
             lock.release()
@@ -236,3 +242,21 @@ def get_security_settings() -> SecuritySettings:
             return _build_env_defaults()
         _CACHE[tenant_id] = effective
         return effective
+
+
+def llm_custom_config_env_injection_enabled() -> bool:
+    """Whether env-only LLM provider custom_config keys may be temporarily
+    injected into os.environ during a call. Hard-off on multi-tenant regardless
+    of stored overrides — process-wide env vars are only safe when the admin
+    owns the whole deployment."""
+    if MULTI_TENANT:
+        # merge_with_env forces this off on multi-tenant, so an effective True
+        # here means that invariant has been broken somewhere upstream.
+        if get_security_settings().llm_custom_config_env_injection:
+            logger.critical(
+                "Invariant violation: llm_custom_config_env_injection resolved "
+                "to enabled on a multi-tenant deployment; forcing it off for "
+                "this call."
+            )
+        return False
+    return get_security_settings().llm_custom_config_env_injection

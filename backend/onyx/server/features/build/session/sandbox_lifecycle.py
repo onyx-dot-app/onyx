@@ -3,30 +3,52 @@ interactive (``create_session__no_commit``) and headless
 (``ensure_sandbox_running``) flows."""
 
 import time
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from uuid import UUID
 
+from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.models import Sandbox, User
 from onyx.db.users import fetch_user_by_id
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
-from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
-from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
-from onyx.server.features.build.db.sandbox import delete_snapshot__no_commit
-from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
-from onyx.server.features.build.db.sandbox import get_running_sandbox_count
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import get_snapshots_for_session
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.configs import (
+    SANDBOX_IDLE_TIMEOUT_SECONDS,
+    SANDBOX_MAX_CONCURRENT_PER_ORG,
+)
+from onyx.server.features.build.db.build_session import (
+    clear_nextjs_ports_for_user,
+    get_orphan_build_session_ids,
+    mark_user_sessions_idle__no_commit,
+)
+from onyx.server.features.build.db.sandbox import (
+    create_sandbox__no_commit,
+    create_snapshot__no_commit,
+    delete_snapshot__no_commit,
+    ensure_sandbox_pat,
+    get_running_sandbox_count,
+    get_sandbox_by_user_id,
+    get_snapshots_for_session,
+    set_sandbox_skills_hashes__no_commit,
+    update_sandbox_status__no_commit,
+)
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.models import (
+    FileSet,
+    LLMProviderConfig,
+    SnapshotResult,
+)
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
+from onyx.server.features.build.sandbox.user_library import hydrate_user_library
+from onyx.server.features.build.sandbox.util.mcp_config import resolve_craft_mcp_servers
 from onyx.server.features.build.session.errors import SandboxProvisioningError
+from onyx.skills.push import (
+    build_user_skills_payload,
+    compute_skill_runtime_hash,
+    hydrate_sandbox_skills,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -35,6 +57,15 @@ logger = setup_logger()
 
 
 _HEALTHCHECK_TIMEOUT_SECONDS = 5.0
+
+# Statuses from which (re-)provisioning a pod is legal.
+_REPROVISIONABLE_STATUSES: frozenset[SandboxStatus] = frozenset(
+    {
+        SandboxStatus.SLEEPING,
+        SandboxStatus.TERMINATED,
+        SandboxStatus.FAILED,
+    }
+)
 
 
 def snapshot_opencode_history_before_recovery(
@@ -58,6 +89,20 @@ def snapshot_opencode_history_before_recovery(
             sandbox_id,
             exc_info=True,
         )
+
+
+def recover_unhealthy_sandbox(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    sandbox: Sandbox,
+    tenant_id: str,
+) -> None:
+    """Tear down a RUNNING sandbox whose pod is unhealthy/missing: preserve
+    opencode history best-effort, terminate, mark TERMINATED so the caller
+    can re-provision. Caller is responsible for committing."""
+    snapshot_opencode_history_before_recovery(sandbox_manager, sandbox.id, tenant_id)
+    sandbox_manager.terminate(sandbox.id)
+    update_sandbox_status__no_commit(db_session, sandbox.id, SandboxStatus.TERMINATED)
 
 
 def create_session_snapshot_keep_latest(
@@ -99,6 +144,69 @@ def create_session_snapshot_keep_latest(
     return result
 
 
+def hydrate_managed_content(
+    sandbox_manager: SandboxManager,
+    sandbox_id: UUID,
+    user: User,
+    db_session: DBSession,
+    *,
+    connectable_apps_section: str | None = None,
+    skills_files: FileSet | None = None,
+) -> bool:
+    """Push managed skills + user library into a sandbox.
+
+    Must complete before the sandbox is reported RUNNING: turns dispatch as
+    soon as RUNNING is visible, and opencode scans the skills directory once
+    per instance, so a turn started mid-push permanently misses managed
+    skills. The persisted hash also covers the connectable-app guidance used
+    to regenerate ``AGENTS.md`` on reload.
+
+    ``connectable_apps_section`` and ``skills_files`` must be supplied together
+    or both omitted; mismatched nullity is a programmer error and raises
+    ``ValueError`` eagerly. Runtime push failures are logged, never raised.
+    """
+    if (connectable_apps_section is None) != (skills_files is None):
+        raise ValueError(
+            "connectable_apps_section and skills_files must be provided together"
+        )
+    if connectable_apps_section is None or skills_files is None:
+        connectable_apps_section, skills_files = build_user_skills_payload(
+            user, db_session
+        )
+
+    skills_hydrated = False
+    try:
+        skills_hash = compute_skill_runtime_hash(skills_files, connectable_apps_section)
+        result = hydrate_sandbox_skills(
+            sandbox_id,
+            user,
+            db_session,
+            sandbox_manager=sandbox_manager,
+            files=skills_files,
+        )
+        if result.succeeded == result.targets:
+            with db_session.begin_nested():
+                set_sandbox_skills_hashes__no_commit(
+                    db_session,
+                    {sandbox_id: skills_hash},
+                )
+            skills_hydrated = True
+    except Exception:
+        logger.warning("Failed to push skills to sandbox %s", sandbox_id, exc_info=True)
+    try:
+        hydrate_user_library(
+            sandbox_id,
+            user.id,
+            db_session,
+            sandbox_manager=sandbox_manager,
+        )
+    except Exception:
+        logger.warning(
+            "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
+        )
+    return skills_hydrated
+
+
 class ProvisioningPolicy(str, Enum):
     """How to handle a sandbox already in ``PROVISIONING`` when we arrive.
 
@@ -126,6 +234,10 @@ def provision_sandbox(
     provider pre-loaded so per-prompt model overrides can cross providers
     without a pod restart. ``all_llm_configs[0]`` is the default.
 
+    Managed content (skills, user library) is pushed before the row is
+    flipped to RUNNING so no turn can start against a pod that is still
+    receiving its skills.
+
     Updates the sandbox row's status to whatever the manager returns.
     Caller is responsible for committing.
     """
@@ -137,7 +249,10 @@ def provision_sandbox(
         llm_config=all_llm_configs[0],
         onyx_pat=onyx_pat,
         all_llm_configs=all_llm_configs,
+        mcp_servers=resolve_craft_mcp_servers(db_session, user),
     )
+    if sandbox_info.status == SandboxStatus.RUNNING:
+        hydrate_managed_content(sandbox_manager, sandbox.id, user, db_session)
     update_sandbox_status__no_commit(db_session, sandbox.id, sandbox_info.status)
 
 
@@ -204,8 +319,9 @@ def ensure_sandbox_ready(
     provisioning_wait_seconds: float = 30.0,
     user: User | None = None,
 ) -> Sandbox:
-    """Return a ``RUNNING`` sandbox for ``user_id``, creating, waking, or
-    recovering as needed.
+    """Return the sandbox for ``user_id``, creating, waking, or recovering
+    it as needed. Provisioning hydrates managed content before the row
+    reports RUNNING.
 
     Branches by current sandbox status:
     - No sandbox row: create + provision.
@@ -256,20 +372,10 @@ def ensure_sandbox_ready(
             "Sandbox %s marked RUNNING but pod is unhealthy/missing; recovering.",
             sandbox.id,
         )
-        snapshot_opencode_history_before_recovery(
-            sandbox_manager, sandbox.id, tenant_id
-        )
-        sandbox_manager.terminate(sandbox.id)
-        update_sandbox_status__no_commit(
-            db_session, sandbox.id, SandboxStatus.TERMINATED
-        )
+        recover_unhealthy_sandbox(db_session, sandbox_manager, sandbox, tenant_id)
         # Fall through into the re-provision path below.
 
-    if sandbox is not None and sandbox.status not in {
-        SandboxStatus.SLEEPING,
-        SandboxStatus.TERMINATED,
-        SandboxStatus.FAILED,
-    }:
+    if sandbox is not None and sandbox.status not in _REPROVISIONABLE_STATUSES:
         raise RuntimeError(
             f"Sandbox {sandbox.id} in unexpected status "
             f"{sandbox.status.value}; refusing to provision"
@@ -304,3 +410,253 @@ def ensure_sandbox_ready(
         all_llm_configs,
     )
     return sandbox
+
+
+def is_sandbox_idle(sandbox: Sandbox, now: datetime) -> bool:
+    """Idle = no heartbeat for the timeout (NULL heartbeat falls back to
+    created_at so legacy/edge-case rows don't sit RUNNING forever)."""
+    reference = sandbox.last_heartbeat or sandbox.created_at
+    return reference < now - timedelta(seconds=SANDBOX_IDLE_TIMEOUT_SECONDS)
+
+
+def list_snapshotable_session_workspaces(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    sandbox: Sandbox,
+    session_creation_lock: RedisLock,
+) -> list[UUID]:
+    """List snapshotable workspaces while session creation is excluded."""
+    if not session_creation_lock.owned():
+        raise RuntimeError(
+            f"Session creation lock is not owned for sandbox user {sandbox.user_id}"
+        )
+
+    workspace_session_ids = sandbox_manager.list_session_workspaces(sandbox.id)
+    orphan_session_ids = get_orphan_build_session_ids(
+        workspace_session_ids,
+        sandbox.user_id,
+        db_session,
+    )
+
+    existing_session_ids: list[UUID] = []
+    for session_id in workspace_session_ids:
+        if session_id not in orphan_session_ids:
+            existing_session_ids.append(session_id)
+            continue
+
+        logger.warning(
+            "Removing orphan workspace for session %s from sandbox %s",
+            session_id,
+            sandbox.id,
+        )
+        try:
+            sandbox_manager.cleanup_session_workspace(sandbox.id, session_id)
+        except Exception:
+            logger.warning(
+                "Failed to remove orphan workspace for session %s from sandbox %s; "
+                "skipping it",
+                session_id,
+                sandbox.id,
+                exc_info=True,
+            )
+
+    return existing_session_ids
+
+
+def sleep_sandbox(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    sandbox: Sandbox,
+    tenant_id: str,
+    session_creation_lock: RedisLock,
+) -> None:
+    """Snapshot an idle ``RUNNING`` sandbox, terminate its pod, and mark it
+    ``SLEEPING``. Commits on success; on abort the sandbox stays ``RUNNING``.
+
+    Invariant: snapshot before terminate, fail-closed — a snapshot failure on
+    a reachable pod aborts the reap so the next sweep retries, while an
+    unreachable pod is terminated anyway (its workspace is unrecoverable;
+    never pin it RUNNING forever). Idleness is re-checked right before the
+    kill since snapshotting can take minutes.
+    """
+    sandbox_id = sandbox.id
+
+    # Chat history lives outside session workspaces; capture it before the
+    # pod dies.
+    if sandbox_manager.supports_opencode_history_persistence:
+        try:
+            sandbox_manager.create_opencode_history_snapshot(sandbox_id, tenant_id)
+        except Exception as e:
+            if sandbox_manager.health_check(
+                sandbox_id, timeout=_HEALTHCHECK_TIMEOUT_SECONDS
+            ):
+                logger.error(
+                    "opencode history snapshot failed for sandbox "
+                    "%s; leaving it RUNNING: %s",
+                    sandbox_id,
+                    e,
+                )
+                return
+            logger.warning(
+                "Sandbox %s pod unreachable; sleeping "
+                "without a fresh opencode history snapshot: %s",
+                sandbox_id,
+                e,
+            )
+
+    if not session_creation_lock.acquire(blocking=False):
+        logger.info(
+            "Skipping idle sandbox %s while a session is being created",
+            sandbox_id,
+        )
+        return
+    try:
+        session_ids = list_snapshotable_session_workspaces(
+            db_session,
+            sandbox_manager,
+            sandbox,
+            session_creation_lock,
+        )
+    finally:
+        if session_creation_lock.owned():
+            session_creation_lock.release()
+
+    snapshot_failed = False
+    for session_id in session_ids:
+        try:
+            snapshot_start = time.monotonic()
+            snapshot_result = create_session_snapshot_keep_latest(
+                sandbox_manager=sandbox_manager,
+                db_session=db_session,
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                tenant_id=tenant_id,
+            )
+            snapshot_elapsed = time.monotonic() - snapshot_start
+            if snapshot_result:
+                logger.info(
+                    "Snapshot created for session %s: %.1f MiB in %.1fs",
+                    session_id,
+                    snapshot_result.size_bytes / 1_048_576,
+                    snapshot_elapsed,
+                )
+        except Exception as e:
+            snapshot_failed = True
+            logger.warning(
+                "Failed to create snapshot for session %s: %s", session_id, e
+            )
+            db_session.rollback()
+
+    logger.info("Putting sandbox %s to sleep", sandbox_id)
+
+    # Fail-closed: terminating with an unsnapshotted workspace loses it
+    # (restore falls back to a fresh template). Keep the sandbox RUNNING to
+    # retry next cycle — unless the pod is unreachable, where snapshots can
+    # never succeed and the workspace is already gone, so don't pin it
+    # RUNNING forever.
+    pod_unreachable = False
+    if snapshot_failed:
+        if sandbox_manager.health_check(
+            sandbox_id, timeout=_HEALTHCHECK_TIMEOUT_SECONDS
+        ):
+            logger.error(
+                "Snapshot failed for sandbox %s; "
+                "leaving it RUNNING to retry next cycle",
+                sandbox_id,
+            )
+            return
+        pod_unreachable = True
+        logger.warning(
+            "Sandbox %s pod is unreachable; "
+            "terminating despite snapshot failure (cannot recover "
+            "its workspace, won't pin it RUNNING forever)",
+            sandbox_id,
+        )
+
+    # Do not block session creation during snapshots. Reacquire its lock before
+    # the final check so a workspace cannot appear between the rescan and kill.
+    if not session_creation_lock.acquire(blocking=False):
+        logger.info(
+            "Sandbox %s has a session creation in progress; skipping reap",
+            sandbox_id,
+        )
+        return
+    try:
+        if not pod_unreachable:
+            current_session_ids = list_snapshotable_session_workspaces(
+                db_session,
+                sandbox_manager,
+                sandbox,
+                session_creation_lock,
+            )
+            new_session_ids = set(current_session_ids) - set(session_ids)
+            if new_session_ids:
+                logger.info(
+                    "Sandbox %s gained %s session workspace(s) during snapshot; "
+                    "skipping reap",
+                    sandbox_id,
+                    len(new_session_ids),
+                )
+                return
+
+        # Snapshotting above can take minutes; re-check idleness right before
+        # the kill.
+        db_session.refresh(sandbox)
+        if sandbox.status != SandboxStatus.RUNNING or not is_sandbox_idle(
+            sandbox, datetime.now(timezone.utc)
+        ):
+            logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
+            return
+
+        # Terminate the pod (but keep the sandbox record).
+        sandbox_manager.terminate(sandbox_id)
+
+        # Ports are no longer in use once the pod is gone.
+        cleared = clear_nextjs_ports_for_user(db_session, sandbox.user_id)
+        logger.debug(
+            "Cleared %s nextjs_port allocations for user %s", cleared, sandbox.user_id
+        )
+
+        idled = mark_user_sessions_idle__no_commit(db_session, sandbox.user_id)
+        logger.debug("Marked %s sessions as IDLE for user %s", idled, sandbox.user_id)
+
+        update_sandbox_status__no_commit(db_session, sandbox_id, SandboxStatus.SLEEPING)
+        db_session.commit()
+        logger.info("Sandbox %s is now sleeping", sandbox_id)
+    finally:
+        if session_creation_lock.owned():
+            session_creation_lock.release()
+
+
+def mark_sandbox_provisioning(db_session: DBSession, sandbox: Sandbox) -> None:
+    """Mark a re-provisionable sandbox as PROVISIONING before re-provisioning.
+
+    Commits deliberately so the transition is immediately visible to concurrent
+    pollers of the state machine (e.g. ``_wait_for_provisioning_to_complete``).
+
+    Raises:
+        RuntimeError: sandbox is not in a re-provisionable status (guards
+            against clobbering RUNNING or a concurrent PROVISIONING).
+    """
+    if sandbox.status not in _REPROVISIONABLE_STATUSES:
+        raise RuntimeError(
+            f"Sandbox {sandbox.id} in unexpected status "
+            f"{sandbox.status.value}; refusing to mark PROVISIONING"
+        )
+    update_sandbox_status__no_commit(db_session, sandbox.id, SandboxStatus.PROVISIONING)
+    db_session.commit()
+
+
+def rollback_failed_provisioning(db_session: DBSession, sandbox: Sandbox) -> bool:
+    """Compensating transition for provisioning that died mid-flight:
+    return the sandbox to ``SLEEPING`` (committed) so the stuck status
+    doesn't block the next attempt. Returns whether a rollback was applied.
+    """
+    if sandbox.status != SandboxStatus.PROVISIONING:
+        return False
+    update_sandbox_status__no_commit(db_session, sandbox.id, SandboxStatus.SLEEPING)
+    db_session.commit()
+    logger.info(
+        "Rolled sandbox %s back to SLEEPING after failed provisioning", sandbox.id
+    )
+    return True

@@ -34,11 +34,10 @@ jobs:
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             args: "--bundles deb,rpm"
-          # TODO: Fix and enable the macOS build.
-          #- platform: macos
-          #  os: macos-latest
-          #  target: universal-apple-darwin
-          #  args: "--target universal-apple-darwin"
+          - platform: macos
+            os: macos-latest
+            target: universal-apple-darwin
+            args: "--target universal-apple-darwin"
           # TODO: Fix and enable the Windows build.
           #- platform: windows
           #  os: windows-latest
@@ -60,10 +59,14 @@ jobs:
         uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
         with:
           toolchain: stable
-          targets: ${{ matrix.target }}
+          # `universal-apple-darwin` is a Tauri-only pseudo-target (lipo of two
+          # real triples), not something rustup can install -- install the
+          # actual per-arch targets on macOS instead.
+          targets: ${{ matrix.platform == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
+          components: clippy, rustfmt
 
       - name: Cache Cargo registry and build
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # zizmor: ignore[cache-poisoning]
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # zizmor: ignore[cache-poisoning]
         with:
           path: |
             ~/.cargo/bin/
@@ -95,6 +98,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Check Rust formatting
+        working-directory: ./desktop/src-tauri
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        working-directory: ./desktop/src-tauri
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
       - name: Build desktop app
         working-directory: ./desktop
         run: bunx tauri build ${{ matrix.args }}
@@ -109,5 +120,73 @@ jobs:
           name: desktop-build-${{ matrix.platform }}-${{ github.run_id }}
           path: |
             desktop/src-tauri/target/release/bundle/
+            desktop/src-tauri/target/universal-apple-darwin/release/bundle/
           retention-days: 7
           if-no-files-found: ignore
+
+  # Post a single PR comment linking to every desktop-build-* artifact produced
+  # by the matrix above, so reviewers don't have to dig through the Actions tab.
+  comment-build-artifacts:
+    name: Comment Build Artifact Links
+    needs: [build-desktop]
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.build-desktop.result != 'cancelled' &&
+      needs.build-desktop.result != 'skipped'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - name: Post PR comment with artifact download links
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          MARKER="<!-- desktop-build-artifacts -->"
+
+          TABLE_ROWS=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
+            | jq -r --arg repo "${REPO}" --arg run_id "${RUN_ID}" '
+                [.artifacts[] | select(.name | startswith("desktop-build-"))]
+                | map("| `\(.name)` | [Download](https://github.com/\($repo)/actions/runs/\($run_id)/artifacts/\(.id)) |")
+                | join("\n")
+              ')
+
+          if [ -z "${TABLE_ROWS}" ]; then
+            echo "No desktop-build-* artifacts found for this run -- skipping PR comment."
+            exit 0
+          fi
+
+          BODY=$(printf '%s\n' \
+            "${MARKER}" \
+            "### 📦 Desktop Build Artifacts" \
+            "" \
+            "Artifacts expire 7 days after this run." \
+            "" \
+            "| Artifact | Link |" \
+            "|----------|------|" \
+            "${TABLE_ROWS}")
+
+          # Upsert: find existing comment with the marker, or create a new one
+          EXISTING_COMMENT_ID=$(gh api \
+            "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" \
+            2>/dev/null | head -1)
+
+          if [ -n "${EXISTING_COMMENT_ID}" ]; then
+            gh api \
+              --method PATCH \
+              "repos/${REPO}/issues/comments/${EXISTING_COMMENT_ID}" \
+              -f body="${BODY}"
+          else
+            gh api \
+              --method POST \
+              "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+              -f body="${BODY}"
+          fi

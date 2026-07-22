@@ -1,23 +1,22 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any
-from typing import Generic
-from typing import TYPE_CHECKING
-from typing import TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.db.enums import LLMModelFlowType
-from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import litellm_thinks_model_supports_image_input
-from onyx.llm.utils import model_is_reasoning_model
-from onyx.server.manage.llm.utils import DYNAMIC_LLM_PROVIDERS
-from onyx.server.manage.llm.utils import extract_vendor_from_model_name
-from onyx.server.manage.llm.utils import filter_model_configurations
-from onyx.server.manage.llm.utils import is_reasoning_model
+from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
+from onyx.llm.model_capabilities import (
+    get_max_input_tokens,
+    litellm_thinks_model_supports_image_input,
+    model_is_reasoning_model,
+)
+from onyx.server.manage.llm.utils import (
+    extract_vendor_from_model_name,
+    filter_model_configurations,
+    is_reasoning_model,
+)
 
 if TYPE_CHECKING:
     from onyx.db.models import LLMProvider as LLMProviderModel
@@ -74,8 +73,6 @@ class LLMProviderDescriptor(BaseModel):
     ) -> "LLMProviderDescriptor":
         from onyx.llm.well_known_providers.llm_provider_options import (
             fetch_default_model_for_provider,
-        )
-        from onyx.llm.well_known_providers.llm_provider_options import (
             get_provider_display_name,
         )
 
@@ -266,12 +263,15 @@ class ModelConfigurationView(BaseModel):
                         model_configuration_model.name, provider_name
                     )
                 ),
-                # Prefer the stored REASONING flow; fall back to a substring
-                # heuristic on model name/display name for legacy rows that
-                # were saved before the flow existed.
+                # Prefer the stored REASONING flow; fall back to the LiteLLM
+                # cost map, then a substring heuristic on model name/display
+                # name for models LiteLLM doesn't know.
                 supports_reasoning=(
                     LLMModelFlowType.REASONING
                     in model_configuration_model.llm_model_flow_types
+                    or model_is_reasoning_model(
+                        model_configuration_model.name, provider_name
+                    )
                     or is_reasoning_model(
                         model_configuration_model.name,
                         model_configuration_model.display_name or "",

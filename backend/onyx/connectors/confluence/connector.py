@@ -1,9 +1,7 @@
 import copy
 import re
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from collections.abc import Generator, Iterable
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -12,51 +10,63 @@ from requests.exceptions import HTTPError
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
-from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
-from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import (
+    CONFLUENCE_CONNECTOR_LABELS_TO_SKIP,
+    CONFLUENCE_TIMEZONE_OFFSET,
+    CONTINUE_ON_CONNECTOR_FAILURE,
+    INDEX_BATCH_SIZE,
+)
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.confluence.access import get_all_space_permissions
-from onyx.connectors.confluence.access import get_page_restrictions
 from onyx.connectors.confluence.access import (
+    get_all_space_permissions,
+    get_page_restrictions,
     get_page_restrictions_with_per_ancestor_fetch,
 )
-from onyx.connectors.confluence.onyx_confluence import Confcloud77618Error
-from onyx.connectors.confluence.onyx_confluence import extract_text_from_confluence_html
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.confluence.utils import build_confluence_document_id
-from onyx.connectors.confluence.utils import convert_attachment_to_content
-from onyx.connectors.confluence.utils import datetime_from_string
-from onyx.connectors.confluence.utils import update_param_in_path
-from onyx.connectors.confluence.utils import validate_attachment_filetype
+from onyx.connectors.confluence.onyx_confluence import (
+    Confcloud77618Error,
+    OnyxConfluence,
+    extract_text_from_confluence_html,
+)
+from onyx.connectors.confluence.utils import (
+    build_confluence_document_id,
+    convert_attachment_to_content,
+    datetime_from_string,
+    update_param_in_path,
+    validate_attachment_filetype,
+)
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     is_atlassian_date_error,
 )
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import ConnectorCheckpoint
-from onyx.connectors.interfaces import ConnectorFailure
-from onyx.connectors.interfaces import CredentialsConnector
-from onyx.connectors.interfaces import CredentialsProviderInterface
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import Resolver
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    CredentialsConnector,
+    CredentialsProviderInterface,
+    GenerateSlimDocumentOutput,
+    Resolver,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    ImageSection,
+    SlimDocument,
+    TextSection,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -77,7 +87,11 @@ _ATTACHMENT_EXPANSION_FIELDS = [
     "version",
     "space",
     "metadata.labels",
+    "history",  # for history.createdDate
 ]
+# These slim-path sets are intentionally trimmed for perf (CONFCLOUD-77618);
+# `history` is added only to expose `history.createdDate` for doc_created_at
+# backfill on the slim path.
 # Fast path: page + ancestor restrictions inlined. Subject to
 # CONFCLOUD-77618 / 76424 on draft/trashed/outdated ancestors.
 _RESTRICTIONS_EXPANSION_FIELDS = [
@@ -86,6 +100,7 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
     "restrictions.read.restrictions.group",
     "ancestors.restrictions.read.restrictions.user",
     "ancestors.restrictions.read.restrictions.group",
+    "history",  # for history.createdDate (doc_created_at backfill)
 ]
 # CONFCLOUD-77618 fallback: bare ancestors only; EE resolver fetches
 # each ancestor's restrictions via `restriction/byOperation`.
@@ -94,11 +109,16 @@ _PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS = [
     "restrictions.read.restrictions.user",
     "restrictions.read.restrictions.group",
     "ancestors",
+    "history",  # for history.createdDate (doc_created_at backfill)
 ]
 # Pruning needs `space` + `ancestors` to populate hierarchy nodes and
 # parent ids; skipping them would flatten the graph. No restrictions
 # expand here, so CONFCLOUD-77618 can't fire.
-_PRUNING_EXPANSION_FIELDS = ["space", "ancestors"]
+_PRUNING_EXPANSION_FIELDS = [
+    "space",
+    "ancestors",
+    "history",  # for history.createdDate (doc_created_at backfill)
+]
 
 _SLIM_DOC_BATCH_SIZE = 5000
 
@@ -158,6 +178,9 @@ class ConfluenceConnector(
         labels_to_skip: list[str] = CONFLUENCE_CONNECTOR_LABELS_TO_SKIP,
         timezone_offset: float = CONFLUENCE_TIMEZONE_OFFSET,
         scoped_token: bool = False,
+        # default True: configs stored before this option existed must keep
+        # indexing attachments
+        include_attachments: bool = True,
     ) -> None:
         self.wiki_base = wiki_base
         self.is_cloud = is_cloud
@@ -169,6 +192,7 @@ class ConfluenceConnector(
         self.labels_to_skip = labels_to_skip
         self.timezone_offset = timezone_offset
         self.scoped_token = scoped_token
+        self.include_attachments = include_attachments
         self._confluence_client: OnyxConfluence | None = None
         self._low_timeout_confluence_client: OnyxConfluence | None = None
         self._fetched_titles: set[str] = set()
@@ -566,6 +590,7 @@ class ConfluenceConnector(
                 semantic_identifier=page_title,
                 metadata=metadata,
                 doc_updated_at=datetime_from_string(page["version"]["when"]),
+                doc_created_at=datetime_from_string(page["history"]["createdDate"]),
                 primary_owners=primary_owners if primary_owners else None,
                 parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
             )
@@ -596,6 +621,9 @@ class ConfluenceConnector(
         If there are valid attachments, the page itself is yielded as a hierarchy node
         (since attachments are children of the page in the hierarchy).
         """
+        if not self.include_attachments:
+            return [], []
+
         attachment_query = self._construct_attachment_query(
             _get_page_id(page), start, end
         )
@@ -720,6 +748,9 @@ class ConfluenceConnector(
                             if attachment.get("version")
                             and attachment["version"].get("when")
                             else None
+                        ),
+                        doc_created_at=datetime_from_string(
+                            attachment["history"]["createdDate"]
                         ),
                         primary_owners=primary_owners,
                         parent_hierarchy_raw_node_id=attachment_parent_hierarchy_raw_id,
@@ -1145,6 +1176,7 @@ class ConfluenceConnector(
                         if include_permissions
                         else None
                     ),
+                    doc_created_at=datetime_from_string(page["history"]["createdDate"]),
                     parent_hierarchy_raw_node_id=self._get_parent_hierarchy_raw_id(
                         page
                     ),
@@ -1154,18 +1186,21 @@ class ConfluenceConnector(
             # Attachments resolve from inline `restrictions` only; no
             # ancestor walk, so per-page mode is a no-op for them.
             page_hierarchy_node_yielded = False
-            attachment_query = self._construct_attachment_query(
-                _get_page_id(page), start, end
-            )
-            for attachment in self.confluence_client.cql_paginate_all_expansions(
-                cql=attachment_query,
-                expand=restrictions_expand,
-                limit=_SLIM_DOC_BATCH_SIZE,
-            ):
-                # If you skip images in the main indexing pass (allow_images
-                # is False), skip them here too. Otherwise the slim path emits
-                # a SlimDocument for an attachment the main path never produces
-                # a Document for, leaving a permanent chunk_count IS NULL row.
+            attachment_results: Iterable[dict[str, Any]] = ()
+            if self.include_attachments:
+                attachment_query = self._construct_attachment_query(
+                    _get_page_id(page), start, end
+                )
+                attachment_results = self.confluence_client.cql_paginate_all_expansions(
+                    cql=attachment_query,
+                    expand=restrictions_expand,
+                    limit=_SLIM_DOC_BATCH_SIZE,
+                )
+            for attachment in attachment_results:
+                # admission must mirror the main indexing pass
+                # (include_attachments + allow_images): extra slim docs become
+                # permanent chunk_count IS NULL rows, missing ones let pruning
+                # clean up docs the main pass no longer indexes
                 media_type = attachment.get("metadata", {}).get("mediaType", "")
                 if not self.allow_images and media_type.startswith("image/"):
                     continue
@@ -1207,6 +1242,9 @@ class ConfluenceConnector(
                             )
                             if include_permissions
                             else None
+                        ),
+                        doc_created_at=datetime_from_string(
+                            attachment["history"]["createdDate"]
                         ),
                         parent_hierarchy_raw_node_id=page_id,
                     )

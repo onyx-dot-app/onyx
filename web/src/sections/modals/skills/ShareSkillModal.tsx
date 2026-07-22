@@ -5,9 +5,9 @@ import useShareableGroups, {
   type MinimalUserGroupSnapshot,
 } from "@/hooks/useShareableGroups";
 import useShareableUsers from "@/hooks/useShareableUsers";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
 import { SharePermissionMenu } from "@/sections/modals/SharePermissionMenu";

@@ -7,3 +7,5 @@
 3134e5f840c12c8f32613ce520101a047c89dcc2  # refactor(whitespace): rm temporary react fragments (#7161)
 ed3f72bc75f3e3a9ae9e4d8cd38278f9c97e78b4  # refactor(whitespace): rm react fragment #7190
 7b927e79c25f4ddfd18a067f489e122acd2c89de  # chore(format): format files where `ruff` and `black` agree (#9339)
+9881c0382283cf959e77cfd02e9275a5a6d98615  # chore(fmt): remove `order-by-type` (#13183)
+46af76e98a7252e29cf63e1e995bf1fa4b358389  # chore(fmt): remove `force-single-line` (#12996)

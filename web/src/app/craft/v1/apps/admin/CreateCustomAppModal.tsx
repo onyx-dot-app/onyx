@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import {
   Button,
   InputTypeIn,
@@ -136,7 +136,6 @@ export default function CreateCustomAppModal({
           setFile(null);
           bundleSaved = true;
         }
-        // enabled is toggled separately on the card.
         await updateExternalApp(existingApp.id, {
           name: name.trim(),
           description: description.trim(),
@@ -152,7 +151,6 @@ export default function CreateCustomAppModal({
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
-          enabled: true,
           bundle: file!,
         });
       }
@@ -258,8 +256,8 @@ export default function CreateCustomAppModal({
               </Text>
               <Text font="secondary-body" color="text-03">
                 {isEdit
-                  ? "Optional — upload a new zip to replace the current bundle. Leave empty to keep it. The slug stays the same."
-                  : "A zip containing SKILL.md plus any other files. The filename becomes the app slug."}
+                  ? "Optional — upload a new zip to replace the current bundle. Leave empty to keep it. The skill name stays the same."
+                  : "A zip containing SKILL.md plus any other files. The linked skill name comes from SKILL.md."}
               </Text>
               <div className="flex items-center gap-2">
                 <input

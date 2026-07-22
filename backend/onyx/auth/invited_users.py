@@ -1,7 +1,6 @@
 from typing import cast
 
-from onyx.configs.constants import KV_PENDING_USERS_KEY
-from onyx.configs.constants import KV_USER_STORE_KEY
+from onyx.configs.constants import KV_PENDING_USERS_KEY, KV_USER_STORE_KEY
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.utils.special_types import JSON_ro

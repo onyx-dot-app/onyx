@@ -13,11 +13,8 @@ SearchSettings row in teardown (this dev DB has a leftover PRESENT row + a stale
 FUTURE row, so we never rely on the live current/secondary settings being ours).
 """
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -25,43 +22,45 @@ from sqlalchemy.orm import Session
 
 from onyx.access.models import DocumentAccess
 from onyx.background.celery.tasks.port import tasks as port_task
-from onyx.background.celery.tasks.port.tasks import run_check_for_port
-from onyx.background.celery.tasks.port.tasks import run_port_attempt
+from onyx.background.celery.tasks.port.tasks import run_check_for_port, run_port_attempt
 from onyx.configs.constants import DocumentSource
-from onyx.configs.model_configs import ASYM_PASSAGE_PREFIX
-from onyx.configs.model_configs import ASYM_QUERY_PREFIX
+from onyx.configs.model_configs import ASYM_PASSAGE_PREFIX, ASYM_QUERY_PREFIX
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db import swap_index
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.enums import PortAttemptStatus
-from onyx.db.enums import SwitchoverType
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import PortAttempt
-from onyx.db.models import SearchSettings
+from onyx.db.enums import (
+    EmbeddingPrecision,
+    IndexingStatus,
+    IndexModelStatus,
+    PortAttemptStatus,
+    SwitchoverType,
+)
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    PortAttempt,
+    SearchSettings,
+)
 from onyx.db.port_attempt import get_port_attempt
-from onyx.db.search_settings import create_search_settings
-from onyx.db.search_settings import get_current_search_settings
+from onyx.db.search_settings import create_search_settings, get_current_search_settings
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.opensearch_document_index import (
+    OpenSearchDocumentIndex,
     generate_opensearch_filtered_access_control_list,
 )
-from onyx.document_index.opensearch.opensearch_document_index import (
-    OpenSearchDocumentIndex,
+from onyx.document_index.opensearch.schema import (
+    DocumentChunk,
+    DocumentSchema,
+    get_opensearch_doc_chunk_id,
 )
-from onyx.document_index.opensearch.schema import DocumentChunk
-from onyx.document_index.opensearch.schema import DocumentSchema
-from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MODEL_SERVER_HOST, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
-from tests.external_dependency_unit.indexing_helpers import seed_cc_pair_documents
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+    seed_cc_pair_documents,
+)
 
 _VECTOR_DIM = 768
 _CHUNKS_PER_DOC = 2

@@ -7,25 +7,24 @@ from uuid import uuid4
 
 import pytest
 from fastapi import UploadFile
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
-from onyx.db.models import ExternalApp
-from onyx.db.models import Skill
-from onyx.db.models import User
+from onyx.db.models import ExternalApp, Skill, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.external_apps.api import create_built_in_external_app
-from onyx.server.features.build.external_apps.api import create_custom_external_app
-from onyx.server.features.build.external_apps.api import replace_custom_app_bundle
-from onyx.server.features.build.external_apps.api import update_external_app_admin
+from onyx.server.features.build.external_apps.api import (
+    create_built_in_external_app,
+    create_custom_external_app,
+    replace_custom_app_bundle,
+    update_external_app_admin,
+)
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
+    ExternalAppAdminResponse,
+    UpdateExternalAppRequest,
 )
-from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
-from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
 from onyx.utils.encryption import is_masked_credential
 
 _AUTH_TEMPLATE = {"Authorization": "Bearer {api_key}"}
@@ -36,13 +35,19 @@ def _noop(*_args: object, **_kwargs: object) -> None:
     return None
 
 
-def _bundle_zip(*, with_skill_md: bool = True, marker: str = "v1") -> bytes:
+def _bundle_zip(
+    *,
+    skill_name: str,
+    with_skill_md: bool = True,
+    marker: str = "v1",
+) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         if with_skill_md:
             zf.writestr(
                 "SKILL.md",
-                "---\nname: Bundle Name\ndescription: Bundle description\n---\n\nDo things.\n",
+                f"---\nname: {skill_name}\ndescription: Bundle description\n"
+                "---\n\nDo things.\n",
             )
         zf.writestr("helper.py", f"print('{marker}')\n")
     return buf.getvalue()
@@ -51,8 +56,15 @@ def _bundle_zip(*, with_skill_md: bool = True, marker: str = "v1") -> bytes:
 def _upload(
     filename: str, *, with_skill_md: bool = True, marker: str = "v1"
 ) -> UploadFile:
+    skill_name = filename.removesuffix(".zip")
     return UploadFile(
-        file=io.BytesIO(_bundle_zip(with_skill_md=with_skill_md, marker=marker)),
+        file=io.BytesIO(
+            _bundle_zip(
+                skill_name=skill_name,
+                with_skill_md=with_skill_md,
+                marker=marker,
+            )
+        ),
         filename=filename,
     )
 
@@ -60,7 +72,7 @@ def _upload(
 def _create(
     db_session: Session,
     test_user: User,
-    slug: str,
+    skill_name: str,
     *,
     auth_template: str = json.dumps(_AUTH_TEMPLATE),
     organization_credentials: str = json.dumps({"api_key": "sk-test"}),
@@ -72,8 +84,7 @@ def _create(
         upstream_url_patterns=json.dumps(_UPSTREAM),
         auth_template=auth_template,
         organization_credentials=organization_credentials,
-        enabled=True,
-        bundle=_upload(f"{slug}.zip"),
+        bundle=_upload(f"{skill_name}.zip"),
         _=test_user,
         db_session=db_session,
     )
@@ -94,32 +105,34 @@ def test_create_persists_skill_and_app(
         "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
         _noop,
     )
-    slug = f"custom-test-{uuid4().hex[:8]}"
+    skill_name = f"custom-test-{uuid4().hex[:8]}"
 
-    resp = _create(db_session, test_user, slug)
+    resp = _create(db_session, test_user, skill_name)
 
-    # Form name overrides the bundle's SKILL.md name; blank description falls
-    # back to the bundle's parsed description.
+    # The form name is app display metadata; the bundle frontmatter supplies the
+    # linked skill's canonical name. Blank description falls back to the
+    # bundle's parsed description.
     assert resp.app_type == ExternalAppType.CUSTOM
     assert resp.name == "My Form Name"
     assert resp.description == "Bundle description"
     assert resp.upstream_url_patterns == _UPSTREAM
 
-    skill = db_session.scalar(select(Skill).where(Skill.slug == slug))
+    skill = db_session.scalar(select(Skill).where(Skill.name == skill_name))
     assert skill is not None
     assert skill.built_in_skill_id is None
     assert skill.bundle_file_id  # bundle was stored
-    assert skill.name == "My Form Name"
+    assert skill.name == skill_name
 
     app = db_session.scalar(select(ExternalApp).where(ExternalApp.skill_id == skill.id))
     assert app is not None
+    assert app.name == "My Form Name"
     assert app.auth_template == _AUTH_TEMPLATE
     # organization_credentials is encrypted at rest -> decrypt to compare.
     assert app.organization_credentials.get_value(apply_mask=False) == {
         "api_key": "sk-test"
     }
 
-    db_session.execute(delete(Skill).where(Skill.slug == slug))
+    db_session.execute(delete(Skill).where(Skill.name == skill_name))
     db_session.commit()
 
 
@@ -137,9 +150,9 @@ def test_custom_app_glob_matches_deep_path(
         "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
         _noop,
     )
-    slug = f"custom-test-{uuid4().hex[:8]}"
+    skill_name = f"custom-test-{uuid4().hex[:8]}"
 
-    resp = _create(db_session, test_user, slug)
+    resp = _create(db_session, test_user, skill_name)
     # The glob is stored and round-tripped verbatim — no regex stored at rest.
     assert resp.upstream_url_patterns == _UPSTREAM
 
@@ -150,7 +163,7 @@ def test_custom_app_glob_matches_deep_path(
     assert resolve_app_for_url("https://api.example.com/v10/users/@me", [app]) is app
     assert resolve_app_for_url("https://other.example.com/x", [app]) is None
 
-    db_session.execute(delete(Skill).where(Skill.slug == slug))
+    db_session.execute(delete(Skill).where(Skill.name == skill_name))
     db_session.commit()
 
 
@@ -163,7 +176,7 @@ def test_create_rejects_wildcard_host_glob(
         "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
         _noop,
     )
-    slug = f"custom-test-{uuid4().hex[:8]}"
+    skill_name = f"custom-test-{uuid4().hex[:8]}"
 
     with pytest.raises(OnyxError):
         create_custom_external_app(
@@ -172,13 +185,12 @@ def test_create_rejects_wildcard_host_glob(
             upstream_url_patterns=json.dumps(["https://*.example.com/*"]),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({"api_key": "sk-test"}),
-            enabled=True,
-            bundle=_upload(f"{slug}.zip"),
+            bundle=_upload(f"{skill_name}.zip"),
             _=test_user,
             db_session=db_session,
         )
     # Rejected before persistence — no skill row created.
-    assert db_session.scalar(select(Skill).where(Skill.slug == slug)) is None
+    assert db_session.scalar(select(Skill).where(Skill.name == skill_name)) is None
 
 
 def test_create_with_no_credentials(
@@ -190,21 +202,21 @@ def test_create_with_no_credentials(
         "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
         _noop,
     )
-    slug = f"custom-test-{uuid4().hex[:8]}"
+    skill_name = f"custom-test-{uuid4().hex[:8]}"
 
     resp = _create(
         db_session,
         test_user,
-        slug,
+        skill_name,
         auth_template=json.dumps({}),
         organization_credentials=json.dumps({}),
     )
 
     assert resp.auth_template == {}
     assert resp.organization_credentials == {}
-    assert db_session.scalar(select(Skill).where(Skill.slug == slug)) is not None
+    assert db_session.scalar(select(Skill).where(Skill.name == skill_name)) is not None
 
-    db_session.execute(delete(Skill).where(Skill.slug == slug))
+    db_session.execute(delete(Skill).where(Skill.name == skill_name))
     db_session.commit()
 
 
@@ -217,10 +229,10 @@ def test_edit_updates_config_and_replaces_bundle(
         "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
         _noop,
     )
-    slug = f"custom-test-{uuid4().hex[:8]}"
+    skill_name = f"custom-test-{uuid4().hex[:8]}"
 
-    created = _create(db_session, test_user, slug)
-    skill = db_session.scalar(select(Skill).where(Skill.slug == slug))
+    created = _create(db_session, test_user, skill_name)
+    skill = db_session.scalar(select(Skill).where(Skill.name == skill_name))
     assert skill is not None
     original_bundle_id = skill.bundle_file_id
 
@@ -245,7 +257,7 @@ def test_edit_updates_config_and_replaces_bundle(
 
     rebundled = replace_custom_app_bundle(
         external_app_id=created.id,
-        bundle=_upload(f"{slug}.zip", marker="v2"),
+        bundle=_upload(f"{skill_name}.zip", marker="v2"),
         _=test_user,
         db_session=db_session,
     )
@@ -253,14 +265,18 @@ def test_edit_updates_config_and_replaces_bundle(
     assert rebundled.name == "Renamed App"
 
     db_session.expire_all()
-    skill = db_session.scalar(select(Skill).where(Skill.slug == slug))
+    skill = db_session.scalar(select(Skill).where(Skill.name == skill_name))
     assert skill is not None
-    # Slug is stable across a bundle swap, but the blob changed.
-    assert skill.name == "Renamed App"
+    # The skill name is stable across app edits and bundle swaps, but the blob
+    # changed.
+    assert skill.name == skill_name
+    app = db_session.scalar(select(ExternalApp).where(ExternalApp.id == created.id))
+    assert app is not None
+    assert app.name == "Renamed App"
     assert skill.bundle_file_id
     assert skill.bundle_file_id != original_bundle_id
 
-    db_session.execute(delete(Skill).where(Skill.slug == slug))
+    db_session.execute(delete(Skill).where(Skill.name == skill_name))
     db_session.commit()
 
 
@@ -276,13 +292,13 @@ def test_admin_response_masks_secret_and_edit_preserves_it(
         "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
         _noop,
     )
-    slug = f"custom-test-{uuid4().hex[:8]}"
+    skill_name = f"custom-test-{uuid4().hex[:8]}"
     raw_secret = "super-secret-client-value-1234567890"
 
     created = _create(
         db_session,
         test_user,
-        slug,
+        skill_name,
         organization_credentials=json.dumps({"api_key": raw_secret}),
     )
 
@@ -314,7 +330,7 @@ def test_admin_response_masks_secret_and_edit_preserves_it(
         "api_key": raw_secret
     }
 
-    db_session.execute(delete(Skill).where(Skill.slug == slug))
+    db_session.execute(delete(Skill).where(Skill.name == skill_name))
     db_session.commit()
 
 
@@ -327,7 +343,7 @@ def test_create_rejects_bundle_without_skill_md(
         "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
         _noop,
     )
-    slug = f"custom-test-{uuid4().hex[:8]}"
+    skill_name = f"custom-test-{uuid4().hex[:8]}"
 
     with pytest.raises(OnyxError):
         create_custom_external_app(
@@ -336,13 +352,12 @@ def test_create_rejects_bundle_without_skill_md(
             upstream_url_patterns=json.dumps(_UPSTREAM),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({}),
-            enabled=True,
-            bundle=_upload(f"{slug}.zip", with_skill_md=False),
+            bundle=_upload(f"{skill_name}.zip", with_skill_md=False),
             _=test_user,
             db_session=db_session,
         )
 
-    assert db_session.scalar(select(Skill).where(Skill.slug == slug)) is None
+    assert db_session.scalar(select(Skill).where(Skill.name == skill_name)) is None
 
 
 def test_create_requires_bundle(
@@ -361,7 +376,6 @@ def test_create_requires_bundle(
             upstream_url_patterns=json.dumps(_UPSTREAM),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({}),
-            enabled=True,
             bundle=None,
             _=test_user,
             db_session=db_session,
@@ -378,7 +392,7 @@ def test_create_rejects_bundle_over_skill_upload_size_limit(
         _noop,
     )
     monkeypatch.setattr("onyx.skills.bundle.DEFAULT_TOTAL_MAX_BYTES", 1)
-    slug = f"custom-test-{uuid4().hex[:8]}"
+    skill_name = f"custom-test-{uuid4().hex[:8]}"
 
     with pytest.raises(OnyxError) as exc:
         create_custom_external_app(
@@ -387,14 +401,13 @@ def test_create_rejects_bundle_over_skill_upload_size_limit(
             upstream_url_patterns=json.dumps(_UPSTREAM),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({}),
-            enabled=True,
-            bundle=_upload(f"{slug}.zip"),
+            bundle=_upload(f"{skill_name}.zip"),
             _=test_user,
             db_session=db_session,
         )
 
     assert exc.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
-    assert db_session.scalar(select(Skill).where(Skill.slug == slug)) is None
+    assert db_session.scalar(select(Skill).where(Skill.name == skill_name)) is None
 
 
 def test_replace_rejects_bundle_over_skill_upload_size_limit(
@@ -406,22 +419,22 @@ def test_replace_rejects_bundle_over_skill_upload_size_limit(
         "onyx.server.features.build.external_apps.api.push_skill_to_affected_sandboxes",
         _noop,
     )
-    slug = f"custom-test-{uuid4().hex[:8]}"
-    created = _create(db_session, test_user, slug)
+    skill_name = f"custom-test-{uuid4().hex[:8]}"
+    created = _create(db_session, test_user, skill_name)
 
     monkeypatch.setattr("onyx.skills.bundle.DEFAULT_TOTAL_MAX_BYTES", 1)
 
     with pytest.raises(OnyxError) as exc:
         replace_custom_app_bundle(
             external_app_id=created.id,
-            bundle=_upload(f"{slug}.zip", marker="v2"),
+            bundle=_upload(f"{skill_name}.zip", marker="v2"),
             _=test_user,
             db_session=db_session,
         )
 
     assert exc.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
 
-    db_session.execute(delete(Skill).where(Skill.slug == slug))
+    db_session.execute(delete(Skill).where(Skill.name == skill_name))
     db_session.commit()
 
 
@@ -449,9 +462,9 @@ def test_create_cleans_up_blob_on_failure(
         lambda _fs, file_id: deleted.append(file_id),
     )
 
-    slug = f"custom-test-{uuid4().hex[:8]}"
+    skill_name = f"custom-test-{uuid4().hex[:8]}"
     with pytest.raises(OnyxError):
-        _create(db_session, test_user, slug)
+        _create(db_session, test_user, skill_name)
 
     # The bundle was stored during ingest, so the post-failure cleanup must run.
     assert len(deleted) == 1
@@ -466,7 +479,6 @@ def test_json_admin_apps_rejects_custom(
             request=CreateBuiltInExternalAppRequest(
                 name="Nope",
                 description="",
-                enabled=True,
                 app_type=ExternalAppType.CUSTOM,
                 upstream_url_patterns=_UPSTREAM,
                 auth_template=_AUTH_TEMPLATE,

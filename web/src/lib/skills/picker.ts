@@ -29,8 +29,8 @@ export interface PickerSections {
 
 const EMPTY_SECTIONS: PickerSections = { skills: [], apps: [] };
 
-// `/api/skills` omits external-app-backed skills; the Apps section is built
-// from `/api/build/apps` instead.
+// Skill rows provide per-user enablement; app metadata and credential state
+// come from `/api/build/apps`.
 export function toPickerSections(
   skillsData: SkillsList | undefined,
   externalApps: ExternalAppUserResponse[] | undefined
@@ -39,22 +39,21 @@ export function toPickerSections(
 
   const skills: PickerSkill[] = [];
   const apps: PickerApp[] = [];
-
   for (const b of skillsData?.builtins ?? []) {
-    if (!b.is_available) continue;
+    if (!b.is_available || !b.enabled) continue;
     skills.push({
       kind: "skill",
-      slug: b.slug,
+      slug: b.name,
       name: b.name,
       description: b.description,
     });
   }
 
   for (const c of skillsData?.customs ?? []) {
-    if (!c.enabled) continue;
+    if (!c.enabled || c.is_valid === false) continue;
     skills.push({
       kind: "skill",
-      slug: c.slug,
+      slug: c.name,
       name: c.name,
       description: c.description,
     });
