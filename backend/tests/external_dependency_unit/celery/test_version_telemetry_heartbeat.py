@@ -17,6 +17,17 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 _TENANT_ID = POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
+@pytest.fixture(autouse=True)
+def enable_telemetry() -> Generator[None, None, None]:
+    # CI runs with DISABLE_TELEMETRY=true; force the task's gate open so the
+    # heartbeat logic under test actually executes
+    with patch(
+        "onyx.background.celery.tasks.monitoring.tasks.DISABLE_TELEMETRY",
+        False,
+    ):
+        yield
+
+
 @pytest.fixture
 def clear_version_telemetry_marker() -> Generator[None, None, None]:
     redis_client = get_redis_client(tenant_id=_TENANT_ID)
