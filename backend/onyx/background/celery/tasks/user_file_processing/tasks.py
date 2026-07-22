@@ -447,15 +447,24 @@ def _index_user_file_to_secondary(
     """Index one user file into the secondary (reindex-port target) index, re-embedding with
     its model. `index_to_secondary=True` makes the adapter skip the terminal side-effects the
     PRESENT pass already applied. Raises on an incomplete write; the caller owns the flag."""
-    embedder = DefaultIndexingEmbedder.from_db_search_settings(
-        search_settings=secondary,
-    )
-    document_indices = get_all_document_indices(
-        secondary,
-        None,
-        httpx_client=HttpxPool.get("vespa"),
-    )
     with get_session_with_current_tenant() as db_session:
+        # Callers resolve `secondary` in a separate, already-closed session, so it arrives
+        # detached. Re-bind before from_db_search_settings reads its cloud_provider-backed
+        # properties (api_key/api_url/api_version/deployment_name), which would otherwise
+        # lazy-load and raise DetachedInstanceError.
+        bound_secondary = db_session.get(SearchSettings, secondary.id)
+        if bound_secondary is None:
+            raise RuntimeError(
+                f"secondary search settings gone for user file {user_file_id}"
+            )
+        embedder = DefaultIndexingEmbedder.from_db_search_settings(
+            search_settings=bound_secondary,
+        )
+        document_indices = get_all_document_indices(
+            bound_secondary,
+            None,
+            httpx_client=HttpxPool.get("vespa"),
+        )
         adapter = UserFileIndexingAdapter(
             tenant_id=tenant_id,
             db_session=db_session,

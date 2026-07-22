@@ -70,7 +70,7 @@ export default function ReindexProgressBanner({
                   <Tag color="purple" icon={SvgClock} title={String(waiting)} />
                   <Tag
                     color="blue"
-                    icon={SpinningLoader}
+                    icon={in_progress > 0 ? SpinningLoader : SvgLoader}
                     title={String(in_progress)}
                   />
                   <Tag
