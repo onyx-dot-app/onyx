@@ -159,20 +159,21 @@ def _response_request_hostname(response: httpx.Response) -> str | None:
         return None
 
 
-def _oauth_token_from_response(
-    body: bytes, content_type: str | None
-) -> OAuthToken:
+def _oauth_token_from_response(body: bytes) -> OAuthToken:
     """Parse JSON or form-encoded OAuth token responses."""
-    normalized_content_type = (content_type or "").split(";", 1)[0].strip().lower()
-    if normalized_content_type == "application/x-www-form-urlencoded":
+    try:
+        return OAuthToken.model_validate_json(body)
+    except ValidationError as json_error:
         form_payload = parse_qs(body.decode("utf-8", errors="replace"))
         payload = {
             key: values[0]
             for key, values in form_payload.items()
             if values
         }
-        return OAuthToken.model_validate(payload)
-    return OAuthToken.model_validate_json(body)
+        try:
+            return OAuthToken.model_validate(payload)
+        except ValidationError:
+            raise json_error from None
 
 
 def _token_dict_with_preserved_refresh(
@@ -590,7 +591,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
             return False
 
         try:
-            token_response = _oauth_token_from_response(body, content_type)
+            token_response = _oauth_token_from_response(body)
         except ValidationError:
             logger.warning("mcp_oauth.refresh.invalid_response", extra=response_fields)
             self.context.clear_tokens()
