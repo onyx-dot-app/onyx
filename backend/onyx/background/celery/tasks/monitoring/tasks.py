@@ -21,6 +21,7 @@ from onyx.background.celery.celery_redis import (
     celery_get_unacked_task_ids,
 )
 from onyx.background.celery.memory_monitoring import emit_process_memory
+from onyx.configs.app_configs import DISABLE_TELEMETRY
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     ONYX_CLOUD_TENANT_ID,
@@ -1155,6 +1156,7 @@ def cloud_monitor_celery_pidbox(
 """Version telemetry heartbeat"""
 
 _VERSION_TELEMETRY_EMITTED_KEY = "monitoring_version_telemetry_emitted"
+_VERSION_TELEMETRY_TTL_SECONDS = 24 * 60 * 60
 
 
 @shared_task(
@@ -1169,16 +1171,25 @@ def emit_version_telemetry(*, tenant_id: str) -> None:
     interval could never fire); the 1-day-TTL Redis marker enforces the daily
     cadence.
     """
-    if MULTI_TENANT:
+    if MULTI_TENANT or DISABLE_TELEMETRY:
         return
 
     redis_std = get_redis_client(tenant_id=tenant_id)
-    if _has_metric_been_emitted(redis_std, _VERSION_TELEMETRY_EMITTED_KEY):
+    # atomically claim the daily slot so overlapping runs can't double-report
+    if not redis_std.set(
+        _VERSION_TELEMETRY_EMITTED_KEY,
+        "1",
+        nx=True,
+        ex=_VERSION_TELEMETRY_TTL_SECONDS,
+    ):
         return
 
-    optional_telemetry(
+    delivered = optional_telemetry(
         record_type=RecordType.VERSION,
         data={"version": __version__},
         tenant_id=tenant_id,
+        blocking=True,
     )
-    _mark_metric_as_emitted(redis_std, _VERSION_TELEMETRY_EMITTED_KEY)
+    if not delivered:
+        # release the slot so the next hourly tick retries
+        redis_std.delete(_VERSION_TELEMETRY_EMITTED_KEY)

@@ -38,6 +38,7 @@ def test_emits_version_once_per_day() -> None:
             record_type=RecordType.VERSION,
             data={"version": __version__},
             tenant_id=_TENANT_ID,
+            blocking=True,
         )
 
         emit_version_telemetry(tenant_id=_TENANT_ID)
@@ -53,6 +54,24 @@ def test_emits_version_once_per_day() -> None:
     ) as mock_telemetry:
         emit_version_telemetry(tenant_id=_TENANT_ID)
         assert mock_telemetry.call_count == 1
+
+
+@pytest.mark.usefixtures("clear_version_telemetry_marker")
+def test_failed_delivery_releases_marker() -> None:
+    with patch(
+        "onyx.background.celery.tasks.monitoring.tasks.optional_telemetry"
+    ) as mock_telemetry:
+        mock_telemetry.return_value = False
+        emit_version_telemetry(tenant_id=_TENANT_ID)
+
+        redis_client = get_redis_client(tenant_id=_TENANT_ID)
+        assert not redis_client.exists(_VERSION_TELEMETRY_EMITTED_KEY)
+
+        # next tick retries; a successful send keeps the marker
+        mock_telemetry.return_value = True
+        emit_version_telemetry(tenant_id=_TENANT_ID)
+        assert mock_telemetry.call_count == 2
+        assert redis_client.exists(_VERSION_TELEMETRY_EMITTED_KEY)
 
 
 @pytest.mark.usefixtures("clear_version_telemetry_marker")
