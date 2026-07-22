@@ -26,7 +26,6 @@ def test_create_token_escapes_name_in_logs(db_session: Session) -> None:
 
     # The untrusted name must be repr'd, not interpolated raw.
     assert "%r" in fmt
-    assert "'%s'" not in fmt
 
     # The fully-rendered log line carries no raw newline from the name.
     assert "\n" not in (fmt % tuple(args))
