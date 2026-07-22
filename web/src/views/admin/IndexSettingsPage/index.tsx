@@ -81,6 +81,7 @@ import {
   useConfiguredEmbeddingProviders,
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
+  useReindexProgress,
   useSecondarySearchSettings,
 } from "@/lib/indexing/hooks";
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
@@ -631,7 +632,15 @@ export default function IndexSettingsPage() {
     settings.image_extraction_and_analysis_enabled ?? false;
 
   const { data: secondarySearchSettings } = useSecondarySearchSettings();
-  const isReindexing = !!secondarySearchSettings;
+  // INSTANT switchover swaps immediately — no secondary settings — and backfills on the
+  // current index. The reindex-progress endpoint still reports that active port target,
+  // so treat it as reindexing too; otherwise the banner never shows for INSTANT.
+  const { data: reindexProgress } = useReindexProgress({
+    pollIntervalMs: 5000,
+  });
+  const isPortBackfilling =
+    !secondarySearchSettings && (reindexProgress?.total ?? 0) > 0;
+  const isReindexing = !!secondarySearchSettings || isPortBackfilling;
 
   // When a migration finishes, the fast poll on the current settings stops in
   // the same render — revalidate once so the new model shows as current.
@@ -940,10 +949,15 @@ export default function IndexSettingsPage() {
                   </customModelModal.Provider>
 
                   {isReindexing ? (
-                    secondarySearchSettings?.use_port_flow ? (
-                      // Port-flow reindex → the new per-connector/user progress banner.
+                    secondarySearchSettings?.use_port_flow ||
+                    isPortBackfilling ? (
+                      // Port-flow reindex, or an INSTANT-switchover backfill (already
+                      // swapped, no secondary) → the per-connector/user progress banner.
                       <ReindexProgressBanner
-                        secondaryModelName={secondarySearchSettings?.model_name}
+                        secondaryModelName={
+                          secondarySearchSettings?.model_name ??
+                          searchSettings?.model_name
+                        }
                         onCancel={() => cancelReindexModal.toggle(true)}
                       />
                     ) : (
