@@ -23,7 +23,8 @@
 #    - Replace env_file with explicit environment variables
 #
 # 4. AUTHENTICATION:
-#    - Select an authentication method like Basic, Google OAuth, OIDC, or SAML
+#    - Email/password auth works out of the box. SSO (Google, OIDC, SAML) is
+#      configured from the admin panel: Admin Panel > Organization > SSO Providers
 #
 # 5. CA CERTIFICATES:
 #    - Uncomment custom CA certificate volumes if needed

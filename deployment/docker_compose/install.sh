@@ -1066,36 +1066,6 @@ else
         print_info "Selected: $VERSION"
     fi
 
-    # Ask for authentication schema
-    # echo ""
-    # print_info "Which authentication schema would you like to set up?"
-    # echo ""
-    # echo "1) Basic - Username/password authentication"
-    # echo "2) No Auth - Open access (development/testing)"
-    # echo ""
-    # read -p "Choose an option (1) [default 1]: " -r AUTH_CHOICE
-    # echo ""
-
-    # case "${AUTH_CHOICE:-1}" in
-    #     1)
-    #         AUTH_SCHEMA="basic"
-    #         print_info "Selected: Basic authentication"
-    #         ;;
-    #     # 2)
-    #     #     AUTH_SCHEMA="disabled"
-    #     #     print_info "Selected: No authentication"
-    #     #     ;;
-    #     *)
-    #         AUTH_SCHEMA="basic"
-    #         print_info "Invalid choice, using basic authentication"
-    #         ;;
-    # esac
-
-    # TODO (jessica): Uncomment this once no auth users still have an account
-    # Use basic auth by default
-    # shellcheck disable=SC2034  # Referenced by the commented-out auth prompt above.
-    AUTH_SCHEMA="basic"
-
     # Create .env file from template
     print_info "Creating .env file with your selections..."
     cp "$ENV_TEMPLATE" "$ENV_FILE"
@@ -1114,10 +1084,6 @@ else
         sed -i.bak 's/^FILE_STORE_BACKEND=.*/FILE_STORE_BACKEND=postgres/' "$ENV_FILE" 2>/dev/null || true
         print_success "Cleared COMPOSE_PROFILES and set FILE_STORE_BACKEND=postgres for lite mode"
     fi
-
-    # Configure basic authentication (default)
-    sed -i.bak 's/^AUTH_TYPE=.*/AUTH_TYPE=basic/' "$ENV_FILE" 2>/dev/null || true
-    print_success "Basic authentication enabled in configuration"
 
     # Check if openssl is available
     if ! command -v openssl &> /dev/null; then
@@ -1167,7 +1133,6 @@ else
     echo ""
     print_info "IMPORTANT: The .env file has been configured with your selections."
     print_info "You can customize it later for:"
-    echo "  • Advanced authentication (OAuth, SAML, etc.)"
     echo "  • AI model configuration"
     echo "  • Domain settings (for production)"
     echo "  • Onyx Craft (set ENABLE_CRAFT=true)"

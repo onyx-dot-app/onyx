@@ -996,8 +996,6 @@ function Main {
         Set-EnvFileValue -Path $envFile -Key "IMAGE_TAG" -Value $version
         Print-Success "IMAGE_TAG set to $version"
         if ($script:LiteMode) { Set-EnvFileValue -Path $envFile -Key "COMPOSE_PROFILES" -Value "" }
-        Set-EnvFileValue -Path $envFile -Key "AUTH_TYPE" -Value "basic"
-        Print-Success "Basic authentication enabled"
         Set-EnvFileValue -Path $envFile -Key "USER_AUTH_SECRET" -Value "`"$(New-SecureSecret)`""
         Print-Success "Generated secure USER_AUTH_SECRET"
         if ($script:IncludeCraftMode) {
@@ -1007,7 +1005,7 @@ function Main {
             Print-Info "Onyx Craft disabled (use -IncludeCraft to enable)"
         }
         Print-Success ".env file created"
-        Print-Info "You can customize .env later for OAuth/SAML, AI models, domain settings, and Craft."
+        Print-Info "You can customize .env later for AI models, domain settings, and Craft."
     }
 
     # Clean up stale lite overlay if standard mode was selected
