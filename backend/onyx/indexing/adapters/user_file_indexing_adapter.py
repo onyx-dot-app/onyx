@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 from onyx.access.access import get_access_for_user_files
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DEFAULT_BOOST, NotificationType
-from onyx.connectors.models import Document
+from onyx.connectors.models import ConnectorStopSignal, Document
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona, UserFile
 from onyx.db.notification import create_notification
@@ -42,6 +42,14 @@ _NUM_LOCK_ATTEMPTS = 3
 retry_delay = 0.5
 
 
+class UserFileDeletingSkip(ConnectorStopSignal):
+    """A user file is DELETING at write time — skip the write, don't retry or fail. Subclasses
+    ConnectorStopSignal so the pipeline handler re-raises it (rather than turning it into an
+    indexing failure), and the lock retry loop (OperationalError only) lets it propagate. The
+    delete owns removal from every index; writing would resurrect it (the port sweep can't
+    remove these non-port chunks)."""
+
+
 def _acquire_user_file_locks(db_session: Session, user_file_ids: list[str]) -> bool:
     """Acquire locks for the specified user files, skipping any being deleted."""
     # Convert to UUIDs for the DB comparison
@@ -59,9 +67,10 @@ def _acquire_user_file_locks(db_session: Session, user_file_ids: list[str]) -> b
         logger.warning("Didn't find row for all specified user file IDs. Aborting.")
         return False
 
+    # Intentional skip, distinct from a missing/contended lock: raise so the pipeline stops
+    # this batch cleanly and callers skip it, instead of retrying then reporting a failure.
     if any(status == UserFileStatus.DELETING for _, status in rows):
-        logger.info("Skipping index write for a user file being deleted.")
-        return False
+        raise UserFileDeletingSkip("user file is being deleted; skipping index write")
 
     return True
 

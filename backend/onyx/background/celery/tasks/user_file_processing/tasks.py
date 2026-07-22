@@ -69,7 +69,10 @@ from onyx.file_store.utils import (
     user_file_id_to_plaintext_file_name,
 )
 from onyx.httpx.httpx_pool import HttpxPool
-from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAdapter
+from onyx.indexing.adapters.user_file_indexing_adapter import (
+    UserFileDeletingSkip,
+    UserFileIndexingAdapter,
+)
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.redis.redis_pool import get_redis_client
@@ -396,6 +399,10 @@ def _process_user_file_with_indexing(
     with get_session_with_current_tenant() as db_session:
         user_file = db_session.get(UserFile, _as_uuid(user_file_id))
         if user_file is None or user_file.status == UserFileStatus.DELETING:
+            task_logger.info(
+                f"_process_user_file_with_indexing - user file {user_file_id} is gone or "
+                "being deleted; skipping indexing (the delete owns removal)"
+            )
             return
         search_settings_list = get_active_search_settings_list(db_session)
         current_search_settings = next(
@@ -418,16 +425,25 @@ def _process_user_file_with_indexing(
             tenant_id=tenant_id,
             db_session=db_session,
         )
-        index_pipeline_result = run_indexing_pipeline(
-            embedder=embedding_model,
-            document_indices=document_indices,
-            ignore_time_skip=True,
-            db_session=db_session,
-            tenant_id=tenant_id,
-            document_batch=documents,
-            request_id=None,
-            adapter=adapter,
-        )
+        try:
+            index_pipeline_result = run_indexing_pipeline(
+                embedder=embedding_model,
+                document_indices=document_indices,
+                ignore_time_skip=True,
+                db_session=db_session,
+                tenant_id=tenant_id,
+                document_batch=documents,
+                request_id=None,
+                adapter=adapter,
+            )
+        except UserFileDeletingSkip:
+            # File began deleting mid-pipeline — the delete owns removal; skip cleanly
+            # rather than fail. (The early-out above catches the already-deleting case.)
+            task_logger.info(
+                f"_process_user_file_with_indexing - user file {user_file_id} began "
+                "deleting mid-indexing; skipping"
+            )
+            return
 
     task_logger.info(
         f"_process_user_file_with_indexing - Indexing pipeline completed ={index_pipeline_result}"
@@ -476,6 +492,10 @@ def _index_user_file_to_secondary(
         # (the adapter's DELETING skip re-checks under the row lock to close the race.)
         user_file = db_session.get(UserFile, _as_uuid(user_file_id))
         if user_file is None or user_file.status == UserFileStatus.DELETING:
+            task_logger.info(
+                f"_index_user_file_to_secondary - user file {user_file_id} is gone or "
+                "being deleted; skipping secondary write"
+            )
             return
         embedder = DefaultIndexingEmbedder.from_db_search_settings(
             search_settings=bound_secondary,
@@ -489,18 +509,27 @@ def _index_user_file_to_secondary(
             tenant_id=tenant_id,
             db_session=db_session,
         )
-        result = run_indexing_pipeline(
-            embedder=embedder,
-            document_indices=document_indices,
-            ignore_time_skip=True,
-            # skip the content_hash gate, else the PRESENT run's hash no-ops this write
-            index_to_secondary=True,
-            db_session=db_session,
-            tenant_id=tenant_id,
-            document_batch=documents,
-            request_id=None,
-            adapter=adapter,
-        )
+        try:
+            result = run_indexing_pipeline(
+                embedder=embedder,
+                document_indices=document_indices,
+                ignore_time_skip=True,
+                # skip the content_hash gate, else the PRESENT run's hash no-ops this write
+                index_to_secondary=True,
+                db_session=db_session,
+                tenant_id=tenant_id,
+                document_batch=documents,
+                request_id=None,
+                adapter=adapter,
+            )
+        except UserFileDeletingSkip:
+            # File began deleting mid-pipeline — skip cleanly so the caller doesn't flag it
+            # for reconcile; the delete owns removal from the target index.
+            task_logger.info(
+                f"_index_user_file_to_secondary - user file {user_file_id} began deleting "
+                "mid-write; skipping secondary write"
+            )
+            return
     if (
         result.failures
         or result.total_docs != len(documents)
