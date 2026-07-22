@@ -59,7 +59,7 @@ to ask the user to restart the celery worker. There is no auto-restart on code-c
 
 ## Database & Migrations
 
-Run all `alembic` commands from `backend/` (where `alembic.ini` lives) with the virtualenv active.
+Run all `alembic` commands from `backend/` (where `alembic.ini` lives), e.g. `uv run alembic upgrade head`.
 
 ### Running Migrations
 
@@ -85,7 +85,8 @@ Write the migration manually and place it in the file that alembic creates when 
 
 ## Testing Strategy
 
-First, activate the virtualenv: `source .venv/bin/activate`. If `.venv` doesn't exist yet, create it first with `uv sync --frozen`.
+Run pytest through `uv run` from the repo root — no venv activation needed (`uv run` uses the
+lockfile-pinned environment and creates/syncs `.venv` as needed).
 
 There are 4 main types of tests within Onyx:
 
@@ -106,7 +107,7 @@ write these for complex, isolated modules e.g. `citation_processing.py`.
 To run them:
 
 ```bash
-pytest -xv backend/tests/unit
+uv run pytest -xv backend/tests/unit
 ```
 
 ### External Dependency Unit Tests
@@ -126,7 +127,7 @@ A great example of this type of test is `backend/tests/external_dependency_unit/
 To run them:
 
 ```bash
-python -m dotenv -f .vscode/.env run -- pytest backend/tests/external_dependency_unit
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit
 ```
 
 ### Integration Tests
@@ -147,7 +148,7 @@ A great example of this type of test is `backend/tests/integration/tests/streami
 To run them:
 
 ```bash
-python -m dotenv -f .vscode/.env run -- pytest backend/tests/integration
+uv run --env-file .vscode/.env pytest backend/tests/integration
 ```
 
 ### Playwright (E2E) Tests
@@ -157,12 +158,14 @@ running, _including_ the Web Server.
 
 Use these tests for anything that requires significant frontend <-> backend coordination.
 
-Tests are located at `web/tests/e2e`. Tests are written in TypeScript.
+Tests are located at `web/tests/e2e`. Tests are written in TypeScript. Spec-writing rules
+(Page Object Model, locator priority) live in `web/tests/e2e/README.md`.
 
-To run them:
+To run them (the `playwright` script expands to `playwright test`; use it rather than
+`bunx`/`npx`, which can silently fetch an unpinned Playwright version):
 
 ```bash
-bunx playwright test <TEST_NAME>
+cd web && bun run playwright <TEST_NAME>
 ```
 
 For shared fixtures, best practices, and detailed guidance, see `backend/tests/README.md`.
