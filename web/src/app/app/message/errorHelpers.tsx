@@ -46,6 +46,8 @@ export const getErrorTitle = (errorCode?: string) => {
       return "Validation Error";
     case "BUDGET_EXCEEDED":
       return "Budget Exceeded";
+    case "MODEL_REFUSAL":
+      return "Model Declined to Respond";
     case "CONTENT_POLICY":
       return "Content Policy Violation";
     case "BAD_REQUEST":

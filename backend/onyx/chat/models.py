@@ -230,3 +230,7 @@ class LlmStepResult(BaseModel):
     # Raw LLM text before any display-oriented filtering/sanitization.
     # Used for fallback tool-call extraction when providers emit calls as text.
     raw_answer: str | None = None
+    # Terminal finish_reason from the stream, LiteLLM-normalized (e.g. "stop",
+    # "length", "tool_calls", "content_filter"). Lets downstream classification
+    # distinguish a model refusal from a genuinely empty provider response.
+    finish_reason: str | None = None
