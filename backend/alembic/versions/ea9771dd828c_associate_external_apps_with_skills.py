@@ -91,7 +91,7 @@ def downgrade() -> None:
         sa.Column("skill_id", postgresql.UUID(as_uuid=True), nullable=True),
     )
     # Keep every skill and its FileStore bundle reference. The legacy schema can
-    # point to only one skill, so choose one association without deleting others.
+    # point to only one skill, so choose the first without deleting the others.
     op.execute(
         """
         UPDATE external_app
@@ -99,7 +99,7 @@ def downgrade() -> None:
         FROM (
             SELECT DISTINCT ON (external_app_id) external_app_id, skill_id
             FROM external_app__skill
-            ORDER BY external_app_id, random()
+            ORDER BY external_app_id, skill_id
         ) AS association
         WHERE external_app.id = association.external_app_id
         """
