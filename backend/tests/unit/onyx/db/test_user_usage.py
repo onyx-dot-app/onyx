@@ -23,6 +23,7 @@ from onyx.db.models import User__UserGroup, UserUsage
 from onyx.db.user_usage import (
     TokenUsageBucket,
     UserUsageByDay,
+    get_cost_window_start,
     get_group_cost_cents_since,
     get_group_token_buckets_since,
     get_token_window_start,
@@ -49,6 +50,17 @@ def test_token_periods_use_whole_utc_days() -> None:
         2026, 7, 21, tzinfo=datetime.timezone.utc
     )
     assert get_token_window_start(now, 48) == datetime.datetime(
+        2026, 7, 20, tzinfo=datetime.timezone.utc
+    )
+
+
+def test_cost_window_uses_whole_utc_day_buckets() -> None:
+    now = datetime.datetime(2026, 7, 21, 13, 30, tzinfo=datetime.timezone.utc)
+
+    assert get_cost_window_start(now, 24) == datetime.datetime(
+        2026, 7, 21, tzinfo=datetime.timezone.utc
+    )
+    assert get_cost_window_start(now, 48) == datetime.datetime(
         2026, 7, 20, tzinfo=datetime.timezone.utc
     )
 

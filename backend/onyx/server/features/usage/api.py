@@ -22,7 +22,7 @@ from onyx.db.token_limit import (
     fetch_user_group_token_rate_limits,
 )
 from onyx.db.user_usage import (
-    USER_USAGE_BUCKET_SECONDS,
+    get_cost_window_start,
     get_group_cost_cents_buckets_since,
     get_total_cost_cents_buckets_since,
     get_usage_export,
@@ -56,9 +56,6 @@ from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 # Default trailing range for the export when no start is given.
 _DEFAULT_EXPORT_DAYS = 30
 
-# Relax budget cutoffs to include the partially overlapping ledger bucket.
-_LEDGER_GRID = timedelta(seconds=USER_USAGE_BUCKET_SECONDS)
-
 
 def _used_from_buckets(
     buckets: list[tuple[datetime, float]], cutoff: datetime
@@ -78,7 +75,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
-            cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
+            cutoff = get_cost_window_start(now, rl.period_hours)
             used = _used_from_buckets(buckets, cutoff)
             candidates.append(
                 EffectiveCostBudget(
@@ -92,7 +89,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
     user_cost_rls = [rl for rl in user_rls if rl.cost_budget_cents is not None]
     if user_cost_rls:
         broadest = max(rl.period_hours for rl in user_cost_rls)
-        fetch_cutoff = now - timedelta(hours=broadest) - _LEDGER_GRID
+        fetch_cutoff = get_cost_window_start(now, broadest)
         _add_from_limits(
             user_cost_rls,
             get_user_cost_cents_buckets_since(db_session, user_id, fetch_cutoff),
@@ -102,7 +99,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
     global_cost_rls = [rl for rl in global_rls if rl.cost_budget_cents is not None]
     if global_cost_rls:
         broadest = max(rl.period_hours for rl in global_cost_rls)
-        fetch_cutoff = now - timedelta(hours=broadest) - _LEDGER_GRID
+        fetch_cutoff = get_cost_window_start(now, broadest)
         _add_from_limits(
             global_cost_rls,
             get_total_cost_cents_buckets_since(db_session, fetch_cutoff),
@@ -142,7 +139,7 @@ def _group_cost_budget_candidate(
 
     # One batched query for every group's cost buckets, then window in Python.
     broadest = max(rl.period_hours for rl in cost_rls)
-    fetch_cutoff = now - timedelta(hours=broadest) - _LEDGER_GRID
+    fetch_cutoff = get_cost_window_start(now, broadest)
     buckets = get_group_cost_cents_buckets_since(
         db_session, list(group_limits.keys()), fetch_cutoff
     )
@@ -154,7 +151,7 @@ def _group_cost_budget_candidate(
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
-            cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
+            cutoff = get_cost_window_start(now, rl.period_hours)
             used = _used_from_buckets(group_buckets, cutoff)
             remaining = rl.cost_budget_cents - used
             if group_binding is None or remaining < group_binding.remaining_cents:
