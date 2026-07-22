@@ -14,11 +14,6 @@ import logging
 import time
 from collections.abc import Callable, MutableMapping
 from datetime import datetime, timedelta, timezone
-from collections.abc import Callable
-from collections.abc import MutableMapping
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -33,6 +28,7 @@ from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
     MAX_CONCURRENT_PORT_ATTEMPTS,
     MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS,
+    MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE,
 )
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
@@ -41,15 +37,6 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
     OnyxRedisLocks,
 )
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import MAX_CONCURRENT_PORT_ATTEMPTS
-from onyx.configs.app_configs import MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS
-from onyx.configs.app_configs import MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
     get_connector_credential_pair_from_id,
@@ -80,7 +67,9 @@ from onyx.db.port_attempt import (
     mark_port_failed,
     mark_port_in_progress,
     mark_port_succeeded,
+    pause_port_attempt,
     port_backfill_has_pending_work,
+    resume_paused_port_attempt,
     touch_port_progress,
 )
 from onyx.db.port_orphan_candidate import (
@@ -100,39 +89,6 @@ from onyx.db.user_file import (
     get_user_file_ids_for_user_batch,
     user_file_port_scope_active,
 )
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import PortAttemptStatus
-from onyx.db.enums import SwitchoverType
-from onyx.db.models import PortAttempt
-from onyx.db.models import SearchSettings
-from onyx.db.port_attempt import commit_port_cursor
-from onyx.db.port_attempt import count_active_port_attempts
-from onyx.db.port_attempt import count_consecutive_failed_port_attempts_no_progress
-from onyx.db.port_attempt import create_port_attempt
-from onyx.db.port_attempt import get_active_port_attempt
-from onyx.db.port_attempt import get_latest_port_attempt
-from onyx.db.port_attempt import get_port_attempt
-from onyx.db.port_attempt import get_stale_in_progress_port_attempts
-from onyx.db.port_attempt import mark_port_canceled
-from onyx.db.port_attempt import mark_port_failed
-from onyx.db.port_attempt import mark_port_in_progress
-from onyx.db.port_attempt import mark_port_succeeded
-from onyx.db.port_attempt import pause_port_attempt
-from onyx.db.port_attempt import port_backfill_has_pending_work
-from onyx.db.port_attempt import PortScope
-from onyx.db.port_attempt import resume_paused_port_attempt
-from onyx.db.port_attempt import touch_port_progress
-from onyx.db.port_orphan_candidate import cleanup_stale_port_orphan_candidates
-from onyx.db.port_orphan_candidate import clear_port_orphan_candidates
-from onyx.db.port_orphan_candidate import get_port_orphan_candidate_doc_ids
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_search_settings_by_id
-from onyx.db.search_settings import get_secondary_search_settings
-from onyx.db.user_file import fetch_port_scope_user_ids
-from onyx.db.user_file import filter_existing_user_file_ids
-from onyx.db.user_file import get_max_user_file_id_for_user
-from onyx.db.user_file import get_user_file_ids_for_user_batch
-from onyx.db.user_file import user_file_port_scope_active
 from onyx.document_index.opensearch.port_copy import PortCopier
 from onyx.redis.redis_pool import get_redis_client
 

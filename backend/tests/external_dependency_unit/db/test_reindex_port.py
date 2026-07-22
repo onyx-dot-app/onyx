@@ -34,13 +34,12 @@ from onyx.background.celery.tasks.port.tasks import run_check_for_port, run_port
 from onyx.background.celery.tasks.shared.tasks import (
     _clear_port_orphan_candidate_for_live_doc,
 )
-from onyx.configs.app_configs import INDEX_BATCH_SIZE, MAX_CONCURRENT_PORT_ATTEMPTS
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    MAX_CONCURRENT_PORT_ATTEMPTS,
+    MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE,
+)
 from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import MAX_CONCURRENT_PORT_ATTEMPTS
-from onyx.configs.app_configs import MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db import port_attempt as port_attempt_db
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
@@ -90,6 +89,7 @@ from onyx.db.port_attempt import (
     pause_port_attempt,
     port_backfill_has_pending_work,
     request_port_cancel,
+    resume_paused_port_attempt,
 )
 from onyx.db.port_orphan_candidate import (
     cleanup_stale_port_orphan_candidates,
@@ -100,33 +100,6 @@ from onyx.db.port_orphan_candidate import (
     record_port_orphan_candidates,
 )
 from onyx.db.search_settings import create_search_settings, get_current_search_settings
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import PortAttempt
-from onyx.db.models import PortOrphanCandidate
-from onyx.db.models import SearchSettings
-from onyx.db.port_attempt import cancel_active_port_attempts
-from onyx.db.port_attempt import commit_port_cursor
-from onyx.db.port_attempt import count_consecutive_failed_port_attempts_no_progress
-from onyx.db.port_attempt import create_port_attempt
-from onyx.db.port_attempt import get_active_port_attempt
-from onyx.db.port_attempt import get_latest_port_attempt
-from onyx.db.port_attempt import mark_port_canceled
-from onyx.db.port_attempt import mark_port_failed
-from onyx.db.port_attempt import mark_port_in_progress
-from onyx.db.port_attempt import mark_port_succeeded
-from onyx.db.port_attempt import pause_port_attempt
-from onyx.db.port_attempt import port_backfill_has_pending_work
-from onyx.db.port_attempt import request_port_cancel
-from onyx.db.port_attempt import resume_paused_port_attempt
-from onyx.db.port_orphan_candidate import cleanup_stale_port_orphan_candidates
-from onyx.db.port_orphan_candidate import clear_port_orphan_candidates
-from onyx.db.port_orphan_candidate import delete_port_orphan_candidates_by_id
-from onyx.db.port_orphan_candidate import get_port_orphan_candidate_doc_ids
-from onyx.db.port_orphan_candidate import port_target_settings_id
-from onyx.db.port_orphan_candidate import record_port_orphan_candidates
-from onyx.db.search_settings import create_search_settings
-from onyx.db.search_settings import get_current_search_settings
 from onyx.db.swap_index import _port_swap_ready
 from onyx.document_index.opensearch import port_copy
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future

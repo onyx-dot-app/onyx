@@ -1,16 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.background.celery.tasks.port.tasks import PortResumeResult
-from onyx.background.celery.tasks.port.tasks import resume_paused_port_unit
+from onyx.background.celery.tasks.port.tasks import (
+    PortResumeResult,
+    resume_paused_port_unit,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.context.search.models import (
@@ -67,8 +65,6 @@ from onyx.server.models import IdReturn
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import ALT_INDEX_SUFFIX, MULTI_TENANT
-from shared_configs.configs import ALT_INDEX_SUFFIX
-from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/search-settings")

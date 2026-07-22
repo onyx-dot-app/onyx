@@ -13,13 +13,6 @@ from uuid import UUID
 
 from pydantic import BaseModel
 from sqlalchemy import ColumnElement, and_, exists, func, or_, select, update
-from sqlalchemy import and_
-from sqlalchemy import ColumnElement
-from sqlalchemy import exists
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import select
-from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -695,8 +688,10 @@ def resume_paused_port_attempt(
     # Local imports break the port_attempt <-> search_settings cycle (search_settings
     # lazily imports this module).
     from onyx.db.port_orphan_candidate import port_target_settings_id
-    from onyx.db.search_settings import get_current_search_settings
-    from onyx.db.search_settings import get_secondary_search_settings
+    from onyx.db.search_settings import (
+        get_current_search_settings,
+        get_secondary_search_settings,
+    )
 
     _scope_where(cc_pair_id, port_user_id)
     latest = get_latest_port_attempt(

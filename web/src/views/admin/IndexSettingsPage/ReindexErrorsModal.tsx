@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { mutate } from "swr";
-import { Button, Modal, Table, Tag, Text, createTableColumns } from "@opal/components";
+import {
+  Button,
+  Modal,
+  Table,
+  Tag,
+  Text,
+  createTableColumns,
+} from "@opal/components";
 import { SvgAlertCircle, SvgPauseCircle, SvgPlayCircle } from "@opal/icons";
 import { useReindexErrors } from "@/lib/indexing/hooks";
 import { resumePausedPort } from "@/lib/indexing/svc";

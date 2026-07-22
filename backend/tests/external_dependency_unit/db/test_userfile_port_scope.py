@@ -26,6 +26,7 @@ from onyx.db.port_attempt import (
     mark_port_failed,
     mark_port_in_progress,
     mark_port_succeeded,
+    pause_port_attempt,
 )
 from onyx.db.user_file import (
     clear_user_file_reconcile_pending,
@@ -37,29 +38,6 @@ from onyx.db.user_file import (
     mark_user_file_reconcile_pending,
     user_file_port_scope_active,
 )
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import SearchSettings
-from onyx.db.models import User
-from onyx.db.models import UserFile
-from onyx.db.port_attempt import count_active_port_attempts
-from onyx.db.port_attempt import create_port_attempt
-from onyx.db.port_attempt import get_active_port_attempt
-from onyx.db.port_attempt import get_latest_port_attempt
-from onyx.db.port_attempt import get_reindex_error_rows
-from onyx.db.port_attempt import get_reindex_progress_counts
-from onyx.db.port_attempt import mark_port_canceled
-from onyx.db.port_attempt import mark_port_failed
-from onyx.db.port_attempt import mark_port_in_progress
-from onyx.db.port_attempt import mark_port_succeeded
-from onyx.db.port_attempt import pause_port_attempt
-from onyx.db.user_file import clear_user_file_reconcile_pending
-from onyx.db.user_file import count_user_files_reconcile_pending
-from onyx.db.user_file import fetch_port_scope_user_ids
-from onyx.db.user_file import filter_existing_user_file_ids
-from onyx.db.user_file import get_max_user_file_id_for_user
-from onyx.db.user_file import get_user_file_ids_for_user_batch
-from onyx.db.user_file import mark_user_file_reconcile_pending
-from onyx.db.user_file import user_file_port_scope_active
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
