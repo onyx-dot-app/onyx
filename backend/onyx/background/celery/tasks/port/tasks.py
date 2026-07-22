@@ -15,6 +15,7 @@ import time
 from collections.abc import Callable, MutableMapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from uuid import UUID
 
 from celery import Celery, Task, shared_task
 from redis.lock import Lock as RedisLock
@@ -22,7 +23,11 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
-from onyx.configs.app_configs import INDEX_BATCH_SIZE, MAX_CONCURRENT_PORT_ATTEMPTS
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    MAX_CONCURRENT_PORT_ATTEMPTS,
+    MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS,
+)
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     OnyxCeleryPriority,
@@ -47,6 +52,7 @@ from onyx.db.enums import (
 )
 from onyx.db.models import PortAttempt, SearchSettings
 from onyx.db.port_attempt import (
+    PortScope,
     commit_port_cursor,
     count_active_port_attempts,
     count_consecutive_failed_port_attempts_no_progress,
@@ -72,6 +78,13 @@ from onyx.db.search_settings import (
     get_search_settings_by_id,
     get_secondary_search_settings,
 )
+from onyx.db.user_file import (
+    fetch_port_scope_user_ids,
+    filter_existing_user_file_ids,
+    get_max_user_file_id_for_user,
+    get_user_file_ids_for_user_batch,
+    user_file_port_scope_active,
+)
 from onyx.document_index.opensearch.port_copy import PortCopier
 from onyx.redis.redis_pool import get_redis_client
 
@@ -93,10 +106,15 @@ _PORT_RETRY_BACKOFF_BASE_S = 30.0
 _PORT_RETRY_BACKOFF_MAX_S = 60.0 * 60  # 1 hour
 
 
+def port_attempt_scope(attempt: PortAttempt) -> PortScope:
+    """A user attempt sets port_user_id; a connector attempt sets cc_pair_id."""
+    return "user_file" if attempt.port_user_id is not None else "connector"
+
+
 class _PortLogAdapter(logging.LoggerAdapter):
-    """Prefix every port log line with its attempt + cc_pair so concurrent ports
+    """Prefix every port log line with its attempt + scope entity so concurrent ports
     are distinguishable in the shared worker log (mirrors the indexing
-    [Index Attempt][CC Pair] prefix). cc_pair_id is filled in once the attempt is
+    [Index Attempt][CC Pair] prefix). The entity id is filled in once the attempt is
     read, so the few lines logged before that omit it."""
 
     def process(
@@ -104,9 +122,15 @@ class _PortLogAdapter(logging.LoggerAdapter):
     ) -> tuple[str, MutableMapping[str, Any]]:
         extra = self.extra or {}
         cc_pair_id = extra.get("cc_pair_id")
-        cc_prefix = f"[CC Pair: {cc_pair_id}] " if cc_pair_id is not None else ""
+        port_user_id = extra.get("port_user_id")
+        if cc_pair_id is not None:
+            scope_prefix = f"[CC Pair: {cc_pair_id}] "
+        elif port_user_id is not None:
+            scope_prefix = f"[User: {port_user_id}] "
+        else:
+            scope_prefix = ""
         return (
-            f"[Port Attempt: {extra.get('port_attempt_id')}] {cc_prefix}{msg}",
+            f"[Port Attempt: {extra.get('port_attempt_id')}] {scope_prefix}{msg}",
             kwargs,
         )
 
@@ -157,7 +181,8 @@ def _copy_batch_with_retry(
 def _sweep_port_orphan_candidates(
     port_attempt_id: int,
     search_settings_id: int,
-    cc_pair_id: int,
+    cc_pair_id: int | None,
+    port_user_id: UUID | None,
     copier: PortCopier,
     log: logging.LoggerAdapter,
 ) -> None:
@@ -172,7 +197,7 @@ def _sweep_port_orphan_candidates(
     """
     with get_session_with_current_tenant() as db_session:
         candidate_ids = get_port_orphan_candidate_doc_ids(
-            db_session, search_settings_id, cc_pair_id
+            db_session, search_settings_id, cc_pair_id, port_user_id=port_user_id
         )
     if not candidate_ids:
         return
@@ -181,7 +206,11 @@ def _sweep_port_orphan_candidates(
     with get_session_with_current_tenant() as db_session:
         touch_port_progress(db_session, port_attempt_id)
         clear_port_orphan_candidates(
-            db_session, search_settings_id, cc_pair_id, candidate_ids
+            db_session,
+            search_settings_id,
+            cc_pair_id,
+            candidate_ids,
+            port_user_id=port_user_id,
         )
         db_session.commit()
     if deleted:
@@ -200,6 +229,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             "port_attempt_id": port_attempt_id,
             "celery_task_id": celery_task_id,
             "cc_pair_id": None,
+            "port_user_id": None,
         },
     )
 
@@ -223,8 +253,13 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             return
 
         cc_pair_id = attempt.cc_pair_id
-        # Replace extra (a read-only Mapping) so every later line carries the cc_pair.
-        log.extra = {**(log.extra or {}), "cc_pair_id": cc_pair_id}
+        port_user_id = attempt.port_user_id
+        # Replace extra (a read-only Mapping) so every later line carries the scope.
+        log.extra = {
+            **(log.extra or {}),
+            "cc_pair_id": cc_pair_id,
+            "port_user_id": port_user_id,
+        }
         cursor = attempt.last_processed_doc_id
         up_to_doc_id = attempt.up_to_doc_id  # snapshot upper bound (None = unbounded)
         docs_ported = attempt.docs_ported or 0
@@ -300,16 +335,22 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 mark_port_canceled(db_session, port_attempt_id)
                 log.info("Port cancel requested; acknowledged and stopping")
                 return
-            cc_pair = get_connector_credential_pair_from_id(db_session, cc_pair_id)
-            if (
-                cc_pair is None
-                or cc_pair.status == ConnectorCredentialPairStatus.DELETING
-            ):
-                # A deletion is waiting on us; ack now (between batches, after our last
-                # write) so it proceeds next tick instead of waiting out the watchdog.
-                mark_port_canceled(db_session, port_attempt_id)
-                log.info("cc_pair gone/deleting, stopping port")
-                return
+            if port_user_id is not None:
+                if not user_file_port_scope_active(db_session, port_user_id):
+                    mark_port_canceled(db_session, port_attempt_id)
+                    log.info("user gone, stopping port")
+                    return
+            elif cc_pair_id is not None:
+                cc_pair = get_connector_credential_pair_from_id(db_session, cc_pair_id)
+                if (
+                    cc_pair is None
+                    or cc_pair.status == ConnectorCredentialPairStatus.DELETING
+                ):
+                    # A deletion is waiting on us; ack now (between batches, after our
+                    # last write) so it proceeds next tick, not after the watchdog.
+                    mark_port_canceled(db_session, port_attempt_id)
+                    log.info("cc_pair gone/deleting, stopping port")
+                    return
             # Thread-pool tasks ignore celery's soft_time_limit, so enforce it here.
             # FAIL (not bare-return) so check_for_port resumes it promptly: a return
             # leaves the row IN_PROGRESS, which the scheduler treats as live until the
@@ -323,13 +364,23 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 )
                 log.info("Port soft time limit reached; failing for prompt resume")
                 return
-            doc_ids = get_document_ids_for_cc_pair_batch(
-                db_session,
-                cc_pair_id,
-                after_doc_id=cursor,
-                limit=INDEX_BATCH_SIZE,
-                up_to_doc_id=up_to_doc_id,
-            )
+            if port_user_id is not None:
+                doc_ids = get_user_file_ids_for_user_batch(
+                    db_session,
+                    port_user_id,
+                    after_id=cursor,
+                    limit=INDEX_BATCH_SIZE,
+                    up_to_id=up_to_doc_id,
+                )
+            else:
+                assert cc_pair_id is not None
+                doc_ids = get_document_ids_for_cc_pair_batch(
+                    db_session,
+                    cc_pair_id,
+                    after_doc_id=cursor,
+                    limit=INDEX_BATCH_SIZE,
+                    up_to_doc_id=up_to_doc_id,
+                )
 
         if not doc_ids:
             break
@@ -338,6 +389,9 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         # so create-only doesn't resurrect them. Default-arg binds this batch's ids.
         def _surviving_doc_ids(_ids: list[str] = doc_ids) -> set[str]:
             with get_session_with_current_tenant() as db_session:
+                if port_user_id is not None:
+                    return filter_existing_user_file_ids(db_session, port_user_id, _ids)
+                assert cc_pair_id is not None
                 return filter_existing_cc_pair_document_ids(
                     db_session, cc_pair_id, _ids
                 )
@@ -382,6 +436,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             port_attempt_id=port_attempt_id,
             search_settings_id=future_search_settings.id,
             cc_pair_id=cc_pair_id,
+            port_user_id=port_user_id,
             copier=copier,
             log=log,
         )
@@ -414,6 +469,24 @@ def run_port_attempt_task(
     )
 
 
+@shared_task(
+    name=OnyxCeleryTask.RUN_USER_FILE_PORT_ATTEMPT,
+    soft_time_limit=_PORT_SOFT_TIME_LIMIT,
+    time_limit=_PORT_TIME_LIMIT,
+    bind=True,
+)
+def run_user_file_port_attempt_task(
+    self: Task,
+    *,
+    port_attempt_id: int,
+    tenant_id: str,  # noqa: ARG001  # consumed by TenantAwareTask wrapper
+) -> None:
+    run_port_attempt(
+        port_attempt_id=port_attempt_id,
+        celery_task_id=self.request.id,
+    )
+
+
 def _fail_stalled_port_attempts(db_session: Session, lock_beat: RedisLock) -> None:
     """Fail every stale IN_PROGRESS attempt (all settings) past the stall threshold —
     a dead or self-yielded worker. Global on purpose: a supersede/promote (or a
@@ -431,9 +504,11 @@ def _fail_stalled_port_attempts(db_session: Session, lock_beat: RedisLock) -> No
         if fresh is None or fresh.status.is_terminal():
             continue
         task_logger.warning(
-            "check_for_port: failing stalled PortAttempt %s (cc_pair %s)",
+            "check_for_port: failing stalled PortAttempt %s (scope=%s cc_pair=%s user=%s)",
             stale.id,
+            port_attempt_scope(stale),
             stale.cc_pair_id,
+            stale.port_user_id,
         )
         mark_port_failed(
             db_session, stale.id, error_msg="stalled: no progress within threshold"
@@ -454,16 +529,18 @@ def _port_retry_delay_seconds(consecutive_failures: int) -> float:
 
 def _failed_port_ready_for_retry(
     db_session: Session,
-    cc_pair_id: int,
+    cc_pair_id: int | None,
     search_settings_id: int,
     latest: PortAttempt,
+    *,
+    port_user_id: UUID | None = None,
 ) -> bool:
     """Whether the backoff since the latest FAILED attempt has elapsed, so a port
     stuck failing at the same cursor isn't recreated (and re-embedded) every tick."""
     if latest.time_completed is None:
         return True
     failures = count_consecutive_failed_port_attempts_no_progress(
-        db_session, cc_pair_id, search_settings_id
+        db_session, cc_pair_id, search_settings_id, port_user_id=port_user_id
     )
     delay = _port_retry_delay_seconds(failures)
     return datetime.now(timezone.utc) >= latest.time_completed + timedelta(
@@ -472,14 +549,23 @@ def _failed_port_ready_for_retry(
 
 
 def _enqueue_run_port_attempt(
-    celery_app: Celery, port_attempt_id: int, tenant_id: str
+    celery_app: Celery,
+    port_attempt_id: int,
+    tenant_id: str,
+    scope: PortScope = "connector",
 ) -> None:
-    """Enqueue run_port_attempt for one attempt. The TTL means a task not consumed
+    """Enqueue a port task on the scope's queue. The TTL means a task not consumed
     within BEAT_EXPIRES_DEFAULT is dropped; check_for_port re-issues it next tick."""
+    if scope == "user_file":
+        task_name = OnyxCeleryTask.RUN_USER_FILE_PORT_ATTEMPT
+        queue = OnyxCeleryQueues.USER_FILE_PORT
+    else:
+        task_name = OnyxCeleryTask.RUN_PORT_ATTEMPT
+        queue = OnyxCeleryQueues.PORT
     celery_app.send_task(
-        OnyxCeleryTask.RUN_PORT_ATTEMPT,
+        task_name,
         kwargs={"port_attempt_id": port_attempt_id, "tenant_id": tenant_id},
-        queue=OnyxCeleryQueues.PORT,
+        queue=queue,
         priority=OnyxCeleryPriority.MEDIUM,
         expires=BEAT_EXPIRES_DEFAULT,
     )
@@ -502,6 +588,135 @@ def _resolve_port_target_settings(db_session: Session) -> SearchSettings | None:
         present.port_backfill_source_id = None
         db_session.commit()
     return None
+
+
+def _schedule_scope_attempts(
+    db_session: Session,
+    celery_app: Celery,
+    tenant_id: str,
+    search_settings_id: int,
+    scope: PortScope,
+    entities: list[tuple[int | None, UUID | None]],
+    cap: int,
+    lock_beat: RedisLock,
+) -> int:
+    """Create / resume / recover port attempts for one scope's entities, returning the
+    number of tasks enqueued. Identical logic for both scopes (connector cc_pairs, user
+    files), keyed by each entity's (cc_pair_id, port_user_id) with exactly one set. The
+    cap gates only NEW creation; recovery re-enqueues of already-active attempts always
+    run (they add no load)."""
+    created_new = 0
+    reenqueued = 0
+    at_cap = 0
+    not_started_expired_before = datetime.now(timezone.utc) - timedelta(
+        seconds=BEAT_EXPIRES_DEFAULT
+    )
+    active_attempts = count_active_port_attempts(
+        db_session, search_settings_id, scope=scope
+    )
+    for cc_pair_id, port_user_id in entities:
+        lock_beat.reacquire()
+        active = get_active_port_attempt(
+            db_session, cc_pair_id, search_settings_id, port_user_id=port_user_id
+        )
+        if active is not None:
+            # IN_PROGRESS is the stall watchdog's job; a recent NOT_STARTED is still in
+            # flight. Only re-issue a NOT_STARTED whose task has definitely expired --
+            # idempotent (the run task's terminal-check + the active-unique index make a
+            # re-send safe, and the original task is already gone, so no double-run).
+            if (
+                active.status == PortAttemptStatus.NOT_STARTED
+                and active.time_updated < not_started_expired_before
+            ):
+                # Stamp before re-sending (the gate reads time_updated) so a down worker
+                # gets one re-send per TTL window, not one per beat.
+                active.time_updated = datetime.now(timezone.utc)
+                db_session.commit()
+                try:
+                    _enqueue_run_port_attempt(celery_app, active.id, tenant_id, scope)
+                    reenqueued += 1
+                except Exception:
+                    task_logger.exception(
+                        "check_for_port: re-enqueue failed for stale NOT_STARTED "
+                        "PortAttempt %s",
+                        active.id,
+                    )
+            continue
+        # At the concurrency cap: don't start new attempts (the remaining entities still
+        # get recovery re-enqueues above next pass).
+        if active_attempts >= cap:
+            at_cap += 1
+            continue
+        latest = get_latest_port_attempt(
+            db_session, cc_pair_id, search_settings_id, port_user_id=port_user_id
+        )
+        # SUCCESS -> backlog already ported; CANCELED -> operator stopped it. Only a
+        # FAILED (or no) attempt warrants a fresh run.
+        if latest is not None and latest.status != PortAttemptStatus.FAILED:
+            continue
+        # Back off a port stuck failing at the same cursor (durable error) so it doesn't
+        # recreate + re-embed every tick. A progressing port (cursor advanced) has a
+        # streak of 1, so it isn't throttled.
+        if latest is not None and not _failed_port_ready_for_retry(
+            db_session,
+            cc_pair_id,
+            search_settings_id,
+            latest,
+            port_user_id=port_user_id,
+        ):
+            continue
+        # Snapshot the upper bound on a fresh run; carry it across resumes so the whole
+        # backfill targets the same doc set (the backlog at start).
+        if latest is not None:
+            resume_cursor = latest.last_processed_doc_id
+            up_to_doc_id = latest.up_to_doc_id
+        elif port_user_id is not None:
+            resume_cursor = None
+            up_to_doc_id = get_max_user_file_id_for_user(db_session, port_user_id)
+        else:
+            assert cc_pair_id is not None  # exactly-one scope (DB CHECK)
+            resume_cursor = None
+            up_to_doc_id = get_max_document_id_for_cc_pair(db_session, cc_pair_id)
+        try:
+            attempt = create_port_attempt(
+                db_session,
+                cc_pair_id,
+                search_settings_id,
+                resume_from_doc_id=resume_cursor,
+                up_to_doc_id=up_to_doc_id,
+                port_user_id=port_user_id,
+            )
+        except Exception:
+            # One entity's failure (unique-index race, transient DB error) must not abort
+            # the tick; the next tick retries it.
+            task_logger.exception(
+                "check_for_port: create failed (scope=%s cc_pair=%s user=%s)",
+                scope,
+                cc_pair_id,
+                port_user_id,
+            )
+            continue
+        try:
+            _enqueue_run_port_attempt(celery_app, attempt.id, tenant_id, scope)
+        except Exception:
+            # Row is committed; on enqueue failure mark it FAILED so the next tick
+            # recreates it (else an orphaned NOT_STARTED sticks).
+            task_logger.exception(
+                "check_for_port: enqueue failed; failing PortAttempt %s", attempt.id
+            )
+            mark_port_failed(db_session, attempt.id, error_msg="enqueue failed")
+            continue
+        created_new += 1
+        active_attempts += 1
+    if entities:
+        task_logger.info(
+            "port_scheduler scope=%s created=%d reenqueued=%d at_cap=%d",
+            scope,
+            created_new,
+            reenqueued,
+            at_cap,
+        )
+    return created_new + reenqueued
 
 
 def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
@@ -539,104 +754,29 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
             cc_pair_ids = fetch_indexable_standard_connector_credential_pair_ids(
                 db_session, active_cc_pairs_only=not include_paused
             )
-
-            # A NOT_STARTED not (re-)enqueued within the task TTL had its
-            # run_port_attempt dropped (worker down/absent); re-issue it, else it
-            # strands forever since it still counts as "active".
-            not_started_expired_before = datetime.now(timezone.utc) - timedelta(
-                seconds=BEAT_EXPIRES_DEFAULT
+            tasks_created += _schedule_scope_attempts(
+                db_session,
+                celery_app,
+                tenant_id,
+                search_settings_id,
+                "connector",
+                [(cc_pair_id, None) for cc_pair_id in cc_pair_ids],
+                MAX_CONCURRENT_PORT_ATTEMPTS,
+                lock_beat,
             )
 
-            # Cap concurrent attempts so the port doesn't fill every docprocessing slot
-            # and starve live indexing. Gates only NEW creation; recovery re-enqueues of
-            # already-active attempts below still run (they don't add load).
-            active_attempts = count_active_port_attempts(db_session, search_settings_id)
-
-            for cc_pair_id in cc_pair_ids:
-                lock_beat.reacquire()
-                active = get_active_port_attempt(
-                    db_session, cc_pair_id, search_settings_id
-                )
-                if active is not None:
-                    # IN_PROGRESS is the stall watchdog's job; a recent NOT_STARTED is
-                    # still in flight. Only re-issue a NOT_STARTED whose task has
-                    # definitely expired -- idempotent (the run task's terminal-check
-                    # + the active-unique index make a re-send safe, and the original
-                    # task is already gone, so there's no double-run).
-                    if (
-                        active.status == PortAttemptStatus.NOT_STARTED
-                        and active.time_updated < not_started_expired_before
-                    ):
-                        # Stamp before re-sending (the gate reads time_updated) so a
-                        # down worker gets one re-send per TTL window, not one per beat.
-                        active.time_updated = datetime.now(timezone.utc)
-                        db_session.commit()
-                        try:
-                            _enqueue_run_port_attempt(celery_app, active.id, tenant_id)
-                            tasks_created += 1
-                        except Exception:
-                            task_logger.exception(
-                                "check_for_port: re-enqueue failed for stale "
-                                "NOT_STARTED PortAttempt %s",
-                                active.id,
-                            )
-                    continue
-                # At the concurrency cap: don't start new attempts(the
-                # remaining cc_pairs still get recovery re-enqueues above next pass).
-                if active_attempts >= MAX_CONCURRENT_PORT_ATTEMPTS:
-                    continue
-                latest = get_latest_port_attempt(
-                    db_session, cc_pair_id, search_settings_id
-                )
-                # SUCCESS -> backlog already ported; CANCELED -> operator stopped it.
-                # Only a FAILED (or no) attempt warrants a fresh run.
-                if latest is not None and latest.status != PortAttemptStatus.FAILED:
-                    continue
-                # Back off a port stuck failing at the same cursor (durable error) so
-                # it doesn't recreate + re-embed every tick. A progressing port (cursor
-                # advanced) has a streak of 1, so it isn't throttled.
-                if latest is not None and not _failed_port_ready_for_retry(
-                    db_session, cc_pair_id, search_settings_id, latest
-                ):
-                    continue
-                # Snapshot the upper bound on a fresh run; carry it across resumes so
-                # the whole backfill targets the same doc set (the backlog at start).
-                if latest is not None:
-                    resume_cursor = latest.last_processed_doc_id
-                    up_to_doc_id = latest.up_to_doc_id
-                else:
-                    resume_cursor = None
-                    up_to_doc_id = get_max_document_id_for_cc_pair(
-                        db_session, cc_pair_id
-                    )
-                try:
-                    attempt = create_port_attempt(
-                        db_session,
-                        cc_pair_id,
-                        search_settings_id,
-                        resume_from_doc_id=resume_cursor,
-                        up_to_doc_id=up_to_doc_id,
-                    )
-                except Exception:
-                    # One cc_pair's failure (unique-index race, transient DB error)
-                    # must not abort the tick; the next tick retries it.
-                    task_logger.exception(
-                        "check_for_port: create failed for cc_pair %s", cc_pair_id
-                    )
-                    continue
-                try:
-                    _enqueue_run_port_attempt(celery_app, attempt.id, tenant_id)
-                except Exception:
-                    # Row is committed; on enqueue failure mark it FAILED so the
-                    # next tick recreates it (else an orphaned NOT_STARTED sticks).
-                    task_logger.exception(
-                        "check_for_port: enqueue failed; failing PortAttempt %s",
-                        attempt.id,
-                    )
-                    mark_port_failed(db_session, attempt.id, error_msg="enqueue failed")
-                    continue
-                tasks_created += 1
-                active_attempts += 1
+            # User files: a second scope with its own queue + cap (see USER_FILE_PORT).
+            user_ids = fetch_port_scope_user_ids(db_session)
+            tasks_created += _schedule_scope_attempts(
+                db_session,
+                celery_app,
+                tenant_id,
+                search_settings_id,
+                "user_file",
+                [(None, user_id) for user_id in user_ids],
+                MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS,
+                lock_beat,
+            )
     finally:
         if lock_beat.owned():
             lock_beat.release()
