@@ -19,8 +19,9 @@ from onyx.db.models import (
 )
 from onyx.db.user_usage import (
     TokenUsageBucket,
+    get_cost_window_reset,
     get_cost_window_start,
-    get_next_usage_bucket_start,
+    get_token_window_reset,
     record_user_usage,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -70,11 +71,18 @@ def _assert_rate_limited(error: OnyxError, scope: TokenRateLimitScope) -> None:
     assert error.extra["scope"] == scope.value
 
 
-def _assert_cost_rate_limited(error: OnyxError, scope: TokenRateLimitScope) -> None:
+def _assert_cost_rate_limited(
+    error: OnyxError,
+    scope: TokenRateLimitScope,
+    period_hours: int,
+) -> None:
     _assert_rate_limited(error, scope)
     assert error.extra is not None
     assert datetime.fromisoformat(str(error.extra["reset_at"])) == (
-        get_next_usage_bucket_start(datetime.now(timezone.utc))
+        get_cost_window_reset(
+            datetime.now(timezone.utc),
+            period_hours,
+        )
     )
 
 
@@ -99,7 +107,11 @@ def test_user_cost_isolated_and_longest_window_reported(
     _record_cost(db_session, user, 50.0)
     with pytest.raises(OnyxError) as exc_info:
         ee_token_limit._user_is_rate_limited(user.id)
-    _assert_cost_rate_limited(exc_info.value, TokenRateLimitScope.USER)
+    _assert_cost_rate_limited(
+        exc_info.value,
+        TokenRateLimitScope.USER,
+        period_hours=48,
+    )
 
 
 def _create_group(db_session: Session, name: str) -> UserGroup:
@@ -154,7 +166,11 @@ def test_group_blocks_only_when_every_group_is_over_budget(
     db_session.commit()
     with pytest.raises(OnyxError) as exc_info:
         ee_token_limit._user_is_rate_limited_by_group(user.id)
-    _assert_cost_rate_limited(exc_info.value, TokenRateLimitScope.USER_GROUP)
+    _assert_cost_rate_limited(
+        exc_info.value,
+        TokenRateLimitScope.USER_GROUP,
+        period_hours=48,
+    )
 
 
 def test_user_token_limit_behavior_is_unchanged(
@@ -189,5 +205,8 @@ def test_user_token_limit_behavior_is_unchanged(
     _assert_rate_limited(exc_info.value, TokenRateLimitScope.USER)
     assert exc_info.value.extra is not None
     assert datetime.fromisoformat(str(exc_info.value.extra["reset_at"])) == (
-        get_next_usage_bucket_start(datetime.now(timezone.utc))
+        get_token_window_reset(
+            datetime.now(timezone.utc),
+            2,
+        )
     )

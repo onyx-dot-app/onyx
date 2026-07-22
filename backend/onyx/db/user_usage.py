@@ -46,25 +46,35 @@ def get_token_window_start(now: datetime, period_hours: int) -> datetime:
     return current_bucket - timedelta(hours=period_hours - USER_USAGE_BUCKET_HOURS)
 
 
-def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
-    """Start of the UTC-day buckets in a cost-budget window."""
+def _get_cost_period_seconds(period_hours: int) -> int:
     period_seconds = period_hours * 60 * 60
     if (
         period_seconds < USER_USAGE_BUCKET_SECONDS
         or period_seconds % USER_USAGE_BUCKET_SECONDS
     ):
         raise ValueError(COST_BUDGET_PERIOD_ERROR)
+    return period_seconds
 
+
+def get_cost_window_start(now: datetime, period_hours: int) -> datetime:
+    """Start of the UTC-day buckets in a cost-budget window."""
+    period_seconds = _get_cost_period_seconds(period_hours)
     current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
     return current_bucket - timedelta(
         seconds=period_seconds - USER_USAGE_BUCKET_SECONDS
     )
 
 
-def get_next_usage_bucket_start(now: datetime) -> datetime:
-    return get_window_start(now, USER_USAGE_BUCKET_SECONDS) + timedelta(
-        seconds=USER_USAGE_BUCKET_SECONDS
-    )
+def get_token_window_reset(now: datetime, period_hours: int) -> datetime:
+    period_hours = normalize_token_period_hours(period_hours)
+    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
+    return current_bucket + timedelta(hours=period_hours)
+
+
+def get_cost_window_reset(now: datetime, period_hours: int) -> datetime:
+    period_seconds = _get_cost_period_seconds(period_hours)
+    current_bucket = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
+    return current_bucket + timedelta(seconds=period_seconds)
 
 
 class UserUsageByDay(BaseModel):

@@ -20,8 +20,9 @@ import onyx.server.query_and_chat.token_limit as token_limit
 from onyx.db.models import TokenRateLimit, TokenRateLimitScope, UserUsage
 from onyx.db.user_usage import (
     TokenUsageBucket,
+    get_cost_window_reset,
     get_cost_window_start,
-    get_next_usage_bucket_start,
+    get_token_window_reset,
     get_token_window_start,
     record_user_usage,
 )
@@ -172,17 +173,23 @@ def _structured_reset_at(exc: OnyxError, scope: str) -> datetime.datetime:
     return reset_at
 
 
-def _assert_token_reset(exc: OnyxError, scope: str) -> None:
+def _assert_token_reset(exc: OnyxError, scope: str, period_hours: int) -> None:
     reset_at = _structured_reset_at(exc, scope)
-    assert reset_at == get_next_usage_bucket_start(
-        datetime.datetime.now(tz=datetime.timezone.utc)
+    assert reset_at == get_token_window_reset(
+        datetime.datetime.now(tz=datetime.timezone.utc),
+        period_hours,
     )
 
 
-def _assert_cost_reset(exc: OnyxError, scope: str) -> None:
+def _assert_cost_reset(
+    exc: OnyxError,
+    scope: str,
+    period_hours: int = 24,
+) -> None:
     reset_at = _structured_reset_at(exc, scope)
-    expected = get_next_usage_bucket_start(
-        datetime.datetime.now(tz=datetime.timezone.utc)
+    expected = get_cost_window_reset(
+        datetime.datetime.now(tz=datetime.timezone.utc),
+        period_hours,
     )
     assert reset_at == expected
 
@@ -253,7 +260,7 @@ class TestGlobalRejectionPath:
 
         with pytest.raises(OnyxError) as ei:
             token_limit._user_is_rate_limited_by_global()
-        _assert_token_reset(ei.value, "organization")
+        _assert_token_reset(ei.value, "organization", 3)
 
     def test_under_global_budget_does_not_raise(
         self, monkeypatch: pytest.MonkeyPatch
@@ -295,6 +302,18 @@ def _recent_cost_buckets(total: float) -> list[tuple[datetime.datetime, float]]:
 
 class TestWorstTriggeredCostLimit:
     """Unit of the shared cost evaluator (no DB; cost buckets are injected)."""
+
+    def test_multi_day_reset_expires_all_current_buckets(self) -> None:
+        limit = _cost_limit(
+            100.0,
+            TokenRateLimitScope.USER,
+            period_hours=48,
+        )
+
+        assert token_limit._cost_reset_at(limit) == get_cost_window_reset(
+            datetime.datetime.now(datetime.timezone.utc),
+            48,
+        )
 
     def test_over_cost_budget_returns_row(self) -> None:
         limit = _cost_limit(100.0, TokenRateLimitScope.USER)
@@ -449,7 +468,7 @@ class TestGlobalCostRejectionPath:
         with pytest.raises(OnyxError) as exc_info:
             token_limit._user_is_rate_limited_by_global()
 
-        _assert_token_reset(exc_info.value, "organization")
+        _assert_token_reset(exc_info.value, "organization", 30 * 24)
         assert token_cutoffs == [get_token_window_start(now, 30 * 24)]
         assert cost_cutoffs == [get_cost_window_start(now, 24)]
 
