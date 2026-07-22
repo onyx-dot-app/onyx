@@ -1291,9 +1291,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             valid_email_domains=get_security_settings().valid_email_domains,
         )
 
-        logger.notice(
-            "Verification requested for user %s. Verification token: %s", user.id, token
-        )
+        # Never log the verification token: it is a replayable credential that
+        # marks the account verified, and the log stream is a wider audience
+        # than the intended email channel.
+        logger.notice("Verification requested for user %s", user.id)
         user_count = await get_user_count()
         try:
             send_user_verification_email(
