@@ -2461,6 +2461,9 @@ def update_mcp_server_simple(
         available_in_craft=request.available_in_craft,
     )
 
+    # Snapshot recipients under the current ACL before mutating it
+    reload_user_ids = affected_user_ids_for_mcp_server(updated_server, db_session)
+
     if any(
         value is not None
         for value in (request.is_public, request.users, request.groups)
@@ -2499,11 +2502,11 @@ def update_mcp_server_simple(
     db_session.commit()
 
     # Craft availability / URL live in each session's baked opencode.json;
-    # reload affected users so the change reaches running sandboxes. (Tool
-    # policies are enforced live by the proxy and need no reload.)
-    _hot_reload_craft_sessions(
-        affected_user_ids_for_mcp_server(updated_server, db_session), db_session
-    )
+    # reload affected users so the change reaches running sandboxes. Union the
+    # pre-update recipients so newly-removed users are reloaded to drop the
+    # server. (Tool policies are enforced live by the proxy and need no reload.)
+    reload_user_ids |= affected_user_ids_for_mcp_server(updated_server, db_session)
+    _hot_reload_craft_sessions(reload_user_ids, db_session)
 
     # Return the updated server in API format
     return _db_mcp_server_to_api_mcp_server(

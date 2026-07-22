@@ -1291,7 +1291,7 @@ class GateAddon:
         # (shared process, untagged base proxy), so it carries the session id in
         # a header stamped by the per-session opencode.json instead.
         mcp_header = flow.request.headers.get(MCP_SESSION_TAG_HEADER)
-        tag = cached or direct or mcp_header
+        tag = mcp_header or cached or direct
 
         logger.debug(
             "session_tag_resolved conn=%s host=%s cached=%s direct=%s "
