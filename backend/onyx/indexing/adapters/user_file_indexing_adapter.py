@@ -43,20 +43,24 @@ retry_delay = 0.5
 
 
 def _acquire_user_file_locks(db_session: Session, user_file_ids: list[str]) -> bool:
-    """Acquire locks for the specified user files."""
+    """Acquire locks for the specified user files, skipping any being deleted."""
     # Convert to UUIDs for the DB comparison
     user_file_uuid_list = [UUID(user_file_id) for user_file_id in user_file_ids]
     stmt = (
-        select(UserFile.id)
+        select(UserFile.id, UserFile.status)
         .where(UserFile.id.in_(user_file_uuid_list))
         .with_for_update(nowait=True)
     )
     # will raise exception if any of the documents are already locked
-    documents = db_session.scalars(stmt).all()
+    rows = db_session.execute(stmt).all()
 
     # make sure we found every document
-    if len(documents) != len(set(user_file_ids)):
+    if len(rows) != len(set(user_file_ids)):
         logger.warning("Didn't find row for all specified user file IDs. Aborting.")
+        return False
+
+    if any(status == UserFileStatus.DELETING for _, status in rows):
+        logger.info("Skipping index write for a user file being deleted.")
         return False
 
     return True
