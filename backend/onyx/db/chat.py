@@ -246,12 +246,17 @@ def duplicate_chat_session_for_user_from_slack(
         (if it is available to the user clicking the button)
     - Sets the user to the given user (if provided)
     """
+    # Copying is limited to Slack-seed sessions the caller is allowed to see:
+    # their own, or the unowned bot-created ones. Passing the caller's user_id
+    # (rather than None) stops one user copying another user's private session by
+    # its id; the onyxbot/slack_thread guard stops copying arbitrary non-Slack
+    # sessions.
     chat_session = get_chat_session_by_id(
         chat_session_id=chat_session_id,
-        user_id=None,  # Ignore user permissions for this
+        user_id=user.id,
         db_session=db_session,
     )
-    if not chat_session:
+    if not chat_session.onyxbot_flow and chat_session.slack_thread_id is None:
         raise HTTPException(status_code=400, detail="Invalid Chat Session ID provided")
 
     # This enforces permissions and sets a default
