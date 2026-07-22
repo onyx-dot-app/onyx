@@ -9,7 +9,6 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import (
-    EndpointPolicy,
     MCPAuthenticationPerformer,
     MCPOAuthProviderMode,
     MCPServerStatus,
@@ -290,11 +289,6 @@ def get_mcp_tools_for_servers(server_ids: list[int], db_session: Session) -> lis
     return list(
         db_session.scalars(select(Tool).where(Tool.mcp_server_id.in_(server_ids))).all()
     )
-
-
-# MCP tools default to ASK; a server's self-declared `readOnlyHint` never
-# auto-grants. Only an admin override relaxes a tool.
-MCP_TOOL_DEFAULT_POLICY = EndpointPolicy.ASK
 
 
 def add_user_to_mcp_server(server_id: int, user_id: UUID, db_session: Session) -> None:

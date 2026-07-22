@@ -20,10 +20,7 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import EndpointPolicy, GatedAppKind
 from onyx.db.external_app import get_external_apps
 from onyx.db.gated_app import get_action_policies
-from onyx.db.mcp import (
-    MCP_TOOL_DEFAULT_POLICY,
-    get_craft_enabled_mcp_servers,
-)
+from onyx.db.mcp import get_craft_enabled_mcp_servers
 from onyx.db.models import ExternalApp, MCPServer
 from onyx.db.users import fetch_user_by_id
 from onyx.external_apps.credentials import app_is_available
@@ -51,6 +48,10 @@ logger = setup_logger()
 
 # action_type for an unclassifiable request to a matched MCP host (fail closed).
 MCP_UNCLASSIFIABLE_ACTION_TYPE = "mcp.unclassifiable"
+
+# MCP tools default to ASK; a server's self-declared `readOnlyHint` never
+# auto-grants. Only an admin override relaxes a tool.
+MCP_TOOL_DEFAULT_POLICY = EndpointPolicy.ASK
 
 
 class RequestEvaluator(Protocol):
