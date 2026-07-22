@@ -40,7 +40,7 @@ class CostOverride(BaseModel):
 
 class UsageExportRecord(BaseModel):
     model: str
-    day: str  # YYYY-MM-DD — the usage window's start day (see UsageExportUser)
+    day: str  # YYYY-MM-DD
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
@@ -61,7 +61,7 @@ class UsageExportUser(BaseModel):
 
 
 class UsageExportResponse(BaseModel):
-    """Nested per-user export; day = window start (weekly grid)."""
+    """Nested per-user daily usage export."""
 
     start: str
     end: str

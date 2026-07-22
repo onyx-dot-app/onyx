@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.6.17
+version: 0.7.2
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,16 +16,13 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: Add the Box connector with permission sync, and expose its configuration env
-        vars (BOX_CONNECTOR_SIZE_THRESHOLD, BOX_PERMISSION_DOC_SYNC_FREQUENCY,
-        BOX_PERMISSION_GROUP_SYNC_FREQUENCY) in the background config map values.
-    - kind: added
-      description: Add configurable per-user LLM usage accounting and fallback pricing.
-    - kind: added
-      description: Add authenticated Prometheus scraping for the MCP server.
-    - kind: fixed
-      description: Scope metrics credentials and ServiceMonitor selectors to the intended workloads.
+    - kind: changed
+      description: The inference and indexing model servers now run on a distroless Docker
+        Hardened Image (no shell or package manager) as nonroot (the onyx user, UID 1001). Custom CA
+        certificates for the model servers are merged with certifi's public roots in Python
+        at startup instead of via update-ca-certificates. This chart version requires the
+        distroless model-server image — upgrade the chart and the model-server image
+        together (see values.yaml).
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

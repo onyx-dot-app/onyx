@@ -42,23 +42,32 @@ import {
   createCustomSkillFromEditor,
   deleteUserSkill,
   inspectSkillBundle,
+  isSkillNameConflict,
   patchUserSkill,
   removeUserSkillFile,
   uploadUserSkillFiles,
 } from "@/lib/skills/api";
 import type { SkillEditableDetail } from "@/lib/skills/types";
 import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
+import {
+  discardSkillCreationDraft,
+  getSkillCreationDraft,
+} from "@/lib/skills/creationDraft";
+import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import SkillNameConflictModal from "@/sections/modals/skills/SkillNameConflictModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
+import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 import SkillFileTree from "@/sections/skills/SkillFileTree";
 import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
 import { ConfirmationModalLayout } from "@opal/layouts";
 
 interface SkillEditorPageProps {
   skillId?: string;
+  draftId?: string;
 }
 
 function getSharingStatus(skill: SkillEditableDetail): {
@@ -95,9 +104,16 @@ function getSharingStatus(skill: SkillEditableDetail): {
   };
 }
 
-export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
+export default function SkillEditorPage({
+  skillId,
+  draftId,
+}: SkillEditorPageProps) {
   const isCreating = skillId === undefined;
   const router = useRouter();
+  const creationDraft = useMemo(
+    () => (isCreating && draftId ? getSkillCreationDraft(draftId) : undefined),
+    [draftId, isCreating]
+  );
   const { mutate } = useSWRConfig();
   const {
     data: skill,
@@ -109,9 +125,13 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     errorHandlingFetcher
   );
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [instructionsMarkdown, setInstructionsMarkdown] = useState("");
+  const [name, setName] = useState(creationDraft?.contents.name ?? "");
+  const [description, setDescription] = useState(
+    creationDraft?.contents.description ?? ""
+  );
+  const [instructionsMarkdown, setInstructionsMarkdown] = useState(
+    creationDraft?.contents.instructions_markdown ?? ""
+  );
   const [instructionsDisplayMode, setInstructionsDisplayMode] =
     useState<InstructionsDisplayMode>("raw");
   const [hydratedSkillId, setHydratedSkillId] = useState<string | null>(null);
@@ -121,14 +141,17 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const [isPreparingFiles, setIsPreparingFiles] = useState(false);
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
   const [pendingFilesUpload, setPendingFilesUpload] =
-    useState<PreparedSkillFilesUpload | null>(null);
+    useState<PreparedSkillFilesUpload | null>(creationDraft?.upload ?? null);
   const [filesUploadToConfirm, setFilesUploadToConfirm] =
     useState<PreparedSkillFilesUpload | null>(null);
   const [removingFilePath, setRemovingFilePath] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [conflictingSkillName, setConflictingSkillName] = useState<
+    string | null
+  >(null);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
-    setName(nextSkill.slug);
+    setName(nextSkill.name);
     setDescription(nextSkill.description);
     setInstructionsMarkdown(nextSkill.instructions_markdown);
   }, []);
@@ -154,9 +177,15 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     description,
     instructionsMarkdown,
     isCreating,
+    name,
     pendingFilesUpload,
     skill,
   ]);
+
+  const unsavedChanges = useUnsavedChangesGuard({
+    isDirty,
+    onDiscard: draftId ? () => discardSkillCreationDraft(draftId) : undefined,
+  });
 
   const canManageSkill =
     isCreating ||
@@ -180,15 +209,23 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     !!instructionsMarkdown.trim() &&
     !isSaving;
 
-  function navigateBack() {
+  function leaveEditor() {
     router.push("/craft/v1/skills" as Route);
+  }
+
+  function handleCancel() {
+    if (isSaving || isPreparingFiles || isUploadingFiles) return;
+    unsavedChanges.requestLeave(leaveEditor);
   }
 
   async function refreshSkillList() {
     await mutate(SWR_KEYS.userSkills);
   }
 
-  async function handleSave(event?: FormEvent<HTMLFormElement>) {
+  async function handleSave(
+    event?: FormEvent<HTMLFormElement>,
+    createDisabled = false
+  ) {
     event?.preventDefault();
     if (!canSave) return;
     setIsSaving(true);
@@ -199,12 +236,17 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
             name,
             description,
             instructions_markdown: instructionsMarkdown,
+            auto_enable: !createDisabled,
           },
           pendingFilesUpload?.file
         );
-        await refreshSkillList();
+        setConflictingSkillName(null);
+        if (draftId) discardSkillCreationDraft(draftId);
+        void refreshSkillList().catch((error: unknown) => {
+          console.error("Failed to refresh skill list after creation", error);
+        });
         toast.success(`Created "${created.name}"`);
-        router.replace(`/craft/v1/skills/edit/${created.id}` as Route);
+        router.replace("/craft/v1/skills" as Route);
         return;
       }
 
@@ -223,6 +265,10 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
       await refreshSkillList();
       toast.success(`Saved "${updated.name}"`);
     } catch (err) {
+      if (isCreating && !createDisabled && isSkillNameConflict(err)) {
+        setConflictingSkillName(name.trim());
+        return;
+      }
       console.error("Failed to save skill", err);
       toast.error(err instanceof Error ? err.message : "Failed to save skill");
     } finally {
@@ -342,7 +388,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
   const saveTooltip = isSaving
     ? isCreating
-      ? "Creating skill..."
+      ? "Saving skill..."
       : "Saving changes..."
     : !isCreating && !skill
       ? undefined
@@ -397,24 +443,19 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
               <Button
                 prominence="secondary"
                 type="button"
-                onClick={navigateBack}
+                disabled={isSaving || isPreparingFiles || isUploadingFiles}
+                onClick={handleCancel}
               >
                 Cancel
               </Button>
               <Tooltip tooltip={saveTooltip} side="bottom">
                 <Button disabled={!canSave} type="submit">
-                  {isSaving
-                    ? isCreating
-                      ? "Creating..."
-                      : "Saving..."
-                    : isCreating
-                      ? "Create"
-                      : "Save"}
+                  {isSaving ? "Saving..." : "Save"}
                 </Button>
               </Tooltip>
             </div>
           }
-          backButton
+          backButton={handleCancel}
           divider
         />
 
@@ -435,7 +476,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
           {(isCreating || skill) && !isLoading && !error && (
             <>
-              {isCreating && (
+              {isCreating && !creationDraft && (
                 <>
                   <Section gap={0.5} alignItems="stretch" height="auto">
                     <Card border="solid" rounding="lg" padding="sm">
@@ -716,6 +757,21 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
             : "This upload must use the same skill name. Continuing will replace the description, instructions, and files with the uploaded bundle."}
         </ConfirmationModalLayout>
       )}
+
+      {conflictingSkillName && (
+        <SkillNameConflictModal
+          skillName={conflictingSkillName}
+          onClose={() => setConflictingSkillName(null)}
+          onConfirm={() => void handleSave(undefined, true)}
+          pending={isSaving}
+        />
+      )}
+
+      <UnsavedChangesModal
+        open={unsavedChanges.confirmationOpen}
+        onCancel={unsavedChanges.cancelLeave}
+        onDiscard={unsavedChanges.discardAndLeave}
+      />
 
       {skill && deleteOpen && (
         <ConfirmEntityModal

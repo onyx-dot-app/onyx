@@ -1,1220 +1,45 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Tauri/wry's own dependency tree pulls duplicate versions of common crates
+// (e.g. `base64`, `syn`, `windows-sys`) that we don't control.
+#![allow(clippy::multiple_crate_versions)]
 
-use directories::ProjectDirs;
-use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
-use std::process::Command;
-use std::sync::{Mutex, RwLock};
-use std::io::Write as IoWrite;
-use std::time::SystemTime;
-#[cfg(target_os = "macos")]
-use std::time::Duration;
-use tauri::image::Image;
-use tauri::menu::{
-    CheckMenuItem, Menu, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder, HELP_SUBMENU_ID,
-};
-use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-#[cfg(target_os = "macos")]
-use tauri::WebviewWindow;
-use tauri::Wry;
-use tauri::{
-    webview::PageLoadPayload, AppHandle, Manager, Webview, WebviewUrl, WebviewWindowBuilder,
-};
-#[cfg(target_os = "macos")]
-use tokio::time::sleep;
-use url::Url;
+mod alt_menu;
+mod commands;
+mod config;
+mod debug_log;
+mod menu;
+mod window;
+
+use clap::Parser;
+use config::ConfigState;
+use serde::Deserialize;
+use tauri::{webview::PageLoadPayload, Manager, Webview, Wry};
 #[cfg(target_os = "macos")]
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 // ============================================================================
-// Configuration
+// CLI flags
 // ============================================================================
 
-const DEFAULT_SERVER_URL: &str = "https://cloud.onyx.app";
-const CONFIG_FILE_NAME: &str = "config.json";
-#[cfg(target_os = "macos")]
-const TITLEBAR_SCRIPT: &str = include_str!("../../src/titlebar.js");
-const TRAY_ID: &str = "onyx-tray";
-const TRAY_ICON_BYTES: &[u8] = include_bytes!("../icons/tray-icon.png");
-const TRAY_MENU_OPEN_APP_ID: &str = "tray_open_app";
-const TRAY_MENU_OPEN_CHAT_ID: &str = "tray_open_chat";
-const TRAY_MENU_SHOW_IN_BAR_ID: &str = "tray_show_in_menu_bar";
-const TRAY_MENU_QUIT_ID: &str = "tray_quit";
-const MENU_SHOW_MENU_BAR_ID: &str = "show_menu_bar";
-#[cfg(target_os = "linux")]
-const MENU_HIDE_DECORATIONS_ID: &str = "hide_window_decorations";
-const CHAT_LINK_INTERCEPT_SCRIPT: &str = r##"
-(() => {
-  if (window.__ONYX_CHAT_LINK_INTERCEPT_INSTALLED__) {
-    return;
-  }
+/// Onyx desktop client. Launching with no flags opens the app normally.
+#[derive(Parser)]
+#[command(name = "onyx", long_about = None, disable_version_flag = true)]
+struct Cli {
+    // Handled manually rather than via `#[command(version)]` so it can also
+    // report the connected server's version, not just the client build.
+    /// Print client and server version and exit
+    #[arg(short = 'v', long)]
+    version: bool,
 
-  window.__ONYX_CHAT_LINK_INTERCEPT_INSTALLED__ = true;
-
-  function isChatSessionPage() {
-    try {
-      const currentUrl = new URL(window.location.href);
-      return (
-        currentUrl.pathname.startsWith("/app") &&
-        currentUrl.searchParams.has("chatId")
-      );
-    } catch {
-      return false;
-    }
-  }
-
-  function getAllowedNavigationUrl(rawUrl) {
-    try {
-      const parsed = new URL(String(rawUrl), window.location.href);
-      const scheme = parsed.protocol.toLowerCase();
-      if (!["http:", "https:", "mailto:", "tel:"].includes(scheme)) {
-        return null;
-      }
-      return parsed;
-    } catch {
-      return null;
-    }
-  }
-
-  async function openWithTauri(url) {
-    try {
-      const invoke =
-        window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
-      if (typeof invoke !== "function") {
-        return false;
-      }
-
-      await invoke("open_in_browser", { url });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  function handleChatNavigation(rawUrl) {
-    const parsedUrl = getAllowedNavigationUrl(rawUrl);
-    if (!parsedUrl) {
-      return false;
-    }
-
-    const safeUrl = parsedUrl.toString();
-    const scheme = parsedUrl.protocol.toLowerCase();
-    if (scheme === "mailto:" || scheme === "tel:") {
-      void openWithTauri(safeUrl).then((opened) => {
-        if (!opened) {
-          window.location.assign(safeUrl);
-        }
-      });
-      return true;
-    }
-
-    window.location.assign(safeUrl);
-    return true;
-  }
-
-  document.addEventListener(
-    "click",
-    (event) => {
-      if (!isChatSessionPage() || event.defaultPrevented) {
-        return;
-      }
-
-      const element = event.target;
-      if (!(element instanceof Element)) {
-        return;
-      }
-
-      const anchor = element.closest("a");
-      if (!(anchor instanceof HTMLAnchorElement)) {
-        return;
-      }
-
-      const target = (anchor.getAttribute("target") || "").toLowerCase();
-      if (target !== "_blank") {
-        return;
-      }
-
-      const href = anchor.getAttribute("href");
-      if (!href || href.startsWith("#")) {
-        return;
-      }
-
-      if (!handleChatNavigation(href)) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    true
-  );
-
-  const nativeWindowOpen = window.open;
-  window.open = function(url, target, features) {
-    const resolvedTarget = typeof target === "string" ? target.toLowerCase() : "";
-    const shouldNavigateInPlace = resolvedTarget === "" || resolvedTarget === "_blank";
-
-    if (
-      isChatSessionPage() &&
-      shouldNavigateInPlace &&
-      url != null &&
-      String(url).length > 0
-    ) {
-      if (!handleChatNavigation(url)) {
-        return null;
-      }
-      return null;
-    }
-
-    if (typeof nativeWindowOpen === "function") {
-      return nativeWindowOpen.call(window, url, target, features);
-    }
-    return null;
-  };
-})();
-"##;
-
-#[cfg(not(target_os = "macos"))]
-const MENU_KEY_HANDLER_SCRIPT: &str = r#"
-(() => {
-  if (window.__ONYX_MENU_KEY_HANDLER__) return;
-  window.__ONYX_MENU_KEY_HANDLER__ = true;
-
-  let altPressedAlone = false;
-
-  document.addEventListener('keydown', (e) => {
-    altPressedAlone = e.key === 'Alt' && !e.repeat;
-  }, true);
-
-  document.addEventListener('keyup', (e) => {
-    if (e.key !== 'Alt' || !altPressedAlone) return;
-    altPressedAlone = false;
-    e.preventDefault();
-    const invoke =
-      window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
-    if (typeof invoke === 'function') invoke('toggle_menu_bar');
-  }, true);
-})();
-"#;
-
-const CONSOLE_CAPTURE_SCRIPT: &str = r#"
-(() => {
-  if (window.__ONYX_CONSOLE_CAPTURE__) return;
-  window.__ONYX_CONSOLE_CAPTURE__ = true;
-
-  const levels = ['log', 'warn', 'error', 'info', 'debug'];
-  const originals = {};
-
-  levels.forEach(level => {
-    originals[level] = console[level];
-    console[level] = function(...args) {
-      originals[level].apply(console, args);
-      try {
-        const invoke =
-          window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
-        if (typeof invoke === 'function') {
-          const message = args.map(a => {
-            try { return typeof a === 'string' ? a : JSON.stringify(a); }
-            catch { return String(a); }
-          }).join(' ');
-          invoke('log_from_frontend', { level, message });
-        }
-      } catch {}
-    };
-  });
-
-  window.addEventListener('error', (event) => {
-    try {
-      const invoke =
-        window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
-      if (typeof invoke === 'function') {
-        invoke('log_from_frontend', {
-          level: 'error',
-          message: `[uncaught] ${event.message} at ${event.filename}:${event.lineno}:${event.colno}`
-        });
-      }
-    } catch {}
-  });
-
-  window.addEventListener('unhandledrejection', (event) => {
-    try {
-      const invoke =
-        window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
-      if (typeof invoke === 'function') {
-        invoke('log_from_frontend', {
-          level: 'error',
-          message: `[unhandled rejection] ${event.reason}`
-        });
-      }
-    } catch {}
-  });
-})();
-"#;
-
-const MENU_TOGGLE_DEVTOOLS_ID: &str = "toggle_devtools";
-const MENU_OPEN_DEBUG_LOG_ID: &str = "open_debug_log";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppConfig {
-    pub server_url: String,
-
-    #[serde(default = "default_window_title")]
-    pub window_title: String,
-
-    #[serde(default = "default_show_menu_bar")]
-    pub show_menu_bar: bool,
-
-    #[serde(default)]
-    pub hide_window_decorations: bool,
+    /// Enable verbose logging, auto-open `DevTools`, and capture webview console output
+    #[arg(long)]
+    debug: bool,
 }
-
-fn default_window_title() -> String {
-    "Onyx".to_string()
-}
-
-fn default_show_menu_bar() -> bool {
-    true
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            server_url: DEFAULT_SERVER_URL.to_string(),
-            window_title: default_window_title(),
-            show_menu_bar: true,
-            hide_window_decorations: false,
-        }
-    }
-}
-
-/// Get the config directory path
-fn get_config_dir() -> Option<PathBuf> {
-    ProjectDirs::from("app", "onyx", "onyx-desktop").map(|dirs| dirs.config_dir().to_path_buf())
-}
-
-/// Get the full config file path
-fn get_config_path() -> Option<PathBuf> {
-    get_config_dir().map(|dir| dir.join(CONFIG_FILE_NAME))
-}
-
-/// Load config from file, or create default if it doesn't exist
-fn load_config() -> (AppConfig, bool) {
-    let config_path = match get_config_path() {
-        Some(path) => path,
-        None => {
-            return (AppConfig::default(), false);
-        }
-    };
-
-    if !config_path.exists() {
-        return (AppConfig::default(), false);
-    }
-
-    match fs::read_to_string(&config_path) {
-        Ok(contents) => match serde_json::from_str(&contents) {
-            Ok(config) => (config, true),
-            Err(_) => (AppConfig::default(), false),
-        },
-        Err(_) => (AppConfig::default(), false),
-    }
-}
-
-/// Save config to file
-fn save_config(config: &AppConfig) -> Result<(), String> {
-    let config_dir = get_config_dir().ok_or("Could not determine config directory")?;
-    let config_path = config_dir.join(CONFIG_FILE_NAME);
-
-    // Ensure config directory exists
-    fs::create_dir_all(&config_dir).map_err(|e| format!("Failed to create config dir: {}", e))?;
-
-    let json = serde_json::to_string_pretty(config)
-        .map_err(|e| format!("Failed to serialize config: {}", e))?;
-
-    fs::write(&config_path, json).map_err(|e| format!("Failed to write config: {}", e))?;
-
-    Ok(())
-}
-
-// ============================================================================
-// Debug Mode
-// ============================================================================
-
-fn is_debug_mode() -> bool {
-    std::env::args().any(|arg| arg == "--debug") || std::env::var("ONYX_DEBUG").is_ok()
-}
-
-fn get_debug_log_path() -> Option<PathBuf> {
-    get_config_dir().map(|dir| dir.join("frontend_debug.log"))
-}
-
-fn init_debug_log_file() -> Option<fs::File> {
-    let log_path = get_debug_log_path()?;
-    if let Some(parent) = log_path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-    fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .ok()
-}
-
-fn format_utc_timestamp() -> String {
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
-    let total_secs = now.as_secs();
-    let millis = now.subsec_millis();
-
-    let days = total_secs / 86400;
-    let secs_of_day = total_secs % 86400;
-    let hours = secs_of_day / 3600;
-    let mins = (secs_of_day % 3600) / 60;
-    let secs = secs_of_day % 60;
-
-    // Days since Unix epoch -> Y/M/D via civil calendar arithmetic
-    let z = days as i64 + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-        y, m, d, hours, mins, secs, millis
-    )
-}
-
-fn inject_console_capture(webview: &Webview) {
-    let _ = webview.eval(CONSOLE_CAPTURE_SCRIPT);
-}
-
-fn maybe_open_devtools(app: &AppHandle, window: &tauri::WebviewWindow) {
-    #[cfg(any(debug_assertions, feature = "devtools"))]
-    {
-        let state = app.state::<ConfigState>();
-        if state.debug_mode {
-            window.open_devtools();
-        }
-    }
-    #[cfg(not(any(debug_assertions, feature = "devtools")))]
-    {
-        let _ = (app, window);
-    }
-}
-
-// Global config state
-struct ConfigState {
-    config: RwLock<AppConfig>,
-    config_initialized: RwLock<bool>,
-    app_base_url: RwLock<Option<Url>>,
-    debug_mode: bool,
-    debug_log_file: Mutex<Option<fs::File>>,
-}
-
-fn focus_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-    } else {
-        trigger_new_window(app);
-    }
-}
-
-fn trigger_new_chat(app: &AppHandle) {
-    let state = app.state::<ConfigState>();
-    let server_url = state.config.read().unwrap().server_url.clone();
-
-    if let Some(window) = app.get_webview_window("main") {
-        let url = format!("{}/chat", server_url);
-        let _ = window.eval(&format!("window.location.href = '{}'", url));
-    }
-}
-
-fn trigger_new_window(app: &AppHandle) {
-    let (server_url, window_title) = {
-        let state = app.state::<ConfigState>();
-        let config = state.config.read().unwrap();
-        (config.server_url.clone(), config.window_title.clone())
-    };
-    let handle = app.clone();
-
-    tauri::async_runtime::spawn(async move {
-        let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
-        let builder = WebviewWindowBuilder::new(
-            &handle,
-            &window_label,
-            WebviewUrl::External(server_url.parse().unwrap()),
-        )
-        .title(window_title)
-        .inner_size(1232.0, 800.0)
-        .min_inner_size(800.0, 600.0);
-
-        // Windows draws its own title bar in the system theme; a transparent
-        // window leaves any unpainted region see-through, which produces the
-        // translucent-bar artifact reported on Windows.
-        #[cfg(not(target_os = "windows"))]
-        let builder = builder.transparent(true);
-
-        #[cfg(target_os = "macos")]
-        let builder = builder
-            .title_bar_style(tauri::TitleBarStyle::Overlay)
-            .hidden_title(true);
-
-        #[cfg(target_os = "linux")]
-        let builder = builder.background_color(tauri::window::Color(0x1a, 0x1a, 0x2e, 0xff));
-
-        if let Ok(window) = builder.build() {
-            #[cfg(target_os = "macos")]
-            {
-                let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
-                inject_titlebar(window.clone());
-            }
-
-            apply_settings_to_window(&handle, &window);
-            maybe_open_devtools(&handle, &window);
-            let _ = window.set_focus();
-        }
-    });
-}
-
-fn open_docs() {
-    let _ = open_in_default_browser("https://docs.onyx.app");
-}
-
-fn open_settings(app: &AppHandle) {
-    // Navigate main window to the settings page (index.html) with settings flag
-    let state = app.state::<ConfigState>();
-    let settings_url = state
-        .app_base_url
-        .read()
-        .unwrap()
-        .as_ref()
-        .cloned()
-        .and_then(|mut url| {
-            url.set_query(None);
-            url.set_fragment(Some("settings"));
-            url.set_path("/");
-            Some(url)
-        })
-        .or_else(|| Url::parse("tauri://localhost/#settings").ok());
-
-    if let Some(window) = app.get_webview_window("main") {
-        if let Some(url) = settings_url {
-            let _ = window.navigate(url);
-        }
-    }
-}
-
-fn same_origin(left: &Url, right: &Url) -> bool {
-    left.scheme() == right.scheme()
-        && left.host_str() == right.host_str()
-        && left.port_or_known_default() == right.port_or_known_default()
-}
-
-fn is_chat_session_url(url: &Url) -> bool {
-    url.path().starts_with("/app") && url.query_pairs().any(|(key, _)| key == "chatId")
-}
-
-fn should_open_in_external_browser(current_url: &Url, destination_url: &Url) -> bool {
-    if !is_chat_session_url(current_url) {
-        return false;
-    }
-
-    match destination_url.scheme() {
-        "mailto" | "tel" => true,
-        "http" | "https" => !same_origin(current_url, destination_url),
-        _ => false,
-    }
-}
-
-fn open_in_default_browser(url: &str) -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        return Command::new("open").arg(url).status().is_ok();
-    }
-    #[cfg(target_os = "linux")]
-    {
-        return Command::new("xdg-open").arg(url).status().is_ok();
-    }
-    #[cfg(target_os = "windows")]
-    {
-        return Command::new("rundll32")
-            .arg("url.dll,FileProtocolHandler")
-            .arg(url)
-            .status()
-            .is_ok();
-    }
-    #[allow(unreachable_code)]
-    false
-}
-
-#[tauri::command]
-async fn check_server_reachable(state: tauri::State<'_, ConfigState>) -> Result<(), String> {
-    let url = state.config.read().unwrap().server_url.clone();
-    let parsed = Url::parse(&url).map_err(|e| format!("Invalid URL: {}", e))?;
-    match parsed.scheme() {
-        "http" | "https" => {}
-        _ => return Err("URL must use http or https".to_string()),
-    }
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
-
-    match client.head(parsed).send().await {
-        Ok(_) => Ok(()),
-        // Only definitive "server didn't answer" errors count as unreachable.
-        // TLS / decode / redirect errors imply the server is listening — the
-        // webview, which has its own trust store, is likely to succeed even
-        // when rustls rejects a self-signed cert.
-        Err(e) if e.is_connect() || e.is_timeout() => Err(e.to_string()),
-        Err(_) => Ok(()),
-    }
-}
-
-#[tauri::command]
-fn open_in_browser(url: String) -> Result<(), String> {
-    let parsed_url = Url::parse(&url).map_err(|_| "Invalid URL".to_string())?;
-    match parsed_url.scheme() {
-        "http" | "https" | "mailto" | "tel" => {}
-        _ => return Err("Unsupported URL scheme".to_string()),
-    }
-
-    if open_in_default_browser(parsed_url.as_str()) {
-        Ok(())
-    } else {
-        Err("Failed to open URL in default browser".to_string())
-    }
-}
-
-fn inject_chat_link_intercept(webview: &Webview) {
-    let _ = webview.eval(CHAT_LINK_INTERCEPT_SCRIPT);
-}
-
-fn handle_toggle_devtools(app: &AppHandle) {
-    #[cfg(any(debug_assertions, feature = "devtools"))]
-    {
-        let windows: Vec<_> = app.webview_windows().into_values().collect();
-        let any_open = windows.iter().any(|w| w.is_devtools_open());
-        for window in &windows {
-            if any_open {
-                window.close_devtools();
-            } else {
-                window.open_devtools();
-            }
-        }
-    }
-    #[cfg(not(any(debug_assertions, feature = "devtools")))]
-    {
-        let _ = app;
-    }
-}
-
-fn handle_open_debug_log() {
-    let log_path = match get_debug_log_path() {
-        Some(p) => p,
-        None => return,
-    };
-
-    if !log_path.exists() {
-        eprintln!("[ONYX DEBUG] Log file does not exist yet: {:?}", log_path);
-        return;
-    }
-
-    let url_path = log_path.to_string_lossy().replace('\\', "/");
-    let _ = open_in_default_browser(&format!(
-        "file:///{}",
-        url_path.trim_start_matches('/')
-    ));
-}
-
-// ============================================================================
-// Tauri Commands
-// ============================================================================
-
-#[tauri::command]
-fn log_from_frontend(level: String, message: String, state: tauri::State<ConfigState>) {
-    if !state.debug_mode {
-        return;
-    }
-    let timestamp = format_utc_timestamp();
-    let log_line = format!("[{}] [{}] {}", timestamp, level.to_uppercase(), message);
-
-    eprintln!("{}", log_line);
-
-    if let Ok(mut guard) = state.debug_log_file.lock() {
-        if let Some(ref mut file) = *guard {
-            let _ = writeln!(file, "{}", log_line);
-            let _ = file.flush();
-        }
-    }
-}
-
-/// Get the current server URL
-#[tauri::command]
-fn get_server_url(state: tauri::State<ConfigState>) -> String {
-    state.config.read().unwrap().server_url.clone()
-}
-
-#[derive(Serialize)]
-struct BootstrapState {
-    server_url: String,
-    config_exists: bool,
-}
-
-/// Get the server URL plus whether a config file exists
-#[tauri::command]
-fn get_bootstrap_state(state: tauri::State<ConfigState>) -> BootstrapState {
-    let server_url = state.config.read().unwrap().server_url.clone();
-    let config_initialized = *state.config_initialized.read().unwrap();
-    let config_exists =
-        config_initialized && get_config_path().map(|path| path.exists()).unwrap_or(false);
-
-    BootstrapState {
-        server_url,
-        config_exists,
-    }
-}
-
-/// Set a new server URL and save to config
-#[tauri::command]
-fn set_server_url(state: tauri::State<ConfigState>, url: String) -> Result<String, String> {
-    // Validate URL
-    if !url.starts_with("http://") && !url.starts_with("https://") {
-        return Err("URL must start with http:// or https://".to_string());
-    }
-
-    let mut config = state.config.write().unwrap();
-    config.server_url = url.trim_end_matches('/').to_string();
-    save_config(&config)?;
-    *state.config_initialized.write().unwrap() = true;
-
-    Ok(config.server_url.clone())
-}
-
-/// Get the config file path (so users know where to edit)
-#[tauri::command]
-fn get_config_path_cmd() -> Result<String, String> {
-    get_config_path()
-        .map(|p| p.to_string_lossy().to_string())
-        .ok_or_else(|| "Could not determine config path".to_string())
-}
-
-/// Open the config file in the default editor
-#[tauri::command]
-fn open_config_file() -> Result<(), String> {
-    let config_path = get_config_path().ok_or("Could not determine config path")?;
-
-    // Ensure config exists
-    if !config_path.exists() {
-        save_config(&AppConfig::default())?;
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg("-t")
-            .arg(&config_path)
-            .spawn()
-            .map_err(|e| format!("Failed to open config: {}", e))?;
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(&config_path)
-            .spawn()
-            .map_err(|e| format!("Failed to open config: {}", e))?;
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("notepad")
-            .arg(&config_path)
-            .spawn()
-            .map_err(|e| format!("Failed to open config: {}", e))?;
-    }
-
-    Ok(())
-}
-
-/// Open the config directory in file manager
-#[tauri::command]
-fn open_config_directory() -> Result<(), String> {
-    let config_dir = get_config_dir().ok_or("Could not determine config directory")?;
-
-    // Ensure directory exists
-    fs::create_dir_all(&config_dir).map_err(|e| format!("Failed to create config dir: {}", e))?;
-
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(&config_dir)
-            .spawn()
-            .map_err(|e| format!("Failed to open directory: {}", e))?;
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(&config_dir)
-            .spawn()
-            .map_err(|e| format!("Failed to open directory: {}", e))?;
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg(&config_dir)
-            .spawn()
-            .map_err(|e| format!("Failed to open directory: {}", e))?;
-    }
-
-    Ok(())
-}
-
-/// Navigate to a specific path on the configured server
-#[tauri::command]
-fn navigate_to(window: tauri::WebviewWindow, state: tauri::State<ConfigState>, path: &str) {
-    let base_url = state.config.read().unwrap().server_url.clone();
-    let url = format!("{}{}", base_url, path);
-    let _ = window.eval(&format!("window.location.href = '{}'", url));
-}
-
-/// Reload the current page
-#[tauri::command]
-fn reload_page(window: tauri::WebviewWindow) {
-    let _ = window.eval("window.location.reload()");
-}
-
-/// Go back in history
-#[tauri::command]
-fn go_back(window: tauri::WebviewWindow) {
-    let _ = window.eval("window.history.back()");
-}
-
-/// Go forward in history
-#[tauri::command]
-fn go_forward(window: tauri::WebviewWindow) {
-    let _ = window.eval("window.history.forward()");
-}
-
-/// Open a new window
-#[tauri::command]
-async fn new_window(app: AppHandle, state: tauri::State<'_, ConfigState>) -> Result<(), String> {
-    let (server_url, window_title) = {
-        let config = state.config.read().unwrap();
-        (config.server_url.clone(), config.window_title.clone())
-    };
-    let window_label = format!("onyx-{}", uuid::Uuid::new_v4());
-
-    let builder = WebviewWindowBuilder::new(
-        &app,
-        &window_label,
-        WebviewUrl::External(
-            server_url
-                .parse()
-                .map_err(|e| format!("Invalid URL: {}", e))?,
-        ),
-    )
-    .title(window_title)
-    .inner_size(1232.0, 800.0)
-    .min_inner_size(800.0, 600.0);
-
-    #[cfg(not(target_os = "windows"))]
-    let builder = builder.transparent(true);
-
-    #[cfg(target_os = "macos")]
-    let builder = builder
-        .title_bar_style(tauri::TitleBarStyle::Overlay)
-        .hidden_title(true);
-
-    #[cfg(target_os = "linux")]
-    let builder = builder.background_color(tauri::window::Color(0x1a, 0x1a, 0x2e, 0xff));
-
-    let window = builder.build().map_err(|e| e.to_string())?;
-
-    #[cfg(target_os = "macos")]
-    {
-        let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
-        inject_titlebar(window.clone());
-    }
-
-    apply_settings_to_window(&app, &window);
-    maybe_open_devtools(&app, &window);
-
-    Ok(())
-}
-
-/// Reset config to defaults
-#[tauri::command]
-fn reset_config(state: tauri::State<ConfigState>) -> Result<(), String> {
-    let mut config = state.config.write().unwrap();
-    *config = AppConfig::default();
-    save_config(&config)?;
-    *state.config_initialized.write().unwrap() = true;
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
-fn inject_titlebar(window: WebviewWindow) {
-    let script = TITLEBAR_SCRIPT.to_string();
-    tauri::async_runtime::spawn(async move {
-        // Keep trying for a few seconds to survive navigations and slow loads
-        let delays = [0u64, 200, 600, 1200, 2000, 4000, 6000, 8000, 10000];
-        for delay in delays {
-            if delay > 0 {
-                sleep(Duration::from_millis(delay)).await;
-            }
-            let _ = window.eval(&script);
-        }
-    });
-}
-
-/// Start dragging the window
-#[tauri::command]
-async fn start_drag_window(window: tauri::Window) -> Result<(), String> {
-    window.start_dragging().map_err(|e| e.to_string())
-}
-
-// ============================================================================
-// Window Settings
-// ============================================================================
-
-fn find_check_menu_item(
-    app: &AppHandle,
-    id: &str,
-) -> Option<CheckMenuItem<tauri::Wry>> {
-    let menu = app.menu()?;
-    for item in menu.items().ok()? {
-        if let Some(submenu) = item.as_submenu() {
-            for sub_item in submenu.items().ok()? {
-                if let Some(check) = sub_item.as_check_menuitem() {
-                    if check.id().as_ref() == id {
-                        return Some(check.clone());
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-fn apply_settings_to_window(app: &AppHandle, window: &tauri::WebviewWindow) {
-    let state = app.state::<ConfigState>();
-    let config = state.config.read().unwrap();
-
-    let _ = window.set_title(&config.window_title);
-
-    // Menu-bar visibility and window decorations are only configurable off macOS.
-    if cfg!(target_os = "macos") {
-        return;
-    }
-    if !config.show_menu_bar {
-        let _ = window.hide_menu();
-    }
-    #[cfg(target_os = "linux")]
-    if config.hide_window_decorations {
-        let _ = window.set_decorations(false);
-    }
-}
-
-fn handle_menu_bar_toggle(app: &AppHandle) {
-    if cfg!(target_os = "macos") {
-        return;
-    }
-    let state = app.state::<ConfigState>();
-    let show = {
-        let mut config = state.config.write().unwrap();
-        config.show_menu_bar = !config.show_menu_bar;
-        let _ = save_config(&config);
-        config.show_menu_bar
-    };
-
-    for (_, window) in app.webview_windows() {
-        if show {
-            let _ = window.show_menu();
-        } else {
-            let _ = window.hide_menu();
-        }
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn handle_decorations_toggle(app: &AppHandle) {
-    let state = app.state::<ConfigState>();
-    let hide = {
-        let mut config = state.config.write().unwrap();
-        config.hide_window_decorations = !config.hide_window_decorations;
-        let _ = save_config(&config);
-        config.hide_window_decorations
-    };
-
-    for (_, window) in app.webview_windows() {
-        let _ = window.set_decorations(!hide);
-    }
-}
-
-#[tauri::command]
-fn toggle_menu_bar(app: AppHandle) {
-    if cfg!(target_os = "macos") {
-        return;
-    }
-    handle_menu_bar_toggle(&app);
-
-    let state = app.state::<ConfigState>();
-    let checked = state.config.read().unwrap().show_menu_bar;
-    if let Some(check) = find_check_menu_item(&app, MENU_SHOW_MENU_BAR_ID) {
-        let _ = check.set_checked(checked);
-    }
-}
-
-// ============================================================================
-// Menu Setup
-// ============================================================================
-
-fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
-    let menu = app.menu().unwrap_or(Menu::default(app)?);
-
-    let new_chat_item = MenuItem::with_id(app, "new_chat", "New Chat", true, Some("CmdOrCtrl+N"))?;
-    let new_window_item = MenuItem::with_id(
-        app,
-        "new_window",
-        "New Window",
-        true,
-        Some("CmdOrCtrl+Shift+N"),
-    )?;
-    let settings_item = MenuItem::with_id(
-        app,
-        "open_settings",
-        "Settings...",
-        true,
-        Some("CmdOrCtrl+Comma"),
-    )?;
-    let docs_item = MenuItem::with_id(app, "open_docs", "Onyx Documentation", true, None::<&str>)?;
-
-    if let Some(file_menu) = menu
-        .items()?
-        .into_iter()
-        .filter_map(|item| item.as_submenu().cloned())
-        .find(|submenu| submenu.text().ok().as_deref() == Some("File"))
-    {
-        file_menu.insert_items(&[&new_chat_item, &new_window_item, &settings_item], 0)?;
-    } else {
-        let file_menu = SubmenuBuilder::new(app, "File")
-            .items(&[
-                &new_chat_item,
-                &new_window_item,
-                &settings_item,
-                &PredefinedMenuItem::close_window(app, None)?,
-            ])
-            .build()?;
-        menu.prepend(&file_menu)?;
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let config = app.state::<ConfigState>();
-        let config_guard = config.config.read().unwrap();
-
-        let show_menu_bar_item = CheckMenuItem::with_id(
-            app,
-            MENU_SHOW_MENU_BAR_ID,
-            "Show Menu Bar",
-            true,
-            config_guard.show_menu_bar,
-            None::<&str>,
-        )?;
-
-        #[cfg(target_os = "linux")]
-        let hide_decorations_item = CheckMenuItem::with_id(
-            app,
-            MENU_HIDE_DECORATIONS_ID,
-            "Hide Window Decorations",
-            true,
-            config_guard.hide_window_decorations,
-            None::<&str>,
-        )?;
-
-        drop(config_guard);
-
-        if let Some(window_menu) = menu
-            .items()?
-            .into_iter()
-            .filter_map(|item| item.as_submenu().cloned())
-            .find(|submenu| submenu.text().ok().as_deref() == Some("Window"))
-        {
-            window_menu.append(&show_menu_bar_item)?;
-            #[cfg(target_os = "linux")]
-            window_menu.append(&hide_decorations_item)?;
-        } else {
-            #[allow(unused_mut)]
-            let mut window_menu_builder =
-                SubmenuBuilder::new(app, "Window").item(&show_menu_bar_item);
-            #[cfg(target_os = "linux")]
-            {
-                window_menu_builder = window_menu_builder.item(&hide_decorations_item);
-            }
-            let window_menu = window_menu_builder.build()?;
-
-            let items = menu.items()?;
-            let help_idx = items
-                .iter()
-                .position(|item| {
-                    item.as_submenu()
-                        .and_then(|s| s.text().ok())
-                        .as_deref()
-                        == Some("Help")
-                })
-                .unwrap_or(items.len());
-            menu.insert(&window_menu, help_idx)?;
-        }
-    }
-
-    if let Some(help_menu) = menu
-        .get(HELP_SUBMENU_ID)
-        .and_then(|item| item.as_submenu().cloned())
-    {
-        help_menu.append(&docs_item)?;
-    } else {
-        let help_menu = SubmenuBuilder::with_id(app, HELP_SUBMENU_ID, "Help")
-            .item(&docs_item)
-            .build()?;
-        menu.append(&help_menu)?;
-    }
-
-    let state = app.state::<ConfigState>();
-    if state.debug_mode {
-        let toggle_devtools_item = MenuItem::with_id(
-            app,
-            MENU_TOGGLE_DEVTOOLS_ID,
-            "Toggle DevTools",
-            true,
-            Some("F12"),
-        )?;
-        let open_log_item = MenuItem::with_id(
-            app,
-            MENU_OPEN_DEBUG_LOG_ID,
-            "Open Debug Log",
-            true,
-            None::<&str>,
-        )?;
-
-        let debug_menu = SubmenuBuilder::new(app, "Debug")
-            .item(&toggle_devtools_item)
-            .item(&open_log_item)
-            .build()?;
-        menu.append(&debug_menu)?;
-    }
-
-    app.set_menu(menu)?;
-    Ok(())
-}
-
-fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
-    let open_app = MenuItem::with_id(app, TRAY_MENU_OPEN_APP_ID, "Open Onyx", true, None::<&str>)?;
-    let open_chat = MenuItem::with_id(
-        app,
-        TRAY_MENU_OPEN_CHAT_ID,
-        "Open Chat Window",
-        true,
-        None::<&str>,
-    )?;
-    let show_in_menu_bar = CheckMenuItem::with_id(
-        app,
-        TRAY_MENU_SHOW_IN_BAR_ID,
-        "Show in Menu Bar",
-        true,
-        true,
-        None::<&str>,
-    )?;
-    // Keep it visible/pinned without letting users uncheck (avoids orphaning the tray)
-    let _ = show_in_menu_bar.set_enabled(false);
-    let quit = PredefinedMenuItem::quit(app, Some("Quit Onyx"))?;
-
-    MenuBuilder::new(app)
-        .item(&open_app)
-        .item(&open_chat)
-        .separator()
-        .item(&show_in_menu_bar)
-        .separator()
-        .item(&quit)
-        .build()
-}
-
-fn handle_tray_menu_event(app: &AppHandle, id: &str) {
-    match id {
-        TRAY_MENU_OPEN_APP_ID => {
-            focus_main_window(app);
-        }
-        TRAY_MENU_OPEN_CHAT_ID => {
-            focus_main_window(app);
-            trigger_new_chat(app);
-        }
-        TRAY_MENU_QUIT_ID => {
-            app.exit(0);
-        }
-        TRAY_MENU_SHOW_IN_BAR_ID => {
-            // No-op for now; the item stays checked/disabled to indicate it's pinned.
-        }
-        _ => {}
-    }
-}
-
-fn setup_tray_icon(app: &AppHandle) -> tauri::Result<()> {
-    let mut builder = TrayIconBuilder::with_id(TRAY_ID).tooltip("Onyx");
-
-    let tray_icon = Image::from_bytes(TRAY_ICON_BYTES)
-        .ok()
-        .or_else(|| app.default_window_icon().cloned());
-
-    if let Some(icon) = tray_icon {
-        builder = builder.icon(icon);
-
-        #[cfg(target_os = "macos")]
-        {
-            builder = builder.icon_as_template(true);
-        }
-    }
-
-    if let Ok(menu) = build_tray_menu(app) {
-        builder = builder.menu(&menu);
-    }
-
-    builder
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { .. } = event {
-                focus_main_window(tray.app_handle());
-            }
-        })
-        .on_menu_event(|app, event| handle_tray_menu_event(app, event.id().as_ref()))
-        .build(app)?;
-
-    Ok(())
-}
-
-// ============================================================================
-// Version
-// ============================================================================
 
 #[derive(Deserialize)]
 struct VersionResponse {
     backend_version: String,
-}
-
-/// Whether the process was launched with `--version` / `-v`.
-fn wants_version() -> bool {
-    std::env::args().any(|arg| arg == "--version" || arg == "-v")
 }
 
 /// Fetch the backend version from the configured server's public `/api/version`
@@ -1235,8 +60,7 @@ fn fetch_server_version(server_url: &str) -> Result<Option<String>, String> {
             .error_for_status()
             .map_err(|e| e.to_string())?;
         let text = resp.text().await.map_err(|e| e.to_string())?;
-        let body: VersionResponse =
-            serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        let body: VersionResponse = serde_json::from_str(&text).map_err(|e| e.to_string())?;
         if body.backend_version.trim().is_empty() {
             Ok(None)
         } else {
@@ -1247,16 +71,19 @@ fn fetch_server_version(server_url: &str) -> Result<Option<String>, String> {
 
 /// Print client and (if reachable) server version, mirroring the CLI's
 /// `--version` output.
+// This is the actual implementation of `--version` -- printing to stdout is
+// the point.
+#[allow(clippy::print_stdout)]
 fn print_version_info() {
     println!("Client version: {}", env!("CARGO_PKG_VERSION"));
 
-    let (config, _) = load_config();
+    let (config, _) = config::load_config();
     let server_url = config.server_url;
 
     match fetch_server_version(&server_url) {
-        Ok(Some(version)) => println!("Server version: {}", version),
-        Ok(None) => println!("Server version: unknown (empty response from {})", server_url),
-        Err(_) => println!("Server version: unknown (could not fetch from {})", server_url),
+        Ok(Some(version)) => println!("Server version: {version}"),
+        Ok(None) => println!("Server version: unknown (empty response from {server_url})"),
+        Err(_) => println!("Server version: unknown (could not fetch from {server_url})"),
     }
 }
 
@@ -1264,27 +91,84 @@ fn print_version_info() {
 // Main
 // ============================================================================
 
+// Printed before the app (and thus `log_backend_error`'s `AppHandle`) exists,
+// so this can't go through the usual logging path.
+#[allow(clippy::print_stderr)]
+fn print_debug_startup_banner() {
+    eprintln!("[ONYX DEBUG] Debug mode enabled");
+    if let Some(path) = debug_log::get_debug_log_path() {
+        eprintln!("[ONYX DEBUG] Frontend logs: {}", path.display());
+    }
+    eprintln!("[ONYX DEBUG] DevTools will open automatically");
+    eprintln!("[ONYX DEBUG] Capturing console.log/warn/error/info/debug from webview");
+}
+
+/// Everything that runs once the Tauri app is up: menu/tray, the main
+/// window's platform tweaks, and Alt-menu/devtools wiring. Every failure here
+/// is logged and non-fatal, so this never needs to return a `Result`.
+fn setup_app(app: &tauri::AppHandle) {
+    if let Err(e) = menu::setup_app_menu(app) {
+        debug_log::log_backend_error(app, &format!("Failed to setup menu: {e}"));
+    }
+
+    if let Err(e) = menu::setup_tray_icon(app) {
+        debug_log::log_backend_error(app, &format!("Failed to setup tray icon: {e}"));
+    }
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    #[cfg(target_os = "macos")]
+    if let Err(e) = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None) {
+        debug_log::log_backend_error(app, &format!("Failed to apply vibrancy effect: {e}"));
+    }
+
+    if let Ok(url) = window.url() {
+        let mut base_url = url;
+        base_url.set_query(None);
+        base_url.set_fragment(None);
+        base_url.set_path("/");
+        app.state::<ConfigState>().set_app_base_url(Some(base_url));
+    }
+
+    #[cfg(target_os = "macos")]
+    window::inject_titlebar(window.clone());
+
+    window::apply_settings_to_window(app, &window);
+
+    #[cfg(target_os = "linux")]
+    alt_menu::setup_alt_menu_toggle(app, &window);
+
+    debug_log::maybe_open_devtools(app, &window);
+
+    if let Err(e) = window.set_focus() {
+        debug_log::log_backend_error(app, &format!("Failed to focus main window: {e}"));
+    }
+}
+
 fn main() {
-    if wants_version() {
+    let cli = Cli::parse();
+
+    if cli.version {
         print_version_info();
         return;
     }
 
-    let (config, config_initialized) = load_config();
-    let debug_mode = is_debug_mode();
+    let (app_config, config_initialized) = config::load_config();
+    let debug_mode = debug_log::is_debug_mode(cli.debug);
 
     let debug_log_file = if debug_mode {
-        eprintln!("[ONYX DEBUG] Debug mode enabled");
-        if let Some(path) = get_debug_log_path() {
-            eprintln!("[ONYX DEBUG] Frontend logs: {}", path.display());
-        }
-        eprintln!("[ONYX DEBUG] DevTools will open automatically");
-        eprintln!("[ONYX DEBUG] Capturing console.log/warn/error/info/debug from webview");
-        init_debug_log_file()
+        print_debug_startup_banner();
+        debug_log::init_debug_log_file()
     } else {
         None
     };
 
+    // Fatal: if the Tauri runtime can't start there's nothing else to do.
+    // `tauri::generate_context!()` also expands to code that calls
+    // `std::process::exit` internally on some platforms.
+    #[allow(clippy::expect_used, clippy::exit)]
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(
@@ -1294,11 +178,13 @@ fn main() {
                         return true;
                     };
 
-                    if should_open_in_external_browser(&current_url, destination_url) {
-                        if !open_in_default_browser(destination_url.as_str()) {
-                            eprintln!(
-                                "Failed to open external URL in default browser: {}",
-                                destination_url
+                    if window::should_open_in_external_browser(&current_url, destination_url) {
+                        if !window::open_in_default_browser(destination_url.as_str()) {
+                            debug_log::log_backend_error(
+                                webview.app_handle(),
+                                &format!(
+                                    "Failed to open external URL in default browser: {destination_url}"
+                                ),
                             );
                         }
                         return false;
@@ -1309,106 +195,59 @@ fn main() {
                 .build(),
         )
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .manage(ConfigState {
-            config: RwLock::new(config),
-            config_initialized: RwLock::new(config_initialized),
-            app_base_url: RwLock::new(None),
+        .manage(ConfigState::new(
+            app_config,
+            config_initialized,
             debug_mode,
-            debug_log_file: Mutex::new(debug_log_file),
-        })
+            debug_log_file,
+        ))
         .invoke_handler(tauri::generate_handler![
-            get_server_url,
-            get_bootstrap_state,
-            set_server_url,
-            get_config_path_cmd,
-            check_server_reachable,
-            open_in_browser,
-            open_config_file,
-            open_config_directory,
-            navigate_to,
-            reload_page,
-            go_back,
-            go_forward,
-            new_window,
-            reset_config,
-            start_drag_window,
-            toggle_menu_bar,
-            log_from_frontend
+            commands::get_server_url,
+            commands::get_bootstrap_state,
+            commands::set_server_url,
+            commands::get_config_path_cmd,
+            commands::check_server_reachable,
+            commands::open_in_browser,
+            commands::open_config_file,
+            commands::open_config_directory,
+            commands::navigate_to,
+            commands::reload_page,
+            commands::go_back,
+            commands::go_forward,
+            commands::new_window,
+            commands::reset_config,
+            commands::start_drag_window,
+            commands::toggle_menu_bar,
+            debug_log::log_from_frontend
         ])
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "open_docs" => open_docs(),
-            "new_chat" => trigger_new_chat(app),
-            "new_window" => trigger_new_window(app),
-            "open_settings" => open_settings(app),
-            "show_menu_bar" => handle_menu_bar_toggle(app),
+            menu::MENU_OPEN_DOCS_ID => window::open_docs(app),
+            menu::MENU_NEW_CHAT_ID => window::trigger_new_chat(app),
+            menu::MENU_NEW_WINDOW_ID => window::trigger_new_window(app),
+            menu::MENU_OPEN_SETTINGS_ID => window::open_settings(app),
+            menu::MENU_SHOW_MENU_BAR_ID => menu::handle_menu_bar_toggle(app),
             #[cfg(target_os = "linux")]
-            "hide_window_decorations" => handle_decorations_toggle(app),
-            MENU_TOGGLE_DEVTOOLS_ID => handle_toggle_devtools(app),
-            MENU_OPEN_DEBUG_LOG_ID => handle_open_debug_log(),
+            menu::MENU_HIDE_DECORATIONS_ID => menu::handle_decorations_toggle(app),
+            debug_log::MENU_TOGGLE_DEVTOOLS_ID => debug_log::handle_toggle_devtools(app),
+            debug_log::MENU_OPEN_DEBUG_LOG_ID => debug_log::handle_open_debug_log(),
             _ => {}
         })
-        .setup(move |app| {
-            let app_handle = app.handle();
-
-            if let Err(e) = setup_app_menu(&app_handle) {
-                eprintln!("Failed to setup menu: {}", e);
-            }
-
-            if let Err(e) = setup_tray_icon(&app_handle) {
-                eprintln!("Failed to setup tray icon: {}", e);
-            }
-
-            // Setup main window with vibrancy effect
-            if let Some(window) = app.get_webview_window("main") {
-                // Apply vibrancy effect for translucent glass look
-                #[cfg(target_os = "macos")]
-                {
-                    let _ = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None);
-                }
-
-                if let Ok(url) = window.url() {
-                    let mut base_url = url;
-                    base_url.set_query(None);
-                    base_url.set_fragment(None);
-                    base_url.set_path("/");
-                    *app.state::<ConfigState>().app_base_url.write().unwrap() = Some(base_url);
-                }
-
-                #[cfg(target_os = "macos")]
-                inject_titlebar(window.clone());
-
-                apply_settings_to_window(&app_handle, &window);
-                maybe_open_devtools(&app_handle, &window);
-
-                let _ = window.set_focus();
-            }
-
+        .setup(|app| {
+            setup_app(&app.handle().clone());
             Ok(())
         })
         .on_page_load(|webview: &Webview, _payload: &PageLoadPayload| {
-            inject_chat_link_intercept(webview);
+            window::inject_chat_link_intercept(webview);
 
-            {
-                let app = webview.app_handle();
-                let state = app.state::<ConfigState>();
-                if state.debug_mode {
-                    inject_console_capture(webview);
-                }
-            }
-
-            #[cfg(not(target_os = "macos"))]
-            {
-                let _ = webview.eval(MENU_KEY_HANDLER_SCRIPT);
-
-                let app = webview.app_handle();
-                let label = webview.label().to_string();
-                if let Some(win) = app.get_webview_window(&label) {
-                    apply_settings_to_window(&app, &win);
-                }
+            if webview.app_handle().state::<ConfigState>().debug_mode {
+                debug_log::inject_console_capture(webview);
             }
 
             #[cfg(target_os = "macos")]
-            let _ = webview.eval(TITLEBAR_SCRIPT);
+            window::eval_titlebar_script(webview);
+
+            #[cfg(target_os = "windows")]
+            alt_menu::inject_alt_menu_script(webview);
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

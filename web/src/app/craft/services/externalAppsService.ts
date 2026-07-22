@@ -55,7 +55,7 @@ interface CreateCustomExternalAppInput {
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
-  /** Required — the skill bundle whose filename becomes the app slug. */
+  /** Required skill bundle; its SKILL.md defines the linked skill name. */
   bundle: File;
 }
 
@@ -94,7 +94,7 @@ export async function createCustomExternalApp(
 }
 
 /**
- * Replace a custom app's bundle bytes, keeping its slug
+ * Replace a custom app's bundle bytes, keeping its skill name
  * (`PUT /admin/apps/{id}/bundle`). The only multipart channel for edits; all
  * other field edits go through {@link updateExternalApp}.
  */

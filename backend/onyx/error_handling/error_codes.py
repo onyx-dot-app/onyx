@@ -67,6 +67,7 @@ class OnyxErrorCode(Enum):
     # --------------------------------------------------------------------------
     CONFLICT = ("CONFLICT", 409)
     DUPLICATE_RESOURCE = ("DUPLICATE_RESOURCE", 409)
+    SKILL_NAME_CONFLICT = ("SKILL_NAME_CONFLICT", 409)
 
     # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)

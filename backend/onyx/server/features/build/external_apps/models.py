@@ -17,7 +17,7 @@ class CreateBuiltInExternalAppRequest(BaseModel):
     transaction). ``upstream_url_patterns`` is a list of regex patterns matched
     by the egress proxy against outbound request URLs.
 
-    Skill identity (slug, bundle bytes, sharing scope) is derived server-side
+    Skill identity (name, bundle bytes, sharing scope) is derived server-side
     from ``app_type``; admins don't supply it. New apps are enabled by default.
     """
 

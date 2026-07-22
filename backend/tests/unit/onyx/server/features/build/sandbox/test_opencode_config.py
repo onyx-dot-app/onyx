@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import (
+    CraftMCPServerConfig,
+    LLMProviderConfig,
+)
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
 )
@@ -240,3 +243,60 @@ def test_plugins_are_emitted_when_provided() -> None:
         plugins=["/workspace/opencode-plugins/session-proxy-tag.ts"],
     )
     assert config["plugin"] == ["/workspace/opencode-plugins/session-proxy-tag.ts"]
+
+
+def _mcp(
+    key: str,
+    url: str = "https://mcp.example.com/mcp",
+    disabled_tools: tuple[str, ...] = (),
+) -> CraftMCPServerConfig:
+    return CraftMCPServerConfig(key=key, url=url, disabled_tools=disabled_tools)
+
+
+def test_no_mcp_servers_omits_mcp_key() -> None:
+    config = build_multi_provider_opencode_config(
+        providers=[_cfg("anthropic", "claude-opus-4-7")],
+        default_provider="anthropic",
+        default_model="claude-opus-4-7",
+    )
+    assert "mcp" not in config
+
+
+def test_mcp_servers_emit_remote_entries_without_headers() -> None:
+    config = build_multi_provider_opencode_config(
+        providers=[_cfg("anthropic", "claude-opus-4-7")],
+        default_provider="anthropic",
+        default_model="claude-opus-4-7",
+        mcp_servers=[_mcp("linear-7", url="https://mcp.linear.app/mcp")],
+    )
+    assert config["mcp"] == {
+        "linear-7": {
+            "type": "remote",
+            "url": "https://mcp.linear.app/mcp",
+            "enabled": True,
+        }
+    }
+
+
+def test_mcp_tool_curation_maps_to_wildcard_allow_and_deny_permissions() -> None:
+    config = build_multi_provider_opencode_config(
+        providers=[_cfg("anthropic", "claude-opus-4-7")],
+        default_provider="anthropic",
+        default_model="claude-opus-4-7",
+        mcp_servers=[_mcp("linear-7", disabled_tools=("delete_issue",))],
+    )
+    permission = config["permission"]
+    assert permission["linear-7_*"] == "allow"
+    assert permission["linear-7_delete_issue"] == "deny"
+
+
+def test_uncurated_mcp_server_still_gets_wildcard_allow() -> None:
+    # Zero Tool rows: the wildcard must still allow so runtime-discovered tools
+    # don't fall through to opencode's default "ask".
+    config = build_multi_provider_opencode_config(
+        providers=[_cfg("anthropic", "claude-opus-4-7")],
+        default_provider="anthropic",
+        default_model="claude-opus-4-7",
+        mcp_servers=[_mcp("linear-7")],
+    )
+    assert config["permission"]["linear-7_*"] == "allow"

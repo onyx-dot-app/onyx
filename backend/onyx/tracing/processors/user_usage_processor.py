@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.user_usage import record_user_usage
+from onyx.db.user_usage import USER_USAGE_BUCKET_SECONDS, record_user_usage
 from onyx.llm.cost import compute_cost_cents
 from onyx.tracing.flows import IMAGE_FLOWS
 from onyx.tracing.framework.processor_interface import TracingProcessor
@@ -22,7 +22,6 @@ from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
 from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
     get_current_tenant_id,
@@ -131,7 +130,7 @@ class UserUsageTracingProcessor(TracingProcessor):
         provider = model_config.get("model_provider")
 
         window_start = get_window_start(
-            datetime.now(timezone.utc), period_seconds=USAGE_LIMIT_WINDOW_SECONDS
+            datetime.now(timezone.utc), period_seconds=USER_USAGE_BUCKET_SECONDS
         )
 
         return _UsageRecord(

@@ -22,11 +22,12 @@ from onyx.db.token_limit import (
     fetch_user_group_token_rate_limits,
 )
 from onyx.db.user_usage import (
+    get_cost_window_start,
     get_group_cost_cents_buckets_since,
     get_total_cost_cents_buckets_since,
     get_usage_export,
     get_user_cost_cents_buckets_since,
-    get_user_cost_cents_in_window,
+    get_user_cost_cents_since,
     get_user_usage_by_day_and_model,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -55,9 +56,6 @@ from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 # Default trailing range for the export when no start is given.
 _DEFAULT_EXPORT_DAYS = 30
 
-# Ledger grid; relax cutoff like cost gate so UI matches enforcement.
-_LEDGER_GRID = timedelta(seconds=USAGE_LIMIT_WINDOW_SECONDS)
-
 
 def _used_from_buckets(
     buckets: list[tuple[datetime, float]], cutoff: datetime
@@ -77,7 +75,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
-            cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
+            cutoff = get_cost_window_start(now, rl.period_hours)
             used = _used_from_buckets(buckets, cutoff)
             candidates.append(
                 EffectiveCostBudget(
@@ -91,7 +89,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
     user_cost_rls = [rl for rl in user_rls if rl.cost_budget_cents is not None]
     if user_cost_rls:
         broadest = max(rl.period_hours for rl in user_cost_rls)
-        fetch_cutoff = now - timedelta(hours=broadest) - _LEDGER_GRID
+        fetch_cutoff = get_cost_window_start(now, broadest)
         _add_from_limits(
             user_cost_rls,
             get_user_cost_cents_buckets_since(db_session, user_id, fetch_cutoff),
@@ -101,7 +99,7 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
     global_cost_rls = [rl for rl in global_rls if rl.cost_budget_cents is not None]
     if global_cost_rls:
         broadest = max(rl.period_hours for rl in global_cost_rls)
-        fetch_cutoff = now - timedelta(hours=broadest) - _LEDGER_GRID
+        fetch_cutoff = get_cost_window_start(now, broadest)
         _add_from_limits(
             global_cost_rls,
             get_total_cost_cents_buckets_since(db_session, fetch_cutoff),
@@ -141,7 +139,7 @@ def _group_cost_budget_candidate(
 
     # One batched query for every group's cost buckets, then window in Python.
     broadest = max(rl.period_hours for rl in cost_rls)
-    fetch_cutoff = now - timedelta(hours=broadest) - _LEDGER_GRID
+    fetch_cutoff = get_cost_window_start(now, broadest)
     buckets = get_group_cost_cents_buckets_since(
         db_session, list(group_limits.keys()), fetch_cutoff
     )
@@ -153,7 +151,7 @@ def _group_cost_budget_candidate(
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
-            cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
+            cutoff = get_cost_window_start(now, rl.period_hours)
             used = _used_from_buckets(group_buckets, cutoff)
             remaining = rl.cost_budget_cents - used
             if group_binding is None or remaining < group_binding.remaining_cents:
@@ -196,7 +194,7 @@ def get_my_usage(
     per_day = get_user_usage_by_day_and_model(
         db_session, user_id, since=since, until=now
     )
-    window_cost_cents = get_user_cost_cents_in_window(db_session, user_id, window_start)
+    window_cost_cents = get_user_cost_cents_since(db_session, user_id, window_start)
 
     # Price tenant default chat model (no per-user model selection yet).
     default_model = fetch_default_llm_model(db_session)
@@ -235,7 +233,7 @@ def export_usage(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UsageExportResponse:
-    """Company-wide usage export by email; day = window start, not call calendar day."""
+    """Company-wide daily usage export by email."""
     end_date = end or datetime.now(timezone.utc).date()
     start_date = start or (end_date - timedelta(days=_DEFAULT_EXPORT_DAYS))
     if start_date > end_date:

@@ -21,6 +21,7 @@ from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError
 from sqlalchemy.orm import Session
 
 from onyx.auth.oidc_client import VerifiedEmailOpenID
+from onyx.auth.sso_web_error import redirect_sso_errors_to_web
 from onyx.auth.users import (
     CSRF_TOKEN_COOKIE_NAME,
     CSRF_TOKEN_KEY,
@@ -285,6 +286,7 @@ async def oidc_login_callback(
 
 
 @router.get("/{provider_name}/callback")
+@redirect_sso_errors_to_web
 async def oidc_login_callback_for_provider(
     provider_name: str,
     request: Request,
@@ -350,8 +352,6 @@ async def oidc_login_callback_for_provider(
         associate_by_email=_ALLOW_AUTO_LINK,
         is_verified_by_default=True,
         allowed_email_domains_override=provider.allowed_email_domains,
-        # Provider rows delegate membership to the IdP.
-        sso_managed=True,
     )
 
     if OIDC_PKCE_ENABLED:

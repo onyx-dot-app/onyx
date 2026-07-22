@@ -245,7 +245,7 @@ def test_restore_re_pushes_skills(
 
     skill = SkillManager.create_custom(
         k8s_admin_user,
-        slug=f"restore-repush-{uuid4().hex[:6]}",
+        name=f"restore-repush-{uuid4().hex[:6]}",
         is_public=True,
     )
     try:
@@ -278,7 +278,7 @@ def test_restore_re_pushes_skills(
             k8s_client,
             pod_name,
             SANDBOX_NAMESPACE,
-            f"ls -1 /workspace/managed/skills/{skill.slug}/",
+            f"ls -1 /workspace/managed/skills/{skill.name}/",
         )
         assert "SKILL.md" in listing, (
             f"API restore should rehydrate skills after snapshot restore. Got: {listing}"
@@ -288,7 +288,7 @@ def test_restore_re_pushes_skills(
             k8s_client,
             pod_name,
             SANDBOX_NAMESPACE,
-            f"ls -1 /workspace/sessions/{session_id}/.opencode/skills/{skill.slug}/",
+            f"ls -1 /workspace/sessions/{session_id}/.opencode/skills/{skill.name}/",
         )
         assert "SKILL.md" in resolved
     finally:

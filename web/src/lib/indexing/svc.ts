@@ -5,7 +5,7 @@ import {
   EmbeddingProviderName,
   SavedSearchSettings,
   SwitchoverType,
-} from "@/lib/indexing/interfaces";
+} from "@/lib/indexing/types";
 import { isCloudBased } from "@/lib/indexing";
 
 interface TestEmbeddingArgs {

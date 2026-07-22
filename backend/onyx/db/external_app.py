@@ -6,14 +6,17 @@ from sqlalchemy import and_, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType, SkillSharePermission
-from onyx.db.models import (
-    ExternalApp,
-    ExternalAppPolicy,
-    ExternalAppUserCredential,
-    Skill,
-    User,
+from onyx.db.enums import (
+    EndpointPolicy,
+    ExternalAppType,
+    GatedAppKind,
+    SkillSharePermission,
 )
+from onyx.db.gated_app import (
+    get_or_create_gated_app_id,
+    replace_action_policies__no_commit,
+)
+from onyx.db.models import ExternalApp, ExternalAppUserCredential, Skill, User
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -124,10 +127,7 @@ def get_external_app_by_id(
 ) -> ExternalApp | None:
     stmt = (
         select(ExternalApp)
-        .options(
-            selectinload(ExternalApp.skill),
-            selectinload(ExternalApp.policies),
-        )
+        .options(selectinload(ExternalApp.skill))
         .where(ExternalApp.id == external_app_id)
     )
     return db_session.scalar(stmt)
@@ -139,7 +139,7 @@ def get_external_app_by_skill_id(
 ) -> ExternalApp | None:
     """The external-app gateway backing ``skill_id``, or None if the skill isn't
     an external app. Returns just the row — callers that need its policies fetch
-    them via ``get_policies``."""
+    them via ``get_action_policies``."""
     stmt = select(ExternalApp).where(ExternalApp.skill_id == skill_id)
     return db_session.scalar(stmt)
 
@@ -201,10 +201,7 @@ def get_external_apps(
 ) -> list[ExternalApp]:
     stmt = (
         select(ExternalApp)
-        .options(
-            selectinload(ExternalApp.skill),
-            selectinload(ExternalApp.policies),
-        )
+        .options(selectinload(ExternalApp.skill))
         .order_by(ExternalApp.id)
     )
     if enabled_only:
@@ -218,10 +215,10 @@ def get_built_in_external_app(
 ) -> ExternalApp | None:
     """The tenant's built-in external app of the given type, or None.
 
-    Built-in apps are unique per type per tenant (enforced via the built-in
-    skill slug — see ``create_built_in_skill_row__no_commit``), so at most one
-    row matches. ``CUSTOM`` is rejected: it can repeat, so "the app of this
-    type" is meaningless — callers must pass a built-in type.
+    Built-in apps are unique per type per tenant (enforced when their backing
+    skill is created), so at most one row matches. ``CUSTOM`` is rejected: it
+    can repeat, so "the app of this type" is meaningless — callers must pass a
+    built-in type.
     """
     if not app_type.is_built_in:
         raise OnyxError(
@@ -231,10 +228,7 @@ def get_built_in_external_app(
         )
     stmt = (
         select(ExternalApp)
-        .options(
-            selectinload(ExternalApp.skill),
-            selectinload(ExternalApp.policies),
-        )
+        .options(selectinload(ExternalApp.skill))
         .where(ExternalApp.app_type == app_type)
     )
     return db_session.scalars(stmt).one_or_none()
@@ -279,24 +273,21 @@ def create_external_app(
     organization_credentials: dict[str, str],
     is_public: bool = False,
     author_user_id: UUID | None = None,
-    slug: str | None = None,
+    skill_name: str | None = None,
     action_policies: dict[str, EndpointPolicy] | None = None,
 ) -> ExternalApp:
     """Create the backing Skill row and the ExternalApp that references it (flush
     only — the caller commits after pushing, so a push failure rolls back). The
-    the linked skill currently owns display and bundle metadata; the external app
-    owns gateway state and availability.
+    linked skill owns bundle metadata and its canonical Agent Skills name; the
+    external app owns display metadata, gateway state, and availability.
 
     Built-in providers (``EXTERNAL_APP_BUILT_IN_SKILL_IDS``) get a built-in
-    skill row whose slug is the provider id, so slug uniqueness means one
-    instance per provider per tenant (duplicate raises ``DUPLICATE_RESOURCE``).
-    CUSTOM apps get a bundle-backed skill using ``slug``, or a generated
-    ``custom-<uuid>`` slug when omitted.
+    skill row whose name is the provider id. App-backed skill names remain
+    exclusive until app content is decoupled from skills, so a duplicate raises
+    ``DUPLICATE_RESOURCE``. CUSTOM apps get a bundle-backed skill using
+    ``skill_name``, or a generated ``custom-<uuid>`` name when omitted.
     """
-    from onyx.db.skill import (
-        create_built_in_skill_row__no_commit,
-        create_skill__no_commit,
-    )
+    from onyx.db.skill import add_new_skill__no_commit
 
     # No existing app to restore from on create, so a masked value is rejected.
     organization_credentials = resolve_masked_credentials(
@@ -305,39 +296,50 @@ def create_external_app(
 
     built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app_type)
     if built_in_skill_id is not None:
-        skill = create_built_in_skill_row__no_commit(
-            built_in_skill_id=built_in_skill_id,
-            name=name,
-            description=description,
-            public_permission=(SkillSharePermission.VIEWER if is_public else None),
-            author_user_id=author_user_id,
-            db_session=db_session,
+        skill = add_new_skill__no_commit(
+            Skill(
+                name=built_in_skill_id,
+                description=description,
+                built_in_skill_id=built_in_skill_id,
+                bundle_file_id=None,
+                bundle_sha256=None,
+                is_valid=True,
+                public_permission=(SkillSharePermission.VIEWER if is_public else None),
+                author_user_id=author_user_id,
+            ),
+            db_session,
+            is_external_app_backing=True,
         )
     else:
         # CUSTOM: use the bundle's canonical name supplied by ingestion, falling
-        # back to a generated slug when no bundle is supplied.
-        custom_slug = slug or f"{app_type.value.lower()}-{uuid4().hex[:8]}"
-        skill = create_skill__no_commit(
-            slug=custom_slug,
-            name=name,
-            description=description,
-            bundle_file_id=bundle_file_id,
-            bundle_sha256=bundle_sha256,
-            public_permission=(SkillSharePermission.VIEWER if is_public else None),
-            author_user_id=author_user_id,
-            db_session=db_session,
+        # back to a generated name when no bundle is supplied.
+        custom_skill_name = skill_name or f"{app_type.value.lower()}-{uuid4().hex[:8]}"
+        skill = add_new_skill__no_commit(
+            Skill(
+                name=custom_skill_name,
+                description=description,
+                bundle_file_id=bundle_file_id,
+                bundle_sha256=bundle_sha256,
+                is_valid=True,
+                public_permission=(SkillSharePermission.VIEWER if is_public else None),
+                author_user_id=author_user_id,
+            ),
+            db_session,
+            is_external_app_backing=True,
         )
     app = ExternalApp(
         skill_id=skill.id,
+        name=name,
         app_type=app_type,
         upstream_url_patterns=upstream_url_patterns,
         auth_template=auth_template,
         organization_credentials=organization_credentials,
     )
     db_session.add(app)
+    # Policies key off the gated_app identity row, which needs app.id.
+    db_session.flush()
     if action_policies is not None:
         _write_policies__no_commit(db_session, app, action_policies)
-    db_session.flush()
     return app
 
 
@@ -362,7 +364,7 @@ def update_external_app(
     Patch fields default to ``UNSET`` (left untouched); pass a value to set one.
     ``app_type`` is required and immutable — a mismatch raises, blocking
     cross-editing built-in vs custom. Passing ``new_bundle_file_id`` swaps the
-    bundle (slug unchanged) and returns the previous blob id for post-commit
+    bundle (skill name unchanged) and returns the previous blob id for post-commit
     cleanup, else ``None``.
 
     Raises ``OnyxError(NOT_FOUND)`` if absent, or ``INVALID_INPUT`` on app_type
@@ -387,12 +389,12 @@ def update_external_app(
     if is_set(enabled):
         app.enabled = enabled
     if is_set(name):
-        app.skill.name = name
+        app.name = name
     if is_set(description):
         app.skill.description = description
     old_bundle_file_id: str | None = None
     if new_bundle_file_id is not None:
-        # Keep the slug; only the bundle bytes change.
+        # Keep the skill name; only the bundle bytes change.
         old_bundle_file_id = app.skill.bundle_file_id
         app.skill.bundle_file_id = new_bundle_file_id
         app.skill.bundle_sha256 = new_bundle_sha256
@@ -431,38 +433,19 @@ def set_external_app_organization_credentials(
     db_session.flush()
 
 
-def get_policies(
-    db_session: Session,
-    external_app_id: int,
-) -> dict[str, EndpointPolicy]:
-    """Return the app's stored per-action policy overrides as
-    ``{action_id: policy}``. Sparse — only actions the admin has set."""
-    rows = db_session.scalars(
-        select(ExternalAppPolicy).where(
-            ExternalAppPolicy.external_app_id == external_app_id
-        )
-    ).all()
-    return {row.action_id: row.policy for row in rows}
-
-
 def _write_policies__no_commit(
     db_session: Session,
     app: ExternalApp,
     policies: dict[str, EndpointPolicy],
 ) -> None:
-    """Replace ``app``'s per-action policy rows with exactly ``policies``.
-
-    Clears the existing rows and flushes the DELETEs before inserting the new
-    set. The flush is required: within a single flush the ORM emits INSERTs
-    before DELETEs, so a re-inserted ``action_id`` would collide with its
-    not-yet-deleted row on the ``(external_app_id, action_id)`` unique
-    constraint. No commit — runs inside the caller's transaction. ``action_id``
-    validation is the caller's responsibility.
+    """Replace ``app``'s per-action policy rows with exactly ``policies``. No
+    commit — runs inside the caller's transaction. ``action_id`` validation is
+    the caller's responsibility.
     """
-    app.policies.clear()  # delete-orphan cascade deletes the rows on flush
-    db_session.flush()
-    for action_id, policy in policies.items():
-        app.policies.append(ExternalAppPolicy(action_id=action_id, policy=policy))
+    gated_app_id = get_or_create_gated_app_id(
+        db_session, GatedAppKind.EXTERNAL_APP, app.id
+    )
+    replace_action_policies__no_commit(db_session, gated_app_id, policies)
 
 
 def delete_external_app(

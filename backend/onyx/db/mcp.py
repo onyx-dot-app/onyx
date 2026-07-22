@@ -58,6 +58,18 @@ def get_mcp_servers_by_owner(owner_email: str, db_session: Session) -> list[MCPS
     )
 
 
+def get_craft_enabled_mcp_servers(
+    db_session: Session, user: User | None
+) -> list[MCPServer]:
+    """MCP servers an admin has made available to the Craft agent, filtered to
+    those ``user`` may use (public / shared / owned). ``None`` skips the access
+    filter — only for host matching before a user is known (proxy claim path)."""
+    stmt = select(MCPServer).where(MCPServer.available_in_craft.is_(True))
+    if user is not None:
+        stmt = _add_mcp_server_access_filter(stmt, user)
+    return list(db_session.scalars(stmt).all())
+
+
 def get_mcp_servers_for_persona(
     persona_id: int,
     db_session: Session,
@@ -205,6 +217,7 @@ def update_mcp_server__no_commit(
     status: MCPServerStatus | None = None,
     last_refreshed_at: datetime.datetime | None = None,
     is_public: bool | None = None,
+    available_in_craft: bool | None = None,
 ) -> MCPServer:
     """Update an existing MCP server"""
     server = get_mcp_server_by_id(server_id, db_session)
@@ -239,6 +252,8 @@ def update_mcp_server__no_commit(
         server.status = status
     if last_refreshed_at is not None:
         server.last_refreshed_at = last_refreshed_at
+    if available_in_craft is not None:
+        server.available_in_craft = available_in_craft
 
     db_session.flush()  # Don't commit yet, let caller decide when to commit
     return server
@@ -264,6 +279,15 @@ def get_all_mcp_tools_for_server(server_id: int, db_session: Session) -> list[To
     """Get all MCP tools for a server"""
     return list(
         db_session.scalars(select(Tool).where(Tool.mcp_server_id == server_id)).all()
+    )
+
+
+def get_mcp_tools_for_servers(server_ids: list[int], db_session: Session) -> list[Tool]:
+    """All MCP tools across ``server_ids`` in a single query"""
+    if not server_ids:
+        return []
+    return list(
+        db_session.scalars(select(Tool).where(Tool.mcp_server_id.in_(server_ids))).all()
     )
 
 

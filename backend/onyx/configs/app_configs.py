@@ -987,6 +987,12 @@ MAX_CONCURRENT_PORT_ATTEMPTS = max(
     1, _non_negative_int_env("MAX_CONCURRENT_PORT_ATTEMPTS", 2)
 )
 
+# User-file ports run on the 2-thread user-file worker and a running port can't be
+# preempted, so default 1 leaves a thread for live uploads.
+MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS = max(
+    1, _non_negative_int_env("MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS", 1)
+)
+
 _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
 try:
     env_value = os.environ.get("CELERY_WORKER_DOCFETCHING_CONCURRENCY")
@@ -1924,6 +1930,24 @@ GCS_PROJECT_ID = os.environ.get("GCS_PROJECT_ID") or None
 GCS_SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GCS_SERVICE_ACCOUNT_KEY_PATH") or None
 # Service account key as inline JSON string (alternative to file path).
 GCS_SERVICE_ACCOUNT_KEY_JSON = os.environ.get("GCS_SERVICE_ACCOUNT_KEY_JSON") or None
+
+# Azure Blob Storage Configuration
+AZURE_FILE_STORE_CONTAINER_NAME = (
+    os.environ.get("AZURE_FILE_STORE_CONTAINER_NAME") or None
+)
+AZURE_FILE_STORE_PREFIX = os.environ.get("AZURE_FILE_STORE_PREFIX") or "onyx-files"
+AZURE_STORAGE_ACCOUNT_NAME = os.environ.get("AZURE_STORAGE_ACCOUNT_NAME") or None
+# Full blob endpoint URL. When unset, derived from the account name as
+# https://<account>.blob.core.windows.net. Set explicitly for Azurite or
+# sovereign clouds (e.g. *.blob.core.usgovcloudapi.net).
+AZURE_STORAGE_ACCOUNT_URL = os.environ.get("AZURE_STORAGE_ACCOUNT_URL") or None
+# Authentication (priority order): connection string, then account key, then
+# DefaultAzureCredential — supports AKS Workload Identity, managed identity,
+# and local `az login`.
+AZURE_STORAGE_CONNECTION_STRING = (
+    os.environ.get("AZURE_STORAGE_CONNECTION_STRING") or None
+)
+AZURE_STORAGE_ACCOUNT_KEY = os.environ.get("AZURE_STORAGE_ACCOUNT_KEY") or None
 
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html

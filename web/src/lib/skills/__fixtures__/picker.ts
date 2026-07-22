@@ -8,8 +8,7 @@ export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
   return {
     source: "builtin",
     id: "builtin-1",
-    slug: "pptx",
-    name: "PPTX",
+    name: "pptx",
     description: "Build PowerPoint decks.",
     is_available: true,
     unavailable_reason: null,
@@ -35,8 +34,7 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
   return {
     source: "custom",
     id: "custom-1",
-    slug: "report-writer",
-    name: "Report Writer",
+    name: "report-writer",
     description: "Draft a structured report from notes.",
     is_available: null,
     unavailable_reason: null,

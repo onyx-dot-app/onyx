@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.login_claims_capture import capture_saml_login_claims
+from onyx.auth.sso_web_error import redirect_sso_errors_to_web
 from onyx.auth.users import UserManager, auth_backend, fastapi_users, get_user_manager
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION, WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
@@ -250,6 +251,7 @@ async def saml_login(
 
 
 @router.get("/callback")
+@redirect_sso_errors_to_web
 async def saml_login_callback_get(
     request: Request,
     db_session: Session = Depends(get_session),
@@ -265,6 +267,7 @@ async def saml_login_callback_get(
 
 
 @router.post("/callback")
+@redirect_sso_errors_to_web
 async def saml_login_callback_post(
     request: Request,
     db_session: Session = Depends(get_session),
@@ -324,6 +327,14 @@ async def _process_saml_callback(
     _enforce_allowed_email_domain(provider, user_email)
 
     user = await upsert_saml_user(email=user_email)
+    # A deactivated account must not receive a session. The OIDC path gates this
+    # in complete_login_flow. SAML gates it here since it logs the user in
+    # directly.
+    if not user.is_active:
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Your account is deactivated. Contact your workspace admin.",
+        )
     # Best-effort directory-profile capture from the SAML assertion attributes.
     await capture_saml_login_claims(
         user_email, auth.get_attributes(), provider.name or "saml"

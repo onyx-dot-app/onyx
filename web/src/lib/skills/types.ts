@@ -24,7 +24,6 @@ export interface SkillGroupShare {
 export interface Skill {
   source: SkillSource;
   id: string;
-  slug: string;
   name: string;
   description: string;
 

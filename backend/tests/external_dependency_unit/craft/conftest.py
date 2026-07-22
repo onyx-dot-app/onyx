@@ -277,7 +277,7 @@ def seeded_skill(
     request.addfinalizer(_cleanup)
 
     def _make(
-        slug: str,
+        name: str,
         public: bool = False,
         groups: Iterable[UserGroup] | None = None,
         bundle_files: dict[str, bytes | str] | None = None,
@@ -286,7 +286,7 @@ def seeded_skill(
         if bundle_files is None:
             bundle_files = {
                 "SKILL.md": (
-                    f"---\nname: {slug}\ndescription: Seeded skill {slug}\n---\n"
+                    f"---\nname: {name}\ndescription: Seeded skill {name}\n---\n"
                 ),
             }
         bundle_bytes = _build_zip(bundle_files)
@@ -294,7 +294,7 @@ def seeded_skill(
 
         bundle_file_id = file_store.save_file(
             content=io.BytesIO(bundle_bytes),
-            display_name=f"{slug}.zip",
+            display_name=f"{name}.zip",
             file_origin=FileOrigin.SKILL_BUNDLE,
             file_type="application/zip",
         )
@@ -302,9 +302,8 @@ def seeded_skill(
 
         skill = Skill(
             id=uuid4(),
-            slug=slug,
-            name=slug,
-            description=f"Seeded skill {slug}",
+            name=name,
+            description=f"Seeded skill {name}",
             bundle_file_id=bundle_file_id,
             bundle_sha256=bundle_sha256,
             public_permission=SkillSharePermission.VIEWER if public else None,

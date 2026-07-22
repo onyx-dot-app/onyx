@@ -22,8 +22,7 @@ def _skill(
 ) -> Skill:
     return Skill(
         id=uuid4(),
-        slug=f"skill-{uuid4().hex}",
-        name="Skill",
+        name=f"skill-{uuid4().hex}",
         description="Description",
         author_user_id=author.id,
         public_permission=public_permission if is_public else None,

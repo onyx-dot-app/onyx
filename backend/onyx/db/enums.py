@@ -469,6 +469,19 @@ POLICY_SEVERITY: dict[EndpointPolicy, int] = {
 }
 
 
+class GatedAppKind(str, PyEnum):
+    """Which catalog a gated egress action belongs to.
+
+    The approval pipeline (matched actions, approval rows, per-tool policy,
+    pre-approvals, session grants) is shared across surfaces; this discriminates
+    whether the target id refers to an ``external_app`` or an ``mcp_server`` row,
+    since the two live in separate tables under a single approval flow.
+    """
+
+    EXTERNAL_APP = "EXTERNAL_APP"
+    MCP_SERVER = "MCP_SERVER"
+
+
 class PatType(str, PyEnum):
     USER = "USER"
     CRAFT = "CRAFT"

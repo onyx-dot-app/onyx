@@ -296,6 +296,23 @@ repos:
         pass_filenames: false
         files: ^web/lib/shared/(.*\.(ts|tsx)|package\.json|tsconfig.*\.json)$
 
+      # Needs a Rust toolchain + GTK3/WebKitGTK headers, absent on the shared
+      # Quality-Checks-PR runner -- that workflow SKIPs both hooks and relies on
+      # pr-desktop-build.yml as the actual CI gate instead.
+      - id: desktop-rust-fmt
+        name: desktop cargo fmt
+        entry: bash -c 'cd desktop/src-tauri && cargo fmt --check'
+        language: system
+        pass_filenames: false
+        files: ^desktop/src-tauri/src/.*\.rs$
+
+      - id: desktop-rust-clippy
+        name: desktop cargo clippy
+        entry: bash -c 'cd desktop/src-tauri && cargo clippy --all-targets --all-features -- -D warnings'
+        language: system
+        pass_filenames: false
+        files: ^desktop/src-tauri/(src/.*\.rs|Cargo\.(toml|lock))$
+
       # mobile/ is a standalone Expo (SDK 56) app with its own bun.lock — it is NOT
       # part of the root bun workspace, so it gets its own install + lockfile-check
       # hooks. Lint/format use the Expo-native toolchain (ESLint flat config +

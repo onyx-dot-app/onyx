@@ -19,7 +19,7 @@ import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 
 export interface TokenLimit {
   tokenBudget: number | null;
-  periodHours: number | null;
+  periodDays: number | null;
 }
 
 interface TokenLimitSectionProps {
@@ -54,12 +54,12 @@ function TokenLimitSection({
 
   function addLimit() {
     const emptyIndex = limits.findIndex(
-      (l) => l.tokenBudget === null && l.periodHours === null
+      (l) => l.tokenBudget === null && l.periodDays === null
     );
     if (emptyIndex !== -1) return;
     const key = nextKeyRef.current++;
     keysRef.current = [...keysRef.current, key];
-    onLimitsChange([...limits, { tokenBudget: null, periodHours: null }]);
+    onLimitsChange([...limits, { tokenBudget: null, periodDays: null }]);
   }
 
   function removeLimit(index: number) {
@@ -111,7 +111,7 @@ function TokenLimitSection({
                     Time Window
                   </Text>
                   <Text mainUiMuted text03 className="ml-0.5">
-                    (hours)
+                    (UTC days)
                   </Text>
                 </div>
               </div>
@@ -132,10 +132,10 @@ function TokenLimitSection({
                   </div>
                   <div className="flex-1">
                     <InputNumber
-                      value={limit.periodHours}
-                      onChange={(v) => updateLimit(i, "periodHours", v)}
+                      value={limit.periodDays}
+                      onChange={(v) => updateLimit(i, "periodDays", v)}
                       min={1}
-                      placeholder="24"
+                      placeholder="1"
                     />
                   </div>
                   <IconButton

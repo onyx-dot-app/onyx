@@ -1,29 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Text } from "@opal/components";
+import { Button, Modal, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
-import { toast } from "@opal/layouts";
-import { createCustomSkill } from "@/lib/skills/api";
+import { inspectSkillBundle } from "@/lib/skills/api";
 import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
-import type { CustomSkill } from "@/lib/skills/types";
-import { Modal } from "@opal/components";
+import type { SkillCreationDraft } from "@/lib/skills/creationDraft";
 import SkillBundlePicker from "@/sections/skills/SkillBundlePicker";
 
 interface CreateSkillModalProps {
   open: boolean;
   onClose: () => void;
-  onCreated: (skill: CustomSkill) => void;
+  onContinue: (draft: SkillCreationDraft) => void;
 }
 
 export default function CreateSkillModal({
   open,
   onClose,
-  onCreated,
+  onContinue,
 }: CreateSkillModalProps) {
   const [bundle, setBundle] = useState<PreparedSkillBundle | null>(null);
   const [preparing, setPreparing] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [inspecting, setInspecting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   function reset() {
@@ -32,28 +30,35 @@ export default function CreateSkillModal({
   }
 
   function handleClose() {
-    if (preparing || submitting) return;
+    if (preparing || inspecting) return;
     reset();
     onClose();
   }
 
-  async function handleSubmit() {
+  async function handleContinue() {
     if (!bundle) return;
-    setSubmitting(true);
+    setInspecting(true);
     setErrorMessage(null);
     try {
-      const created = await createCustomSkill(bundle.file);
-      toast.success(`Created "${created.name}"`);
+      const contents = await inspectSkillBundle(bundle.file);
+      const draft: SkillCreationDraft = {
+        contents,
+        upload: {
+          file: bundle.file,
+          displayName: bundle.displayName,
+          entries: contents.files,
+          containsSkillMd: true,
+        },
+      };
       reset();
-      onCreated(created);
-      onClose();
+      onContinue(draft);
     } catch (error) {
-      console.error("Failed to create skill", error);
+      console.error("Failed to inspect skill bundle", error);
       setErrorMessage(
-        error instanceof Error ? error.message : "Failed to create skill"
+        error instanceof Error ? error.message : "Failed to read skill"
       );
     } finally {
-      setSubmitting(false);
+      setInspecting(false);
     }
   }
 
@@ -62,14 +67,14 @@ export default function CreateSkillModal({
       <Modal.Content width="sm">
         <Modal.Header
           icon={SvgUploadCloud}
-          title="Create skill"
-          description="Upload a SKILL.md file, ZIP file, or skill folder. New skills are private until you choose to share them."
+          title="Upload skill"
+          description="Upload a SKILL.md file, ZIP file, or skill folder. You can review and edit its details before saving."
           onClose={handleClose}
         />
         <Modal.Body>
           <SkillBundlePicker
             value={bundle}
-            disabled={submitting}
+            disabled={inspecting}
             onPreparingChange={setPreparing}
             onChange={(nextBundle) => {
               setBundle(nextBundle);
@@ -98,7 +103,7 @@ export default function CreateSkillModal({
             </ul>
           </div>
           {errorMessage && (
-            <div className="mt-2">
+            <div role="alert" className="mt-2">
               <Text as="p" font="secondary-body" color="status-error-05">
                 {errorMessage}
               </Text>
@@ -108,17 +113,17 @@ export default function CreateSkillModal({
         <Modal.Footer>
           <Button
             prominence="secondary"
-            disabled={preparing || submitting}
+            disabled={preparing || inspecting}
             onClick={handleClose}
           >
             Cancel
           </Button>
           <Button
-            disabled={preparing || submitting || !bundle}
-            onClick={handleSubmit}
+            disabled={preparing || inspecting || !bundle}
+            onClick={() => void handleContinue()}
             icon={SvgUploadCloud}
           >
-            {submitting ? "Creating…" : "Create"}
+            {inspecting ? "Opening…" : "Review skill"}
           </Button>
         </Modal.Footer>
       </Modal.Content>

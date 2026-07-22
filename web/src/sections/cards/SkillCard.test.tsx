@@ -28,7 +28,6 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
   const skill: CustomSkill = {
     source: "custom",
     id: "custom-skill-id",
-    slug: "report-writer",
     name: "Report Writer",
     description: "Draft reports",
     is_available: null,
@@ -65,7 +64,6 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
 function invalidCustom(): CustomSkillCardItem {
   return custom({
     id: "invalid-skill-id",
-    slug: "invalid-skill",
     name: "Invalid skill",
     description: "Invalid bundle",
     is_valid: false,

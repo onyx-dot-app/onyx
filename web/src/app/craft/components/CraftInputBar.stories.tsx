@@ -24,7 +24,7 @@ const SWR_NO_FETCH = {
 };
 
 const skillsList: SkillsList = {
-  builtins: [builtinFixture(), builtinFixture({ slug: "pdf", name: "PDF" })],
+  builtins: [builtinFixture(), builtinFixture({ name: "pdf" })],
   customs: [customFixture()],
 };
 
