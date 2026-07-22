@@ -24,8 +24,6 @@ function userApp(
   return {
     id: 1,
     name: "Slack",
-    description: "Post messages and read channels.",
-    slug: "slack",
     app_type: "SLACK",
     credential_keys: [],
     credential_values: {},
@@ -39,7 +37,7 @@ function userApp(
 export const Default: Story = {
   args: {
     requestId: "req-01HX3K9M4Q7W2",
-    appSlug: "slack",
+    externalAppId: 1,
     reason: "I need Slack to post the release notes to #eng-craft.",
     userApp: userApp(),
   },
@@ -49,12 +47,11 @@ export const Default: Story = {
 export const WithoutReason: Story = {
   args: {
     requestId: "req-01HX3K9M4Q7W2",
-    appSlug: "linear",
+    externalAppId: 2,
     reason: null,
     userApp: userApp({
       id: 2,
       name: "Linear",
-      slug: "linear",
       app_type: "LINEAR",
     }),
   },
@@ -64,12 +61,11 @@ export const WithoutReason: Story = {
 export const TokenApp: Story = {
   args: {
     requestId: "req-01HX3K9M4Q7W2",
-    appSlug: "hubspot",
+    externalAppId: 3,
     reason: "I need HubSpot to look up the customer record.",
     userApp: userApp({
       id: 3,
       name: "HubSpot",
-      slug: "hubspot",
       app_type: "HUBSPOT",
       supports_oauth: false,
     }),
@@ -80,7 +76,7 @@ export const TokenApp: Story = {
 export const Loading: Story = {
   args: {
     requestId: "req-01HX3K9M4Q7W2",
-    appSlug: "slack",
+    externalAppId: 1,
     reason: "I need Slack to post the release notes to #eng-craft.",
     userApp: undefined,
   },
@@ -91,7 +87,7 @@ export const Loading: Story = {
 export const Connected: Story = {
   args: {
     requestId: "req-01HX3K9M4Q7W2",
-    appSlug: "slack",
+    externalAppId: 1,
     reason: "I need Slack to post the release notes to #eng-craft.",
     userApp: userApp({ authenticated: true }),
   },

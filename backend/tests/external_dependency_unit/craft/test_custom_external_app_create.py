@@ -11,7 +11,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
-from onyx.db.models import ExternalApp, Skill, User
+from onyx.db.models import ExternalApp, ExternalApp__Skill, Skill, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.external_apps.api import (
@@ -80,7 +80,6 @@ def _create(
     """Create a custom app with a valid default bundle."""
     return create_custom_external_app(
         name="My Form Name",
-        description="",
         upstream_url_patterns=json.dumps(_UPSTREAM),
         auth_template=auth_template,
         organization_credentials=organization_credentials,
@@ -110,11 +109,9 @@ def test_create_persists_skill_and_app(
     resp = _create(db_session, test_user, skill_name)
 
     # The form name is app display metadata; the bundle frontmatter supplies the
-    # linked skill's canonical name. Blank description falls back to the
-    # bundle's parsed description.
+    # linked skill's canonical name and description.
     assert resp.app_type == ExternalAppType.CUSTOM
     assert resp.name == "My Form Name"
-    assert resp.description == "Bundle description"
     assert resp.upstream_url_patterns == _UPSTREAM
 
     skill = db_session.scalar(select(Skill).where(Skill.name == skill_name))
@@ -122,8 +119,16 @@ def test_create_persists_skill_and_app(
     assert skill.built_in_skill_id is None
     assert skill.bundle_file_id  # bundle was stored
     assert skill.name == skill_name
+    assert skill.description == "Bundle description"
 
-    app = db_session.scalar(select(ExternalApp).where(ExternalApp.skill_id == skill.id))
+    app = db_session.scalar(
+        select(ExternalApp)
+        .join(
+            ExternalApp__Skill,
+            ExternalApp__Skill.external_app_id == ExternalApp.id,
+        )
+        .where(ExternalApp__Skill.skill_id == skill.id)
+    )
     assert app is not None
     assert app.name == "My Form Name"
     assert app.auth_template == _AUTH_TEMPLATE
@@ -181,7 +186,6 @@ def test_create_rejects_wildcard_host_glob(
     with pytest.raises(OnyxError):
         create_custom_external_app(
             name="Wildcard Host",
-            description="",
             upstream_url_patterns=json.dumps(["https://*.example.com/*"]),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({"api_key": "sk-test"}),
@@ -240,7 +244,6 @@ def test_edit_updates_config_and_replaces_bundle(
         external_app_id=created.id,
         request=UpdateExternalAppRequest(
             name="Renamed App",
-            description="A new description",
             upstream_url_patterns=["https://api.example.com/v2/*"],
             auth_template=_AUTH_TEMPLATE,
             organization_credentials={},
@@ -251,9 +254,11 @@ def test_edit_updates_config_and_replaces_bundle(
 
     assert edited.id == created.id
     assert edited.name == "Renamed App"
-    assert edited.description == "A new description"
     assert edited.upstream_url_patterns == ["https://api.example.com/v2/*"]
     assert edited.organization_credentials == {}
+
+    db_session.refresh(skill)
+    assert skill.description == "Bundle description"
 
     rebundled = replace_custom_app_bundle(
         external_app_id=created.id,
@@ -348,7 +353,6 @@ def test_create_rejects_bundle_without_skill_md(
     with pytest.raises(OnyxError):
         create_custom_external_app(
             name="No Skill",
-            description="",
             upstream_url_patterns=json.dumps(_UPSTREAM),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({}),
@@ -372,7 +376,6 @@ def test_create_requires_bundle(
     with pytest.raises(OnyxError):
         create_custom_external_app(
             name="No Bundle",
-            description="",
             upstream_url_patterns=json.dumps(_UPSTREAM),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({}),
@@ -397,7 +400,6 @@ def test_create_rejects_bundle_over_skill_upload_size_limit(
     with pytest.raises(OnyxError) as exc:
         create_custom_external_app(
             name="Too Large",
-            description="",
             upstream_url_patterns=json.dumps(_UPSTREAM),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({}),
@@ -478,7 +480,6 @@ def test_json_admin_apps_rejects_custom(
         create_built_in_external_app(
             request=CreateBuiltInExternalAppRequest(
                 name="Nope",
-                description="",
                 app_type=ExternalAppType.CUSTOM,
                 upstream_url_patterns=_UPSTREAM,
                 auth_template=_AUTH_TEMPLATE,

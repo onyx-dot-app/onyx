@@ -72,25 +72,18 @@ should be treated as high-priority context.
 contain exactly what you need to complete the task successfully."""
 
 
-_DESCRIPTION_MAX_LEN = 120
-
-
-def _truncate(text: str) -> str:
-    text = text.strip()
-    if len(text) > _DESCRIPTION_MAX_LEN:
-        return text[: _DESCRIPTION_MAX_LEN - 3] + "..."
-    return text
-
-
 def build_connectable_apps_list(apps: Iterable[ExternalApp]) -> str:
     """Render the connectable-apps bullet list — org apps the user hasn't set up
     yet. The heading and explanatory prose live in AGENTS.template.md; this only
     supplies the dynamic ``{{CONNECTABLE_APPS_LIST}}`` value, with a fallback
     line when there are no apps."""
-    entries = sorted((app.skill.name, _truncate(app.skill.description)) for app in apps)
+    entries = sorted((app.id, app.name) for app in apps)
     if not entries:
         return "No connectable apps available."
-    return "\n".join(f"- **{slug}**: {desc}" for slug, desc in entries)
+    return "\n".join(
+        f"- External app ID `{external_app_id}`: **{name}**"
+        for external_app_id, name in entries
+    )
 
 
 def build_organization_instructions_section(instructions: str | None) -> str:

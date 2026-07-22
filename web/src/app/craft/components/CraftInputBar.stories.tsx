@@ -29,8 +29,8 @@ const skillsList: SkillsList = {
 };
 
 const apps = [
-  appFixture({ slug: "slack", app_type: "SLACK" }),
-  appFixture({ slug: "gmail", app_type: "GMAIL", authenticated: false }),
+  appFixture({ id: 1, name: "Slack", app_type: "SLACK" }),
+  appFixture({ id: 2, name: "Gmail", app_type: "GMAIL", authenticated: false }),
 ];
 
 const libraryTree: LibraryEntry[] = [
@@ -71,14 +71,13 @@ const skillEntry = (slug: string, name: string): PickerEntry => ({
 });
 
 const appEntry = (
-  slug: string,
+  externalAppId: number,
   name: string,
   appType: ExternalAppType
 ): PickerEntry => ({
   kind: "app",
-  slug,
+  externalAppId,
   name,
-  description: "",
   appType,
   authenticated: true,
 });
@@ -152,7 +151,7 @@ export const WithSkillChips: Story = {
     initialEntries: [
       skillEntry("pptx", "PPTX"),
       skillEntry("report-writer", "Report Writer"),
-      appEntry("slack", "Slack", "SLACK"),
+      appEntry(1, "Slack", "SLACK"),
     ],
   },
 };
@@ -165,9 +164,9 @@ export const WithManySkillChips: Story = {
       skillEntry("pdf", "PDF"),
       skillEntry("report-writer", "Report Writer"),
       skillEntry("data-analysis", "Data Analysis"),
-      appEntry("slack", "Slack", "SLACK"),
-      appEntry("gmail", "Gmail", "GMAIL"),
-      appEntry("github", "GitHub", "GITHUB"),
+      appEntry(1, "Slack", "SLACK"),
+      appEntry(2, "Gmail", "GMAIL"),
+      appEntry(3, "GitHub", "GITHUB"),
     ],
   },
 };

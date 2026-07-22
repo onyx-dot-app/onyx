@@ -21,7 +21,6 @@ async function readErrorDetail(
 
 interface CreateBuiltInExternalAppBody {
   name: string;
-  description: string;
   app_type: ExternalAppType;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
@@ -51,7 +50,6 @@ export async function createBuiltInExternalApp(
 
 interface CreateCustomExternalAppInput {
   name: string;
-  description: string;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
@@ -70,7 +68,6 @@ export async function createCustomExternalApp(
 ): Promise<ExternalAppAdminResponse> {
   const form = new FormData();
   form.append("name", input.name);
-  form.append("description", input.description);
   form.append(
     "upstream_url_patterns",
     JSON.stringify(input.upstream_url_patterns)
@@ -119,7 +116,6 @@ interface UpdateExternalAppBody {
   // Every field is optional; omit to leave the stored value untouched.
   enabled?: boolean;
   name?: string;
-  description?: string;
   upstream_url_patterns?: string[];
   auth_template?: Record<string, string>;
   organization_credentials?: Record<string, string>;

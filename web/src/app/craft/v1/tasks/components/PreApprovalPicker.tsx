@@ -108,7 +108,7 @@ function PreApprovalRow({ app, checked, onToggle }: PreApprovalRowProps) {
           <div className="flex-1 flex flex-col gap-0.5 min-w-0">
             <Text font="main-ui-action">{app.name}</Text>
             <Text font="secondary-body" color="text-03">
-              {app.description}
+              {app.authenticated ? "Connected" : "Connection required"}
             </Text>
           </div>
           {/* Visual only — the row owns clicks/keys so the control never

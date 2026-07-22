@@ -78,7 +78,7 @@ function AppConnections({ query }: AppConnectionsProps) {
     errorHandlingFetcher,
     { keepPreviousData: true }
   );
-  const connectSlug = useSearchParams().get("connect");
+  const connectAppId = Number(useSearchParams().get("connect"));
 
   const { connected, browse } = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -144,7 +144,7 @@ function AppConnections({ query }: AppConnectionsProps) {
                 key={userApp.id}
                 variant="tile"
                 userApp={userApp}
-                highlight={connectSlug === userApp.slug}
+                highlight={connectAppId === userApp.id}
                 onChange={() => mutate()}
               />
             ))}
@@ -254,7 +254,9 @@ function ProviderConnectCard({
                 <Text font="main-ui-action">{userApp.name}</Text>
               </div>
               <Text font="secondary-body" color="text-03">
-                {userApp.description}
+                {userApp.supports_oauth
+                  ? "Connect with OAuth"
+                  : "Connect with credentials"}
               </Text>
               <Button disabled={isStarting} onClick={connect}>
                 {isStarting ? "Redirecting…" : "Connect"}

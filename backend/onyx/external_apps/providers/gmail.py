@@ -160,10 +160,6 @@ class GmailProvider(GoogleOAuthProvider, OnyxManagedExtApp):
         # the integration safer by default.
         scope="https://www.googleapis.com/auth/gmail.modify",
         upstream_url_patterns=["https://gmail\\.googleapis\\.com/gmail/.*"],
-        description=(
-            "Read, search, send, and draft email from your Gmail account inside "
-            "Onyx Craft."
-        ),
         google_api_name="Gmail API",
         endpoint_catalog=_ENDPOINTS,
     )

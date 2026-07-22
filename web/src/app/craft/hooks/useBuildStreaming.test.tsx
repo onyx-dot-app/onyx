@@ -367,7 +367,7 @@ describe("useBuildStreaming thinking packets", () => {
         onPacket({
           type: "connect_app_request",
           request_id: "req-1",
-          app_slug: "google_calendar",
+          external_app_id: 17,
           reason: "to schedule events",
         } as never);
       });
@@ -384,7 +384,7 @@ describe("useBuildStreaming thinking packets", () => {
         type: "connect_app_request",
         id: "req-1",
         requestId: "req-1",
-        appSlug: "google_calendar",
+        externalAppId: 17,
         reason: "to schedule events",
       }),
     ]);

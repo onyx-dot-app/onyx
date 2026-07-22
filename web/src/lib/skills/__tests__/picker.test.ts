@@ -2,6 +2,8 @@ import {
   detectSlashTrigger,
   filterPickerSections,
   flattenSections,
+  pickerEntryKey,
+  pickerEntryPromptPrefix,
   toPickerSections,
   type PickerSections,
 } from "@/lib/skills/picker";
@@ -105,26 +107,46 @@ describe("toPickerSections", () => {
 
   it("builds the Apps section from the external-apps payload with auth state", () => {
     const apps = [
-      appFixture({ slug: "slack", app_type: "SLACK", authenticated: true }),
       appFixture({
-        slug: "gmail",
+        id: 2,
+        name: "Slack",
+        app_type: "SLACK",
+        authenticated: true,
+      }),
+      appFixture({
+        id: 1,
         name: "Gmail",
         app_type: "GMAIL",
         authenticated: false,
       }),
     ];
     const { apps: result } = toPickerSections(skillsList(), apps);
-    expect(result.map((a) => [a.slug, a.name, a.authenticated])).toEqual([
-      ["gmail", "Gmail", false],
-      ["slack", "slack", true],
+    expect(
+      result.map((a) => [a.externalAppId, a.name, a.authenticated])
+    ).toEqual([
+      [1, "Gmail", false],
+      [2, "Slack", true],
     ]);
   });
 
   it("builds Apps independently of skill data", () => {
-    const apps = [appFixture({ slug: "slack", app_type: "SLACK" })];
+    const apps = [appFixture({ id: 7, name: "Slack", app_type: "SLACK" })];
     const result = toPickerSections(undefined, apps);
     expect(result.skills).toEqual([]);
-    expect(result.apps.map((app) => app.slug)).toEqual(["slack"]);
+    expect(result.apps.map((app) => app.externalAppId)).toEqual([7]);
+  });
+
+  it("keeps same-named apps distinct by ID throughout selection serialization", () => {
+    const { apps } = toPickerSections(skillsList(), [
+      appFixture({ id: 41, name: "Acme", app_type: "CUSTOM" }),
+      appFixture({ id: 12, name: "Acme", app_type: "CUSTOM" }),
+    ]);
+
+    expect(apps.map(pickerEntryKey)).toEqual(["app:12", "app:41"]);
+    expect(apps.map(pickerEntryPromptPrefix)).toEqual([
+      '[Use external app "Acme" (ID: 12)]',
+      '[Use external app "Acme" (ID: 41)]',
+    ]);
   });
 });
 
@@ -147,9 +169,8 @@ describe("filterPickerSections", () => {
     apps: [
       {
         kind: "app",
-        slug: "slack",
+        externalAppId: 3,
         name: "Slack",
-        description: "chat search",
         appType: "SLACK",
         authenticated: true,
       },
@@ -162,7 +183,7 @@ describe("filterPickerSections", () => {
 
   it("filters both sections case-insensitively across fields", () => {
     expect(filterPickerSections(sections, "image").skills.length).toBe(1);
-    expect(filterPickerSections(sections, "CHAT").apps.length).toBe(1);
+    expect(filterPickerSections(sections, "SLACK").apps.length).toBe(1);
     expect(
       filterPickerSections(sections, "deck").skills.map((s) => s.slug)
     ).toEqual(["pptx"]);
@@ -185,18 +206,17 @@ describe("flattenSections", () => {
       apps: [
         {
           kind: "app",
-          slug: "c",
+          externalAppId: 3,
           name: "C",
-          description: "",
           appType: "SLACK",
           authenticated: true,
         },
       ],
     };
-    expect(flattenSections(sections).map((e) => e.slug)).toEqual([
-      "a",
-      "b",
-      "c",
+    expect(flattenSections(sections)).toEqual([
+      sections.skills[0],
+      sections.skills[1],
+      sections.apps[0],
     ]);
   });
 });

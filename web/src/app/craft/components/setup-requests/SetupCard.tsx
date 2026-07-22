@@ -26,8 +26,8 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 interface SetupCardProps {
   // Correlation id for the parked `connect_app` request (from the packet).
   requestId: string;
-  // App slug the agent asked to connect; used as the label fallback.
-  appSlug: string;
+  // Stable app ID the agent asked to connect.
+  externalAppId: number;
   // The agent's one-line justification, when provided.
   reason: string | null;
   // The user-facing app row, when resolved — drives popup-vs-form + fields.
@@ -45,7 +45,7 @@ const POPUP_POLL_MS = 600;
  */
 export default function SetupCard({
   requestId,
-  appSlug,
+  externalAppId,
   reason,
   userApp,
 }: SetupCardProps) {
@@ -65,8 +65,7 @@ export default function SetupCard({
     };
   }, []);
 
-  const appName = userApp?.name ?? appSlug;
-  const externalAppId = userApp?.id ?? null;
+  const appName = userApp?.name ?? `External app ${externalAppId}`;
   const supportsOauth = userApp?.supports_oauth ?? false;
   const appLoading = userApp === undefined;
 
@@ -147,7 +146,7 @@ export default function SetupCard({
     setError(null);
     // Capabilities are unknown until the app row loads (the button is disabled).
     if (appLoading) return;
-    if (externalAppId === null) {
+    if (!userApp) {
       setError("This app can't be set up from here.");
       return;
     }

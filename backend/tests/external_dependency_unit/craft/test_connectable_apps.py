@@ -23,7 +23,7 @@ def test_lists_only_unconnected_apps_and_renders_them(
 ) -> None:
     user = make_user(db_session, email_prefix="connectable")
 
-    # Connectable: public, needs a user token the org hasn't pre-filled.
+    # Connectable: needs a user token the org hasn't pre-filled.
     make_external_app(
         db_session,
         skill=make_skill(db_session, name="needs-setup", is_public=True),
@@ -45,8 +45,7 @@ def test_lists_only_unconnected_apps_and_renders_them(
         auth_template=_USER_TOKEN_TEMPLATE,
         organization_credentials={"token": "shared"},
     )
-    # Not visible: non-public and not granted to this user — must be excluded, or
-    # the user would connect a skill that never injects into their sandbox.
+    # App visibility is organization-wide and independent of skill sharing.
     make_external_app(
         db_session,
         skill=make_skill(db_session, name="hidden-app", is_public=False),
@@ -60,17 +59,17 @@ def test_lists_only_unconnected_apps_and_renders_them(
     )
     db_session.commit()
 
-    names = {app.skill.name for app in get_connectable_apps_for_user(db_session, user)}
+    names = {app.name for app in get_connectable_apps_for_user(db_session, user)}
 
     assert "needs-setup" in names
     assert "already-connected" not in names
     assert "org-filled" not in names
-    assert "hidden-app" not in names
+    assert "hidden-app" in names
     assert "disabled-app" not in names
 
     apps_list = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
     )
-    assert "- **needs-setup**" in apps_list
-    assert "hidden-app" not in apps_list
+    assert "**needs-setup**" in apps_list
+    assert "**hidden-app**" in apps_list
     assert "disabled-app" not in apps_list

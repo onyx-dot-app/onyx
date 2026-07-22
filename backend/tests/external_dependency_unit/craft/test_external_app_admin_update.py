@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
 from onyx.db.enums import ExternalAppType
-from onyx.db.external_app import get_external_app_by_id
+from onyx.db.external_app import (
+    get_external_app_by_id,
+    get_first_skill_for_external_app,
+)
 from onyx.db.models import ExternalApp, Skill, User
 from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
 from tests.external_dependency_unit.craft.db_helpers import (
@@ -68,7 +71,6 @@ def test_patch_updates_config_on_non_managed_built_in(
         external_app_id=app_id,
         request=UpdateExternalAppRequest(
             name="Slack — Eng",
-            description="Engineering workspace",
             upstream_url_patterns=new_patterns,
             auth_template=new_auth,
             organization_credentials={"shared": "value"},
@@ -78,15 +80,16 @@ def test_patch_updates_config_on_non_managed_built_in(
     )
 
     assert resp.name == "Slack — Eng"
-    assert resp.description == "Engineering workspace"
     assert resp.upstream_url_patterns == new_patterns
     assert resp.auth_template == new_auth
 
     db_session.expire_all()
     stored = get_external_app_by_id(db_session, app_id)
     assert stored is not None
+    skill = get_first_skill_for_external_app(db_session, app_id)
     assert stored.name == "Slack — Eng"
-    assert stored.skill.name == "slack"
+    assert skill.name == "slack"
+    assert skill.description == "Slack test app"
     assert list(stored.upstream_url_patterns) == new_patterns
     assert stored.auth_template == new_auth
     assert stored.organization_credentials.get_value(apply_mask=False) == {
@@ -102,7 +105,9 @@ def test_patch_rolls_back_when_push_fails(
     """Push failure leaves the app update uncommitted."""
     app = _slack_app(db_session)
     app_id = app.id
-    original_description = app.skill.description
+    original_description = get_first_skill_for_external_app(
+        db_session, app_id
+    ).description
 
     def _boom(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("push failed")
@@ -112,7 +117,7 @@ def test_patch_rolls_back_when_push_fails(
     with pytest.raises(RuntimeError):
         api.update_external_app_admin(
             external_app_id=app_id,
-            request=UpdateExternalAppRequest(description="changed"),
+            request=UpdateExternalAppRequest(name="changed"),
             _=test_user,
             db_session=db_session,
         )
@@ -120,4 +125,7 @@ def test_patch_rolls_back_when_push_fails(
     db_session.rollback()
     stored = get_external_app_by_id(db_session, app_id)
     assert stored is not None
-    assert stored.skill.description == original_description
+    assert (
+        get_first_skill_for_external_app(db_session, app_id).description
+        == original_description
+    )

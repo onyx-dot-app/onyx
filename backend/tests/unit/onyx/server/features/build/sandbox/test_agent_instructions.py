@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from onyx.db.models import ExternalApp
 from onyx.server.features.build.sandbox.util import agent_instructions
 
 _TEMPLATE_PLACEHOLDER_RE = re.compile(r"{{[A-Z0-9_]+}}")
@@ -116,6 +117,17 @@ def test_build_connectable_apps_list_empty_renders_fallback() -> None:
     assert (
         agent_instructions.build_connectable_apps_list([])
         == "No connectable apps available."
+    )
+
+
+def test_build_connectable_apps_list_uses_stable_ids_and_names() -> None:
+    apps = [
+        ExternalApp(id=12, name="Zeta"),
+        ExternalApp(id=3, name="Alpha"),
+    ]
+
+    assert agent_instructions.build_connectable_apps_list(apps) == (
+        "- External app ID `3`: **Alpha**\n- External app ID `12`: **Zeta**"
     )
 
 

@@ -290,11 +290,8 @@ function AvailableAppCard({ descriptor, onClick }: AvailableAppCardProps) {
     <Card className="h-full flex flex-col justify-center">
       <div className="flex items-center gap-3 w-full">
         <Logo className="w-8 h-8 shrink-0" />
-        <div className="flex-1 flex flex-col gap-0.5">
+        <div className="flex-1">
           <Text font="main-ui-action">{descriptor.name}</Text>
-          <Text font="secondary-body" color="text-03">
-            {descriptor.description}
-          </Text>
         </div>
         <Button icon={SvgPlus} onClick={onClick}>
           Add

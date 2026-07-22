@@ -158,7 +158,6 @@ export default function ConfigureProviderModal({
         // Merge creds so non-credential metadata survives a credential edit.
         await updateExternalApp(existingApp.id, {
           name: name.trim(),
-          description: descriptor.description,
           upstream_url_patterns: descriptor.upstream_url_patterns,
           auth_template: descriptor.auth_template,
           organization_credentials: {
@@ -170,7 +169,6 @@ export default function ConfigureProviderModal({
       } else {
         await createBuiltInExternalApp({
           name: name.trim(),
-          description: descriptor.description,
           app_type: descriptor.app_type,
           upstream_url_patterns: descriptor.upstream_url_patterns,
           auth_template: descriptor.auth_template,

@@ -31,8 +31,9 @@ import {
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import {
+  pickerEntryKey,
+  pickerEntryPromptPrefix,
   toPickerSections,
-  flattenSections,
   type PickerEntry,
 } from "@/lib/skills/picker";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -127,12 +128,18 @@ const CraftInputBar = memo(
 
       const addEntry = useCallback((entry: PickerEntry) => {
         setActiveEntries((prev) =>
-          prev.some((e) => e.slug === entry.slug) ? prev : [...prev, entry]
+          prev.some(
+            (candidate) => pickerEntryKey(candidate) === pickerEntryKey(entry)
+          )
+            ? prev
+            : [...prev, entry]
         );
       }, []);
 
-      const removeEntry = useCallback((slug: string) => {
-        setActiveEntries((prev) => prev.filter((e) => e.slug !== slug));
+      const removeEntry = useCallback((entryKey: string) => {
+        setActiveEntries((prev) =>
+          prev.filter((entry) => pickerEntryKey(entry) !== entryKey)
+        );
       }, []);
 
       const slashPicker = useSlashPicker({
@@ -166,7 +173,7 @@ const CraftInputBar = memo(
         (text: string): boolean => {
           const slug = text.trim().match(/^\/(\S+)$/)?.[1];
           const entry = slug
-            ? (flattenSections(pickerSections).find((e) => e.slug === slug) ??
+            ? (pickerSections.skills.find((entry) => entry.slug === slug) ??
               null)
             : null;
           if (entry) {
@@ -180,11 +187,11 @@ const CraftInputBar = memo(
 
       const handleSubmit = useCallback(
         (message: string) => {
-          const skillPrefixes = activeEntries
-            .map((e) => `/${e.slug}`)
+          const entryPrefixes = activeEntries
+            .map(pickerEntryPromptPrefix)
             .join(" ");
-          const fullMessage = skillPrefixes
-            ? `${skillPrefixes} ${message}`
+          const fullMessage = entryPrefixes
+            ? `${entryPrefixes} ${message}`
             : message;
           onSubmit(fullMessage, currentMessageFiles);
           setActiveEntries([]);
@@ -285,7 +292,13 @@ const CraftInputBar = memo(
           {entryInfo && (
             <EntryInfoPopover
               name={entryInfo.entry.name}
-              description={entryInfo.entry.description}
+              description={
+                entryInfo.entry.kind === "skill"
+                  ? entryInfo.entry.description
+                  : entryInfo.entry.authenticated
+                    ? "Connected"
+                    : "Connection required"
+              }
               tileElement={entryInfo.chipEl}
               onDismiss={dismissEntryInfo}
             />

@@ -140,18 +140,18 @@ describe("parsePacket", () => {
     });
   });
 
-  it("parses connect-app requests with their correlation id and slug", () => {
+  it("parses connect-app requests with their correlation id and app ID", () => {
     expect(
       parsePacket({
         type: "connect_app_request",
         request_id: "req-1",
-        app_slug: "google_calendar",
+        external_app_id: 17,
         reason: "to schedule events",
       })
     ).toEqual({
       type: "connect_app_request",
       requestId: "req-1",
-      appSlug: "google_calendar",
+      externalAppId: 17,
       reason: "to schedule events",
     });
   });

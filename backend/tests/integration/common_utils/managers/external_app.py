@@ -44,7 +44,6 @@ class ExternalAppManager:
     def create(
         user_performing_action: DATestUser,
         name: str,
-        description: str,
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
@@ -55,7 +54,6 @@ class ExternalAppManager:
             user_performing_action,
             None,
             name,
-            description,
             app_type,
             upstream_url_patterns,
             auth_template,
@@ -68,7 +66,6 @@ class ExternalAppManager:
         user_performing_action: DATestUser,
         app_id: int,
         name: str,
-        description: str,
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
@@ -79,7 +76,6 @@ class ExternalAppManager:
             user_performing_action,
             app_id,
             name,
-            description,
             app_type,
             upstream_url_patterns,
             auth_template,
@@ -92,7 +88,6 @@ class ExternalAppManager:
         user_performing_action: DATestUser,
         app_id: int | None,
         name: str,
-        description: str,
         app_type: ExternalAppType,
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
@@ -105,7 +100,6 @@ class ExternalAppManager:
         if app_id is not None:
             update_body = UpdateExternalAppRequest(
                 name=name,
-                description=description,
                 upstream_url_patterns=upstream_url_patterns,
                 auth_template=auth_template,
                 organization_credentials=organization_credentials,
@@ -121,7 +115,6 @@ class ExternalAppManager:
             response = ExternalAppManager._create_custom(
                 user_performing_action,
                 name,
-                description,
                 upstream_url_patterns,
                 auth_template,
                 organization_credentials,
@@ -129,7 +122,6 @@ class ExternalAppManager:
         else:
             create_body = CreateBuiltInExternalAppRequest(
                 name=name,
-                description=description,
                 app_type=app_type,
                 upstream_url_patterns=upstream_url_patterns,
                 auth_template=auth_template,
@@ -149,7 +141,6 @@ class ExternalAppManager:
     def _create_custom(
         user_performing_action: DATestUser,
         name: str,
-        description: str,
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
@@ -157,7 +148,6 @@ class ExternalAppManager:
         """POST the multipart custom-app create endpoint (bundle required)."""
         data: dict[str, str] = {
             "name": name,
-            "description": description,
             "upstream_url_patterns": json.dumps(upstream_url_patterns),
             "auth_template": json.dumps(auth_template),
             "organization_credentials": json.dumps(organization_credentials),

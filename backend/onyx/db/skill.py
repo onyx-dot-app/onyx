@@ -46,6 +46,7 @@ from onyx.db.enums import SandboxStatus, SkillSharePermission
 from onyx.db.external_app import available_external_app_skill_ids_for_user
 from onyx.db.models import (
     ExternalApp,
+    ExternalApp__Skill,
     Sandbox,
     Skill,
     Skill__User,
@@ -220,9 +221,16 @@ def _skill_select_for_access_policy(
     user: User,
     order_by_name: bool,
 ) -> Select[tuple[Skill]]:
-    stmt = _skill_select_with_eager_load(order_by_name=order_by_name).outerjoin(
-        ExternalApp,
-        ExternalApp.skill_id == Skill.id,
+    stmt = (
+        _skill_select_with_eager_load(order_by_name=order_by_name)
+        .outerjoin(
+            ExternalApp__Skill,
+            ExternalApp__Skill.skill_id == Skill.id,
+        )
+        .outerjoin(
+            ExternalApp,
+            ExternalApp.id == ExternalApp__Skill.external_app_id,
+        )
     )
     if policy == SkillAccessPolicy.VIEW:
         stmt = stmt.where(ExternalApp.id.is_(None))
@@ -360,8 +368,11 @@ def add_new_skill__no_commit(
     existing_name = select(Skill.id).where(Skill.name == skill.name)
     if not is_external_app_backing:
         existing_name = existing_name.join(
+            ExternalApp__Skill,
+            ExternalApp__Skill.skill_id == Skill.id,
+        ).join(
             ExternalApp,
-            ExternalApp.skill_id == Skill.id,
+            ExternalApp.id == ExternalApp__Skill.external_app_id,
         )
     if db_session.scalar(existing_name.limit(1)) is not None:
         conflicting_resource = (

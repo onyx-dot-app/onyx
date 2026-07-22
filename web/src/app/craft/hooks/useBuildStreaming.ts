@@ -736,7 +736,7 @@ export function useBuildStreaming() {
               type: "connect_app_request",
               id: parsed.requestId,
               requestId: parsed.requestId,
-              appSlug: parsed.appSlug,
+              externalAppId: parsed.externalAppId,
               reason: parsed.reason,
             });
             break;

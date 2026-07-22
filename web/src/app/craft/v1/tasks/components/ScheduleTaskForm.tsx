@@ -24,6 +24,7 @@ import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import {
   detectSlashTrigger,
+  pickerEntryPromptPrefix,
   toPickerSections,
   type PickerEntry,
 } from "@/lib/skills/picker";
@@ -137,12 +138,12 @@ export default function ScheduleTaskForm({
     (entry: PickerEntry) => {
       if (entry.kind === "app" && !entry.authenticated) {
         setSkillPicker((s) => ({ ...s, open: false }));
-        router.push(`/craft/v1/apps?connect=${entry.slug}`);
+        router.push(`/craft/v1/apps?connect=${entry.externalAppId}`);
         return;
       }
       setSkillPicker((prev) => {
         if (!prev.open) return prev;
-        const replacement = `/${entry.slug} `;
+        const replacement = `${pickerEntryPromptPrefix(entry)} `;
         const newPrompt =
           prompt.slice(0, prev.slashIndex) +
           replacement +
