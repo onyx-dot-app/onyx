@@ -1674,10 +1674,12 @@ def _stream_chat_turn(
     except EmptyLLMResponseError as e:
         stack_trace = traceback.format_exc()
         logger.warning(
-            "LLM returned an empty response (provider=%s, model=%s, tool_choice=%s)",
+            "LLM returned an empty response "
+            "(provider=%s, model=%s, tool_choice=%s, finish_reason=%s)",
             e.provider,
             e.model,
             e.tool_choice,
+            e.finish_reason,
         )
         yield StreamingError(
             error=e.client_error_msg,
@@ -1688,6 +1690,7 @@ def _stream_chat_turn(
                 "model": e.model,
                 "provider": e.provider,
                 "tool_choice": e.tool_choice.value,
+                "finish_reason": e.finish_reason,
             },
         )
 
