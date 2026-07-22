@@ -35,6 +35,7 @@ import SkillCard, {
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
+import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 
@@ -350,9 +351,10 @@ export default function SkillsPage() {
       <CreateSkillModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(created) => {
-          refresh();
-          router.push(`/craft/v1/skills/edit/${created.id}` as Route);
+        onContinue={(draft) => {
+          const draftId = stageSkillCreationDraft(draft);
+          setCreateOpen(false);
+          router.push(`/craft/v1/skills/new?draft=${draftId}` as Route);
         }}
       />
 

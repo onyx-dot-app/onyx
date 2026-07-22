@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import useSWR, { mutate } from "swr";
 import { Button, Card, Text } from "@opal/components";
 import {
@@ -21,6 +21,8 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
 import { toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
+import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
+import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 
 const MAX_INSTRUCTIONS_LENGTH = 4000;
 
@@ -65,15 +67,7 @@ export default function CraftInstructionsPage() {
   // null until the user edits — render the saved value until then.
   const value = draft ?? savedInstructions;
   const isDirty = value !== savedInstructions;
-
-  useEffect(() => {
-    if (!isDirty) return;
-    function warn(event: BeforeUnloadEvent) {
-      event.preventDefault();
-    }
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [isDirty]);
+  const unsavedChanges = useUnsavedChangesGuard({ isDirty });
 
   async function save(instructions: string): Promise<boolean> {
     if (!settings) return false;
@@ -235,6 +229,11 @@ export default function CraftInstructionsPage() {
           removes your workspace instructions for everyone.
         </ConfirmationModalLayout>
       )}
+      <UnsavedChangesModal
+        open={unsavedChanges.confirmationOpen}
+        onCancel={unsavedChanges.cancelLeave}
+        onDiscard={unsavedChanges.discardAndLeave}
+      />
     </SettingsLayouts.Root>
   );
 }

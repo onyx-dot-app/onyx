@@ -270,7 +270,16 @@ azure-cognitiveservices-speech==1.50.0 \
 azure-core==1.41.0 \
     --hash=sha256:522b4011e8180b1a3dcd2024396a4e7fe9ac37fb8597db47163d230b5efe892d \
     --hash=sha256:f46ff5dfcd230f25cf1c19e8a34b8dc08a337b2503e268bb600a16c00db8ad5a
-    # via azure-cognitiveservices-speech
+    # via
+    #   azure-cognitiveservices-speech
+    #   azure-identity
+    #   azure-storage-blob
+azure-identity==1.25.2 \
+    --hash=sha256:030dbaa720266c796221c6cdbd1999b408c079032c919fef725fcc348a540fe9 \
+    --hash=sha256:1b40060553d01a72ba0d708b9a46d0f61f56312e215d8896d836653ffdc6753d
+azure-storage-blob==12.30.0 \
+    --hash=sha256:2cd74d4d5731e5eb6b8d5c5056ee115a5e88f8fdf22517b739836fda685018be \
+    --hash=sha256:d415ac50b67a8da6b3ae7e9f1014b1b55cd7aafa0b8d4ca9b380568dc7360423
 babel==2.17.0 \
     --hash=sha256:0c54cffb19f690cdcc52a3b50bcbf71e07a808d1c80d549f2459b9d2cf0afb9d \
     --hash=sha256:4d0b53093fdfb4b21c92b5213dba5a1b23885afa8383709427046b21c366e5f2
@@ -644,6 +653,8 @@ cryptography==48.0.1 \
     # via
     #   aioquic
     #   authlib
+    #   azure-identity
+    #   azure-storage-blob
     #   google-auth
     #   mitmproxy
     #   msal
@@ -1196,6 +1207,7 @@ isodate==0.7.2 \
     --hash=sha256:28009937d8031054830160fce6d409ed342816b543597cece116d966c6d99e15 \
     --hash=sha256:4cd1aa0f43ca76f4a6c6c0292a85f40b35ec2e43e315b59f06e6d32171a953e6
     # via
+    #   azure-storage-blob
     #   python3-saml
     #   zeep
 itsdangerous==2.2.0 \
@@ -1576,7 +1588,14 @@ mpmath==1.3.0 \
 msal==1.34.0 \
     --hash=sha256:76ba83b716ea5a6d75b0279c0ac353a0e05b820ca1f6682c0eb7f45190c43c2f \
     --hash=sha256:f669b1644e4950115da7a176441b0e13ec2975c29528d8b9e81316023676d6e1
-    # via office365-rest-python-client
+    # via
+    #   azure-identity
+    #   msal-extensions
+    #   office365-rest-python-client
+msal-extensions==1.3.1 \
+    --hash=sha256:96d3de4d034504e969ac5e85bae8106c8373b5c6568e4c8fa7af2eca9dbe6bca \
+    --hash=sha256:c5b0fd10f65ef62b5f1d62f4251d51cbcaf003fcedae8c91b040a488614be1a4
+    # via azure-identity
 msgpack==1.2.1 \
     --hash=sha256:04c721c2c7448767e9e3f2520a475663d8ee0f09c31890f6d2bd70fd636a9647 \
     --hash=sha256:05f340e47e7e47d2da8db9b53e1bb1d294369e9ef45a747441309f6650b8351d \
@@ -3020,6 +3039,8 @@ typing-extensions==4.15.0 \
     #   alembic
     #   atlassian-python-api
     #   azure-core
+    #   azure-identity
+    #   azure-storage-blob
     #   braintrust
     #   cohere
     #   cron-descriptor

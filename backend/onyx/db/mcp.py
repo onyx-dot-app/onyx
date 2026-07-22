@@ -58,13 +58,16 @@ def get_mcp_servers_by_owner(owner_email: str, db_session: Session) -> list[MCPS
     )
 
 
-def get_craft_enabled_mcp_servers(db_session: Session) -> list[MCPServer]:
-    """Get all MCP servers an admin has made available to the Craft agent"""
-    return list(
-        db_session.scalars(
-            select(MCPServer).where(MCPServer.available_in_craft.is_(True))
-        ).all()
-    )
+def get_craft_enabled_mcp_servers(
+    db_session: Session, user: User | None
+) -> list[MCPServer]:
+    """MCP servers an admin has made available to the Craft agent, filtered to
+    those ``user`` may use (public / shared / owned). ``None`` skips the access
+    filter — only for host matching before a user is known (proxy claim path)."""
+    stmt = select(MCPServer).where(MCPServer.available_in_craft.is_(True))
+    if user is not None:
+        stmt = _add_mcp_server_access_filter(stmt, user)
+    return list(db_session.scalars(stmt).all())
 
 
 def get_mcp_servers_for_persona(
@@ -276,6 +279,15 @@ def get_all_mcp_tools_for_server(server_id: int, db_session: Session) -> list[To
     """Get all MCP tools for a server"""
     return list(
         db_session.scalars(select(Tool).where(Tool.mcp_server_id == server_id)).all()
+    )
+
+
+def get_mcp_tools_for_servers(server_ids: list[int], db_session: Session) -> list[Tool]:
+    """All MCP tools across ``server_ids`` in a single query"""
+    if not server_ids:
+        return []
+    return list(
+        db_session.scalars(select(Tool).where(Tool.mcp_server_id.in_(server_ids))).all()
     )
 
 

@@ -2562,9 +2562,16 @@ class PortAttempt(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    cc_pair_id: Mapped[int] = mapped_column(
+    # exactly one of cc_pair_id / port_user_id is set (see ck_..._exactly_one_scope)
+    cc_pair_id: Mapped[int | None] = mapped_column(
         ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    port_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     search_settings_id: Mapped[int] = mapped_column(  # the FUTURE settings
@@ -2619,24 +2626,101 @@ class PortAttempt(Base):
         DateTime(timezone=True), nullable=True, default=None
     )
 
-    connector_credential_pair: Mapped["ConnectorCredentialPair"] = relationship(
+    connector_credential_pair: Mapped["ConnectorCredentialPair | None"] = relationship(
         "ConnectorCredentialPair"
     )
     search_settings: Mapped["SearchSettings"] = relationship("SearchSettings")
 
-    # at most one active attempt per (cc_pair, FUTURE)
     __table_args__ = (
+        CheckConstraint(
+            "num_nonnulls(cc_pair_id, port_user_id) = 1",
+            name="ck_port_attempt_exactly_one_scope",
+        ),
+        # one active attempt per (cc_pair, FUTURE); scoped to non-NULL cc_pair so
+        # user rows (NULLs are distinct in PG) don't collide here — hence the
+        # separate user index below.
         Index(
             "ix_port_attempt_active_unique",
             "cc_pair_id",
             "search_settings_id",
             unique=True,
-            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
+            postgresql_where=text(
+                "status IN ('NOT_STARTED', 'IN_PROGRESS') AND cc_pair_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "ix_port_attempt_active_unique_user",
+            "port_user_id",
+            "search_settings_id",
+            unique=True,
+            postgresql_where=text(
+                "status IN ('NOT_STARTED', 'IN_PROGRESS') AND port_user_id IS NOT NULL"
+            ),
         ),
     )
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+
+class PortOrphanCandidate(Base):
+    """A doc deleted while a port was filling a target index, possibly resurrected there
+    by a racing create-only copy. The sweep deletes only the chunks the port itself wrote
+    (written_by_port) for these docs — removing a resurrection but leaving a legitimately
+    re-added doc (unmarked chunks) intact."""
+
+    __tablename__ = "port_orphan_candidate"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # the port target: FUTURE for a reindex, the promoted live PRESENT for INSTANT
+    search_settings_id: Mapped[int] = mapped_column(
+        ForeignKey("search_settings.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # exactly one of cc_pair_id / port_user_id is set (see the CHECK below)
+    cc_pair_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    port_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    document_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "num_nonnulls(cc_pair_id, port_user_id) = 1",
+            name="ck_port_orphan_candidate_exactly_one_scope",
+        ),
+        # idempotent inserts + the sweep lookup, split per scope (NULLs are distinct
+        # in Postgres, so a single all-column unique key can't dedup user rows).
+        Index(
+            "uq_port_orphan_candidate_connector",
+            "search_settings_id",
+            "cc_pair_id",
+            "document_id",
+            unique=True,
+            postgresql_where=text("cc_pair_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_port_orphan_candidate_user",
+            "search_settings_id",
+            "port_user_id",
+            "document_id",
+            unique=True,
+            postgresql_where=text("port_user_id IS NOT NULL"),
+        ),
+    )
 
 
 class HierarchyFetchAttempt(Base):
@@ -5186,6 +5270,12 @@ class UserFile(Base):
     needs_persona_sync: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    # reindex-port dirty bit: the secondary index is stale/missing for this file (content
+    # and/or ACL). The reconciler drains it; the swap waits on it. (Document has an ACL-only
+    # analog, secondary_only_sync_pending — this one is broader, hence "reconcile".)
+    secondary_reconcile_pending: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     last_project_sync_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -5202,6 +5292,21 @@ class UserFile(Base):
         secondary=Project__UserFile.__table__,
         back_populates="user_files",
         lazy="selectin",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_user_file_secondary_reconcile_pending",
+            "id",
+            postgresql_where=text("secondary_reconcile_pending IS TRUE"),
+        ),
+        # back the port scheduler's per-user cursor scan + COMPLETED enumeration
+        Index("ix_user_file_user_status_id", "user_id", "status", "id"),
+        Index(
+            "ix_user_file_user_id_completed",
+            "user_id",
+            postgresql_where=text("status = 'COMPLETED'"),
+        ),
     )
 
 

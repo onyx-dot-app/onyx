@@ -1550,6 +1550,17 @@ configMap:
   # MinIO/S3 Configuration override
   S3_ENDPOINT_URL: ""  # only used if minio is not enabled
   S3_FILE_STORE_BUCKET_NAME: ""
+  # Azure Blob Storage file store (set FILE_STORE_BACKEND: "azure" and
+  # minio.enabled: false). Auth priority: AZURE_STORAGE_CONNECTION_STRING,
+  # then AZURE_STORAGE_ACCOUNT_KEY, then DefaultAzureCredential (AKS Workload
+  # Identity / managed identity). Put the connection string / account key in a
+  # secret rather than here for production.
+  AZURE_FILE_STORE_CONTAINER_NAME: ""
+  AZURE_FILE_STORE_PREFIX: ""
+  AZURE_STORAGE_ACCOUNT_NAME: ""
+  # Derived from the account name when unset; set explicitly for sovereign
+  # clouds (e.g. *.blob.core.usgovcloudapi.net).
+  AZURE_STORAGE_ACCOUNT_URL: ""
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""
   LLM_SOCKET_READ_TIMEOUT: "60"
