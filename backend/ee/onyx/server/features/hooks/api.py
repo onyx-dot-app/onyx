@@ -29,6 +29,8 @@ from onyx.hooks.models import (
     HookValidateStatus,
 )
 from onyx.hooks.registry import get_all_specs, get_hook_point_spec
+from onyx.server.security.models import outbound_ssrf_params
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, validate_outbound_http_url
 
@@ -42,11 +44,29 @@ logger = setup_logger()
 def _check_ssrf_safety(endpoint_url: str) -> None:
     """Raise OnyxError if endpoint_url could be used for SSRF.
 
-    Delegates to validate_outbound_http_url with https_only=True.
+    Strictness follows the admin ``SSRF Protection`` setting, matching how MCP
+    and OAuth endpoints treat it: at the VALIDATE_* levels private/internal
+    targets are blocked; ``allow_private_network`` opens RFC1918 LAN hosts
+    (self-hosted deployments calling a cluster-internal hook service) while
+    loopback and cloud-metadata stay blocked; ``disabled`` also opens loopback.
+    ``https_only`` is unconditional at every level.
+
+    Validation runs at configuration time only; delivery trusts the stored URL
+    (see ``post_json_to_endpoint``). HTTPS certificate verification does not
+    prevent a validated hostname from later resolving to a private address;
+    preventing DNS rebinding requires validating again at delivery time.
+
     Uses BAD_GATEWAY so the frontend maps the error to the Endpoint URL field.
     """
+    params = outbound_ssrf_params(get_security_settings().ssrf_protection_level)
     try:
-        validate_outbound_http_url(endpoint_url, https_only=True)
+        validate_outbound_http_url(
+            endpoint_url,
+            https_only=True,
+            allow_private_network=params.allow_private_network,
+            block_loopback_and_link_local=params.block_loopback_and_link_local,
+            block_link_local_only=params.block_link_local_only,
+        )
     except (SSRFException, ValueError) as e:
         raise OnyxError(OnyxErrorCode.BAD_GATEWAY, str(e))
 
