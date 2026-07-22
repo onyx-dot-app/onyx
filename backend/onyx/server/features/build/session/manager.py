@@ -81,7 +81,10 @@ from onyx.server.features.build.session.errors import (
     UploadLimitExceededError,
 )
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
-from onyx.server.features.build.session.llm_config import build_onyx_gateway_config
+from onyx.server.features.build.session.llm_config import (
+    build_onyx_gateway_config,
+    parse_gateway_model_id,
+)
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.naming import generate_session_name
 from onyx.server.features.build.session.sandbox_lifecycle import (
@@ -97,6 +100,8 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+_DISPOSE_PENDING_TTL_SECONDS = 24 * 3600
 
 
 # Hidden directories/files to filter from listings
@@ -282,19 +287,18 @@ class SessionManager:
         sandbox: Sandbox,
         session: BuildSession,
         user: User,
-        requested_provider_type: str | None,
-        requested_model_name: str | None,
-        requested_provider_id: int | None,
     ) -> None:
-        if requested_model_name is None and session.agent_model:
-            requested_model_name = session.agent_model
-            requested_provider_type = session.agent_provider
+        requested_provider_id: int | None = None
+        requested_provider_type: str | None = None
+        requested_model_name: str | None = None
+        if session.agent_model:
             if session.agent_provider == ONYX_GATEWAY_PROVIDER_ID:
-                provider_id, separator, model_name = session.agent_model.partition("/")
-                if separator and provider_id.isdigit() and model_name:
-                    requested_provider_id = int(provider_id)
-                    requested_provider_type = None
-                    requested_model_name = model_name
+                parsed = parse_gateway_model_id(session.agent_model)
+                if parsed is not None:
+                    requested_provider_id, requested_model_name = parsed
+            else:
+                requested_provider_type = session.agent_provider
+                requested_model_name = session.agent_model
         llm_config = self.build_llm_configs(
             user,
             requested_provider_type=requested_provider_type,
@@ -312,7 +316,28 @@ class SessionManager:
             ).decode()
         except (UnicodeDecodeError, ValueError):
             current = None
+        except RuntimeError:
+            # Transient exec/API failure while merely checking; assume stale
+            # and regenerate defensively rather than failing the turn.
+            logger.warning(
+                "Could not read opencode.json for session %s; regenerating",
+                session.id,
+            )
+            current = None
+
+        cache = get_cache_backend()
+        dispose_pending_key = f"craft:llm_config_dispose_pending:{session.id}"
         if current == expected:
+            # A matching file does NOT prove the running opencode instance
+            # picked it up: a prior reconcile may have written the file and
+            # then failed the dispose. Retry the dispose while the marker is
+            # set, else the instance stays on the old config until pod death.
+            if (
+                session.opencode_session_id is not None
+                and cache.get(dispose_pending_key) is not None
+            ):
+                self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
+            cache.delete(dispose_pending_key)
             if (
                 session.agent_provider != llm_config.provider
                 or session.agent_model != llm_config.model_name
@@ -335,8 +360,10 @@ class SessionManager:
             llm_config=llm_config,
             mcp_servers=mcp_servers,
         )
+        cache.set(dispose_pending_key, "1", ex=_DISPOSE_PENDING_TTL_SECONDS)
         if session.opencode_session_id is not None:
             self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
+        cache.delete(dispose_pending_key)
         session.agent_provider = llm_config.provider
         session.agent_model = llm_config.model_name
         self._db_session.flush()
@@ -632,14 +659,7 @@ class SessionManager:
                         hydrate_managed_content(
                             self._sandbox_manager, sandbox.id, user, self._db_session
                         )
-                        self.reconcile_session_llm_config(
-                            sandbox,
-                            existing,
-                            user,
-                            None,
-                            None,
-                            None,
-                        )
+                        self.reconcile_session_llm_config(sandbox, existing, user)
                     self._prewarm_opencode_session(sandbox, existing)
                     logger.info(
                         "Returning existing empty session %s for user %s",

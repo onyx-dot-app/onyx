@@ -15,7 +15,6 @@ from onyx.db.users import fetch_user_by_id
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
 )
-from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.interactive_turns.state import (
     TURN_STATUS_CANCELLED,
     TURN_STATUS_FAILED,
@@ -234,17 +233,8 @@ def _drive_interactive_turn(
             user = fetch_user_by_id(db_session, user_id)
             if session is None or user is None:
                 raise RuntimeError("Craft session owner or session no longer exists")
-            session_manager.reconcile_session_llm_config(
-                sandbox,
-                session,
-                user,
-                None,
-                None,
-                None,
-            )
+            session_manager.reconcile_session_llm_config(sandbox, session, user)
             db_session.commit()
-
-            update_session_activity(session_id, db_session)
 
             if interrupt_requested():
                 session_manager.finalize_persist(session_id, state)

@@ -627,6 +627,10 @@ def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:
 def fetch_all_accessible_build_llm_providers(
     db_session: Session, user: User
 ) -> list[LLMProviderView]:
+    """Every provider the ``user`` can access (is_public / group rules).
+    persona=None below: Craft has no persona context, so a provider restricted
+    to specific personas is intentionally excluded even when otherwise
+    public."""
     provider_models = db_session.scalars(
         select(LLMProviderModel)
         .order_by(LLMProviderModel.id.asc())

@@ -185,49 +185,213 @@ def _gateway_config() -> LLMProviderConfig:
     )
 
 
-def test_empty_gateway_session_skips_unchanged_catalog() -> None:
+def test_gateway_config_falls_back_when_requested_selection_is_stale() -> None:
+    provider = _provider(2, "anthropic", [_model("claude-fable-5")])
+
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
+        config = llm_config.build_onyx_gateway_config(
+            [provider],
+            requested_provider_id=99,
+            requested_model_name="deleted-model",
+        )
+
+    assert config is not None
+    assert config.model_name == "2/claude-fable-5"
+
+
+def _reconcile_manager(
+    config: LLMProviderConfig,
+) -> tuple[SessionManager, MagicMock, MagicMock]:
+    """(manager, sandbox_manager mock, build_llm_configs mock) — the mocks are
+    returned as plain MagicMocks so assertions don't go through the typed
+    SessionManager attributes."""
     manager = SessionManager.__new__(SessionManager)
+    sandbox_manager = MagicMock()
+    build_llm_configs = MagicMock(return_value=config)
     manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
-    manager._sandbox_manager = MagicMock()  # type: ignore[attr-defined]
+    manager._sandbox_manager = sandbox_manager  # type: ignore[attr-defined]
+    manager.build_llm_configs = build_llm_configs  # type: ignore[method-assign]
+    return manager, sandbox_manager, build_llm_configs
+
+
+def _fresh_session() -> BuildSession:
+    return cast(
+        BuildSession,
+        MagicMock(id=2, agent_provider=None, agent_model=None),
+    )
+
+
+def test_empty_gateway_session_skips_unchanged_catalog() -> None:
     config = _gateway_config()
+    manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = build_session_opencode_config(
         config, manager_module.OPENCODE_DISABLED_TOOLS
     )
     assert expected is not None
-    manager._sandbox_manager.read_file.return_value = expected.encode()  # type: ignore[attr-defined]
-    manager.build_llm_configs = MagicMock(return_value=config)  # type: ignore[method-assign]
+    sandbox_manager.read_file.return_value = expected.encode()
 
-    manager.reconcile_session_llm_config(
-        cast(Sandbox, MagicMock(id=1)),
-        cast(BuildSession, MagicMock(id=2)),
-        cast(User, MagicMock(spec=User)),
-        None,
-        None,
-        None,
+    cache = MagicMock()
+    cache.get.return_value = None
+    with patch.object(manager_module, "get_cache_backend", return_value=cache):
+        manager.reconcile_session_llm_config(
+            cast(Sandbox, MagicMock(id=1)),
+            _fresh_session(),
+            cast(User, MagicMock(spec=User)),
+        )
+
+    sandbox_manager.regenerate_session_config.assert_not_called()
+    sandbox_manager.dispose_opencode_instance.assert_not_called()
+
+
+def test_unchanged_catalog_retries_pending_dispose() -> None:
+    """A matching config file does not prove the running instance reloaded it:
+    when a prior reconcile wrote the file but failed the dispose, the pending
+    marker must force a dispose retry on the next reconcile."""
+    config = _gateway_config()
+    manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
+    expected = build_session_opencode_config(
+        config, manager_module.OPENCODE_DISABLED_TOOLS
+    )
+    assert expected is not None
+    sandbox_manager.read_file.return_value = expected.encode()
+    session = cast(
+        BuildSession,
+        MagicMock(
+            id=2,
+            agent_provider=None,
+            agent_model=None,
+            opencode_session_id="ses-live",
+        ),
+    )
+    sandbox = cast(Sandbox, MagicMock(id=1))
+
+    cache = MagicMock()
+    cache.get.return_value = b"1"
+    with patch.object(manager_module, "get_cache_backend", return_value=cache):
+        manager.reconcile_session_llm_config(
+            sandbox, session, cast(User, MagicMock(spec=User))
+        )
+
+    sandbox_manager.dispose_opencode_instance.assert_called_once_with(
+        sandbox.id, session.id
+    )
+    cache.delete.assert_called_once()
+
+
+def test_reconcile_regenerates_when_config_read_fails_transiently() -> None:
+    """A transient exec/API failure while checking the config must not fail
+    the turn; the reconcile regenerates defensively."""
+    config = _gateway_config()
+    manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
+    sandbox_manager.read_file.side_effect = RuntimeError("exec blip")
+
+    cache = MagicMock()
+    cache.get.return_value = None
+    with patch.object(manager_module, "get_cache_backend", return_value=cache):
+        manager.reconcile_session_llm_config(
+            cast(Sandbox, MagicMock(id=1)),
+            _fresh_session(),
+            cast(User, MagicMock(spec=User)),
+        )
+
+    sandbox_manager.regenerate_session_config.assert_called_once()
+
+
+def test_reconcile_parses_stored_gateway_selection() -> None:
+    """The persisted "<provider_id>/<model_name>" selection must round-trip
+    through the parse — including model names that themselves contain
+    slashes."""
+    config = _gateway_config()
+    manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
+    sandbox_manager.read_file.side_effect = ValueError("no file")
+    session = cast(
+        BuildSession,
+        MagicMock(
+            id=2,
+            agent_provider="onyx",
+            agent_model="17/anthropic/claude-sonnet",
+            opencode_session_id=None,
+        ),
     )
 
-    manager._sandbox_manager.regenerate_session_config.assert_not_called()  # type: ignore[attr-defined]
-    manager._sandbox_manager.dispose_opencode_instance.assert_not_called()  # type: ignore[attr-defined]
+    cache = MagicMock()
+    cache.get.return_value = None
+    with (
+        patch.object(manager_module, "get_cache_backend", return_value=cache),
+        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+    ):
+        manager.reconcile_session_llm_config(
+            cast(Sandbox, MagicMock(id=1)), session, cast(User, MagicMock(spec=User))
+        )
+
+    assert build_llm_configs.call_args.kwargs == {
+        "requested_provider_type": None,
+        "requested_model_name": "anthropic/claude-sonnet",
+        "requested_provider_id": 17,
+    }
+
+
+def test_reconcile_forwards_legacy_provider_selection() -> None:
+    """Sessions persisted before the gateway (agent_provider="anthropic")
+    must resolve by provider type, not the gateway parse."""
+    config = _gateway_config()
+    manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
+    sandbox_manager.read_file.side_effect = ValueError("no file")
+    session = cast(
+        BuildSession,
+        MagicMock(
+            id=2,
+            agent_provider="anthropic",
+            agent_model="claude-fable-5",
+            opencode_session_id=None,
+        ),
+    )
+
+    cache = MagicMock()
+    cache.get.return_value = None
+    with (
+        patch.object(manager_module, "get_cache_backend", return_value=cache),
+        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+    ):
+        manager.reconcile_session_llm_config(
+            cast(Sandbox, MagicMock(id=1)), session, cast(User, MagicMock(spec=User))
+        )
+
+    assert build_llm_configs.call_args.kwargs == {
+        "requested_provider_type": "anthropic",
+        "requested_model_name": "claude-fable-5",
+        "requested_provider_id": None,
+    }
 
 
 def test_empty_gateway_session_restarts_instance_for_changed_catalog() -> None:
-    manager = SessionManager.__new__(SessionManager)
-    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
-    manager._sandbox_manager = MagicMock()  # type: ignore[attr-defined]
-    manager._sandbox_manager.read_file.return_value = b"stale"  # type: ignore[attr-defined]
     config = _gateway_config()
-    manager.build_llm_configs = MagicMock(return_value=config)  # type: ignore[method-assign]
+    manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
+    sandbox_manager.read_file.return_value = b"stale"
     sandbox = cast(Sandbox, MagicMock(id=1))
     session = cast(
         BuildSession,
-        MagicMock(id=2, opencode_session_id="ses-old", nextjs_port=3010),
+        MagicMock(
+            id=2,
+            agent_provider=None,
+            agent_model=None,
+            opencode_session_id="ses-old",
+            nextjs_port=3010,
+        ),
     )
     user = cast(User, MagicMock(spec=User, personal_name="Roshan"))
 
-    with patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]):
-        manager.reconcile_session_llm_config(sandbox, session, user, None, None, None)
+    cache = MagicMock()
+    cache.get.return_value = None
+    with (
+        patch.object(manager_module, "get_cache_backend", return_value=cache),
+        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+    ):
+        manager.reconcile_session_llm_config(sandbox, session, user)
 
-    manager._sandbox_manager.regenerate_session_config.assert_called_once()  # type: ignore[attr-defined]
-    manager._sandbox_manager.dispose_opencode_instance.assert_called_once_with(  # type: ignore[attr-defined]
+    sandbox_manager.regenerate_session_config.assert_called_once()
+    sandbox_manager.dispose_opencode_instance.assert_called_once_with(
         sandbox.id, session.id
     )
+    cache.set.assert_called_once()
+    cache.delete.assert_called_once()

@@ -32,22 +32,22 @@ CRAFT_RECOMMENDED_MODEL_NAMES = frozenset(
 )
 
 
-def _recommended_model(provider: LLMProviderView) -> str | None:
-    return next(
-        (
-            model.name
-            for model in provider.model_configurations
-            if model.is_visible and model.name in CRAFT_RECOMMENDED_MODEL_NAMES
-        ),
-        None,
+def _visible_models_by_name(provider: LLMProviderView) -> list[str]:
+    """Sorted: the relationship carries no ORDER BY, and callers' choices end
+    up in the rendered opencode config, which must be byte-stable."""
+    return sorted(
+        model.name for model in provider.model_configurations if model.is_visible
     )
 
 
-def _first_visible_model(provider: LLMProviderView) -> str | None:
-    return next(
-        (model.name for model in provider.model_configurations if model.is_visible),
-        None,
-    )
+def parse_gateway_model_id(model_id: str) -> tuple[int, str] | None:
+    """Split the "<provider_id>/<model_name>" composite id the gateway routes
+    on. Model names may themselves contain slashes, so split on the FIRST
+    separator only."""
+    provider_id, separator, model_name = model_id.partition("/")
+    if not separator or not model_name or not provider_id.isdigit():
+        return None
+    return int(provider_id), model_name
 
 
 def normalize_agent_selection(
@@ -80,43 +80,31 @@ def _select_gateway_default(
     requested_model_name: str | None,
 ) -> tuple[int, str] | None:
     if requested_model_name:
-        requested_provider = (
-            next(
-                (
-                    provider
-                    for provider in providers
-                    if provider.id == requested_provider_id
-                ),
-                None,
+        for provider in providers:
+            matches_request = (
+                provider.id == requested_provider_id
+                if requested_provider_id is not None
+                else provider.provider == requested_provider_type
             )
-            if requested_provider_id is not None
-            else next(
-                (
-                    provider
-                    for provider in providers
-                    if provider.provider == requested_provider_type
-                ),
-                None,
-            )
-        )
-        if requested_provider and any(
-            model.is_visible and model.name == requested_model_name
-            for model in requested_provider.model_configurations
-        ):
-            return requested_provider.id, requested_model_name
+            if matches_request and any(
+                model.is_visible and model.name == requested_model_name
+                for model in provider.model_configurations
+            ):
+                return provider.id, requested_model_name
         logger.warning(
             "Requested Craft gateway provider/model is not accessible or visible; "
             "falling back"
         )
 
-    for provider in _gateway_provider_order(providers):
-        model_name = _recommended_model(provider)
-        if model_name is not None:
-            return provider.id, model_name
-    for provider in _gateway_provider_order(providers):
-        model_name = _first_visible_model(provider)
-        if model_name is not None:
-            return provider.id, model_name
+    ordered = _gateway_provider_order(providers)
+    for provider in ordered:
+        for name in _visible_models_by_name(provider):
+            if name in CRAFT_RECOMMENDED_MODEL_NAMES:
+                return provider.id, name
+    for provider in ordered:
+        names = _visible_models_by_name(provider)
+        if names:
+            return provider.id, names[0]
     return None
 
 
@@ -129,11 +117,17 @@ def build_onyx_gateway_config(
     if not ONYX_SERVER_URL:
         return None
 
+    # Sorted so the rendered config is byte-stable across DB reads: the
+    # model_configurations relationship has no ORDER BY, and the per-turn
+    # reconcile compares the rendered JSON byte-for-byte to decide whether to
+    # restart the opencode instance.
     visible_models = [
         (provider, model)
-        for provider in gateway_providers
-        for model in provider.model_configurations
-        if model.is_visible
+        for provider in _gateway_provider_order(gateway_providers)
+        for model in sorted(
+            (m for m in provider.model_configurations if m.is_visible),
+            key=lambda m: m.name,
+        )
     ]
     default_selection = _select_gateway_default(
         gateway_providers,
