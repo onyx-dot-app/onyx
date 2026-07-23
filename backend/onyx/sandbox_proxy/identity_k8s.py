@@ -46,8 +46,9 @@ _SANDBOX_POD_SELECTOR = ",".join(
     ]
 )
 
-# lookup() runs on the proxy's event loop, so the read-through must fail fast
-# rather than stall all traffic behind a slow API server.
+# The gate resolves identity off the proxy's event loop, but the read-through
+# still fails fast so a slow/sick API server can't tie up an executor thread (or
+# get hammered) on every uncached request.
 _READTHROUGH_REQUEST_TIMEOUT: tuple[float, float] = (1.0, 2.0)
 
 logger = setup_logger()
@@ -165,9 +166,12 @@ class K8sInformerLookup(SandboxIPLookup):
                 )
             return None
 
+        # Deliberately not cached: the watch is the sole cache writer, so a
+        # read-through hit can't linger past a concurrent DELETED event and mask
+        # it (a reused IP would otherwise resolve to the dead sandbox until the
+        # next relist). This one-shot result identifies only the current request;
+        # the watch's own ADDED event is what populates the cache.
         identity = identities[0]
-        with self._cache_lock:
-            self._cache[identity.sandbox_ip] = identity
         logger.info(
             "identity_readthrough_hit src_ip=%s sandbox=%s (watch had not caught up)",
             src_ip,

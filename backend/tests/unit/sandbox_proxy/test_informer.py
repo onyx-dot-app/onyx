@@ -163,7 +163,7 @@ def _listing(*pods: client.V1Pod) -> client.V1PodList:
     )
 
 
-def test_lookup_miss_reads_through_and_caches() -> None:
+def test_lookup_miss_reads_through_without_caching() -> None:
     core = MagicMock(spec=client.CoreV1Api)
     lookup = K8sInformerLookup(core_api=core)
     core.list_namespaced_pod.return_value = _listing(_make_pod())
@@ -174,9 +174,13 @@ def test_lookup_miss_reads_through_and_caches() -> None:
     assert identity.sandbox_name == "sandbox-aaaa1111"
     _, kwargs = core.list_namespaced_pod.call_args
     assert kwargs["field_selector"] == "status.podIP=10.0.0.1"
+    # The watch is the sole cache writer, so a read-through hit is not cached: it
+    # can't linger past a concurrent DELETED event and misattribute a reused IP.
+    # Each miss re-queries until the watch's ADDED event populates the cache.
+    assert lookup._cache == {}
     core.list_namespaced_pod.reset_mock()
     assert lookup.lookup("10.0.0.1") is not None
-    core.list_namespaced_pod.assert_not_called()
+    assert core.list_namespaced_pod.call_count == 1
 
 
 def test_lookup_readthrough_miss_returns_none_and_caches_nothing() -> None:
