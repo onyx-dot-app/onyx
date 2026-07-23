@@ -81,8 +81,8 @@ func APIURL(serverURL string) string {
 	return baseURL + suffix
 }
 
-// WebAppURL removes an API prefix when the configured URL already includes it.
-func WebAppURL(serverURL string) string {
+// OnyxWebURL removes an API prefix when the configured URL already includes it.
+func OnyxWebURL(serverURL string) string {
 	baseURL := strings.TrimRight(serverURL, "/")
 	prefix := apiPrefix()
 	if prefix == "" {
