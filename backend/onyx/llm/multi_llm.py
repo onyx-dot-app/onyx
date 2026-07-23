@@ -32,7 +32,11 @@ from onyx.llm.interfaces import (
     ReasoningEffort,
     ToolChoiceOptions,
 )
-from onyx.llm.model_capabilities import is_true_openai_model, model_is_reasoning_model
+from onyx.llm.model_capabilities import (
+    is_true_openai_model,
+    model_is_reasoning_model,
+    openai_model_rejects_reasoning_effort,
+)
 from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
 from onyx.llm.models import (
     ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
@@ -634,6 +638,7 @@ class LitellmLLM(LLM):
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
             and not is_vertex_model_rejecting_output_config
+            and not openai_model_rejects_reasoning_effort(self.config.model_name)
         ):
             if is_openai_model:
                 # OpenAI API does not accept reasoning params for GPT 5 chat models
