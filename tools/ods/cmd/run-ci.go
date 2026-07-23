@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -31,6 +33,11 @@ const (
 	cherryPickOptionText = "Please cherry-pick this PR to the latest release version."
 	cherryPickOption     = "- [ ] [Optional] " + cherryPickOptionText
 	linearCheckOverride  = "- [x] Override Linear Check"
+
+	gitRefComponentMaxBytes = 255
+	githubPRTitleMaxRunes   = 256
+	prStateAll              = "all"
+	prStateOpen             = "open"
 )
 
 var editableBranchPrefixes = [...]string{
@@ -39,6 +46,11 @@ var editableBranchPrefixes = [...]string{
 	fixBranchPrefix,
 	refactorBranchPrefix,
 }
+
+var cherryPickOptionPattern = regexp.MustCompile(
+	`(?im)^[ \t]*-[ \t]*\[[ x]\][ \t]*(?:\[[^\r\n]*\][ \t]*)?` +
+		regexp.QuoteMeta(cherryPickOptionText) + `[ \t]*$`,
+)
 
 // NewRunCICommand creates a new run-ci command
 func NewRunCICommand() *cobra.Command {
@@ -119,19 +131,44 @@ type runCIPRMetadata struct {
 	Body   string
 }
 
+func truncateUTF8Bytes(value string, maxBytes int) string {
+	if len(value) <= maxBytes {
+		return value
+	}
+	for !utf8.ValidString(value[:maxBytes]) {
+		maxBytes--
+	}
+	return value[:maxBytes]
+}
+
 func buildEditableBranchName(prInfo *PRInfo) string {
 	branchName := prInfo.HeadRefName
-	hasExpectedPrefix := false
 	for _, prefix := range editableBranchPrefixes {
 		if strings.HasPrefix(branchName, prefix) {
-			hasExpectedPrefix = true
-			break
+			return appendEditableBranchSuffix(branchName, prInfo.Number)
 		}
 	}
-	if !hasExpectedPrefix {
-		branchName = choreBranchPrefix + branchName
+	return appendEditableBranchSuffix(choreBranchPrefix+branchName, prInfo.Number)
+}
+
+func appendEditableBranchSuffix(branchName string, prNumber int) string {
+	suffix := fmt.Sprintf("-pr-%d-edits", prNumber)
+	componentStart := strings.LastIndex(branchName, "/") + 1
+	component := truncateUTF8Bytes(
+		branchName[componentStart:],
+		gitRefComponentMaxBytes-len(suffix),
+	)
+	return branchName[:componentStart] + component + suffix
+}
+
+func buildEditablePRTitle(prInfo *PRInfo) string {
+	suffix := fmt.Sprintf(" [edit of #%d]", prInfo.Number)
+	maxTitleRunes := githubPRTitleMaxRunes - utf8.RuneCountInString(suffix)
+	titleRunes := []rune(strings.TrimSpace(prInfo.Title))
+	if len(titleRunes) > maxTitleRunes {
+		titleRunes = titleRunes[:maxTitleRunes]
 	}
-	return fmt.Sprintf("%s-pr-%d-edits", branchName, prInfo.Number)
+	return strings.TrimSpace(string(titleRunes)) + suffix
 }
 
 func buildRunCIPRMetadata(prInfo *PRInfo, forEdits bool) runCIPRMetadata {
@@ -156,7 +193,7 @@ func buildRunCIPRMetadata(prInfo *PRInfo, forEdits bool) runCIPRMetadata {
 		body += "\n\n## Original PR description\n\n" + originalBody
 	}
 	additionalOptions := []string{}
-	if !strings.Contains(prInfo.Body, cherryPickOptionText) {
+	if !cherryPickOptionPattern.MatchString(prInfo.Body) {
 		additionalOptions = append(additionalOptions, cherryPickOption)
 	}
 	additionalOptions = append(additionalOptions, linearCheckOverride)
@@ -164,9 +201,28 @@ func buildRunCIPRMetadata(prInfo *PRInfo, forEdits bool) runCIPRMetadata {
 
 	return runCIPRMetadata{
 		Branch: buildEditableBranchName(prInfo),
-		Title:  fmt.Sprintf("%s [edit of #%d]", prInfo.Title, prInfo.Number),
+		Title:  buildEditablePRTitle(prInfo),
 		Body:   body,
 	}
+}
+
+func ensureEditableBranchAvailable(branchName string) error {
+	existingPRURL, err := findExistingEditablePR(branchName)
+	if err != nil {
+		return fmt.Errorf("failed to check for an existing editable PR: %w", err)
+	}
+	if existingPRURL != "" {
+		return fmt.Errorf("editable PR already exists for branch %s: %s", branchName, existingPRURL)
+	}
+
+	exists, err := remoteBranchExists(branchName)
+	if err != nil {
+		return fmt.Errorf("failed to check for an existing remote branch: %w", err)
+	}
+	if exists {
+		return fmt.Errorf("refusing to overwrite existing remote branch %s; delete it manually if it is safe to replace", branchName)
+	}
+	return nil
 }
 
 func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
@@ -203,10 +259,16 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	prMetadata := buildRunCIPRMetadata(prInfo, opts.ForEdits)
 	ciBranch := prMetadata.Branch
 
-	// Check if a CI PR already exists for this branch
-	existingPRURL, err := findExistingCIPR(ciBranch)
-	if err != nil {
-		log.Fatalf("Failed to check for existing CI PR: %v", err)
+	existingPRURL := ""
+	if opts.ForEdits {
+		if err := ensureEditableBranchAvailable(ciBranch); err != nil {
+			log.Fatalf("Cannot create editable PR: %v", err)
+		}
+	} else {
+		existingPRURL, err = findExistingCIPR(ciBranch)
+		if err != nil {
+			log.Fatalf("Failed to check for existing CI PR: %v", err)
+		}
 	}
 
 	if existingPRURL != "" && !opts.Rerun {
@@ -286,13 +348,18 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		return
 	}
 
-	// Push the CI branch (force push in case it already exists)
+	// Editable branches must still be absent when pushed.
 	log.Infof("Pushing CI branch: %s", ciBranch)
 	pushArgs := []string{"push"}
 	if opts.NoVerify {
 		pushArgs = append(pushArgs, "--no-verify")
 	}
-	pushArgs = append(pushArgs, "--quiet", "-f", "-u", "origin", ciBranch)
+	if opts.ForEdits {
+		pushArgs = append(pushArgs, fmt.Sprintf("--force-with-lease=refs/heads/%s:", ciBranch))
+	} else {
+		pushArgs = append(pushArgs, "-f")
+	}
+	pushArgs = append(pushArgs, "--quiet", "-u", "origin", ciBranch)
 	if err := git.RunCommand(pushArgs...); err != nil {
 		// Switch back to original branch before exiting
 		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
@@ -360,9 +427,18 @@ func getPRInfo(prNumber string) (*PRInfo, error) {
 // findExistingCIPR checks if an open PR already exists for the given CI branch.
 // Returns the PR URL if found, or empty string if not.
 func findExistingCIPR(headBranch string) (string, error) {
+	return findExistingPR(headBranch, prStateOpen)
+}
+
+func findExistingEditablePR(headBranch string) (string, error) {
+	return findExistingPR(headBranch, prStateAll)
+}
+
+func findExistingPR(headBranch string, state string) (string, error) {
 	cmd := exec.Command("gh", "pr", "list",
 		"--head", headBranch,
-		"--state", "open",
+		"--state", state,
+		"--limit", "1",
 		"--json", "url",
 	)
 	output, err := cmd.Output()
@@ -382,12 +458,25 @@ func findExistingCIPR(headBranch string) (string, error) {
 	}
 
 	if len(prs) == 0 {
-		log.Debugf("No existing open PRs found for branch %s", headBranch)
+		log.Debugf("No existing %s PRs found for branch %s", state, headBranch)
 		return "", nil
 	}
 
 	log.Debugf("Found existing PR for branch %s: %s", headBranch, prs[0].URL)
 	return prs[0].URL, nil
+}
+
+func remoteBranchExists(branchName string) (bool, error) {
+	ref := "refs/heads/" + branchName
+	cmd := exec.Command("git", "ls-remote", "--heads", "origin", ref)
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return false, fmt.Errorf("%w: %s", err, string(exitErr.Stderr))
+		}
+		return false, err
+	}
+	return strings.TrimSpace(string(output)) != "", nil
 }
 
 // createCIPR creates a pull request for CI using the GitHub CLI

@@ -3,6 +3,7 @@ package cmd
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestBuildRunCIPRMetadataForEdits(t *testing.T) {
@@ -64,6 +65,47 @@ func TestBuildEditableBranchName(t *testing.T) {
 	}
 }
 
+func TestBuildEditableBranchNameBoundsLastComponent(t *testing.T) {
+	longComponent := strings.Repeat("界", 85)
+	prInfo := &PRInfo{
+		Number:      1234,
+		HeadRefName: fixBranchPrefix + longComponent,
+	}
+
+	branch := buildEditableBranchName(prInfo)
+	component := strings.TrimPrefix(branch, fixBranchPrefix)
+
+	if len(component) > gitRefComponentMaxBytes {
+		t.Errorf("component exceeds %d bytes: %d", gitRefComponentMaxBytes, len(component))
+	}
+	if !utf8.ValidString(component) {
+		t.Errorf("branch component is not valid UTF-8: %q", component)
+	}
+	if !strings.HasSuffix(component, "-pr-1234-edits") {
+		t.Errorf("branch component is missing edit suffix: %q", component)
+	}
+}
+
+func TestBuildEditablePRTitleBoundsLength(t *testing.T) {
+	prInfo := &PRInfo{
+		Number: 1234,
+		Title:  strings.Repeat("界", githubPRTitleMaxRunes),
+	}
+
+	title := buildEditablePRTitle(prInfo)
+
+	if utf8.RuneCountInString(title) != githubPRTitleMaxRunes {
+		t.Errorf(
+			"expected %d-rune title, got %d",
+			githubPRTitleMaxRunes,
+			utf8.RuneCountInString(title),
+		)
+	}
+	if !strings.HasSuffix(title, " [edit of #1234]") {
+		t.Errorf("title is missing edit suffix: %q", title)
+	}
+}
+
 func TestBuildRunCIPRMetadataForEditsPreservesCherryPickSelection(t *testing.T) {
 	originalOption := "- [x] [Optional] " + cherryPickOptionText
 	prInfo := &PRInfo{
@@ -80,6 +122,21 @@ func TestBuildRunCIPRMetadataForEditsPreservesCherryPickSelection(t *testing.T) 
 	}
 	if !strings.Contains(metadata.Body, originalOption) {
 		t.Errorf("expected checked cherry-pick option to be preserved, got:\n%s", metadata.Body)
+	}
+}
+
+func TestBuildRunCIPRMetadataForEditsIgnoresCherryPickTextInProse(t *testing.T) {
+	prInfo := &PRInfo{
+		Number:      1234,
+		Title:       "fix: example",
+		Body:        "Use the checkbox if you want us to Please cherry-pick this PR to the latest release version.",
+		HeadRefName: "fix/example",
+	}
+
+	metadata := buildRunCIPRMetadata(prInfo, true)
+
+	if !strings.Contains(metadata.Body, cherryPickOption) {
+		t.Errorf("expected cherry-pick checkbox to be added, got:\n%s", metadata.Body)
 	}
 }
 

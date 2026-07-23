@@ -430,7 +430,8 @@ preserves `feat/`, `fix/`, `refactor/`, and `chore/` prefixes; otherwise it adds
 description and cherry-pick selection, and marks the new PR as superseding the
 original. The replacement PR should be merged and the original PR closed
 without merging. It cannot be combined with `--rerun`, which would discard
-edits made on the replacement branch.
+edits made on the replacement branch. The command also refuses to overwrite an
+existing replacement PR or remote branch.
 
 ### `cherry-pick` - Backport Commits to Release Branches
 
