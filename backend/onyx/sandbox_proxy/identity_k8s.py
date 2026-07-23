@@ -178,10 +178,14 @@ class K8sInformerLookup(SandboxIPLookup):
         try:
             result = self._query_identity_by_ip(src_ip)
         finally:
-            with self._cache_lock:
-                self._inflight_readthroughs.pop(src_ip, None)
+            # Publish before de-registering: a caller arriving between the pop
+            # and the signal would otherwise miss the entry and fire a duplicate
+            # query. Ordered this way, it either finds the entry and coalesces
+            # onto this result, or arrives after the pop and starts a fresh burst.
             inflight.result = result
             inflight.done.set()
+            with self._cache_lock:
+                self._inflight_readthroughs.pop(src_ip, None)
         return result
 
     def _query_identity_by_ip(self, src_ip: str) -> SandboxIdentity | None:
