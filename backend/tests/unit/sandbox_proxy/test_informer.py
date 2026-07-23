@@ -175,9 +175,6 @@ def test_lookup_miss_reads_through_without_caching() -> None:
     assert identity.sandbox_name == "sandbox-aaaa1111"
     _, kwargs = core.list_namespaced_pod.call_args
     assert kwargs["field_selector"] == "status.podIP=10.0.0.1"
-    # The watch is the sole cache writer, so a read-through hit is not cached: it
-    # can't linger past a concurrent DELETED event and misattribute a reused IP.
-    # Each miss re-queries until the watch's ADDED event populates the cache.
     assert lookup._cache == {}
     core.list_namespaced_pod.reset_mock()
     assert lookup.lookup("10.0.0.1") is not None
@@ -191,8 +188,6 @@ def test_lookup_readthrough_miss_returns_none_and_caches_nothing() -> None:
 
     assert lookup.lookup("10.0.0.9") is None
     assert lookup._cache == {}
-    # No negative caching: each miss is its own bounded query, so an IP the
-    # watch delivers a moment later resolves on the very next request.
     assert lookup.lookup("10.0.0.9") is None
     assert core.list_namespaced_pod.call_count == 2
 
@@ -217,8 +212,6 @@ def test_lookup_readthrough_ambiguous_ip_refused() -> None:
 
 
 def test_lookup_readthrough_refuses_two_pods_sharing_sandbox_id() -> None:
-    # Any IP resolving to more than one pod is ambiguous, even when the pods
-    # share a sandbox_id label — never trust list ordering to pick a winner.
     core = MagicMock(spec=client.CoreV1Api)
     lookup = K8sInformerLookup(core_api=core)
     core.list_namespaced_pod.return_value = _listing(
@@ -240,8 +233,6 @@ def test_lookup_readthrough_rejects_unmanaged_pod() -> None:
 def test_concurrent_readthroughs_for_one_ip_coalesce_into_one_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # A fresh pod's concurrent boot requests must fan into a single API query,
-    # not a thundering herd (resolution runs on executor threads).
     import onyx.sandbox_proxy.identity_k8s as identity_k8s
 
     parked = threading.Semaphore(0)
@@ -289,7 +280,7 @@ def test_concurrent_readthroughs_for_one_ip_coalesce_into_one_query(
 
     leader = threading.Thread(target=worker)
     leader.start()
-    assert in_query.wait(timeout=5)  # leader is inside the (blocked) query
+    assert in_query.wait(timeout=5)
 
     followers = [threading.Thread(target=worker) for _ in range(2)]
     for t in followers:

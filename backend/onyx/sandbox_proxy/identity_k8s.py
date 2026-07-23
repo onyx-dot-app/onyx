@@ -46,20 +46,15 @@ _SANDBOX_POD_SELECTOR = ",".join(
     ]
 )
 
-# The gate resolves identity off the proxy's event loop, but the read-through
-# still fails fast so a slow/sick API server can't tie up an executor thread (or
-# get hammered) on every uncached request.
 _READTHROUGH_REQUEST_TIMEOUT: tuple[float, float] = (1.0, 2.0)
-# A follower coalesced onto an in-flight read-through gives up a hair after the
-# leader's own request deadline, then fails closed rather than wait forever.
+# Must exceed the leader's total request deadline, or a coalesced follower gives
+# up before the leader's query completes and fails closed spuriously.
 _READTHROUGH_LEADER_WAIT_SECONDS = 4.0
 
 logger = setup_logger()
 
 
 class _InflightReadThrough:
-    """Shared result slot for read-throughs coalesced onto one IP's query."""
-
     __slots__ = ("done", "result")
 
     def __init__(self) -> None:
@@ -116,10 +111,6 @@ class K8sInformerLookup(SandboxIPLookup):
         self._namespace = namespace
         self._cache: dict[str, SandboxIdentity] = {}
         self._cache_lock = threading.Lock()
-        # In-flight read-throughs keyed by IP, guarded by `_cache_lock`. Lets a
-        # fresh pod's concurrent boot requests fan into one API query instead of
-        # a thundering herd (resolution runs on executor threads, and read-through
-        # hits are deliberately not cached, so nothing else dedupes them).
         self._inflight_readthroughs: dict[str, _InflightReadThrough] = {}
 
         self._initial_sync_done = threading.Event()
@@ -152,15 +143,7 @@ class K8sInformerLookup(SandboxIPLookup):
         return self._read_through(src_ip)
 
     def _read_through(self, src_ip: str) -> SandboxIdentity | None:
-        """Resolve an uncached IP, coalescing concurrent requests for that IP.
-
-        The first caller for an IP issues the query; others block on its result
-        instead of firing their own. Nothing is persisted — the shared result
-        lives only for this burst, so the watch stays the sole cache writer.
-        """
         with self._cache_lock:
-            # The watch may have populated the cache between lookup()'s miss and
-            # now; prefer that over another query.
             hit = self._cache.get(src_ip)
             if hit is not None:
                 return hit
@@ -178,10 +161,8 @@ class K8sInformerLookup(SandboxIPLookup):
         try:
             result = self._query_identity_by_ip(src_ip)
         finally:
-            # Publish before de-registering: a caller arriving between the pop
-            # and the signal would otherwise miss the entry and fire a duplicate
-            # query. Ordered this way, it either finds the entry and coalesces
-            # onto this result, or arrives after the pop and starts a fresh burst.
+            # Publish before de-registering, or a caller arriving between the pop
+            # and the signal misses the entry and fires a duplicate query.
             inflight.result = result
             inflight.done.set()
             with self._cache_lock:
@@ -189,11 +170,6 @@ class K8sInformerLookup(SandboxIPLookup):
         return result
 
     def _query_identity_by_ip(self, src_ip: str) -> SandboxIdentity | None:
-        """One-shot pod query by IP.
-
-        Applies the same label selector and `_identity_from_pod` validation as
-        the watch, so this grants nothing the watch wouldn't.
-        """
         try:
             listing = self._core.list_namespaced_pod(
                 namespace=self._namespace,
@@ -208,7 +184,6 @@ class K8sInformerLookup(SandboxIPLookup):
                 and identity.sandbox_ip == src_ip
             ]
         except Exception as e:
-            # Fail closed like any other unidentified request.
             logger.warning("identity_readthrough_error src_ip=%s error=%s", src_ip, e)
             return None
 
@@ -225,10 +200,8 @@ class K8sInformerLookup(SandboxIPLookup):
             return None
 
         # Deliberately not cached: the watch is the sole cache writer, so a
-        # read-through hit can't linger past a concurrent DELETED event and mask
-        # it (a reused IP would otherwise resolve to the dead sandbox until the
-        # next relist). This one-shot result identifies only the current request;
-        # the watch's own ADDED event is what populates the cache.
+        # read-through hit can't linger past a concurrent DELETED event and
+        # misattribute a reused IP to the dead sandbox until the next relist.
         identity = identities[0]
         logger.info(
             "identity_readthrough_hit src_ip=%s sandbox=%s (watch had not caught up)",

@@ -539,9 +539,8 @@ class GateAddon:
             return None
 
         try:
-            # resolve_sandbox blocks on a DB query and (on a cache miss) a
-            # one-shot K8s read-through; keep both off the proxy event loop so a
-            # slow API server stalls only this request, not every in-flight flow.
+            # Off the proxy event loop: resolve_sandbox blocks on a DB query and a
+            # one-shot K8s read-through, which would otherwise stall every flow.
             sandbox = await asyncio.get_running_loop().run_in_executor(
                 None, self._identity.resolve_sandbox, src_ip
             )
