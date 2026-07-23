@@ -131,6 +131,7 @@ from onyx.server.features.build.sandbox.util.api_url_check import (
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
+    build_opencode_dependencies_setup_script,
 )
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -1454,6 +1455,9 @@ fi
             if nextjs_port is not None
             else ""
         )
+        opencode_dependencies_setup = build_opencode_dependencies_setup_script(
+            session_path
+        )
 
         setup_script = f"""
 set -e
@@ -1470,7 +1474,7 @@ mkdir -p {session_path}/attachments
 # here — the push daemon swaps these paths via os.rename(symlink, mount),
 # which fails if the mount is a real directory. Dangling until the first
 # push lands is fine; nothing reads these during the rest of setup.
-mkdir -p {session_path}/.opencode
+{opencode_dependencies_setup}
 ln -sf /workspace/managed/skills {session_path}/.opencode/skills
 echo "Linked skills to /workspace/managed/skills"
 ln -sf /workspace/managed/user_library {session_path}/user_library
@@ -1937,9 +1941,12 @@ echo "Session cleanup complete"
         attachments_content_b64 = base64.b64encode(
             ATTACHMENTS_SECTION_CONTENT.encode()
         ).decode()
+        opencode_dependencies_setup = build_opencode_dependencies_setup_script(
+            session_path
+        )
         config_script = f"""
 set -e
-mkdir -p {session_path}/.opencode
+{opencode_dependencies_setup}
 ln -sfn /workspace/managed/skills {session_path}/.opencode/skills
 ln -sfn /workspace/managed/user_library {session_path}/user_library
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md

@@ -138,6 +138,7 @@ from onyx.server.features.build.sandbox.util.api_url_check import (
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
+    build_opencode_dependencies_setup_script,
 )
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -1106,10 +1107,13 @@ class DockerSandboxManager(SandboxManager):
             if nextjs_port is not None
             else ""
         )
+        opencode_dependencies_setup = build_opencode_dependencies_setup_script(
+            session_path
+        )
         setup_script = f"""
 set -e
 echo "Creating session directory: {session_path}"
-mkdir -p {session_path}/outputs {session_path}/attachments {session_path}/.opencode
+mkdir -p {session_path}/outputs {session_path}/attachments
 if [ -d {TEMPLATES_OUTPUTS_PATH} ]; then
     cp -r {TEMPLATES_OUTPUTS_PATH}/* {session_path}/outputs/
     # flock+sentinel: serialize concurrent session setups; .ready guards
@@ -1131,6 +1135,7 @@ else
     echo "Warning: outputs template not found at {TEMPLATES_OUTPUTS_PATH}"
     mkdir -p {session_path}/outputs/web
 fi
+{opencode_dependencies_setup}
 ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 ln -sf {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
@@ -1542,9 +1547,12 @@ fi
         attachments_content_b64 = base64.b64encode(
             ATTACHMENTS_SECTION_CONTENT.encode()
         ).decode()
+        opencode_dependencies_setup = build_opencode_dependencies_setup_script(
+            session_path
+        )
         script = f"""
 set -e
-mkdir -p {session_path}/.opencode
+{opencode_dependencies_setup}
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md

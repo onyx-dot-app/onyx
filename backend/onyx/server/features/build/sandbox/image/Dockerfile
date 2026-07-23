@@ -174,6 +174,14 @@ USER sandbox
 RUN curl -fsSL -o /tmp/opencode-install.sh https://opencode.ai/install && \
     bash /tmp/opencode-install.sh --version "${OPENCODE_VERSION}" --no-modify-path && \
     rm /tmp/opencode-install.sh
+# OpenCode ensures @opencode-ai/plugin is installed in every project config
+# directory before loading local plugins. Seed one shared installation so
+# session startup never depends on live npm access.
+RUN mkdir -p /workspace/templates/opencode && \
+    cd /workspace/templates/opencode && \
+    npm install --ignore-scripts --save-exact "@opencode-ai/plugin@${OPENCODE_VERSION}" && \
+    npm cache clean --force && \
+    rm -rf /home/sandbox/.npm
 # Pre-warm Bun's tarball cache so per-session installs hit a local store.
 RUN cd /workspace/templates/outputs/web && \
     bun install --frozen-lockfile && \

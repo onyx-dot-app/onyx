@@ -16,6 +16,24 @@ from onyx.server.features.build.sandbox.models import (
     LLMProviderConfig,
 )
 
+OPENCODE_DEPENDENCIES_TEMPLATE_PATH = "/workspace/templates/opencode"
+
+
+def build_opencode_dependencies_setup_script(session_path: str) -> str:
+    """Seed OpenCode's per-project dependency metadata from the sandbox image."""
+    config_path = f"{session_path}/.opencode"
+    template_path = OPENCODE_DEPENDENCIES_TEMPLATE_PATH
+    return f"""
+mkdir -p {config_path}
+if [ -d {template_path}/node_modules ]; then
+    cp {template_path}/package.json {template_path}/package-lock.json {config_path}/
+    if [ ! -e {config_path}/node_modules ]; then
+        ln -s {template_path}/node_modules {config_path}/node_modules
+    fi
+fi
+"""
+
+
 # 4.6+ supports adaptive thinking; older needs enabled+budgetTokens.
 _ADAPTIVE_THINKING_MODELS = frozenset(
     {"claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6"}

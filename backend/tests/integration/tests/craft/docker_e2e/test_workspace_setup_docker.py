@@ -92,12 +92,20 @@ def test_session_setup_creates_user_writable_workspace(
                 f'test -f "{session_path}/AGENTS.md" && '
                 f'test -L "{session_path}/.opencode/skills" && '
                 f'test "$(readlink "{session_path}/.opencode/skills")" = '
-                '"/workspace/managed/skills"'
+                '"/workspace/managed/skills" && '
+                f'test -f "{session_path}/.opencode/package.json" && '
+                f'test -f "{session_path}/.opencode/package-lock.json" && '
+                f'test -L "{session_path}/.opencode/node_modules" && '
+                f'test "$(readlink "{session_path}/.opencode/node_modules")" = '
+                '"/workspace/templates/opencode/node_modules" && '
+                f'cd "{session_path}" && '
+                "timeout 20 opencode debug config >/dev/null"
             ),
         ],
+        user=SANDBOX_EXEC_USER,
     )
     assert symlink_result.returncode == 0, (
-        "Expected AGENTS.md plus .opencode/skills symlink after provision. "
+        "Expected provisioned OpenCode config and preinstalled dependencies. "
         f"stdout={symlink_result.stdout!r} stderr={symlink_result.stderr!r}"
     )
 
