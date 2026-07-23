@@ -165,9 +165,8 @@ test.describe("Share Chat Session Modal", () => {
       dialog.locator('[aria-label="share-modal-cancel"]')
     ).toBeHidden();
 
-    // The button stays disabled (isLoading) until refreshChatSessions +
-    // clipboard copy finish; wait for the settled state so the screenshot
-    // doesn't race it
+    // The button stays disabled (isLoading) until refreshChatSessions
+    // completes; wait for the settled state so the screenshot doesn't race it
     await expect(submitButton).toBeEnabled();
 
     await expectElementScreenshot(dialog, {
