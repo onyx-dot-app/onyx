@@ -28,7 +28,7 @@ import SwitchField from "@/refresh-components/form/SwitchField";
 import InputChipField, {
   type ChipItem,
 } from "@/refresh-components/inputs/InputChipField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import { Modal } from "@opal/components";
 import { useModalClose } from "@opal/components";
 

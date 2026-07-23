@@ -12,7 +12,7 @@ import { Section } from "@/layouts/general-layouts";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { InputTextArea, InputTypeIn } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import {
   SvgAddLines,
   SvgActions,
@@ -466,9 +466,15 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   }, [showCustom]);
 
   // Only read while in select mode. A stored custom value (transiently visible
-  // here after "More") maps to no item, so the trigger shows the placeholder
-  // until the user picks — at which point onValueChange fires reliably.
-  const selectValue = value === null ? FOREVER_RETENTION_VALUE : String(value);
+  // here after "More") maps to no item, so it becomes the empty value and the
+  // trigger shows the placeholder until the user picks. Picking fires
+  // onValueChange reliably.
+  const selectValue =
+    value === null
+      ? FOREVER_RETENTION_VALUE
+      : valueIsCustomRetention(value)
+        ? ""
+        : String(value);
 
   const persist = (next: number | null) => {
     lastSavedRef.current = next;

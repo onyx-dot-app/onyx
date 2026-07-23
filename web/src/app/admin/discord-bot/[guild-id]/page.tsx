@@ -13,7 +13,7 @@ import Card from "@/refresh-components/cards/Card";
 import { Callout } from "@/components/ui/callout";
 import { Button, MessageCard } from "@opal/components";
 import { SvgServer } from "@opal/icons";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import {
   useDiscordGuild,
   useDiscordChannels,

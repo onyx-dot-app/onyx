@@ -13,13 +13,7 @@ import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import * as Yup from "yup";
 import { FormBodyBuilder } from "./admin/connectors/types";
 import { StringOrNumberOption } from "@/components/Dropdown";
-import {
-  Select,
-  SelectItem,
-  SelectContent,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { InputSelect } from "@opal/components";
 import { FiInfo, FiX } from "react-icons/fi";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
@@ -916,15 +910,10 @@ interface SelectorFormFieldProps {
   label?: string;
   options: StringOrNumberOption[];
   subtext?: string | JSX.Element;
-  includeDefault?: boolean;
-  side?: "top" | "right" | "bottom" | "left";
-  maxHeight?: string;
   onSelect?: (selected: string | number | null) => void;
   defaultValue?: string;
   tooltip?: string;
   includeReset?: boolean;
-  fontSize?: "sm" | "md" | "lg";
-  small?: boolean;
   disabled?: boolean;
 }
 
@@ -933,110 +922,50 @@ export function SelectorFormField({
   label,
   options,
   subtext,
-  side = "bottom",
-  maxHeight,
   onSelect,
   defaultValue,
   tooltip,
   includeReset = false,
-  fontSize = "md",
-  small = false,
   disabled = false,
 }: SelectorFormFieldProps) {
   const [field] = useField<string>(name);
   const { setFieldValue } = useFormikContext();
-  const [container, setContainer] = useState<HTMLDivElement | null>(null);
-
-  const currentlySelected = options.find(
-    (option) => option.value?.toString() === field.value?.toString()
-  );
-
-  const textSizeClasses = {
-    sm: {
-      label: "text-sm",
-      input: "text-sm",
-      placeholder: "text-sm",
-    },
-    md: {
-      label: "text-base",
-      input: "text-base",
-      placeholder: "text-base",
-    },
-    lg: {
-      label: "text-lg",
-      input: "text-lg",
-      placeholder: "text-lg",
-    },
-  };
-
-  const sizeClass = textSizeClasses[fontSize];
 
   return (
     <div>
       {label && (
         <div className="flex gap-x-2 items-center">
-          <Label className={sizeClass.label} small={small}>
-            {label}
-          </Label>
+          <Label>{label}</Label>
           {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
         </div>
       )}
       {subtext && <SubLabel>{subtext}</SubLabel>}
-      <div className="mt-2" ref={setContainer}>
-        <Select
+      <div className="mt-2">
+        <InputSelect
           value={field.value || defaultValue}
-          onValueChange={
-            onSelect ||
-            ((selected) =>
-              selected == "__none__"
-                ? setFieldValue(name, null)
-                : setFieldValue(name, selected))
-          }
-          defaultValue={defaultValue}
+          onValueChange={(selected) => {
+            const next = selected === "__none__" ? null : selected;
+            if (onSelect) onSelect(next);
+            else setFieldValue(name, next);
+          }}
           disabled={disabled}
         >
-          <SelectTrigger className={sizeClass.input} disabled={disabled}>
-            <SelectValue placeholder="Select...">
-              {currentlySelected?.name || defaultValue || ""}
-            </SelectValue>
-          </SelectTrigger>
-
-          {container && (
-            <SelectContent
-              side={side}
-              className={`
-               ${maxHeight ? `${maxHeight}` : "max-h-72"}
-               overflow-y-scroll
-               ${sizeClass.input}
-              `}
-              container={container}
-            >
-              {options.length === 0 ? (
-                <SelectItem value="default">Select...</SelectItem>
-              ) : (
-                options.map((option) => (
-                  <SelectItem
-                    hideCheck
-                    icon={option.icon}
-                    key={option.value}
-                    value={String(option.value)}
-                    selected={field.value === option.value}
-                  >
-                    {option.name}
-                  </SelectItem>
-                ))
-              )}
-              {includeReset && (
-                <SelectItem
-                  value={"__none__"}
-                  onSelect={() => setFieldValue(name, null)}
-                >
-                  None
-                </SelectItem>
-              )}
-            </SelectContent>
-          )}
-        </Select>
+          <InputSelect.Trigger placeholder="Select..." />
+          <InputSelect.Content>
+            {options.map((option) => (
+              <InputSelect.Item
+                key={option.value}
+                value={String(option.value)}
+                icon={option.icon}
+              >
+                {option.name}
+              </InputSelect.Item>
+            ))}
+            {includeReset && (
+              <InputSelect.Item value="__none__">None</InputSelect.Item>
+            )}
+          </InputSelect.Content>
+        </InputSelect>
       </div>
 
       <ErrorMessage

@@ -1,23 +1,15 @@
 import SvgSimpleLoader from "@opal/icons/simple-loader";
-import { X, Search } from "lucide-react";
 import {
   getDatesList,
   usePersonaMessages,
   usePersonaUniqueUsers,
 } from "../lib";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
-import { Text } from "@opal/components";
+import { InputSelect, Text } from "@opal/components";
 import Title from "@/components/ui/title";
 import CardSection from "@/components/admin/CardSection";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Agent } from "@/lib/agents/types";
 
 export function PersonaMessagesChart({
@@ -31,7 +23,6 @@ export function PersonaMessagesChart({
     number | undefined
   >(undefined);
   const [searchQuery, setSearchQuery] = useState("");
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   const {
     data: personaMessagesData,
@@ -54,45 +45,6 @@ export function PersonaMessagesChart({
       persona.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [availablePersonas, searchQuery]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    e.stopPropagation();
-
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        setHighlightedIndex((prev) =>
-          prev < filteredPersonaList.length - 1 ? prev + 1 : prev
-        );
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : prev));
-        break;
-      case "Enter":
-        if (
-          highlightedIndex >= 0 &&
-          highlightedIndex < filteredPersonaList.length
-        ) {
-          const filteredPersona = filteredPersonaList[highlightedIndex];
-          if (filteredPersona !== undefined) {
-            setSelectedPersonaId(filteredPersona.id);
-            setSearchQuery("");
-            setHighlightedIndex(-1);
-          }
-        }
-        break;
-      case "Escape":
-        setSearchQuery("");
-        setHighlightedIndex(-1);
-        break;
-    }
-  };
-
-  // Reset highlight when search query changes
-  useEffect(() => {
-    setHighlightedIndex(-1);
-  }, [searchQuery]);
 
   const chartData = useMemo(() => {
     if (
@@ -184,49 +136,34 @@ export function PersonaMessagesChart({
           Messages and unique users per day for the selected agent
         </Text>
         <div className="flex items-center gap-4">
-          <Select
-            value={selectedPersonaId?.toString() ?? ""}
-            onValueChange={(value) => {
-              setSelectedPersonaId(parseInt(value));
-            }}
-          >
-            <SelectTrigger className="flex w-full max-w-xs">
-              <SelectValue placeholder="Select an agent to display" />
-            </SelectTrigger>
-            <SelectContent>
-              <div className="flex items-center px-2 pb-2 sticky top-0 bg-background border-b">
-                <Search className="h-4 w-4 mr-2 shrink-0 opacity-50" />
-                <input
-                  className="flex h-8 w-full rounded-xs bg-transparent py-3 text-sm outline-hidden placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="Search agents..."
+          <div className="w-full max-w-xs">
+            <InputSelect
+              value={selectedPersonaId?.toString() ?? ""}
+              onValueChange={(value) => {
+                setSelectedPersonaId(parseInt(value));
+              }}
+              onOpenChange={(open) => {
+                if (open) setSearchQuery("");
+              }}
+            >
+              <InputSelect.Trigger placeholder="Select an agent to display" />
+              <InputSelect.Content>
+                <InputSelect.Search
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onKeyDown={handleKeyDown}
+                  placeholder="Search agents..."
                 />
-                {searchQuery && (
-                  <X
-                    className="h-4 w-4 shrink-0 opacity-50 cursor-pointer hover:opacity-100"
-                    onClick={() => {
-                      setSearchQuery("");
-                      setHighlightedIndex(-1);
-                    }}
-                  />
-                )}
-              </div>
-              {filteredPersonaList.map((persona, index) => (
-                <SelectItem
-                  key={persona.id}
-                  value={persona.id.toString()}
-                  className={`${highlightedIndex === index ? "hover" : ""}`}
-                  onMouseEnter={() => setHighlightedIndex(index)}
-                >
-                  {persona.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                {filteredPersonaList.map((persona) => (
+                  <InputSelect.Item
+                    key={persona.id}
+                    value={persona.id.toString()}
+                  >
+                    {persona.name}
+                  </InputSelect.Item>
+                ))}
+              </InputSelect.Content>
+            </InputSelect>
+          </div>
         </div>
       </div>
       {content}

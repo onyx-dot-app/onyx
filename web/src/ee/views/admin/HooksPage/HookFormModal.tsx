@@ -12,7 +12,7 @@ import {
 } from "@opal/icons";
 import { BasicModalFooter, Modal } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction, InputVertical, toast } from "@opal/layouts";
@@ -316,23 +316,25 @@ export default function HookFormModal({
                     >
                       <InputSelect.Trigger placeholder="Select strategy" />
                       <InputSelect.Content>
-                        <InputSelect.Item value="soft">
+                        <InputSelect.Item
+                          value="soft"
+                          description={
+                            spec?.default_fail_strategy === "soft"
+                              ? "Default"
+                              : undefined
+                          }
+                        >
                           Log Error and Continue
-                          {spec?.default_fail_strategy === "soft" && (
-                            <>
-                              {" "}
-                              <Text color="text-03">(Default)</Text>
-                            </>
-                          )}
                         </InputSelect.Item>
-                        <InputSelect.Item value="hard">
+                        <InputSelect.Item
+                          value="hard"
+                          description={
+                            spec?.default_fail_strategy === "hard"
+                              ? "Default"
+                              : undefined
+                          }
+                        >
                           Block Pipeline on Failure
-                          {spec?.default_fail_strategy === "hard" && (
-                            <>
-                              {" "}
-                              <Text color="text-03">(Default)</Text>
-                            </>
-                          )}
                         </InputSelect.Item>
                       </InputSelect.Content>
                     </InputSelect>

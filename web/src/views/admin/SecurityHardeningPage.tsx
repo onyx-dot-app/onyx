@@ -10,7 +10,7 @@ import InputNumber from "@/refresh-components/inputs/InputNumber";
 import InputChipField, {
   type ChipItem,
 } from "@/refresh-components/inputs/InputChipField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import {
   Content,
   InputHorizontal,

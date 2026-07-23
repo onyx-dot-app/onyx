@@ -21,7 +21,7 @@ import {
 } from "@opal/icons";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { BasicModalFooter, Modal } from "@opal/components";
 import { Code } from "@opal/components";

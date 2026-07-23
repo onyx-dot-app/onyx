@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import { Label } from "@/components/Field";
 
 interface ReferralSourceSelectorProps {

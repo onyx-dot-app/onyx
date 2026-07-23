@@ -21,7 +21,7 @@ import {
   deleteImageGenerationConfig,
 } from "@/views/admin/ImageGenerationPage/svc";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import { Button, MessageCard, Text } from "@opal/components";
 import { Content, toast } from "@opal/layouts";
 import { SvgSlash, SvgUnplug } from "@opal/icons";
@@ -318,14 +318,9 @@ export default function ImageGenerationContent() {
                       <InputSelect.Item
                         value={NO_DEFAULT_VALUE}
                         icon={SvgSlash}
+                        description="Disable Image Generation"
                       >
-                        <span>
-                          <b>No Default</b>
-                          <span className="text-text-03">
-                            {" "}
-                            (Disable Image Generation)
-                          </span>
-                        </span>
+                        No Default
                       </InputSelect.Item>
                     </InputSelect.Content>
                   </InputSelect>
