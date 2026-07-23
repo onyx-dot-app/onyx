@@ -3073,6 +3073,16 @@ class ChatSession(Base):
     )
     persona: Mapped["Persona"] = relationship("Persona")
 
+    __table_args__ = (
+        # Backs the chat-history sidebar query (get_chat_sessions_by_user):
+        # filter by user_id, order by time_updated DESC.
+        Index(
+            "ix_chat_session_user_id_time_updated",
+            "user_id",
+            desc("time_updated"),
+        ),
+    )
+
 
 class ChatMessage(Base):
     """Note, the first message in a chain has no contents, it's a workaround to allow edits
