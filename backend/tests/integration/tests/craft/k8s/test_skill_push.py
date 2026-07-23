@@ -333,7 +333,7 @@ def _rendered_company_search_lines(db_session: Session, user: User) -> list[str]
 
 
 class TestSkillPush:
-    def test_external_app_skill_lands_after_user_authenticates(
+    def test_external_app_skill_requires_authentication_and_selection(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
@@ -377,6 +377,8 @@ class TestSkillPush:
                 credentials={"access_token": "integration-test-token"},
             )
 
+            skill_file.wait_for_absent()
+            SkillManager.set_enabled(skill_response, user, True)
             skill_file.wait_for_bytes(b"credential gated skill body\n")
         finally:
             ExternalAppManager.delete(k8s_admin_user, app.id)
