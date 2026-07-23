@@ -126,5 +126,5 @@ def slack_external_app() -> None:
                 organization_credentials={"access_token": "fake-test-token"},
                 action_policies={"slack.messages.write": EndpointPolicy.ASK},
             )
-            associate_built_in_skill__no_commit(db, app, is_public=True)
+            associate_built_in_skill__no_commit(db, app)
             db.commit()

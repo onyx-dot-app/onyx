@@ -83,7 +83,7 @@ def _seed_built_in(
         organization_credentials=credentials,
         action_policies=None,
     )
-    associate_built_in_skill__no_commit(db_session, app, is_public=True)
+    associate_built_in_skill__no_commit(db_session, app)
     db_session.commit()
 
 

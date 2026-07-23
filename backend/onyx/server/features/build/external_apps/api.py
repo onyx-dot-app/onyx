@@ -181,7 +181,7 @@ def create_built_in_external_app(
         organization_credentials=request.organization_credentials,
         action_policies=action_policies,
     )
-    skill = associate_built_in_skill__no_commit(db_session, app, is_public=True)
+    skill = associate_built_in_skill__no_commit(db_session, app)
 
     # Push before commit so a push failure rolls back the create.
     push_skill_to_affected_sandboxes(skill, db_session)

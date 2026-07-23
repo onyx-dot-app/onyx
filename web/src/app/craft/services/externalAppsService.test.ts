@@ -23,8 +23,8 @@ describe("createCustomExternalApp", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
-    const request = jest.mocked(global.fetch).mock.calls[0]?.[1];
-    expect(request?.body).not.toBeInstanceOf(FormData);
-    expect(String(request?.body)).not.toContain("bundle");
+    const request = jest.mocked(global.fetch).mock.calls[0]![1]!;
+    expect(request.body).not.toBeInstanceOf(FormData);
+    expect(String(request.body)).not.toContain("bundle");
   });
 });

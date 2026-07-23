@@ -255,10 +255,9 @@ def get_built_in_external_app(
 ) -> ExternalApp | None:
     """The tenant's built-in external app of the given type, or None.
 
-    Built-in apps are unique per type per tenant (enforced when their backing
-    skill is created), so at most one row matches. ``CUSTOM`` is rejected: it
-    can repeat, so "the app of this type" is meaningless — callers must pass a
-    built-in type.
+    Callers expect at most one configured row for a built-in provider type.
+    ``CUSTOM`` is rejected because multiple custom apps may share that type, so
+    callers must identify them by ID instead.
     """
     if not app_type.is_built_in:
         raise OnyxError(
@@ -337,8 +336,6 @@ def create_external_app(
 def associate_built_in_skill__no_commit(
     db_session: Session,
     app: ExternalApp,
-    *,
-    is_public: bool = True,
 ) -> Skill:
     """Create or reuse a provider's canonical built-in skill and link it to app.
 
@@ -370,7 +367,7 @@ def associate_built_in_skill__no_commit(
                 bundle_file_id=None,
                 bundle_sha256=None,
                 is_valid=True,
-                public_permission=(SkillSharePermission.VIEWER if is_public else None),
+                public_permission=SkillSharePermission.VIEWER,
             ),
             db_session,
             is_external_app_backing=True,
@@ -381,6 +378,7 @@ def associate_built_in_skill__no_commit(
             f"The built-in app '{app.app_type.value}' is already configured.",
         )
 
+    skill.public_permission = SkillSharePermission.VIEWER
     app.associated_skills.append(skill)
     db_session.flush()
     return skill

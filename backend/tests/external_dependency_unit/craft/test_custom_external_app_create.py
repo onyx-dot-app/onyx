@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import ExternalAppType, SkillSharePermission
 from onyx.db.external_app import (
     associate_built_in_skill__no_commit,
     create_external_app,
@@ -156,7 +156,10 @@ def test_built_in_provisioning_reuses_an_orphaned_system_skill(
     first_skill_id = first_skill.id
     db_session.delete(first_app)
     db_session.commit()
-    assert db_session.get(Skill, first_skill_id) is not None
+    orphaned_skill = db_session.get(Skill, first_skill_id)
+    assert orphaned_skill is not None
+    orphaned_skill.public_permission = None
+    db_session.commit()
 
     second_app = create_external_app(
         db_session=db_session,
@@ -170,6 +173,7 @@ def test_built_in_provisioning_reuses_an_orphaned_system_skill(
     db_session.commit()
 
     assert second_skill.id == first_skill_id
+    assert second_skill.public_permission == SkillSharePermission.VIEWER
     assert second_app.associated_skills == [second_skill]
     assert (
         len(
