@@ -104,6 +104,23 @@ module "eks" {
       # Only add subnet_ids override for main node group if specified
       k == "main" && length(var.main_node_subnet_ids) > 0 ? {
         subnet_ids = var.main_node_subnet_ids
+      } : {},
+      # Scaling-bound overrides for the main node group; null keeps the map default
+      k == "main" ? {
+        min_size = coalesce(var.main_node_min_size, v.min_size)
+        max_size = coalesce(var.main_node_max_size, v.max_size)
+      } : {},
+      # Disk override for the Vespa/document-index node; null keeps the map default
+      k == "vespa" && var.vespa_node_disk_size_gb != null ? {
+        block_device_mappings = {
+          xvda = {
+            device_name = "/dev/xvda"
+            ebs = merge(
+              v.block_device_mappings.xvda.ebs,
+              { volume_size = var.vespa_node_disk_size_gb }
+            )
+          }
+        }
       } : {}
     )
   }, local.craft_sandbox_node_groups)

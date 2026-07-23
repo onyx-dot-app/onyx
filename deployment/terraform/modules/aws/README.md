@@ -93,6 +93,52 @@ terraform init
 terraform apply
 ```
 
+## T-shirt sizing
+The `onyx` module takes a `size` input (`small` | `medium` | `large`, default `medium`) that sets
+coherent defaults for every compute and data-plane knob. Pick a tier from your expected scale:
+
+| Tier | Users | Documents |
+|---|---|---|
+| `small` | up to ~200 | < ~500k |
+| `medium` | ~200–1,000 | ~0.5–2M |
+| `large` | 1,000+ | multi-million |
+
+What each tier provisions:
+
+| Setting | small | medium | large |
+|---|---|---|---|
+| Main EKS node group | m7i.4xlarge ×1–3 | m7i.4xlarge ×1–5 | m7i.4xlarge ×2–8 |
+| Document-index node¹ | m6i.xlarge, 100 GB | m6i.2xlarge, 100 GB | r6i.4xlarge, 512 GB |
+| RDS Postgres | db.t4g.large, 64→256 GB | db.t4g.large, 128→512 GB | db.m7g.xlarge, 256→1024 GB |
+| ElastiCache Redis | cache.m6g.large | cache.m6g.xlarge | cache.m6g.2xlarge |
+| OpenSearch data² | r7g.large ×1, 256 GB | r8g.xlarge ×1, 512 GB | r8g.2xlarge ×1, 1 TB (12k IOPS) |
+| OpenSearch masters² | 3× m7g.medium | 3× m7g.medium | 3× m7g.medium |
+
+¹ The dedicated index node group only matters when running the document index in-cluster
+(the Helm chart's OpenSearch StatefulSet). If you use a managed OpenSearch domain instead
+(`enable_opensearch = true`), the index node sits idle — consider overriding
+`vespa_node_instance_types` to a small instance.
+² Only created when `enable_opensearch = true`. All tiers default to a single data node
+without zone awareness; RDS is likewise single-AZ. For HA, set
+`opensearch_instance_count = 3`, `opensearch_zone_awareness_enabled = true` (and optionally
+`opensearch_multi_az_with_standby_enabled = true`).
+
+These defaults are calibrated from Onyx's own managed production fleet: memory, not CPU, is
+the binding dimension on the Kubernetes side, and the burstable `db.t4g.large` holds up to
+roughly the medium tier before CPU peaks make a fixed-performance class worthwhile.
+
+Every value in the table is just a default — any sizing variable set to a non-null value
+(e.g. `postgres_instance_type`, `opensearch_instance_type`, `main_node_max_size`) overrides
+its tier.
+
+**Upgrading from a pre-sizing version of these modules:** the previous hardcoded defaults
+were `db.t4g.large` with 20 GB gp2 and no storage autoscaling, `cache.m6g.xlarge`, and a
+3×r8g.large multi-AZ OpenSearch domain. The default `medium` tier keeps the same EKS node
+groups and Redis node type, grows Postgres storage online (gp2→gp3 conversion is also
+online; storage can never shrink), and — if you enabled OpenSearch and relied on the old
+defaults — would replace the domain with a single-node shape, so pin the old values
+explicitly before applying if you want to keep them.
+
 ### Using an existing VPC
 If you already have a VPC and subnets, disable VPC creation and provide IDs, CIDR, and the ID of the existing S3 gateway endpoint in that VPC:
 
@@ -126,6 +172,7 @@ module "onyx" {
 
 Inputs (common):
 - `name` (default `onyx`), `region` (default `us-west-2`), `tags`
+- `size` (`small`/`medium`/`large`, default `medium`) — see "T-shirt sizing" above — plus per-setting overrides (`main_node_*`, `vespa_node_*`, `postgres_instance_type`, `postgres_storage_gb`, `redis_instance_type`, `opensearch_*`)
 - `postgres_username`, `postgres_password`
 - `create_vpc` (default true) or existing VPC details and `s3_vpc_endpoint_id`
 - WAF controls such as `waf_allowed_ip_cidrs`, `waf_common_rule_set_count_rules`, rate limits, geo restrictions, and logging retention

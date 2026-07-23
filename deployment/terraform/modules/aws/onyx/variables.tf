@@ -59,6 +59,79 @@ variable "tags" {
   }
 }
 
+variable "size" {
+  type        = string
+  description = <<-EOT
+    T-shirt size that sets coherent defaults for every compute/data-plane knob
+    (EKS node groups, RDS, ElastiCache, OpenSearch). Rough guide:
+      small  — pilots and small teams: up to ~200 users, < ~500k documents
+      medium — typical department/company: ~200-1,000 users, ~0.5-2M documents
+      large  — org-wide deployments: 1,000+ users, multi-million documents
+    Any individual sizing variable set to a non-null value overrides its tier
+    default. See the README for the full per-tier table.
+  EOT
+  default     = "medium"
+
+  validation {
+    condition     = contains(["small", "medium", "large"], var.size)
+    error_message = "size must be one of: small, medium, large."
+  }
+}
+
+variable "main_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the main EKS node group. Null uses the t-shirt size default."
+  default     = null
+}
+
+variable "main_node_min_size" {
+  type        = number
+  description = "Minimum main node group size (autoscaler floor). Null uses the t-shirt size default."
+  default     = null
+}
+
+variable "main_node_max_size" {
+  type        = number
+  description = "Maximum main node group size. Null uses the t-shirt size default."
+  default     = null
+}
+
+variable "vespa_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the dedicated document-index (Vespa/OpenSearch STS) node group. Only relevant when running the index in-cluster. Null uses the t-shirt size default."
+  default     = null
+}
+
+variable "vespa_node_disk_size_gb" {
+  type        = number
+  description = "Root EBS volume (GiB) for the document-index node. Null uses the t-shirt size default."
+  default     = null
+}
+
+variable "postgres_instance_type" {
+  type        = string
+  description = "RDS instance class. Null uses the t-shirt size default."
+  default     = null
+}
+
+variable "postgres_storage_gb" {
+  type        = number
+  description = "Initial RDS allocated storage in GiB (grows via autoscaling up to postgres_max_storage_gb; cannot shrink once applied). Null uses the t-shirt size default."
+  default     = null
+}
+
+variable "postgres_max_storage_gb" {
+  type        = number
+  description = "RDS storage-autoscaling ceiling in GiB. Null uses the t-shirt size default."
+  default     = null
+}
+
+variable "redis_instance_type" {
+  type        = string
+  description = "ElastiCache node type for the Redis replication group. Null uses the t-shirt size default."
+  default     = null
+}
+
 variable "postgres_username" {
   type        = string
   description = "Username for the postgres database"
@@ -227,14 +300,14 @@ variable "opensearch_engine_version" {
 
 variable "opensearch_instance_type" {
   type        = string
-  description = "Instance type for OpenSearch data nodes"
-  default     = "r8g.large.search"
+  description = "Instance type for OpenSearch data nodes. Null uses the t-shirt size default."
+  default     = null
 }
 
 variable "opensearch_instance_count" {
   type        = number
-  description = "Number of OpenSearch data nodes"
-  default     = 3
+  description = "Number of OpenSearch data nodes. Null uses the t-shirt size default."
+  default     = null
 }
 
 variable "opensearch_dedicated_master_enabled" {
@@ -245,26 +318,38 @@ variable "opensearch_dedicated_master_enabled" {
 
 variable "opensearch_dedicated_master_type" {
   type        = string
-  description = "Instance type for dedicated master nodes"
-  default     = "m7g.large.search"
+  description = "Instance type for dedicated master nodes. Null uses the t-shirt size default."
+  default     = null
 }
 
 variable "opensearch_multi_az_with_standby_enabled" {
   type        = bool
-  description = "Whether to enable Multi-AZ with Standby deployment"
-  default     = true
+  description = "Whether to enable Multi-AZ with Standby deployment. Requires zone awareness and instance_count >= 3 when true. Null uses the t-shirt size default."
+  default     = null
+}
+
+variable "opensearch_zone_awareness_enabled" {
+  type        = bool
+  description = "Whether to spread OpenSearch data nodes across AZs. Must be false for single-data-node domains. Null uses the t-shirt size default."
+  default     = null
 }
 
 variable "opensearch_ebs_volume_size" {
   type        = number
-  description = "EBS volume size in GiB per OpenSearch node"
-  default     = 512
+  description = "EBS volume size in GiB per OpenSearch node. Null uses the t-shirt size default."
+  default     = null
+}
+
+variable "opensearch_ebs_iops" {
+  type        = number
+  description = "IOPS for gp3 volumes. Null uses the t-shirt size default."
+  default     = null
 }
 
 variable "opensearch_ebs_throughput" {
   type        = number
-  description = "Throughput in MiB/s for gp3 volumes"
-  default     = 256
+  description = "Throughput in MiB/s for gp3 volumes. Null uses the t-shirt size default."
+  default     = null
 }
 
 variable "opensearch_internal_user_database_enabled" {

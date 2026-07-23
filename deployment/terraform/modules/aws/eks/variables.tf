@@ -43,10 +43,28 @@ variable "main_node_instance_types" {
   default     = ["m7i.4xlarge"]
 }
 
+variable "main_node_min_size" {
+  type        = number
+  description = "Minimum number of nodes in the main node group. The cluster-autoscaler will not scale below this, so raise it to guarantee always-on baseline capacity for bursty workloads. Null keeps the node-group default."
+  default     = null
+}
+
+variable "main_node_max_size" {
+  type        = number
+  description = "Maximum number of nodes the main node group may scale up to. Null keeps the node-group default."
+  default     = null
+}
+
 variable "vespa_node_instance_types" {
   type        = list(string)
   description = "Instance types for the Vespa node group"
   default     = ["m6i.2xlarge"]
+}
+
+variable "vespa_node_disk_size_gb" {
+  type        = number
+  description = "Root EBS volume (GiB) for the Vespa/document-index node. Size to the expected on-disk index; null keeps the node-group default."
+  default     = null
 }
 
 variable "vespa_node_subnet_ids" {
