@@ -19,6 +19,7 @@ from onyx.llm.well_known_providers.constants import (
     AZURE_PROVIDER_NAME,
     BEDROCK_PROVIDER_NAME,
     BIFROST_PROVIDER_NAME,
+    EDENAI_PROVIDER_NAME,
     LITELLM_PROXY_PROVIDER_NAME,
     LM_STUDIO_PROVIDER_NAME,
     NEBIUS_TOKENFACTORY_PROVIDER_NAME,
@@ -55,6 +56,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
         LM_STUDIO_PROVIDER_NAME: [],  # Dynamic - fetched from LM Studio API
         OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
+        EDENAI_PROVIDER_NAME: [],  # Dynamic - fetched from Eden AI /v3/models
         LITELLM_PROXY_PROVIDER_NAME: [],  # Dynamic - fetched from LiteLLM proxy API
         BIFROST_PROVIDER_NAME: [],  # Dynamic - fetched from Bifrost API
         OPENAI_COMPATIBLE_PROVIDER_NAME: [],  # Dynamic - fetched from OpenAI-compatible API
@@ -351,6 +353,7 @@ def get_provider_display_name(provider_name: str) -> str:
         BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
+        EDENAI_PROVIDER_NAME: "Eden AI",
         LITELLM_PROXY_PROVIDER_NAME: "LiteLLM Proxy",
         OPENAI_COMPATIBLE_PROVIDER_NAME: "OpenAI-Compatible",
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: "Nebius TokenFactory",

@@ -20,6 +20,7 @@ class LlmProviderNames(str, Enum):
     BEDROCK_CONVERSE = "bedrock_converse"
     VERTEX_AI = "vertex_ai"
     OPENROUTER = "openrouter"
+    EDENAI = "edenai"
     AZURE = "azure"
     OLLAMA_CHAT = "ollama_chat"
     LM_STUDIO = "lm_studio"
@@ -43,6 +44,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.VERTEX_AI,
     LlmProviderNames.BEDROCK,
     LlmProviderNames.OPENROUTER,
+    LlmProviderNames.EDENAI,
     LlmProviderNames.AZURE,
     LlmProviderNames.OLLAMA_CHAT,
     LlmProviderNames.LM_STUDIO,
@@ -62,6 +64,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.BEDROCK_CONVERSE: "Bedrock",
     LlmProviderNames.VERTEX_AI: "Vertex AI",
     LlmProviderNames.OPENROUTER: "OpenRouter",
+    LlmProviderNames.EDENAI: "Eden AI",
     LlmProviderNames.AZURE: "Azure",
     "ollama": "Ollama",
     LlmProviderNames.OLLAMA_CHAT: "Ollama",
@@ -154,6 +157,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.BEDROCK,
     LlmProviderNames.BEDROCK_CONVERSE,
     LlmProviderNames.OPENROUTER,
+    LlmProviderNames.EDENAI,
     LlmProviderNames.OLLAMA_CHAT,
     LlmProviderNames.LM_STUDIO,
     LlmProviderNames.VERTEX_AI,
@@ -169,6 +173,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
 DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
     {
         LlmProviderNames.OPENROUTER,
+        LlmProviderNames.EDENAI,
         LlmProviderNames.BEDROCK,
         LlmProviderNames.OLLAMA_CHAT,
         LlmProviderNames.LM_STUDIO,

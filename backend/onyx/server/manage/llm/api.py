@@ -80,6 +80,9 @@ from onyx.server.manage.llm.models import (
     BifrostModelsRequest,
     CustomProviderOption,
     DefaultModel,
+    EdenAiFinalModelResponse,
+    EdenAiModelDetails,
+    EdenAiModelsRequest,
     LitellmFinalModelResponse,
     LitellmModelDetails,
     LitellmModelsRequest,
@@ -1523,6 +1526,105 @@ def get_openrouter_available_models(
                 for r in sorted_results
             ],
             source_label="OpenRouter",
+        )
+
+    return sorted_results
+
+
+def _get_edenai_models_response(api_base: str, api_key: str | None) -> dict:
+    """Perform GET to the Eden AI /models endpoint and return parsed JSON.
+
+    Delegates to the shared OpenAI-compatible helper so invalid credentials and
+    bad base URLs surface as actionable validation errors (rather than a generic
+    502) with consistent request-context logging.
+    """
+    cleaned_api_base = api_base.strip().rstrip("/")
+    return _get_openai_compatible_models_response(
+        url=f"{cleaned_api_base}/models",
+        source_name="Eden AI",
+        api_key=api_key,
+    )
+
+
+@admin_router.post("/edenai/available-models")
+def get_edenai_available_models(
+    request: EdenAiModelsRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[EdenAiFinalModelResponse]:
+    """Fetch available models from the Eden AI `/v3/models` endpoint.
+
+    Parses id, model_name (display), context_length, and capabilities
+    (input/output modalities). Keeps text-generation (chat) models only.
+    """
+
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, request.api_base, db_session
+    )
+
+    response_json = _get_edenai_models_response(
+        api_base=request.api_base, api_key=api_key
+    )
+
+    data = response_json.get("data", [])
+    if not isinstance(data, list) or len(data) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your Eden AI endpoint",
+        )
+
+    results: list[EdenAiFinalModelResponse] = []
+    for item in data:
+        try:
+            model_details = EdenAiModelDetails.model_validate(item)
+
+            # Keep chat models only (skip audio / image / embedding models)
+            if not model_details.is_text_output:
+                continue
+
+            # Eden AI already returns the bare model name; fall back to the id.
+            display_name = model_details.model_name or model_details.id
+
+            # Treat context_length of 0 as unknown (None)
+            context_length = model_details.context_length or None
+
+            results.append(
+                EdenAiFinalModelResponse(
+                    name=model_details.id,
+                    display_name=display_name,
+                    max_input_tokens=context_length,
+                    supports_image_input=model_details.supports_image_input,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Eden AI model entry",
+                extra={"error": str(e), "item": str(item)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from Eden AI",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                )
+                for r in sorted_results
+            ],
+            source_label="Eden AI",
         )
 
     return sorted_results

@@ -40,7 +40,10 @@ from onyx.llm.models import (
 )
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
+from onyx.llm.well_known_providers.constants import (
+    EDENAI_API_BASE,
+    VERTEX_LOCATION_KWARG,
+)
 from onyx.utils.encryption import mask_env_value_for_logging, mask_string
 from onyx.utils.logger import setup_logger
 
@@ -415,6 +418,17 @@ class LitellmLLM(LLM):
                 self._api_base = base if base.endswith("/v1") else f"{base}/v1"
                 model_kwargs["api_base"] = self._api_base
 
+        # Eden AI: an OpenAI-compatible aggregator. We route through LiteLLM's
+        # openai provider with Eden AI's base URL. Unlike the proxies above,
+        # Eden AI's base already ends in /v3, so we must NOT append /v1.
+        if model_provider == LlmProviderNames.EDENAI:
+            self._custom_llm_provider = "openai"
+            if not self._api_key:
+                model_kwargs.setdefault("api_key", "not-needed")
+            base = (self._api_base or EDENAI_API_BASE).rstrip("/")
+            self._api_base = base
+            model_kwargs["api_base"] = base
+
         # This is needed for Ollama to do proper function calling
         if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:
             model_kwargs["api_base"] = api_base
@@ -537,13 +551,25 @@ class LitellmLLM(LLM):
             LlmProviderNames.BIFROST,
             LlmProviderNames.OPENAI_COMPATIBLE,
             LlmProviderNames.NEBIUS_TOKENFACTORY,
+            # Eden AI is reached through LiteLLM's openai-compatible path too, so
+            # it needs the same tool_choice forwarding even when the underlying
+            # model is Claude or Mistral. Its extra "openai/" model prefix is
+            # handled by the dedicated branch below.
+            LlmProviderNames.EDENAI,
         )
         model_provider = (
             f"{self.config.model_provider}/responses"
             if is_openai_model  # Uses litellm's completions -> responses bridge
             else self.config.model_provider
         )
-        if is_openai_compatible_proxy:
+        if self._model_provider == LlmProviderNames.EDENAI:
+            # Eden AI is reached through LiteLLM's openai-compatible path
+            # (custom_llm_provider="openai"). LiteLLM strips exactly one leading
+            # "<provider>/" segment from the model string, so we prepend "openai/"
+            # to preserve Eden AI's full "<vendor>/<model>" id. Example:
+            # "openai/anthropic/claude-sonnet-4-5" -> "anthropic/claude-sonnet-4-5".
+            model = f"openai/{self.config.deployment_name or self.config.model_name}"
+        elif is_openai_compatible_proxy:
             # OpenAI-compatible proxies (Bifrost, generic OpenAI-compatible
             # servers) expect model names sent directly to their endpoint.
             # We use custom_llm_provider="openai" so LiteLLM doesn't try

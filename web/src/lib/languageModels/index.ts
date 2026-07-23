@@ -7,6 +7,7 @@ import {
   SvgOllama,
   SvgAws,
   SvgOpenrouter,
+  SvgEdenai,
   SvgAzure,
   SvgGemini,
   SvgLitellm,
@@ -31,6 +32,7 @@ import AzureModal from "@/sections/modals/languageModels/AzureModal";
 import BedrockModal from "@/sections/modals/languageModels/BedrockModal";
 import VertexAIModal from "@/sections/modals/languageModels/VertexAIModal";
 import OpenRouterModal from "@/sections/modals/languageModels/OpenRouterModal";
+import EdenAiModal from "@/sections/modals/languageModels/EdenAiModal";
 import CustomModal from "@/sections/modals/languageModels/CustomModal";
 import LMStudioModal from "@/sections/modals/languageModels/LMStudioModal";
 import LiteLLMProxyModal from "@/sections/modals/languageModels/LiteLLMProxyModal";
@@ -102,6 +104,12 @@ const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "OpenRouter",
     Modal: OpenRouterModal,
   },
+  [LLMProviderName.EDENAI]: {
+    icon: SvgEdenai,
+    productName: "Eden AI",
+    companyName: "Eden AI",
+    Modal: EdenAiModal,
+  },
   [LLMProviderName.LM_STUDIO]: {
     icon: SvgLmStudio,
     productName: "LM Studio",
@@ -148,6 +156,7 @@ const CUSTOM_CONFIG_OVERRIDES = new Set<string>([
   LLMProviderName.ANTHROPIC,
   LLMProviderName.AZURE,
   LLMProviderName.OPENROUTER,
+  LLMProviderName.EDENAI,
 ]);
 
 export function getProvider(
@@ -178,6 +187,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.BEDROCK,
   "bedrock_converse",
   LLMProviderName.OPENROUTER,
+  LLMProviderName.EDENAI,
   LLMProviderName.OLLAMA_CHAT,
   LLMProviderName.LM_STUDIO,
   LLMProviderName.LITELLM_PROXY,
@@ -195,6 +205,7 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
   [LLMProviderName.LM_STUDIO]: SvgLmStudio,
   [LLMProviderName.OPENROUTER]: SvgOpenrouter,
+  [LLMProviderName.EDENAI]: SvgEdenai,
   [LLMProviderName.VERTEX_AI]: SvgGemini,
   [LLMProviderName.BEDROCK]: SvgAws,
   [LLMProviderName.LITELLM_PROXY]: SvgLitellm,

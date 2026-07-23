@@ -72,6 +72,7 @@ const PROVIDER_GROUPS: ProviderGroup[] = [
     title: "Gateways & Routers",
     providerNames: [
       LLMProviderName.OPENROUTER,
+      LLMProviderName.EDENAI,
       LLMProviderName.LITELLM_PROXY,
       LLMProviderName.NEBIUS_TOKENFACTORY,
       LLMProviderName.BIFROST,

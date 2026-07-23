@@ -73,6 +73,39 @@
           "display_name": "Kimi K3"
         }
       ]
+    },
+    "edenai": {
+      "default_model": "anthropic/claude-sonnet-4-5",
+      "additional_visible_models": [
+        {
+          "name": "anthropic/claude-sonnet-4-5",
+          "display_name": "Claude Sonnet 4.5"
+        },
+        {
+          "name": "anthropic/claude-haiku-4-5",
+          "display_name": "Claude Haiku 4.5"
+        },
+        {
+          "name": "openai/gpt-4o",
+          "display_name": "GPT-4o"
+        },
+        {
+          "name": "openai/gpt-4o-mini",
+          "display_name": "GPT-4o mini"
+        },
+        {
+          "name": "google/gemini-2.5-flash",
+          "display_name": "Gemini 2.5 Flash"
+        },
+        {
+          "name": "mistral/mistral-large-latest",
+          "display_name": "Mistral Large"
+        },
+        {
+          "name": "mistral/mistral-small-latest",
+          "display_name": "Mistral Small"
+        }
+      ]
     }
   }
 }

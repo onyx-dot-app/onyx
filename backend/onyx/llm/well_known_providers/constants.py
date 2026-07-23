@@ -26,6 +26,10 @@ PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING: dict[str, str] = {
 # OpenRouter
 OPENROUTER_PROVIDER_NAME = "openrouter"
 
+# Eden AI
+EDENAI_PROVIDER_NAME = "edenai"
+EDENAI_API_BASE = "https://api.edenai.run/v3"
+
 ANTHROPIC_PROVIDER_NAME = "anthropic"
 
 AZURE_PROVIDER_NAME = "azure"

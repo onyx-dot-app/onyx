@@ -475,6 +475,34 @@ def test_omits_temperature_for_no_sampling_params_models(model_name: str) -> Non
         assert "temperature" not in kwargs
 
 
+def test_edenai_routing_wraps_model_and_keeps_v3_base() -> None:
+    # Eden AI is an OpenAI-compatible aggregator. Onyx must:
+    #  - route via custom_llm_provider="openai"
+    #  - keep Eden AI's base URL ending in /v3 (NOT append /v1 like other proxies)
+    #  - send the model as "openai/<eden_id>" so LiteLLM's one-segment strip
+    #    preserves Eden AI's full "<vendor>/<model>" id. Regression lock.
+    model_name = "anthropic/claude-sonnet-4-5"
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.EDENAI,
+        model_name=model_name,
+        api_base="https://api.edenai.run/v3",
+        max_input_tokens=200000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["custom_llm_provider"] == "openai"
+        assert kwargs["model"] == f"openai/{model_name}"
+        assert kwargs["base_url"] == "https://api.edenai.run/v3"
+
+
 @pytest.mark.parametrize(
     "model_name",
     [

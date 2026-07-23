@@ -258,6 +258,8 @@ def _get_internal_search_tool_id(admin_user: DATestUser) -> int:
 def _default_api_base_for_provider(provider: str) -> str | None:
     if provider == "openrouter":
         return "https://openrouter.ai/api/v1"
+    if provider == "edenai":
+        return "https://api.edenai.run/v3"
     if provider == "ollama_chat":
         # host.docker.internal works when tests are running inside the integration test container.
         return "http://host.docker.internal:11434"

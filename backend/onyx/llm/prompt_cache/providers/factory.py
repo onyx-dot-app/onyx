@@ -39,7 +39,10 @@ def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
         return AnthropicPromptCacheProvider()
     elif llm_config.model_provider == LlmProviderNames.VERTEX_AI:
         return VertexAIPromptCacheProvider()
-    elif llm_config.model_provider == LlmProviderNames.OPENROUTER:
+    elif llm_config.model_provider in (
+        LlmProviderNames.OPENROUTER,
+        LlmProviderNames.EDENAI,
+    ):
         model_name = llm_config.model_name or ""
         if model_name.startswith(OPENROUTER_ANTHROPIC_PREFIX):
             logger.debug(
