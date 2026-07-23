@@ -17,9 +17,9 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Size profiles values-small.yaml / values-medium.yaml / values-large.yaml —
-        full-featured tier presets calibrated from production fleet usage, pairing with the
-        terraform module's small/medium/large sizes.
+      description: SIZING.md — per-scale tuning guidance (small/medium/large snippets)
+        calibrated from production fleet usage, covering both in-cluster and managed
+        document-index topologies.
     - kind: changed
       description: Default resources retuned from production evidence — api-server CPU raised
         (request 1, limit 3; a 1-core limit stalls /health under load and causes liveness
