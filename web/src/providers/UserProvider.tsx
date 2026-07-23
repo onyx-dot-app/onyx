@@ -86,7 +86,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           temperature_override_enabled:
             currentUser.preferences?.temperature_override_enabled ??
             wsTemperatureOverride ??
-            false,
+            true,
         },
       };
     },

@@ -18,7 +18,11 @@ import {
   llmOptionKey,
 } from "@/lib/languageModels/options";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
-import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
+import ModelSelectorContent, {
+  ReasoningManager,
+  TemperatureManager,
+  useModelDetailManagers,
+} from "@/sections/model-selector/ModelSelectorContent";
 
 export const MAX_MODELS = 3;
 
@@ -36,6 +40,9 @@ export interface MultiModelSelectorProps {
   onAdd: (model: SelectedModel) => void;
   onRemove: (index: number) => void;
   onReplace: (index: number, model: SelectedModel) => void;
+  /** See ModelSelectorProps. Powers the per-model detail pane. */
+  temperatureManager?: TemperatureManager;
+  reasoningManager?: ReasoningManager;
 }
 
 export default function MultiModelSelector({
@@ -43,6 +50,8 @@ export default function MultiModelSelector({
   onAdd,
   onRemove,
   onReplace,
+  temperatureManager,
+  reasoningManager,
 }: MultiModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
@@ -50,6 +59,11 @@ export default function MultiModelSelector({
 
   const settings = useSettings();
   const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
+
+  const modelDetail = useModelDetailManagers(
+    temperatureManager,
+    reasoningManager
+  );
 
   // Mirror the data source used by `ModelSelectorContent` so the selector is
   // disabled precisely when the popover would render "No models found".
@@ -248,6 +262,7 @@ export default function MultiModelSelector({
             onSelect={handleSelect}
             isSelected={isSelected}
             isDisabled={isDisabled}
+            modelDetail={modelDetail}
           />
         </Popover.Content>
       )}

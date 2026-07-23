@@ -5,6 +5,8 @@ import {
   getAvailableContextTokens,
   nameChatSession,
   updateLlmOverrideForChatSession,
+  updateReasoningEffortForChatSession,
+  updateTemperatureOverrideForChatSession,
 } from "@/app/app/services/lib";
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
@@ -875,6 +877,38 @@ export default function useChatController({
       let streamSucceeded = false;
 
       try {
+        // Awaited so the send cannot race these writes (turn setup reads
+        // reasoning effort from the session row). Inside the try so a failure
+        // renders as a chat error in the already-adopted session.
+        const overrideWrites: Promise<Response>[] = [];
+        if (llmManager.reasoningEffort) {
+          overrideWrites.push(
+            updateReasoningEffortForChatSession(
+              currChatSessionId,
+              llmManager.reasoningEffort
+            )
+          );
+        }
+        if (llmManager.temperatureExplicitlySet) {
+          overrideWrites.push(
+            updateTemperatureOverrideForChatSession(
+              currChatSessionId,
+              llmManager.temperature
+            )
+          );
+        }
+        if (overrideWrites.length > 0) {
+          const overrideResponses = await Promise.all(overrideWrites);
+          const failedWrite = overrideResponses.find(
+            (response) => !response.ok
+          );
+          if (failedWrite) {
+            throw new Error(
+              `Failed to persist chat session overrides: ${failedWrite.status}`
+            );
+          }
+        }
+
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
           currentMessageTreeLocal
         );

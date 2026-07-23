@@ -27,13 +27,17 @@ import { MinimalAgent } from "@/lib/agents/types";
 import {
   DefaultModel,
   LLMProviderDescriptor,
+  ReasoningEffortOverride,
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
 import { DEFAULT_AGENT_ID, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
-import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
+import {
+  updateReasoningEffortForChatSession,
+  updateTemperatureOverrideForChatSession,
+} from "@/app/app/services/lib";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -402,6 +406,11 @@ export interface LlmManager {
   updateCurrentLlm: (newOverride: LlmDescriptor) => void;
   temperature: number;
   updateTemperature: (temperature: number) => void;
+  /** True once updateTemperature was called for the current session, marking
+   * an explicit choice vs the 0/0.5 heuristic default. */
+  temperatureExplicitlySet: boolean;
+  reasoningEffort: ReasoningEffortOverride | null;
+  updateReasoningEffort: (effort: ReasoningEffortOverride | null) => void;
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
@@ -765,6 +774,29 @@ export function useLlmManager(
     return 0.5;
   });
 
+  const [reasoningEffort, setReasoningEffort] =
+    useState<ReasoningEffortOverride | null>(
+      currentChatSession?.current_reasoning_effort_override ?? null
+    );
+  const [temperatureExplicitlySet, setTemperatureExplicitlySet] =
+    useState(false);
+
+  // Adopt the stored reasoning override (and reset the explicit-temperature
+  // flag) only when session identity changes. Keying on identity, not the
+  // object, keeps new-chat dep churn from wiping a pre-first-message choice.
+  const prevSessionIdRef = useRef<string | null>(
+    currentChatSession?.id ?? null
+  );
+  useEffect(() => {
+    const sessionId = currentChatSession?.id ?? null;
+    if (prevSessionIdRef.current === sessionId) return;
+    prevSessionIdRef.current = sessionId;
+    setTemperatureExplicitlySet(false);
+    setReasoningEffort(
+      currentChatSession?.current_reasoning_effort_override ?? null
+    );
+  }, [currentChatSession]);
+
   const maxTemperature = useMemo(() => {
     // Check currentLlm first, fall back to chat session model if currentLlm isn't populated
     if (currentLlm.provider) {
@@ -799,6 +831,12 @@ export function useLlmManager(
           temperature
         );
       }
+      if (reasoningEffort) {
+        updateReasoningEffortForChatSession(
+          currentChatSession.id,
+          reasoningEffort
+        );
+      }
       return;
     }
 
@@ -823,8 +861,16 @@ export function useLlmManager(
       ? Math.min(temperature, 1.0)
       : temperature;
     setTemperature(clampedTemp);
+    setTemperatureExplicitlySet(true);
     if (chatSession) {
       updateTemperatureOverrideForChatSession(chatSession.id, clampedTemp);
+    }
+  };
+
+  const updateReasoningEffort = (effort: ReasoningEffortOverride | null) => {
+    setReasoningEffort(effort);
+    if (chatSession) {
+      updateReasoningEffortForChatSession(chatSession.id, effort);
     }
   };
 
@@ -839,6 +885,9 @@ export function useLlmManager(
     updateCurrentLlm,
     temperature,
     updateTemperature,
+    temperatureExplicitlySet,
+    reasoningEffort,
+    updateReasoningEffort,
     imageFilesPresent,
     updateImageFilesPresent,
     liveAgent: liveAgent ?? null,
