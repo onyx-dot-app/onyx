@@ -11,13 +11,14 @@ from sqlalchemy.orm import Session
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import (
     EndpointPolicy,
+    GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPTransport,
 )
+from onyx.db.gated_app import get_action_policies
 from onyx.db.mcp import (
     create_mcp_server__no_commit,
-    get_mcp_tool_policies,
     get_user_connection_config,
     upsert_user_connection_config,
 )
@@ -63,7 +64,7 @@ def test_tool_policies_patch_round_trip(
     )
     assert resp.tool_policies == {"send_email": EndpointPolicy.DENY}
     # Sparse: the unlisted tool has no stored override (effective default ASK).
-    assert get_mcp_tool_policies(server.id, db_session) == {
+    assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {
         "send_email": EndpointPolicy.DENY
     }
 
@@ -80,7 +81,7 @@ def test_tool_policies_patch_round_trip(
         db_session,
         admin,
     )
-    assert get_mcp_tool_policies(server.id, db_session) == {
+    assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {
         "send_email": EndpointPolicy.DENY
     }
 
@@ -91,7 +92,7 @@ def test_tool_policies_patch_round_trip(
         db_session,
         admin,
     )
-    assert get_mcp_tool_policies(server.id, db_session) == {}
+    assert get_action_policies(db_session, GatedAppKind.MCP_SERVER, server.id) == {}
 
     # Unknown tool names are rejected.
     with pytest.raises(OnyxError):

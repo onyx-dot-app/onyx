@@ -32,6 +32,8 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
+    EndpointPolicy,
+    GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -39,8 +41,12 @@ from onyx.db.enums import (
     MCPTransport,
     Permission,
 )
+from onyx.db.gated_app import (
+    get_action_policies,
+    get_or_create_gated_app_id,
+    replace_action_policies__no_commit,
+)
 from onyx.db.mcp import (
-    MCP_TOOL_DEFAULT_POLICY,
     create_connection_config,
     create_mcp_server__no_commit,
     delete_all_user_connection_configs_for_server_no_commit,
@@ -54,10 +60,8 @@ from onyx.db.mcp import (
     get_mcp_server_by_id,
     get_mcp_servers_accessible_to_user,
     get_mcp_servers_for_persona,
-    get_mcp_tool_policies,
     get_server_auth_template,
     get_user_connection_config,
-    set_mcp_tool_policies__no_commit,
     update_connection_config,
     update_mcp_server__no_commit,
     upsert_user_connection_config,
@@ -124,6 +128,10 @@ from onyx.utils.variable_functionality import (
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# A tool with no stored override is treated as ASK; stored policies stay sparse
+# by omitting this value (mirrors the gate evaluator's default).
+MCP_TOOL_DEFAULT_POLICY = EndpointPolicy.ASK
 
 
 _SSRF_HINT_NEVER_ALLOWED = (
@@ -1290,7 +1298,9 @@ def _db_mcp_server_to_api_mcp_server(
         users=[user.id for user in db_server.users],
         available_in_craft=db_server.available_in_craft,
         tool_policies=(
-            get_mcp_tool_policies(db_server.id, db) if can_view_server_details else None
+            get_action_policies(db, GatedAppKind.MCP_SERVER, db_server.id)
+            if can_view_server_details
+            else None
         ),
         last_refreshed_at=db_server.last_refreshed_at,
         tool_count=tool_count,
@@ -2458,7 +2468,10 @@ def update_mcp_server_simple(
             for tool, policy in request.tool_policies.items()
             if policy != MCP_TOOL_DEFAULT_POLICY
         }
-        set_mcp_tool_policies__no_commit(server_id, sparse_policies, db_session)
+        gated_app_id = get_or_create_gated_app_id(
+            db_session, GatedAppKind.MCP_SERVER, server_id
+        )
+        replace_action_policies__no_commit(db_session, gated_app_id, sparse_policies)
 
     db_session.commit()
 
