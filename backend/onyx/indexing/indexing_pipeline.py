@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
     ENABLE_CONTEXTUAL_RAG,
+    IMAGE_SUMMARIZATION_TIMEOUT_SECONDS,
     MAX_CHUNKS_PER_DOC_BATCH,
     MAX_DOCUMENT_CHARS,
     MAX_TOKENS_FOR_FULL_INCLUSION,
@@ -107,7 +108,11 @@ from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.retry_wrapper import retry_builder
+from onyx.utils.threadpool_concurrency import (
+    run_functions_tuples_in_parallel,
+    run_with_timeout,
+)
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
 
@@ -115,6 +120,11 @@ logger = setup_logger()
 
 MAX_CONTEXTUAL_RAG_WORKERS = 128  # Assume 8mb of memory per worker
 MAX_IMAGE_WORKERS = 16
+
+# A timed-out or errored image summary is usually a transient provider blip, so
+# retry a few times (short backoff) before falling back to a placeholder.
+IMAGE_SUMMARIZATION_MAX_ATTEMPTS = 2
+IMAGE_SUMMARIZATION_RETRY_BACKOFF_SECONDS = 2.0
 
 # Contextual-RAG doc/chunk summaries are a short, non-reasoning task. On a reasoning
 # model the hidden reasoning tokens consume the small MAX_CONTEXT_TOKENS budget and the
@@ -831,14 +841,38 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
 
     # Summarize all images in parallel
     if pending:
+        # Wall-clock timeout per attempt: the LLM's own timeout is per-read, not total,
+        # so a trickling connection would otherwise hang the worker forever. retry_builder
+        # can't interrupt a blocking call, so the timeout lives inside the retried unit.
+        @retry_builder(
+            tries=IMAGE_SUMMARIZATION_MAX_ATTEMPTS,
+            delay=IMAGE_SUMMARIZATION_RETRY_BACKOFF_SECONDS,
+            jitter=0,
+            exceptions=(TimeoutError, ValueError),
+        )
+        def _summarize_attempt(image_data: bytes, context_name: str) -> str | None:
+            return run_with_timeout(
+                IMAGE_SUMMARIZATION_TIMEOUT_SECONDS,
+                summarize_image_with_error_handling,
+                llm=llm,
+                image_data=image_data,
+                context_name=context_name,
+            )
 
         def _summarize(image_data: bytes, context_name: str) -> str:
-            return (
-                summarize_image_with_error_handling(
-                    llm=llm, image_data=image_data, context_name=context_name
+            try:
+                # None is a non-retryable skip (e.g. unsupported image format).
+                result = _summarize_attempt(image_data, context_name)
+            except (TimeoutError, ValueError) as e:
+                logger.warning(
+                    "Image summarization failed for '%s' after %s attempts: %s; "
+                    "using placeholder",
+                    context_name,
+                    IMAGE_SUMMARIZATION_MAX_ATTEMPTS,
+                    e,
                 )
-                or "[Image could not be summarized]"
-            )
+                result = None
+            return result or "[Image could not be summarized]"
 
         results = run_functions_tuples_in_parallel(
             [(_summarize, (p.image_data, p.context_name)) for p in pending],

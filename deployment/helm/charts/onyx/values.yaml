@@ -1613,6 +1613,9 @@ configMap:
   DOCUMENT_PUSH_ENDPOINT_URL: ""
   DOCUMENT_PUSH_API_KEY: ""
   DOCUMENT_PUSH_TIMEOUT_SECONDS: ""
+  # Wall-clock cap (seconds) for summarizing a single image during indexing; bounds a
+  # stalled vision-LLM call so it can't wedge a docprocessing worker. Defaults to 120.
+  IMAGE_SUMMARIZATION_TIMEOUT_SECONDS: ""
   # Worker Parallelism
   CELERY_WORKER_DOCPROCESSING_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_CONCURRENCY: ""

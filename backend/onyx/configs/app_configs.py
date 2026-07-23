@@ -1873,6 +1873,14 @@ IMAGE_SUMMARIZATION_USER_PROMPT = os.environ.get(
     DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
 )
 
+# Wall-clock cap for summarizing one image. The vision LLM's timeout is per-read,
+# not total, so a trickling provider connection can hang a docprocessing worker
+# forever and stall indexing. Image summaries are non-critical, so bound each one
+# and fall back to a placeholder.
+IMAGE_SUMMARIZATION_TIMEOUT_SECONDS = int(
+    os.environ.get("IMAGE_SUMMARIZATION_TIMEOUT_SECONDS") or 120
+)
+
 # Knowledge Graph Read Only User Configuration
 DB_READONLY_USER: str = os.environ.get("DB_READONLY_USER", "db_readonly_user")
 DB_READONLY_PASSWORD: str = urllib.parse.quote_plus(

@@ -765,6 +765,54 @@ class TestProcessImageSections:
         assert section.csv_file_id == "fid-2"
         assert section.text is None
 
+    def test_hung_summarization_is_bounded_and_retried_to_placeholder(self) -> None:
+        """A vision-LLM call that hangs must not wedge indexing: each attempt is bounded
+        by IMAGE_SUMMARIZATION_TIMEOUT_SECONDS, it is retried, and once the retries are
+        exhausted the image falls back to a placeholder (the document still indexes)."""
+        call_count = 0
+
+        def _hang(**_kwargs: Any) -> str:
+            nonlocal call_count
+            call_count += 1
+            time.sleep(3)  # would hang the worker indefinitely without the timeout
+            return "never-returned"
+
+        doc = _make_image_doc("doc1", [ImageSection(image_file_id="img-A")])
+        with (
+            patch(f"{_PATCH_PREFIX}.IMAGE_SUMMARIZATION_TIMEOUT_SECONDS", 0.2),
+            patch(f"{_PATCH_PREFIX}.IMAGE_SUMMARIZATION_RETRY_BACKOFF_SECONDS", 0.0),
+            patch(f"{_PATCH_PREFIX}.IMAGE_SUMMARIZATION_MAX_ATTEMPTS", 2),
+        ):
+            start = time.monotonic()
+            result = self._run([doc], {"img-A": b"aa"}, summarize_side_effect=_hang)
+            elapsed = time.monotonic() - start
+
+        assert call_count == 2  # retried before giving up
+        assert elapsed < 2.0  # bounded — not the 3s hang, per attempt
+        assert result[0].processed_sections[0].text == "[Image could not be summarized]"
+
+    def test_transient_summarization_failure_recovers_on_retry(self) -> None:
+        """A transient failure on the first attempt is retried, and the real summary
+        (not a placeholder) is used — honoring the opted-in image-summarization feature."""
+        call_count = 0
+
+        def _flaky(**kwargs: Any) -> str:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ValueError("transient provider error")
+            return f"summary-of-{kwargs['context_name']}"
+
+        doc = _make_image_doc("doc1", [ImageSection(image_file_id="img-A")])
+        with (
+            patch(f"{_PATCH_PREFIX}.IMAGE_SUMMARIZATION_RETRY_BACKOFF_SECONDS", 0.0),
+            patch(f"{_PATCH_PREFIX}.IMAGE_SUMMARIZATION_MAX_ATTEMPTS", 2),
+        ):
+            result = self._run([doc], {"img-A": b"aa"}, summarize_side_effect=_flaky)
+
+        assert call_count == 2  # first failed, second succeeded
+        assert result[0].processed_sections[0].text == "summary-of-img-A"
+
     def test_interleaved_sections_preserve_order(self) -> None:
         """Text and image sections must stay in their original positions."""
         doc = _make_image_doc(
@@ -900,13 +948,17 @@ class TestProcessImageSections:
                 raise ValueError("boom")
             return f"summary-of-{kwargs['context_name']}"
 
-        result = self._run([doc], image_map, summarize_side_effect=_sometimes_fail)
+        with (
+            patch(f"{_PATCH_PREFIX}.IMAGE_SUMMARIZATION_RETRY_BACKOFF_SECONDS", 0.0),
+            patch(f"{_PATCH_PREFIX}.IMAGE_SUMMARIZATION_MAX_ATTEMPTS", 2),
+        ):
+            result = self._run([doc], image_map, summarize_side_effect=_sometimes_fail)
 
         sections = result[0].processed_sections
         assert len(sections) == 3
         assert sections[0].text == "summary-of-ok"
-        # allow_failures=True → None result → fallback text
-        assert sections[1].text == "[Error processing image]"
+        # retries exhausted → placeholder for the failed image; the document still indexes
+        assert sections[1].text == "[Image could not be summarized]"
         assert sections[2].text == "summary-of-ok2"
 
 
