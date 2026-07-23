@@ -127,6 +127,9 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
     generate_agent_instructions,
 )
+from onyx.server.features.build.sandbox.util.api_url_check import (
+    validate_sandbox_api_url,
+)
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
 )
@@ -1051,6 +1054,7 @@ class KubernetesSandboxManager(SandboxManager):
             raise ValueError(
                 "SANDBOX_API_SERVER_URL must be set for Kubernetes sandbox provisioning"
             )
+        validate_sandbox_api_url(SANDBOX_API_SERVER_URL)
         if not SANDBOX_PROXY_HOST:
             raise ValueError(
                 "SANDBOX_PROXY_HOST must be set for Kubernetes sandbox provisioning"
