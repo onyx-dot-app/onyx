@@ -49,7 +49,9 @@ class _VersionPoller:
     _lock = threading.Lock()
     _last_polled_at: float | None = None
     _last_seen_version: str | None = None
-    _redis_healthy: bool = False
+    # None = never polled. Distinct from False so the *first* failure still logs;
+    # starting at False would silently swallow an outage present from boot.
+    _redis_healthy: bool | None = None
 
     @classmethod
     def _read_version(cls) -> str | None:
@@ -99,8 +101,8 @@ class _VersionPoller:
                 was_healthy = cls._redis_healthy
                 cls._redis_healthy = False
                 # Only log the transition, so a Redis outage does not emit a line
-                # per poll per process.
-                if was_healthy:
+                # per poll per process. `None` (never polled) counts as a transition.
+                if was_healthy is not False:
                     logger.warning(
                         "Could not read the shard map version from Redis; tenant "
                         "routing falls back to its %ss TTL until Redis recovers",
@@ -134,7 +136,7 @@ class _VersionPoller:
         with cls._lock:
             cls._last_polled_at = None
             cls._last_seen_version = None
-            cls._redis_healthy = False
+            cls._redis_healthy = None
 
 
 def poll_shard_map_version() -> bool:
@@ -166,5 +168,20 @@ def shard_map_propagation_seconds() -> float:
     """How long to wait after a bump before every process is guaranteed current.
 
     This is the minimum a tenant must stay frozen after its map entry is flipped.
+
+    It is bounded by the **TTL**, not the poll interval. A successful
+    ``bump_shard_map_version`` only proves the *migrator* reached Redis; a serving
+    process that is partitioned from Redis never observes the bump and keeps its
+    cached mapping until it expires on its own. The TTL is therefore the real
+    worst-case, and the freeze has to outlast it or an unfrozen tenant can still be
+    routed to its old database by exactly the pod that could not be told.
+
+    The Redis channel makes the common case fast; it does not improve this bound.
     """
-    return ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS + _PROPAGATION_MARGIN_SECONDS
+    return (
+        max(
+            ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS,
+            float(ONYX_DB_SHARD_MAP_TTL_SECONDS),
+        )
+        + _PROPAGATION_MARGIN_SECONDS
+    )

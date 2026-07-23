@@ -13,9 +13,16 @@ A tenant with no ``tenant_shard`` row lives on the default shard. That makes the
 empty until tenants are actually migrated, so no backfill is needed and an
 unconfigured deployment never depends on it existing.
 
-Failure of the catalog lookup degrades to the default shard rather than raising: with
-a single shard configured that is always the right answer, and it means a catalog
-hiccup cannot take down request handling for a deployment that isn't sharded yet.
+**Routing fails closed.** Single-shard deployments never reach the catalog at all, so
+every lookup that does reach it belongs to a deployment where the answer genuinely
+matters. If the catalog cannot be consulted, or names a shard this process does not
+know, resolution raises rather than assuming the default. Guessing "default" for a
+tenant that has already been migrated sends its *writes* to the database it was moved
+off — silent, and unrecoverable without reconciliation. A failed request is strictly
+better than that, so unavailability is preferred to misrouting.
+
+The one exception is a missing ``tenant_shard`` table, which is provably safe: if the
+table does not exist, no tenant can be mapped anywhere.
 """
 
 import json
@@ -24,6 +31,7 @@ import time
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import ProgrammingError
 
 from onyx.configs.app_configs import (
     ONYX_DB_SHARD_MAP_TTL_SECONDS,
@@ -41,6 +49,10 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+
+class ShardLookupError(RuntimeError):
+    """The catalog could not be consulted, so the tenant's shard is unknown."""
 
 
 def _parse_overrides() -> dict[str, str]:
@@ -79,10 +91,21 @@ def get_shard_overrides() -> dict[str, str]:
 
 
 class _ShardCache:
-    """tenant_id -> (shard_name, expires_at monotonic seconds)."""
+    """tenant_id -> (shard_name, expires_at monotonic seconds).
+
+    Entries carry the generation they were resolved under. A catalog read that began
+    before an invalidation must not install its now-stale answer afterwards, which is
+    otherwise a live race during a migration flip: the reader wins, and the tenant
+    stays routable to its old database for a full TTL past the freeze.
+    """
 
     _entries: dict[str, tuple[str, float]] = {}
     _lock: threading.Lock = threading.Lock()
+    _generation: int = 0
+
+    @classmethod
+    def generation(cls) -> int:
+        return cls._generation
 
     @classmethod
     def get(cls, tenant_id: str) -> str | None:
@@ -95,8 +118,11 @@ class _ShardCache:
         return shard_name
 
     @classmethod
-    def put(cls, tenant_id: str, shard_name: str) -> None:
+    def put(cls, tenant_id: str, shard_name: str, generation: int) -> None:
         with cls._lock:
+            if generation != cls._generation:
+                # Invalidated while this lookup was in flight; drop the result.
+                return
             cls._entries[tenant_id] = (
                 shard_name,
                 time.monotonic() + ONYX_DB_SHARD_MAP_TTL_SECONDS,
@@ -105,6 +131,7 @@ class _ShardCache:
     @classmethod
     def invalidate(cls, tenant_id: str | None = None) -> None:
         with cls._lock:
+            cls._generation += 1
             if tenant_id is None:
                 cls._entries = {}
             else:
@@ -127,14 +154,33 @@ def reset_shard_overrides() -> None:
         _OVERRIDES = None
 
 
+def _is_undefined_table(exc: BaseException) -> bool:
+    """True if the failure is specifically 'public.tenant_shard does not exist'.
+
+    Distinguishing this from every other failure is what makes the default-shard
+    fallback provably safe: if the table does not exist, no tenant can be mapped
+    anywhere, so the default is the only possible answer. Any other failure means
+    the mapping is unknown, which is a different situation entirely.
+    """
+    if isinstance(exc, ProgrammingError):
+        pgcode = getattr(getattr(exc, "orig", None), "pgcode", None)
+        # 42P01 = undefined_table
+        return pgcode == "42P01"
+    return False
+
+
 def _lookup_shard_in_catalog(tenant_id: str) -> str | None:
     """Read `public.tenant_shard` from the catalog database.
 
-    Returns None when the tenant has no row, or when the table does not exist yet
-    (pre-migration deployments).
+    Returns None when the tenant has no row, or when the table has not been created
+    yet. Raises `ShardLookupError` if the catalog cannot be consulted — the caller
+    must not guess, because guessing "default" for a migrated tenant sends its writes
+    to the database it was moved off.
     """
-    engine = get_catalog_engine()
     try:
+        # Inside the try: building the catalog engine can itself fail, and that is
+        # the same "mapping unknown" situation as a failed query.
+        engine = get_catalog_engine()
         with engine.connect() as connection:
             result = connection.execute(
                 text(
@@ -142,15 +188,14 @@ def _lookup_shard_in_catalog(tenant_id: str) -> str | None:
                 ),
                 {"tenant_id": tenant_id},
             ).first()
-    except Exception:
-        # Table missing (not yet migrated) or catalog unreachable. Either way the
-        # default shard is the safe answer — see module docstring.
-        logger.warning(
-            "tenant_shard lookup failed for %s; falling back to default shard",
-            tenant_id,
-            exc_info=True,
-        )
-        return None
+    except Exception as e:
+        if _is_undefined_table(e):
+            # Deployment has not run the catalog migration yet; nothing is mapped.
+            return None
+        logger.exception("tenant_shard lookup failed for %s", tenant_id)
+        raise ShardLookupError(
+            f"Could not resolve the shard for tenant {tenant_id}: {e}"
+        ) from e
 
     if result is None:
         return None
@@ -177,16 +222,21 @@ def get_shard_for_tenant(tenant_id: str) -> str:
     if cached is not None:
         return cached
 
+    # Captured before the lookup so a concurrent invalidation discards our result
+    # rather than letting it overwrite fresher state.
+    generation = _ShardCache.generation()
+
     shard_name = _lookup_shard_in_catalog(tenant_id) or default_shard
     if shard_name not in get_shard_specs():
-        logger.error(
-            "Tenant %s maps to unknown shard '%s'; falling back to default shard",
-            tenant_id,
-            shard_name,
+        # A mapping pointing at a shard this process knows nothing about. Falling
+        # back to the default would route a migrated tenant's writes to its old
+        # database, so refuse instead.
+        raise ShardConfigurationError(
+            f"Tenant {tenant_id} maps to unknown shard '{shard_name}' "
+            f"(configured: {sorted(get_shard_specs())})"
         )
-        shard_name = default_shard
 
-    _ShardCache.put(tenant_id, shard_name)
+    _ShardCache.put(tenant_id, shard_name, generation)
     return shard_name
 
 

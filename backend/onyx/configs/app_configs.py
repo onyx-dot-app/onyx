@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import urllib.parse
 from datetime import datetime, timezone
@@ -628,12 +629,29 @@ ONYX_DB_SHARD_OVERRIDES_JSON = os.environ.get("ONYX_DB_SHARD_OVERRIDES", "").str
 ONYX_DB_SHARD_MAP_TTL_SECONDS = int(
     os.environ.get("ONYX_DB_SHARD_MAP_TTL_SECONDS") or 60
 )
-# How often a process re-reads the shared shard-map version from Redis. Bounds
-# how long a migrator's map flip takes to reach every process, so it is also the
-# floor on how long a tenant must stay frozen after the flip.
+# How often a process re-reads the shared shard-map version from Redis. Bounds how
+# quickly a migrator's map flip reaches every process in the common case; the freeze
+# window itself is bounded by the TTL above, since a Redis-partitioned process never
+# sees the flip at all.
 ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS = float(
     os.environ.get("ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS") or 5
 )
+
+if ONYX_DB_SHARD_MAP_TTL_SECONDS <= 0:
+    raise ValueError(
+        f"ONYX_DB_SHARD_MAP_TTL_SECONDS must be positive, got "
+        f"{ONYX_DB_SHARD_MAP_TTL_SECONDS}"
+    )
+if (
+    not math.isfinite(ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS)
+    or ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS <= 0
+):
+    # A non-finite interval would stop the poller permanently, silently reducing
+    # flip propagation to the TTL path.
+    raise ValueError(
+        f"ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS must be a positive finite number, "
+        f"got {ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS}"
+    )
 
 POSTGRES_API_SERVER_POOL_SIZE = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 40

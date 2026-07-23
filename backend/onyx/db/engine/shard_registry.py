@@ -21,6 +21,7 @@ before.
 
 import json
 import threading
+import urllib.parse
 from dataclasses import dataclass
 from typing import Any
 
@@ -62,6 +63,20 @@ class ShardSpec:
         return f"{self.name}({self.user}@{self.host}:{self.port}/{self.db})"
 
 
+def _validate_catalog_shard(specs: dict[str, ShardSpec]) -> None:
+    """Fail at startup if the catalog shard names something that does not exist.
+
+    Checked on the unconfigured path too: pointing ONYX_DB_CATALOG_SHARD at a name
+    without also defining ONYX_DB_SHARDS otherwise starts cleanly and then breaks
+    every catalog session at request time.
+    """
+    if ONYX_DB_CATALOG_SHARD not in specs:
+        raise ShardConfigurationError(
+            f"ONYX_DB_CATALOG_SHARD='{ONYX_DB_CATALOG_SHARD}' is not a configured shard "
+            f"(known: {sorted(specs)})"
+        )
+
+
 def _parse_shard_specs() -> dict[str, ShardSpec]:
     """Build the shard table from configuration.
 
@@ -79,6 +94,7 @@ def _parse_shard_specs() -> dict[str, ShardSpec]:
     specs: dict[str, ShardSpec] = {default_spec.name: default_spec}
 
     if not ONYX_DB_SHARDS_JSON:
+        _validate_catalog_shard(specs)
         return specs
 
     try:
@@ -96,25 +112,39 @@ def _parse_shard_specs() -> dict[str, ShardSpec]:
             raise ShardConfigurationError(
                 f"ONYX_DB_SHARDS['{name}'] must be an object of connection overrides"
             )
+        if name == ONYX_DB_DEFAULT_SHARD:
+            # The default shard's engine comes from SqlEngine, built from POSTGRES_*.
+            # Accepting overrides here would let sessions and migrations disagree
+            # about which database the default shard actually is.
+            raise ShardConfigurationError(
+                f"ONYX_DB_SHARDS must not redefine the default shard "
+                f"'{ONYX_DB_DEFAULT_SHARD}'; configure it via the POSTGRES_* settings"
+            )
         unknown = set(overrides) - {"host", "port", "db", "user", "password"}
         if unknown:
             raise ShardConfigurationError(
                 f"ONYX_DB_SHARDS['{name}'] has unknown keys: {sorted(unknown)}"
             )
+        # POSTGRES_PASSWORD is already percent-encoded at config load; an explicit
+        # override is raw, so encode it here to match. Without this a password
+        # containing '@' or ':' silently produces a misparsed connection URL.
+        raw_password = overrides.get("password")
+        password = (
+            urllib.parse.quote_plus(str(raw_password))
+            if raw_password is not None
+            else POSTGRES_PASSWORD
+        )
+
         specs[name] = ShardSpec(
             name=name,
             host=str(overrides.get("host", POSTGRES_HOST)),
             port=str(overrides.get("port", POSTGRES_PORT)),
             db=str(overrides.get("db", POSTGRES_DB)),
             user=str(overrides.get("user", POSTGRES_USER)),
-            password=str(overrides.get("password", POSTGRES_PASSWORD)),
+            password=password,
         )
 
-    if ONYX_DB_CATALOG_SHARD not in specs:
-        raise ShardConfigurationError(
-            f"ONYX_DB_CATALOG_SHARD='{ONYX_DB_CATALOG_SHARD}' is not a configured shard "
-            f"(known: {sorted(specs)})"
-        )
+    _validate_catalog_shard(specs)
 
     return specs
 
@@ -214,11 +244,11 @@ class ShardRegistry:
     @classmethod
     def _build_engine(cls, spec: ShardSpec) -> Engine:
         """Build a shard engine mirroring the default engine's pool configuration."""
+        from onyx.db.engine.iam_auth import make_provide_iam_token
         from onyx.db.engine.sql_engine import (
             SYNC_DB_API,
             SqlEngine,
             build_connection_string,
-            provide_iam_token,
         )
 
         profile = SqlEngine.get_engine_profile()
@@ -238,7 +268,13 @@ class ShardRegistry:
         engine = create_engine(connection_string, **engine_kwargs)
 
         if profile.use_iam:
-            event.listen(engine, "do_connect", provide_iam_token)
+            # Bound to this shard's coordinates: an RDS IAM token is only valid for
+            # the host/port/user it was minted for.
+            event.listen(
+                engine,
+                "do_connect",
+                make_provide_iam_token(spec.host, spec.port, spec.user),
+            )
 
         return engine
 

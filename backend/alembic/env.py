@@ -55,6 +55,19 @@ target_metadata = [Base.metadata, ResultModelBase.metadata]
 
 logger = logging.getLogger(__name__)
 
+
+def connection_url() -> str:
+    """Database URL for this migration run.
+
+    Defaults to the process-wide POSTGRES_* settings, but a caller that has already
+    decided which database to target — notably per-tenant migrations, which must
+    follow the tenant's shard — can override it by setting `sqlalchemy.url` on the
+    Alembic config. `alembic.ini` leaves that option unset, so the default path is
+    unchanged.
+    """
+    return config.get_main_option("sqlalchemy.url") or build_connection_string()
+
+
 ssl_context: ssl.SSLContext | None = None
 if USE_IAM_AUTH:
     if not os.path.exists(SSL_CERT_FILE):
@@ -274,7 +287,7 @@ async def run_async_migrations() -> None:
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
     engine = create_async_engine(
-        build_connection_string(),
+        connection_url(),
         poolclass=pool.NullPool,
         connect_args={"ssl": create_pg_ssl_context()},
     )
@@ -397,7 +410,7 @@ def run_migrations_offline() -> None:
         tenant_range_end,
         schemas,
     ) = get_schema_options()
-    url = build_connection_string()
+    url = connection_url()
 
     if schemas:
         # Use specific schema names directly without fetching all tenants

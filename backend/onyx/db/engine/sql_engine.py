@@ -283,7 +283,11 @@ class SqlEngine:
                 # is unchanged from single-database deployments.
                 divisor = shard_pool_divisor()
                 final_engine_kwargs["pool_size"] = max(1, pool_size // divisor)
-                final_engine_kwargs["max_overflow"] = max(1, max_overflow // divisor)
+                # An explicit zero-overflow budget (celery beat) must stay zero —
+                # flooring at 1 would quietly hand it overflow it asked not to have.
+                final_engine_kwargs["max_overflow"] = (
+                    0 if max_overflow == 0 else max(1, max_overflow // divisor)
+                )
                 final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
                 final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
 

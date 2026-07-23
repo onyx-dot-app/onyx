@@ -16,6 +16,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table, select, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from onyx.configs.app_configs import POSTGRES_DB
 from onyx.db.engine import shard_registry, shard_routing, shard_version
@@ -286,10 +287,15 @@ def test_static_override_wins_over_the_catalog(
     invalidate_shard_cache()
 
 
-def test_unknown_shard_in_map_falls_back_rather_than_failing(
+def test_unknown_shard_in_map_raises_rather_than_falling_back(
     two_shards: dict[str, Any],
 ) -> None:
-    """A dangling mapping must not take request handling down."""
+    """A dangling mapping must fail closed, not silently resolve to default.
+
+    Falling back here is worse than erroring: the tenant named a shard, so it has
+    plausibly been migrated, and routing it to `default` would put its writes on the
+    database it was moved off.
+    """
     tenant_a = two_shards["tenant_a"]
     with get_catalog_engine().connect() as conn:
         conn.execute(
@@ -302,15 +308,17 @@ def test_unknown_shard_in_map_falls_back_rather_than_failing(
         conn.commit()
     invalidate_shard_cache(tenant_a)
 
-    assert get_shard_for_tenant(tenant_a) == "default"
-
-    with get_catalog_engine().connect() as conn:
-        conn.execute(
-            text("DELETE FROM public.tenant_shard WHERE tenant_id = :t"),
-            {"t": tenant_a},
-        )
-        conn.commit()
-    invalidate_shard_cache(tenant_a)
+    try:
+        with pytest.raises(ShardConfigurationError):
+            get_shard_for_tenant(tenant_a)
+    finally:
+        with get_catalog_engine().connect() as conn:
+            conn.execute(
+                text("DELETE FROM public.tenant_shard WHERE tenant_id = :t"),
+                {"t": tenant_a},
+            )
+            conn.commit()
+        invalidate_shard_cache(tenant_a)
 
 
 def test_requesting_an_unconfigured_shard_raises(two_shards: dict[str, Any]) -> None:  # noqa: ARG001
@@ -493,3 +501,230 @@ def test_alembic_url_targets_the_tenants_shard(two_shards: dict[str, Any]) -> No
     assert url_b.endswith(f"/{two_shards['second_db']}")
     # Byte-identical to the historical call for the default shard.
     assert url_a == build_connection_string()
+
+
+def test_catalog_failure_raises_instead_of_routing_to_default(
+    two_shards: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unreachable catalog must not be read as "tenant is on the default shard".
+
+    The two are indistinguishable at the return-value level, which is what made the
+    original `except -> None -> default` path dangerous: a transient catalog blip
+    would pin a migrated tenant to its old database for a full TTL.
+    """
+    tenant_b = two_shards["tenant_b"]
+    invalidate_shard_cache()
+
+    real_get_catalog_engine = shard_routing.get_catalog_engine
+    failing = {"on": True}
+
+    def _maybe_explode(*args: Any, **kwargs: Any) -> Any:
+        if failing["on"]:
+            raise OperationalError("SELECT 1", {}, Exception("catalog unreachable"))
+        return real_get_catalog_engine(*args, **kwargs)
+
+    monkeypatch.setattr(shard_routing, "get_catalog_engine", _maybe_explode)
+
+    try:
+        with pytest.raises(shard_routing.ShardLookupError):
+            get_shard_for_tenant(tenant_b)
+    finally:
+        # Restore before fixture teardown, which itself resolves shards.
+        failing["on"] = False
+
+
+def test_catalog_failure_does_not_poison_the_cache(
+    two_shards: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After a failed lookup, recovery must produce the correct shard immediately.
+
+    The old code cached the default-shard guess, so a momentary catalog blip pinned
+    a migrated tenant to the wrong database for a full TTL even once it recovered.
+    """
+    tenant_b = two_shards["tenant_b"]
+    invalidate_shard_cache()
+
+    real_get_catalog_engine = shard_routing.get_catalog_engine
+    failing = {"on": True}
+
+    def _maybe_explode(*args: Any, **kwargs: Any) -> Any:
+        if failing["on"]:
+            raise OperationalError("SELECT 1", {}, Exception("catalog unreachable"))
+        return real_get_catalog_engine(*args, **kwargs)
+
+    monkeypatch.setattr(shard_routing, "get_catalog_engine", _maybe_explode)
+
+    with pytest.raises(shard_routing.ShardLookupError):
+        get_shard_for_tenant(tenant_b)
+
+    # Catalog recovers; no invalidation call in between.
+    failing["on"] = False
+    assert get_shard_for_tenant(tenant_b) == SECOND_SHARD
+
+
+def test_missing_catalog_table_still_falls_back_to_default(
+    two_shards: dict[str, Any],  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A not-yet-migrated deployment is the one safe case for the default fallback.
+
+    If `tenant_shard` does not exist, no tenant can be mapped anywhere, so `default`
+    is not a guess.
+    """
+    tenant_id = f"tenant_{uuid4()}"
+    invalidate_shard_cache()
+
+    def _undefined_table() -> Any:
+        raise _make_undefined_table_error()
+
+    monkeypatch.setattr(shard_routing, "get_catalog_engine", _undefined_table)
+    assert get_shard_for_tenant(tenant_id) == "default"
+
+
+def _make_undefined_table_error() -> ProgrammingError:
+    orig = Exception('relation "public.tenant_shard" does not exist')
+    orig.pgcode = "42P01"  # ty: ignore[unresolved-attribute]
+    return ProgrammingError("SELECT 1", {}, orig)
+
+
+def test_stale_lookup_cannot_repopulate_cache_after_invalidation(
+    two_shards: dict[str, Any],
+) -> None:
+    """A read in flight during a flip must not install its stale answer.
+
+    Without generation tracking the racing reader wins and the tenant stays routable
+    to its old database for a full TTL after the migrator unfroze it.
+    """
+    tenant_b = two_shards["tenant_b"]
+    invalidate_shard_cache()
+
+    generation = shard_routing._ShardCache.generation()
+    # Simulate a flip landing while a lookup was in flight.
+    invalidate_shard_cache()
+    shard_routing._ShardCache.put(tenant_b, "default", generation)
+
+    assert shard_routing._ShardCache.get(tenant_b) is None
+    assert get_shard_for_tenant(tenant_b) == SECOND_SHARD
+
+
+def test_freeze_window_outlasts_the_ttl(two_shards: dict[str, Any]) -> None:  # noqa: ARG001
+    """A Redis-partitioned pod only recovers via the TTL, so the freeze must cover it.
+
+    `bump_shard_map_version()` proves the *migrator* reached Redis, not that every
+    serving process did.
+    """
+    assert shard_map_propagation_seconds() > float(
+        shard_version.ONYX_DB_SHARD_MAP_TTL_SECONDS
+    )
+
+
+def test_default_shard_cannot_be_redefined(
+    second_database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Overriding the default shard would split sessions from migrations."""
+    monkeypatch.setattr(
+        shard_registry,
+        "ONYX_DB_SHARDS_JSON",
+        f'{{"default": {{"db": "{second_database}"}}}}',
+    )
+    monkeypatch.setattr(shard_registry, "ONYX_DB_DEFAULT_SHARD", "default")
+    shard_registry.reset_shard_specs()
+
+    with pytest.raises(ShardConfigurationError):
+        get_shard_specs()
+
+    shard_registry.reset_shard_specs()
+
+
+def test_shard_password_is_url_encoded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A password with URL-reserved characters must not corrupt the DSN.
+
+    POSTGRES_PASSWORD is percent-encoded at config load, so an explicit shard
+    override has to be treated the same way.
+    """
+    monkeypatch.setattr(
+        shard_registry,
+        "ONYX_DB_SHARDS_JSON",
+        '{"pw-shard": {"password": "p@ss:w/rd"}}',
+    )
+    monkeypatch.setattr(shard_registry, "ONYX_DB_DEFAULT_SHARD", "default")
+    monkeypatch.setattr(shard_registry, "ONYX_DB_CATALOG_SHARD", "default")
+    shard_registry.reset_shard_specs()
+
+    spec = shard_registry.get_shard_spec("pw-shard")
+    assert spec.password == "p%40ss%3Aw%2Frd"
+    assert "@ss" not in spec.password
+
+    shard_registry.reset_shard_specs()
+
+
+def test_catalog_shard_is_validated_without_shard_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Naming a catalog shard that does not exist must fail at startup, not at request time."""
+    monkeypatch.setattr(shard_registry, "ONYX_DB_SHARDS_JSON", "")
+    monkeypatch.setattr(shard_registry, "ONYX_DB_DEFAULT_SHARD", "default")
+    monkeypatch.setattr(shard_registry, "ONYX_DB_CATALOG_SHARD", "nonexistent-catalog")
+    shard_registry.reset_shard_specs()
+
+    with pytest.raises(ShardConfigurationError):
+        get_shard_specs()
+
+    shard_registry.reset_shard_specs()
+
+
+class _CapturedAlembicURL(Exception):
+    """Sentinel to abort a migration run once the target URL is known."""
+
+    def __init__(self, url: str) -> None:
+        super().__init__(url)
+        self.url = url
+
+
+def test_run_alembic_migrations_targets_the_tenants_shard(
+    two_shards: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The migration runner must actually connect to the tenant's database.
+
+    Asserting on the generated URL alone is not enough: `alembic/env.py` builds its
+    own engine, and previously ignored the URL the caller configured, so migrations
+    silently ran against the default database while the URL looked correct. This
+    intercepts `create_async_engine` inside the real
+    `run_alembic_migrations` -> alembic -> `env.py` path and aborts once the target
+    is known, so the full 400-migration tree never has to run.
+    """
+    import sqlalchemy.ext.asyncio as sa_asyncio
+
+    from ee.onyx.server.tenants.schema_management import run_alembic_migrations
+
+    def _capture(url: Any, *_: Any, **__: Any) -> Any:
+        raise _CapturedAlembicURL(str(url))
+
+    # env.py does `from sqlalchemy.ext.asyncio import create_async_engine` at import
+    # time, and alembic re-executes env.py per run, so patching the source module
+    # attribute is picked up by the real code path.
+    monkeypatch.setattr(sa_asyncio, "create_async_engine", _capture)
+
+    for tenant_key, expected_db in (
+        ("tenant_a", POSTGRES_DB),
+        ("tenant_b", two_shards["second_db"]),
+    ):
+        captured: str | None = None
+        try:
+            run_alembic_migrations(two_shards[tenant_key])
+        except _CapturedAlembicURL as e:
+            captured = e.url
+        except Exception as e:  # pragma: no cover - surfaces wiring breakage
+            cause = e
+            while cause is not None:
+                if isinstance(cause, _CapturedAlembicURL):
+                    captured = cause.url
+                    break
+                cause = cause.__cause__ or cause.__context__
+
+        assert captured is not None, f"never reached engine creation for {tenant_key}"
+        assert captured.endswith(f"/{expected_db}"), (
+            f"{tenant_key} migrations target {captured}, expected database {expected_db}"
+        )
