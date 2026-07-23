@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import {
   Button,
@@ -45,6 +45,11 @@ import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 
 export default function SkillsPage() {
   const router = useRouter();
+  const externalAppIdParam = useSearchParams().get("externalAppId");
+  const focusedExternalAppId =
+    externalAppIdParam !== null && /^\d+$/.test(externalAppIdParam)
+      ? Number(externalAppIdParam)
+      : null;
   const { data, error, isLoading, refresh } = useUserSkills();
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -89,9 +94,14 @@ export default function SkillsPage() {
       return;
     }
 
-    const affectedItems = enabled
-      ? items.filter((candidate) => candidate.name === item.name)
-      : [item];
+    const affectedItems =
+      enabled && replaceConflict
+        ? items.filter(
+            (candidate) =>
+              candidate.id === item.id ||
+              (candidate.name === item.name && candidate.enabled)
+          )
+        : [item];
     const affectedIds = new Set(affectedItems.map(({ id }) => id));
     setPendingSkillIds((current) => {
       const next = new Set(current);
@@ -224,22 +234,90 @@ export default function SkillsPage() {
     );
   }, [data, optimisticEnabledById]);
 
+  const focusedAppName = useMemo(() => {
+    if (focusedExternalAppId === null) return null;
+    for (const item of items) {
+      if (
+        item.source === "custom" &&
+        item.skill.external_app?.external_app_id === focusedExternalAppId
+      ) {
+        return item.skill.external_app.name;
+      }
+    }
+    return null;
+  }, [focusedExternalAppId, items]);
+
+  const enabledItemByName = useMemo(
+    () =>
+      new Map(
+        items
+          .filter((item) => item.enabled)
+          .map((item) => [item.name, item] as const)
+      ),
+    [items]
+  );
+
   const visibleItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return items;
     return items.filter(
       (item) =>
-        item.name.toLowerCase().includes(q) ||
-        item.description.toLowerCase().includes(q)
+        (focusedExternalAppId === null ||
+          (item.source === "custom" &&
+            item.skill.external_app?.external_app_id ===
+              focusedExternalAppId)) &&
+        (!q ||
+          item.name.toLowerCase().includes(q) ||
+          item.description.toLowerCase().includes(q))
     );
-  }, [items, searchQuery]);
-  const previewUnavailableReason =
-    previewTarget?.source === "builtin" && !previewTarget.is_available
-      ? (previewTarget.unavailable_reason ??
-        "This skill is currently unavailable.")
-      : null;
+  }, [focusedExternalAppId, items, searchQuery]);
+  const previewUnavailableReason = (() => {
+    if (previewTarget?.source === "builtin" && !previewTarget.is_available) {
+      return (
+        previewTarget.unavailable_reason ??
+        "This skill is currently unavailable."
+      );
+    }
+    if (
+      previewTarget?.source === "custom" &&
+      previewTarget.enabled &&
+      previewTarget.skill.external_app &&
+      !previewTarget.skill.external_app.ready
+    ) {
+      const dependency = previewTarget.skill.external_app;
+      return dependency.enabled
+        ? `Connect app “${dependency.name}” from the Apps page to use this skill.`
+        : `App “${dependency.name}” is disabled by an administrator.`;
+    }
+    return null;
+  })();
   const switchPending =
     pendingSwitchTarget !== null && pendingSkillIds.has(pendingSwitchTarget.id);
+  const enabledNameConflict =
+    pendingSwitchTarget === null
+      ? null
+      : (enabledItemByName.get(pendingSwitchTarget.name) ?? null);
+  const switchImpact = (() => {
+    if (pendingSwitchTarget?.source !== "custom") {
+      return "Continuing will disable the active skill and enable the selected one.";
+    }
+    const targetApp = pendingSwitchTarget.skill.external_app;
+    if (!targetApp) {
+      return "Continuing will disable the active skill and enable the selected one.";
+    }
+    let currentSkill = "the currently enabled skill";
+    if (
+      enabledNameConflict?.source === "custom" &&
+      enabledNameConflict.skill.external_app
+    ) {
+      currentSkill = `the skill that uses app “${enabledNameConflict.skill.external_app.name}”`;
+    } else if (
+      enabledNameConflict?.source === "custom" &&
+      enabledNameConflict.is_personal
+    ) {
+      currentSkill = "your personal skill";
+    }
+    return `Switching will disable ${currentSkill} and enable the skill that uses app “${targetApp.name}”.`;
+  })();
 
   return (
     <SettingsLayouts.Root data-testid="SkillsPage/container">
@@ -291,6 +369,19 @@ export default function SkillsPage() {
       </SettingsLayouts.Header>
 
       <SettingsLayouts.Body>
+        {focusedAppName && (
+          <MessageCard
+            variant="info"
+            title={`Skills for app “${focusedAppName}”`}
+            description={`Enable every skill associated with app “${focusedAppName}”. The app may not work correctly without them. If another skill with the same name is enabled, enabling the app-associated skill disables the other skill for you.`}
+            rightChildren={
+              <Button prominence="secondary" href="/craft/v1/skills">
+                Show all skills
+              </Button>
+            }
+          />
+        )}
+
         {isLoading && <SvgSimpleLoader />}
 
         {error && !isLoading && (
@@ -328,6 +419,9 @@ export default function SkillsPage() {
                       <SkillCard
                         key={item.id}
                         item={item}
+                        hasEnabledNameConflict={
+                          !item.enabled && enabledItemByName.has(item.name)
+                        }
                         onEdit={handleEdit}
                         onClick={setPreviewTarget}
                         onEnabledChange={(skill, enabled) =>
@@ -369,8 +463,8 @@ export default function SkillsPage() {
       {pendingSwitchTarget && (
         <ConfirmationModalLayout
           icon={SvgAlertTriangle}
-          title="Switch active skill?"
-          description={`Only one skill named “${pendingSwitchTarget.name}” can be active at a time.`}
+          title={`Switch “${pendingSwitchTarget.name}” skill?`}
+          description={`Only one skill named “${pendingSwitchTarget.name}” can be enabled at a time.`}
           onClose={
             switchPending ? undefined : () => setPendingSwitchTarget(null)
           }
@@ -386,7 +480,7 @@ export default function SkillsPage() {
             </Button>
           }
         >
-          Continuing will disable the active skill and enable the selected one.
+          {switchImpact}
         </ConfirmationModalLayout>
       )}
     </SettingsLayouts.Root>

@@ -30,6 +30,12 @@ function metadataRows(
   } else if (preview.author_email) {
     rows.push({ label: "Created by", value: preview.author_email });
   }
+  if (preview.external_app) {
+    rows.push({
+      label: "External app",
+      value: preview.external_app.name,
+    });
+  }
   return rows;
 }
 

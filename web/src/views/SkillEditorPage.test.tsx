@@ -33,6 +33,37 @@ async function fillRequiredFields(user: ReturnType<typeof setupUser>) {
   );
 }
 
+function existingSkill(
+  overrides: Partial<SkillEditableDetail> = {}
+): SkillEditableDetail {
+  return {
+    source: "custom",
+    id: "existing-id",
+    name: "report-writer",
+    description: "Writes reports",
+    instructions_markdown: "Write the requested report.",
+    files: [],
+    is_available: true,
+    unavailable_reason: null,
+    is_valid: true,
+    is_personal: true,
+    enabled: true,
+    can_toggle: true,
+    author_user_id: "author-id",
+    author_email: "author@example.com",
+    owner: { id: "author-id", email: "author@example.com" },
+    ownership_vacant: false,
+    created_at: null,
+    updated_at: null,
+    user_shares: [],
+    group_shares: [],
+    public_permission: null,
+    user_permission: "OWNER",
+    external_app: null,
+    ...overrides,
+  };
+}
+
 jest.mock("next/navigation", () => ({
   usePathname: () => "/craft/v1/skills/new",
   useRouter: () => ({
@@ -196,30 +227,7 @@ describe("SkillEditorPage", () => {
 
   it("confirms before leaving an existing skill with unsaved changes", async () => {
     const user = setupUser();
-    const skill: SkillEditableDetail = {
-      source: "custom",
-      id: "existing-id",
-      name: "report-writer",
-      description: "Writes reports",
-      instructions_markdown: "Write the requested report.",
-      files: [],
-      is_available: true,
-      unavailable_reason: null,
-      is_valid: true,
-      is_personal: true,
-      enabled: true,
-      can_toggle: true,
-      author_user_id: "author-id",
-      author_email: "author@example.com",
-      owner: { id: "author-id", email: "author@example.com" },
-      ownership_vacant: false,
-      created_at: null,
-      updated_at: null,
-      user_shares: [],
-      group_shares: [],
-      public_permission: null,
-      user_permission: "OWNER",
-    };
+    const skill = existingSkill();
     mockUseSWR.mockReturnValue({
       data: skill,
       error: undefined,
@@ -241,6 +249,38 @@ describe("SkillEditorPage", () => {
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/skills");
     expect(mockDiscardSkillCreationDraft).not.toHaveBeenCalled();
+  });
+
+  it("shows the app dependency and required organization visibility", () => {
+    const skill = existingSkill({
+      is_personal: false,
+      public_permission: "VIEWER",
+      external_app: {
+        external_app_id: 42,
+        name: "Acme CRM",
+        enabled: true,
+        ready: false,
+      },
+    });
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+
+    render(<SkillEditorPage skillId={skill.id} />);
+
+    expect(
+      screen.getByText(
+        "Connect app “Acme CRM” from the Apps page to use this skill."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Organization-wide viewer access is required while this skill is associated with app “Acme CRM”."
+      )
+    ).toBeInTheDocument();
   });
 
   it("requires confirmation before retrying a same-name creation disabled", async () => {

@@ -46,6 +46,7 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     group_shares: [],
     public_permission: null,
     user_permission: "OWNER",
+    external_app: null,
     ...overrides,
   };
   return {
@@ -120,5 +121,134 @@ describe("SkillCard", () => {
       screen.getByText("Delete this invalid skill and create a new one.")
     ).toBeInTheDocument();
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+  });
+
+  it("keeps a selected skill on while its app is unavailable", () => {
+    const { container } = render(
+      <SkillCard
+        item={custom({
+          enabled: true,
+          external_app: {
+            external_app_id: 42,
+            name: "Acme CRM",
+            enabled: true,
+            ready: false,
+          },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByText("Connect app “Acme CRM” to use")
+    ).toBeInTheDocument();
+    const preferenceSwitch = screen.getByRole("switch", {
+      name: "Disable Report Writer for Acme CRM",
+    });
+    expect(preferenceSwitch).toBeChecked();
+    expect(preferenceSwitch).toBeEnabled();
+    expect(
+      container.querySelector(".card[data-variant='secondary']")
+    ).toBeInTheDocument();
+  });
+
+  it("does not offer an enable toggle until the app is connected", () => {
+    const { container } = render(
+      <SkillCard
+        item={custom({
+          enabled: false,
+          can_toggle: false,
+          external_app: {
+            external_app_id: 42,
+            name: "Acme CRM",
+            enabled: true,
+            ready: false,
+          },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByText("Connect app “Acme CRM” to enable")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(
+      container.querySelector(".card[data-variant='disabled']")
+    ).toBeInTheDocument();
+  });
+
+  it("distinguishes an admin-disabled app dependency", () => {
+    render(
+      <SkillCard
+        item={custom({
+          external_app: {
+            external_app_id: 42,
+            name: "Acme CRM",
+            enabled: false,
+            ready: false,
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByText("App “Acme CRM” is disabled")).toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", {
+        name: "Disable Report Writer for Acme CRM",
+      })
+    ).toBeChecked();
+  });
+
+  it("shows a selected ready associated skill as active", () => {
+    const { container } = render(
+      <SkillCard
+        item={custom({
+          enabled: true,
+          external_app: {
+            external_app_id: 42,
+            name: "Acme CRM",
+            enabled: true,
+            ready: true,
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByText("Uses app “Acme CRM”")).toBeInTheDocument();
+    expect(screen.getByText("App skill")).toBeInTheDocument();
+    expect(screen.queryByText("Custom")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", {
+        name: "Disable Report Writer for Acme CRM",
+      })
+    ).toBeChecked();
+    expect(
+      container.querySelector(".card[data-variant='primary']")
+    ).toBeInTheDocument();
+  });
+
+  it("shows when another skill with the same name is enabled", () => {
+    render(
+      <SkillCard
+        item={custom({
+          enabled: false,
+          external_app: {
+            external_app_id: 42,
+            name: "Acme CRM",
+            enabled: true,
+            ready: true,
+          },
+        })}
+        hasEnabledNameConflict
+      />
+    );
+
+    expect(
+      screen.getByText("Another skill with this name is enabled")
+    ).toBeInTheDocument();
+    const preferenceSwitch = screen.getByRole("switch", {
+      name: "Enable Report Writer for Acme CRM",
+    });
+    expect(preferenceSwitch).not.toBeChecked();
+    expect(preferenceSwitch).toBeEnabled();
   });
 });
