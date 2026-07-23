@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime, timezone
 
 from ee.onyx.external_permissions.google_drive.models import (
@@ -104,6 +104,7 @@ def get_external_access_for_raw_gdrive_file(
     admin_drive_service: GoogleDriveService,
     fallback_user_email: str,
     add_prefix: bool = False,
+    fallback_drive_service_factory: Callable[[], GoogleDriveService] | None = None,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
@@ -144,17 +145,23 @@ def get_external_access_for_raw_gdrive_file(
                 permission_ids=permission_ids,
             )
 
-        permissions_list = _get_permissions(
-            retriever_drive_service or admin_drive_service
-        )
-        if len(permissions_list) != len(permission_ids) and retriever_drive_service:
-            logger.warning(
-                "Failed to get all permissions for file %s with retriever service, trying admin service",
-                doc_id,
-            )
-            backup_permissions_list = _get_permissions(admin_drive_service)
+        if retriever_drive_service:
+            permissions_list = _get_permissions(retriever_drive_service)
+
+        if (
+            len(permissions_list) != len(permission_ids)
+            and fallback_drive_service_factory
+        ):
             permissions_list = _merge_permissions_lists(
-                [permissions_list, backup_permissions_list]
+                [
+                    permissions_list,
+                    _get_permissions(fallback_drive_service_factory()),
+                ]
+            )
+
+        if len(permissions_list) != len(permission_ids):
+            permissions_list = _merge_permissions_lists(
+                [permissions_list, _get_permissions(admin_drive_service)]
             )
 
     # For externally-owned files, the Drive API may return no permissions
