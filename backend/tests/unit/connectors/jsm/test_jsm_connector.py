@@ -146,6 +146,84 @@ class TestDocumentEnrichment:
         assert "jsm_sla_breached" in meta
         assert "Time to first response" in meta["jsm_sla_breached"]
 
+    def test_fetch_jsm_metadata_ongoing_cycle_breached_flag(self) -> None:
+        """ongoingCycle with breached=True must be treated as a breach."""
+        connector = JsmConnector(jira_base_url="https://example.atlassian.net")
+        mock_client = MagicMock()
+        mock_client._options = {"server": "https://example.atlassian.net"}
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "sla": {
+                "values": [
+                    {
+                        "name": "Time to resolution",
+                        "completedCycles": [],
+                        "ongoingCycles": [{"breached": True, "breachTime": {"epochMillis": 9999999999999}}],
+                    }
+                ]
+            }
+        }
+        mock_client._session.get.return_value = mock_resp
+        connector._jira_client = mock_client
+
+        meta = connector._fetch_jsm_request_metadata("IT-2")
+        assert "jsm_sla_breached" in meta
+        assert "Time to resolution" in meta["jsm_sla_breached"]
+
+    def test_fetch_jsm_metadata_ongoing_cycle_past_breach_time(self) -> None:
+        """ongoingCycle whose breachTime is in the past must be treated as a breach."""
+        connector = JsmConnector(jira_base_url="https://example.atlassian.net")
+        mock_client = MagicMock()
+        mock_client._options = {"server": "https://example.atlassian.net"}
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "sla": {
+                "values": [
+                    {
+                        "name": "Time to resolution",
+                        "completedCycles": [],
+                        "ongoingCycles": [
+                            {"breached": False, "breachTime": {"epochMillis": 1000}}
+                        ],
+                    }
+                ]
+            }
+        }
+        mock_client._session.get.return_value = mock_resp
+        connector._jira_client = mock_client
+
+        meta = connector._fetch_jsm_request_metadata("IT-3")
+        assert "jsm_sla_breached" in meta
+        assert "Time to resolution" in meta["jsm_sla_breached"]
+
+    def test_fetch_jsm_metadata_ongoing_cycle_future_breach_time_not_flagged(self) -> None:
+        """ongoingCycle whose breachTime is still in the future must NOT be flagged."""
+        connector = JsmConnector(jira_base_url="https://example.atlassian.net")
+        mock_client = MagicMock()
+        mock_client._options = {"server": "https://example.atlassian.net"}
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "sla": {
+                "values": [
+                    {
+                        "name": "Time to resolution",
+                        "completedCycles": [],
+                        "ongoingCycles": [
+                            {"breached": False, "breachTime": {"epochMillis": 9999999999999}}
+                        ],
+                    }
+                ]
+            }
+        }
+        mock_client._session.get.return_value = mock_resp
+        connector._jira_client = mock_client
+
+        meta = connector._fetch_jsm_request_metadata("IT-4")
+        assert "jsm_sla_breached" not in meta
+
     def test_fetch_jsm_metadata_graceful_on_exception(self) -> None:
         connector = JsmConnector(jira_base_url="https://example.atlassian.net")
         mock_client = MagicMock()
