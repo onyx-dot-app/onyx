@@ -32,8 +32,12 @@ export interface UserUsageResponse {
 }
 
 export function useUserUsage(days: number) {
-  return useSWR<UserUsageResponse>(SWR_KEYS.userUsage(days), errorHandlingFetcher, {
-    revalidateOnFocus: false,
-    onErrorRetry: skipRetryOnAuthError,
-  });
+  return useSWR<UserUsageResponse>(
+    SWR_KEYS.userUsage(days),
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      onErrorRetry: skipRetryOnAuthError,
+    }
+  );
 }

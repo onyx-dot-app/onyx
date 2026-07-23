@@ -64,8 +64,11 @@ def get_model_prices_per_million(
             logger.exception("Override lookup failed for model %s", model)
             rates = None
         if rates is not None:
-            # rates is (input, output, cache).
-            return rates[0], rates[1], rates[2]
+            return (
+                rates.input_cost_per_mtok,
+                rates.output_cost_per_mtok,
+                rates.cache_read_cost_per_mtok,
+            )
 
     try:
         import litellm
