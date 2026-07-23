@@ -748,7 +748,9 @@ def _azure_llm(model_name: str, api_version: str | None) -> LitellmLLM:
     )
 
 
-def _stream_and_get_completion_kwargs(llm: LitellmLLM, is_openai: bool) -> dict:
+def _stream_and_get_completion_kwargs(
+    llm: LitellmLLM, is_openai: bool
+) -> dict[str, Any]:
     with (
         patch("litellm.completion") as mock_completion,
         patch("onyx.llm.multi_llm.is_true_openai_model", return_value=is_openai),
@@ -756,7 +758,7 @@ def _stream_and_get_completion_kwargs(llm: LitellmLLM, is_openai: bool) -> dict:
         mock_completion.return_value = []
         messages: LanguageModelInput = [UserMessage(content="Hi")]
         list(llm.stream(messages))
-        return mock_completion.call_args.kwargs
+        return dict(mock_completion.call_args.kwargs)
 
 
 @pytest.mark.parametrize(

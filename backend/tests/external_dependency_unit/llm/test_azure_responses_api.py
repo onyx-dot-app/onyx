@@ -14,14 +14,14 @@ silently change the surface.
 """
 
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from litellm.llms.custom_httpx.http_handler import HTTPHandler
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.models import LanguageModelInput, UserMessage
-from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.multi_llm import _AZURE_V1_API_VERSIONS, LitellmLLM
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
@@ -71,7 +71,10 @@ def _assert_v1_surface(urls: list[str], api_base: str) -> None:
     assert azure_urls, f"no request reached the Azure resource; saw: {urls}"
     for url in azure_urls:
         assert "/openai/v1/responses" in url, f"legacy responses surface used: {url}"
-        assert "api-version=preview" in url, f"unexpected api-version: {url}"
+        # Any v1 value is fine (AZURE_DEFAULT_RESPONSES_API_VERSION can pick
+        # among them); a dated value here would mean the legacy surface.
+        api_version = parse_qs(urlparse(url).query).get("api-version", [""])[0]
+        assert api_version in _AZURE_V1_API_VERSIONS, f"non-v1 api-version: {url}"
 
 
 @pytest.mark.secrets(TestSecret.AZURE_API_KEY, TestSecret.AZURE_API_URL)

@@ -248,7 +248,7 @@ def _log_azure_responses_api_version_override(
 ) -> None:
     """Log once per provider config per process (LLM instances and calls are
     per-request, so unconditional logging here would fire on every LLM call)."""
-    logger.info(
+    logger.warning(
         "Azure responses API calls for %s ignore the configured api_version %s: "
         "dated api-versions target the legacy /openai/responses surface, which "
         "some clouds (e.g. Azure Government) do not serve. These calls use "
