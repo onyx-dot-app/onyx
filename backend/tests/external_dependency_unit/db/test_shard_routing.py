@@ -728,3 +728,58 @@ def test_run_alembic_migrations_targets_the_tenants_shard(
         assert captured.endswith(f"/{expected_db}"), (
             f"{tenant_key} migrations target {captured}, expected database {expected_db}"
         )
+
+
+def test_sqlalchemy_url_option_is_still_ignored_by_env_py(
+    two_shards: dict[str, Any],  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Setting `sqlalchemy.url` must not redirect a migration run.
+
+    The integration-test reset helpers set that option to a *sync* driver URL and
+    rely on env.py ignoring it. Honoring it there routes a psycopg2 URL into
+    `create_async_engine`, which fails with "the asyncio extension requires an async
+    driver" — so shard targeting has to travel on its own channel.
+    """
+    import os
+    from types import SimpleNamespace
+
+    import sqlalchemy.ext.asyncio as sa_asyncio
+    from alembic import command
+    from alembic.config import Config
+
+    def _capture(url: Any, *_: Any, **__: Any) -> Any:
+        raise _CapturedAlembicURL(str(url))
+
+    monkeypatch.setattr(sa_asyncio, "create_async_engine", _capture)
+
+    root_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..")
+    )
+    alembic_cfg = Config(os.path.join(root_dir, "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", os.path.join(root_dir, "alembic"))
+    alembic_cfg.attributes["configure_logger"] = False
+    alembic_cfg.cmd_opts = SimpleNamespace()  # ty: ignore[invalid-assignment]
+    alembic_cfg.cmd_opts.x = ["schemas=public"]  # ty: ignore[invalid-assignment]
+
+    sync_url = build_connection_string(db_api=SYNC_DB_API)
+    alembic_cfg.set_main_option("sqlalchemy.url", sync_url)
+
+    captured: str | None = None
+    try:
+        command.upgrade(alembic_cfg, "head")
+    except _CapturedAlembicURL as e:
+        captured = e.url
+    except Exception as e:
+        cause: BaseException | None = e
+        while cause is not None:
+            if isinstance(cause, _CapturedAlembicURL):
+                captured = cause.url
+                break
+            cause = cause.__cause__ or cause.__context__
+
+    assert captured is not None, "never reached engine creation"
+    assert "psycopg2" not in captured, (
+        f"env.py used the caller's sync URL ({captured}); async engine creation "
+        "would fail"
+    )

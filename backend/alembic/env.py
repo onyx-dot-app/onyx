@@ -11,6 +11,7 @@ from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from sqlalchemy import event
 from sqlalchemy import pool
 from sqlalchemy import text
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.engine.base import Connection
 import os
 import ssl
@@ -56,16 +57,21 @@ target_metadata = [Base.metadata, ResultModelBase.metadata]
 logger = logging.getLogger(__name__)
 
 
+# Config attribute a caller sets to pin this run to a specific database. Deliberately
+# *not* `sqlalchemy.url`: that option is already set by other callers (e.g. the
+# integration-test reset helpers) with a sync driver URL, on the established
+# understanding that this env.py ignores it and builds its own async engine.
+TARGET_URL_ATTRIBUTE = "onyx_target_url"
+
+
 def connection_url() -> str:
     """Database URL for this migration run.
 
-    Defaults to the process-wide POSTGRES_* settings, but a caller that has already
+    Defaults to the process-wide POSTGRES_* settings. A caller that has already
     decided which database to target — notably per-tenant migrations, which must
-    follow the tenant's shard — can override it by setting `sqlalchemy.url` on the
-    Alembic config. `alembic.ini` leaves that option unset, so the default path is
-    unchanged.
+    follow the tenant's shard — passes it via `TARGET_URL_ATTRIBUTE`.
     """
-    return config.get_main_option("sqlalchemy.url") or build_connection_string()
+    return config.attributes.get(TARGET_URL_ATTRIBUTE) or build_connection_string()
 
 
 ssl_context: ssl.SSLContext | None = None
@@ -256,11 +262,15 @@ def provide_iam_token_for_alembic(
     cparams: Any,
 ) -> None:
     if USE_IAM_AUTH:
-        # Database connection settings
+        # Derived from the URL actually being migrated, not the global POSTGRES_*
+        # settings: an RDS IAM token is only valid for the host/port/user it was
+        # minted for, so a tenant on a shard with different coordinates would be
+        # rejected if we used the defaults here.
+        url = make_url(connection_url())
         region = AWS_REGION_NAME
-        host = POSTGRES_HOST
-        port = POSTGRES_PORT
-        user = POSTGRES_USER
+        host = url.host or POSTGRES_HOST
+        port = str(url.port) if url.port else POSTGRES_PORT
+        user = url.username or POSTGRES_USER
 
         # Get IAM authentication token
         token = get_iam_auth_token(host, port, user, region)

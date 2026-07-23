@@ -42,8 +42,10 @@ def run_alembic_migrations(schema_name: str) -> None:
 
         # Configure Alembic
         alembic_cfg = Config(alembic_ini_path)
-        alembic_cfg.set_main_option(
-            "sqlalchemy.url", _tenant_connection_string(schema_name)
+        # Pin the run to the tenant's shard. Uses env.py's dedicated attribute rather
+        # than `sqlalchemy.url`, which env.py ignores by design.
+        alembic_cfg.attributes["onyx_target_url"] = _tenant_connection_string(
+            schema_name
         )
         alembic_cfg.set_main_option(
             "script_location", os.path.join(root_dir, "alembic")
