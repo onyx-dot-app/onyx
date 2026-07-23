@@ -1,4 +1,5 @@
 import json
+from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
@@ -383,3 +384,62 @@ def test_azure_provider_rejects_reference_images_for_unsupported_model() -> None
             n=1,
             reference_images=[ReferenceImage(data=b"image-1", mime_type="image/png")],
         )
+
+
+def test_build_openrouter_provider_from_api_key_and_base() -> None:
+    from onyx.image_gen.providers.openrouter_img_gen import (
+        OpenRouterImageGenerationProvider,
+    )
+
+    credentials = _get_default_image_gen_creds()
+    credentials.api_key = "test-key"
+    credentials.api_base = "https://example.openrouter.ai/api/v1"
+
+    image_gen_provider = get_image_generation_provider("openrouter", credentials)
+
+    assert isinstance(image_gen_provider, OpenRouterImageGenerationProvider)
+    assert image_gen_provider._api_key == "test-key"
+    assert image_gen_provider._api_base == "https://example.openrouter.ai/api/v1"
+    assert image_gen_provider.supports_reference_images is True
+    assert image_gen_provider.max_reference_images == 10
+
+
+def test_build_openrouter_provider_fails_no_api_key() -> None:
+    credentials = _get_default_image_gen_creds()
+
+    with pytest.raises(ImageProviderCredentialsError):
+        get_image_generation_provider("openrouter", credentials)
+
+
+def test_openrouter_provider_posts_image_generation_request() -> None:
+    from onyx.image_gen.providers.openrouter_img_gen import (
+        OpenRouterImageGenerationProvider,
+    )
+
+    provider = OpenRouterImageGenerationProvider(api_key="test-key")
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "created": 123,
+        "data": [{"b64_json": "aGVsbG8="}],
+    }
+
+    with patch("requests.post", return_value=mock_response) as mock_post:
+        response = provider.generate_image(
+            prompt="draw a mountain",
+            model="bytedance-seed/seedream-4.5",
+            size="1024x1024",
+            n=1,
+            quality="high",
+        )
+
+    assert response.data[0].b64_json == "aGVsbG8="
+    mock_response.raise_for_status.assert_called_once()
+    mock_post.assert_called_once()
+    assert mock_post.call_args.args[0] == "https://openrouter.ai/api/v1/images"
+    assert mock_post.call_args.kwargs["json"] == {
+        "model": "bytedance-seed/seedream-4.5",
+        "prompt": "draw a mountain",
+        "size": "1024x1024",
+        "n": 1,
+        "quality": "high",
+    }

@@ -6,18 +6,21 @@ from onyx.image_gen.interfaces import (
 )
 from onyx.image_gen.providers.azure_img_gen import AzureImageGenerationProvider
 from onyx.image_gen.providers.openai_img_gen import OpenAIImageGenerationProvider
+from onyx.image_gen.providers.openrouter_img_gen import OpenRouterImageGenerationProvider
 from onyx.image_gen.providers.vertex_img_gen import VertexImageGenerationProvider
 
 
 class ImageGenerationProviderName(str, Enum):
     AZURE = "azure"
     OPENAI = "openai"
+    OPENROUTER = "openrouter"
     VERTEX_AI = "vertex_ai"
 
 
 PROVIDERS: dict[ImageGenerationProviderName, type[ImageGenerationProvider]] = {
     ImageGenerationProviderName.AZURE: AzureImageGenerationProvider,
     ImageGenerationProviderName.OPENAI: OpenAIImageGenerationProvider,
+    ImageGenerationProviderName.OPENROUTER: OpenRouterImageGenerationProvider,
     ImageGenerationProviderName.VERTEX_AI: VertexImageGenerationProvider,
 }
 

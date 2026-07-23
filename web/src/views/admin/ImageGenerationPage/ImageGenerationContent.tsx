@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useCreateModal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -33,6 +33,7 @@ import { getModelIcon } from "@/lib/languageModels";
 const NO_DEFAULT_VALUE = "__none__";
 
 export default function ImageGenerationContent() {
+  const { mutate } = useSWRConfig();
   const {
     data: llmProviderResponse,
     error: llmError,
@@ -108,6 +109,7 @@ export default function ImageGenerationContent() {
         await setDefaultImageGenerationConfig(config.image_provider_id);
         toast.success(`${provider.title} set as default`);
         refetchConfigs();
+        mutate(SWR_KEYS.tools);
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to set default"
@@ -125,6 +127,7 @@ export default function ImageGenerationContent() {
         await unsetDefaultImageGenerationConfig(config.image_provider_id);
         toast.success(`${provider.title} deselected`);
         refetchConfigs();
+        mutate(SWR_KEYS.tools);
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to deselect"
@@ -154,6 +157,7 @@ export default function ImageGenerationContent() {
       toast.success(`${disconnectProvider.title} disconnected`);
       refetchConfigs();
       refetchProviders();
+      mutate(SWR_KEYS.tools);
     } catch (error) {
       console.error("Failed to disconnect image generation provider:", error);
       toast.error(
@@ -170,6 +174,7 @@ export default function ImageGenerationContent() {
     setEditConfig(null);
     refetchConfigs();
     refetchProviders();
+    mutate(SWR_KEYS.tools);
   };
 
   if (llmError || configError) {
