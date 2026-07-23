@@ -104,16 +104,25 @@ def get_orphan_build_session_ids(
     return set(db_session.scalars(stmt).all())
 
 
-def skills_are_stale(session: BuildSession, sandbox: Sandbox | None) -> bool:
-    """Whether a live runtime predates the sandbox's managed content."""
-    return bool(
+def session_runtime_stale(session: BuildSession, sandbox: Sandbox | None) -> bool:
+    """Whether a live runtime predates the sandbox's managed content — either the
+    skill/app payload (``skills_hash``) or the craft MCP set (``mcp_config_hash``).
+    Both trigger the same reload (rewrite session config + dispose instance)."""
+    if not (
         session.status == BuildSessionStatus.ACTIVE
         and session.origin == SessionOrigin.INTERACTIVE
         and session.opencode_session_id is not None
         and sandbox is not None
-        and sandbox.skills_hash is not None
-        and session.skills_hash != sandbox.skills_hash
+    ):
+        return False
+    skills_changed = (
+        sandbox.skills_hash is not None and session.skills_hash != sandbox.skills_hash
     )
+    mcp_changed = (
+        sandbox.mcp_config_hash is not None
+        and session.mcp_config_hash != sandbox.mcp_config_hash
+    )
+    return skills_changed or mcp_changed
 
 
 async def get_webapp_access_async(

@@ -5911,6 +5911,7 @@ class BuildSession(Base):
     agent_provider: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_model: Mapped[str | None] = mapped_column(String, nullable=True)
     skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mcp_config_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
@@ -5965,6 +5966,7 @@ class Sandbox(Base):
         DateTime(timezone=True), nullable=True
     )
     skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mcp_config_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True

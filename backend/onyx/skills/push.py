@@ -59,7 +59,9 @@ def compute_skill_runtime_hash(
     files: FileSet,
     connectable_apps_section: str,
 ) -> str:
-    """Digest skill files and the app guidance rendered into ``AGENTS.md``."""
+    """Digest the skill files and the app guidance rendered into ``AGENTS.md``.
+    A change makes a live session stale so it hot-reloads. The craft MCP set is
+    tracked separately via ``mcp_config_hash`` (see ``session_runtime_stale``)."""
     digest = hashlib.sha256()
     connectable_apps_bytes = connectable_apps_section.encode()
     digest.update(len(connectable_apps_bytes).to_bytes(8))

@@ -18,9 +18,16 @@ from onyx.db.enums import (
     MCPAuthenticationType,
     MCPTransport,
 )
-from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
+from onyx.db.mcp import (
+    create_connection_config,
+    create_mcp_server__no_commit,
+    update_mcp_server__no_commit,
+)
 from onyx.db.models import MCPServer, Tool
-from onyx.server.features.build.sandbox.util.mcp_config import resolve_craft_mcp_servers
+from onyx.server.features.build.sandbox.util.mcp_config import (
+    craft_mcp_fingerprint,
+    resolve_craft_mcp_servers,
+)
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -77,6 +84,34 @@ def test_only_craft_enabled_servers_resolved_with_tool_curation(
     assert config.key == f"linear-mcp-{craft.id}"
     # Only disabled tools are tracked; enabled ones ride the wildcard allow.
     assert config.disabled_tools == ("delete_issue",)
+
+
+def test_resolve_populates_server_id_and_user_auth(
+    db_session: Session,
+    craft_server: tuple[MCPServer, MCPServer],
+) -> None:
+    """``server_id`` and ``authenticated`` feed the runtime hash: connecting
+    credentials must flip ``authenticated`` and change the fingerprint so the
+    user's session hot-reloads (tool discovery is credential-gated)."""
+    craft, _ = craft_server
+    user = create_test_user(db_session, "mcp_auth")
+
+    before = {c.server_id: c for c in resolve_craft_mcp_servers(db_session, user)}
+    assert craft.id in before
+    assert before[craft.id].authenticated is False
+    fp_before = craft_mcp_fingerprint(list(before.values()))
+
+    create_connection_config(
+        {"headers": {"Authorization": "Bearer x"}},
+        db_session,
+        mcp_server_id=craft.id,
+        user_email=user.email,
+    )
+    db_session.commit()
+
+    after = {c.server_id: c for c in resolve_craft_mcp_servers(db_session, user)}
+    assert after[craft.id].authenticated is True
+    assert craft_mcp_fingerprint(list(after.values())) != fp_before
 
 
 def test_private_unshared_server_excluded_for_user(

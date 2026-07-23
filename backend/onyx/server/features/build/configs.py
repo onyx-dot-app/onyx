@@ -137,6 +137,15 @@ SANDBOX_PROXY_CA_VOLUME_NAME = "sandbox_proxy_ca"
 # never see the raw values.
 SANDBOX_PROXY_INJECTED_PLACEHOLDER = "replaced_by_egress_proxy"
 
+# Header carrying the originating BuildSession id on opencode's in-process MCP
+# client requests. opencode-serve is one process for many sessions and uses the
+# untagged base proxy env, so the shell-env proxy tag can't ride MCP egress;
+# instead the per-session opencode.json stamps this header on each MCP server.
+# The egress proxy reads it to attribute the tool call to a session for approval,
+# then strips it so it never reaches the MCP origin.
+MCP_SESSION_TAG_HEADER = "X-Onyx-Mcp-Session"
+
+
 # ==============================================================================
 # Docker sandbox (SANDBOX_BACKEND=docker, self-hosted docker-compose)
 # ==============================================================================

@@ -47,6 +47,7 @@ from onyx.db.gated_app import (
     replace_action_policies__no_commit,
 )
 from onyx.db.mcp import (
+    affected_user_ids_for_mcp_server,
     create_connection_config,
     create_mcp_server__no_commit,
     delete_all_user_connection_configs_for_server_no_commit,
@@ -364,6 +365,21 @@ router = APIRouter(prefix="/mcp")
 admin_router = APIRouter(prefix="/admin/mcp")
 
 HEADER_SUBSTITUTIONS: Literal["header_substitutions"] = "header_substitutions"
+
+
+def _hot_reload_craft_sessions(user_ids: set[UUID], db_session: Session) -> None:
+    """Restamp affected users' running sandboxes with the current craft MCP
+    fingerprint so a live Craft session picks up the change on its next turn
+    (via the session reload) without a pod re-provision. Updates only
+    ``mcp_config_hash`` — it does not re-push skill files. Best-effort; imported
+    lazily to avoid a build-layer import cycle at module load."""
+    if not user_ids:
+        return
+    from onyx.server.features.build.session.sandbox_lifecycle import (
+        refresh_mcp_config_hashes_for_users,
+    )
+
+    refresh_mcp_config_hashes_for_users(user_ids, db_session)
 
 
 def _build_headers_from_template(
@@ -870,6 +886,11 @@ async def process_oauth_callback(
         redis_client.delete(key_state(user_id))
 
         db_session.commit()
+
+        # OAuth connect unblocks tool discovery for this user's craft session;
+        # reload it (single sandbox — this user only).
+        _hot_reload_craft_sessions({user.id}, db_session)
+
         return MCPOAuthCallbackResponse(
             success=True,
             server_id=mcp_server.id,
@@ -907,6 +928,11 @@ async def process_oauth_callback(
         raise HTTPException(status_code=400, detail="No access_token in OAuth response")
 
     db_session.commit()
+
+    # The background task committed the user's tokens before unblocking the
+    # blpop above, so the credential is persisted; reload this user's craft
+    # session (single sandbox — this user only) to retry tool discovery.
+    _hot_reload_craft_sessions({user.id}, db_session)
 
     logger.info(
         "server_id=%s server_name=%s return_path=%s",
@@ -1047,6 +1073,10 @@ def save_user_credentials(
         )
         db_session.commit()
 
+        # Connecting credentials unblocks tool discovery for this user's craft
+        # session (opencode's startup tools/list is credential-gated); reload it.
+        _hot_reload_craft_sessions({user.id}, db_session)
+
         return MCPApiKeyResponse(
             success=True,
             message=validation_message,
@@ -1076,6 +1106,10 @@ def delete_user_credentials(
 
     # The helper commits internally.
     delete_user_connection_configs_for_server(server_id, user.email, db_session)
+
+    # Disconnecting revokes tool discovery for this user; reload their craft
+    # session (single sandbox — this user only) so the next turn drops it.
+    _hot_reload_craft_sessions({user.id}, db_session)
 
     return MCPApiKeyResponse(
         success=True,
@@ -2438,10 +2472,20 @@ def update_mcp_server_simple(
         available_in_craft=request.available_in_craft,
     )
 
-    if any(
+    acl_changing = any(
         value is not None
         for value in (request.is_public, request.users, request.groups)
-    ):
+    )
+    # Only an ACL change can drop a user's access; snapshot the pre-change
+    # recipients in that case so they're reloaded to lose the server (the
+    # post-update query wouldn't include them).
+    reload_user_ids: set[UUID] = (
+        affected_user_ids_for_mcp_server(updated_server, db_session)
+        if acl_changing
+        else set()
+    )
+
+    if acl_changing:
         _apply_mcp_server_access(
             mcp_server=updated_server,
             acting_user=user,
@@ -2475,6 +2519,13 @@ def update_mcp_server_simple(
 
     db_session.commit()
 
+    # Craft availability / URL live in each session's baked opencode.json;
+    # reload affected users so the change reaches running sandboxes. Union the
+    # pre-update recipients so newly-removed users are reloaded to drop the
+    # server. (Tool policies are enforced live by the proxy and need no reload.)
+    reload_user_ids |= affected_user_ids_for_mcp_server(updated_server, db_session)
+    _hot_reload_craft_sessions(reload_user_ids, db_session)
+
     # Return the updated server in API format
     return _db_mcp_server_to_api_mcp_server(
         updated_server, db_session, request_user=user
@@ -2493,6 +2544,11 @@ def delete_mcp_server_admin(
         server = get_mcp_server_by_id(server_id, db_session)
 
         _ensure_mcp_server_owner_or_admin(server, user)
+
+        # Snapshot recipients before deletion: once the server (and its ACL
+        # rows) are gone, the affected-user query returns nothing, so they'd
+        # never be reloaded to drop the now-deleted server from their config.
+        reload_user_ids = affected_user_ids_for_mcp_server(server, db_session)
 
         # Log tools that will be deleted for debugging
         tools_to_delete = get_tools_by_mcp_server_id(server_id, db_session)
@@ -2523,6 +2579,10 @@ def delete_mcp_server_admin(
                 )
                 delete_tool__no_commit(tool.id, db_session)
         db_session.commit()
+
+        # Restamp affected users so their running craft session drops the
+        # deleted server on its next turn.
+        _hot_reload_craft_sessions(reload_user_ids, db_session)
 
         return {"success": True}
     except ValueError:

@@ -13,6 +13,7 @@ from onyx.db.enums import (
     MCPOAuthProviderMode,
     MCPServerStatus,
     MCPTransport,
+    SandboxStatus,
 )
 from onyx.db.models import (
     MCPAuthenticationType,
@@ -21,6 +22,7 @@ from onyx.db.models import (
     MCPServer__User,
     MCPServer__UserGroup,
     Persona,
+    Sandbox,
     Tool,
     User,
     User__UserGroup,
@@ -143,6 +145,48 @@ def user_can_access_mcp_server(user: User, server_id: int, db_session: Session) 
         select(MCPServer.id).where(MCPServer.id == server_id), user
     )
     return db_session.scalar(stmt) is not None
+
+
+def affected_user_ids_for_mcp_server(
+    server: MCPServer, db_session: Session
+) -> set[UUID]:
+    """User IDs with a RUNNING sandbox whose Craft session should be reloaded
+    after this server changes (enabled/disabled for craft, tools toggled, URL
+    edited). Scoped to running sandboxes so the hot-reload push has somewhere to
+    land. Access must match what ``resolve_craft_mcp_servers`` bakes into a
+    session: public / group / direct / owner, plus admins (who bypass the access
+    filter in ``_add_mcp_server_access_filter`` and therefore see every
+    craft-enabled server)."""
+    stmt = select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
+    if server.is_public:
+        return set(db_session.scalars(stmt))
+
+    group_users = (
+        select(User__UserGroup.user_id)
+        .join(
+            MCPServer__UserGroup,
+            MCPServer__UserGroup.user_group_id == User__UserGroup.user_group_id,
+        )
+        .where(MCPServer__UserGroup.mcp_server_id == server.id)
+    )
+    direct_users = select(MCPServer__User.user_id).where(
+        MCPServer__User.mcp_server_id == server.id
+    )
+    owner_users = select(User.id).where(  # ty: ignore[no-matching-overload]
+        User.email == server.owner
+    )
+    # Admins see every craft-enabled server (ACL bypass), so any change to a
+    # private server can be baked into an admin's session and must reload it.
+    admin_users = select(User.id).where(  # ty: ignore[no-matching-overload]
+        User.role == UserRole.ADMIN
+    )
+    stmt = stmt.where(
+        Sandbox.user_id.in_(group_users)
+        | Sandbox.user_id.in_(direct_users)
+        | Sandbox.user_id.in_(owner_users)
+        | Sandbox.user_id.in_(admin_users)
+    )
+    return set(db_session.scalars(stmt))
 
 
 def make_mcp_server_private(
@@ -361,6 +405,24 @@ def get_user_connection_config(
             )
         )
     )
+
+
+def get_user_authenticated_server_ids(
+    server_ids: list[int], user_email: str, db_session: Session
+) -> set[int]:
+    """Subset of ``server_ids`` for which ``user_email`` has a stored connection
+    config (per-user credentials / OAuth tokens)."""
+    if not server_ids:
+        return set()
+    rows = db_session.scalars(
+        select(MCPConnectionConfig.mcp_server_id).where(
+            and_(
+                MCPConnectionConfig.mcp_server_id.in_(server_ids),
+                MCPConnectionConfig.user_email == user_email,
+            )
+        )
+    )
+    return {sid for sid in rows if sid is not None}
 
 
 class MCPCredentialsError(Exception):
