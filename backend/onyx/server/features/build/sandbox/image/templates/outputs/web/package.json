@@ -37,7 +37,7 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "oxlint": "^1.72.0",
-    "tailwindcss": "^4.3.0",
+    "tailwindcss": "^4.3.2",
     "typescript": "^6"
   },
   "overrides": {
