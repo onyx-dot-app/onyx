@@ -81,8 +81,8 @@ func APIURL(serverURL string) string {
 	return baseURL + suffix
 }
 
-// OnyxBaseURL returns the deployment root, removing a configured API prefix.
-func OnyxBaseURL(serverURL string) string {
+// OnyxWebURL removes an API prefix when the configured URL already includes it.
+func OnyxWebURL(serverURL string) string {
 	baseURL := strings.TrimRight(serverURL, "/")
 	prefix := apiPrefix()
 	if prefix == "" {
