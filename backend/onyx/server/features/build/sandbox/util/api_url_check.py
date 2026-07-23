@@ -11,6 +11,8 @@ import threading
 
 import httpx
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -87,12 +89,13 @@ def validate_sandbox_api_url(api_server_url: str) -> None:
     prefixed = f"{base}/api"
     prefixed_response = _probe_health(prefixed)
     if prefixed_response is not None and _is_health_response(prefixed_response):
-        raise RuntimeError(
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
             f"SANDBOX_API_SERVER_URL={api_server_url!r} is missing its API path "
             f"prefix: {base}/health does not serve the API health payload "
             f"(HTTP {response.status_code}) while {prefixed}/health does. "
             f"Set SANDBOX_API_SERVER_URL to {prefixed!r} — the full base URL a "
-            "sandbox client uses."
+            "sandbox client uses.",
         )
     logger.warning(
         "SANDBOX_API_SERVER_URL=%s: %s/health did not serve the API health "

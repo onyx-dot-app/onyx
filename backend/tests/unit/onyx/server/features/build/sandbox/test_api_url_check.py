@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.sandbox.util import api_url_check
 
 
@@ -33,7 +34,7 @@ def test_missing_api_prefix_raises_with_corrected_url() -> None:
         return _health_response()
 
     with patch.object(api_url_check.httpx, "get", side_effect=fake_get):
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             api_url_check.validate_sandbox_api_url("https://onyx.example")
 
     assert "'https://onyx.example/api'" in str(exc_info.value)
@@ -49,7 +50,7 @@ def test_redirected_web_page_does_not_mask_missing_prefix() -> None:
         return _health_response()
 
     with patch.object(api_url_check.httpx, "get", side_effect=fake_get):
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             api_url_check.validate_sandbox_api_url("https://onyx.example")
 
     assert "'https://onyx.example/api'" in str(exc_info.value)
