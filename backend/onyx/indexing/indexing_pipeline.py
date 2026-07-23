@@ -121,8 +121,9 @@ logger = setup_logger()
 MAX_CONTEXTUAL_RAG_WORKERS = 128  # Assume 8mb of memory per worker
 MAX_IMAGE_WORKERS = 16
 
-# A timed-out or errored image summary is usually a transient provider blip, so
-# retry a few times (short backoff) before falling back to a placeholder.
+# A transient LLM error (e.g. rate limit / 5xx) is usually recoverable, so retry a
+# few times (short backoff) before falling back to a placeholder. A timeout is NOT
+# retried (see below) — it means a hung call, and retrying would leak another thread.
 IMAGE_SUMMARIZATION_MAX_ATTEMPTS = 2
 IMAGE_SUMMARIZATION_RETRY_BACKOFF_SECONDS = 2.0
 
@@ -844,11 +845,14 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         # Wall-clock timeout per attempt: the LLM's own timeout is per-read, not total,
         # so a trickling connection would otherwise hang the worker forever. retry_builder
         # can't interrupt a blocking call, so the timeout lives inside the retried unit.
+        # Only ValueError (transient LLM error) is retried — a TimeoutError means the call
+        # is hung, and run_with_timeout leaves that thread running, so retrying would just
+        # stack up another stuck provider thread.
         @retry_builder(
             tries=IMAGE_SUMMARIZATION_MAX_ATTEMPTS,
             delay=IMAGE_SUMMARIZATION_RETRY_BACKOFF_SECONDS,
             jitter=0,
-            exceptions=(TimeoutError, ValueError),
+            exceptions=(ValueError,),
         )
         def _summarize_attempt(image_data: bytes, context_name: str) -> str | None:
             return run_with_timeout(
@@ -865,10 +869,8 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                 result = _summarize_attempt(image_data, context_name)
             except (TimeoutError, ValueError) as e:
                 logger.warning(
-                    "Image summarization failed for '%s' after %s attempts: %s; "
-                    "using placeholder",
+                    "Image summarization failed for '%s': %s; using placeholder",
                     context_name,
-                    IMAGE_SUMMARIZATION_MAX_ATTEMPTS,
                     e,
                 )
                 result = None

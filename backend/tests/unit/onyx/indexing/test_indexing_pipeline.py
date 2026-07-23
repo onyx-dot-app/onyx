@@ -765,10 +765,9 @@ class TestProcessImageSections:
         assert section.csv_file_id == "fid-2"
         assert section.text is None
 
-    def test_hung_summarization_is_bounded_and_retried_to_placeholder(self) -> None:
-        """A vision-LLM call that hangs must not wedge indexing: each attempt is bounded
-        by IMAGE_SUMMARIZATION_TIMEOUT_SECONDS, it is retried, and once the retries are
-        exhausted the image falls back to a placeholder (the document still indexes)."""
+    def test_hung_summarization_is_bounded_and_not_retried(self) -> None:
+        """A hung vision-LLM call is time-boxed and NOT retried — retrying would leave a
+        second stuck provider thread — so it falls back to a placeholder after one attempt."""
         call_count = 0
 
         def _hang(**_kwargs: Any) -> str:
@@ -787,8 +786,10 @@ class TestProcessImageSections:
             result = self._run([doc], {"img-A": b"aa"}, summarize_side_effect=_hang)
             elapsed = time.monotonic() - start
 
-        assert call_count == 2  # retried before giving up
-        assert elapsed < 2.0  # bounded — not the 3s hang, per attempt
+        assert (
+            call_count == 1
+        )  # timeout is NOT retried (would stack another stuck thread)
+        assert elapsed < 1.0  # single 0.2s timeout, not 2×
         assert result[0].processed_sections[0].text == "[Image could not be summarized]"
 
     def test_transient_summarization_failure_recovers_on_retry(self) -> None:
