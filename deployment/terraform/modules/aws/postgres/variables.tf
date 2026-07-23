@@ -27,8 +27,9 @@ variable "max_storage_gb" {
   default     = null
 
   validation {
-    condition     = var.max_storage_gb == null || coalesce(var.max_storage_gb, 0) == 0 || coalesce(var.max_storage_gb, 0) > var.storage_gb
-    error_message = "max_storage_gb must be greater than storage_gb (or null/0 to disable autoscaling)."
+    # RDS requires the ceiling to be at least 10% above allocated storage.
+    condition     = var.max_storage_gb == null || coalesce(var.max_storage_gb, 0) == 0 || coalesce(var.max_storage_gb, 0) >= ceil(1.1 * var.storage_gb)
+    error_message = "max_storage_gb must be at least 10% greater than storage_gb (RDS requirement), or null/0 to disable autoscaling."
   }
 }
 

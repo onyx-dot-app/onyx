@@ -89,8 +89,13 @@ locals {
   vespa_node_disk_size_gb   = coalesce(var.vespa_node_disk_size_gb, local.sizing.vespa_node_disk_size_gb)
   postgres_instance_type    = coalesce(var.postgres_instance_type, local.sizing.postgres_instance_type)
   postgres_storage_gb       = coalesce(var.postgres_storage_gb, local.sizing.postgres_storage_gb)
-  postgres_max_storage_gb   = coalesce(var.postgres_max_storage_gb, local.sizing.postgres_max_storage_gb)
-  redis_instance_type       = coalesce(var.redis_instance_type, local.sizing.redis_instance_type)
+  # Keep the autoscaling ceiling above the initial size even when
+  # postgres_storage_gb alone is overridden past the tier ceiling.
+  postgres_max_storage_gb = coalesce(
+    var.postgres_max_storage_gb,
+    max(local.sizing.postgres_max_storage_gb, 2 * local.postgres_storage_gb),
+  )
+  redis_instance_type = coalesce(var.redis_instance_type, local.sizing.redis_instance_type)
 
   opensearch_instance_type                 = coalesce(var.opensearch_instance_type, local.sizing.opensearch_instance_type)
   opensearch_instance_count                = coalesce(var.opensearch_instance_count, local.sizing.opensearch_instance_count)

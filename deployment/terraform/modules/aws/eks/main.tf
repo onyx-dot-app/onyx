@@ -105,22 +105,27 @@ module "eks" {
       k == "main" && length(var.main_node_subnet_ids) > 0 ? {
         subnet_ids = var.main_node_subnet_ids
       } : {},
-      # Scaling-bound overrides for the main node group; null keeps the map default
+      # Scaling-bound overrides for the main node group; null keeps the map
+      # default. desired_size must be >= min_size or the EKS API rejects the
+      # node group at creation (the upstream module defaults desired to 1 and
+      # ignores changes to it after create).
       k == "main" ? {
-        min_size = coalesce(var.main_node_min_size, v.min_size)
-        max_size = coalesce(var.main_node_max_size, v.max_size)
+        min_size     = coalesce(var.main_node_min_size, v.min_size)
+        max_size     = coalesce(var.main_node_max_size, v.max_size)
+        desired_size = try(v.desired_size, coalesce(var.main_node_min_size, v.min_size))
       } : {},
-      # Disk override for the Vespa/document-index node; null keeps the map default
+      # Disk override for the Vespa/document-index node; null keeps the map
+      # default. Merge preserves any other device mappings on the group.
       k == "vespa" && var.vespa_node_disk_size_gb != null ? {
-        block_device_mappings = {
+        block_device_mappings = merge(try(v.block_device_mappings, {}), {
           xvda = {
             device_name = "/dev/xvda"
             ebs = merge(
-              v.block_device_mappings.xvda.ebs,
+              try(v.block_device_mappings.xvda.ebs, {}),
               { volume_size = var.vespa_node_disk_size_gb }
             )
           }
-        }
+        })
       } : {}
     )
   }, local.craft_sandbox_node_groups)

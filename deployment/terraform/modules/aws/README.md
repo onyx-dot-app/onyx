@@ -111,13 +111,15 @@ What each tier provisions:
 | Document-index node¹ | m6i.xlarge, 100 GB | m6i.2xlarge, 100 GB | r6i.4xlarge, 512 GB |
 | RDS Postgres | db.t4g.large, 64→256 GB | db.t4g.large, 128→512 GB | db.m7g.xlarge, 256→1024 GB |
 | ElastiCache Redis | cache.m6g.large | cache.m6g.xlarge | cache.m6g.2xlarge |
-| OpenSearch data² | r7g.large ×1, 256 GB | r8g.xlarge ×1, 512 GB | r8g.2xlarge ×1, 1 TB (12k IOPS) |
-| OpenSearch masters² | 3× m7g.medium | 3× m7g.medium | 3× m7g.medium |
+| OpenSearch data² | r7g.large.search ×1, 256 GB | r8g.xlarge.search ×1, 512 GB | r8g.2xlarge.search ×1, 1 TB (12k IOPS) |
+| OpenSearch masters² | 3× m7g.medium.search | 3× m7g.medium.search | 3× m7g.medium.search |
 
 ¹ The dedicated index node group only matters when running the document index in-cluster
-(the Helm chart's OpenSearch StatefulSet). If you use a managed OpenSearch domain instead
-(`enable_opensearch = true`), the index node sits idle — consider overriding
-`vespa_node_instance_types` to a small instance.
+(the Helm chart's bundled OpenSearch StatefulSet, which is pinned to this node group). If
+your deployment instead points the chart at a managed OpenSearch domain (provision one
+with `enable_opensearch = true` *and* disable the chart's bundled OpenSearch / set the
+managed endpoint in its values), the index node group sits idle — override
+`vespa_node_instance_types` to a small instance in that case.
 ² Only created when `enable_opensearch = true`. All tiers default to a single data node
 without zone awareness; RDS is likewise single-AZ. For HA, set
 `opensearch_instance_count = 3`, `opensearch_zone_awareness_enabled = true` (and optionally
@@ -134,10 +136,15 @@ its tier.
 **Upgrading from a pre-sizing version of these modules:** the previous hardcoded defaults
 were `db.t4g.large` with 20 GB gp2 and no storage autoscaling, `cache.m6g.xlarge`, and a
 3×r8g.large multi-AZ OpenSearch domain. The default `medium` tier keeps the same EKS node
-groups and Redis node type, grows Postgres storage online (gp2→gp3 conversion is also
-online; storage can never shrink), and — if you enabled OpenSearch and relied on the old
-defaults — would replace the domain with a single-node shape, so pin the old values
-explicitly before applying if you want to keep them.
+groups and Redis node type, and grows Postgres storage online (gp2→gp3 conversion is also
+online; storage can never shrink). If you enabled OpenSearch and relied on the old
+defaults, `medium` would reconfigure the domain to a single-node shape — an in-place AWS
+blue/green change that preserves index data but shrinks capacity and drops multi-AZ
+redundancy, so pin the old values explicitly (`opensearch_instance_count = 3`,
+`opensearch_zone_awareness_enabled = true`, `opensearch_multi_az_with_standby_enabled =
+true`, `opensearch_dedicated_master_type = "m7g.large.search"`,
+`opensearch_instance_type = "r8g.large.search"`) if you want to keep the old topology.
+Review the plan before applying either way.
 
 ### Using an existing VPC
 If you already have a VPC and subnets, disable VPC creation and provide IDs, CIDR, and the ID of the existing S3 gateway endpoint in that VPC:
