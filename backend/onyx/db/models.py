@@ -3004,6 +3004,16 @@ Messages Tables
 
 class ChatSession(Base):
     __tablename__ = "chat_session"
+    __table_args__ = (
+        # Backs the chat-history sidebar query: filter on (user_id,
+        # onyxbot_flow), order by time_updated DESC.
+        Index(
+            "ix_chat_session_user_id_onyxbot_flow_time_updated",
+            "user_id",
+            "onyxbot_flow",
+            desc("time_updated"),
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
