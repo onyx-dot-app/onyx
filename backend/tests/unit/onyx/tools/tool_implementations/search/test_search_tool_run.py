@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.context.search.models import BaseFilters
+from onyx.context.search.models import BaseFilters, InferenceChunk, InferenceSection
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
 from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
@@ -32,6 +33,33 @@ def _make_tool(
         project_id_filter=None,
         enable_slack_search=False,
         auto_detect_filters=auto_detect_filters,
+    )
+
+
+def _make_section(document_id: str = "doc-1") -> InferenceSection:
+    chunk = InferenceChunk(
+        document_id=document_id,
+        chunk_id=0,
+        content="section content",
+        source_type=DocumentSource.MOCK_CONNECTOR,
+        semantic_identifier=f"sem-{document_id}",
+        title=document_id,
+        boost=1,
+        score=0.5,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+        doc_summary="",
+        chunk_context="",
+        updated_at=None,
+        image_file_id=None,
+        source_links={},
+        section_continuation=False,
+        blurb="blurb",
+        file_id=None,
+    )
+    return InferenceSection(
+        center_chunk=chunk, chunks=[chunk], combined_content=chunk.content
     )
 
 
@@ -109,6 +137,50 @@ def _emitted_filter_sources(tool: SearchTool) -> list[list[str]]:
     emit_mock = cast(MagicMock, tool.emitter.emit)
     emitted = [call.args[0].obj for call in emit_mock.call_args_list]
     return [obj.sources for obj in emitted if isinstance(obj, SearchToolFilterDelta)]
+
+
+def _patch_non_empty_search(stack: ExitStack, section: InferenceSection) -> None:
+    mock_session_ctx = stack.enter_context(
+        patch(f"{MODULE}.get_session_with_current_tenant")
+    )
+    mock_session_ctx.return_value.__enter__ = MagicMock(return_value=MagicMock())
+    mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
+    stack.enter_context(
+        patch(f"{MODULE}.build_access_filters_for_user", return_value=[])
+    )
+    stack.enter_context(
+        patch(f"{MODULE}.get_current_search_settings", return_value=MagicMock())
+    )
+    stack.enter_context(patch(f"{MODULE}.EmbeddingModel"))
+    stack.enter_context(
+        patch(f"{MODULE}.get_federated_retrieval_functions", return_value=[])
+    )
+    stack.enter_context(
+        patch(f"{MODULE}.fetch_unique_document_sources", return_value=[])
+    )
+    stack.enter_context(
+        patch(f"{MODULE}.semantic_query_rephrase", return_value="rephrased query")
+    )
+    stack.enter_context(patch(f"{MODULE}.keyword_query_expansion", return_value=[]))
+    stack.enter_context(patch(f"{MODULE}.decide_search_scope", return_value=None))
+    stack.enter_context(patch(f"{MODULE}.decide_time_filter", return_value=None))
+    stack.enter_context(patch(f"{MODULE}.search_pipeline", return_value=[]))
+    stack.enter_context(
+        patch(f"{MODULE}.weighted_reciprocal_rank_fusion", return_value=[section])
+    )
+    stack.enter_context(
+        patch(f"{MODULE}.merge_individual_chunks", return_value=[section])
+    )
+    stack.enter_context(patch(f"{MODULE}.populate_file_ids_on_sections"))
+    stack.enter_context(
+        patch(f"{MODULE}.get_llm_token_counter", return_value=lambda text: len(text))
+    )
+    stack.enter_context(
+        patch(
+            f"{MODULE}.convert_inference_sections_to_llm_string",
+            return_value=("docs", {}),
+        )
+    )
 
 
 def test_decided_scope_is_passed_to_search() -> None:
@@ -344,3 +416,197 @@ def test_auto_detect_disabled_keeps_user_selected_filters() -> None:
     for applied in filters:
         assert applied is not None
         assert applied.source_type == restriction
+
+
+def test_section_expansion_uses_bounded_runner() -> None:
+    section = _make_section()
+    tool = _make_tool()
+    runner_calls: list[dict[str, object]] = []
+
+    def fake_runner(functions: list[tuple[Any, tuple]], **kwargs: object) -> list[Any]:
+        runner_calls.append(kwargs)
+        return [func(*args) for func, args in functions]
+
+    with ExitStack() as stack:
+        _patch_non_empty_search(stack, section)
+        stack.enter_context(
+            patch(f"{MODULE}.DISABLE_LLM_SEARCH_SECTION_PROCESSING", False)
+        )
+        stack.enter_context(patch(f"{MODULE}.SEARCH_SECTION_EXPANSION_MAX_WORKERS", 1))
+        stack.enter_context(patch(f"{MODULE}.SEARCH_SECTION_EXPANSION_TIMEOUT_S", 7))
+        stack.enter_context(patch(f"{MODULE}.SEARCH_SECTION_SELECTION_TIMEOUT_S", 5))
+        stack.enter_context(
+            patch(
+                f"{MODULE}.select_sections_for_expansion",
+                return_value=([section], None),
+            )
+        )
+        stack.enter_context(
+            patch(f"{MODULE}.expand_section_with_context", return_value=section)
+        )
+        stack.enter_context(
+            patch(
+                f"{MODULE}.run_functions_tuples_in_parallel",
+                side_effect=fake_runner,
+            )
+        )
+        tool.run(
+            placement=Placement(turn_index=0, tab_index=0),
+            override_kwargs=SearchToolOverrideKwargs(
+                starting_citation_num=1,
+                original_query="resolve the ticket",
+                message_history=[
+                    ChatMinimalTextMessage(
+                        message="resolve the ticket",
+                        message_type=MessageType.USER,
+                    )
+                ],
+            ),
+            queries=["ticket"],
+        )
+
+    selection_call = runner_calls[-2]
+    assert selection_call["timeout"] == 5
+    assert callable(selection_call["timeout_callback"])
+
+    expansion_call = runner_calls[-1]
+    assert expansion_call["max_workers"] == 1
+    assert expansion_call["timeout"] == 7
+    assert callable(expansion_call["timeout_callback"])
+
+
+def test_disable_llm_section_processing_skips_selection_and_expansion() -> None:
+    section = _make_section()
+    tool = _make_tool()
+
+    with ExitStack() as stack:
+        _patch_non_empty_search(stack, section)
+        stack.enter_context(
+            patch(f"{MODULE}.DISABLE_LLM_SEARCH_SECTION_PROCESSING", True)
+        )
+        select_mock = stack.enter_context(
+            patch(f"{MODULE}.select_sections_for_expansion")
+        )
+        expand_mock = stack.enter_context(
+            patch(f"{MODULE}.expand_section_with_context")
+        )
+        merge_mock = stack.enter_context(
+            patch(f"{MODULE}.merge_overlapping_sections", return_value=[section])
+        )
+        tool.run(
+            placement=Placement(turn_index=0, tab_index=0),
+            override_kwargs=SearchToolOverrideKwargs(
+                starting_citation_num=1,
+                original_query="resolve the ticket",
+                message_history=[
+                    ChatMinimalTextMessage(
+                        message="resolve the ticket",
+                        message_type=MessageType.USER,
+                    )
+                ],
+            ),
+            queries=["ticket"],
+        )
+
+    select_mock.assert_not_called()
+    expand_mock.assert_not_called()
+    assert merge_mock.call_args.args[0] == [section]
+
+
+def test_section_selection_timeout_falls_back_to_retrieved_sections() -> None:
+    section = _make_section()
+    tool = _make_tool()
+
+    def fake_runner(functions: list[tuple[Any, tuple]], **kwargs: object) -> list[Any]:
+        timeout_callback = kwargs.get("timeout_callback")
+        if callable(timeout_callback) and "max_workers" not in kwargs:
+            func, args = functions[0]
+            return [timeout_callback(0, func, args)]
+        return [func(*args) for func, args in functions]
+
+    with ExitStack() as stack:
+        _patch_non_empty_search(stack, section)
+        stack.enter_context(
+            patch(f"{MODULE}.DISABLE_LLM_SEARCH_SECTION_PROCESSING", False)
+        )
+        stack.enter_context(
+            patch(f"{MODULE}.run_functions_tuples_in_parallel", side_effect=fake_runner)
+        )
+        select_mock = stack.enter_context(
+            patch(f"{MODULE}.select_sections_for_expansion")
+        )
+        stack.enter_context(
+            patch(f"{MODULE}.expand_section_with_context", return_value=section)
+        )
+        merge_mock = stack.enter_context(
+            patch(f"{MODULE}.merge_overlapping_sections", return_value=[section])
+        )
+
+        tool.run(
+            placement=Placement(turn_index=0, tab_index=0),
+            override_kwargs=SearchToolOverrideKwargs(
+                starting_citation_num=1,
+                original_query="resolve the ticket",
+                message_history=[
+                    ChatMinimalTextMessage(
+                        message="resolve the ticket",
+                        message_type=MessageType.USER,
+                    )
+                ],
+            ),
+            queries=["ticket"],
+        )
+
+    select_mock.assert_not_called()
+    assert merge_mock.call_args.args[0] == [section]
+
+
+def test_section_expansion_timeout_falls_back_to_original_section() -> None:
+    section = _make_section()
+    tool = _make_tool()
+
+    def fake_runner(functions: list[tuple[Any, tuple]], **kwargs: object) -> list[Any]:
+        timeout_callback = kwargs.get("timeout_callback")
+        if callable(timeout_callback) and "max_workers" in kwargs:
+            func, args = functions[0]
+            return [timeout_callback(0, func, args)]
+        return [func(*args) for func, args in functions]
+
+    with ExitStack() as stack:
+        _patch_non_empty_search(stack, section)
+        stack.enter_context(
+            patch(f"{MODULE}.DISABLE_LLM_SEARCH_SECTION_PROCESSING", False)
+        )
+        stack.enter_context(
+            patch(
+                f"{MODULE}.select_sections_for_expansion",
+                return_value=([section], None),
+            )
+        )
+        stack.enter_context(
+            patch(f"{MODULE}.run_functions_tuples_in_parallel", side_effect=fake_runner)
+        )
+        expand_mock = stack.enter_context(
+            patch(f"{MODULE}.expand_section_with_context")
+        )
+        merge_mock = stack.enter_context(
+            patch(f"{MODULE}.merge_overlapping_sections", return_value=[section])
+        )
+
+        tool.run(
+            placement=Placement(turn_index=0, tab_index=0),
+            override_kwargs=SearchToolOverrideKwargs(
+                starting_citation_num=1,
+                original_query="resolve the ticket",
+                message_history=[
+                    ChatMinimalTextMessage(
+                        message="resolve the ticket",
+                        message_type=MessageType.USER,
+                    )
+                ],
+            ),
+            queries=["ticket"],
+        )
+
+    expand_mock.assert_not_called()
+    assert merge_mock.call_args.args[0] == [section]

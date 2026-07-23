@@ -42,7 +42,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
+from onyx.configs.chat_configs import (
+    DISABLE_LLM_SEARCH_SECTION_PROCESSING,
+    MAX_CHUNKS_FED_TO_CHAT,
+    SEARCH_SECTION_EXPANSION_MAX_WORKERS,
+    SEARCH_SECTION_EXPANSION_TIMEOUT_S,
+    SEARCH_SECTION_SELECTION_TIMEOUT_S,
+)
 from onyx.configs.constants import DocumentSource, FederatedConnectorSource
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
@@ -1097,24 +1103,49 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
         )
 
-        # Start timing for LLM document selection
-        document_selection_start_time = time.time()
+        if DISABLE_LLM_SEARCH_SECTION_PROCESSING:
+            selected_sections = top_sections
+            best_doc_ids = None
+            logger.warning(
+                "Search tool - LLM section processing disabled; using retrieved sections directly"
+            )
+        else:
+            # Start timing for LLM document selection
+            document_selection_start_time = time.time()
 
-        # Use LLM to select the most relevant sections for expansion
-        selected_sections, best_doc_ids = select_sections_for_expansion(
-            sections=sections_for_selection,
-            user_query=secondary_flows_user_query,
-            llm=self.llm,
-            max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
-        )
+            def selection_timeout_callback(
+                _index: int, _func: Callable, _args: tuple[Any, ...]
+            ) -> tuple[list[InferenceSection], list[str] | None]:
+                logger.warning(
+                    "Search tool - LLM section selection timed out; using top retrieved sections."
+                )
+                return sections_for_selection[:10], None
 
-        # End timing for LLM document selection
-        document_selection_elapsed = time.time() - document_selection_start_time
-        logger.debug(
-            "Search tool - LLM picking documents took %s seconds (selected %s sections)",
-            format(document_selection_elapsed, ".3f"),
-            len(selected_sections),
-        )
+            selection_results = run_functions_tuples_in_parallel(
+                [
+                    (
+                        select_sections_for_expansion,
+                        (
+                            sections_for_selection,
+                            secondary_flows_user_query,
+                            self.llm,
+                            10,
+                            MAX_CHUNKS_FOR_RELEVANCE,
+                        ),
+                    )
+                ],
+                timeout=SEARCH_SECTION_SELECTION_TIMEOUT_S,
+                timeout_callback=selection_timeout_callback,
+            )
+            selected_sections, best_doc_ids = selection_results[0]
+
+            # End timing for LLM document selection
+            document_selection_elapsed = time.time() - document_selection_start_time
+            logger.debug(
+                "Search tool - LLM picking documents took %s seconds (selected %s sections)",
+                format(document_selection_elapsed, ".3f"),
+                len(selected_sections),
+            )
 
         # Create a set of best document IDs for quick lookup
         best_doc_ids_set = set(best_doc_ids) if best_doc_ids else set()
@@ -1159,34 +1190,53 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 )
                 return section
 
-        # Build parallel function calls for all sections
-        expansion_functions: list[tuple[Callable, tuple]] = [
-            (
-                expand_section_safe,
+        if DISABLE_LLM_SEARCH_SECTION_PROCESSING:
+            expanded_sections = selected_sections
+        else:
+            # Build parallel function calls for all sections
+            expansion_functions: list[tuple[Callable, tuple]] = [
                 (
-                    section,
-                    secondary_flows_user_query,
-                    self.llm,
-                    self.document_index,
-                    section.center_chunk.document_id in best_doc_ids_set,
-                ),
+                    expand_section_safe,
+                    (
+                        section,
+                        secondary_flows_user_query,
+                        self.llm,
+                        self.document_index,
+                        section.center_chunk.document_id in best_doc_ids_set,
+                    ),
+                )
+                for section in selected_sections
+            ]
+
+            def expansion_timeout_callback(
+                index: int, _func: Callable, _args: tuple[Any, ...]
+            ) -> InferenceSection:
+                section = selected_sections[index]
+                logger.warning(
+                    "Search tool - section context expansion timed out for document %s; using original section.",
+                    section.center_chunk.document_id,
+                )
+                return section
+
+            # Start timing for document expansion
+            document_expansion_start_time = time.time()
+
+            # Run expansions with bounded concurrency so a stuck provider pool
+            # cannot hold the entire request open indefinitely.
+            expanded_sections = run_functions_tuples_in_parallel(
+                expansion_functions,
+                max_workers=SEARCH_SECTION_EXPANSION_MAX_WORKERS,
+                timeout=SEARCH_SECTION_EXPANSION_TIMEOUT_S,
+                timeout_callback=expansion_timeout_callback,
             )
-            for section in selected_sections
-        ]
 
-        # Start timing for document expansion
-        document_expansion_start_time = time.time()
-
-        # Run all expansions in parallel
-        expanded_sections = run_functions_tuples_in_parallel(expansion_functions)
-
-        # End timing for document expansion
-        document_expansion_elapsed = time.time() - document_expansion_start_time
-        logger.debug(
-            "Search tool - Expansion of selected documents took %s seconds (expanded %s sections)",
-            format(document_expansion_elapsed, ".3f"),
-            len(expanded_sections),
-        )
+            # End timing for document expansion
+            document_expansion_elapsed = time.time() - document_expansion_start_time
+            logger.debug(
+                "Search tool - Expansion of selected documents took %s seconds (expanded %s sections)",
+                format(document_expansion_elapsed, ".3f"),
+                len(expanded_sections),
+            )
 
         if not expanded_sections:
             expanded_sections = selected_sections

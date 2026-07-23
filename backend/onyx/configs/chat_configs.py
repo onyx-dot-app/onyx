@@ -48,6 +48,35 @@ DR_REPORT_LLM_TIMEOUT_S = int(os.environ.get("DR_REPORT_LLM_TIMEOUT_S") or "60")
 SECONDARY_LLM_FLOW_TIMEOUT_S = int(
     os.environ.get("SECONDARY_LLM_FLOW_TIMEOUT_S") or "60"
 )
+# Emergency escape hatch for the post-retrieval LLM section-selection and
+# context-expansion phase. Retrieval still runs, but results are passed through
+# without secondary LLM filtering/expansion.
+DISABLE_LLM_SEARCH_SECTION_PROCESSING = (
+    os.environ.get("DISABLE_LLM_SEARCH_SECTION_PROCESSING", "").lower() == "true"
+)
+# Section expansion issues one LLM call per selected section. Keep the default
+# serialized to avoid stressing shared sync provider connection pools.
+SEARCH_SECTION_EXPANSION_MAX_WORKERS = max(
+    1, int(os.environ.get("SEARCH_SECTION_EXPANSION_MAX_WORKERS") or "1")
+)
+# Wall-clock cap for the post-retrieval section-selection LLM call. This is
+# separate from the provider timeout because lock acquisition may not observe it.
+SEARCH_SECTION_SELECTION_TIMEOUT_S = max(
+    1,
+    int(
+        os.environ.get("SEARCH_SECTION_SELECTION_TIMEOUT_S")
+        or str(SECONDARY_LLM_FLOW_TIMEOUT_S)
+    ),
+)
+# Wall-clock cap for the whole section-expansion phase. Timed-out work falls
+# back to the original selected section while the stuck worker is abandoned.
+SEARCH_SECTION_EXPANSION_TIMEOUT_S = max(
+    1,
+    int(
+        os.environ.get("SEARCH_SECTION_EXPANSION_TIMEOUT_S")
+        or str(SECONDARY_LLM_FLOW_TIMEOUT_S)
+    ),
+)
 # Live buffer TTL. Refreshed per write.
 CHAT_STREAM_BUFFER_TTL_S = int(os.environ.get("CHAT_STREAM_BUFFER_TTL_S") or 3600)
 # Retention after the run is done.
