@@ -228,6 +228,9 @@ def _port_swap_ready(
     for cc_pair in required_cc_pairs:
         if get_active_port_attempt(db_session, cc_pair.id, ss_id) is not None:
             return False
+        # Only a SUCCESS clears the gate; PAUSED (awaiting operator Resume), FAILED, or a
+        # missing latest all block. A paused unit thus holds the swap until it's resumed
+        # and succeeds.
         latest_port = get_latest_port_attempt(db_session, cc_pair.id, ss_id)
         if latest_port is None or not latest_port.status.is_successful():
             return False
