@@ -44,7 +44,7 @@ from onyx.server.features.build.db.build_session import (
     get_empty_session_for_user,
     get_session_messages,
     get_user_build_sessions,
-    skills_are_stale,
+    session_runtime_stale,
     update_session_activity,
 )
 from onyx.server.features.build.db.sandbox import (
@@ -246,6 +246,7 @@ class SessionManager:
             )
             session.opencode_session_id = opencode_session_id
             session.skills_hash = sandbox.skills_hash
+            session.mcp_config_hash = sandbox.mcp_config_hash
             self._db_session.flush()
 
     def reload_session_skills(self, session_id: UUID, user: User) -> bool:
@@ -255,10 +256,11 @@ class SessionManager:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
 
         sandbox = get_sandbox_by_user_id(self._db_session, user.id)
-        if sandbox is None or not skills_are_stale(session, sandbox):
+        if sandbox is None or not session_runtime_stale(session, sandbox):
             return False
 
         skills_hash = sandbox.skills_hash
+        mcp_config_hash = sandbox.mcp_config_hash
         if sandbox.status == SandboxStatus.PROVISIONING:
             raise OnyxError(
                 OnyxErrorCode.CONFLICT,
@@ -323,9 +325,10 @@ class SessionManager:
                     ) from exc
 
             session.skills_hash = skills_hash
+            session.mcp_config_hash = mcp_config_hash
             self._db_session.flush()
             self._db_session.refresh(sandbox)
-            return skills_are_stale(session, sandbox)
+            return session_runtime_stale(session, sandbox)
 
     def ensure_sandbox_running(
         self,

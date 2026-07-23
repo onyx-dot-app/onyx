@@ -28,8 +28,8 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.db.build_session import (
     allocate_nextjs_port,
     get_build_session,
+    session_runtime_stale,
     set_build_session_sharing_scope,
-    skills_are_stale,
 )
 from onyx.server.features.build.db.sandbox import (
     get_latest_snapshot_for_session,
@@ -400,7 +400,7 @@ def restore_session(
                 sandbox.id, session_id
             ):
                 session.status = BuildSessionStatus.ACTIVE
-                if skills_are_stale(session, sandbox):
+                if session_runtime_stale(session, sandbox):
                     SessionManager(db_session).reload_session_skills(session_id, user)
                 else:
                     update_sandbox_heartbeat(db_session, sandbox.id)
@@ -477,6 +477,7 @@ def restore_session(
                         )
                         session.status = BuildSessionStatus.ACTIVE
                         session.skills_hash = sandbox.skills_hash
+                        session.mcp_config_hash = sandbox.mcp_config_hash
                         db_session.commit()
                     except Exception as e:
                         logger.error(
@@ -498,6 +499,7 @@ def restore_session(
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     session.skills_hash = sandbox.skills_hash
+                    session.mcp_config_hash = sandbox.mcp_config_hash
                     db_session.commit()
 
         else:

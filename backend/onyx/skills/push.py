@@ -35,10 +35,6 @@ from onyx.server.features.build.sandbox.models import FileSet, PushResult
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
-from onyx.server.features.build.sandbox.util.mcp_config import (
-    craft_mcp_fingerprint,
-    resolve_craft_mcp_servers,
-)
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
     COMPANY_SEARCH,
@@ -62,18 +58,14 @@ _EXCLUDED_DIR_NAMES: frozenset[str] = frozenset({"__pycache__"})
 def compute_skill_runtime_hash(
     files: FileSet,
     connectable_apps_section: str,
-    mcp_fingerprint: str = "",
 ) -> str:
-    """Digest the per-session managed runtime: skill files, the app guidance
-    rendered into ``AGENTS.md``, and the craft MCP set (``mcp_fingerprint``).
-    A change in any of these makes a live session stale so it hot-reloads."""
+    """Digest the skill files and the app guidance rendered into ``AGENTS.md``.
+    A change makes a live session stale so it hot-reloads. The craft MCP set is
+    tracked separately via ``mcp_config_hash`` (see ``session_runtime_stale``)."""
     digest = hashlib.sha256()
     connectable_apps_bytes = connectable_apps_section.encode()
     digest.update(len(connectable_apps_bytes).to_bytes(8))
     digest.update(connectable_apps_bytes)
-    mcp_bytes = mcp_fingerprint.encode()
-    digest.update(len(mcp_bytes).to_bytes(8))
-    digest.update(mcp_bytes)
     for path in sorted(files):
         path_bytes = path.encode()
         content = files[path]
@@ -306,16 +298,8 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
             sandbox_id: build_user_skills_payload(user, db_session)
             for sandbox_id, user in sandbox_map.items()
         }
-        mcp_fingerprints = {
-            sandbox_id: craft_mcp_fingerprint(
-                resolve_craft_mcp_servers(db_session, user)
-            )
-            for sandbox_id, user in sandbox_map.items()
-        }
         desired_hashes = {
-            sandbox_id: compute_skill_runtime_hash(
-                files, connectable_apps_section, mcp_fingerprints[sandbox_id]
-            )
+            sandbox_id: compute_skill_runtime_hash(files, connectable_apps_section)
             for sandbox_id, (
                 connectable_apps_section,
                 files,

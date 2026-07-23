@@ -15,11 +15,15 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPTransport,
+    SandboxStatus,
 )
 from onyx.db.gated_app import get_action_policies
 from onyx.db.mcp import (
+    add_user_to_mcp_server,
+    affected_user_ids_for_mcp_server,
     create_mcp_server__no_commit,
     get_user_connection_config,
+    update_mcp_server__no_commit,
     upsert_user_connection_config,
 )
 from onyx.db.models import MCPServer, Tool
@@ -30,6 +34,85 @@ from onyx.server.features.mcp.models import (
     MCPServerSimpleUpdateRequest,
 )
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox
+
+
+def _make_craft_server(
+    db_session: Session, *, owner_email: str, is_public: bool
+) -> MCPServer:
+    server = create_mcp_server__no_commit(
+        owner_email=owner_email,
+        name=f"craft-{uuid4().hex[:8]}",
+        description=None,
+        server_url=f"https://api-{uuid4().hex[:8]}.example.com/mcp",
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        transport=MCPTransport.STREAMABLE_HTTP,
+        auth_performer=MCPAuthenticationPerformer.PER_USER,
+        db_session=db_session,
+        is_public=is_public,
+    )
+    update_mcp_server__no_commit(
+        server_id=server.id, db_session=db_session, available_in_craft=True
+    )
+    db_session.commit()
+    return server
+
+
+def test_affected_user_ids_cover_direct_owner_admin_not_unrelated(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    owner = create_test_user(db_session, "aff_owner")
+    direct = create_test_user(db_session, "aff_direct")
+    unrelated = create_test_user(db_session, "aff_unrelated")
+    admin = create_test_user(db_session, "aff_admin", role=UserRole.ADMIN)
+    for u in (owner, direct, unrelated, admin):
+        make_sandbox(db_session, u, status=SandboxStatus.RUNNING)
+
+    server = _make_craft_server(db_session, owner_email=owner.email, is_public=False)
+    add_user_to_mcp_server(server.id, direct.id, db_session)
+    db_session.commit()
+
+    affected = affected_user_ids_for_mcp_server(server, db_session)
+    assert direct.id in affected
+    assert owner.id in affected
+    # Admins bypass the access filter (so they see every craft server) and must
+    # be reloaded even for a private server they aren't explicitly shared on.
+    assert admin.id in affected
+    assert unrelated.id not in affected
+
+    # A public server reaches every running-sandbox user.
+    server.is_public = True
+    db_session.flush()
+    public_affected = affected_user_ids_for_mcp_server(server, db_session)
+    assert {owner.id, direct.id, unrelated.id, admin.id} <= public_affected
+
+
+def test_public_to_private_recipient_union_covers_losing_user(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    # The recipient set differs across a public -> private transition; the union
+    # of pre- and post-change recipients that update_mcp_server_simple reloads
+    # must still cover a user who was reachable only while the server was public.
+    # (The transition itself is EE-gated at the API layer, so this exercises the
+    # db-level recipient calc the endpoint unions over.)
+    losing = create_test_user(db_session, "union_losing")
+    make_sandbox(db_session, losing, status=SandboxStatus.RUNNING)
+    server = _make_craft_server(
+        db_session, owner_email="union_owner@example.com", is_public=True
+    )
+
+    before = affected_user_ids_for_mcp_server(server, db_session)
+    assert losing.id in before  # public reaches every running-sandbox user
+
+    server.is_public = False
+    db_session.flush()
+    after = affected_user_ids_for_mcp_server(server, db_session)
+    assert losing.id not in after  # private no longer reaches them
+
+    # The reload set is the union, so the losing user is still reloaded.
+    assert losing.id in (before | after)
 
 
 def _make_server(db_session: Session, *, tool_names: list[str]) -> MCPServer:

@@ -368,16 +368,18 @@ HEADER_SUBSTITUTIONS: Literal["header_substitutions"] = "header_substitutions"
 
 
 def _hot_reload_craft_sessions(user_ids: set[UUID], db_session: Session) -> None:
-    """Push the current craft MCP config to affected users' running sandboxes so
-    a live Craft session picks it up on its next turn (via the skills-reload
-    pipeline) without a pod re-provision. Best-effort — the push pipeline logs
-    and swallows per-sandbox failures. Imported lazily to avoid a build-layer
-    import cycle at module load."""
+    """Restamp affected users' running sandboxes with the current craft MCP
+    fingerprint so a live Craft session picks up the change on its next turn
+    (via the session reload) without a pod re-provision. Updates only
+    ``mcp_config_hash`` — it does not re-push skill files. Best-effort; imported
+    lazily to avoid a build-layer import cycle at module load."""
     if not user_ids:
         return
-    from onyx.skills.push import push_skills_for_users
+    from onyx.server.features.build.session.sandbox_lifecycle import (
+        refresh_mcp_config_hashes_for_users,
+    )
 
-    push_skills_for_users(user_ids, db_session)
+    refresh_mcp_config_hashes_for_users(user_ids, db_session)
 
 
 def _build_headers_from_template(

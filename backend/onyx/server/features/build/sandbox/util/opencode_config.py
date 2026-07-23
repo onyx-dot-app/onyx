@@ -10,10 +10,7 @@ restart.
 from collections.abc import Sequence
 from typing import Any
 
-from onyx.server.features.build.configs import (
-    MCP_SESSION_TAG_HEADER,
-    sign_session_tag,
-)
+from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
 from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     LLMProviderConfig,
@@ -138,12 +135,13 @@ def build_session_mcp_config(
     ``permission`` keys (``<serverKey>_*``) don't collide with the pod-global base
     permissions, so both survive the merge.
 
-    Each server carries the ``MCP_SESSION_TAG_HEADER`` header, HMAC-signed for
-    ``session_id`` (see ``sign_session_tag``): opencode's in-process MCP client
-    uses the untagged base proxy env, so this header is how the egress proxy
-    attributes a tool call to its session for approval (the proxy strips it before
-    the origin sees it). Signing stops the sandbox forging a tag for a session it
-    doesn't own.
+    Each server carries the ``MCP_SESSION_TAG_HEADER`` header stamped with
+    ``session_id``: opencode's in-process MCP client uses the untagged base proxy
+    env, so this header is how the egress proxy attributes a tool call to its
+    session for approval (the proxy strips it before the origin sees it). The tag
+    is a same-user attribution hint, not a security boundary — a sandbox is one
+    trust domain per user, so the value is not tamper-proof against a compromised
+    process in it (see the note in the gate).
 
     MCP tool ids are ``<serverKey>_<toolName>``. The wildcard allow defers gating
     to the sandbox proxy and covers tools discovered at runtime.
@@ -158,14 +156,13 @@ def build_session_mcp_config(
         config["permission"] = permission
     if mcp_servers:
         # Credentials are injected by the proxy; the only header we set is the
-        # signed session tag the proxy verifies, consumes, and strips.
-        signed_tag = sign_session_tag(session_id)
+        # session tag the proxy consumes and strips.
         config["mcp"] = {
             server.key: {
                 "type": "remote",
                 "url": server.url,
                 "enabled": True,
-                "headers": {MCP_SESSION_TAG_HEADER: signed_tag},
+                "headers": {MCP_SESSION_TAG_HEADER: session_id},
             }
             for server in mcp_servers
         }

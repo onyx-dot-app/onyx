@@ -153,7 +153,10 @@ def affected_user_ids_for_mcp_server(
     """User IDs with a RUNNING sandbox whose Craft session should be reloaded
     after this server changes (enabled/disabled for craft, tools toggled, URL
     edited). Scoped to running sandboxes so the hot-reload push has somewhere to
-    land; access is public / group / direct / owner (mirrors skills)."""
+    land. Access must match what ``resolve_craft_mcp_servers`` bakes into a
+    session: public / group / direct / owner, plus admins (who bypass the access
+    filter in ``_add_mcp_server_access_filter`` and therefore see every
+    craft-enabled server)."""
     stmt = select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
     if server.is_public:
         return set(db_session.scalars(stmt))
@@ -172,10 +175,16 @@ def affected_user_ids_for_mcp_server(
     owner_users = select(User.id).where(  # ty: ignore[no-matching-overload]
         User.email == server.owner
     )
+    # Admins see every craft-enabled server (ACL bypass), so any change to a
+    # private server can be baked into an admin's session and must reload it.
+    admin_users = select(User.id).where(  # ty: ignore[no-matching-overload]
+        User.role == UserRole.ADMIN
+    )
     stmt = stmt.where(
         Sandbox.user_id.in_(group_users)
         | Sandbox.user_id.in_(direct_users)
         | Sandbox.user_id.in_(owner_users)
+        | Sandbox.user_id.in_(admin_users)
     )
     return set(db_session.scalars(stmt))
 

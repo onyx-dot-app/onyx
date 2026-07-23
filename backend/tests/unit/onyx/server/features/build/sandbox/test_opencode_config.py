@@ -11,11 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.server.features.build.configs import (
-    MCP_SESSION_TAG_HEADER,
-    sign_session_tag,
-    verify_session_tag,
-)
+from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
 from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     LLMProviderConfig,
@@ -282,27 +278,16 @@ def test_mcp_servers_emit_remote_entries_with_session_tag_header() -> None:
     config = build_session_mcp_config(
         [_mcp("linear-7", url="https://mcp.linear.app/mcp")], "sess-abc"
     )
-    entry = config["mcp"]["linear-7"]
-    assert entry["type"] == "remote"
-    assert entry["url"] == "https://mcp.linear.app/mcp"
-    assert entry["enabled"] is True
-    # The proxy reads this to attribute the tool call to a session for approval
-    # (no per-user credentials — the proxy injects those). It's HMAC-signed so
-    # the sandbox can't forge a tag for a session it doesn't own; the proxy
-    # verifies it back to the raw id.
-    assert verify_session_tag(entry["headers"][MCP_SESSION_TAG_HEADER]) == "sess-abc"
-
-
-def test_session_tag_signature_round_trips_and_rejects_forgery() -> None:
-    signed = sign_session_tag("sess-abc")
-    assert signed != "sess-abc"
-    assert verify_session_tag(signed) == "sess-abc"
-    # A raw (unsigned) id or a bogus signature is rejected.
-    assert verify_session_tag("sess-abc") is None
-    assert verify_session_tag("sess-abc.deadbeef") is None
-    # Another session's valid signature can't be reused for a different id.
-    forged = "sess-abc." + sign_session_tag("sess-other").split(".", 1)[1]
-    assert verify_session_tag(forged) is None
+    assert config["mcp"] == {
+        "linear-7": {
+            "type": "remote",
+            "url": "https://mcp.linear.app/mcp",
+            "enabled": True,
+            # The proxy reads this to attribute the tool call to a session for
+            # approval (no per-user credentials — the proxy injects those).
+            "headers": {MCP_SESSION_TAG_HEADER: "sess-abc"},
+        }
+    }
 
 
 def test_mcp_tool_curation_maps_to_wildcard_allow_and_deny_permissions() -> None:

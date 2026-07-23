@@ -61,11 +61,6 @@ def test_skill_runtime_hash_covers_files_and_connectable_apps() -> None:
     assert push.compute_skill_runtime_hash(
         files, "apps"
     ) != push.compute_skill_runtime_hash(files, "different apps")
-    # The craft MCP fingerprint is part of the runtime hash so an MCP change
-    # marks live sessions stale and hot-reloads them.
-    assert push.compute_skill_runtime_hash(
-        files, "apps", "mcp-fp-1"
-    ) != push.compute_skill_runtime_hash(files, "apps", "mcp-fp-2")
 
 
 def test_assemble_rejects_duplicate_names() -> None:

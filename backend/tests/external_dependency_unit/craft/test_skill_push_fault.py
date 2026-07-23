@@ -11,12 +11,8 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.models import BuildSession, Skill, User
-from onyx.server.features.build.db.build_session import skills_are_stale
+from onyx.server.features.build.db.build_session import session_runtime_stale
 from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.server.features.build.sandbox.util.mcp_config import (
-    craft_mcp_fingerprint,
-    resolve_craft_mcp_servers,
-)
 from onyx.skills.push import compute_skill_runtime_hash, push_skills_for_users
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
@@ -80,11 +76,11 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
         push_skills_for_users({user_a.id, user_b.id, user_c.id}, db_session)
 
     assert stub.write_files_to_sandbox_count == 3
-    assert skills_are_stale(sessions[user_a.id], sandbox_a)
-    assert not skills_are_stale(sessions[user_b.id], sandbox_b)
-    assert not skills_are_stale(sessions[user_c.id], sandbox_c)
-    assert not skills_are_stale(idle_session, sandbox_a)
-    assert not skills_are_stale(scheduled_session, sandbox_a)
+    assert session_runtime_stale(sessions[user_a.id], sandbox_a)
+    assert not session_runtime_stale(sessions[user_b.id], sandbox_b)
+    assert not session_runtime_stale(sessions[user_c.id], sandbox_c)
+    assert not session_runtime_stale(idle_session, sandbox_a)
+    assert not session_runtime_stale(scheduled_session, sandbox_a)
     assert sandbox_a.skills_hash is not None
     assert sandbox_b.skills_hash is None
     assert sandbox_c.skills_hash is not None
@@ -105,7 +101,7 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
         (sessions[user_b.id], sandbox_b),
         (sessions[user_c.id], sandbox_c),
     ):
-        assert not skills_are_stale(session, sandbox)
+        assert not session_runtime_stale(session, sandbox)
 
 
 def test_connectable_app_change_pushes_and_hashes_self_heal(
@@ -139,20 +135,15 @@ def test_connectable_app_change_pushes_and_hashes_self_heal(
         changed_user.id: "new apps",
     }
 
-    # Seed the runtime hash with the same craft MCP fingerprint push_skills_for_users
-    # computes per user, so the "unchanged" sandbox is genuinely up to date.
-    def mcp_fp(user: User) -> str:
-        return craft_mcp_fingerprint(resolve_craft_mcp_servers(db_session, user))
-
+    # Seed the runtime hash exactly as push_skills_for_users computes it, so the
+    # "unchanged" sandbox is genuinely up to date.
     unchanged_sandbox.skills_hash = compute_skill_runtime_hash(
         files_for(unchanged_user, db_session),
         "",
-        mcp_fp(unchanged_user),
     )
     changed_sandbox.skills_hash = compute_skill_runtime_hash(
         files_for(changed_user, db_session),
         "old apps",
-        mcp_fp(changed_user),
     )
     unchanged_session.skills_hash = unchanged_sandbox.skills_hash
     changed_session.skills_hash = changed_sandbox.skills_hash
@@ -177,12 +168,12 @@ def test_connectable_app_change_pushes_and_hashes_self_heal(
     assert stub.write_files_to_sandbox_count == 1
     assert stub.last_write_files_to_sandbox_payload is not None
     assert stub.last_write_files_to_sandbox_payload["sandbox_id"] == changed_sandbox.id
-    assert not skills_are_stale(unchanged_session, unchanged_sandbox)
-    assert skills_are_stale(changed_session, changed_sandbox)
+    assert not session_runtime_stale(unchanged_session, unchanged_sandbox)
+    assert session_runtime_stale(changed_session, changed_sandbox)
 
     connectable_apps_sections[changed_user.id] = "old apps"
     push_skills_for_users({changed_user.id}, db_session)
 
     db_session.refresh(changed_sandbox)
     assert stub.write_files_to_sandbox_count == 2
-    assert not skills_are_stale(changed_session, changed_sandbox)
+    assert not session_runtime_stale(changed_session, changed_sandbox)

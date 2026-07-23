@@ -30,7 +30,9 @@ from onyx.server.features.build.db.sandbox import (
     ensure_sandbox_pat,
     get_running_sandbox_count,
     get_sandbox_by_user_id,
+    get_sandbox_user_map,
     get_snapshots_for_session,
+    set_sandbox_mcp_config_hashes__no_commit,
     set_sandbox_skills_hashes__no_commit,
     update_sandbox_status__no_commit,
 )
@@ -177,14 +179,27 @@ def hydrate_managed_content(
             user, db_session
         )
 
+    # The sandbox's MCP fingerprint is its baseline for session staleness and is
+    # independent of the skill-file push (MCP config is written per session), so
+    # stamp it regardless of whether that push succeeds.
+    try:
+        with db_session.begin_nested():
+            set_sandbox_mcp_config_hashes__no_commit(
+                db_session,
+                {
+                    sandbox_id: craft_mcp_fingerprint(
+                        resolve_craft_mcp_servers(db_session, user)
+                    )
+                },
+            )
+    except Exception:
+        logger.warning(
+            "Failed to stamp MCP config hash for sandbox %s", sandbox_id, exc_info=True
+        )
+
     skills_hydrated = False
     try:
-        mcp_fingerprint = craft_mcp_fingerprint(
-            resolve_craft_mcp_servers(db_session, user)
-        )
-        skills_hash = compute_skill_runtime_hash(
-            skills_files, connectable_apps_section, mcp_fingerprint
-        )
+        skills_hash = compute_skill_runtime_hash(skills_files, connectable_apps_section)
         result = hydrate_sandbox_skills(
             sandbox_id,
             user,
@@ -667,3 +682,39 @@ def rollback_failed_provisioning(db_session: DBSession, sandbox: Sandbox) -> boo
         "Rolled sandbox %s back to SLEEPING after failed provisioning", sandbox.id
     )
     return True
+
+
+def refresh_mcp_config_hashes_for_users(
+    user_ids: set[UUID], db_session: DBSession
+) -> None:
+    """Stamp each affected user's running sandbox with the current craft MCP
+    fingerprint so live sessions detect the change and reload on their next turn.
+    Unlike the skill push this touches only ``mcp_config_hash`` — no skill-file
+    push. Deliberately unlocked (the skill push locks ``skills_hash``): two
+    concurrent MCP changes for the same user could interleave and leave a
+    momentarily stale ``mcp_config_hash``, but that self-heals — the reload
+    resolves the MCP set live, and the next change re-stamps — so a brief
+    bookkeeping skew never yields a wrong runtime.
+
+    Best-effort: callers invoke this AFTER their own change has committed, so a
+    failure here must neither surface to the caller nor roll their change back —
+    it is swallowed and the session is left clean. Commits its own writes."""
+    if not user_ids:
+        return
+    try:
+        sandbox_map = get_sandbox_user_map(list(user_ids), db_session)
+        if not sandbox_map:
+            return
+        hashes = {
+            sandbox_id: craft_mcp_fingerprint(
+                resolve_craft_mcp_servers(db_session, user)
+            )
+            for sandbox_id, user in sandbox_map.items()
+        }
+        set_sandbox_mcp_config_hashes__no_commit(db_session, hashes)
+        db_session.commit()
+    except Exception:
+        logger.warning(
+            "Failed to refresh MCP config hashes for users %s", user_ids, exc_info=True
+        )
+        db_session.rollback()

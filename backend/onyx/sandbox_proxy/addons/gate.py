@@ -62,7 +62,6 @@ from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
     SANDBOX_API_SERVER_URL,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
-    verify_session_tag,
 )
 from onyx.server.features.build.db import action_approval
 from onyx.utils.logger import setup_logger
@@ -1290,21 +1289,14 @@ class GateAddon:
         direct = _parse_proxy_auth_username(direct_auth_header)
         # opencode's in-process MCP client can't ride the proxy-userinfo tag
         # (shared process, untagged base proxy), so it carries the session id in a
-        # signed header stamped by the per-session opencode.json. Verify the
-        # signature and let it win for MCP requests; a present-but-forged header
-        # fails closed (tag stays None) rather than falling back to a connection
-        # tag it could otherwise override.
+        # header stamped by the per-session opencode.json, which wins for MCP
+        # requests. This is a same-user attribution hint, not a security boundary:
+        # the sandbox is one trust domain per user, so a compromised process can
+        # read any of its sessions' tags and forge this header — signing it buys
+        # nothing (the value is stored in-sandbox in plaintext). Cross-user is
+        # still blocked by the src-IP-pinned sandbox identity in resolve_sandbox.
         mcp_header = flow.request.headers.get(MCP_SESSION_TAG_HEADER)
-        if mcp_header is not None:
-            tag = verify_session_tag(mcp_header)
-            if tag is None:
-                logger.warning(
-                    "mcp_session_tag_invalid conn=%s host=%s",
-                    conn_id or "-",
-                    flow.request.host,
-                )
-        else:
-            tag = cached or direct
+        tag = mcp_header or cached or direct
 
         logger.debug(
             "session_tag_resolved conn=%s host=%s cached=%s direct=%s "
