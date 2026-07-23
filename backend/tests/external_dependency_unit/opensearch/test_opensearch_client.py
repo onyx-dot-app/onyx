@@ -3198,6 +3198,23 @@ class TestIndexReclaimPrimitive:
         assert test_client.count_by_query({"query": {"match_all": {}}}) == 3
         assert test_client.count_by_query(self._tenant_term(ts.tenant_id)) == 3
 
+    def test_count_by_query_raises_on_shard_failure(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A partial count (shard failure) must raise, not under-report — it gates a
+        destructive finalize, so it fails closed."""
+        self._create_mt_index(test_client, monkeypatch)
+        monkeypatch.setattr(
+            test_client._client,
+            "count",
+            lambda *_, **__: {
+                "count": 3,
+                "_shards": {"total": 5, "successful": 4, "failed": 1},
+            },
+        )
+        with pytest.raises(RuntimeError):
+            test_client.count_by_query({"query": {"match_all": {}}})
+
     def test_reclaim_single_tenant_drops_whole_index(
         self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
