@@ -107,23 +107,32 @@ What each tier provisions:
 
 | Setting | small | medium | large |
 |---|---|---|---|
-| Main EKS node group | m7i.4xlarge ×1–3 | m7i.4xlarge ×1–5 | m7i.4xlarge ×2–8 |
-| Document-index node¹ | m6i.xlarge, 100 GB | m6i.2xlarge, 100 GB | r6i.4xlarge, 512 GB |
+| Main EKS node group | m7i.2xlarge ×1–3³ | m7i.4xlarge ×1–5 | m7i.4xlarge ×2–8 |
+| Document-index node¹ | none³ | m6i.2xlarge, 100 GB | r6i.4xlarge, 512 GB |
 | RDS Postgres | db.t4g.large, 64→256 GB | db.t4g.large, 128→512 GB | db.m7g.xlarge, 256→1024 GB |
 | ElastiCache Redis | cache.m6g.large | cache.m6g.xlarge | cache.m6g.2xlarge |
 | OpenSearch data² | r7g.large.search ×1, 256 GB | r8g.xlarge.search ×1, 512 GB | r8g.2xlarge.search ×1, 1 TB (12k IOPS) |
 | OpenSearch masters² | 3× m7g.medium.search | 3× m7g.medium.search | 3× m7g.medium.search |
 
+Pair each tier with the matching sizing snippets from the Helm chart's
+`deployment/helm/charts/onyx/SIZING.md` (chart ≥ 0.8.0) — the tiers here size the
+infrastructure, the chart snippets size the workloads on it.
+
 ¹ The dedicated index node group only matters when running the document index in-cluster
-(the Helm chart's bundled OpenSearch StatefulSet, which is pinned to this node group). If
-your deployment instead points the chart at a managed OpenSearch domain (provision one
-with `enable_opensearch = true` *and* disable the chart's bundled OpenSearch / set the
-managed endpoint in its values), the index node group sits idle — override
-`vespa_node_instance_types` to a small instance in that case.
+(the Helm chart's bundled OpenSearch StatefulSet). It is created tainted
+(`vespa-dedicated=true`), so the StatefulSet must carry the toleration *and* nodeSelector
+from SIZING.md's placement snippet to use it. If you point the chart at a managed
+OpenSearch domain instead (`enable_opensearch = true` + disable the bundled OpenSearch in
+chart values), set `vespa_node_enabled = false` so the node group isn't created at all.
 ² Only created when `enable_opensearch = true`. All tiers default to a single data node
 without zone awareness; RDS is likewise single-AZ. For HA, set
 `opensearch_instance_count = 3`, `opensearch_zone_awareness_enabled = true` (and optionally
 `opensearch_multi_az_with_standby_enabled = true`).
+³ The small tier creates no index node group — the small chart sizing fits the in-cluster
+index on the main nodes. With chart ≥ 0.8.0 and SIZING.md's small snippets the whole stack
+fits one m7i.2xlarge (external Postgres/Redis/S3); with plain chart defaults the
+autoscaler settles at two nodes. Set `vespa_node_enabled = true` to add the dedicated
+node back.
 
 These defaults are calibrated from Onyx's own managed production fleet: memory, not CPU, is
 the binding dimension on the Kubernetes side, and the burstable `db.t4g.large` holds up to

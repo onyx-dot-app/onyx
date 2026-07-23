@@ -22,9 +22,13 @@ locals {
   # be overridden individually via the matching variable.
   size_defaults = {
     small = {
-      main_node_instance_types                 = ["m7i.4xlarge"]
+      # Sized against chart >= 0.8.0 (see the chart's SIZING.md small
+      # snippets): the full stack fits one m7i.2xlarge with an external data
+      # plane; with plain chart defaults the autoscaler settles at two nodes.
+      main_node_instance_types                 = ["m7i.2xlarge"]
       main_node_min_size                       = 1
       main_node_max_size                       = 3
+      vespa_node_enabled                       = false
       vespa_node_instance_types                = ["m6i.xlarge"]
       vespa_node_disk_size_gb                  = 100
       postgres_instance_type                   = "db.t4g.large"
@@ -42,6 +46,7 @@ locals {
     }
     medium = {
       main_node_instance_types                 = ["m7i.4xlarge"]
+      vespa_node_enabled                       = true
       main_node_min_size                       = 1
       main_node_max_size                       = 5
       vespa_node_instance_types                = ["m6i.2xlarge"]
@@ -61,6 +66,7 @@ locals {
     }
     large = {
       main_node_instance_types                 = ["m7i.4xlarge"]
+      vespa_node_enabled                       = true
       main_node_min_size                       = 2
       main_node_max_size                       = 8
       vespa_node_instance_types                = ["r6i.4xlarge"]
@@ -85,6 +91,7 @@ locals {
   main_node_instance_types  = var.main_node_instance_types != null ? var.main_node_instance_types : local.sizing.main_node_instance_types
   main_node_min_size        = coalesce(var.main_node_min_size, local.sizing.main_node_min_size)
   main_node_max_size        = coalesce(var.main_node_max_size, local.sizing.main_node_max_size)
+  vespa_node_enabled        = coalesce(var.vespa_node_enabled, local.sizing.vespa_node_enabled)
   vespa_node_instance_types = var.vespa_node_instance_types != null ? var.vespa_node_instance_types : local.sizing.vespa_node_instance_types
   vespa_node_disk_size_gb   = coalesce(var.vespa_node_disk_size_gb, local.sizing.vespa_node_disk_size_gb)
   postgres_instance_type    = coalesce(var.postgres_instance_type, local.sizing.postgres_instance_type)
@@ -182,6 +189,7 @@ module "eks" {
   main_node_instance_types  = local.main_node_instance_types
   main_node_min_size        = local.main_node_min_size
   main_node_max_size        = local.main_node_max_size
+  vespa_node_enabled        = local.vespa_node_enabled
   vespa_node_instance_types = local.vespa_node_instance_types
   vespa_node_disk_size_gb   = local.vespa_node_disk_size_gb
 

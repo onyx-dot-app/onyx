@@ -55,6 +55,12 @@ variable "main_node_max_size" {
   default     = null
 }
 
+variable "vespa_node_enabled" {
+  type        = bool
+  description = "Whether to create the dedicated Vespa/document-index node group. Disable when the index runs off-cluster (managed OpenSearch) or fits on the main node group."
+  default     = true
+}
+
 variable "vespa_node_instance_types" {
   type        = list(string)
   description = "Instance types for the Vespa node group"

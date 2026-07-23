@@ -90,6 +90,7 @@ module "eks" {
 
   eks_managed_node_groups = merge({
     for k, v in var.eks_managed_node_groups : k => merge(v,
+      # (vespa group is skipped entirely when var.vespa_node_enabled is false — see the `if` at the end of this for-expression)
       {
         instance_types = v.instance_types != null ? v.instance_types : (
           k == "main" ? var.main_node_instance_types :
@@ -127,7 +128,7 @@ module "eks" {
           }
         })
       } : {}
-    )
+    ) if k != "vespa" || var.vespa_node_enabled
   }, local.craft_sandbox_node_groups)
 
   tags = var.tags

@@ -96,6 +96,12 @@ variable "main_node_max_size" {
   default     = null
 }
 
+variable "vespa_node_enabled" {
+  type        = bool
+  description = "Whether to create the dedicated document-index node group. Null uses the t-shirt size default (small omits it: the small chart sizing fits the index on the main node, and on fresh clusters the group's taint would leave it idle anyway)."
+  default     = null
+}
+
 variable "vespa_node_instance_types" {
   type        = list(string)
   description = "Instance types for the dedicated document-index (Vespa/OpenSearch STS) node group. Only relevant when running the index in-cluster. Null uses the t-shirt size default."
