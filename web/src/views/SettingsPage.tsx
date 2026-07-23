@@ -400,15 +400,18 @@ function GeneralSettings() {
     onError: () => toast.error("Failed to update personalization"),
   });
 
-  // Track initial values to detect changes
-  const initialNameRef = useRef(personalizationValues.name);
-  const initialRoleRef = useRef(personalizationValues.role);
+  // Baseline the blur-save change detection against the *persisted* server
+  // values, not the local (possibly mid-edit) values. Keying off the values
+  // themselves — rather than the `user.personalization` object reference —
+  // means an unrelated settings refresh won't advance the baseline onto an
+  // unsaved edit and cause the next blur to skip the save.
+  const initialNameRef = useRef(user?.personalization?.name ?? "");
+  const initialRoleRef = useRef(user?.personalization?.role ?? "");
 
-  // Update refs when personalization values change from external source
   useEffect(() => {
-    initialNameRef.current = personalizationValues.name;
-    initialRoleRef.current = personalizationValues.role;
-  }, [user?.personalization]);
+    initialNameRef.current = user?.personalization?.name ?? "";
+    initialRoleRef.current = user?.personalization?.role ?? "";
+  }, [user?.personalization?.name, user?.personalization?.role]);
 
   const handleDeleteAllChats = useCallback(async () => {
     setIsDeleting(true);

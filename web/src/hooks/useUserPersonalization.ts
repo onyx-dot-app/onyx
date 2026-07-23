@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MemoryItem, User, UserPersonalization } from "@/lib/types";
 
 const DEFAULT_PERSONALIZATION: UserPersonalization = {
@@ -111,7 +111,18 @@ export default function useUserPersonalization(
     [user]
   );
 
+  // Resync local form state from the server only when the personalization
+  // *content* actually changes. The `user` object reference churns on every
+  // unrelated settings save (theme, auto-scroll, etc. all call refreshUser()),
+  // and blindly resyncing on that churn would silently clobber a field the
+  // user is still editing but hasn't saved yet.
+  const lastSyncedSignatureRef = useRef<string | null>(null);
   useEffect(() => {
+    const signature = JSON.stringify(basePersonalization);
+    if (signature === lastSyncedSignatureRef.current) {
+      return;
+    }
+    lastSyncedSignatureRef.current = signature;
     setPersonalizationValues(basePersonalization);
   }, [basePersonalization]);
 
