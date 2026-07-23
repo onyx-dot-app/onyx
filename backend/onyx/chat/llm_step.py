@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.citation_utils import strip_rendered_citation_links
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageSimple, LlmStepResult
 from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
@@ -709,9 +710,14 @@ def _build_structured_assistant_message(msg: ChatMessageSimple) -> AssistantMess
             for tc in msg.tool_calls
         ]
 
+    # Assistant messages are persisted in rendered "[[n]](url)" citation form. Replay
+    # the bare "[n]" markers the system prompt asks for so the model doesn't imitate
+    # the link format and trigger nested "[ [[n]](url) ](url)" citations on later turns.
+    content = strip_rendered_citation_links(msg.message) if msg.message else None
+
     return AssistantMessage(
         role="assistant",
-        content=msg.message or None,
+        content=content,
         tool_calls=tool_calls_list,
     )
 
@@ -758,9 +764,15 @@ class _OllamaHistoryMessageFormatter(_HistoryMessageFormatter):
             )
             for tc in msg.tool_calls
         ]
+        # Strip rendered "[[n]](url)" citations back to bare "[n]" markers here too, so
+        # Ollama assistant turns that mix tool calls with cited answers don't trigger the
+        # nested-citation bug (matches _build_structured_assistant_message).
+        normalized_message = (
+            strip_rendered_citation_links(msg.message) if msg.message else None
+        )
         assistant_content = (
-            "\n".join([msg.message, *tool_call_lines])
-            if msg.message
+            "\n".join([normalized_message, *tool_call_lines])
+            if normalized_message
             else "\n".join(tool_call_lines)
         )
         return AssistantMessage(
