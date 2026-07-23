@@ -3,6 +3,8 @@ handshake (stored tokens), not mere connection-config row existence, since the
 row is created before token exchange. API-token servers stay authenticated on
 row existence alone."""
 
+from uuid import uuid4
+
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
@@ -29,7 +31,7 @@ def _make_per_user_server(
     db_session.flush()
     server = MCPServer(
         owner="admin@example.com",
-        name="oauth_status_server",
+        name=f"oauth_status_server_{uuid4().hex[:8]}",
         server_url="https://example.com/mcp",
         transport=MCPTransport.STREAMABLE_HTTP,
         auth_type=auth_type,

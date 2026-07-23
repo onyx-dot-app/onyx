@@ -410,7 +410,7 @@ def _oauth_user_config_has_tokens(
     """
     if user_config is None:
         return False
-    config_data = extract_connection_data(user_config, apply_mask=True)
+    config_data = extract_connection_data(user_config, apply_mask=False)
     return bool(config_data.get(MCPOAuthKeys.TOKENS.value))
 
 
