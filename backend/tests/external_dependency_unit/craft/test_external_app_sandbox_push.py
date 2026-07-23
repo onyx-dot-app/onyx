@@ -78,8 +78,6 @@ def test_create_refreshes_the_created_skill(
     def _associate_built_in_skill(
         _db: Session,
         _app: ExternalApp,
-        *,
-        is_public: bool,  # noqa: ARG001
     ) -> Skill:
         return skill
 
