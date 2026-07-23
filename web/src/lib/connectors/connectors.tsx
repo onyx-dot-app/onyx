@@ -378,6 +378,15 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [
       {
+        type: "text",
+        query: "Enter a branch (optional):",
+        label: "Branch",
+        name: "branch",
+        description:
+          "Branch to index code files from. Leave blank to use the repository's default branch.",
+        optional: true,
+      },
+      {
         type: "checkbox",
         query: "Include merge requests?",
         label: "Include MRs",
@@ -2089,6 +2098,7 @@ export interface GithubConfig {
 export interface GitlabConfig {
   project_owner: string;
   project_name: string;
+  branch?: string;
   include_mrs: boolean;
   include_issues: boolean;
 }
