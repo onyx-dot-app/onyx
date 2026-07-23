@@ -7,10 +7,14 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import require_permission
+from onyx.auth.permissions import get_effective_permissions, require_permission
 from onyx.auth.schemas import UserRole
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccountType, Permission, SkillSharePermission
+from onyx.db.external_app import (
+    associate_custom_skill_with_external_app__no_commit,
+    get_external_app_by_id,
+)
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
     SkillManagementPolicy,
@@ -250,9 +254,23 @@ def create_custom_skill_from_editor(
     instructions_markdown: Annotated[str, Form(min_length=1)],
     upload: Annotated[UploadFile | None, File()] = None,
     auto_enable: Annotated[bool, Form()] = True,
+    external_app_id: Annotated[int | None, Form(gt=0)] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
+    if external_app_id is not None:
+        if (
+            user.role != UserRole.ADMIN
+            and Permission.FULL_ADMIN_PANEL_ACCESS
+            not in get_effective_permissions(user)
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "Only administrators can create a skill for an external app.",
+            )
+        if get_external_app_by_id(db_session, external_app_id) is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "External app not found.")
+
     try:
         create_request = SkillCreateRequest(
             name=name,
@@ -300,10 +318,22 @@ def create_custom_skill_from_editor(
                 bundle_sha256=ingested.bundle_sha256,
                 is_valid=True,
                 author_user_id=user.id,
+                public_permission=(
+                    SkillSharePermission.VIEWER if external_app_id is not None else None
+                ),
             ),
             db_session,
         )
-        if auto_enable and not enable_new_skill_if_name_available__no_commit(
+        if external_app_id is not None:
+            associate_custom_skill_with_external_app__no_commit(
+                db_session,
+                external_app_id=external_app_id,
+                skill_id=skill.id,
+            )
+        # App-originated skills become org content first; each user selects them
+        # after the app is available to that user.
+        should_auto_enable = auto_enable and external_app_id is None
+        if should_auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         ):
             raise OnyxError(
@@ -312,7 +342,7 @@ def create_custom_skill_from_editor(
             )
         db_session.commit()
 
-    if auto_enable:
+    if should_auto_enable:
         push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 

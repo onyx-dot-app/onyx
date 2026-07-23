@@ -22,6 +22,7 @@ from onyx.db.external_app import (
     get_external_apps,
     get_skills_for_external_app,
     get_user_credentials_by_app_id,
+    replace_custom_skill_associations__no_commit,
     required_user_credential_keys,
     update_external_app,
     upsert_external_app_user_credential,
@@ -98,9 +99,13 @@ def _to_admin_response(
         enabled=app.enabled,
         actions=action_policy_views(app.app_type, stored),
         associated_skills=[
-            ExternalAppAssociatedSkill(id=skill.id, name=skill.name)
+            ExternalAppAssociatedSkill(
+                id=skill.id,
+                name=skill.name,
+                is_valid=skill.is_valid,
+            )
             for skill in sorted(
-                app.associated_skills,
+                (skill for skill in app.associated_skills if skill.is_custom),
                 key=lambda skill: (skill.name, str(skill.id)),
             )
         ],
@@ -220,6 +225,9 @@ def update_external_app_admin(
         request.action_policies,
         get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app_id),
     )
+    affected_skills_by_id = {
+        skill.id: skill for skill in get_skills_for_external_app(db_session, app.id)
+    }
     app = update_external_app(
         db_session=db_session,
         external_app_id=external_app_id,
@@ -236,11 +244,24 @@ def update_external_app_admin(
         ),
         action_policies=action_policies,
     )
+    if request.associated_skill_ids is not None:
+        affected_skills_by_id.update(
+            {
+                skill.id: skill
+                for skill in replace_custom_skill_associations__no_commit(
+                    db_session,
+                    external_app_id=external_app_id,
+                    skill_ids=request.associated_skill_ids,
+                )
+            }
+        )
     affected: set[UUID] = set()
-    for skill in app.associated_skills:
+    for skill in affected_skills_by_id.values():
         affected.update(affected_user_ids_for_skill(skill, db_session))
     push_skills_for_users(affected, db_session)
     db_session.commit()
+    if request.associated_skill_ids is not None:
+        db_session.expire(app, ["associated_skills"])
     # ``action_policies`` is exactly what was persisted — no need to re-read.
     return _to_admin_response(app, stored=action_policies)
 

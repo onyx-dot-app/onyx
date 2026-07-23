@@ -154,9 +154,7 @@ def get_external_app_by_skill_id(
     db_session: Session,
     skill_id: UUID,
 ) -> ExternalApp | None:
-    """The external-app gateway backing ``skill_id``, or None if the skill isn't
-    an external app. Returns just the row — callers that need its policies fetch
-    them via ``get_action_policies``."""
+    """Return the app that ``skill_id`` depends on, if one is associated."""
     stmt = (
         select(ExternalApp)
         .join(
@@ -389,6 +387,153 @@ def associate_built_in_skill__no_commit(
     app.associated_skills.append(skill)
     db_session.flush()
     return skill
+
+
+def associate_custom_skill_with_external_app__no_commit(
+    db_session: Session,
+    *,
+    external_app_id: int,
+    skill_id: UUID,
+) -> Skill:
+    """Associate a custom skill with an app and require org-wide visibility.
+
+    The skill row is locked so concurrent association attempts serialize.
+    Existing user preferences and explicit editor grants are preserved.
+    """
+    app = db_session.scalar(
+        select(ExternalApp).where(ExternalApp.id == external_app_id).with_for_update()
+    )
+    if app is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"External app with id {external_app_id} not found.",
+        )
+
+    skill = db_session.scalar(
+        select(Skill).where(Skill.id == skill_id).with_for_update()
+    )
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found.")
+    if not skill.is_custom:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Built-in skills cannot be associated through the admin workflow.",
+        )
+
+    existing_app = get_external_app_by_skill_id(db_session, skill.id)
+    if existing_app is not None:
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            (
+                f"Skill '{skill.name}' is already associated with "
+                f"app '{existing_app.name}'."
+            ),
+        )
+
+    skill.public_permission = SkillSharePermission.VIEWER
+    db_session.add(ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id))
+    db_session.flush()
+    return skill
+
+
+def replace_custom_skill_associations__no_commit(
+    db_session: Session,
+    *,
+    external_app_id: int,
+    skill_ids: Iterable[UUID],
+) -> list[Skill]:
+    """Replace an app's custom-skill associations and return affected skills.
+
+    Built-in provider associations are preserved. New associations promote the
+    skill to organization-wide viewer access; removed skills keep their current
+    visibility and content.
+    """
+    requested_ids = list(skill_ids)
+    target_ids = set(requested_ids)
+    if len(target_ids) != len(requested_ids):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "associated_skill_ids must not contain duplicates.",
+        )
+
+    app = db_session.scalar(
+        select(ExternalApp).where(ExternalApp.id == external_app_id).with_for_update()
+    )
+    if app is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"External app with id {external_app_id} not found.",
+        )
+
+    target_skills = list(
+        db_session.scalars(
+            select(Skill)
+            .where(Skill.id.in_(target_ids))
+            .order_by(Skill.id)
+            .with_for_update()
+        )
+    )
+    if len(target_skills) != len(target_ids):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "One or more skills were not found.")
+    if any(not skill.is_custom for skill in target_skills):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Built-in skills cannot be associated through the admin workflow.",
+        )
+
+    conflicting_app = db_session.execute(
+        select(Skill.name, ExternalApp.name)
+        .select_from(ExternalApp__Skill)
+        .join(Skill, Skill.id == ExternalApp__Skill.skill_id)
+        .join(ExternalApp, ExternalApp.id == ExternalApp__Skill.external_app_id)
+        .where(
+            ExternalApp__Skill.skill_id.in_(target_ids),
+            ExternalApp__Skill.external_app_id != app.id,
+        )
+        .limit(1)
+    ).one_or_none()
+    if conflicting_app is not None:
+        skill_name, app_name = conflicting_app
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            f"Skill '{skill_name}' is already associated with app '{app_name}'.",
+        )
+
+    current_skills = list(
+        db_session.scalars(
+            select(Skill)
+            .join(
+                ExternalApp__Skill,
+                ExternalApp__Skill.skill_id == Skill.id,
+            )
+            .where(
+                ExternalApp__Skill.external_app_id == app.id,
+                Skill.built_in_skill_id.is_(None),
+            )
+        )
+    )
+    current_ids = {skill.id for skill in current_skills}
+
+    removed_ids = current_ids - target_ids
+    if removed_ids:
+        db_session.execute(
+            delete(ExternalApp__Skill).where(
+                ExternalApp__Skill.external_app_id == app.id,
+                ExternalApp__Skill.skill_id.in_(removed_ids),
+            )
+        )
+
+    for skill in target_skills:
+        skill.public_permission = SkillSharePermission.VIEWER
+        if skill.id not in current_ids:
+            db_session.add(
+                ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id)
+            )
+
+    db_session.flush()
+    return current_skills + [
+        skill for skill in target_skills if skill.id not in current_ids
+    ]
 
 
 def update_external_app(

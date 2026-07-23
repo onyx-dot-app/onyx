@@ -57,6 +57,9 @@ class UpdateExternalAppRequest(BaseModel):
     upstream_url_patterns: list[str] | None = None
     auth_template: dict[str, Any] | None = None
     organization_credentials: dict[str, str] | None = None
+    # When present, atomically replaces only the app's custom-skill
+    # associations. System-managed built-in associations are preserved.
+    associated_skill_ids: list[UUID] | None = None
     # Full-replace stored overrides when present (empty clears); None leaves them.
     action_policies: dict[str, EndpointPolicy] | None = None
 
@@ -64,6 +67,7 @@ class UpdateExternalAppRequest(BaseModel):
 class ExternalAppAssociatedSkill(BaseModel):
     id: UUID
     name: str
+    is_valid: bool | None
 
 
 class ExternalAppAdminResponse(BaseModel):
