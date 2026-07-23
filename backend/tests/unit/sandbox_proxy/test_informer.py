@@ -154,3 +154,66 @@ def test_synced_clears_after_watch_loop_returns_cleanly() -> None:
     assert lookup._initial_sync_done.is_set()
     assert not lookup._synced.is_set()
     assert call_count[0] == 1
+
+
+def _listing(*pods: client.V1Pod) -> client.V1PodList:
+    return client.V1PodList(
+        items=list(pods),
+        metadata=client.V1ListMeta(resource_version="1"),
+    )
+
+
+def test_lookup_miss_reads_through_and_caches() -> None:
+    core = MagicMock(spec=client.CoreV1Api)
+    lookup = K8sInformerLookup(core_api=core)
+    core.list_namespaced_pod.return_value = _listing(_make_pod())
+
+    identity = lookup.lookup("10.0.0.1")
+
+    assert identity is not None
+    assert identity.sandbox_name == "sandbox-aaaa1111"
+    _, kwargs = core.list_namespaced_pod.call_args
+    assert kwargs["field_selector"] == "status.podIP=10.0.0.1"
+    core.list_namespaced_pod.reset_mock()
+    assert lookup.lookup("10.0.0.1") is not None
+    core.list_namespaced_pod.assert_not_called()
+
+
+def test_lookup_readthrough_miss_returns_none_and_caches_nothing() -> None:
+    core = MagicMock(spec=client.CoreV1Api)
+    lookup = K8sInformerLookup(core_api=core)
+    core.list_namespaced_pod.return_value = _listing()
+
+    assert lookup.lookup("10.0.0.9") is None
+    assert lookup._cache == {}
+    # No negative caching: each miss is its own bounded query, so an IP the
+    # watch delivers a moment later resolves on the very next request.
+    assert lookup.lookup("10.0.0.9") is None
+    assert core.list_namespaced_pod.call_count == 2
+
+
+def test_lookup_readthrough_api_error_fails_closed() -> None:
+    core = MagicMock(spec=client.CoreV1Api)
+    lookup = K8sInformerLookup(core_api=core)
+    core.list_namespaced_pod.side_effect = ConnectionError("api down")
+
+    assert lookup.lookup("10.0.0.9") is None
+
+
+def test_lookup_readthrough_ambiguous_ip_refused() -> None:
+    core = MagicMock(spec=client.CoreV1Api)
+    lookup = K8sInformerLookup(core_api=core)
+    core.list_namespaced_pod.return_value = _listing(
+        _make_pod(name="sandbox-a", sandbox_id="11111111-1111-1111-1111-111111111111"),
+        _make_pod(name="sandbox-b", sandbox_id="22222222-2222-2222-2222-222222222222"),
+    )
+
+    assert lookup.lookup("10.0.0.1") is None
+
+
+def test_lookup_readthrough_rejects_unmanaged_pod() -> None:
+    core = MagicMock(spec=client.CoreV1Api)
+    lookup = K8sInformerLookup(core_api=core)
+    core.list_namespaced_pod.return_value = _listing(_make_pod(managed_by="rogue"))
+
+    assert lookup.lookup("10.0.0.1") is None

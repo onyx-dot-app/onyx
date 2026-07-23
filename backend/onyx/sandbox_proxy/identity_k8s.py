@@ -3,6 +3,11 @@
 Background thread watches sandbox pods and maintains a `{pod_ip:
 SandboxIdentity}` cache. On any error or EOF the watch loop reconnects with
 exponential backoff capped at `_RECONNECT_MAX_SECONDS`; on 410 Gone we relist.
+
+A cache miss falls back to a one-shot read-through query by pod IP. A pod's
+first requests (opencode's boot-time fetches) can beat the watch event for the
+pod by a second or two; without the read-through those requests 403 as
+unidentified and one-shot clients (npm's plugin-SDK install) never retry.
 """
 
 import threading
@@ -40,6 +45,10 @@ _SANDBOX_POD_SELECTOR = ",".join(
         f"{LABEL_K8S_MANAGED_BY}={LABEL_K8S_MANAGED_BY_ONYX}",
     ]
 )
+
+# lookup() runs on the proxy's event loop, so the read-through must fail fast
+# rather than stall all traffic behind a slow API server.
+_READTHROUGH_REQUEST_TIMEOUT: tuple[float, float] = (1.0, 2.0)
 
 logger = setup_logger()
 
@@ -118,7 +127,53 @@ class K8sInformerLookup(SandboxIPLookup):
 
     def lookup(self, src_ip: str) -> SandboxIdentity | None:
         with self._cache_lock:
-            return self._cache.get(src_ip)
+            hit = self._cache.get(src_ip)
+        if hit is not None:
+            return hit
+        return self._read_through(src_ip)
+
+    def _read_through(self, src_ip: str) -> SandboxIdentity | None:
+        """Resolve an IP the watch hasn't cached yet with a one-shot pod query.
+
+        Applies the same label selector and `_identity_from_pod` validation as
+        the watch, so this grants nothing the watch wouldn't.
+        """
+        try:
+            listing = self._core.list_namespaced_pod(
+                namespace=self._namespace,
+                label_selector=_SANDBOX_POD_SELECTOR,
+                field_selector=f"status.podIP={src_ip}",
+                _request_timeout=_READTHROUGH_REQUEST_TIMEOUT,
+            )
+            identities = [
+                identity
+                for pod in listing.items
+                if (identity := _identity_from_pod(pod)) is not None
+                and identity.sandbox_ip == src_ip
+            ]
+        except Exception as e:
+            # Fail closed like any other unidentified request.
+            logger.warning("identity_readthrough_error src_ip=%s error=%s", src_ip, e)
+            return None
+
+        if len({identity.sandbox_id for identity in identities}) != 1:
+            if identities:
+                logger.warning(
+                    "identity_readthrough_ambiguous src_ip=%s sandboxes=%s",
+                    src_ip,
+                    [str(identity.sandbox_id) for identity in identities],
+                )
+            return None
+
+        identity = identities[0]
+        with self._cache_lock:
+            self._cache[identity.sandbox_ip] = identity
+        logger.info(
+            "identity_readthrough_hit src_ip=%s sandbox=%s (watch had not caught up)",
+            src_ip,
+            identity.sandbox_name,
+        )
+        return identity
 
     def _run(self) -> None:
         backoff = _RECONNECT_INITIAL_SECONDS
