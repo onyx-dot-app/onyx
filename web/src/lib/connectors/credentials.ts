@@ -79,6 +79,11 @@ export interface OutlineCredentialJson {
   outline_api_token: string;
 }
 
+export interface DocmostCredentialJson {
+  docmost_base_url: string;
+  docmost_api_token: string;
+}
+
 export interface ConfluenceCredentialJson {
   confluence_username: string;
   confluence_access_token: string;
@@ -328,6 +333,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     outline_base_url: "",
     outline_api_token: "",
   } as OutlineCredentialJson,
+  docmost: {
+    docmost_base_url: "",
+    docmost_api_token: "",
+  } as DocmostCredentialJson,
   confluence: {
     confluence_username: "",
     confluence_access_token: "",
@@ -552,6 +561,11 @@ export const credentialDisplayNames: Record<string, string> = {
   outline_base_url:
     "Outline Base URL (e.g. https://app.getoutline.com or your self-hosted URL)",
   outline_api_token: "Outline API Token",
+
+  // DocMost
+  docmost_base_url:
+    "DocMost Base URL (e.g. https://docmost.example.com)",
+  docmost_api_token: "DocMost API Token",
 
   // Confluence
   confluence_username: "Confluence Username",
