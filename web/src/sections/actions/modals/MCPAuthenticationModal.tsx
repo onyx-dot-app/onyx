@@ -15,9 +15,9 @@ import {
   Divider,
   InputTypeIn,
   MessageCard,
+  PasswordInputTypeIn,
   Tabs,
 } from "@opal/components";
-import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { markdown } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import { Formik, Form } from "formik";
