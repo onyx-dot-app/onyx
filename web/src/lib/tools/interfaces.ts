@@ -34,7 +34,7 @@ export interface MCPServer {
   oauth_additional_auth_params?: Record<string, string>;
   is_authenticated: boolean;
   user_authenticated?: boolean;
-  auth_template?: any;
+  auth_template?: MCPAuthTemplate | null;
   admin_credentials?: Record<string, string>;
   user_credentials?: Record<string, string>;
   status: MCPServerStatus;
@@ -47,6 +47,11 @@ export interface MCPServer {
   tool_policies?: Record<string, EndpointPolicy> | null;
   last_refreshed_at?: string;
   tool_count: number;
+}
+
+export interface MCPAuthTemplate {
+  headers: Record<string, string>;
+  required_fields: string[];
 }
 
 export interface AgentEditorMCPServer extends MCPServer {

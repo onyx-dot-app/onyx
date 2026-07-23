@@ -18,6 +18,8 @@ from onyx.db.enums import (
 
 # Matches `{placeholder_name}` inside header value templates.
 _PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
+# RFC 9110 field-name syntax: a non-empty sequence of HTTP token characters.
+_HTTP_FIELD_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
 
 
 def _build_auto_substitution_map(*, user_email: str) -> dict[str, str]:
@@ -75,6 +77,12 @@ class MCPConnectionData(TypedDict):
     in Postgres"""
 
     headers: dict[str, str]
+    # The placeholder form of shared API-token headers. The rendered headers
+    # above remain the source used for outbound requests.
+    header_template: NotRequired[dict[str, str]]
+    # Stored in the encrypted connection config so an admin can edit the
+    # header template without re-entering the masked API token.
+    api_token: NotRequired[str]
     header_substitutions: NotRequired[dict[str, str]]
     # Names of fields the user must supply for header substitution. Persisted
     # only on the per-user template config (the admin's connection config that
@@ -137,6 +145,13 @@ class MCPToolCreateRequest(BaseModel):
     api_token: Optional[str] = Field(
         None, description="API token for api_token auth type"
     )
+    api_token_changed: bool = Field(
+        default=False,
+        description=(
+            "True if the shared API token was edited. When False on an update, "
+            "the stored token is reused instead of the masked request value."
+        ),
+    )
     oauth_client_id: Optional[str] = Field(None, description="OAuth client ID")
     oauth_client_secret: Optional[str] = Field(None, description="OAuth client secret")
     oauth_provider_mode: MCPOAuthProviderMode = Field(
@@ -179,7 +194,11 @@ class MCPToolCreateRequest(BaseModel):
         None, description="MCP transport type (STREAMABLE_HTTP or SSE)"
     )
     auth_template: Optional[MCPAuthTemplate] = Field(
-        None, description="Template configuration for per-user authentication"
+        None,
+        description=(
+            "Authentication header template for API-token authentication. "
+            "Shared templates support the {api_key} placeholder."
+        ),
     )
     admin_credentials: Optional[dict[str, str]] = Field(
         None,
@@ -215,15 +234,57 @@ class MCPToolCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_auth_configuration(self) -> "MCPToolCreateRequest":
-        # Validate API token requirements for admin auth
+        # A shared API token is required to create an admin-managed server.
+        # On update (`existing_server_id` set) it may be omitted: the upsert
+        # path reuses the stored token, so requiring it here would reject
+        # legitimate template-only edits from clients that don't replay it.
         if (
             self.auth_type == MCPAuthenticationType.API_TOKEN
             and self.auth_performer == MCPAuthenticationPerformer.ADMIN
+            and self.existing_server_id is None
             and not self.api_token
         ):
             raise ValueError(
                 "api_token is required when auth_type is 'api_token' and auth_performer is 'admin'"
             )
+
+        if (
+            self.auth_type == MCPAuthenticationType.API_TOKEN
+            and self.auth_performer == MCPAuthenticationPerformer.ADMIN
+        ):
+            # An omitted template is resolved against the existing server
+            # configuration during an update, or defaults to Bearer when a
+            # server is created. Do not materialize that default here, since
+            # doing so makes an omitted template look like an explicit edit.
+            if self.auth_template is not None:
+                placeholders: set[str] = {
+                    match
+                    for value in self.auth_template.headers.values()
+                    for match in _PLACEHOLDER_RE.findall(value)
+                }
+                unsupported_placeholders: set[str] = placeholders - {"api_key"}
+                if unsupported_placeholders:
+                    raise ValueError(
+                        "Shared API-token header templates only support the "
+                        f"{{api_key}} placeholder; unsupported placeholders: "
+                        f"{', '.join(sorted(unsupported_placeholders))}"
+                    )
+                if not any(
+                    "{api_key}" in value
+                    for value in self.auth_template.headers.values()
+                ):
+                    raise ValueError(
+                        "Shared API-token header templates must include the {api_key} placeholder"
+                    )
+                if any(
+                    _HTTP_FIELD_NAME_RE.fullmatch(name) is None
+                    or name.strip().lower() in DENYLISTED_MCP_HEADERS
+                    for name in self.auth_template.headers
+                ):
+                    raise ValueError(
+                        "Shared API-token header templates contain an invalid header name"
+                    )
+                self.auth_template.required_fields = ["api_key"]
 
         # Validate that API token is not provided for per-user auth
         if (
