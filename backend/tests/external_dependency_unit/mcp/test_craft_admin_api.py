@@ -28,6 +28,10 @@ from onyx.db.mcp import (
 )
 from onyx.db.models import MCPServer, Tool
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.sandbox.util.mcp_config import (
+    craft_mcp_fingerprint,
+    resolve_craft_mcp_servers,
+)
 from onyx.server.features.mcp import api as mcp_api
 from onyx.server.features.mcp.models import (
     MCPConnectionData,
@@ -211,3 +215,60 @@ def test_disconnect_removes_only_callers_credentials(
     assert resp.success is True
     assert get_user_connection_config(server.id, user_a.email, db_session) is None
     assert get_user_connection_config(server.id, user_b.email, db_session) is not None
+
+
+def test_delete_server_restamps_affected_running_sandbox(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    # Deleting a craft server must restamp affected users' running sandboxes so
+    # their live sessions detect staleness and drop the server on the next turn.
+    admin = create_test_user(db_session, "del_reload_admin", role=UserRole.ADMIN)
+    sandbox = make_sandbox(db_session, admin, status=SandboxStatus.RUNNING)
+    server = _make_craft_server(db_session, owner_email=admin.email, is_public=True)
+
+    fp_before = craft_mcp_fingerprint(resolve_craft_mcp_servers(db_session, admin))
+    sandbox.mcp_config_hash = fp_before
+    db_session.commit()
+
+    assert mcp_api.delete_mcp_server_admin(server.id, db_session, admin) == {
+        "success": True
+    }
+
+    # Restamped to the post-delete fingerprint (the server dropped out of the
+    # resolved craft set), so the live session detects staleness next turn.
+    db_session.refresh(sandbox)
+    assert sandbox.mcp_config_hash != fp_before
+    assert sandbox.mcp_config_hash == craft_mcp_fingerprint(
+        resolve_craft_mcp_servers(db_session, admin)
+    )
+
+
+def test_disconnect_restamps_callers_running_sandbox(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    # Disconnecting flips the server's authenticated flag (tool discovery is
+    # credential-gated), so the caller's running sandbox must be restamped.
+    user = create_test_user(db_session, "disc_reload")
+    sandbox = make_sandbox(db_session, user, status=SandboxStatus.RUNNING)
+    server = _make_craft_server(db_session, owner_email=user.email, is_public=True)
+    upsert_user_connection_config(
+        server_id=server.id,
+        user_email=user.email,
+        config_data=MCPConnectionData(headers={"Authorization": "Bearer user-token"}),
+        db_session=db_session,
+    )
+    db_session.commit()
+
+    fp_connected = craft_mcp_fingerprint(resolve_craft_mcp_servers(db_session, user))
+    sandbox.mcp_config_hash = fp_connected
+    db_session.commit()
+
+    mcp_api.delete_user_credentials(server.id, db_session, user)
+
+    db_session.refresh(sandbox)
+    assert sandbox.mcp_config_hash != fp_connected
+    assert sandbox.mcp_config_hash == craft_mcp_fingerprint(
+        resolve_craft_mcp_servers(db_session, user)
+    )

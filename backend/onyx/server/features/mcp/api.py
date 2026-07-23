@@ -929,6 +929,11 @@ async def process_oauth_callback(
 
     db_session.commit()
 
+    # The background task committed the user's tokens before unblocking the
+    # blpop above, so the credential is persisted; reload this user's craft
+    # session (single sandbox — this user only) to retry tool discovery.
+    _hot_reload_craft_sessions({user.id}, db_session)
+
     logger.info(
         "server_id=%s server_name=%s return_path=%s",
         str(mcp_server.id),
@@ -1101,6 +1106,10 @@ def delete_user_credentials(
 
     # The helper commits internally.
     delete_user_connection_configs_for_server(server_id, user.email, db_session)
+
+    # Disconnecting revokes tool discovery for this user; reload their craft
+    # session (single sandbox — this user only) so the next turn drops it.
+    _hot_reload_craft_sessions({user.id}, db_session)
 
     return MCPApiKeyResponse(
         success=True,
@@ -2536,6 +2545,11 @@ def delete_mcp_server_admin(
 
         _ensure_mcp_server_owner_or_admin(server, user)
 
+        # Snapshot recipients before deletion: once the server (and its ACL
+        # rows) are gone, the affected-user query returns nothing, so they'd
+        # never be reloaded to drop the now-deleted server from their config.
+        reload_user_ids = affected_user_ids_for_mcp_server(server, db_session)
+
         # Log tools that will be deleted for debugging
         tools_to_delete = get_tools_by_mcp_server_id(server_id, db_session)
         logger.info(
@@ -2565,6 +2579,10 @@ def delete_mcp_server_admin(
                 )
                 delete_tool__no_commit(tool.id, db_session)
         db_session.commit()
+
+        # Restamp affected users so their running craft session drops the
+        # deleted server on its next turn.
+        _hot_reload_craft_sessions(reload_user_ids, db_session)
 
         return {"success": True}
     except ValueError:
