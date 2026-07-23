@@ -17,7 +17,7 @@ export interface PolicyEditorItem {
   defaultPolicy: EndpointPolicy;
 }
 
-// A required text input the integration needs before it can be saved
+// A required text input the app needs before it can be saved
 // (name, credentials, …).
 export interface EditorField {
   key: string;
@@ -27,7 +27,7 @@ export interface EditorField {
   secret: boolean;
 }
 
-interface IntegrationEditorModalProps {
+interface ActionPolicyEditorModalProps {
   onClose: () => void;
   title: string;
   description: string;
@@ -52,7 +52,7 @@ interface IntegrationEditorModalProps {
  * Callers (external apps, MCP servers) normalize their data into fields +
  * policy items and supply the save call; the UI is identical for both.
  * Mount it only while open — initial values are read once. */
-export default function IntegrationEditorModal({
+export default function ActionPolicyEditorModal({
   onClose,
   title,
   description,
@@ -64,7 +64,7 @@ export default function IntegrationEditorModal({
   emptyPoliciesMessage,
   saveLabel,
   onSave,
-}: IntegrationEditorModalProps) {
+}: ActionPolicyEditorModalProps) {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({
     ...initialFieldValues,
   });

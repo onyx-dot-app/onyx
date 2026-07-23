@@ -5,7 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import { updateMCPServer } from "@/lib/tools/mcpService";
-import IntegrationEditorModal from "@/app/craft/v1/apps/admin/IntegrationEditorModal";
+import ActionPolicyEditorModal from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
 import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
 
 interface McpServerPolicyModalProps {
@@ -39,7 +39,7 @@ export default function McpServerPolicyModal({
   }
 
   return (
-    <IntegrationEditorModal
+    <ActionPolicyEditorModal
       onClose={onClose}
       title={`Edit ${server.name}`}
       description="Configure what the Craft agent may do with this MCP server's tools."

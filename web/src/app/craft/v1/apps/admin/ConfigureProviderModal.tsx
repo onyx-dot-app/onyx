@@ -1,8 +1,8 @@
 "use client";
 
-import IntegrationEditorModal, {
+import ActionPolicyEditorModal, {
   EditorField,
-} from "@/app/craft/v1/apps/admin/IntegrationEditorModal";
+} from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
 import {
   BuiltInExternalAppDescriptor,
   EndpointPolicy,
@@ -120,7 +120,7 @@ export default function ConfigureProviderModal({
   }
 
   return (
-    <IntegrationEditorModal
+    <ActionPolicyEditorModal
       onClose={onClose}
       title={
         existingApp ? `Edit ${existingApp.name}` : `Add ${descriptor.name}`

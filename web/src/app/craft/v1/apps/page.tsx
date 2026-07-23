@@ -7,32 +7,16 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import useOnMount from "@/hooks/useOnMount";
 import { cn } from "@opal/utils";
-import type { IconFunctionComponent } from "@opal/types";
 import { Button, Card, InputTypeIn, Text } from "@opal/components";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { SvgCheckCircle, SvgPlug, SvgSettings } from "@opal/icons";
+import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
+import { MCPServersResponse } from "@/lib/tools/interfaces";
 import {
-  ExternalAppUserResponse,
-  getAppTypeLogo,
-} from "@/app/craft/v1/apps/registry";
-import {
-  disconnectUserFromApp,
-  startExternalAppOAuth,
-  upsertUserCredentials,
-} from "@/app/craft/services/externalAppsService";
-import {
-  disconnectMCPServer,
-  saveMCPUserCredentials,
-  startMCPUserOAuth,
-} from "@/lib/tools/mcpService";
-import {
-  MCPAuthenticationPerformer,
-  MCPAuthenticationType,
-  MCPServer,
-  MCPServersResponse,
-} from "@/lib/tools/interfaces";
-import { getActionIcon } from "@/lib/tools/mcpUtils";
-import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
+  ConnectableApp,
+  externalAppToConnectable,
+  mcpServerToConnectable,
+} from "@/app/craft/v1/apps/connectableApps";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { useUser } from "@/providers/UserProvider";
 
@@ -81,88 +65,6 @@ export default function ExternalAppsPage() {
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
-}
-
-// Normalized view of anything connectable on this page — external apps and
-// craft-enabled MCP servers render through the same card so users see one
-// uniform "Apps" surface.
-interface ConnectableApp {
-  key: string;
-  name: string;
-  description: string;
-  /** Deep-link (`?connect=`) target; external apps only. */
-  slug: string | null;
-  authenticated: boolean;
-  logo: IconFunctionComponent;
-  /** How the user connects; null = nothing for the user to do (org-managed). */
-  connectMode: "oauth" | "credentials" | null;
-  credentialKeys: string[];
-  credentialValues: Record<string, string>;
-  /** Returns the URL to redirect to for OAuth. */
-  startOAuth: () => Promise<string>;
-  saveCredentials: (values: Record<string, string>) => Promise<void>;
-  /** Absent when there is no per-user credential to remove. */
-  disconnect: (() => Promise<void>) | null;
-}
-
-function externalAppToConnectable(
-  app: ExternalAppUserResponse
-): ConnectableApp {
-  return {
-    key: `app-${app.id}`,
-    name: app.name,
-    description: app.description,
-    slug: app.slug,
-    authenticated: app.authenticated,
-    logo: getAppTypeLogo(app.app_type),
-    connectMode: app.app_type === "CUSTOM" ? "credentials" : "oauth",
-    credentialKeys: app.credential_keys,
-    credentialValues: app.credential_values,
-    startOAuth: async () => (await startExternalAppOAuth(app.id)).authorize_url,
-    saveCredentials: (values) => upsertUserCredentials(app.id, values),
-    disconnect: () => disconnectUserFromApp(app.id),
-  };
-}
-
-function mcpServerToConnectable(server: MCPServer): ConnectableApp | null {
-  // Pass-through OAuth authenticates via the user's Onyx login token at runtime:
-  // always usable, with nothing for the user to connect or disconnect. Its
-  // per-user `user_authenticated` is false (no stored config), so it must not
-  // drive the regular OAuth flow or the connected state.
-  const passThrough = server.auth_type === MCPAuthenticationType.PT_OAUTH;
-  const perUser =
-    !passThrough &&
-    server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-    server.auth_type !== MCPAuthenticationType.NONE;
-  const authenticated =
-    passThrough ||
-    (server.user_authenticated ?? server.is_authenticated ?? false);
-  // Org-managed (admin-performed / no-auth) servers with nothing configured
-  // aren't actionable for the user — hide rather than show a dead card.
-  if (!perUser && !authenticated) return null;
-  const credentialKeys: string[] = server.auth_template?.required_fields?.length
-    ? server.auth_template.required_fields
-    : ["api_key"];
-  return {
-    key: `mcp-${server.id}`,
-    name: server.name,
-    description: server.description ?? "",
-    slug: null,
-    authenticated,
-    logo: getActionIcon(server.server_url, server.name),
-    connectMode: !perUser
-      ? null
-      : server.auth_type === MCPAuthenticationType.API_TOKEN
-        ? "credentials"
-        : "oauth",
-    credentialKeys,
-    credentialValues: server.user_credentials ?? {},
-    startOAuth: async () =>
-      (await startMCPUserOAuth(server.id, CRAFT_APPS_PATH)).oauth_url,
-    saveCredentials: (values) =>
-      saveMCPUserCredentials(server.id, values, server.transport),
-    disconnect: perUser ? () => disconnectMCPServer(server.id) : null,
-  };
 }
 
 interface AppConnectionsProps {
