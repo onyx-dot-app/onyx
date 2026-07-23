@@ -317,6 +317,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     """
     monkeypatch.setattr(dsm, "DEV_MODE", True)
     monkeypatch.setattr(dsm, "SANDBOX_API_SERVER_URL", "https://onyx.example.com")
+    monkeypatch.setattr(dsm, "validate_sandbox_api_url", lambda *_: None)
     # Skip the actual readiness HTTP probe — that needs a real container.
     monkeypatch.setattr(
         DockerSandboxManager,
@@ -475,6 +476,7 @@ def test_provision_removes_container_when_history_restore_fails(
     """
     monkeypatch.setattr(dsm, "DEV_MODE", True)
     monkeypatch.setattr(dsm, "SANDBOX_API_SERVER_URL", "https://onyx.example.com")
+    monkeypatch.setattr(dsm, "validate_sandbox_api_url", lambda *_: None)
 
     mgr = _bare_manager()
     mgr._docker = MagicMock()  # type: ignore[attr-defined]

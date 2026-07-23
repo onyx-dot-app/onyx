@@ -754,6 +754,7 @@ def test_provision_cleans_up_pod_when_opencode_history_restore_fails(
     import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 
     monkeypatch.setattr(ksm, "SANDBOX_API_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "validate_sandbox_api_url", lambda *_: None)
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "proxy.local")
 
     sandbox_id = _sandbox_id()
@@ -798,6 +799,7 @@ def test_provision_existing_healthy_pod_does_not_restore_opencode_history(
     import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 
     monkeypatch.setattr(ksm, "SANDBOX_API_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "validate_sandbox_api_url", lambda *_: None)
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "proxy.local")
 
     sandbox_id = _sandbox_id()
@@ -835,6 +837,7 @@ def test_provision_conflicting_healthy_pod_skips_startup_restore(
     import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 
     monkeypatch.setattr(ksm, "SANDBOX_API_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "validate_sandbox_api_url", lambda *_: None)
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "proxy.local")
 
     sandbox_id = _sandbox_id()
@@ -884,6 +887,7 @@ def test_provision_conflicting_not_ready_pod_runs_startup_restore(
     import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 
     monkeypatch.setattr(ksm, "SANDBOX_API_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "validate_sandbox_api_url", lambda *_: None)
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "proxy.local")
 
     sandbox_id = _sandbox_id()
@@ -945,6 +949,7 @@ def test_provision_conflicting_not_ready_pod_restore_failure_does_not_cleanup(
     import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 
     monkeypatch.setattr(ksm, "SANDBOX_API_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "validate_sandbox_api_url", lambda *_: None)
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "proxy.local")
 
     sandbox_id = _sandbox_id()
