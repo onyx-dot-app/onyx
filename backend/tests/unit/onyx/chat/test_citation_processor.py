@@ -834,6 +834,55 @@ def test_citation_outside_code_block_processed(
     assert "code here" in output
 
 
+def test_unlabeled_fence_does_not_corrupt_following_labeled_fence(
+    mock_search_docs: CitationMapping,  # noqa: ARG001
+) -> None:
+    """An unlabeled opening fence must not relabel a later ```lang fence that
+    lands in the same buffered segment."""
+    processor = DynamicCitationProcessor()
+
+    # First token opens a code block (odd backtick count). The second token
+    # carries both the unlabeled opening fence and a following labeled fence.
+    tokens: list[str | None] = ["```python\n", "```\nplain\n```bash\n"]
+    output, _ = process_tokens(processor, tokens)
+
+    assert "```plaintextbash" not in output
+    assert "```bash" in output
+
+
+def test_unlabeled_fence_does_not_corrupt_closing_fence(
+    mock_search_docs: CitationMapping,  # noqa: ARG001
+) -> None:
+    """An unlabeled opening fence must not turn its closing ``` into a spurious
+    second plaintext block when both live in the same buffered segment."""
+    processor = DynamicCitationProcessor()
+
+    tokens: list[str | None] = ["```python\n", "```\ncode\n```\n"]
+    output, _ = process_tokens(processor, tokens)
+
+    # Only the unlabeled opening fence should gain a plaintext label.
+    assert output.count("```plaintext") == 1
+
+
+def test_fence_labeled_by_parity_when_segment_closes_then_opens(
+    mock_search_docs: CitationMapping,  # noqa: ARG001
+) -> None:
+    """When one segment closes a prior block and opens a new unlabeled block,
+    the closing fence must stay bare and only the opening fence gets labeled.
+    The fence role is decided by parity before the segment, not by position."""
+    processor = DynamicCitationProcessor()
+
+    # First token opens a labeled block and leaves it unclosed. The second token
+    # closes it and then opens an unlabeled block, all within one segment.
+    tokens: list[str | None] = ["```python\n", "```\ncode\n```\n"]
+    output, _ = process_tokens(processor, tokens)
+
+    # The closing fence of the python block must remain bare.
+    assert "```plaintext\ncode" not in output
+    # The newly opened unlabeled block must be the one that gets labeled.
+    assert "code\n```plaintext" in output
+
+
 def test_multiple_code_blocks(mock_search_docs: CitationMapping) -> None:
     """Test handling of multiple code blocks."""
     processor = DynamicCitationProcessor()
