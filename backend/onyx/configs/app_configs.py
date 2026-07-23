@@ -1016,6 +1016,13 @@ OLD_INDEX_RECLAIM_MAX_PER_RUN = max(
 OLD_INDEX_RECLAIM_MAX_ATTEMPTS = max(
     1, _non_negative_int_env("OLD_INDEX_RECLAIM_MAX_ATTEMPTS", 5)
 )
+# Max docs a single reclaim delete_by_query removes before returning, so one call
+# can't run past the OpenSearch client HTTP timeout (60s) on a huge tenant. The reclaim
+# loop re-runs until the tenant's slice is empty. Conservative default leaves margin on
+# a slow / loaded cluster (the fleet-reindex case); tune up for fast clusters.
+OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE", 10_000)
+)
 
 _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
 try:
