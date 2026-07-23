@@ -401,7 +401,7 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG00
 
     # Set up variables for waiting on primary worker
     WAIT_INTERVAL = 5
-    WAIT_LIMIT = 60
+    WAIT_LIMIT = int(os.environ.get("CELERY_PRIMARY_WORKER_WAIT_LIMIT", "180"))
     r = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA)
     time_start = time.monotonic()
 
