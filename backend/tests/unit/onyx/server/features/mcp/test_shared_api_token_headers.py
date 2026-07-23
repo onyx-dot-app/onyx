@@ -123,6 +123,34 @@ def test_shared_api_token_prefers_new_token_during_auth_mode_conversion() -> Non
     assert token == "new-shared-secret"
 
 
+def test_shared_api_token_create_requires_token() -> None:
+    with pytest.raises(ValueError, match="api_token is required"):
+        MCPToolCreateRequest(
+            name="Semrush",
+            server_url="https://mcp.semrush.com/v2/mcp",
+            auth_type=MCPAuthenticationType.API_TOKEN,
+            auth_performer=MCPAuthenticationPerformer.ADMIN,
+            api_token=None,
+            transport=MCPTransport.STREAMABLE_HTTP,
+        )
+
+
+def test_shared_api_token_update_allows_omitted_token() -> None:
+    # On update the stored token is reused, so the request may omit it.
+    request = MCPToolCreateRequest(
+        name="Semrush",
+        server_url="https://mcp.semrush.com/v2/mcp",
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+        api_token=None,
+        existing_server_id=123,
+        transport=MCPTransport.STREAMABLE_HTTP,
+    )
+
+    assert request.api_token is None
+    assert request.existing_server_id == 123
+
+
 def test_shared_api_token_template_update_preserves_omitted_template() -> None:
     existing = MCPConnectionData(
         headers={"X-API-Key": "shared-secret"},

@@ -234,10 +234,14 @@ class MCPToolCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_auth_configuration(self) -> "MCPToolCreateRequest":
-        # Validate API token requirements for admin auth
+        # A shared API token is required to create an admin-managed server.
+        # On update (`existing_server_id` set) it may be omitted: the upsert
+        # path reuses the stored token, so requiring it here would reject
+        # legitimate template-only edits from clients that don't replay it.
         if (
             self.auth_type == MCPAuthenticationType.API_TOKEN
             and self.auth_performer == MCPAuthenticationPerformer.ADMIN
+            and self.existing_server_id is None
             and not self.api_token
         ):
             raise ValueError(

@@ -102,10 +102,21 @@ export function PerUserAuthConfig({
     : computeRequiredFieldsFromHeaders(values.auth_template?.headers || {});
   const userCredentials = values.user_credentials || {};
 
+  // Shared templates must render the org's single shared key, so at least one
+  // header value has to contain `{api_key}`. Surface this inline rather than
+  // relying on the backend validator's generic toast.
+  const hasApiKeyPlaceholder = Object.values(
+    values.auth_template?.headers || {}
+  ).some((value) => typeof value === "string" && value.includes("{api_key}"));
+  const missingSharedApiKey = mode === "shared" && !hasApiKeyPlaceholder;
+
   return (
     <div className="flex flex-col gap-4 -mx-2 px-2 py-2 bg-background-tint-00 rounded-12">
       {/* Authentication Headers */}
-      <FormField name="auth_template.headers" state="idle">
+      <FormField
+        name="auth_template.headers"
+        state={missingSharedApiKey ? "error" : "idle"}
+      >
         <FormField.Label>Authentication Headers</FormField.Label>
         <FormField.Control asChild>
           <InputKeyValue
@@ -126,7 +137,7 @@ export function PerUserAuthConfig({
           <Text text03 secondaryMono className="inline">
             {"{api_key}"}
           </Text>{" "}
-          {mode === "per-user" && (
+          {mode === "per-user" ? (
             <>
               or{" "}
               <Text text03 secondaryMono className="inline">
@@ -135,8 +146,19 @@ export function PerUserAuthConfig({
               . Users will be prompted to provide values for placeholders
               (except user_email).
             </>
+          ) : (
+            <>
+              in at least one header value; it is replaced with your
+              organization&apos;s shared key.
+            </>
           )}
         </FormField.Description>
+        <FormField.Message
+          messages={{
+            error:
+              "At least one header value must include the {api_key} placeholder.",
+          }}
+        />
       </FormField>
 
       {/* Only show user credentials section if there are required fields */}

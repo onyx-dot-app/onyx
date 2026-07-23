@@ -1319,8 +1319,17 @@ def _db_mcp_server_to_api_mcp_server(
     # Surface the placeholder header template without exposing rendered
     # credentials. OAuth servers do not get an auth_template because OAuth
     # uses the handshake URL rather than a header template.
+    #
+    # Per-user templates are surfaced to any accessible user because they
+    # drive the per-user credential prompt. Shared/admin templates are only
+    # surfaced to the owner/admin auth-config response: basic users never
+    # supply shared credentials, and the template can legitimately carry
+    # literal header values that must not leak.
     auth_template = None
-    if db_server.auth_type != MCPAuthenticationType.OAUTH:
+    if db_server.auth_type != MCPAuthenticationType.OAUTH and (
+        auth_performer == MCPAuthenticationPerformer.PER_USER
+        or can_view_admin_credentials
+    ):
         try:
             template_config = db_server.admin_connection_config
             if template_config:
@@ -1900,6 +1909,13 @@ def _upsert_mcp_server(
                     else None
                 ),
             )
+            # The validator allows an omitted token on update so the stored
+            # one can be reused; enforce that a token actually resolved.
+            if not request.api_token:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "A shared API token is required for admin-managed API-token servers.",
+                )
         if (
             request.auth_type == MCPAuthenticationType.API_TOKEN
             and request.auth_performer == MCPAuthenticationPerformer.PER_USER
