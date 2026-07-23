@@ -23,12 +23,12 @@ variable "storage_gb" {
 
 variable "max_storage_gb" {
   type        = number
-  description = "Upper limit in GB for RDS storage autoscaling. Null disables autoscaling."
+  description = "Upper limit in GB for RDS storage autoscaling. Null or 0 disables autoscaling."
   default     = null
 
   validation {
-    condition     = var.max_storage_gb == null || coalesce(var.max_storage_gb, 0) > var.storage_gb
-    error_message = "max_storage_gb must be greater than storage_gb (or null to disable autoscaling)."
+    condition     = var.max_storage_gb == null || coalesce(var.max_storage_gb, 0) == 0 || coalesce(var.max_storage_gb, 0) > var.storage_gb
+    error_message = "max_storage_gb must be greater than storage_gb (or null/0 to disable autoscaling)."
   }
 }
 

@@ -122,7 +122,7 @@ variable "postgres_storage_gb" {
 
 variable "postgres_max_storage_gb" {
   type        = number
-  description = "RDS storage-autoscaling ceiling in GiB. Null uses the t-shirt size default."
+  description = "RDS storage-autoscaling ceiling in GiB. 0 disables autoscaling; null uses the t-shirt size default."
   default     = null
 }
 
