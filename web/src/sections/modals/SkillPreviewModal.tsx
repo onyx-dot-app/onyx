@@ -56,6 +56,15 @@ export default function SkillPreviewModal({
   } = useSWR<SkillPreview>(swrKey, errorHandlingFetcher);
   const instructionsMarkdown =
     preview?.instructions_markdown || "No instructions found.";
+  const dependency = preview?.external_app;
+  const dependencyUnavailableReason =
+    dependency && !dependency.ready
+      ? dependency.enabled
+        ? `Connect app “${dependency.name}” from the Apps page to use this skill.`
+        : `App “${dependency.name}” is disabled by an administrator.`
+      : null;
+  const displayedUnavailableReason =
+    unavailableReason ?? dependencyUnavailableReason;
 
   useEffect(() => {
     if (open) {
@@ -89,11 +98,11 @@ export default function SkillPreviewModal({
 
           {preview && !isLoading && !error && (
             <Section gap={1} alignItems="stretch">
-              {unavailableReason && (
+              {displayedUnavailableReason && (
                 <MessageCard
                   variant="warning"
                   title="Skill unavailable"
-                  description={unavailableReason}
+                  description={displayedUnavailableReason}
                 />
               )}
 

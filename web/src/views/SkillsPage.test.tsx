@@ -337,7 +337,7 @@ describe("SkillsPage preference toggles", () => {
     ).not.toHaveLength(0);
     expect(
       screen.getByText(
-        "Switching will disable the currently enabled skill and enable the skill that uses app “Acme CRM”."
+        "Continuing will disable the currently enabled skill and enable this one."
       )
     ).toBeInTheDocument();
 

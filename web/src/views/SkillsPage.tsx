@@ -270,54 +270,14 @@ export default function SkillsPage() {
           item.description.toLowerCase().includes(q))
     );
   }, [focusedAppName, focusedExternalAppId, items, searchQuery]);
-  const previewUnavailableReason = (() => {
-    if (previewTarget?.source === "builtin" && !previewTarget.is_available) {
-      return (
-        previewTarget.unavailable_reason ??
-        "This skill is currently unavailable."
-      );
-    }
-    if (
-      previewTarget?.source === "custom" &&
-      previewTarget.enabled &&
-      previewTarget.skill.external_app &&
-      !previewTarget.skill.external_app.ready
-    ) {
-      const dependency = previewTarget.skill.external_app;
-      return dependency.enabled
-        ? `Connect app “${dependency.name}” from the Apps page to use this skill.`
-        : `App “${dependency.name}” is disabled by an administrator.`;
-    }
-    return null;
-  })();
+
   const switchPending =
     pendingSwitchTarget !== null && pendingSkillIds.has(pendingSwitchTarget.id);
-  const enabledNameConflict =
-    pendingSwitchTarget === null
-      ? null
-      : (enabledItemByName.get(pendingSwitchTarget.name) ?? null);
-  const switchImpact = (() => {
-    if (pendingSwitchTarget?.source !== "custom") {
-      return "Continuing will disable the active skill and enable the selected one.";
-    }
-    const targetApp = pendingSwitchTarget.skill.external_app;
-    if (!targetApp) {
-      return "Continuing will disable the active skill and enable the selected one.";
-    }
-    let currentSkill = "the currently enabled skill";
-    if (
-      enabledNameConflict?.source === "custom" &&
-      enabledNameConflict.skill.external_app
-    ) {
-      currentSkill = `the skill that uses app “${enabledNameConflict.skill.external_app.name}”`;
-    } else if (
-      enabledNameConflict?.source === "custom" &&
-      enabledNameConflict.is_personal
-    ) {
-      currentSkill = "your personal skill";
-    }
-    return `Switching will disable ${currentSkill} and enable the skill that uses app “${targetApp.name}”.`;
-  })();
+  const previewUnavailableReason =
+    previewTarget?.source === "builtin" && !previewTarget.is_available
+      ? (previewTarget.unavailable_reason ??
+        "This skill is currently unavailable.")
+      : null;
 
   return (
     <SettingsLayouts.Root data-testid="SkillsPage/container">
@@ -480,7 +440,8 @@ export default function SkillsPage() {
             </Button>
           }
         >
-          {switchImpact}
+          Continuing will disable the currently enabled skill and enable this
+          one.
         </ConfirmationModalLayout>
       )}
     </SettingsLayouts.Root>
