@@ -1,8 +1,7 @@
-"""The per-user OAuth connection-config row is created when a user *initiates*
-the connect flow, before the provider redirect and token exchange. These verify
-that `is_authenticated` reflects whether the handshake actually completed
-(stored tokens) rather than mere row existence, while API-token servers stay
-authenticated on row existence alone."""
+"""`is_authenticated` for per-user OAuth servers must reflect a completed
+handshake (stored tokens), not mere connection-config row existence, since the
+row is created before token exchange. API-token servers stay authenticated on
+row existence alone."""
 
 from sqlalchemy.orm import Session
 
@@ -45,8 +44,6 @@ def _make_per_user_server(
 
 
 def test_oauth_tokenless_row_is_not_authenticated(db_session: Session) -> None:
-    """A row seeded at connect-initiation (client_info only, no tokens) must not
-    read as authenticated."""
     user = create_test_user(db_session, "mcp_oauth_pending")
     server = _make_per_user_server(db_session, MCPAuthenticationType.OAUTH)
     create_connection_config(
@@ -63,8 +60,6 @@ def test_oauth_tokenless_row_is_not_authenticated(db_session: Session) -> None:
 
 
 def test_oauth_row_with_tokens_is_authenticated(db_session: Session) -> None:
-    """Once tokens are stored (handshake completed) the server reads as
-    authenticated."""
     user = create_test_user(db_session, "mcp_oauth_done")
     server = _make_per_user_server(db_session, MCPAuthenticationType.OAUTH)
     create_connection_config(
@@ -86,8 +81,6 @@ def test_oauth_row_with_tokens_is_authenticated(db_session: Session) -> None:
 def test_api_token_row_is_authenticated_without_tokens_key(
     db_session: Session,
 ) -> None:
-    """API-token rows are only written once the user submits credentials, so
-    existence alone (no OAuth `tokens` key) still counts as authenticated."""
     user = create_test_user(db_session, "mcp_api_token")
     server = _make_per_user_server(db_session, MCPAuthenticationType.API_TOKEN)
     create_connection_config(

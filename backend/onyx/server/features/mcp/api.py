@@ -403,13 +403,10 @@ def _build_oauth_admin_config_data(
 def _oauth_user_config_has_tokens(
     user_config: MCPConnectionConfig | None,
 ) -> bool:
-    """Whether a per-user OAuth connection config holds a completed token set.
+    """Whether a per-user OAuth config holds tokens from a completed handshake.
 
-    The row is created when the user *initiates* the OAuth connect flow, before
-    the provider redirect and token exchange, so its mere existence does not
-    mean the user finished authenticating. Only stored tokens (written by
-    `OnyxTokenStorage.set_tokens` / the known-provider callback) indicate a
-    completed handshake.
+    The row is created when the connect flow starts, before token exchange, so
+    existence alone doesn't prove the user finished authenticating.
     """
     if user_config is None:
         return False
@@ -1328,10 +1325,8 @@ def _db_mcp_server_to_api_mcp_server(
                     )
     else:  # currently: per user auth using api key OR oauth
         user_config = get_user_connection_config(db_server.id, email, db)
-        # OAuth rows are created at the start of the connect flow, so existence
-        # alone doesn't prove the handshake completed — require stored tokens.
-        # API-token rows are only written once the user submits credentials, so
-        # existence is sufficient there.
+        # API-token rows exist only once credentials are submitted; OAuth rows
+        # are created before token exchange, so require tokens there.
         if db_server.auth_type == MCPAuthenticationType.OAUTH:
             user_authenticated = _oauth_user_config_has_tokens(user_config)
         else:
