@@ -89,3 +89,38 @@ def test_attachment_section_link_uses_platform_specific_url(
     attachment_document = documents[0]
     assert isinstance(attachment_document, Document)
     assert attachment_document.sections[0].link == expected_link
+
+
+def test_attachment_failure_uses_attachment_document_id() -> None:
+    connector = ConfluenceConnector(
+        wiki_base="https://wiki.example.com", is_cloud=False
+    )
+    confluence_client = mock.Mock(spec=OnyxConfluence)
+    confluence_client.paginated_cql_retrieval.return_value = iter([_ATTACHMENT])
+
+    with (
+        mock.patch.object(
+            ConfluenceConnector,
+            "confluence_client",
+            new_callable=mock.PropertyMock,
+            return_value=confluence_client,
+        ),
+        mock.patch(
+            "onyx.connectors.confluence.connector.convert_attachment_to_content",
+            side_effect=RuntimeError("conversion failed"),
+        ),
+    ):
+        documents, failures = connector._fetch_page_attachments(_PAGE)
+
+    assert documents == []
+    assert len(failures) == 1
+    failed_document = failures[0].failed_document
+    assert failed_document is not None
+    assert failed_document.document_id == (
+        "https://wiki.example.com/pages/viewpageattachments.action"
+        f"?pageId={_ATTACHMENT_PAGE_ID}&preview=att123"
+    )
+    assert failed_document.document_link == (
+        f"https://wiki.example.com/download/attachments/{_ATTACHMENT_PAGE_ID}/"
+        f"{_ENCODED_ATTACHMENT_TITLE}"
+    )
