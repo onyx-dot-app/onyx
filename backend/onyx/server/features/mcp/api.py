@@ -400,6 +400,20 @@ def _build_oauth_admin_config_data(
     return config_data
 
 
+def _oauth_user_config_has_tokens(
+    user_config: MCPConnectionConfig | None,
+) -> bool:
+    """Whether a per-user OAuth config holds tokens from a completed handshake.
+
+    The row is created when the connect flow starts, before token exchange, so
+    existence alone doesn't prove the user finished authenticating.
+    """
+    if user_config is None:
+        return False
+    config_data = extract_connection_data(user_config, apply_mask=False)
+    return bool(config_data.get(MCPOAuthKeys.TOKENS.value))
+
+
 def _build_oauth_admin_config_data_for_update(
     *,
     client_id: str | None,
@@ -1311,7 +1325,12 @@ def _db_mcp_server_to_api_mcp_server(
                     )
     else:  # currently: per user auth using api key OR oauth
         user_config = get_user_connection_config(db_server.id, email, db)
-        user_authenticated = user_config is not None
+        # API-token rows exist only once credentials are submitted; OAuth rows
+        # are created before token exchange, so require tokens there.
+        if db_server.auth_type == MCPAuthenticationType.OAUTH:
+            user_authenticated = _oauth_user_config_has_tokens(user_config)
+        else:
+            user_authenticated = user_config is not None
 
         if user_authenticated and user_config:
             # Avoid hitting the MCP server when assembling response data.
