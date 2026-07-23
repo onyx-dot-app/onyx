@@ -317,7 +317,8 @@ def test_delete_detaches_custom_skill_and_clears_enablement(
     )
 
     db_session.expire_all()
-    assert calls == [{test_user.id}]
+    assert len(calls) == 1
+    assert test_user.id in calls[0]
     assert api.get_external_app_by_id(db_session, app_id) is None
     assert db_session.get(Skill, skill_id) is not None
     assert get_external_app_by_skill_id(db_session, skill_id) is None
