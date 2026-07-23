@@ -17,7 +17,7 @@ import (
 // happy path and HTTP error cases against a real server.
 func TestListAgents_Timeout(t *testing.T) {
 	url := testutil.DeadServerURL()
-	client := testutil.NewClient(url + "/api")
+	client := testutil.NewClient(url)
 	_, err := client.ListAgents(t.Context())
 	if err == nil {
 		t.Fatal("expected error for dead server")
@@ -39,7 +39,7 @@ func TestSearch_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	resp, err := client.Search(t.Context(), models.SearchRequest{Query: "test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -56,7 +56,7 @@ func TestSearch_401(t *testing.T) {
 	srv := testutil.StatusServer(401)
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	_, err := client.Search(t.Context(), models.SearchRequest{Query: "test"})
 	if err == nil {
 		t.Fatal("expected error for 401")
@@ -81,7 +81,7 @@ func TestTestConnection_AWSELB403(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	err := client.TestConnection(t.Context())
 	if err == nil {
 		t.Fatal("expected error")

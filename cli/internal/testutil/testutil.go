@@ -13,10 +13,10 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 )
 
-// NewClient creates a test API client pointed at the given API base URL.
-func NewClient(apiBaseURL string) *api.Client {
+// NewClient creates a test API client pointed at the given server URL.
+func NewClient(serverURL string) *api.Client {
 	return api.NewClient(
-		config.OnyxCliConfig{ServerURL: apiBaseURL, APIKey: "test-key"},
+		config.OnyxCliConfig{ServerURL: serverURL, APIKey: "test-key"},
 	)
 }
 
@@ -55,10 +55,10 @@ func DeadServerURL() string {
 }
 
 // IsolateConfig sets env vars so tests use a temp config directory.
-func IsolateConfig(t *testing.T, apiBaseURL string) {
+func IsolateConfig(t *testing.T, serverURL string) {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("ONYX_SERVER_URL", apiBaseURL)
+	t.Setenv("ONYX_SERVER_URL", serverURL)
 	t.Setenv("ONYX_PAT", "test-key")
 }
 

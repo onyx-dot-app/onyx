@@ -11,6 +11,7 @@ import (
 
 const (
 	EnvServerURL      = "ONYX_SERVER_URL"
+	EnvAPIPrefix      = "ONYX_API_PREFIX"
 	EnvAPIKey         = "ONYX_PAT"
 	EnvAgentID        = "ONYX_PERSONA_ID"
 	EnvSSHHostKey     = "ONYX_SSH_HOST_KEY"
@@ -36,7 +37,7 @@ type OnyxCliConfig struct {
 // DefaultConfig returns a config with default values.
 func DefaultConfig() OnyxCliConfig {
 	return OnyxCliConfig{
-		ServerURL:      "https://cloud.onyx.app/api",
+		ServerURL:      "https://cloud.onyx.app",
 		APIKey:         "",
 		DefaultAgentID: 0,
 	}
@@ -56,9 +57,38 @@ func (c OnyxCliConfig) IsConfigured() bool {
 	return c.APIKey != ""
 }
 
-// WebAppURL derives the web-app base from the conventional /api API suffix.
+func apiPrefix() string {
+	prefix := "/api"
+	if value, ok := os.LookupEnv(EnvAPIPrefix); ok {
+		prefix = value
+	}
+	return strings.Trim(prefix, "/")
+}
+
+// APIURL returns the API base for a server origin or an already-prefixed URL.
+// Set ONYX_API_PREFIX="" for direct backend access without a proxy path.
+func APIURL(serverURL string) string {
+	baseURL := strings.TrimRight(serverURL, "/")
+	prefix := apiPrefix()
+	if prefix == "" {
+		return baseURL
+	}
+
+	suffix := "/" + prefix
+	if strings.HasSuffix(baseURL, suffix) {
+		return baseURL
+	}
+	return baseURL + suffix
+}
+
+// WebAppURL removes an API prefix when the configured URL already includes it.
 func WebAppURL(serverURL string) string {
-	return strings.TrimSuffix(strings.TrimRight(serverURL, "/"), "/api")
+	baseURL := strings.TrimRight(serverURL, "/")
+	prefix := apiPrefix()
+	if prefix == "" {
+		return baseURL
+	}
+	return strings.TrimSuffix(baseURL, "/"+prefix)
 }
 
 // ConfigDir returns ~/.config/onyx-cli

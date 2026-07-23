@@ -36,7 +36,8 @@ type Client struct {
 }
 
 // NewClient creates a new API client from config.
-// ServerURL is the complete API base URL (e.g. "https://cloud.onyx.app/api").
+// ServerURL may be a server origin or an API base that already includes the
+// configured API prefix.
 func NewClient(cfg config.OnyxCliConfig) *Client {
 	var transport *http.Transport
 	if t, ok := http.DefaultTransport.(*http.Transport); ok {
@@ -45,7 +46,7 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 		transport = &http.Transport{}
 	}
 	return &Client{
-		baseURL: strings.TrimRight(cfg.ServerURL, "/"),
+		baseURL: config.APIURL(cfg.ServerURL),
 		apiKey:  cfg.APIKey,
 		httpClient: &http.Client{
 			Timeout:   3 * time.Minute,

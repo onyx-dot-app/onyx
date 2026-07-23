@@ -186,7 +186,7 @@ func (m Model) exitConfigureMode() Model {
 }
 
 func configURLPrompt() string {
-	return infoStyle.Render("(1/2) API base URL ") + dimInfoStyle.Render("❯") + " "
+	return infoStyle.Render("(1/2) Server URL ") + dimInfoStyle.Render("❯") + " "
 }
 
 func configAPIKeyPrompt(hasExisting bool) string {

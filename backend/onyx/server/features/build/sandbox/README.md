@@ -54,7 +54,7 @@ The Docker backend is intentionally the closest single-VM analogue of the Kubern
 
 #### Docker mode trust boundary
 
-`api_server` and `background` mount the host Docker socket so they can drive sandbox containers. Anything that can talk to that socket is effectively root on the host — only enable Craft on hosts you fully control. Sandbox containers themselves run unprivileged: `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL`).
+`api_server` and `background` mount the host Docker socket so they can drive sandbox containers. Anything that can talk to that socket is effectively root on the host — only enable Craft on hosts you fully control. Sandbox containers themselves run unprivileged: `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL` + `ONYX_API_PREFIX`).
 
 `ONYX_SERVER_URL` is the complete API base URL used by both the host-side
 manager and the sandbox client. The Craft Compose overlay defaults it to
@@ -257,7 +257,7 @@ uv run pytest backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox.
 - **Sandbox app containers and sidecar init containers** do not receive FileStore, S3, or MinIO credentials
 - **Network policies** can restrict sandbox egress traffic
 - **Resource limits** prevent resource exhaustion
-- **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL`)
+- **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL` + `ONYX_API_PREFIX`)
 - **Docker network isolation** is enforced by joining only the dedicated `onyx_craft_sandbox` bridge — compose's default network (postgres/redis/minio/model servers) is unreachable by DNS from inside a sandbox
 - **EC2 IMDS** must be blocked at the host firewall (`install.sh --include-craft` installs a `DOCKER-USER` iptables rule on EC2 when sudo is available) — there is no app-level fallback
 

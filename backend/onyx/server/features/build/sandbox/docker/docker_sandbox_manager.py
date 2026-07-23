@@ -29,6 +29,7 @@ Sandbox containers run with:
 - no Docker socket mount
 - no S3 / MinIO / Postgres / Redis / FileStore credentials in env
 - a fixed env allowlist (``ONYX_PAT``, ``ONYX_SERVER_URL``,
+  ``ONYX_API_PREFIX``,
   opencode auth/config only)
 - only the dedicated sandbox bridge network — never compose's default
   network. As a result api_server / postgres / redis / minio /
@@ -567,6 +568,9 @@ def build_container_create_kwargs(
     env: dict[str, str] = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
+        # The deployment URL is already the exact API base. Disable the CLI's
+        # compatibility prefix for direct services and prefixed ingress URLs.
+        "ONYX_API_PREFIX": "",
         OPENCODE_SERVER_PASSWORD: opencode_password,
         "OPENCODE_CONFIG_CONTENT": opencode_config_json,
     }

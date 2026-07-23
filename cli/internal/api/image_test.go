@@ -27,7 +27,7 @@ func TestGenerateImage_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	resp, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -49,7 +49,7 @@ func TestGenerateImage_KeepaliveWhitespacePrefix(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	resp, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -66,7 +66,7 @@ func TestGenerateImage_InBandErrorEnvelope(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
 	if err == nil {
 		t.Fatal("expected error for in-band error envelope")
@@ -90,7 +90,7 @@ func TestGenerateImage_InBandNotFoundEnvelope(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
 	var apiErr *api.OnyxAPIError
 	if !errors.As(err, &apiErr) {
@@ -108,7 +108,7 @@ func TestGenerateImage_InBandTimeoutEnvelope(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
 	var apiErr *api.OnyxAPIError
 	if !errors.As(err, &apiErr) {
@@ -126,7 +126,7 @@ func TestGenerateImage_EmptyBodyIsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
 	var apiErr *api.OnyxAPIError
 	if !errors.As(err, &apiErr) {
@@ -144,7 +144,7 @@ func TestGenerateImage_KeepaliveOnlyStreamIsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
 	if err == nil {
 		t.Fatal("expected error for whitespace-only body")
@@ -158,7 +158,7 @@ func TestGenerateImage_TruncatedStreamIsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
 	if err == nil {
 		t.Fatal("expected error for truncated body")
@@ -169,7 +169,7 @@ func TestGenerateImage_404(t *testing.T) {
 	srv := testutil.StatusServer(404)
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	_, err := client.GenerateImage(t.Context(), models.ImageGenerationRequest{Prompt: "a cat"})
 	if err == nil {
 		t.Fatal("expected error for 404")
