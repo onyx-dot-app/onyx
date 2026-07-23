@@ -1,5 +1,9 @@
+import hashlib
+import hmac
 import os
 from enum import Enum
+
+from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
 
 
 class SandboxBackend(str, Enum):
@@ -144,6 +148,33 @@ SANDBOX_PROXY_INJECTED_PLACEHOLDER = "replaced_by_egress_proxy"
 # The egress proxy reads it to attribute the tool call to a session for approval,
 # then strips it so it never reaches the MCP origin.
 MCP_SESSION_TAG_HEADER = "X-Onyx-Mcp-Session"
+
+
+def sign_session_tag(session_id: str) -> str:
+    """Value for ``MCP_SESSION_TAG_HEADER``: ``<session_id>.<hmac>``. The session
+    id is not secret (it leaks via deep links / notifications), so the sandbox
+    could otherwise forge a tag for a session it doesn't own. HMAC with the
+    shared ``ENCRYPTION_KEY_SECRET`` (which the sandbox never sees) makes a tag
+    unforgeable without the key."""
+    mac = hmac.new(
+        ENCRYPTION_KEY_SECRET.encode(), session_id.encode(), hashlib.sha256
+    ).hexdigest()
+    return f"{session_id}.{mac}"
+
+
+def verify_session_tag(value: str) -> str | None:
+    """The session id from a signed tag, or ``None`` if the signature is absent
+    or invalid — callers fail closed."""
+    session_id, _, mac = value.partition(".")
+    if not mac:
+        return None
+    expected = hmac.new(
+        ENCRYPTION_KEY_SECRET.encode(), session_id.encode(), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(mac, expected):
+        return None
+    return session_id
+
 
 # ==============================================================================
 # Docker sandbox (SANDBOX_BACKEND=docker, self-hosted docker-compose)

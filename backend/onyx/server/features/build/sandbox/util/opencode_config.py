@@ -10,7 +10,10 @@ restart.
 from collections.abc import Sequence
 from typing import Any
 
-from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
+from onyx.server.features.build.configs import (
+    MCP_SESSION_TAG_HEADER,
+    sign_session_tag,
+)
 from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     LLMProviderConfig,
@@ -128,16 +131,19 @@ def build_session_mcp_config(
     session_id: str,
 ) -> dict[str, Any]:
     """Per-session ``opencode.json`` fragment carrying the craft MCP servers and
-    their per-tool permission gates. opencode merges this project-level config
-    with the pod-global config (providers/base permissions), and re-reads it when
-    the session's instance is disposed — so the server set hot-reloads without a
-    pod re-provision. Kept out of the pod-global config precisely so it can change
-    per session without restarting opencode-serve.
+    their per-tool permission gates. opencode deep-merges this project-level
+    config with the pod-global config (providers/base permissions) — combining
+    keys, not replacing — and re-reads it when the session's instance is disposed,
+    so the server set hot-reloads without a pod re-provision. The MCP-gate
+    ``permission`` keys (``<serverKey>_*``) don't collide with the pod-global base
+    permissions, so both survive the merge.
 
-    Each server carries the ``MCP_SESSION_TAG_HEADER`` header stamped with
-    ``session_id``: opencode's in-process MCP client uses the untagged base proxy
-    env, so this header is how the egress proxy attributes a tool call to its
-    session for approval (the proxy strips it before the origin sees it).
+    Each server carries the ``MCP_SESSION_TAG_HEADER`` header, HMAC-signed for
+    ``session_id`` (see ``sign_session_tag``): opencode's in-process MCP client
+    uses the untagged base proxy env, so this header is how the egress proxy
+    attributes a tool call to its session for approval (the proxy strips it before
+    the origin sees it). Signing stops the sandbox forging a tag for a session it
+    doesn't own.
 
     MCP tool ids are ``<serverKey>_<toolName>``. The wildcard allow defers gating
     to the sandbox proxy and covers tools discovered at runtime.
@@ -152,13 +158,14 @@ def build_session_mcp_config(
         config["permission"] = permission
     if mcp_servers:
         # Credentials are injected by the proxy; the only header we set is the
-        # session tag the proxy consumes and strips.
+        # signed session tag the proxy verifies, consumes, and strips.
+        signed_tag = sign_session_tag(session_id)
         config["mcp"] = {
             server.key: {
                 "type": "remote",
                 "url": server.url,
                 "enabled": True,
-                "headers": {MCP_SESSION_TAG_HEADER: session_id},
+                "headers": {MCP_SESSION_TAG_HEADER: signed_tag},
             }
             for server in mcp_servers
         }
