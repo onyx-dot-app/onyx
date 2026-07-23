@@ -948,7 +948,7 @@ def fetch_chat_file(
 
 
 @router.get("/search", tags=PUBLIC_API_TAGS)
-async def search_chats(
+def search_chats(
     query: str | None = Query(None),
     page: int = Query(1),
     page_size: int = Query(10),
