@@ -1,13 +1,15 @@
 """DB operations for skill rows.
 
-Access model:
-- `VIEW` excludes external-app-backed rows, applies normal ownership and
-  sharing visibility, and lets admins view all remaining skills.
-- `EDIT` is the skill mutation policy. It excludes external-app-backed
-  and built-in rows, and only returns rows the user can modify.
-- `USE` is the runtime/sandbox policy. It applies user visibility without an
-  admin bypass, resolves per-user enablement for ordinary skills, includes
-  authenticated external-app-backed rows, and hides unavailable built-ins.
+Management authorization:
+- `VIEW` includes associated custom rows but excludes associated built-in
+  provider rows, applies normal ownership and sharing visibility, and lets
+  admins view all remaining skills.
+- `EDIT` is the skill mutation policy. It excludes built-in rows and only
+  returns custom rows the user can modify.
+
+Runtime selection is deliberately separate from authorization. It applies
+visibility without an admin bypass, user enablement for custom skills, app
+readiness for associated skills, validity, and built-in availability.
 
 Delete is a hard delete — `delete_skill` removes the row and returns its
 `bundle_file_id` so the caller can drop the blob from the file store
@@ -43,9 +45,11 @@ from sqlalchemy.orm import Session, selectinload
 from onyx.auth.schemas import UserRole
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus, SkillSharePermission
-from onyx.db.external_app import available_external_app_skill_ids_for_user
+from onyx.db.external_app import (
+    SkillExternalAppDependencyState,
+    get_skill_external_app_dependencies,
+)
 from onyx.db.models import (
-    ExternalApp,
     ExternalApp__Skill,
     Sandbox,
     Skill,
@@ -61,10 +65,9 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
 
 
-class SkillAccessPolicy(str, Enum):
+class SkillManagementPolicy(str, Enum):
     VIEW = "view"
     EDIT = "edit"
-    USE = "use"
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,7 @@ class SkillValidityUpdate:
 class SkillUserState:
     enabled: bool
     can_toggle: bool
+    external_app_dependency: SkillExternalAppDependencyState | None
 
 
 def _is_shared_with_user(
@@ -214,66 +218,39 @@ def _skill_select_with_eager_load(*, order_by_name: bool) -> Select[tuple[Skill]
     return stmt
 
 
-def _skill_select_for_access_policy(
+def _has_external_app_dependency() -> ColumnElement[bool]:
+    return exists().where(ExternalApp__Skill.skill_id == Skill.id)
+
+
+def _skill_select_for_management_policy(
     *,
-    policy: SkillAccessPolicy,
+    policy: SkillManagementPolicy,
     db_session: Session,
     user: User,
     order_by_name: bool,
 ) -> Select[tuple[Skill]]:
-    stmt = (
-        _skill_select_with_eager_load(order_by_name=order_by_name)
-        .outerjoin(
-            ExternalApp__Skill,
-            ExternalApp__Skill.skill_id == Skill.id,
+    stmt = _skill_select_with_eager_load(order_by_name=order_by_name)
+    if policy == SkillManagementPolicy.VIEW:
+        # Associated custom skills are first-class; provider-owned built-ins
+        # remain represented only through the Apps surfaces.
+        stmt = stmt.where(
+            or_(
+                Skill.built_in_skill_id.is_(None),
+                ~_has_external_app_dependency(),
+            )
         )
-        .outerjoin(
-            ExternalApp,
-            ExternalApp.id == ExternalApp__Skill.external_app_id,
-        )
-    )
-    if policy == SkillAccessPolicy.VIEW:
-        stmt = stmt.where(ExternalApp.id.is_(None))
         if user.role == UserRole.ADMIN:
             return stmt
         stmt = stmt.where(skill_visible_to_user(user))
         return _exclude_unavailable_built_in_skills(stmt, db_session)
 
-    if policy == SkillAccessPolicy.EDIT:
-        stmt = stmt.where(
-            ExternalApp.id.is_(None),
-            Skill.built_in_skill_id.is_(None),
-        )
+    if policy == SkillManagementPolicy.EDIT:
+        stmt = stmt.where(Skill.built_in_skill_id.is_(None))
         if user.role == UserRole.ADMIN:
             return stmt
         return stmt.where(_is_editable_by_user(user))
 
-    if policy == SkillAccessPolicy.USE:
-        available_external_app_skill_ids = available_external_app_skill_ids_for_user(
-            db_session, user
-        )
-        enabled_in_sandbox = or_(
-            and_(
-                ExternalApp.id.isnot(None),
-                Skill.id.in_(available_external_app_skill_ids),
-            ),
-            and_(
-                ExternalApp.id.is_(None),
-                _is_enabled_for_user(user),
-            ),
-        )
-        stmt = stmt.where(
-            enabled_in_sandbox,
-            skill_visible_to_user(user),
-            or_(
-                Skill.built_in_skill_id.isnot(None),
-                Skill.is_valid.is_(None),
-                Skill.is_valid.is_(True),
-            ),
-        )
-        return _exclude_unavailable_built_in_skills(stmt, db_session)
-
-    raise ValueError(f"Unknown skill access policy: {policy}")
+    raise ValueError(f"Unknown skill management policy: {policy}")
 
 
 def affected_user_ids_for_skill(skill: Skill, db_session: Session) -> set[UUID]:
@@ -325,11 +302,11 @@ def affected_user_ids_for_skill(skill: Skill, db_session: Session) -> set[UUID]:
 
 def list_skills(
     *,
-    policy: SkillAccessPolicy,
+    policy: SkillManagementPolicy,
     db_session: Session,
     user: User,
 ) -> list[Skill]:
-    stmt = _skill_select_for_access_policy(
+    stmt = _skill_select_for_management_policy(
         policy=policy,
         db_session=db_session,
         user=user,
@@ -338,15 +315,50 @@ def list_skills(
     return list(db_session.scalars(stmt))
 
 
+def list_runtime_skills_for_user(
+    *,
+    db_session: Session,
+    user: User,
+) -> list[Skill]:
+    """Return the user's effective sandbox skills.
+
+    Management visibility, user selection, bundle validity, built-in
+    availability, and external-app readiness remain independent inputs.
+    """
+    external_app_dependencies = get_skill_external_app_dependencies(db_session, user)
+    ready_external_app_skill_ids = [
+        skill_id
+        for skill_id, dependency in external_app_dependencies.items()
+        if dependency.ready
+    ]
+    has_external_app_dependency = _has_external_app_dependency()
+    stmt = _skill_select_with_eager_load(order_by_name=True).where(
+        skill_visible_to_user(user),
+        _is_enabled_for_user(user),
+        or_(
+            ~has_external_app_dependency,
+            Skill.id.in_(ready_external_app_skill_ids),
+        ),
+        or_(
+            Skill.built_in_skill_id.isnot(None),
+            Skill.is_valid.is_(None),
+            Skill.is_valid.is_(True),
+        ),
+    )
+    return list(
+        db_session.scalars(_exclude_unavailable_built_in_skills(stmt, db_session))
+    )
+
+
 def fetch_skill(
     skill_id: UUID,
     *,
-    policy: SkillAccessPolicy,
+    policy: SkillManagementPolicy,
     db_session: Session,
     user: User,
     lock_for_update: bool = False,
 ) -> Skill | None:
-    stmt = _skill_select_for_access_policy(
+    stmt = _skill_select_for_management_policy(
         policy=policy,
         db_session=db_session,
         user=user,
@@ -360,29 +372,7 @@ def fetch_skill(
 def add_new_skill__no_commit(
     skill: Skill,
     db_session: Session,
-    *,
-    is_external_app_backing: bool = False,
 ) -> Skill:
-    # App-backed skills share the sandbox directory namespace until their
-    # lifecycle is decoupled, so they cannot share a name with another skill.
-    existing_name = select(Skill.id).where(Skill.name == skill.name)
-    if not is_external_app_backing:
-        existing_name = existing_name.join(
-            ExternalApp__Skill,
-            ExternalApp__Skill.skill_id == Skill.id,
-        ).join(
-            ExternalApp,
-            ExternalApp.id == ExternalApp__Skill.external_app_id,
-        )
-    if db_session.scalar(existing_name.limit(1)) is not None:
-        conflicting_resource = (
-            "another skill" if is_external_app_backing else "an external app"
-        )
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"The skill name '{skill.name}' is already used by {conflicting_resource}.",
-        )
-
     db_session.add(skill)
     db_session.flush()
     return skill
@@ -451,6 +441,19 @@ def set_skill_public_permission(
     public_permission: SkillSharePermission | None,
     db_session: Session,
 ) -> None:
+    is_associated = db_session.scalar(
+        select(
+            exists().where(
+                ExternalApp__Skill.skill_id == skill.id,
+            )
+        )
+    )
+    if is_associated and public_permission != SkillSharePermission.VIEWER:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Skills associated with an external app must remain visible to the "
+            "organization with viewer access.",
+        )
     skill.public_permission = public_permission
     db_session.flush()
 
@@ -464,6 +467,11 @@ def skill_user_states(
     if not requested_ids:
         return {}
 
+    external_app_dependencies = get_skill_external_app_dependencies(
+        db_session,
+        user,
+        requested_ids,
+    )
     rows = db_session.execute(
         select(
             Skill.id,
@@ -478,7 +486,14 @@ def skill_user_states(
     return {
         skill_id: SkillUserState(
             enabled=enabled,
-            can_toggle=visible and supports_preference,
+            can_toggle=visible
+            and supports_preference
+            and (
+                enabled
+                or skill_id not in external_app_dependencies
+                or external_app_dependencies[skill_id].ready
+            ),
+            external_app_dependency=external_app_dependencies.get(skill_id),
         )
         for skill_id, enabled, visible, supports_preference in rows
     }
@@ -494,7 +509,7 @@ def set_skill_enabled_for_user(
 ) -> Skill:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
         lock_for_update=True,

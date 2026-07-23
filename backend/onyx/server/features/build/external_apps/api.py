@@ -17,6 +17,7 @@ from onyx.db.external_app import (
     associate_built_in_skill__no_commit,
     create_external_app,
     delete_external_app,
+    disconnect_external_app_for_user,
     get_external_app_by_id,
     get_external_apps,
     get_skills_for_external_app,
@@ -235,9 +236,10 @@ def update_external_app_admin(
         ),
         action_policies=action_policies,
     )
-    # Push before commit so a push failure rolls back the change.
+    affected: set[UUID] = set()
     for skill in app.associated_skills:
-        push_skill_to_affected_sandboxes(skill, db_session)
+        affected.update(affected_user_ids_for_skill(skill, db_session))
+    push_skills_for_users(affected, db_session)
     db_session.commit()
     # ``action_policies`` is exactly what was persisted — no need to re-read.
     return _to_admin_response(app, stored=action_policies)
@@ -311,10 +313,10 @@ def delete_external_app_admin(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    """Delete an external app, cascading to its user-credential rows. 404 if
-    absent.
+    """Delete an app and its provider-owned skills. Associated custom skills
+    are detached and left disabled. Returns 404 if the app is absent.
     """
-    # Resolve affected users before the delete cascades the skill row away.
+    # Resolve affected users before deleting the associations.
     app = _get_app_or_404(db_session, external_app_id)
     if MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None:
         raise OnyxError(
@@ -364,6 +366,23 @@ def upsert_user_credentials(
     )
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes now.
+    push_skills_for_users({user.id}, db_session)
+    db_session.commit()
+
+
+@router.delete("/apps/{external_app_id}/credentials")
+def disconnect_user_from_external_app(
+    external_app_id: int,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Disconnect the calling user and disable the app's associated skills."""
+    _get_app_or_404(db_session, external_app_id)
+    disconnect_external_app_for_user(
+        db_session,
+        external_app_id=external_app_id,
+        user_id=user.id,
+    )
     push_skills_for_users({user.id}, db_session)
     db_session.commit()
 

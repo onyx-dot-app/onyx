@@ -1,4 +1,6 @@
 import re
+from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
 
@@ -22,6 +24,7 @@ from onyx.db.models import (
     ExternalAppUserCredential,
     Skill,
     User,
+    UserSkillPreference,
 )
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -34,6 +37,14 @@ from onyx.utils.sensitive import SensitiveValue
 logger = setup_logger()
 
 _PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
+
+
+@dataclass(frozen=True)
+class SkillExternalAppDependencyState:
+    external_app_id: int
+    name: str
+    enabled: bool
+    ready: bool
 
 
 def _placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:
@@ -175,20 +186,6 @@ def get_skills_for_external_app(
     )
 
 
-def get_first_skill_for_external_app(
-    db_session: Session,
-    external_app_id: int,
-) -> Skill:
-    """Return the first associated skill for transitional bundle operations."""
-    skills = get_skills_for_external_app(db_session, external_app_id)
-    if not skills:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            f"External app {external_app_id} has no associated skills.",
-        )
-    return skills[0]
-
-
 def get_connectable_apps_for_user(
     db_session: Session,
     user: User,
@@ -206,12 +203,13 @@ def get_connectable_apps_for_user(
     ]
 
 
-def available_external_app_skill_ids_for_user(
+def get_skill_external_app_dependencies(
     db_session: Session,
     user: User,
-) -> list[UUID]:
-    """Return app-backed skill IDs whose credentials are ready for this user."""
-    rows = db_session.execute(
+    skill_ids: Iterable[UUID] | None = None,
+) -> dict[UUID, SkillExternalAppDependencyState]:
+    """Return dependency state for all or selected associated skills."""
+    stmt = (
         select(ExternalApp__Skill.skill_id, ExternalApp, ExternalAppUserCredential)
         .join(
             ExternalApp,
@@ -225,13 +223,23 @@ def available_external_app_skill_ids_for_user(
             ),
             isouter=True,
         )
-        .where(ExternalApp.enabled.is_(True))
-    ).all()
-    return [
-        skill_id
+    )
+    if skill_ids is not None:
+        requested_ids = set(skill_ids)
+        if not requested_ids:
+            return {}
+        stmt = stmt.where(ExternalApp__Skill.skill_id.in_(requested_ids))
+
+    rows = db_session.execute(stmt).all()
+    return {
+        skill_id: SkillExternalAppDependencyState(
+            external_app_id=app.id,
+            name=app.name,
+            enabled=app.enabled,
+            ready=app.enabled and is_user_authenticated_for_app(app, credential),
+        )
         for skill_id, app, credential in rows
-        if is_user_authenticated_for_app(app, credential)
-    ]
+    }
 
 
 def get_external_apps(
@@ -370,7 +378,6 @@ def associate_built_in_skill__no_commit(
                 public_permission=SkillSharePermission.VIEWER,
             ),
             db_session,
-            is_external_app_backing=True,
         )
     elif get_external_app_by_skill_id(db_session, skill.id) is not None:
         raise OnyxError(
@@ -476,12 +483,11 @@ def _write_policies__no_commit(
 def delete_external_app(
     db_session: Session,
     external_app_id: int,
-) -> list[str]:
-    """Delete the app and its currently associated skills.
+) -> None:
+    """Delete an app, detach custom skills, and remove provider-owned skills.
 
-    Flush only — the caller commits after pushing, so a push failure rolls back.
-    Returns bundle file IDs for post-commit cleanup. Raises
-    ``OnyxError(NOT_FOUND)`` if absent.
+    Detached custom skills remain organization-visible but become ordinary
+    disabled skills. Flush only; the caller owns the transaction.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -491,12 +497,19 @@ def delete_external_app(
         )
 
     skills = get_skills_for_external_app(db_session, app.id)
-    bundle_file_ids = [skill.bundle_file_id for skill in skills if skill.bundle_file_id]
+    custom_skill_ids = [skill.id for skill in skills if skill.built_in_skill_id is None]
+    if custom_skill_ids:
+        db_session.execute(
+            delete(UserSkillPreference).where(
+                UserSkillPreference.skill_id.in_(custom_skill_ids)
+            )
+        )
+
     db_session.delete(app)
     for skill in skills:
-        db_session.delete(skill)
+        if skill.built_in_skill_id is not None:
+            db_session.delete(skill)
     db_session.flush()
-    return bundle_file_ids
 
 
 def upsert_external_app_user_credential(
@@ -565,18 +578,29 @@ def upsert_external_app_user_credential(
     return cred
 
 
-def delete_external_app_user_credential(
+def disconnect_external_app_for_user(
     db_session: Session,
     *,
     external_app_id: int,
     user_id: UUID,
 ) -> None:
-    """Delete the user's stored credentials for one app, and commit (no-op if
-    absent). Used when a refresh terminally fails so the user reconnects."""
+    """Remove a user's app credentials and associated skill preferences.
+
+    Flush only; the caller refreshes the user's sandbox and commits.
+    """
     db_session.execute(
         delete(ExternalAppUserCredential).where(
             ExternalAppUserCredential.external_app_id == external_app_id,
             ExternalAppUserCredential.user_id == user_id,
         )
     )
-    db_session.commit()
+    associated_skill_ids = select(ExternalApp__Skill.skill_id).where(
+        ExternalApp__Skill.external_app_id == external_app_id
+    )
+    db_session.execute(
+        delete(UserSkillPreference).where(
+            UserSkillPreference.user_id == user_id,
+            UserSkillPreference.skill_id.in_(associated_skill_ids),
+        )
+    )
+    db_session.flush()

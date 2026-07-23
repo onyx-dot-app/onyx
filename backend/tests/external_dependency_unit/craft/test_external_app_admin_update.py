@@ -15,7 +15,7 @@ import onyx.server.features.build.external_apps.api as api
 from onyx.db.enums import ExternalAppType
 from onyx.db.external_app import (
     get_external_app_by_id,
-    get_first_skill_for_external_app,
+    get_skills_for_external_app,
 )
 from onyx.db.models import ExternalApp, Skill, User
 from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
@@ -61,12 +61,11 @@ def test_patch_updates_config_on_non_managed_built_in(
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
+    monkeypatch.setattr(api, "push_skills_for_users", _noop)
     app = _slack_app(db_session)
     app_id = app.id
-    original_skill_description = get_first_skill_for_external_app(
-        db_session, app_id
-    ).description
+    [original_skill] = get_skills_for_external_app(db_session, app_id)
+    original_skill_description = original_skill.description
 
     new_patterns = ["https://slack.com/api/chat.postMessage"]
     new_auth = {"Authorization": "Bearer {access_token}"}
@@ -89,7 +88,7 @@ def test_patch_updates_config_on_non_managed_built_in(
     db_session.expire_all()
     stored = get_external_app_by_id(db_session, app_id)
     assert stored is not None
-    skill = get_first_skill_for_external_app(db_session, app_id)
+    [skill] = get_skills_for_external_app(db_session, app_id)
     assert stored.name == "Slack — Eng"
     assert skill.name == "slack"
     assert skill.description == original_skill_description
@@ -108,14 +107,12 @@ def test_patch_rolls_back_when_push_fails(
     """Push failure leaves the app update uncommitted."""
     app = _slack_app(db_session)
     app_id = app.id
-    original_description = get_first_skill_for_external_app(
-        db_session, app_id
-    ).description
+    original_name = app.name
 
     def _boom(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("push failed")
 
-    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _boom)
+    monkeypatch.setattr(api, "push_skills_for_users", _boom)
 
     with pytest.raises(RuntimeError):
         api.update_external_app_admin(
@@ -128,7 +125,4 @@ def test_patch_rolls_back_when_push_fails(
     db_session.rollback()
     stored = get_external_app_by_id(db_session, app_id)
     assert stored is not None
-    assert (
-        get_first_skill_for_external_app(db_session, app_id).description
-        == original_description
-    )
+    assert stored.name == original_name
