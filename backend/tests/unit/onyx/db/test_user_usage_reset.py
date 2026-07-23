@@ -6,20 +6,20 @@ from collections.abc import Generator
 from typing import cast
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy import Table
+from sqlalchemy import Table, create_engine
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from onyx.db.models import UserUsage
-from onyx.db.user_usage import USER_USAGE_BUCKET_SECONDS
-from onyx.db.user_usage import get_user_cost_cents_since
-from onyx.db.user_usage import record_user_usage
-from onyx.db.user_usage import reset_user_usage
+from onyx.db.user_usage import (
+    USER_USAGE_BUCKET_SECONDS,
+    get_user_cost_cents_since,
+    record_user_usage,
+    reset_user_usage,
+)
 from onyx.utils.datetime import get_window_start
 
 

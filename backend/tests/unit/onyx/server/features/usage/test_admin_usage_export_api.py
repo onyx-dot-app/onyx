@@ -265,6 +265,7 @@ class TestExportEndpoint:
         assert resp.status_code == 400
         assert resp.json()["error_code"] == "INVALID_INPUT"
 
+
 class TestResetUsageEndpoint:
     def test_unknown_user_is_404(
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch

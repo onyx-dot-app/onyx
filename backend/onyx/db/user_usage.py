@@ -7,10 +7,12 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from math import ceil
+from typing import Any, cast
 
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User, User__UserGroup, UserUsage
@@ -258,11 +260,14 @@ def reset_user_usage(db_session: Session, user_id: str) -> int:
     window_start = get_window_start(
         datetime.now(timezone.utc), USER_USAGE_BUCKET_SECONDS
     )
-    result = db_session.execute(
-        delete(UserUsage).where(
-            UserUsage.user_id == user_id,
-            UserUsage.window_start == window_start,
-        )
+    result = cast(
+        CursorResult[Any],
+        db_session.execute(
+            delete(UserUsage).where(
+                UserUsage.user_id == user_id,
+                UserUsage.window_start == window_start,
+            )
+        ),
     )
     db_session.commit()
     return result.rowcount or 0
