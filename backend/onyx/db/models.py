@@ -5938,6 +5938,41 @@ class BuildSession(Base):
     )
 
 
+class SlackThread__BuildSession(Base):
+    """Maps a Slack thread to the BuildSession handling it (one thread per session)."""
+
+    __tablename__ = "slack_thread__build_session"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    slack_team_id: Mapped[str] = mapped_column(String, nullable=False)
+    channel_id: Mapped[str] = mapped_column(String, nullable=False)
+    thread_ts: Mapped[str] = mapped_column(String, nullable=False)
+    build_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("build_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    session: Mapped["BuildSession"] = relationship("BuildSession")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "slack_team_id",
+            "channel_id",
+            "thread_ts",
+            name="uq_slack_thread__build_session_thread",
+        ),
+        UniqueConstraint(
+            "build_session_id", name="uq_slack_thread__build_session_session"
+        ),
+    )
+
+
 class Sandbox(Base):
     """Stores sandbox container metadata for users (one sandbox per user)."""
 
