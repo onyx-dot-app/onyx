@@ -190,9 +190,14 @@ export async function upsertUserCredentials(
   }
 }
 
-/** "Disconnect" by clearing stored user credentials. */
 export async function disconnectUserFromApp(
   externalAppId: number
 ): Promise<void> {
-  return upsertUserCredentials(externalAppId, {});
+  const res = await fetch(
+    `${BUILD_API_BASE}/apps/${externalAppId}/credentials`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Failed to disconnect app"));
+  }
 }

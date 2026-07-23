@@ -1,4 +1,7 @@
-import { createCustomExternalApp } from "@/app/craft/services/externalAppsService";
+import {
+  createCustomExternalApp,
+  disconnectUserFromApp,
+} from "@/app/craft/services/externalAppsService";
 
 describe("createCustomExternalApp", () => {
   beforeEach(() => {
@@ -26,5 +29,14 @@ describe("createCustomExternalApp", () => {
     const request = jest.mocked(global.fetch).mock.calls[0]![1]!;
     expect(request.body).not.toBeInstanceOf(FormData);
     expect(String(request.body)).not.toContain("bundle");
+  });
+
+  it("disconnects through the credential deletion endpoint", async () => {
+    await disconnectUserFromApp(17);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/build/apps/17/credentials",
+      { method: "DELETE" }
+    );
   });
 });

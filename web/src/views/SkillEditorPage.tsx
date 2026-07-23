@@ -75,6 +75,13 @@ function getSharingStatus(skill: SkillEditableDetail): {
   description: string;
   color: "blue" | "gray" | "purple";
 } {
+  if (skill.external_app) {
+    return {
+      title: "Organization",
+      description: `Organization-wide viewer access is required while this skill is associated with app “${skill.external_app.name}”.`,
+      color: "blue",
+    };
+  }
   if (skill.public_permission !== null) {
     return {
       title: "Organization",
@@ -663,6 +670,26 @@ export default function SkillEditorPage({
                     />
                     <Card border="solid" rounding="lg">
                       <Section>
+                        {skill.external_app && (
+                          <InputHorizontal
+                            title="External app"
+                            description={
+                              skill.external_app.ready
+                                ? `This skill uses app “${skill.external_app.name}”.`
+                                : skill.external_app.enabled
+                                  ? `Connect app “${skill.external_app.name}” from the Apps page to use this skill.`
+                                  : `App “${skill.external_app.name}” is disabled by an administrator.`
+                            }
+                            center
+                          >
+                            <Tag
+                              title={skill.external_app.name}
+                              color={
+                                skill.external_app.ready ? "blue" : "amber"
+                              }
+                            />
+                          </InputHorizontal>
+                        )}
                         {sharingStatus && (
                           <InputHorizontal
                             title="Sharing"
