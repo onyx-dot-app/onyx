@@ -6,6 +6,8 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+from onyx.utils.datetime import datetime_to_utc
+
 
 class Header(str, Enum):
     SUBJECT_HEADER = "subject"
@@ -27,7 +29,8 @@ class EmailHeaders(BaseModel):
     subject: str
     sender: str
     recipients: str | None
-    date: datetime
+    # `None` when the email has no (or an unparseable) `Date` header.
+    date: datetime | None
 
     @classmethod
     def from_email_msg(cls, email_msg: Message) -> "EmailHeaders":
@@ -39,7 +42,14 @@ class EmailHeaders(BaseModel):
             decoded_value, encoding = email.header.decode_header(value)[0]
             if isinstance(decoded_value, bytes):
                 encoding = encoding or "utf-8"
-                return decoded_value.decode(encoding, errors="replace")
+                try:
+                    return decoded_value.decode(encoding, errors="replace")
+                except LookupError:
+                    # Some senders emit non-standard charset labels (e.g. the
+                    # RFC 1428 placeholder `unknown-8bit`) that Python's codec
+                    # registry doesn't recognize. Fall back to latin-1, which
+                    # maps every byte 0-255 to a code point and never raises.
+                    return decoded_value.decode("latin-1", errors="replace")
             elif isinstance(decoded_value, str):
                 return decoded_value
             else:
@@ -49,9 +59,13 @@ class EmailHeaders(BaseModel):
             if not date_str:
                 return None
             try:
-                return email.utils.parsedate_to_datetime(date_str)
+                parsed = email.utils.parsedate_to_datetime(date_str)
             except (TypeError, ValueError):
                 return None
+            # `Document.doc_updated_at` must be tz-aware UTC; `parsedate_to_datetime`
+            # returns the sender's own offset (or a naive datetime for `-0000`),
+            # so normalize with the repo's canonical UTC helper.
+            return datetime_to_utc(parsed)
 
         message_id = _decode(header=Header.MESSAGE_ID_HEADER)
         # It's possible for the subject line to not exist or be an empty string.
