@@ -293,7 +293,7 @@ func TestAPIURLEmptyPrefix(t *testing.T) {
 	}
 }
 
-func TestOnyxWebURL(t *testing.T) {
+func TestOnyxBaseURL(t *testing.T) {
 	t.Setenv(EnvAPIPrefix, "/api")
 	cases := []struct {
 		input string
@@ -306,9 +306,9 @@ func TestOnyxWebURL(t *testing.T) {
 		{"http://localhost:8080", "http://localhost:8080"},
 	}
 	for _, tc := range cases {
-		got := OnyxWebURL(tc.input)
+		got := OnyxBaseURL(tc.input)
 		if got != tc.want {
-			t.Errorf("OnyxWebURL(%q) = %q, want %q", tc.input, got, tc.want)
+			t.Errorf("OnyxBaseURL(%q) = %q, want %q", tc.input, got, tc.want)
 		}
 	}
 }
