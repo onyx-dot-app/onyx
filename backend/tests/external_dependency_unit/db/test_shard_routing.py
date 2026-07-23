@@ -405,3 +405,91 @@ def test_propagation_window_exceeds_the_poll_interval(
         shard_map_propagation_seconds()
         > shard_version.ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS
     )
+
+
+def _schema_exists(engine: Engine, schema: str) -> bool:
+    with engine.connect() as conn:
+        return (
+            conn.execute(
+                text(
+                    "SELECT 1 FROM information_schema.schemata WHERE schema_name = :s"
+                ),
+                {"s": schema},
+            ).scalar()
+            is not None
+        )
+
+
+def test_schema_creation_follows_the_shard_map(
+    two_shards: dict[str, Any],  # noqa: ARG001
+) -> None:
+    """DDL must land in the same database the tenant's data sessions route to.
+
+    Without this, `setup_tenant` creates the schema on the default shard and then
+    seeds it through a shard-routed session — writing into a schema that does not
+    exist on that database.
+    """
+    from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
+
+    tenant_id = f"tenant_{uuid4()}"
+    catalog_engine = get_catalog_engine()
+    with catalog_engine.connect() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO public.tenant_shard (tenant_id, shard_name) "
+                "VALUES (:t, :s)"
+            ),
+            {"t": tenant_id, "s": SECOND_SHARD},
+        )
+        conn.commit()
+    invalidate_shard_cache()
+
+    default_engine = shard_registry.get_engine_for_shard("default")
+    second_engine = shard_registry.get_engine_for_shard(SECOND_SHARD)
+    try:
+        create_schema_if_not_exists(tenant_id)
+
+        assert _schema_exists(second_engine, tenant_id)
+        assert not _schema_exists(default_engine, tenant_id)
+    finally:
+        with second_engine.connect() as conn:
+            conn.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
+            conn.commit()
+        with catalog_engine.connect() as conn:
+            conn.execute(
+                text("DELETE FROM public.tenant_shard WHERE tenant_id = :t"),
+                {"t": tenant_id},
+            )
+            conn.commit()
+
+
+def test_drop_schema_follows_the_shard_map(two_shards: dict[str, Any]) -> None:
+    """Dropping must target the shard that actually holds the schema.
+
+    A default-pinned drop would silently no-op, leaving the real schema behind.
+    """
+    from ee.onyx.server.tenants.schema_management import drop_schema
+
+    tenant_b = two_shards["tenant_b"]
+    second_engine = shard_registry.get_engine_for_shard(SECOND_SHARD)
+    assert _schema_exists(second_engine, tenant_b)
+
+    drop_schema(tenant_b)
+
+    assert not _schema_exists(second_engine, tenant_b)
+
+
+def test_alembic_url_targets_the_tenants_shard(two_shards: dict[str, Any]) -> None:
+    """The migration runner must be pointed at the tenant's database.
+
+    Checked at the URL level because running the full tree per test is far too slow.
+    """
+    from ee.onyx.server.tenants.schema_management import _tenant_connection_string
+
+    url_a = _tenant_connection_string(two_shards["tenant_a"])
+    url_b = _tenant_connection_string(two_shards["tenant_b"])
+
+    assert url_a.endswith(f"/{POSTGRES_DB}")
+    assert url_b.endswith(f"/{two_shards['second_db']}")
+    # Byte-identical to the historical call for the default shard.
+    assert url_a == build_connection_string()

@@ -8,10 +8,28 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema
 
-from onyx.db.engine.sql_engine import build_connection_string, get_sqlalchemy_engine
+from onyx.db.engine.shard_registry import get_shard_spec
+from onyx.db.engine.shard_routing import get_engine_for_tenant, get_shard_for_tenant
+from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.tenant_utils import validate_tenant_id
 
 logger = logging.getLogger(__name__)
+
+
+def _tenant_connection_string(tenant_id: str) -> str:
+    """Alembic URL for the database holding this tenant's schema.
+
+    For the default shard this is byte-identical to ``build_connection_string()``,
+    since the default shard's spec is derived from the same POSTGRES_* settings.
+    """
+    spec = get_shard_spec(get_shard_for_tenant(tenant_id))
+    return build_connection_string(
+        user=spec.user,
+        password=spec.password,
+        host=spec.host,
+        port=spec.port,
+        db=spec.db,
+    )
 
 
 def run_alembic_migrations(schema_name: str) -> None:
@@ -24,7 +42,9 @@ def run_alembic_migrations(schema_name: str) -> None:
 
         # Configure Alembic
         alembic_cfg = Config(alembic_ini_path)
-        alembic_cfg.set_main_option("sqlalchemy.url", build_connection_string())
+        alembic_cfg.set_main_option(
+            "sqlalchemy.url", _tenant_connection_string(schema_name)
+        )
         alembic_cfg.set_main_option(
             "script_location", os.path.join(root_dir, "alembic")
         )
@@ -54,7 +74,7 @@ def run_alembic_migrations(schema_name: str) -> None:
 
 
 def create_schema_if_not_exists(tenant_id: str) -> bool:
-    with Session(get_sqlalchemy_engine()) as db_session:
+    with Session(get_engine_for_tenant(tenant_id)) as db_session:
         with db_session.begin():
             result = db_session.execute(
                 text(
@@ -79,7 +99,7 @@ def drop_schema(tenant_id: str) -> None:
     if not validate_tenant_id(tenant_id):
         raise ValueError(f"Invalid tenant_id format: {tenant_id}")
 
-    with get_sqlalchemy_engine().connect() as connection:
+    with get_engine_for_tenant(tenant_id).connect() as connection:
         with connection.begin():
             # Use string formatting with validated tenant_id (safe after validation)
             connection.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
@@ -90,7 +110,7 @@ def get_current_alembic_version(tenant_id: str) -> str:
     from alembic.runtime.migration import MigrationContext
     from sqlalchemy import text
 
-    engine = get_sqlalchemy_engine()
+    engine = get_engine_for_tenant(tenant_id)
 
     # Set the search path to the tenant's schema
     with engine.connect() as connection:

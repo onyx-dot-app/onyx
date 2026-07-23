@@ -258,6 +258,21 @@ class ShardRegistry:
             cls._engines = {}
 
 
+def get_shard_spec(shard_name: str) -> ShardSpec:
+    """Connection coordinates for one shard.
+
+    For callers that need to reach a shard without going through an ``Engine`` —
+    notably Alembic, which wants a URL string.
+    """
+    specs = get_shard_specs()
+    spec = specs.get(shard_name)
+    if spec is None:
+        raise ShardConfigurationError(
+            f"No configuration for shard '{shard_name}' (known: {sorted(specs)})"
+        )
+    return spec
+
+
 def get_engine_for_shard(shard_name: str) -> Engine:
     return ShardRegistry.get_engine(shard_name)
 
