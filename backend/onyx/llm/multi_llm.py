@@ -87,6 +87,16 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
 # still advertises temperature as supported).
 _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
 
+# Best-effort tuning kwargs, never worth failing a chat over. _completion
+# retries provider rejections without them: reasoning keys first, then all.
+# Semantics-changing keys (tools, tool_choice, messages) are never stripped.
+_REASONING_KWARG_KEYS = frozenset(
+    {"thinking", "output_config", "reasoning", "reasoning_effort"}
+)
+_BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset(
+    {"temperature", "stream_options"}
+)
+
 # Named tiers spanning Claude's naming schemes, including the Claude 5 line whose
 # version digit can precede or follow the tier ("claude-sonnet-5" vs
 # "claude-5-sonnet").
@@ -527,7 +537,7 @@ class LitellmLLM(LLM):
         client: "HTTPHandler | None" = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
-        from litellm.exceptions import RateLimitError, Timeout
+        from litellm.exceptions import BadRequestError, RateLimitError, Timeout
 
         from onyx.llm.litellm_singleton import litellm
 
@@ -699,6 +709,9 @@ class LitellmLLM(LLM):
                     ReasoningEffort.HIGH,
                 ]:
                     optional_kwargs["reasoning_effort"] = reasoning_effort.value
+                elif reasoning_effort is ReasoningEffort.XHIGH:
+                    # litellm's generic reasoning_effort path has no xhigh, clamp to high.
+                    optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
 
@@ -808,36 +821,63 @@ class LitellmLLM(LLM):
             if tools and tool_choice is not None:
                 optional_kwargs["tool_choice"] = tool_choice
 
-            # Injection disabled means no env writer exists anywhere in the
-            # process, so skip the rwlock entirely.
-            env_ctx: AbstractContextManager[None]
-            if _env_injection_enabled():
-                env_ctx = temporary_env_and_lock(self._env_only_custom_config)
-            else:
-                if self._env_only_custom_config:
-                    _warn_dropped_env_only_keys(
-                        self._model_provider,
-                        tuple(sorted(self._env_only_custom_config)),
-                    )
-                env_ctx = nullcontext()
-
-            with env_ctx:
-                response = litellm.completion(
-                    mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
-                    model=model,
-                    base_url=self._api_base or None,
-                    api_version=api_version,
-                    custom_llm_provider=self._custom_llm_provider or None,
-                    messages=messages,
-                    tools=tools,
-                    stream=stream,
-                    timeout=timeout_override or self._timeout,
-                    max_tokens=max_tokens,
-                    client=client,
-                    **optional_kwargs,
-                    **passthrough_kwargs,
+            if not _env_injection_enabled() and self._env_only_custom_config:
+                _warn_dropped_env_only_keys(
+                    self._model_provider,
+                    tuple(sorted(self._env_only_custom_config)),
                 )
-            return response
+
+            def _call_litellm(opts: dict[str, Any]) -> Any:
+                # Injection disabled means no env writer exists anywhere in
+                # the process, so skip the rwlock entirely. Built per attempt
+                # because the context manager is single-use.
+                env_ctx: AbstractContextManager[None] = (
+                    temporary_env_and_lock(self._env_only_custom_config)
+                    if _env_injection_enabled()
+                    else nullcontext()
+                )
+                with env_ctx:
+                    return litellm.completion(
+                        mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
+                        model=model,
+                        base_url=self._api_base or None,
+                        api_version=api_version,
+                        custom_llm_provider=self._custom_llm_provider or None,
+                        messages=messages,
+                        tools=tools,
+                        stream=stream,
+                        timeout=timeout_override or self._timeout,
+                        max_tokens=max_tokens,
+                        client=client,
+                        **opts,
+                        **passthrough_kwargs,
+                    )
+
+            # Retry ladder for provider 400s: drop reasoning kwargs, then every
+            # best-effort kwarg. Unknown models or capability drift degrade to
+            # provider defaults with a warning instead of failing the message.
+            attempts = [optional_kwargs]
+            for strip_keys in (_REASONING_KWARG_KEYS, _BEST_EFFORT_KWARG_KEYS):
+                stripped = {
+                    k: v for k, v in optional_kwargs.items() if k not in strip_keys
+                }
+                if len(stripped) < len(attempts[-1]):
+                    attempts.append(stripped)
+
+            for i, opts in enumerate(attempts):
+                try:
+                    return _call_litellm(opts)
+                except BadRequestError as e:
+                    if i == len(attempts) - 1:
+                        raise
+                    logger.warning(
+                        "Provider rejected request for model %s. Retrying "
+                        "without %s: %s",
+                        model,
+                        sorted(set(opts) - set(attempts[i + 1])),
+                        e,
+                    )
+            raise RuntimeError("unreachable: retry ladder always returns or raises")
         except Exception as e:
             # for break pointing
             if isinstance(e, Timeout):

@@ -31,6 +31,37 @@ class ReasoningEffort(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+    # Supported by OpenAI and by Anthropic adaptive-thinking models
+    # (Claude >= 4.7). Other provider mappings clamp it to their highest
+    # supported effort.
+    XHIGH = "xhigh"
+
+
+# Reasoning-effort values a user may pin per chat session. AUTO is excluded
+# because a cleared override (NULL) already resolves to AUTO.
+USER_SELECTABLE_REASONING_EFFORTS: frozenset[ReasoningEffort] = frozenset(
+    {
+        ReasoningEffort.OFF,
+        ReasoningEffort.LOW,
+        ReasoningEffort.MEDIUM,
+        ReasoningEffort.HIGH,
+        ReasoningEffort.XHIGH,
+    }
+)
+
+
+def parse_reasoning_effort_override(value: str | None) -> ReasoningEffort:
+    """Resolve a stored per-session override string to a ReasoningEffort.
+
+    NULL means no override, which resolves to AUTO. Raises ValueError for an
+    unknown value or an explicit "auto", neither of which is user-selectable.
+    """
+    if value is None:
+        return ReasoningEffort.AUTO
+    effort = ReasoningEffort(value)
+    if effort not in USER_SELECTABLE_REASONING_EFFORTS:
+        raise ValueError(f"{value!r} is not a selectable reasoning effort")
+    return effort
 
 
 # OpenAI reasoning effort mapping
@@ -41,6 +72,7 @@ OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
     ReasoningEffort.HIGH: "high",
+    ReasoningEffort.XHIGH: "xhigh",
 }
 
 # Anthropic reasoning effort to budget tokens mapping
@@ -50,6 +82,7 @@ ANTHROPIC_REASONING_EFFORT_BUDGET: dict[ReasoningEffort, int] = {
     ReasoningEffort.LOW: 1024,
     ReasoningEffort.MEDIUM: 2048,
     ReasoningEffort.HIGH: 4096,
+    ReasoningEffort.XHIGH: 4096,
 }
 
 # Newer Anthropic models (Claude Opus 4.7+) use adaptive thinking with
@@ -59,6 +92,7 @@ ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
     ReasoningEffort.HIGH: "high",
+    ReasoningEffort.XHIGH: "xhigh",
 }
 
 
