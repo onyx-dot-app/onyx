@@ -34,7 +34,11 @@ from onyx.background.celery.tasks.port.tasks import run_check_for_port, run_port
 from onyx.background.celery.tasks.shared.tasks import (
     _clear_port_orphan_candidate_for_live_doc,
 )
-from onyx.configs.app_configs import INDEX_BATCH_SIZE, MAX_CONCURRENT_PORT_ATTEMPTS
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    MAX_CONCURRENT_PORT_ATTEMPTS,
+    MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE,
+)
 from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db import port_attempt as port_attempt_db
@@ -82,8 +86,10 @@ from onyx.db.port_attempt import (
     mark_port_failed,
     mark_port_in_progress,
     mark_port_succeeded,
+    pause_port_attempt,
     port_backfill_has_pending_work,
     request_port_cancel,
+    resume_paused_port_attempt,
 )
 from onyx.db.port_orphan_candidate import (
     cleanup_stale_port_orphan_candidates,
@@ -1891,3 +1897,439 @@ def test_clear_for_live_doc_clears_live_but_keeps_removed(
         ).delete(synchronize_session="fetch")
         db_session.commit()
         cleanup_cc_pair(db_session, other)
+
+
+def test_pause_port_attempt_from_failed_preserves_cursor_and_error(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """FAILED -> PAUSED keeps cursor + error_msg, stamps completion, isn't 'active' (no
+    resume-collision on the active-unique index); re-pause is a no-op."""
+    cc_pair, future_id = cc_pair_and_future
+
+    failed = create_port_attempt(db_session, cc_pair.id, future_id)
+    mark_port_in_progress(db_session, failed.id)
+    commit_port_cursor(
+        db_session, failed.id, last_processed_doc_id="portdoc-007", docs_ported=7
+    )
+    mark_port_failed(db_session, failed.id, error_msg="embedding key over quota")
+
+    assert pause_port_attempt(db_session, failed.id) is True
+
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, failed.id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.PAUSED
+    assert row.last_processed_doc_id == "portdoc-007"
+    assert row.error_msg == "embedding key over quota"
+    assert row.time_completed is not None
+    # PAUSED is not active -> no collision with a resume's fresh NOT_STARTED
+    assert get_active_port_attempt(db_session, cc_pair.id, future_id) is None
+
+    assert pause_port_attempt(db_session, failed.id) is False  # idempotent
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        PortAttemptStatus.NOT_STARTED,
+        PortAttemptStatus.IN_PROGRESS,
+        PortAttemptStatus.SUCCESS,
+        PortAttemptStatus.CANCELED,
+    ],
+)
+def test_pause_port_attempt_noop_from_non_failed(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    status: PortAttemptStatus,
+) -> None:
+    """Gates strictly on == FAILED: any other source (e.g. a racing resume/cancel) is an
+    untouched no-op -- why it can't route through the terminal-guarded _mark_terminal."""
+    pair = make_cc_pair(db_session)
+    ss = get_current_search_settings(db_session)
+    try:
+        attempt = PortAttempt(
+            cc_pair_id=pair.id, search_settings_id=ss.id, status=status
+        )
+        db_session.add(attempt)
+        db_session.commit()
+
+        assert pause_port_attempt(db_session, attempt.id) is False
+        db_session.expire_all()
+        row = db_session.get(PortAttempt, attempt.id)
+        assert row is not None
+        assert row.status == status  # unchanged
+    finally:
+        db_session.rollback()
+        db_session.query(PortAttempt).filter(PortAttempt.cc_pair_id == pair.id).delete(
+            synchronize_session="fetch"
+        )
+        db_session.commit()
+        cleanup_cc_pair(db_session, pair)
+
+
+def test_commit_port_cursor_stops_on_paused(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """commit_port_cursor treats PAUSED as a stop: a wedged worker holding a just-paused
+    attempt can't advance its cursor (which would revive it toward SUCCESS). Returns
+    False and leaves the row untouched."""
+    cc_pair, future_id = cc_pair_and_future
+    attempt = create_port_attempt(db_session, cc_pair.id, future_id)
+    mark_port_in_progress(db_session, attempt.id)
+    commit_port_cursor(
+        db_session, attempt.id, last_processed_doc_id="portdoc-003", docs_ported=3
+    )
+    mark_port_failed(db_session, attempt.id, error_msg="boom")
+    assert pause_port_attempt(db_session, attempt.id) is True
+
+    assert (
+        commit_port_cursor(
+            db_session, attempt.id, last_processed_doc_id="portdoc-999", docs_ported=99
+        )
+        is False
+    )
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt.id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.PAUSED
+    assert row.last_processed_doc_id == "portdoc-003"  # cursor not advanced
+    assert row.docs_ported == 3
+
+
+def _paused_unit(
+    db_session: Session, cc_pair_id: int, future_id: int, cursor: str | None
+) -> int:
+    """A unit parked at PAUSED (one FAILED at `cursor`, then auto-paused). Returns the
+    paused attempt id."""
+    attempt = create_port_attempt(
+        db_session, cc_pair_id, future_id, resume_from_doc_id=cursor
+    )
+    mark_port_in_progress(db_session, attempt.id)
+    mark_port_failed(db_session, attempt.id, error_msg="durable")
+    assert pause_port_attempt(db_session, attempt.id) is True
+    return attempt.id
+
+
+def test_check_for_port_auto_pauses_after_threshold(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A unit stuck failing at the same cursor auto-pauses once it hits the consecutive-
+    failure threshold: the latest FAILED flips to PAUSED and no fresh attempt is created."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    for _ in range(MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE):
+        _fail_port_at(db_session, cc_pair.id, future_id, "doc-1")
+
+    # patch out the (global) user scope so `result` reflects only this cc_pair
+    with patch.object(port_task, "fetch_port_scope_user_ids", lambda *_: []):
+        result, celery_app = _run_check_for_port(cc_pair, future_id)
+
+    assert result == 0  # paused, not retried -> nothing created/enqueued
+    celery_app.send_task.assert_not_called()
+    db_session.expire_all()
+    latest = get_latest_port_attempt(db_session, cc_pair.id, future_id)
+    assert latest is not None and latest.status == PortAttemptStatus.PAUSED
+    assert (
+        db_session.query(PortAttempt)
+        .filter(
+            PortAttempt.cc_pair_id == cc_pair.id,
+            PortAttempt.status == PortAttemptStatus.NOT_STARTED,
+        )
+        .count()
+        == 0
+    )
+
+
+def test_check_for_port_does_not_pause_below_threshold(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """One short of the threshold, the unit still RETRIES (fresh attempt), not pauses."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    for _ in range(MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE - 1):
+        _fail_port_at(db_session, cc_pair.id, future_id, "doc-1")
+    # clear the retry backoff so the tick acts this pass
+    latest = get_latest_port_attempt(db_session, cc_pair.id, future_id)
+    assert latest is not None
+    latest.time_completed = datetime.now(timezone.utc) - timedelta(
+        seconds=port_task._PORT_RETRY_BACKOFF_MAX_S + 1
+    )
+    db_session.commit()
+
+    with patch.object(port_task, "fetch_port_scope_user_ids", lambda *_: []):
+        result, _ = _run_check_for_port(cc_pair, future_id)
+
+    assert result == 1  # retried, not paused
+    db_session.expire_all()
+    assert (
+        db_session.query(PortAttempt)
+        .filter(
+            PortAttempt.cc_pair_id == cc_pair.id,
+            PortAttempt.status == PortAttemptStatus.PAUSED,
+        )
+        .count()
+        == 0
+    )
+    assert (
+        db_session.query(PortAttempt)
+        .filter(
+            PortAttempt.cc_pair_id == cc_pair.id,
+            PortAttempt.status == PortAttemptStatus.NOT_STARTED,
+        )
+        .count()
+        == 1
+    )
+
+
+def test_resume_paused_port_attempt_from_cursor_and_streak_reset(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Resume mints a fresh NOT_STARTED at the paused cursor; the PAUSED row is a streak
+    barrier, so the resumed unit gets a fresh failure budget (streak 0, then 1 after a
+    single re-failure -- not threshold+1)."""
+    cc_pair, future_id = cc_pair_and_future
+    _paused_unit(db_session, cc_pair.id, future_id, "doc-5")
+
+    with patch(
+        "onyx.db.port_orphan_candidate.port_target_settings_id", lambda *_: future_id
+    ):
+        resumed = resume_paused_port_attempt(
+            db_session,
+            cc_pair_id=cc_pair.id,
+            port_user_id=None,
+            search_settings_id=future_id,
+        )
+    assert resumed is not None
+    assert resumed.status == PortAttemptStatus.NOT_STARTED
+    assert resumed.last_processed_doc_id == "doc-5"  # resumes from the paused cursor
+    assert (
+        count_consecutive_failed_port_attempts_no_progress(
+            db_session, cc_pair.id, future_id
+        )
+        == 0
+    )
+
+    mark_port_in_progress(db_session, resumed.id)
+    mark_port_failed(db_session, resumed.id, error_msg="again")
+    # one fresh failure -> streak 1 (the PAUSED history row broke the prior run)
+    assert (
+        count_consecutive_failed_port_attempts_no_progress(
+            db_session, cc_pair.id, future_id
+        )
+        == 1
+    )
+
+
+def test_resume_refuses_when_not_current_target(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Resume no-ops if the FUTURE was superseded/promoted out from under it (the target
+    re-check), so it can't resurrect a unit against stale settings."""
+    cc_pair, future_id = cc_pair_and_future
+    _paused_unit(db_session, cc_pair.id, future_id, "doc-2")
+
+    with patch(
+        "onyx.db.port_orphan_candidate.port_target_settings_id",
+        lambda *_: future_id + 9999,
+    ):
+        assert (
+            resume_paused_port_attempt(
+                db_session,
+                cc_pair_id=cc_pair.id,
+                port_user_id=None,
+                search_settings_id=future_id,
+            )
+            is None
+        )
+    db_session.expire_all()
+    assert (
+        db_session.query(PortAttempt)
+        .filter(
+            PortAttempt.cc_pair_id == cc_pair.id,
+            PortAttempt.status == PortAttemptStatus.NOT_STARTED,
+        )
+        .count()
+        == 0
+    )
+
+
+def test_resume_noop_when_not_paused(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Resume only acts on a PAUSED latest: a FAILED (still auto-retrying) unit yields no
+    new attempt."""
+    cc_pair, future_id = cc_pair_and_future
+    _fail_port_at(db_session, cc_pair.id, future_id, "doc-1")
+
+    assert (
+        resume_paused_port_attempt(
+            db_session,
+            cc_pair_id=cc_pair.id,
+            port_user_id=None,
+            search_settings_id=future_id,
+        )
+        is None
+    )
+
+
+def test_resume_twice_only_mints_one_attempt(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A second Resume is a no-op: the first mints a NOT_STARTED (now the latest), so the
+    second sees a non-PAUSED latest and creates nothing. Guards against a double-click /
+    two-admin duplicate attempt."""
+    cc_pair, future_id = cc_pair_and_future
+    _paused_unit(db_session, cc_pair.id, future_id, "doc-3")
+
+    with patch(
+        "onyx.db.port_orphan_candidate.port_target_settings_id", lambda *_: future_id
+    ):
+        first = resume_paused_port_attempt(
+            db_session,
+            cc_pair_id=cc_pair.id,
+            port_user_id=None,
+            search_settings_id=future_id,
+        )
+        assert first is not None
+        second = resume_paused_port_attempt(
+            db_session,
+            cc_pair_id=cc_pair.id,
+            port_user_id=None,
+            search_settings_id=future_id,
+        )
+    assert second is None
+    db_session.expire_all()
+    assert (
+        db_session.query(PortAttempt)
+        .filter(
+            PortAttempt.cc_pair_id == cc_pair.id,
+            PortAttempt.status == PortAttemptStatus.NOT_STARTED,
+        )
+        .count()
+        == 1
+    )
+
+
+def test_mark_terminal_refuses_paused_attempt(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A wedged worker that un-wedges after its attempt was auto-paused can't drive it
+    terminal: mark_port_succeeded / mark_port_failed no-op on a PAUSED (resting) row, so it
+    stays PAUSED and keeps blocking the swap until an operator Resume."""
+    cc_pair, future_id = cc_pair_and_future
+    paused_id = _paused_unit(db_session, cc_pair.id, future_id, "doc-7")
+
+    mark_port_succeeded(db_session, paused_id)  # wedged worker's late success
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, paused_id)
+    assert row is not None and row.status == PortAttemptStatus.PAUSED
+
+    mark_port_failed(db_session, paused_id, error_msg="late stall")
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, paused_id)
+    assert row is not None and row.status == PortAttemptStatus.PAUSED
+
+
+def test_resume_paused_port_unit_dispatches_and_reports_resumed(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The happy path: the orchestrator mints a fresh NOT_STARTED at the cursor, enqueues
+    it, and reports RESUMED."""
+    cc_pair, future_id = cc_pair_and_future
+    _paused_unit(db_session, cc_pair.id, future_id, "doc-4")
+
+    celery_app = MagicMock()
+    with patch(
+        "onyx.db.port_orphan_candidate.port_target_settings_id", lambda *_: future_id
+    ):
+        result = port_task.resume_paused_port_unit(
+            celery_app, get_current_tenant_id(), cc_pair.id, None, future_id
+        )
+
+    assert result is port_task.PortResumeResult.RESUMED
+    celery_app.send_task.assert_called_once()
+    db_session.expire_all()
+    latest = get_latest_port_attempt(db_session, cc_pair.id, future_id)
+    assert latest is not None
+    assert latest.status == PortAttemptStatus.NOT_STARTED
+    assert latest.last_processed_doc_id == "doc-4"
+
+
+def test_resume_paused_port_unit_reports_dispatch_failure(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A broker enqueue failure is surfaced as DISPATCH_FAILED (not masked as success), so
+    the endpoint doesn't tell the operator a wedged unit resumed immediately. The minted
+    NOT_STARTED stays for the scheduler to re-enqueue within a TTL -- the resume isn't lost."""
+    cc_pair, future_id = cc_pair_and_future
+    _paused_unit(db_session, cc_pair.id, future_id, "doc-4")
+
+    celery_app = MagicMock()
+    celery_app.send_task.side_effect = RuntimeError("broker down")
+    with patch(
+        "onyx.db.port_orphan_candidate.port_target_settings_id", lambda *_: future_id
+    ):
+        result = port_task.resume_paused_port_unit(
+            celery_app, get_current_tenant_id(), cc_pair.id, None, future_id
+        )
+
+    assert result is port_task.PortResumeResult.DISPATCH_FAILED
+    db_session.expire_all()
+    latest = get_latest_port_attempt(db_session, cc_pair.id, future_id)
+    assert latest is not None
+    assert (
+        latest.status == PortAttemptStatus.NOT_STARTED
+    )  # committed; self-heals via TTL
+
+
+def test_resume_paused_port_unit_not_paused(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Nothing to resume (latest is FAILED, not PAUSED) -> NOT_PAUSED, no enqueue."""
+    cc_pair, future_id = cc_pair_and_future
+    _fail_port_at(db_session, cc_pair.id, future_id, "doc-1")
+
+    celery_app = MagicMock()
+    with patch(
+        "onyx.db.port_orphan_candidate.port_target_settings_id", lambda *_: future_id
+    ):
+        result = port_task.resume_paused_port_unit(
+            celery_app, get_current_tenant_id(), cc_pair.id, None, future_id
+        )
+
+    assert result is port_task.PortResumeResult.NOT_PAUSED
+    celery_app.send_task.assert_not_called()
+
+
+def test_tracked_retries_covers_pause_threshold() -> None:
+    """The streak history the pause gate reads must cover the configured pause threshold,
+    else a threshold above the old fixed cap (10) would silently never fire."""
+    assert (
+        port_attempt_db._MAX_TRACKED_FAILED_RETRIES
+        >= MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE
+    )
+
+
+def test_streak_counts_beyond_default_cap_when_limit_allows(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The same-cursor streak can exceed the default backoff window (10) when the tracked-
+    history limit covers it -- so a pause threshold > 10 actually reaches its trigger."""
+    cc_pair, future_id = cc_pair_and_future
+    with patch.object(port_attempt_db, "_MAX_TRACKED_FAILED_RETRIES", 12):
+        for _ in range(12):
+            _fail_port_at(db_session, cc_pair.id, future_id, "doc-1")
+        assert (
+            count_consecutive_failed_port_attempts_no_progress(
+                db_session, cc_pair.id, future_id
+            )
+            == 12
+        )
