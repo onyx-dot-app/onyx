@@ -541,9 +541,6 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
     async def _refresh_token(self) -> httpx.Request:
         self.refresh_attempt_id = uuid4().hex
         self.token_expiry_before_refresh = self.context.token_expiry_time
-        storage = self.context.storage
-        if isinstance(storage, OnyxTokenStorage):
-            storage.refresh_attempt_id = self.refresh_attempt_id
 
         request = await super()._refresh_token()
         logger.info(
@@ -562,6 +559,18 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
             ),
         )
         return request
+
+    async def _persist_refresh_tokens(self, tokens: OAuthToken) -> None:
+        storage = self.context.storage
+        if not isinstance(storage, OnyxTokenStorage):
+            await storage.set_tokens(tokens)
+            return
+
+        storage.refresh_attempt_id = self.refresh_attempt_id
+        try:
+            await storage.set_tokens(tokens)
+        finally:
+            storage.refresh_attempt_id = None
 
     async def _handle_refresh_response(self, response: httpx.Response) -> bool:
         """Handle JSON and form-encoded refresh responses without logging secrets."""
@@ -592,7 +601,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
 
         self.context.current_tokens = token_response
         self.context.update_token_expiry(token_response)
-        await self.context.storage.set_tokens(token_response)
+        await self._persist_refresh_tokens(token_response)
         logger.info(
             "mcp_oauth.refresh.succeeded",
             extra=self._refresh_log_fields(

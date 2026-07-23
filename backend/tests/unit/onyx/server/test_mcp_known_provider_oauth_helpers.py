@@ -455,6 +455,7 @@ async def _drive_refresh(
 
 def test_proactive_refresh_targets_configured_endpoint_and_persists(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     provider = _build_provider(MCPOAuthProviderMode.KNOWN_PROVIDER)
     config_data = _seed_refreshable_config(expires_at=time.time() - 60)
@@ -485,6 +486,31 @@ def test_proactive_refresh_targets_configured_endpoint_and_persists(
     assert persisted_tokens["access_token"] == "access-new"
     assert persisted_tokens["refresh_token"] == "refresh-new"
     assert cast(float, config_data[MCPOAuthKeys.TOKEN_EXPIRES_AT.value]) > time.time()
+    storage = cast(mcp_oauth.OnyxTokenStorage, provider.context.storage)
+    assert storage.refresh_attempt_id is None
+
+    started_record = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "mcp_oauth.refresh.started"
+    )
+    persisted_record = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "mcp_oauth.refresh.persisted"
+    )
+    assert getattr(persisted_record, "refresh_attempt_id") == getattr(
+        started_record, "refresh_attempt_id"
+    )
+
+    caplog.clear()
+    asyncio.run(
+        storage.set_tokens(OAuthToken(access_token="reauth", token_type="Bearer"))
+    )
+    assert not any(
+        record.getMessage() == "mcp_oauth.refresh.persisted"
+        for record in caplog.records
+    )
 
 
 def test_proactive_refresh_preserves_refresh_token_when_response_omits_it(
@@ -513,8 +539,14 @@ def test_proactive_refresh_preserves_refresh_token_when_response_omits_it(
     assert persisted_tokens["refresh_token"] == "refresh-old"
 
 
-def test_proactive_refresh_failure_clears_tokens(
+@pytest.mark.parametrize(
+    ("refresh_status", "refresh_body"),
+    [(400, {"error": "invalid_grant"}), (200, {})],
+)
+def test_proactive_refresh_failure_clears_tokens_and_attempt_id(
     monkeypatch: pytest.MonkeyPatch,
+    refresh_status: int,
+    refresh_body: dict[str, object],
 ) -> None:
     provider = _build_provider(MCPOAuthProviderMode.KNOWN_PROVIDER)
     config_data = _seed_refreshable_config(expires_at=time.time() - 60)
@@ -523,12 +555,12 @@ def test_proactive_refresh_failure_clears_tokens(
     refresh_request, authed_request = asyncio.run(
         _drive_refresh(
             provider,
-            refresh_status=400,
-            refresh_body={"error": "invalid_grant"},
+            refresh_status=refresh_status,
+            refresh_body=refresh_body,
         )
     )
 
-    # A rejected refresh clears the in-memory token so the SDK falls through to
+    # A failed refresh clears the in-memory token so the SDK falls through to
     # re-auth (which surfaces as "please reconnect" at the tool layer) rather
     # than retrying a dead access token.
     assert str(refresh_request.url) == "https://accounts.example.com/oauth/token"
@@ -537,3 +569,5 @@ def test_proactive_refresh_failure_clears_tokens(
         "SDK no longer yields original request on refresh failure"
     )
     assert authed_request.headers.get("Authorization") is None
+    storage = cast(mcp_oauth.OnyxTokenStorage, provider.context.storage)
+    assert storage.refresh_attempt_id is None
