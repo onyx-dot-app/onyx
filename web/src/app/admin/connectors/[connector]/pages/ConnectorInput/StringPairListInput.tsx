@@ -2,14 +2,13 @@ import React from "react";
 import {
   ArrayHelpers,
   ErrorMessage,
-  Field,
   FieldArray,
   useFormikContext,
 } from "formik";
-import { FiX } from "react-icons/fi";
-import { Button } from "@opal/components";
-import { SvgPlusCircle } from "@opal/icons";
-import { Label, SubLabel } from "@/components/Field";
+import { Button, Spacer, Text } from "@opal/components";
+import { InputErrorText, InputVertical, Section } from "@opal/layouts";
+import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
 interface StringPairListInputProps {
   name: string;
@@ -23,16 +22,9 @@ interface StringPairListInputProps {
   rightPlaceholder?: string;
 }
 
-const FIELD_CLASSES = `
-  border
-  border-border
-  bg-background
-  rounded
-  w-full
-  py-2
-  px-3
-  disabled:cursor-not-allowed
-`;
+// Matches the min-width of a `size="sm"` Button so the header column labels stay
+// aligned with the input columns above each row's remove button.
+const REMOVE_BUTTON_WIDTH_REM = 1.5;
 
 /** A list of labeled string pairs rendered as two side-by-side inputs per row,
  * each serialized to an object keyed by leftKey/rightKey (e.g. URL rewrite
@@ -65,68 +57,95 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
   }
 
   return (
-    <div className="mb-4">
-      <Label>{label}</Label>
-      {description && <SubLabel>{description}</SubLabel>}
-
+    <InputVertical title={label} description={description}>
       <FieldArray
         name={name}
         render={(arrayHelpers: ArrayHelpers) => (
-          <div>
+          <Section gap={0.5} alignItems="start" width="full">
             {pairs.length > 0 && (
-              <div className="flex mt-2 text-sm text-text-500">
-                <div className="w-full mr-2">{leftLabel}</div>
-                <div className="w-full">{rightLabel}</div>
-                <div className="w-10 shrink-0" />
-              </div>
+              <Section
+                flexDirection="row"
+                justifyContent="start"
+                alignItems="center"
+                gap={0.25}
+                width="full"
+              >
+                <Section width="full" alignItems="start" gap={0}>
+                  <Text font="secondary-body" color="text-03">
+                    {leftLabel}
+                  </Text>
+                </Section>
+                <Section width="full" alignItems="start" gap={0}>
+                  <Text font="secondary-body" color="text-03">
+                    {rightLabel}
+                  </Text>
+                </Section>
+                <Spacer
+                  orientation="horizontal"
+                  rem={REMOVE_BUTTON_WIDTH_REM}
+                />
+              </Section>
             )}
+
             {pairs.map((_, index) => (
-              <div key={rowIdsRef.current[index]} className="mt-2">
-                <div className="flex items-center">
-                  <Field
+              <Section
+                key={rowIdsRef.current[index]}
+                gap={0.25}
+                alignItems="start"
+                width="full"
+              >
+                <Section
+                  flexDirection="row"
+                  justifyContent="start"
+                  alignItems="center"
+                  gap={0.25}
+                  width="full"
+                >
+                  <InputTypeInField
                     name={`${name}.${index}.${leftKey}`}
-                    className={`${FIELD_CLASSES} mr-2`}
-                    autoComplete="off"
                     placeholder={leftPlaceholder}
-                  />
-                  <Field
-                    name={`${name}.${index}.${rightKey}`}
-                    className={FIELD_CLASSES}
                     autoComplete="off"
-                    placeholder={rightPlaceholder}
                   />
-                  <FiX
-                    className="w-10 h-10 shrink-0 cursor-pointer hover:bg-background-neutral-02 rounded-sm p-2"
+                  <InputTypeInField
+                    name={`${name}.${index}.${rightKey}`}
+                    placeholder={rightPlaceholder}
+                    autoComplete="off"
+                  />
+                  <Button
+                    icon={SvgMinusCircle}
+                    prominence="tertiary"
+                    size="sm"
+                    type="button"
+                    tooltip="Remove"
                     onClick={() => {
                       rowIdsRef.current.splice(index, 1);
                       arrayHelpers.remove(index);
                     }}
                   />
-                </div>
+                </Section>
                 <ErrorMessage
                   name={`${name}.${index}`}
-                  component="div"
-                  className="text-action-danger-05 text-sm mt-1"
+                  render={(msg) => (
+                    <InputErrorText type="error">{msg}</InputErrorText>
+                  )}
                 />
-              </div>
+              </Section>
             ))}
 
-            <div className="mt-2">
-              <Button
-                icon={SvgPlusCircle}
-                prominence="secondary"
-                onClick={() =>
-                  arrayHelpers.push({ [leftKey]: "", [rightKey]: "" })
-                }
-                type="button"
-              >
-                Add New
-              </Button>
-            </div>
-          </div>
+            <Button
+              icon={SvgPlusCircle}
+              prominence="secondary"
+              type="button"
+              onClick={() =>
+                arrayHelpers.push({ [leftKey]: "", [rightKey]: "" })
+              }
+            >
+              Add New
+            </Button>
+          </Section>
         )}
       />
-    </div>
+    </InputVertical>
   );
 };
 
