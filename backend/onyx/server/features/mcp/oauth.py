@@ -115,15 +115,12 @@ class MCPRefreshLogContext(TypedDict):
 def _refresh_log_context(
     mcp_server: DbMCPServer, connection_config_id: int
 ) -> MCPRefreshLogContext:
-    transport = getattr(mcp_server, "transport", None)
-    provider_mode = getattr(mcp_server, "oauth_provider_mode", None)
     return {
-        "mcp_server_id": getattr(mcp_server, "id", None),
+        "mcp_server_id": mcp_server.id,
         "mcp_server_name": mcp_server.name,
         "connection_config_id": connection_config_id,
-        "transport": getattr(transport, "value", transport) or "UNKNOWN",
-        "oauth_provider_mode": getattr(provider_mode, "value", provider_mode)
-        or "UNKNOWN",
+        "transport": mcp_server.transport.value if mcp_server.transport else "UNKNOWN",
+        "oauth_provider_mode": mcp_server.oauth_provider_mode.value,
     }
 
 
@@ -165,11 +162,7 @@ def _oauth_token_from_response(body: bytes) -> OAuthToken:
         return OAuthToken.model_validate_json(body)
     except ValidationError as json_error:
         form_payload = parse_qs(body.decode("utf-8", errors="replace"))
-        payload = {
-            key: values[0]
-            for key, values in form_payload.items()
-            if values
-        }
+        payload = {key: values[0] for key, values in form_payload.items() if values}
         try:
             return OAuthToken.model_validate(payload)
         except ValidationError:

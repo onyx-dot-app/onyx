@@ -16,7 +16,7 @@ from onyx.auth.oauth_token_manager import (
     build_oauth_authorization_url,
     exchange_oauth_code_for_token,
 )
-from onyx.db.enums import MCPOAuthProviderMode
+from onyx.db.enums import MCPOAuthProviderMode, MCPTransport
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp.api import _mcp_known_provider_flow_params
@@ -48,6 +48,7 @@ def _make_mcp_server_stub(
             server_url="https://mcp.example.com/mcp",
             name="Example MCP",
             id=1,
+            transport=MCPTransport.STREAMABLE_HTTP,
         ),
     )
 

@@ -19,7 +19,7 @@ import pytest
 
 import onyx.server.features.mcp.oauth as mcp_oauth
 from onyx.cache.interface import CacheLockAcquisitionError
-from onyx.db.enums import MCPOAuthProviderMode
+from onyx.db.enums import MCPOAuthProviderMode, MCPTransport
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.server.features.mcp.oauth import refresh_mcp_oauth_token_if_expired
@@ -35,8 +35,10 @@ def _server_stub() -> DbMCPServer:
     return cast(
         DbMCPServer,
         SimpleNamespace(
+            id=1,
             name="gitlab",
             server_url="https://mcp.gitlab.example.com",
+            transport=MCPTransport.SSE,
             oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
             oauth_authorization_endpoint=None,
             oauth_token_endpoint=None,
@@ -133,7 +135,8 @@ def _token_response(**overrides: Any) -> httpx.Response:
 
 
 def _form_token_response(
-    *, content_type: str | None = "application/x-www-form-urlencoded; charset=utf-8",
+    *,
+    content_type: str | None = "application/x-www-form-urlencoded; charset=utf-8",
     **overrides: Any,
 ) -> httpx.Response:
     payload: dict[str, Any] = {
