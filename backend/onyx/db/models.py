@@ -83,6 +83,7 @@ from onyx.db.enums import (
     IndexingMode,
     IndexingStatus,
     IndexModelStatus,
+    IndexReclaimStatus,
     LLMModelFlowType,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -2152,6 +2153,28 @@ class SearchSettings(Base):
         ForeignKey("search_settings.id", ondelete="SET NULL"), nullable=True
     )
 
+    # Old-index reclamation (see reclaim helpers in db/search_settings.py).
+    # NULL = not reclaim-tracked; set to PENDING at reindex submit on the current
+    # PRESENT (the future PAST).
+    reclaim_status: Mapped[IndexReclaimStatus | None] = mapped_column(
+        Enum(IndexReclaimStatus, native_enum=False), nullable=True
+    )
+    # Soak anchor: when the index stopped being read (port drained), NOT swap time —
+    # so INSTANT backfills (which read PAST post-swap) anchor correctly.
+    reclaim_stopped_reading_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Consecutive failures on the current step; drives BLOCKED.
+    reclaim_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    reclaim_last_error: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Consented not-ported cc_pairs to delete once the port completes. Re-validated
+    # at fire time (only those still INVALID/PAUSED are deleted).
+    pending_cc_pair_deletions: Mapped[list[int] | None] = mapped_column(
+        postgresql.ARRAY(Integer), nullable=True
+    )
+
     # allows for quantization -> less memory usage for a small performance hit.
     # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
     # vectors as float32 regardless; BFLOAT16 is only honored by Vespa.
@@ -2201,6 +2224,12 @@ class SearchSettings(Base):
             "status",
             unique=True,
             postgresql_where=(status == IndexModelStatus.FUTURE),
+        ),
+        # Scan predicate for the reclaim beat task: PAST rows still needing cleanup.
+        Index(
+            "ix_search_settings_reclaimable",
+            "reclaim_status",
+            postgresql_where=(status == IndexModelStatus.PAST),
         ),
     )
 
