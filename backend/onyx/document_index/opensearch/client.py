@@ -1216,12 +1216,18 @@ class OpenSearchIndexClient(OpenSearchClient):
     def count_by_query(self, query_body: dict[str, Any]) -> int:
         """Counts documents matching a query for this index (the _count API).
 
-        Used to verify a delete_by_query fully drained (count == 0), since that
-        delete can time out or partially fail. `query_body` is `{"query": {...}}`,
-        the same shape delete_by_query takes.
+        Used as reclaim's deletion gate (count == 0 means the slice drained), so it
+        fails closed: a partial count from shard failures under-reports and could
+        falsely green-light deletion, so raise instead of trusting it.
         """
         result = self._client.count(index=self._index_name, body=query_body)
-        return int(result.get("count", 0))
+        shards = result.get("_shards", {})
+        if shards.get("failed", 0):
+            raise RuntimeError(
+                f"Count for index {self._index_name} hit shard failures ({shards}); "
+                "refusing a partial count as a deletion gate."
+            )
+        return int(result["count"])
 
     @log_function_time(
         print_only=True,
