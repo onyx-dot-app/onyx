@@ -39,6 +39,7 @@ const APP: ExternalAppAdminResponse = {
   organization_credentials: {},
   enabled: true,
   actions: [],
+  associated_skills: [],
   is_onyx_managed: false,
 };
 
