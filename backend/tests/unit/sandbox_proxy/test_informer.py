@@ -1,3 +1,4 @@
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -215,9 +216,91 @@ def test_lookup_readthrough_ambiguous_ip_refused() -> None:
     assert lookup.lookup("10.0.0.1") is None
 
 
+def test_lookup_readthrough_refuses_two_pods_sharing_sandbox_id() -> None:
+    # Any IP resolving to more than one pod is ambiguous, even when the pods
+    # share a sandbox_id label — never trust list ordering to pick a winner.
+    core = MagicMock(spec=client.CoreV1Api)
+    lookup = K8sInformerLookup(core_api=core)
+    core.list_namespaced_pod.return_value = _listing(
+        _make_pod(name="sandbox-a"),
+        _make_pod(name="sandbox-b"),
+    )
+
+    assert lookup.lookup("10.0.0.1") is None
+
+
 def test_lookup_readthrough_rejects_unmanaged_pod() -> None:
     core = MagicMock(spec=client.CoreV1Api)
     lookup = K8sInformerLookup(core_api=core)
     core.list_namespaced_pod.return_value = _listing(_make_pod(managed_by="rogue"))
 
     assert lookup.lookup("10.0.0.1") is None
+
+
+def test_concurrent_readthroughs_for_one_ip_coalesce_into_one_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A fresh pod's concurrent boot requests must fan into a single API query,
+    # not a thundering herd (resolution runs on executor threads).
+    import onyx.sandbox_proxy.identity_k8s as identity_k8s
+
+    parked = threading.Semaphore(0)
+
+    class _WaitCountingEvent:
+        def __init__(self) -> None:
+            self._event = threading.Event()
+
+        def wait(self, timeout: float | None = None) -> bool:
+            parked.release()  # signal that a follower is now blocked on the leader
+            return self._event.wait(timeout)
+
+        def set(self) -> None:
+            self._event.set()
+
+        def is_set(self) -> bool:
+            return self._event.is_set()
+
+    class _InstrumentedInflight(identity_k8s._InflightReadThrough):
+        __slots__ = ()
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.done = _WaitCountingEvent()  # type: ignore[assignment]
+
+    monkeypatch.setattr(identity_k8s, "_InflightReadThrough", _InstrumentedInflight)
+
+    core = MagicMock(spec=client.CoreV1Api)
+    lookup = K8sInformerLookup(core_api=core)
+
+    in_query = threading.Event()
+    release = threading.Event()
+
+    def blocking_list(*_: object, **__: object) -> client.V1PodList:
+        in_query.set()
+        release.wait(timeout=5)
+        return _listing(_make_pod())
+
+    core.list_namespaced_pod.side_effect = blocking_list
+
+    results: list[object] = []
+
+    def worker() -> None:
+        results.append(lookup.lookup("10.0.0.1"))
+
+    leader = threading.Thread(target=worker)
+    leader.start()
+    assert in_query.wait(timeout=5)  # leader is inside the (blocked) query
+
+    followers = [threading.Thread(target=worker) for _ in range(2)]
+    for t in followers:
+        t.start()
+    for _ in followers:
+        assert parked.acquire(timeout=5)  # both followers coalesced onto the leader
+
+    release.set()
+    for t in [leader, *followers]:
+        t.join(timeout=5)
+
+    assert core.list_namespaced_pod.call_count == 1
+    assert len(results) == 3
+    assert all(r is not None for r in results)

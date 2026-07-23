@@ -50,8 +50,21 @@ _SANDBOX_POD_SELECTOR = ",".join(
 # still fails fast so a slow/sick API server can't tie up an executor thread (or
 # get hammered) on every uncached request.
 _READTHROUGH_REQUEST_TIMEOUT: tuple[float, float] = (1.0, 2.0)
+# A follower coalesced onto an in-flight read-through gives up a hair after the
+# leader's own request deadline, then fails closed rather than wait forever.
+_READTHROUGH_LEADER_WAIT_SECONDS = 4.0
 
 logger = setup_logger()
+
+
+class _InflightReadThrough:
+    """Shared result slot for read-throughs coalesced onto one IP's query."""
+
+    __slots__ = ("done", "result")
+
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.result: SandboxIdentity | None = None
 
 
 def _identity_from_pod(pod: client.V1Pod) -> SandboxIdentity | None:
@@ -103,6 +116,11 @@ class K8sInformerLookup(SandboxIPLookup):
         self._namespace = namespace
         self._cache: dict[str, SandboxIdentity] = {}
         self._cache_lock = threading.Lock()
+        # In-flight read-throughs keyed by IP, guarded by `_cache_lock`. Lets a
+        # fresh pod's concurrent boot requests fan into one API query instead of
+        # a thundering herd (resolution runs on executor threads, and read-through
+        # hits are deliberately not cached, so nothing else dedupes them).
+        self._inflight_readthroughs: dict[str, _InflightReadThrough] = {}
 
         self._initial_sync_done = threading.Event()
         self._stop_event = threading.Event()
@@ -134,7 +152,40 @@ class K8sInformerLookup(SandboxIPLookup):
         return self._read_through(src_ip)
 
     def _read_through(self, src_ip: str) -> SandboxIdentity | None:
-        """Resolve an IP the watch hasn't cached yet with a one-shot pod query.
+        """Resolve an uncached IP, coalescing concurrent requests for that IP.
+
+        The first caller for an IP issues the query; others block on its result
+        instead of firing their own. Nothing is persisted — the shared result
+        lives only for this burst, so the watch stays the sole cache writer.
+        """
+        with self._cache_lock:
+            # The watch may have populated the cache between lookup()'s miss and
+            # now; prefer that over another query.
+            hit = self._cache.get(src_ip)
+            if hit is not None:
+                return hit
+            inflight = self._inflight_readthroughs.get(src_ip)
+            is_leader = inflight is None
+            if inflight is None:
+                inflight = _InflightReadThrough()
+                self._inflight_readthroughs[src_ip] = inflight
+
+        if not is_leader:
+            if not inflight.done.wait(timeout=_READTHROUGH_LEADER_WAIT_SECONDS):
+                return None
+            return inflight.result
+
+        try:
+            result = self._query_identity_by_ip(src_ip)
+        finally:
+            with self._cache_lock:
+                self._inflight_readthroughs.pop(src_ip, None)
+            inflight.result = result
+            inflight.done.set()
+        return result
+
+    def _query_identity_by_ip(self, src_ip: str) -> SandboxIdentity | None:
+        """One-shot pod query by IP.
 
         Applies the same label selector and `_identity_from_pod` validation as
         the watch, so this grants nothing the watch wouldn't.
@@ -157,7 +208,10 @@ class K8sInformerLookup(SandboxIPLookup):
             logger.warning("identity_readthrough_error src_ip=%s error=%s", src_ip, e)
             return None
 
-        if len({identity.sandbox_id for identity in identities}) != 1:
+        # Require exactly one validated pod, not just one distinct sandbox_id: an
+        # IP resolving to more than one pod is ambiguous regardless of labels, and
+        # picking identities[0] would trust unspecified list ordering.
+        if len(identities) != 1:
             if identities:
                 logger.warning(
                     "identity_readthrough_ambiguous src_ip=%s sandboxes=%s",
