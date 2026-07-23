@@ -19,6 +19,25 @@ type RunCIOptions struct {
 	Yes      bool
 	Rerun    bool
 	NoVerify bool
+	ForEdits bool
+}
+
+const (
+	choreBranchPrefix    = "chore/"
+	featBranchPrefix     = "feat/"
+	fixBranchPrefix      = "fix/"
+	refactorBranchPrefix = "refactor/"
+
+	cherryPickOptionText = "Please cherry-pick this PR to the latest release version."
+	cherryPickOption     = "- [ ] [Optional] " + cherryPickOptionText
+	linearCheckOverride  = "- [x] Override Linear Check"
+)
+
+var editableBranchPrefixes = [...]string{
+	choreBranchPrefix,
+	featBranchPrefix,
+	fixBranchPrefix,
+	refactorBranchPrefix,
 }
 
 // NewRunCICommand creates a new run-ci command
@@ -40,10 +59,22 @@ This command will:
 This is useful for running CI on PRs from forks, which don't automatically
 trigger GitHub Actions for security reasons.
 
+Use --for-edits when the replacement PR will be edited and merged instead of
+only used to run CI.
+
 Example usage:
 
-	$ ods run-ci 7353`,
-		Args: cobra.ExactArgs(1),
+	$ ods run-ci 7353
+	$ ods run-ci 7353 --for-edits`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := cobra.ExactArgs(1)(cmd, args); err != nil {
+				return err
+			}
+			if opts.ForEdits && opts.Rerun {
+				return fmt.Errorf("--for-edits cannot be combined with --rerun because rerunning would discard edits")
+			}
+			return nil
+		},
 		Run: func(cmd *cobra.Command, args []string) {
 			runCI(cmd, args, opts)
 		},
@@ -53,6 +84,7 @@ Example usage:
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip confirmation prompts and automatically proceed")
 	cmd.Flags().BoolVar(&opts.Rerun, "rerun", false, "Update an existing CI PR with the latest fork changes to re-trigger CI")
 	cmd.Flags().BoolVar(&opts.NoVerify, "no-verify", false, "Skip pre-push hooks when pushing the CI branch")
+	cmd.Flags().BoolVar(&opts.ForEdits, "for-edits", false, "Create a replacement PR intended for editing and merging")
 
 	return cmd
 }
@@ -61,6 +93,7 @@ Example usage:
 type PRInfo struct {
 	Number         int    `json:"number"`
 	Title          string `json:"title"`
+	Body           string `json:"body"`
 	HeadRefName    string `json:"headRefName"`
 	HeadRepository struct {
 		Name string `json:"name"`
@@ -78,6 +111,62 @@ func (p *PRInfo) ForkRepo() string {
 		return ""
 	}
 	return fmt.Sprintf("%s/%s", p.HeadRepositoryOwner.Login, p.HeadRepository.Name)
+}
+
+type runCIPRMetadata struct {
+	Branch string
+	Title  string
+	Body   string
+}
+
+func buildEditableBranchName(prInfo *PRInfo) string {
+	branchName := prInfo.HeadRefName
+	hasExpectedPrefix := false
+	for _, prefix := range editableBranchPrefixes {
+		if strings.HasPrefix(branchName, prefix) {
+			hasExpectedPrefix = true
+			break
+		}
+	}
+	if !hasExpectedPrefix {
+		branchName = choreBranchPrefix + branchName
+	}
+	return fmt.Sprintf("%s-pr-%d-edits", branchName, prInfo.Number)
+}
+
+func buildRunCIPRMetadata(prInfo *PRInfo, forEdits bool) runCIPRMetadata {
+	if !forEdits {
+		return runCIPRMetadata{
+			Branch: fmt.Sprintf("run-ci/%d", prInfo.Number),
+			Title:  fmt.Sprintf("chore: [Running GitHub actions for #%d]", prInfo.Number),
+			Body: fmt.Sprintf(
+				"This PR runs GitHub Actions CI for #%d.\n\n%s\n\n**This PR should be closed (not merged) after CI completes.**",
+				prInfo.Number,
+				linearCheckOverride,
+			),
+		}
+	}
+
+	body := fmt.Sprintf(
+		"> [!IMPORTANT]\n> This PR supersedes #%d. Merge this PR and close #%d without merging.",
+		prInfo.Number,
+		prInfo.Number,
+	)
+	if originalBody := strings.TrimSpace(prInfo.Body); originalBody != "" {
+		body += "\n\n## Original PR description\n\n" + originalBody
+	}
+	additionalOptions := []string{}
+	if !strings.Contains(prInfo.Body, cherryPickOptionText) {
+		additionalOptions = append(additionalOptions, cherryPickOption)
+	}
+	additionalOptions = append(additionalOptions, linearCheckOverride)
+	body += "\n\n" + strings.Join(additionalOptions, "\n")
+
+	return runCIPRMetadata{
+		Branch: buildEditableBranchName(prInfo),
+		Title:  fmt.Sprintf("%s [edit of #%d]", prInfo.Title, prInfo.Number),
+		Body:   body,
+	}
 }
 
 func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
@@ -111,10 +200,8 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		log.Fatalf("PR #%s is not from a fork - CI should already run automatically", prNumber)
 	}
 
-	// Create the CI branch
-	ciBranch := fmt.Sprintf("run-ci/%s", prNumber)
-	prTitle := fmt.Sprintf("chore: [Running GitHub actions for #%s]", prNumber)
-	prBody := fmt.Sprintf("This PR runs GitHub Actions CI for #%s.\n\n- [x] Override Linear Check\n\n**This PR should be closed (not merged) after CI completes.**", prNumber)
+	prMetadata := buildRunCIPRMetadata(prInfo, opts.ForEdits)
+	ciBranch := prMetadata.Branch
 
 	// Check if a CI PR already exists for this branch
 	existingPRURL, err := findExistingCIPR(ciBranch)
@@ -188,7 +275,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	if opts.DryRun {
 		log.Warnf("[DRY RUN] Would push CI branch: %s", ciBranch)
 		if existingPRURL == "" {
-			log.Warnf("[DRY RUN] Would create PR: %s", prTitle)
+			log.Warnf("[DRY RUN] Would create PR: %s", prMetadata.Title)
 		} else {
 			log.Warnf("[DRY RUN] Would update existing PR: %s", existingPRURL)
 		}
@@ -227,7 +314,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 
 	// Create PR using GitHub CLI
 	log.Info("Creating PR...")
-	prURL, err := createCIPR(ciBranch, prInfo.BaseRefName, prTitle, prBody)
+	prURL, err := createCIPR(ciBranch, prInfo.BaseRefName, prMetadata.Title, prMetadata.Body)
 	if err != nil {
 		// Switch back to original branch before exiting
 		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
@@ -243,13 +330,17 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	}
 
 	log.Infof("PR created successfully: %s", prURL)
+	if opts.ForEdits {
+		log.Infof("Make edits on %s, merge this PR, and close #%s without merging.", ciBranch, prNumber)
+		return
+	}
 	log.Info("Remember to close (not merge) this PR after CI completes!")
 }
 
 // getPRInfo fetches PR information using the GitHub CLI
 func getPRInfo(prNumber string) (*PRInfo, error) {
 	cmd := exec.Command("gh", "pr", "view", prNumber,
-		"--json", "number,title,headRefName,headRepository,headRepositoryOwner,baseRefName,isCrossRepository")
+		"--json", "number,title,body,headRefName,headRepository,headRepositoryOwner,baseRefName,isCrossRepository")
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
