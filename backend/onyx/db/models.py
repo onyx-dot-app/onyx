@@ -2460,6 +2460,10 @@ class IndexAttempt(Base):
     last_progress_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # completed_batches observed at the previous stall-watchdog pass. The
+    # watchdog treats forward progress on completions as a crash-proof liveness
+    # signal (a batch landing means the worker pool is doing real work) even
+    # when the heartbeat counter has stalled.
     last_batches_completed_count: Mapped[int] = mapped_column(Integer, default=0)
 
     # Heartbeat tracking for worker liveness detection

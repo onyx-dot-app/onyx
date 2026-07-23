@@ -171,6 +171,10 @@ logger = setup_logger()
 # Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead.
 # This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s).
 HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+# Timeout for the Celery inspect ping used to corroborate a stale heartbeat
+# before invalidating. Generous enough that a CPU-saturated worker's control
+# thread can still answer, but bounded so the watchdog never hangs on it.
+DOCPROCESSING_LIVENESS_PING_TIMEOUT = 4.0
 # How long a NOT_STARTED attempt must sit before we scan the broker.
 # After this window we check Redis directly — if the task is still there we
 # leave it alone, so this threshold does not cause false positives for
@@ -195,6 +199,37 @@ def _get_fence_validation_block_expiration() -> int:
         beat_multiplier = CLOUD_BEAT_MULTIPLIER_DEFAULT
 
     return int(base_expiration * beat_multiplier)
+
+
+def _docprocessing_workers_alive() -> bool:
+    """Best-effort check for whether any docprocessing worker is registered.
+
+    Uses Celery's inspect ping, which is answered by the worker's control
+    thread and therefore still responds even when every task thread is blocked
+    on a saturated dependency (e.g. a pegged embedder). The celery inspect API
+    can return empty or hang under load, so we read it asymmetrically: a
+    positive result (>=1 docprocessing worker) is trusted as proof of life,
+    while an empty result or an error is reported as "not confirmed alive" so
+    the caller falls back to its existing crash verdict. We therefore only ever
+    SPARE an attempt on a positive read, never destroy one on a flaky empty read.
+    """
+    try:
+        replies = current_app.control.inspect(
+            timeout=DOCPROCESSING_LIVENESS_PING_TIMEOUT
+        ).ping()
+    except Exception:
+        task_logger.warning(
+            "docprocessing worker liveness ping failed; "
+            "treating as not confirmed alive",
+            exc_info=True,
+        )
+        return False
+
+    if not replies:
+        return False
+
+    # Worker hostnames are of the form "docprocessing@<node>" (see supervisord).
+    return any("docprocessing" in worker_name for worker_name in replies)
 
 
 def validate_active_indexing_attempts(
@@ -226,6 +261,13 @@ def validate_active_indexing_attempts(
             .all()
         )
 
+        # Worker liveness does not change within a single watchdog pass, and the
+        # inspect ping blocks for up to DOCPROCESSING_LIVENESS_PING_TIMEOUT when
+        # workers are down. Compute it at most once per pass (lazily, only if an
+        # attempt actually needs it) so N stale attempts don't cost N pings while
+        # holding this DB session open.
+        workers_alive_this_pass: bool | None = None
+
         for attempt in active_attempts:
             lock_beat.reacquire()
 
@@ -241,6 +283,9 @@ def validate_active_indexing_attempts(
             if fresh_attempt.last_heartbeat_time is None:
                 # First time seeing this attempt - initialize heartbeat tracking
                 fresh_attempt.last_heartbeat_value = fresh_attempt.heartbeat_counter
+                fresh_attempt.last_batches_completed_count = (
+                    fresh_attempt.completed_batches
+                )
                 fresh_attempt.last_heartbeat_time = datetime.now(timezone.utc)
                 db_session.commit()
 
@@ -261,14 +306,26 @@ def validate_active_indexing_attempts(
                 f"last_check_time={last_check_time}"
             )
 
-            if current_counter > last_known_counter:
-                # Heartbeat has advanced - worker is alive
+            completed_now = fresh_attempt.completed_batches
+            completed_progressed = (
+                completed_now > fresh_attempt.last_batches_completed_count
+            )
+
+            if current_counter > last_known_counter or completed_progressed:
+                # Heartbeat advanced or batches completed since the last pass —
+                # the worker is alive regardless of which signal moved.
+                # Completed-batch progress is a crash-proof liveness signal:
+                # even if the heartbeat thread is starved (e.g. contending for
+                # the shared DB pool), a batch landing proves the worker pool is
+                # doing real work.
                 fresh_attempt.last_heartbeat_value = current_counter
+                fresh_attempt.last_batches_completed_count = completed_now
                 fresh_attempt.last_heartbeat_time = datetime.now(timezone.utc)
                 db_session.commit()
 
                 task_logger.debug(
-                    f"Heartbeat advanced for attempt {fresh_attempt.id}: new_counter={current_counter}"
+                    f"Liveness advanced for attempt {fresh_attempt.id}: "
+                    f"counter={current_counter} completed_batches={completed_now}"
                 )
                 continue
 
@@ -286,9 +343,10 @@ def validate_active_indexing_attempts(
             # Heartbeat is stale. If docfetching has finished (total_batches is
             # set), use the Redis counters to decide whether to invalidate:
             #
-            #   in_flight > 0               → workers crashed holding batches → invalidate
-            #   in_flight = 0, pending > 0  → batches in queue, no crash → wait
-            #   in_flight = 0, pending = 0  → no work anywhere, stuck → invalidate
+            #   in_flight > 0, workers alive → saturated/wedged → wait + alarm
+            #   in_flight > 0, workers dead  → crashed holding batches → invalidate
+            #   in_flight = 0, pending > 0   → batches in queue, no crash → wait
+            #   in_flight = 0, pending = 0   → no work anywhere, stuck → invalidate
             #
             # If total_batches is not set yet, docfetching is still running;
             # fall through to immediate invalidation (base timeout elapsed).
@@ -322,13 +380,43 @@ def validate_active_indexing_attempts(
                     continue
 
                 if in_flight > 0:
+                    # Outstanding in-flight work with a stale heartbeat used to
+                    # mean "workers crashed holding batches". But a saturated
+                    # dependency (e.g. a pegged embedder) blocks live workers the
+                    # same way, and killing here discards potentially days of
+                    # indexing progress. Corroborate with worker liveness before
+                    # the crash verdict (cached once per pass).
+                    if workers_alive_this_pass is None:
+                        workers_alive_this_pass = _docprocessing_workers_alive()
+                    if workers_alive_this_pass:
+                        task_logger.error(
+                            f"Attempt {fresh_attempt.id} heartbeat stale for "
+                            f"{heartbeat_timeout_seconds}s (in_flight={in_flight} "
+                            f"pending={pending} "
+                            f"completed={fresh_attempt.completed_batches}/"
+                            f"{fresh_attempt.total_batches}) but docprocessing "
+                            f"workers are ALIVE — treating as saturated/wedged, not "
+                            f"crashed. NOT invalidating; investigate a saturated "
+                            f"model server or other blocked dependency."
+                        )
+                        # Reset the window so we re-evaluate a full timeout later
+                        # (throttles this loud log and keeps the attempt alive).
+                        fresh_attempt.last_heartbeat_value = current_counter
+                        fresh_attempt.last_batches_completed_count = completed_now
+                        fresh_attempt.last_heartbeat_time = datetime.now(timezone.utc)
+                        db_session.commit()
+                        continue
+
                     failure_reason = (
                         f"Heartbeat stale for {heartbeat_timeout_seconds}s with "
-                        f"{in_flight} in-flight batches — workers crashed holding batches"
+                        f"{in_flight} in-flight batches and no live docprocessing "
+                        f"workers — workers crashed holding batches"
                     )
                 else:
                     # in_flight == 0, pending == 0: no work anywhere, no forward
                     # progress possible — all batches either failed or were lost.
+                    # Worker liveness is irrelevant; there is nothing left to
+                    # process, so invalidate regardless.
                     failure_reason = (
                         f"Heartbeat stale for {heartbeat_timeout_seconds}s with "
                         f"no pending or in-flight batches — all batches failed or lost"
