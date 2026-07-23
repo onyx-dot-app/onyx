@@ -27,7 +27,7 @@ func writeConfig(t *testing.T, dir string, data []byte) {
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.ServerURL != "https://cloud.onyx.app" {
+	if cfg.ServerURL != "https://cloud.onyx.app/api" {
 		t.Errorf("expected default server URL, got %s", cfg.ServerURL)
 	}
 	if cfg.APIKey != "" {
@@ -55,7 +55,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
 	cfg := Load()
-	if cfg.ServerURL != "https://cloud.onyx.app" {
+	if cfg.ServerURL != "https://cloud.onyx.app/api" {
 		t.Errorf("expected default URL, got %s", cfg.ServerURL)
 	}
 	if cfg.APIKey != "" {
@@ -69,14 +69,14 @@ func TestLoadFromFile(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
 	data, _ := json.Marshal(map[string]interface{}{
-		"server_url":         "https://my-onyx.example.com",
+		"server_url":         "https://my-onyx.example.com/api",
 		"api_key":            "test-key-123",
 		"default_persona_id": 5,
 	})
 	writeConfig(t, dir, data)
 
 	cfg := Load()
-	if cfg.ServerURL != "https://my-onyx.example.com" {
+	if cfg.ServerURL != "https://my-onyx.example.com/api" {
 		t.Errorf("got %s", cfg.ServerURL)
 	}
 	if cfg.APIKey != "test-key-123" {
@@ -95,7 +95,7 @@ func TestLoadCorruptFile(t *testing.T) {
 	writeConfig(t, dir, []byte("not valid json {{{"))
 
 	cfg := Load()
-	if cfg.ServerURL != "https://cloud.onyx.app" {
+	if cfg.ServerURL != "https://cloud.onyx.app/api" {
 		t.Errorf("expected default URL on corrupt file, got %s", cfg.ServerURL)
 	}
 }
@@ -104,10 +104,10 @@ func TestEnvOverrideServerURL(t *testing.T) {
 	clearEnvVars(t)
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	t.Setenv(EnvServerURL, "https://env-override.com")
+	t.Setenv(EnvServerURL, "https://env-override.com/api")
 
 	cfg := Load()
-	if cfg.ServerURL != "https://env-override.com" {
+	if cfg.ServerURL != "https://env-override.com/api" {
 		t.Errorf("got %s", cfg.ServerURL)
 	}
 }
@@ -154,15 +154,15 @@ func TestEnvOverridesFileValues(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
 	data, _ := json.Marshal(map[string]interface{}{
-		"server_url": "https://file-url.com",
+		"server_url": "https://file-url.com/api",
 		"api_key":    "file-key",
 	})
 	writeConfig(t, dir, data)
 
-	t.Setenv(EnvServerURL, "https://env-url.com")
+	t.Setenv(EnvServerURL, "https://env-url.com/api")
 
 	cfg := Load()
-	if cfg.ServerURL != "https://env-url.com" {
+	if cfg.ServerURL != "https://env-url.com/api" {
 		t.Errorf("env should override file, got %s", cfg.ServerURL)
 	}
 	if cfg.APIKey != "file-key" {
@@ -176,7 +176,7 @@ func TestSaveAndReload(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
 	cfg := OnyxCliConfig{
-		ServerURL:      "https://saved.example.com",
+		ServerURL:      "https://saved.example.com/api",
 		APIKey:         "saved-key",
 		DefaultAgentID: 10,
 	}
@@ -185,7 +185,7 @@ func TestSaveAndReload(t *testing.T) {
 	}
 
 	loaded := Load()
-	if loaded.ServerURL != "https://saved.example.com" {
+	if loaded.ServerURL != "https://saved.example.com/api" {
 		t.Errorf("got %s", loaded.ServerURL)
 	}
 	if loaded.APIKey != "saved-key" {
@@ -253,38 +253,20 @@ func TestSaveCreatesParentDirs(t *testing.T) {
 	}
 }
 
-func TestAPIURL(t *testing.T) {
+func TestWebAppURL(t *testing.T) {
 	cases := []struct {
 		input string
 		want  string
 	}{
-		{"https://cloud.onyx.app", "https://cloud.onyx.app/api"},
-		{"https://cloud.onyx.app/", "https://cloud.onyx.app/api"},
-		{"http://localhost:8080", "http://localhost:8080/api"},
-		{"http://localhost:3000", "http://localhost:3000/api"},
-	}
-	for _, tc := range cases {
-		got := APIURL(tc.input)
-		if got != tc.want {
-			t.Errorf("APIURL(%q) = %q, want %q", tc.input, got, tc.want)
-		}
-	}
-}
-
-func TestAPIURLEmptyPrefix(t *testing.T) {
-	t.Setenv("ONYX_API_PREFIX", "")
-	cases := []struct {
-		input string
-		want  string
-	}{
+		{"https://cloud.onyx.app/api", "https://cloud.onyx.app"},
+		{"https://cloud.onyx.app/api/", "https://cloud.onyx.app"},
+		{"https://onyx.example/base/api", "https://onyx.example/base"},
 		{"http://localhost:8080", "http://localhost:8080"},
-		{"http://localhost:8080/", "http://localhost:8080"},
-		{"https://cloud.onyx.app", "https://cloud.onyx.app"},
 	}
 	for _, tc := range cases {
-		got := APIURL(tc.input)
+		got := WebAppURL(tc.input)
 		if got != tc.want {
-			t.Errorf("APIURL(%q) = %q, want %q", tc.input, got, tc.want)
+			t.Errorf("WebAppURL(%q) = %q, want %q", tc.input, got, tc.want)
 		}
 	}
 }

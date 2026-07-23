@@ -133,7 +133,7 @@ def lock_env(
     preconditions (URL/proxy host) satisfied."""
     monkeypatch.setattr(factory, "CACHE_BACKEND", CacheBackendType.REDIS)
     monkeypatch.setattr(
-        kubernetes_sandbox_manager, "SANDBOX_API_SERVER_URL", "http://api-server"
+        kubernetes_sandbox_manager, "ONYX_SERVER_URL", "http://api-server"
     )
     monkeypatch.setattr(
         kubernetes_sandbox_manager, "SANDBOX_PROXY_HOST", "sandbox-proxy"
