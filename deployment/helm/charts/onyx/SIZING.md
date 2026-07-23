@@ -108,6 +108,15 @@ opensearch:
     limits: {cpu: 4000m, memory: 12Gi}
   persistence:
     size: 128Gi  # existing PVCs must be expanded manually
+  # Pin to the dedicated index node group if you provisioned one — see the
+  # placement note in the Large section.
+  nodeSelector:
+    eks.amazonaws.com/nodegroup: vespa-node-group
+  tolerations:
+    - key: vespa-dedicated
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
 ```
 
 ## Large — org-wide, sustained re-indexes
@@ -163,9 +172,14 @@ opensearch:
   opensearchJavaOpts: "-Xmx6g -Xms6g"
   persistence:
     size: 512Gi
-  # Let the index land on the dedicated document-index node group created by
-  # the terraform module (tainted vespa-dedicated=true on new clusters —
-  # without this toleration that node sits idle).
+  # Pin the index to the dedicated document-index node group created by the
+  # terraform module. The toleration only makes the tainted node *eligible*
+  # — the nodeSelector is what actually keeps OpenSearch (and its page
+  # cache) off the general-purpose pool. EKS labels each node with its node
+  # group name automatically; adjust the value if you renamed the group, and
+  # on non-EKS infrastructure label the node yourself and select on that.
+  nodeSelector:
+    eks.amazonaws.com/nodegroup: vespa-node-group
   tolerations:
     - key: vespa-dedicated
       operator: Equal
