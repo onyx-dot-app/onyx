@@ -132,13 +132,36 @@ def test_advance_to_soaking_stamps_anchor(
         ss.reclaim_status = IndexReclaimStatus.PENDING
         db_session.commit()
 
-        advance_to_soaking__no_commit(ss)
+        assert advance_to_soaking__no_commit(ss) is True
         db_session.commit()
         db_session.refresh(ss)
 
         assert ss.reclaim_status == IndexReclaimStatus.SOAKING
         assert ss.reclaim_stopped_reading_at is not None
         assert ss.reclaim_attempts == 0
+    finally:
+        db_session.delete(ss)
+        db_session.commit()
+
+
+def test_advance_to_soaking_is_noop_off_source_state(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """A repeat call on an already-SOAKING row must not re-stamp the anchor (which
+    would extend the soak) — it returns False and leaves the row untouched."""
+    ss = _make_past_settings(db_session)
+    try:
+        ss.reclaim_status = IndexReclaimStatus.PENDING
+        assert advance_to_soaking__no_commit(ss) is True  # PENDING -> SOAKING, stamps
+        db_session.commit()
+        db_session.refresh(ss)
+        first_anchor = ss.reclaim_stopped_reading_at
+
+        assert advance_to_soaking__no_commit(ss) is False  # already SOAKING
+        db_session.commit()
+        db_session.refresh(ss)
+        assert ss.reclaim_stopped_reading_at == first_anchor
     finally:
         db_session.delete(ss)
         db_session.commit()
@@ -153,11 +176,13 @@ def test_advance_to_deleting(
         ss.reclaim_status = IndexReclaimStatus.SOAKING
         db_session.commit()
 
-        advance_to_deleting__no_commit(ss)
+        assert advance_to_deleting__no_commit(ss) is True
         db_session.commit()
         db_session.refresh(ss)
 
         assert ss.reclaim_status == IndexReclaimStatus.DELETING
+        # Off-source no-op: cannot skip the soak from PENDING.
+        assert advance_to_deleting__no_commit(ss) is False
     finally:
         db_session.delete(ss)
         db_session.commit()

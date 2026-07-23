@@ -343,20 +343,29 @@ def fetch_reclaimable_past_settings(
     return list(db_session.scalars(stmt))
 
 
-def advance_to_soaking__no_commit(search_settings: SearchSettings) -> None:
+def advance_to_soaking__no_commit(search_settings: SearchSettings) -> bool:
     """PENDING -> SOAKING: the index stopped being read; start the soak clock.
-    Anchors `reclaim_stopped_reading_at` to now (DB clock). Caller commits."""
+    Anchors `reclaim_stopped_reading_at` to now (DB clock). No-op returning False
+    unless currently PENDING, so a repeat/out-of-order call can't re-stamp the anchor
+    and extend the soak. Caller commits."""
+    if search_settings.reclaim_status != IndexReclaimStatus.PENDING:
+        return False
     search_settings.reclaim_status = IndexReclaimStatus.SOAKING
     search_settings.reclaim_stopped_reading_at = func.now()
     search_settings.reclaim_attempts = 0
     search_settings.reclaim_last_error = None
+    return True
 
 
-def advance_to_deleting__no_commit(search_settings: SearchSettings) -> None:
-    """SOAKING -> DELETING: soak elapsed + new index healthy. Caller commits."""
+def advance_to_deleting__no_commit(search_settings: SearchSettings) -> bool:
+    """SOAKING -> DELETING: soak elapsed + new index healthy. No-op returning False
+    unless currently SOAKING, so a call can't skip the soak. Caller commits."""
+    if search_settings.reclaim_status != IndexReclaimStatus.SOAKING:
+        return False
     search_settings.reclaim_status = IndexReclaimStatus.DELETING
     search_settings.reclaim_attempts = 0
     search_settings.reclaim_last_error = None
+    return True
 
 
 def record_failure__no_commit(
