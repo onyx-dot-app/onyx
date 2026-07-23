@@ -657,13 +657,19 @@ class ConfluenceConnector(
                     attachment["title"],
                     page["title"],
                 )
-                # Build the download URL ourselves for a stable, filename-bearing link:
-                # `_links.download` is a token-only REST endpoint on Cloud and
-                # `_links.webui` points at the attachments viewer, not the file.
+                # Cloud's download link may be a filename-free REST URL.
                 try:
+                    attachment_url = (
+                        f"/download/attachments/{_get_page_id(page)}/{quote(attachment['title'])}"
+                        if self.is_cloud
+                        else attachment["_links"]["download"]
+                    )
+                    attachment_id = build_confluence_document_id(
+                        self.wiki_base, attachment["_links"]["webui"], self.is_cloud
+                    )
                     object_url = build_confluence_document_id(
                         self.wiki_base,
-                        f"/download/attachments/{_get_page_id(page)}/{quote(attachment['title'])}",
+                        attachment_url,
                         self.is_cloud,
                     )
                 except Exception as e:
@@ -713,9 +719,6 @@ class ConfluenceConnector(
                         self.wiki_base, page["_links"]["webui"], self.is_cloud
                     )
                     attachment_metadata["parent_page_id"] = page_url
-                    attachment_id = build_confluence_document_id(
-                        self.wiki_base, attachment["_links"]["webui"], self.is_cloud
-                    )
 
                     primary_owners: list[BasicExpertInfo] | None = None
                     if "version" in attachment and "by" in attachment["version"]:
@@ -772,7 +775,7 @@ class ConfluenceConnector(
                     attachment_failures.append(
                         ConnectorFailure(
                             failed_document=DocumentFailure(
-                                document_id=object_url,
+                                document_id=attachment_id,
                                 document_link=object_url,
                             ),
                             failure_message=f"Failed to extract/summarize attachment {attachment['title']} for doc {object_url}",
