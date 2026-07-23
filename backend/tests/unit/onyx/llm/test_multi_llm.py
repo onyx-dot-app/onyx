@@ -822,6 +822,52 @@ def test_non_azure_responses_bridge_keeps_api_version() -> None:
     assert kwargs["api_version"] == "2025-03-01-preview"
 
 
+@pytest.mark.parametrize("model_name", ["o1-mini", "o1-preview", "o1-mini-2024-09-12"])
+@pytest.mark.parametrize("routed_via_responses", [True, False])
+def test_reasoning_effort_omitted_for_models_rejecting_it(
+    model_name: str, routed_via_responses: bool
+) -> None:
+    """o1-mini / o1-preview reject the reasoning-effort parameter on every API
+    surface; neither the nested responses param nor the root-level one may be
+    sent, regardless of routing."""
+    llm = _azure_llm(model_name, api_version="2025-03-01-preview")
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+        patch(
+            "onyx.llm.multi_llm.is_true_openai_model",
+            return_value=routed_via_responses,
+        ),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "reasoning" not in kwargs
+        assert "reasoning_effort" not in kwargs
+
+
+def test_reasoning_effort_sent_for_o1() -> None:
+    """The o1-mini/o1-preview deny-list must not catch the bare o1 model."""
+    llm = _azure_llm("o1", api_version="2025-03-01-preview")
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"]["effort"] == "medium"
+
+
 def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
     with (
         patch("litellm.completion") as mock_completion,
