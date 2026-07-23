@@ -164,12 +164,13 @@ const AppInputBar = React.memo(
       wrapperRef: inputWrapperRef,
       pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
     });
+    const trimmedMessage = message.trim();
 
     // Keyboard navigation + highlight state for the queued-message bar
     // (shared with the Craft input bar).
     const queueNav = useQueuedMessageNavigation({
       messages: queuedMessages,
-      inputIsEmpty: !message,
+      inputIsEmpty: !trimmedMessage,
       onRemove: removeCurrentQueuedMessage,
       onEdit: setMessage,
     });
@@ -271,10 +272,11 @@ const AppInputBar = React.memo(
     );
     const submitMessage = useCallback(
       (text: string) => {
-        if (!text.trim()) {
+        const trimmed = text.trim();
+        if (!trimmed) {
           return;
         }
-        handleSubmit(text);
+        handleSubmit(trimmed);
         clearChatDraft();
       },
       [handleSubmit, clearChatDraft]
@@ -760,7 +762,7 @@ const AppInputBar = React.memo(
             disabled={
               (chatState === "input" &&
                 !isVoicePlaybackControllable &&
-                !message) ||
+                !trimmedMessage) ||
               hasUploadingFiles ||
               hasIndexingFiles ||
               isClassifying
@@ -775,7 +777,7 @@ const AppInputBar = React.memo(
               isClassifying
                 ? SvgSimpleLoader
                 : (chatState !== "input" || awaitingPreferredSelection) &&
-                    message.trim()
+                    trimmedMessage
                   ? SvgArrowUp
                   : chatState === "streaming" || isVoicePlaybackControllable
                     ? SvgStop
@@ -784,9 +786,9 @@ const AppInputBar = React.memo(
             onClick={() => {
               const canSubmitNormally =
                 chatState === "input" && !awaitingPreferredSelection;
-              if (!canSubmitNormally && message.trim()) {
+              if (!canSubmitNormally && trimmedMessage) {
                 if (queuedMessages.length < MAX_QUEUED_MESSAGES) {
-                  enqueueCurrentMessage(message.trim());
+                  enqueueCurrentMessage(trimmedMessage);
                   clearMessage();
                   // Drop the draft now; a reload could outrace the debounced
                   // empty-save.
@@ -797,8 +799,8 @@ const AppInputBar = React.memo(
                 stopGenerating();
               } else if (isVoicePlaybackControllable) {
                 stopTTS({ manual: true });
-              } else if (message) {
-                submitMessage(message);
+              } else if (trimmedMessage) {
+                submitMessage(trimmedMessage);
               }
             }}
           />
@@ -921,7 +923,7 @@ const AppInputBar = React.memo(
                       aria-disabled={disabled}
                       aria-placeholder="How can I help you today?"
                       data-placeholder={
-                        queuedMessages.length > 0 && !message
+                        queuedMessages.length > 0 && !trimmedMessage
                           ? "Press up to edit queued messages"
                           : isRecording
                             ? "Listening..."
@@ -931,7 +933,7 @@ const AppInputBar = React.memo(
                                 ? "Search connected sources"
                                 : "How can I help you today?"
                       }
-                      data-empty={!message ? "" : undefined}
+                      data-empty={!trimmedMessage ? "" : undefined}
                       onKeyDown={(event) => {
                         if (
                           handleInputNavKeys(event, queueNav, handleTileKeyDown)
@@ -952,21 +954,21 @@ const AppInputBar = React.memo(
                             !awaitingPreferredSelection;
                           if (canSubmitNormally) {
                             if (
-                              message &&
+                              trimmedMessage &&
                               !disabled &&
                               !isClassifying &&
                               !hasUploadingFiles
                             ) {
-                              submitMessage(message);
+                              submitMessage(trimmedMessage);
                             }
                           } else if (
-                            message.trim() &&
+                            trimmedMessage &&
                             !disabled &&
                             !isClassifying &&
                             !hasUploadingFiles &&
                             queuedMessages.length < MAX_QUEUED_MESSAGES
                           ) {
-                            enqueueCurrentMessage(message.trim());
+                            enqueueCurrentMessage(trimmedMessage);
                             clearMessage();
                             // Drop the draft now; a reload could outrace the
                             // debounced empty-save.
@@ -1019,20 +1021,22 @@ const AppInputBar = React.memo(
               {isSearchMode && (
                 <Section flexDirection="row" width="fit" gap={0}>
                   <Button
-                    disabled={!message || isClassifying}
+                    disabled={!trimmedMessage || isClassifying}
                     icon={SvgX}
                     onClick={() => clearMessage()}
                     prominence="tertiary"
                   />
                   <Button
-                    disabled={!message || isClassifying || hasUploadingFiles}
+                    disabled={
+                      !trimmedMessage || isClassifying || hasUploadingFiles
+                    }
                     id="onyx-chat-input-send-button"
                     icon={isClassifying ? SvgSimpleLoader : SvgSearch}
                     onClick={() => {
                       if (chatState == "streaming") {
                         stopGenerating();
-                      } else if (message) {
-                        submitMessage(message);
+                      } else if (trimmedMessage) {
+                        submitMessage(trimmedMessage);
                       }
                     }}
                     prominence="tertiary"
