@@ -35,12 +35,17 @@ from onyx.document_index.opensearch.constants import (
     HybridSearchSubqueryConfiguration,
     OpenSearchSearchType,
 )
+from onyx.document_index.opensearch.index_reclaim import (
+    ReclaimOutcome,
+    reclaim_index_data,
+)
 from onyx.document_index.opensearch.opensearch_document_index import (
     generate_opensearch_filtered_access_control_list,
 )
 from onyx.document_index.opensearch.schema import (
     ACCESS_CONTROL_LIST_FIELD_NAME,
     CONTENT_FIELD_NAME,
+    TENANT_ID_FIELD_NAME,
     DocumentChunk,
     DocumentChunkWithoutVectors,
     DocumentSchema,
@@ -3146,3 +3151,181 @@ class TestSearchFailureMetrics:
 
         with pytest.raises(OpenSearchServerSideTimeout):
             test_client.fetch_chunks_for_doc_ids(pit_id, ["doc-a"], page_size=4)
+
+
+class TestIndexReclaimPrimitive:
+    """count_by_query + reclaim_index_data (the old-index deletion primitive)."""
+
+    def _create_mt_index(
+        self, client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _patch_global_tenant_state(monkeypatch, True)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=True
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        client.create_index(mappings=mappings, settings=settings)
+
+    def _index_docs(
+        self,
+        client: OpenSearchIndexClient,
+        tenant_state: TenantState,
+        prefix: str,
+        count: int,
+    ) -> None:
+        for i in range(count):
+            client.index_document(
+                document=_create_test_document_chunk(
+                    document_id=f"{prefix}-{i}",
+                    content="content",
+                    tenant_state=tenant_state,
+                ),
+                tenant_state=tenant_state,
+            )
+
+    @staticmethod
+    def _tenant_term(tenant_id: str) -> dict[str, Any]:
+        return {"query": {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_id}}}}
+
+    def test_count_by_query(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._create_mt_index(test_client, monkeypatch)
+        ts = TenantState(tenant_id=f"tenant_{uuid.uuid4().hex}", multitenant=True)
+        self._index_docs(test_client, ts, "doc", 3)
+        test_client.refresh_index()
+
+        assert test_client.count_by_query({"query": {"match_all": {}}}) == 3
+        assert test_client.count_by_query(self._tenant_term(ts.tenant_id)) == 3
+
+    def test_reclaim_single_tenant_drops_whole_index(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._create_mt_index(test_client, monkeypatch)
+        ts = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=True)
+        self._index_docs(test_client, ts, "doc", 2)
+        test_client.refresh_index()
+
+        outcome = reclaim_index_data(
+            test_client._index_name,
+            is_multi_tenant=False,
+            tenant_id="ignored",
+        )
+
+        assert outcome == ReclaimOutcome.COMPLETE
+        assert test_client.index_exists() is False
+
+    def test_reclaim_multi_tenant_deletes_only_that_tenant(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._create_mt_index(test_client, monkeypatch)
+        tenant_a = TenantState(tenant_id=f"tenant_{uuid.uuid4().hex}", multitenant=True)
+        tenant_b = TenantState(tenant_id=f"tenant_{uuid.uuid4().hex}", multitenant=True)
+        self._index_docs(test_client, tenant_a, "a", 3)
+        self._index_docs(test_client, tenant_b, "b", 2)
+        test_client.refresh_index()
+
+        outcome = reclaim_index_data(
+            test_client._index_name,
+            is_multi_tenant=True,
+            tenant_id=tenant_a.tenant_id,
+        )
+        test_client.refresh_index()
+
+        assert outcome == ReclaimOutcome.COMPLETE
+        assert test_client.count_by_query(self._tenant_term(tenant_a.tenant_id)) == 0
+        # The shared index and the other tenant's slice are untouched.
+        assert test_client.count_by_query(self._tenant_term(tenant_b.tenant_id)) == 2
+        assert test_client.index_exists() is True
+
+    def test_reclaim_incomplete_when_docs_remain(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If a post-delete count still reports leftovers (a partial delete), the
+        outcome is INCOMPLETE so the beat task retries next tick."""
+        self._create_mt_index(test_client, monkeypatch)
+        ts = TenantState(tenant_id=f"tenant_{uuid.uuid4().hex}", multitenant=True)
+        self._index_docs(test_client, ts, "doc", 1)
+        test_client.refresh_index()
+
+        monkeypatch.setattr(OpenSearchIndexClient, "count_by_query", lambda *_: 3)
+        outcome = reclaim_index_data(
+            test_client._index_name, is_multi_tenant=True, tenant_id=ts.tenant_id
+        )
+        assert outcome == ReclaimOutcome.INCOMPLETE
+
+    def test_reclaim_missing_index_is_complete(
+        self,
+        opensearch_available: None,  # noqa: ARG002
+    ) -> None:
+        missing = f"test_missing_{uuid.uuid4().hex[:8]}"
+        assert (
+            reclaim_index_data(missing, is_multi_tenant=True, tenant_id="tenant_x")
+            == ReclaimOutcome.COMPLETE
+        )
+        assert (
+            reclaim_index_data(missing, is_multi_tenant=False, tenant_id="tenant_x")
+            == ReclaimOutcome.COMPLETE
+        )
+
+    def test_delete_by_query_refresh_makes_deletes_visible(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """refresh=True makes the deletions immediately visible to a follow-up count;
+        without it the count would read stale."""
+        self._create_mt_index(test_client, monkeypatch)
+        ts = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=True)
+        self._index_docs(test_client, ts, "doc", 2)
+        test_client.refresh_index()
+
+        deleted = test_client.delete_by_query(
+            {"query": {"match_all": {}}}, refresh=True
+        )
+
+        # No manual refresh before this count — refresh=True must have made it visible.
+        assert deleted == 2
+        assert test_client.count_by_query({"query": {"match_all": {}}}) == 0
+
+    def test_delete_by_query_max_docs_bounds_deletion(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._create_mt_index(test_client, monkeypatch)
+        ts = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=True)
+        self._index_docs(test_client, ts, "doc", 5)
+        test_client.refresh_index()
+
+        deleted = test_client.delete_by_query(
+            {"query": {"match_all": {}}}, refresh=True, max_docs=2
+        )
+        assert deleted == 2
+        assert test_client.count_by_query({"query": {"match_all": {}}}) == 3
+
+    def test_reclaim_multi_tenant_drains_over_multiple_calls(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A tenant larger than the per-call batch drains over repeated calls —
+        INCOMPLETE until the last batch, then COMPLETE (the whale guard)."""
+        self._create_mt_index(test_client, monkeypatch)
+        monkeypatch.setattr(
+            "onyx.document_index.opensearch.index_reclaim.OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE",
+            2,
+        )
+        ts = TenantState(tenant_id=f"tenant_{uuid.uuid4().hex}", multitenant=True)
+        self._index_docs(test_client, ts, "doc", 5)
+        test_client.refresh_index()
+
+        name = test_client._index_name
+        # 5 docs, batch 2: 3 left, then 1 left, then 0.
+        assert (
+            reclaim_index_data(name, is_multi_tenant=True, tenant_id=ts.tenant_id)
+            == ReclaimOutcome.INCOMPLETE
+        )
+        assert (
+            reclaim_index_data(name, is_multi_tenant=True, tenant_id=ts.tenant_id)
+            == ReclaimOutcome.INCOMPLETE
+        )
+        assert (
+            reclaim_index_data(name, is_multi_tenant=True, tenant_id=ts.tenant_id)
+            == ReclaimOutcome.COMPLETE
+        )
+        assert test_client.count_by_query(self._tenant_term(ts.tenant_id)) == 0
