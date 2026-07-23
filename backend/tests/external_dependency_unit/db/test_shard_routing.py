@@ -783,3 +783,42 @@ def test_sqlalchemy_url_option_is_still_ignored_by_env_py(
         f"env.py used the caller's sync URL ({captured}); async engine creation "
         "would fail"
     )
+
+
+@pytest.mark.asyncio
+async def test_async_sessions_reach_different_physical_databases(
+    two_shards: dict[str, Any],
+) -> None:
+    """Async sessions must route by shard, not just by schema.
+
+    The async path was previously pinned to the default engine, so authentication,
+    PAT, SAML, and token-refresh work for a migrated tenant would read a stale
+    schema on the old database and write to an abandoned copy.
+    """
+    from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+
+    async with get_async_session_context_manager(two_shards["tenant_a"]) as session:
+        db_a = str((await session.execute(text("SELECT current_database()"))).scalar())
+    async with get_async_session_context_manager(two_shards["tenant_b"]) as session:
+        db_b = str((await session.execute(text("SELECT current_database()"))).scalar())
+
+    assert db_a == POSTGRES_DB
+    assert db_b == two_shards["second_db"]
+    assert db_a != db_b
+
+
+@pytest.mark.asyncio
+async def test_async_engine_is_reused_per_shard(two_shards: dict[str, Any]) -> None:
+    """One engine per shard, not one per call — pools must not multiply."""
+    from onyx.db.engine.async_sql_engine import (
+        get_async_engine_for_tenant,
+        reset_sqlalchemy_async_engine,
+    )
+
+    try:
+        first = get_async_engine_for_tenant(two_shards["tenant_b"])
+        second = get_async_engine_for_tenant(two_shards["tenant_b"])
+        assert first is second
+        assert first is not get_async_engine_for_tenant(two_shards["tenant_a"])
+    finally:
+        await reset_sqlalchemy_async_engine()
