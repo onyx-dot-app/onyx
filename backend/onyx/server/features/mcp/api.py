@@ -32,6 +32,8 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
+    EndpointPolicy,
+    GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -39,14 +41,21 @@ from onyx.db.enums import (
     MCPTransport,
     Permission,
 )
+from onyx.db.gated_app import (
+    get_action_policies,
+    get_or_create_gated_app_id,
+    replace_action_policies__no_commit,
+)
 from onyx.db.mcp import (
     create_connection_config,
     create_mcp_server__no_commit,
     delete_all_user_connection_configs_for_server_no_commit,
     delete_connection_config,
     delete_mcp_server,
+    delete_user_connection_configs_for_server,
     extract_connection_data,
     get_all_mcp_servers,
+    get_all_mcp_tools_for_server,
     get_craft_enabled_mcp_servers,
     get_mcp_server_by_id,
     get_mcp_servers_accessible_to_user,
@@ -119,6 +128,10 @@ from onyx.utils.variable_functionality import (
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# A tool with no stored override is treated as ASK; stored policies stay sparse
+# by omitting this value (mirrors the gate evaluator's default).
+MCP_TOOL_DEFAULT_POLICY = EndpointPolicy.ASK
 
 
 _SSRF_HINT_NEVER_ALLOWED = (
@@ -1048,6 +1061,31 @@ def save_user_credentials(
         raise HTTPException(status_code=500, detail="Failed to save user credentials")
 
 
+@router.delete("/user-credentials/{server_id}")
+def delete_user_credentials(
+    server_id: int,
+    db_session: Session = Depends(get_session),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> MCPApiKeyResponse:
+    """Disconnect the caller from an MCP server: remove their own connection
+    configs (OAuth tokens / API keys). Admin template rows are untouched."""
+    try:
+        mcp_server = get_mcp_server_by_id(server_id, db_session)
+    except ValueError:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
+
+    # The helper commits internally.
+    delete_user_connection_configs_for_server(server_id, user.email, db_session)
+
+    return MCPApiKeyResponse(
+        success=True,
+        message="Disconnected",
+        server_id=server_id,
+        server_name=mcp_server.name,
+        authenticated=False,
+    )
+
+
 class MCPToolDescription(BaseModel):
     id: int
     name: str
@@ -1259,6 +1297,11 @@ def _db_mcp_server_to_api_mcp_server(
         groups=[group.id for group in db_server.user_groups],
         users=[user.id for user in db_server.users],
         available_in_craft=db_server.available_in_craft,
+        tool_policies=(
+            get_action_policies(db, GatedAppKind.MCP_SERVER, db_server.id)
+            if can_view_server_details
+            else None
+        ),
         last_refreshed_at=db_server.last_refreshed_at,
         tool_count=tool_count,
         auth_template=auth_template,
@@ -2408,6 +2451,27 @@ def update_mcp_server_simple(
             is_new=False,
             db_session=db_session,
         )
+
+    if request.tool_policies is not None:
+        known = {t.name for t in get_all_mcp_tools_for_server(server_id, db_session)}
+        unknown = sorted(set(request.tool_policies) - known)
+        if unknown:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"unknown tool names for this server: {unknown}",
+            )
+        # Canonicalize at the input boundary so the stored set stays sparse
+        # regardless of which client wrote it: a default (ASK) choice is
+        # equivalent to leaving the tool unlisted.
+        sparse_policies = {
+            tool: policy
+            for tool, policy in request.tool_policies.items()
+            if policy != MCP_TOOL_DEFAULT_POLICY
+        }
+        gated_app_id = get_or_create_gated_app_id(
+            db_session, GatedAppKind.MCP_SERVER, server_id
+        )
+        replace_action_policies__no_commit(db_session, gated_app_id, sparse_policies)
 
     db_session.commit()
 
