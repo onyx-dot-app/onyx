@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import {
   Button,
   InputTypeIn,
@@ -58,7 +58,6 @@ export default function CreateCustomAppModal({
   const isEdit = existingApp !== null;
 
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const [upstreamPatterns, setUpstreamPatterns] = useState<string[]>([]);
   const [headers, setHeaders] = useState<KeyValue[]>([{ key: "", value: "" }]);
   const [orgCredentials, setOrgCredentials] = useState<KeyValue[]>([
@@ -74,7 +73,6 @@ export default function CreateCustomAppModal({
   useEffect(() => {
     if (!open) return;
     setName(existingApp?.name ?? "");
-    setDescription(existingApp?.description ?? "");
     setUpstreamPatterns(existingApp?.upstream_url_patterns ?? []);
     setHeaders(
       existingApp
@@ -136,10 +134,8 @@ export default function CreateCustomAppModal({
           setFile(null);
           bundleSaved = true;
         }
-        // enabled is toggled separately on the card.
         await updateExternalApp(existingApp.id, {
           name: name.trim(),
-          description: description.trim(),
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
@@ -148,11 +144,9 @@ export default function CreateCustomAppModal({
         // Create: bundle is required (enforced by `canSave`).
         await createCustomExternalApp({
           name: name.trim(),
-          description: description.trim(),
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
-          enabled: true,
           bundle: file!,
         });
       }
@@ -191,15 +185,6 @@ export default function CreateCustomAppModal({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="My Custom App"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <Text font="main-ui-action">Description</Text>
-              <InputTypeIn
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional — defaults to the bundle's SKILL.md description"
               />
             </div>
 
@@ -258,8 +243,8 @@ export default function CreateCustomAppModal({
               </Text>
               <Text font="secondary-body" color="text-03">
                 {isEdit
-                  ? "Optional — upload a new zip to replace the current bundle. Leave empty to keep it. The slug stays the same."
-                  : "A zip containing SKILL.md plus any other files. The filename becomes the app slug."}
+                  ? "Optional — upload a new zip to replace the current bundle. Leave empty to keep it. The skill name stays the same."
+                  : "A zip containing SKILL.md plus any other files. The linked skill name comes from SKILL.md."}
               </Text>
               <div className="flex items-center gap-2">
                 <input

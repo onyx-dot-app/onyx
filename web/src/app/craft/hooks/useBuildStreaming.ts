@@ -239,34 +239,19 @@ export function useBuildStreaming() {
     (state) => state.appendSubagentThinkingChunk
   );
 
-  // ── Output file detector registry ──────────────────────────────────────
-  // Ordered by priority — first match wins.
-  // To add a new output type, add an entry here + a store action.
-  const OUTPUT_FILE_DETECTORS = useMemo(
-    () => [
-      {
-        match: (fp: string, k: string) =>
-          (k === "edit" || k === "write") &&
-          (fp.includes("/web/") || fp.startsWith("web/")),
-        onDetect: (sid: string) => triggerWebappRefresh(sid),
-      },
-      {
-        match: (fp: string, k: string) =>
-          (k === "edit" || k === "write") &&
-          fp.endsWith(".md") &&
-          (fp.includes("/outputs/") || fp.startsWith("outputs/")),
-        onDetect: (sid: string, fp: string) => {
-          openMarkdownPreview(sid, fp);
-          triggerFilesRefresh(sid);
-        },
-      },
-      {
-        match: (fp: string, k: string) =>
-          (k === "edit" || k === "write") &&
-          (fp.includes("/outputs/") || fp.startsWith("outputs/")),
-        onDetect: (sid: string) => triggerFilesRefresh(sid),
-      },
-    ],
+  const handleCompletedFileChange = useCallback(
+    (sid: string, filePath: string) => {
+      const isWebFile =
+        filePath.includes("/web/") || filePath.startsWith("web/");
+      const isOutputFile =
+        filePath.includes("/outputs/") || filePath.startsWith("outputs/");
+
+      if (isWebFile) triggerWebappRefresh(sid);
+      if (isOutputFile) {
+        if (filePath.endsWith(".md")) openMarkdownPreview(sid, filePath);
+        triggerFilesRefresh(sid);
+      }
+    },
     [triggerWebappRefresh, triggerFilesRefresh, openMarkdownPreview]
   );
 
@@ -281,6 +266,12 @@ export function useBuildStreaming() {
       const currentItems =
         useBuildSessionStore.getState().sessions.get(sessionId)?.streamItems ??
         [];
+      let needsTurnCompletionFileRefresh = currentItems.some(
+        (item) =>
+          item.type === "tool_call" &&
+          item.toolCall.kind === "execute" &&
+          item.toolCall.status === "completed"
+      );
       const lastCurrentItem = currentItems[currentItems.length - 1];
       if (lastCurrentItem?.type === "text") {
         accumulatedText = lastCurrentItem.content;
@@ -516,6 +507,17 @@ export function useBuildStreaming() {
           }
 
           case "tool_call_progress": {
+            if (parsed.status === "completed" && parsed.kind === "execute") {
+              needsTurnCompletionFileRefresh = true;
+            }
+            if (
+              parsed.status === "completed" &&
+              parsed.kind === "edit" &&
+              parsed.filePath
+            ) {
+              handleCompletedFileChange(sessionId, parsed.filePath);
+            }
+
             const subagentClass = classifySubagentEvent(parsed);
 
             // Child (subagent-internal) event: route to the subagent's own
@@ -532,14 +534,6 @@ export function useBuildStreaming() {
                 null,
                 ""
               );
-              if (parsed.filePath && parsed.kind) {
-                for (const detector of OUTPUT_FILE_DETECTORS) {
-                  if (detector.match(parsed.filePath, parsed.kind)) {
-                    detector.onDetect(sessionId, parsed.filePath);
-                    break;
-                  }
-                }
-              }
               break;
             }
 
@@ -631,14 +625,6 @@ export function useBuildStreaming() {
               }),
             });
 
-            if (parsed.filePath && parsed.kind) {
-              for (const detector of OUTPUT_FILE_DETECTORS) {
-                if (detector.match(parsed.filePath, parsed.kind)) {
-                  detector.onDetect(sessionId, parsed.filePath);
-                  break;
-                }
-              }
-            }
             break;
           }
 
@@ -674,6 +660,11 @@ export function useBuildStreaming() {
           }
 
           case "prompt_response": {
+            if (needsTurnCompletionFileRefresh) {
+              // Shell commands and scripts can mutate the workspace without
+              // emitting structured file paths. Reconcile once when the turn ends.
+              triggerFilesRefresh(sessionId);
+            }
             finalizeStreaming();
             const isInterrupting = useBuildSessionStore
               .getState()
@@ -687,12 +678,16 @@ export function useBuildStreaming() {
               .sessions.get(sessionId);
 
             if (session && session.streamItems.length > 0) {
-              const savedStreamItems = session.streamItems.map((item) => ({
-                ...item,
-                ...(item.type === "text" || item.type === "thinking"
-                  ? { isStreaming: false }
-                  : {}),
-              }));
+              // Connect cards are transient interaction prompts, not transcript
+              // content — drop them from the persisted message.
+              const savedStreamItems = session.streamItems
+                .filter((item) => item.type !== "connect_app_request")
+                .map((item) => ({
+                  ...item,
+                  ...(item.type === "text" || item.type === "thinking"
+                    ? { isStreaming: false }
+                    : {}),
+                }));
               const textContent = session.streamItems
                 .filter((item) => item.type === "text")
                 .map((item) => item.content)
@@ -733,6 +728,38 @@ export function useBuildStreaming() {
             break;
           }
 
+          case "connect_app_request": {
+            // The `connect_app` tool is parked server-side; render the card
+            // inline so resolving it can unblock the tool.
+            if (!parsed.requestId) break;
+            appendStreamItem(sessionId, {
+              type: "connect_app_request",
+              id: parsed.requestId,
+              requestId: parsed.requestId,
+              externalAppId: parsed.externalAppId,
+              reason: parsed.reason,
+            });
+            break;
+          }
+
+          case "context_usage": {
+            updateSessionData(sessionId, {
+              contextUsage: {
+                usedTokens: parsed.usedTokens,
+              },
+            });
+            break;
+          }
+
+          case "compaction": {
+            appendStreamItem(sessionId, {
+              type: "compaction",
+              id: genId("compaction"),
+              summary: parsed.summary,
+            });
+            break;
+          }
+
           case "error": {
             // Safety net for an error arriving mid-interrupt: defer to reconcile rather than
             // marking failed, which strands the queued auto-send and stalls reconcile.
@@ -769,7 +796,8 @@ export function useBuildStreaming() {
       upsertTodoListStreamItem,
       addArtifactToSession,
       appendMessageToSession,
-      OUTPUT_FILE_DETECTORS,
+      handleCompletedFileChange,
+      triggerFilesRefresh,
       globalMutate,
       recordSubagentToolCall,
       seedSubagentMeta,

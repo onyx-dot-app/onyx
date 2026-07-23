@@ -9,7 +9,6 @@ function descriptor(app_type: ExternalAppType): BuiltInExternalAppDescriptor {
   return {
     app_type,
     name: app_type,
-    description: "",
     upstream_url_patterns: [],
     auth_template: {},
     required_org_credential_fields: [],
@@ -25,12 +24,11 @@ function configuredApp(
   return {
     id: 1,
     name: app_type,
-    description: "",
     app_type,
     upstream_url_patterns: [],
     auth_template: {},
     organization_credentials: {},
-    enabled: false,
+    enabled: true,
     actions: [],
     is_onyx_managed: false,
     ...overrides,
@@ -73,7 +71,7 @@ describe("availableBuiltInDescriptors", () => {
     ]);
   });
 
-  it("hides Onyx-managed (cloud, pre-provisioned) built-ins, which are always configured", () => {
+  it("hides configured Onyx-managed built-ins", () => {
     const available = availableBuiltInDescriptors(ALL_DESCRIPTORS, [
       configuredApp("GMAIL", { is_onyx_managed: true }),
     ]);

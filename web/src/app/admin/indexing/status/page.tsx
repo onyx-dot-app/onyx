@@ -2,14 +2,13 @@
 
 import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, useToastFromQuery } from "@opal/layouts";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
-import { useToastFromQuery } from "@/hooks/useToast";
 import { Button } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
 import { useState, useRef, useMemo, RefObject } from "react";

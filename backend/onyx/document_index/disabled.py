@@ -8,14 +8,15 @@ out against a nonexistent Vespa/OpenSearch instance.
 from collections.abc import Iterable
 
 from onyx.context.search.enums import QueryType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentInsertionRecord
-from onyx.document_index.interfaces_new import DocumentSectionRequest
-from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import (
+    DocumentIndex,
+    DocumentInsertionRecord,
+    DocumentSectionRequest,
+    IndexingMetadata,
+    MetadataUpdateRequest,
+)
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding
 

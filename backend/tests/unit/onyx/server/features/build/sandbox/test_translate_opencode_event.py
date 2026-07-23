@@ -11,20 +11,24 @@ from typing import Any
 
 import pytest
 
-from onyx.server.features.build.packets import SubagentStartedPacket
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
+from onyx.server.features.build.packets import (
+    CompactionPacket,
+    ContextUsagePacket,
+    SubagentStartedPacket,
+)
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentThoughtChunk,
+    Error,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
 from onyx.server.features.build.sandbox.opencode.serve_client import (
     _synthesize_tool_content,
-)
-from onyx.server.features.build.sandbox.opencode.serve_client import _tool_status
-from onyx.server.features.build.sandbox.opencode.serve_client import _TurnState
-from onyx.server.features.build.sandbox.opencode.serve_client import _wrap_raw_output
-from onyx.server.features.build.sandbox.opencode.serve_client import (
+    _tool_status,
+    _TurnState,
+    _wrap_raw_output,
     translate_opencode_event,
 )
 
@@ -1761,3 +1765,100 @@ def test_tool_error_state_maps_to_failed_with_error_output() -> None:
     assert out[0].status == "failed"
     assert out[0].raw_output is not None
     assert out[0].raw_output.get("output") == "sudo: a password is required"  # type: ignore[union-attr]
+
+
+def _msg_updated(
+    msg_id: str,
+    *,
+    tokens: dict[str, Any] | None = None,
+    cost: float | None = None,
+    summary: bool | None = None,
+) -> dict[str, Any]:
+    info: dict[str, Any] = {"role": "assistant", "id": msg_id, "sessionID": SESS}
+    if tokens is not None:
+        info["tokens"] = tokens
+    if cost is not None:
+        info["cost"] = cost
+    if summary is not None:
+        info["summary"] = summary
+    return {"type": "message.updated", "properties": {"info": info}}
+
+
+_TOKENS = {
+    "input": 100,
+    "output": 20,
+    "reasoning": 5,
+    "cache": {"read": 30, "write": 10},
+}
+
+
+def test_message_updated_emits_context_usage() -> None:
+    s = _state()
+    out = _drain(
+        translate_opencode_event(_msg_updated("m1", tokens=_TOKENS, cost=0.4), s)
+    )
+    usage = [e for e in out if isinstance(e, ContextUsagePacket)]
+    assert len(usage) == 1
+    assert usage[0].used_tokens == 165
+    assert usage[0].cost == 0.4
+
+
+def test_message_updated_no_usage_when_tokens_zero() -> None:
+    s = _state()
+    zero = {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}}
+    out = _drain(translate_opencode_event(_msg_updated("m1", tokens=zero), s))
+    assert not [e for e in out if isinstance(e, ContextUsagePacket)]
+
+
+def test_message_updated_no_usage_without_tokens() -> None:
+    s = _state()
+    out = _drain(translate_opencode_event(_msg_updated("m1"), s))
+    assert not [e for e in out if isinstance(e, ContextUsagePacket)]
+
+
+def test_summary_message_records_id_and_suppresses_usage() -> None:
+    s = _state()
+    out = _drain(
+        translate_opencode_event(_msg_updated("sum1", tokens=_TOKENS, summary=True), s)
+    )
+    assert "sum1" in s.summary_message_ids
+    assert not [e for e in out if isinstance(e, ContextUsagePacket)]
+
+
+def test_summary_message_text_delta_suppressed() -> None:
+    s = _state()
+    s.assistant_message_ids.add("sum1")
+    s.summary_message_ids.add("sum1")
+    delta = {
+        "type": "message.part.delta",
+        "properties": {
+            "field": "text",
+            "delta": "This is the summary",
+            "partID": "p1",
+            "messageID": "sum1",
+        },
+    }
+    assert _drain(translate_opencode_event(delta, s)) == []
+
+
+def test_session_compacted_emits_marker_with_summary() -> None:
+    s = _state()
+    s.summary_message_ids.add("sum1")
+    fetch, _ = _fetch_from(
+        {
+            "sum1": {
+                "info": {"role": "assistant"},
+                "parts": [{"type": "text", "text": "Recap"}],
+            }
+        }
+    )
+    out = _drain(
+        translate_opencode_event(
+            {"type": "session.compacted", "properties": {"sessionID": SESS}},
+            s,
+            fetch_message=fetch,
+        )
+    )
+    markers = [e for e in out if isinstance(e, CompactionPacket)]
+    assert len(markers) == 1
+    assert markers[0].summary == "Recap"

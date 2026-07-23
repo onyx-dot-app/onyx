@@ -1,19 +1,17 @@
 from collections.abc import Sequence
 
-from sqlalchemy import exists
-from sqlalchemy import Row
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import Session
+from sqlalchemy import Row, Select, exists, select
+from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.constants import TokenRateLimitScope
-from onyx.db.models import TokenRateLimit
-from onyx.db.models import TokenRateLimit__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
+from onyx.db.models import (
+    TokenRateLimit,
+    TokenRateLimit__UserGroup,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserRole,
+)
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 
 
@@ -89,6 +87,7 @@ def insert_user_group_token_rate_limit(
     token_limit = TokenRateLimit(
         enabled=token_rate_limit_settings.enabled,
         token_budget=token_rate_limit_settings.token_budget,
+        cost_budget_cents=token_rate_limit_settings.cost_budget_cents,
         period_hours=token_rate_limit_settings.period_hours,
         scope=TokenRateLimitScope.USER_GROUP,
     )

@@ -35,6 +35,7 @@ _SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
     DocumentSource.LOOPIO: "Loopio.png",
     DocumentSource.DROPBOX: "Dropbox.png",
     DocumentSource.SHAREPOINT: "Sharepoint.png",
+    DocumentSource.BOX: _DEFAULT_SOURCE_IMAGE_FILENAME,
     DocumentSource.TEAMS: "Teams.png",
     DocumentSource.SALESFORCE: "Salesforce.png",
     DocumentSource.DISCOURSE: "Discourse.png",
@@ -60,6 +61,8 @@ _SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
     DocumentSource.BITBUCKET: "Bitbucket.png",
     DocumentSource.TESTRAIL: "Testrail.png",
     DocumentSource.BRAINTRUST: "Braintrust.png",
+    # LumApps ships only as an inline SVG in web; no PNG asset exists
+    DocumentSource.LUMAPPS: _DEFAULT_SOURCE_IMAGE_FILENAME,
     DocumentSource.MOCK_CONNECTOR: _DEFAULT_SOURCE_IMAGE_FILENAME,
     DocumentSource.USER_FILE: _DEFAULT_SOURCE_IMAGE_FILENAME,
     DocumentSource.CRAFT_FILE: _DEFAULT_SOURCE_IMAGE_FILENAME,

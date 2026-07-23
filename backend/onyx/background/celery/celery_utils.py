@@ -1,38 +1,43 @@
 import time
-from collections.abc import Generator
-from collections.abc import Iterator
-from collections.abc import Sequence
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Generator, Iterator, Sequence
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
-from typing import cast
-from typing import TypeVar
+from typing import Any, TypeVar, cast
 
 import httpx
 from pydantic import BaseModel
 
-from onyx.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
-from onyx.configs.app_configs import VESPA_REQUEST_TIMEOUT
+from onyx.configs.app_configs import (
+    MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE,
+    VESPA_REQUEST_TIMEOUT,
+)
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
-from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import ConnectorCheckpoint
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.file_store.staging import build_tracking_raw_file_callback
-from onyx.file_store.staging import delete_files_best_effort
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    CheckpointedConnector,
+    ConnectorCheckpoint,
+    LoadConnector,
+    PollConnector,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    HierarchyNode,
+    SlimDocument,
+)
+from onyx.file_store.staging import (
+    build_tracking_raw_file_callback,
+    delete_files_best_effort,
+)
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.server.metrics.pruning_metrics import inc_pruning_rate_limit_error
-from onyx.server.metrics.pruning_metrics import observe_pruning_enumeration_duration
+from onyx.server.metrics.pruning_metrics import (
+    inc_pruning_rate_limit_error,
+    observe_pruning_enumeration_duration,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -49,6 +54,7 @@ class SlimConnectorExtractionResult(BaseModel):
 
     raw_id_to_parent: dict[str, str | None]
     hierarchy_nodes: list[HierarchyNode]
+    id_to_created_at: dict[str, datetime]
 
 
 def _checkpointed_batched_items(
@@ -102,6 +108,7 @@ def _get_failure_id(failure: ConnectorFailure) -> str | None:
 class BatchResult(BaseModel):
     raw_id_to_parent: dict[str, str | None]
     hierarchy_nodes: list[HierarchyNode]
+    id_to_created_at: dict[str, datetime]
 
 
 def _extract_from_batch(
@@ -113,6 +120,7 @@ def _extract_from_batch(
     ID dict so that failed-to-retrieve documents are not accidentally pruned.
     """
     ids: dict[str, str | None] = {}
+    id_to_created_at: dict[str, datetime] = {}
     hierarchy_nodes: list[HierarchyNode] = []
     for item in doc_list:
         if isinstance(item, HierarchyNode):
@@ -126,7 +134,13 @@ def _extract_from_batch(
             )
         else:
             ids[item.id] = item.parent_hierarchy_raw_node_id
-    return BatchResult(raw_id_to_parent=ids, hierarchy_nodes=hierarchy_nodes)
+            if item.doc_created_at is not None:
+                id_to_created_at[item.id] = item.doc_created_at
+    return BatchResult(
+        raw_id_to_parent=ids,
+        hierarchy_nodes=hierarchy_nodes,
+        id_to_created_at=id_to_created_at,
+    )
 
 
 def extract_ids_from_runnable_connector(
@@ -145,6 +159,7 @@ def extract_ids_from_runnable_connector(
     """
     all_raw_id_to_parent: dict[str, str | None] = {}
     all_hierarchy_nodes: list[HierarchyNode] = []
+    all_id_to_created_at: dict[str, datetime] = {}
 
     # Pruning only needs doc ids, but non-slim tabular connectors won't yield a
     # doc without staging its CSV. Stage to a tracked list and reap in the finally
@@ -207,6 +222,7 @@ def extract_ids_from_runnable_connector(
             doc_batch_processing_func(batch_ids)
             all_raw_id_to_parent.update(batch_ids)
             all_hierarchy_nodes.extend(batch_nodes)
+            all_id_to_created_at.update(batch_result.id_to_created_at)
 
             if callback:
                 callback.progress("extract_ids_from_runnable_connector", len(batch_ids))
@@ -233,6 +249,7 @@ def extract_ids_from_runnable_connector(
     return SlimConnectorExtractionResult(
         raw_id_to_parent=all_raw_id_to_parent,
         hierarchy_nodes=all_hierarchy_nodes,
+        id_to_created_at=all_id_to_created_at,
     )
 
 

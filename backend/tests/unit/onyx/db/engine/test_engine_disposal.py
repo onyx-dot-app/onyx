@@ -16,9 +16,7 @@ the cached engine references are released.
 from __future__ import annotations
 
 from contextlib import ExitStack
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 

@@ -21,12 +21,10 @@ async function readErrorDetail(
 
 interface CreateBuiltInExternalAppBody {
   name: string;
-  description: string;
   app_type: ExternalAppType;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
-  enabled: boolean;
   // Full replace when present; omit to default every action to ASK.
   action_policies?: Record<string, EndpointPolicy>;
 }
@@ -52,12 +50,10 @@ export async function createBuiltInExternalApp(
 
 interface CreateCustomExternalAppInput {
   name: string;
-  description: string;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
-  enabled: boolean;
-  /** Required — the skill bundle whose filename becomes the app slug. */
+  /** Required skill bundle; its SKILL.md defines the linked skill name. */
   bundle: File;
 }
 
@@ -72,8 +68,6 @@ export async function createCustomExternalApp(
 ): Promise<ExternalAppAdminResponse> {
   const form = new FormData();
   form.append("name", input.name);
-  form.append("description", input.description);
-  form.append("enabled", String(input.enabled));
   form.append(
     "upstream_url_patterns",
     JSON.stringify(input.upstream_url_patterns)
@@ -97,7 +91,7 @@ export async function createCustomExternalApp(
 }
 
 /**
- * Replace a custom app's bundle bytes, keeping its slug
+ * Replace a custom app's bundle bytes, keeping its skill name
  * (`PUT /admin/apps/{id}/bundle`). The only multipart channel for edits; all
  * other field edits go through {@link updateExternalApp}.
  */
@@ -122,7 +116,6 @@ interface UpdateExternalAppBody {
   // Every field is optional; omit to leave the stored value untouched.
   enabled?: boolean;
   name?: string;
-  description?: string;
   upstream_url_patterns?: string[];
   auth_template?: Record<string, string>;
   organization_credentials?: Record<string, string>;
@@ -132,7 +125,7 @@ interface UpdateExternalAppBody {
 
 /**
  * Partial update of any app (PATCH /admin/apps/{id}). For Onyx-managed built-ins
- * the gateway-config fields are ignored server-side (only enablement + policies
+ * the gateway-config fields are ignored server-side (only policies
  * apply); a custom app's bundle bytes go through {@link replaceCustomAppBundle}.
  */
 export async function updateExternalApp(
@@ -148,17 +141,6 @@ export async function updateExternalApp(
     throw new Error(await readErrorDetail(res, "Save failed"));
   }
   return res.json();
-}
-
-/**
- * Toggle `enabled` without touching credentials or stored policies — works the
- * same for built-in and custom apps via the PATCH endpoint.
- */
-export async function setExternalAppEnabled(
-  app: ExternalAppAdminResponse,
-  enabled: boolean
-): Promise<ExternalAppAdminResponse> {
-  return updateExternalApp(app.id, { enabled });
 }
 
 export async function deleteExternalApp(id: number): Promise<void> {
@@ -186,10 +168,15 @@ export async function startExternalAppOAuth(
   return res.json();
 }
 
+interface OAuthCallbackResponse {
+  success: boolean;
+  external_app_id: number;
+}
+
 export async function completeExternalAppOAuthCallback(
   code: string,
   state: string
-): Promise<void> {
+): Promise<OAuthCallbackResponse> {
   const res = await fetch(`${BUILD_API_BASE}/apps/oauth/callback`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -197,6 +184,31 @@ export async function completeExternalAppOAuthCallback(
   });
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "OAuth exchange failed"));
+  }
+  return res.json();
+}
+
+export type ConnectAppDecision = "connected" | "declined";
+
+/**
+ * Resolve a parked `connect_app` request. The api-server is blocking the
+ * agent's tool call on this decision: "connected" allows it, "declined" hands
+ * the agent a rejection result so it can choose an alternative.
+ */
+export async function postConnectAppDecision(
+  requestId: string,
+  decision: ConnectAppDecision
+): Promise<void> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/apps/connect/${requestId}/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Failed to resolve connection"));
   }
 }
 

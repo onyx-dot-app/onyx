@@ -164,6 +164,19 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.NEBIUS_TOKENFACTORY,
 }
 
+# Dynamic providers fetch models directly from source APIs (not LiteLLM).
+# A subset of AGGREGATOR_PROVIDERS.
+DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
+    {
+        LlmProviderNames.OPENROUTER,
+        LlmProviderNames.BEDROCK,
+        LlmProviderNames.OLLAMA_CHAT,
+        LlmProviderNames.LM_STUDIO,
+        LlmProviderNames.BIFROST,
+        LlmProviderNames.OPENAI_COMPATIBLE,
+    }
+)
+
 # Model family name mappings for display name generation
 # Used by Bedrock display name generator
 BEDROCK_MODEL_NAME_MAPPINGS: dict[str, str] = {

@@ -1,20 +1,20 @@
 from datetime import datetime
-from typing import Any
-from typing import TYPE_CHECKING
-from typing import Union
+from typing import TYPE_CHECKING, Any, Union
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
-from onyx.db.enums import ArtifactType
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.enums import SharingScope
+from onyx.db.enums import (
+    ArtifactType,
+    BuildSessionStatus,
+    SandboxStatus,
+    SessionOrigin,
+    SharingScope,
+)
+from onyx.server.features.build.db.build_session import skills_are_stale
 
 if TYPE_CHECKING:
-    from onyx.db.models import BuildSession
-    from onyx.db.models import Sandbox
+    from onyx.db.models import BuildSession, Sandbox
 
 
 # ===== Session Models =====
@@ -66,6 +66,12 @@ class SandboxResponse(BaseModel):
         )
 
 
+class SandboxStatusResponse(BaseModel):
+    """Lightweight sandbox status for the frontend sleep poll."""
+
+    status: SandboxStatus | None
+
+
 class ArtifactResponse(BaseModel):
     """Artifact metadata in session response."""
 
@@ -109,6 +115,7 @@ class SessionResponse(BaseModel):
     origin: SessionOrigin
     agent_provider: str | None
     agent_model: str | None
+    skills_stale: bool
 
     @classmethod
     def from_model(
@@ -135,7 +142,12 @@ class SessionResponse(BaseModel):
             origin=session.origin,
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
+            skills_stale=skills_are_stale(session, sandbox),
         )
+
+
+class SessionSkillsStateResponse(BaseModel):
+    skills_stale: bool
 
 
 class DetailedSessionResponse(SessionResponse):

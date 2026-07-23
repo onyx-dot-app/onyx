@@ -1,6 +1,6 @@
 "use client";
 
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Button } from "@opal/components";
 import {
@@ -9,12 +9,14 @@ import {
 } from "./AppearanceThemeSettings";
 import { useRef, useState } from "react";
 import { useSettings } from "@/lib/settings/hooks";
-import { toast } from "@/hooks/useToast";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { EnterpriseSettings } from "@/lib/settings/types";
-import { mutate } from "swr";
+import useSWR, { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { AdminBanner } from "@/lib/banner/interfaces";
+import { invalidateNotificationCaches } from "@/lib/notifications/api";
 
 const route = ADMIN_ROUTES.THEME;
 
@@ -26,6 +28,8 @@ const CHAR_LIMITS = {
   custom_popup_header: 100,
   custom_popup_content: 500,
   consent_screen_prompt: 200,
+  system_announcement_header: 100,
+  system_announcement_content: 1000,
 };
 
 export default function ThemePage() {
@@ -34,6 +38,16 @@ export default function ThemePage() {
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
   const [logoVersion, setLogoVersion] = useState(0);
   const appearanceSettingsRef = useRef<AppearanceThemeSettingsRef>(null);
+  // The banner seeds Formik initialValues once, so the form renders only after
+  // this fetch settles (a failed fetch counts as "no banner"). Background
+  // revalidation stays off, and only our own post-save mutate refreshes it.
+  const { data: adminBanner, error: adminBannerError } =
+    useSWR<AdminBanner | null>(SWR_KEYS.adminBanner, errorHandlingFetcher, {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    });
+  const bannerLoaded = adminBanner !== undefined || Boolean(adminBannerError);
+  const currentBanner = adminBanner ?? null;
 
   async function updateEnterpriseSettings(
     newValues: EnterpriseSettings
@@ -56,6 +70,23 @@ export default function ThemePage() {
       alert(`Failed to update settings. ${errorMsg}`);
       return false;
     }
+  }
+
+  async function mutateAdminBanner(
+    init: RequestInit,
+    failMessage: string
+  ): Promise<boolean> {
+    const response = await fetch("/api/admin/banner", init);
+    if (!response.ok) {
+      const errorMsg = (await response.json()).detail;
+      toast.error(`${failMessage} ${errorMsg}`);
+      return false;
+    }
+    await mutate(SWR_KEYS.adminBanner);
+    // The banner reaches users as a synthesized notification, so the mounted
+    // banner queue and bell must refetch to show the change without a reload.
+    await invalidateNotificationCaches();
+    return true;
   }
 
   const validationSchema = Yup.object().shape({
@@ -141,7 +172,33 @@ export default function ThemePage() {
           ),
       }),
     hide_onyx_branding: Yup.boolean().nullable(),
+    system_announcement_enabled: Yup.boolean().nullable(),
+    system_announcement_header: Yup.string()
+      .trim()
+      .max(
+        CHAR_LIMITS.system_announcement_header,
+        `Maximum ${CHAR_LIMITS.system_announcement_header} characters`
+      )
+      .when("system_announcement_enabled", {
+        is: true,
+        then: (schema) => schema.required("Notice Header is required"),
+        otherwise: (schema) => schema.nullable(),
+      }),
+    system_announcement_content: Yup.string()
+      .trim()
+      .max(
+        CHAR_LIMITS.system_announcement_content,
+        `Maximum ${CHAR_LIMITS.system_announcement_content} characters`
+      )
+      .when("system_announcement_enabled", {
+        is: true,
+        then: (schema) => schema.required("Notice Content is required"),
+        otherwise: (schema) => schema.nullable(),
+      }),
+    system_announcement_show_as_popup: Yup.boolean().nullable(),
   });
+
+  if (!bannerLoaded) return null;
 
   return (
     <Formik
@@ -166,6 +223,11 @@ export default function ThemePage() {
         custom_help_link_label:
           enterpriseSettings?.custom_help_link_label || "",
         hide_onyx_branding: enterpriseSettings?.hide_onyx_branding || false,
+        system_announcement_enabled: !!currentBanner,
+        system_announcement_header: currentBanner?.title || "",
+        system_announcement_content: currentBanner?.content || "",
+        system_announcement_show_as_popup:
+          currentBanner?.show_as_popup || false,
       }}
       validationSchema={validationSchema}
       validateOnChange={false}
@@ -215,9 +277,44 @@ export default function ThemePage() {
           hide_onyx_branding: values.hide_onyx_branding ?? null,
         });
 
-        // Important: after a successful save, reset Formik's "baseline" so
-        // dirty comparisons reflect the newly-saved values.
-        if (success) {
+        // Only touch the banner after the settings save succeeds, and only when
+        // its own fields changed, so an unrelated edit does not re-publish it.
+        const trimmedHeader = values.system_announcement_header.trim();
+        const trimmedContent =
+          values.system_announcement_content.trim() || null;
+        const bannerChanged =
+          values.system_announcement_enabled !== !!currentBanner ||
+          trimmedHeader !== (currentBanner?.title ?? "") ||
+          trimmedContent !== (currentBanner?.content ?? null) ||
+          values.system_announcement_show_as_popup !==
+            (currentBanner?.show_as_popup ?? false);
+
+        let bannerOk = true;
+        if (success && bannerChanged) {
+          if (values.system_announcement_enabled) {
+            bannerOk = await mutateAdminBanner(
+              {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  title: trimmedHeader,
+                  content: trimmedContent,
+                  show_as_popup: values.system_announcement_show_as_popup,
+                }),
+              },
+              "Failed to save announcement."
+            );
+          } else if (currentBanner) {
+            bannerOk = await mutateAdminBanner(
+              { method: "DELETE" },
+              "Failed to clear announcement."
+            );
+          }
+        }
+
+        // After a successful save, reset Formik's baseline so dirty comparisons
+        // reflect the newly-saved values.
+        if (success && bannerOk) {
           formikHelpers.resetForm({ values });
           if (logoUploaded) {
             setLogoVersion((v) => v + 1);

@@ -236,7 +236,7 @@ export const MemoizedParagraph = memo(function MemoizedParagraph({
   children,
 }: MemoizedParagraphProps) {
   return (
-    <Text as="p" mainContentBody className={className}>
+    <Text as="p" mainContentBody text04 className={className}>
       {children}
     </Text>
   );

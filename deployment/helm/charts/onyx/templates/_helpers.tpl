@@ -87,7 +87,8 @@ Create env vars from secrets (global secrets only — skips entries with allPods
 */}}
 {{- define "onyx.envSecrets" -}}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
-    {{- if and (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) (ne (toString (index $secretContent "allPods" | default "true")) "false") }}
+    {{- $allPods := or (not (hasKey $secretContent "allPods")) (ne (toString $secretContent.allPods) "false") }}
+    {{- if and (ne $secretSuffix "metricsAuth") (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) $allPods }}
     {{- range $name, $key := $secretContent.secretKeys }}
 - name: {{ $name | upper | replace "-" "_" | quote }}
   valueFrom:
@@ -104,7 +105,8 @@ Create env vars from secrets restricted to specific pods (entries with allPods: 
 */}}
 {{- define "onyx.envSecretsRestricted" -}}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
-    {{- if and (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) (eq (toString (index $secretContent "allPods" | default "true")) "false") }}
+    {{- $restricted := and (hasKey $secretContent "allPods") (eq (toString $secretContent.allPods) "false") }}
+    {{- if and (ne $secretSuffix "metricsAuth") (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) $restricted }}
     {{- range $name, $key := $secretContent.secretKeys }}
 - name: {{ $name | upper | replace "-" "_" | quote }}
   valueFrom:
@@ -113,6 +115,20 @@ Create env vars from secrets restricted to specific pods (entries with allPods: 
       key: {{ default $name $key }}
     {{- end }}
     {{- end }}
+    {{- end }}
+{{- end }}
+
+{{/*
+Inject metrics auth only into pods that expose the protected endpoint.
+*/}}
+{{- define "onyx.metricsAuthEnv" -}}
+    {{- $metricsAuth := .Values.auth.metricsAuth | default dict }}
+    {{- if dig "enabled" false $metricsAuth }}
+- name: METRICS_AUTH_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "onyx.secretName" $metricsAuth }}
+      key: {{ default "METRICS_AUTH_TOKEN" (dig "secretKeys" "METRICS_AUTH_TOKEN" "" $metricsAuth) }}
     {{- end }}
 {{- end }}
 
@@ -293,6 +309,51 @@ Emits a single line ending with a comma.
 {{- define "onyx.customCACerts.commandPrefix" -}}
 {{- if include "onyx.customCACerts.enabled" . -}}
 "/bin/sh", "-c", "update-ca-certificates && exec \"$0\" \"$@\"",
+{{- end -}}
+{{- end }}
+
+{{/*
+Model-server variant of the custom-CA env. The model servers run on a distroless
+image with no shell to run update-ca-certificates, so instead of pointing at the
+merged system store they hand the mount directory to the Python entrypoint, which
+concatenates the mounted roots with certifi's public roots at startup. Any key
+name(s) under the mount work, and the roots stay additive to the public roots.
+*/}}
+{{- define "onyx.customCACerts.modelServerEnv" -}}
+{{- if include "onyx.customCACerts.enabled" . -}}
+- name: ONYX_CUSTOM_CA_CERTS_DIR
+  value: /etc/onyx/certs
+{{- end -}}
+{{- end }}
+
+{{/*
+Model-server variant of the custom-CA mount: mounts the bundle directory the
+entrypoint reads (no update-ca-certificates step) at the path the env above names.
+*/}}
+{{- define "onyx.customCACerts.modelServerVolumeMount" -}}
+{{- if include "onyx.customCACerts.enabled" . -}}
+- name: custom-ca-certs
+  mountPath: /etc/onyx/certs
+  readOnly: true
+{{- end -}}
+{{- end }}
+
+{{/*
+Render a volumeMounts block for the model servers, combining pod-specific mounts
+with the model-server custom-CA mount.
+Usage: include "onyx.modelServer.volumeMountsWithCA" (dict "ctx" . "volumeMounts" <list>)
+*/}}
+{{- define "onyx.modelServer.volumeMountsWithCA" -}}
+{{- $ca := include "onyx.customCACerts.modelServerVolumeMount" .ctx -}}
+{{- $existing := .volumeMounts -}}
+{{- if or $ca $existing -}}
+volumeMounts:
+{{- if $existing }}
+{{ toYaml $existing | nindent 2 }}
+{{- end }}
+{{- if $ca }}
+{{ $ca | nindent 2 }}
+{{- end }}
 {{- end -}}
 {{- end }}
 

@@ -8,14 +8,14 @@
     "start": "next start"
   },
   "dependencies": {
-    "next": "^16.2.6",
+    "next": "^16.2.9",
     "react": "^19",
     "react-dom": "^19",
     "react-markdown": "^10.1.0"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.18",
-    "@types/node": "^25",
+    "@tailwindcss/postcss": "^4.3.2",
+    "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "postcss": "^8.5.10",

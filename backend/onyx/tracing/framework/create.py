@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
-from collections.abc import Mapping
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import Any
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from onyx.utils.logger import setup_logger
 
 from .setup import get_trace_provider
-from .span_data import AgentSpanData
-from .span_data import FunctionSpanData
-from .span_data import GenerationSpanData
+from .span_data import AgentSpanData, FunctionSpanData, GenerationSpanData
 from .spans import Span
 from .traces import Trace
 
@@ -180,6 +175,7 @@ def generation_span(
     reasoning: str | None = None,
     model: str | None = None,
     model_config: Mapping[str, Any] | None = None,
+    image_count: int | None = None,
     usage: dict[str, Any] | None = None,
     time_to_first_action_seconds: float | None = None,
     tools: Sequence[Mapping[str, Any]] | None = None,
@@ -201,6 +197,7 @@ def generation_span(
         reasoning: The reasoning/thinking content from reasoning models (e.g., Claude extended thinking).
         model: The model identifier used for the generation.
         model_config: The model configuration (hyperparameters) used.
+        image_count: Number of images produced by an image generation call.
         usage: A dictionary of usage information (input tokens, output tokens, etc.).
         time_to_first_action_seconds: Time elapsed before the first model action is observed.
         tools: The full tool schemas (name, description, parameters) offered to the model on this call.
@@ -221,6 +218,7 @@ def generation_span(
             reasoning=reasoning,
             model=model,
             model_config=model_config,
+            image_count=image_count,
             usage=usage,
             time_to_first_action_seconds=time_to_first_action_seconds,
             tools=tools,

@@ -40,6 +40,9 @@ class IndexingStatus(str, PyEnum):
     IN_PROGRESS = "in_progress"
     SUCCESS = "success"
     CANCELED = "canceled"
+    # Worker stopped mid-run by infrastructure (deploy / autoscaling), not a real
+    # error or a user. Terminal but resumable, and not counted as a failure.
+    INTERRUPTED = "interrupted"
     FAILED = "failed"
     COMPLETED_WITH_ERRORS = "completed_with_errors"
 
@@ -48,9 +51,20 @@ class IndexingStatus(str, PyEnum):
             IndexingStatus.SUCCESS,
             IndexingStatus.COMPLETED_WITH_ERRORS,
             IndexingStatus.CANCELED,
+            IndexingStatus.INTERRUPTED,
             IndexingStatus.FAILED,
         }
         return self in terminal_states
+
+    def should_reuse_checkpoint(self) -> bool:
+        # Terminal states where the crawl stopped before finishing, so the next
+        # attempt continues from the saved checkpoint and poll window instead of
+        # restarting. SUCCESS / COMPLETED_WITH_ERRORS finished, so they start fresh.
+        return self in {
+            IndexingStatus.FAILED,
+            IndexingStatus.CANCELED,
+            IndexingStatus.INTERRUPTED,
+        }
 
     def is_successful(self) -> bool:
         return (
@@ -83,6 +97,32 @@ class PermissionSyncStatus(str, PyEnum):
             self == PermissionSyncStatus.SUCCESS
             or self == PermissionSyncStatus.COMPLETED_WITH_ERRORS
         )
+
+
+class PortAttemptStatus(str, PyEnum):
+    NOT_STARTED = "NOT_STARTED"
+    IN_PROGRESS = "IN_PROGRESS"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    CANCELED = "CANCELED"
+    # Auto-parked failing unit; non-terminal + non-settled so it blocks the swap until
+    # the operator resumes or skips.
+    PAUSED = "PAUSED"
+
+    def is_terminal(self) -> bool:
+        return self in {
+            PortAttemptStatus.SUCCESS,
+            PortAttemptStatus.FAILED,
+            PortAttemptStatus.CANCELED,
+        }
+
+    def is_successful(self) -> bool:
+        return self == PortAttemptStatus.SUCCESS
+
+    def is_resting(self) -> bool:
+        # terminal + PAUSED: the owning task must stop, else a stall-failed-then-paused
+        # worker could drive a paused attempt back to SUCCESS
+        return self.is_terminal() or self == PortAttemptStatus.PAUSED
 
 
 class IndexingMode(str, PyEnum):
@@ -285,13 +325,16 @@ class SessionOrigin(str, PyEnum):
     """How a BuildSession was created.
 
     INTERACTIVE: session started by a user in the Craft UI.
-    SCHEDULED:   session started by the scheduled-tasks executor (or any
-                 future non-interactive caller). Sessions with this origin
-                 are excluded from the Craft sidebar list.
+    SCHEDULED:   session started by the scheduled-tasks executor. Sessions
+                 with this origin are excluded from the Craft sidebar list.
+    SLACK:       session started by a Slack thread mention. Surfaces in
+                 Slack (and a future admin list), not the user sidebar.
+                 Excluded from the Craft sidebar list.
     """
 
     INTERACTIVE = "INTERACTIVE"
     SCHEDULED = "SCHEDULED"
+    SLACK = "SLACK"
 
 
 class SharingScope(str, PyEnum):
@@ -364,6 +407,7 @@ class ScheduledTaskSkipReason(str, PyEnum):
     """Well-known values for ``ScheduledTaskRun.skip_reason``."""
 
     PRIOR_IN_FLIGHT = "prior_in_flight"
+    OWNER_CRAFT_DISABLED = "owner_craft_disabled"
 
 
 class SandboxStatus(str, PyEnum):
@@ -403,6 +447,7 @@ class ExternalAppType(str, PyEnum):
     LINEAR = "LINEAR"
     GITHUB = "GITHUB"
     HUBSPOT = "HUBSPOT"
+    NOTION = "NOTION"
     CUSTOM = "CUSTOM"
 
     @property
@@ -430,6 +475,19 @@ POLICY_SEVERITY: dict[EndpointPolicy, int] = {
     EndpointPolicy.ASK: 1,
     EndpointPolicy.DENY: 2,
 }
+
+
+class GatedAppKind(str, PyEnum):
+    """Which catalog a gated egress action belongs to.
+
+    The approval pipeline (matched actions, approval rows, per-tool policy,
+    pre-approvals, session grants) is shared across surfaces; this discriminates
+    whether the target id refers to an ``external_app`` or an ``mcp_server`` row,
+    since the two live in separate tables under a single approval flow.
+    """
+
+    EXTERNAL_APP = "EXTERNAL_APP"
+    MCP_SERVER = "MCP_SERVER"
 
 
 class PatType(str, PyEnum):
@@ -527,6 +585,8 @@ class Permission(str, PyEnum):
     READ_CHAT = "read:chat"
     WRITE_CHAT = "write:chat"
     READ_ADMIN = "read:admin"
+    GENERATE_IMAGE = "generate:image"
+    USE_LLM_GATEWAY = "use:llm_gateway"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
@@ -567,6 +627,8 @@ Permission.IMPLIED = frozenset(
         Permission.READ_CHAT,
         Permission.WRITE_CHAT,
         Permission.READ_ADMIN,
+        Permission.GENERATE_IMAGE,
+        Permission.USE_LLM_GATEWAY,
     }
 )
 
@@ -575,6 +637,22 @@ class PersonaSharePermission(str, PyEnum):
     """Level granted by a persona share row (user or group), or to the whole
     org via `Persona.public_permission`."""
 
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class SkillSharePermission(str, PyEnum):
+    """Level granted by a skill share row (user or group), or to the whole org
+    via `Skill.public_permission`."""
+
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class SkillAccessLevel(str, PyEnum):
+    """Computed access the requesting user holds on a skill."""
+
+    OWNER = "OWNER"
     EDITOR = "EDITOR"
     VIEWER = "VIEWER"
 
@@ -597,3 +675,11 @@ class PersonaSharingStatus(str, PyEnum):
     PRIVATE = "PRIVATE"
     SHARED = "SHARED"
     PUBLIC = "PUBLIC"
+
+
+class SSOProviderType(str, PyEnum):
+    # name == value: Enum(native_enum=False) columns persist the member name,
+    # so the two must match to round-trip (repo-wide convention).
+    GOOGLE_OAUTH = "GOOGLE_OAUTH"
+    OIDC = "OIDC"
+    SAML = "SAML"

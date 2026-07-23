@@ -17,6 +17,7 @@ import BaseInputBar, {
 import EntryInfoPopover from "@/sections/input/EntryInfoPopover";
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import InterruptHint from "@/app/craft/components/InterruptHint";
+import ContextRing from "@/app/craft/components/ContextRing";
 import { InputChipStrip } from "@/sections/input/InputChipStrip";
 import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
 import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
@@ -30,8 +31,10 @@ import {
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import {
+  pickerEntryConnectionPath,
+  pickerEntryKey,
+  pickerEntryPromptPrefix,
   toPickerSections,
-  flattenSections,
   type PickerEntry,
 } from "@/lib/skills/picker";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -56,6 +59,10 @@ export interface CraftInputBarProps {
   onRemoveQueuedMessage?: (index: number) => void;
   onInterrupt?: () => void;
   isInterrupting?: boolean;
+  contextUsage?: {
+    usedTokens: number;
+    contextLimit: number | null;
+  } | null;
   /** Seed the active entry chips. For stories/tests; production callers leave unset. */
   initialEntries?: PickerEntry[];
 }
@@ -75,12 +82,14 @@ const CraftInputBar = memo(
         onRemoveQueuedMessage,
         onInterrupt,
         isInterrupting = false,
+        contextUsage,
         initialEntries,
       },
       ref
     ) => {
       const baseRef = useRef<BaseInputBarHandle>(null);
       const fileInputRef = useRef<HTMLInputElement>(null);
+      const router = useRouter();
 
       const {
         currentMessageFiles,
@@ -119,14 +128,28 @@ const CraftInputBar = memo(
       } | null>(null);
       const dismissEntryInfo = useCallback(() => setEntryInfo(null), []);
 
-      const addEntry = useCallback((entry: PickerEntry) => {
-        setActiveEntries((prev) =>
-          prev.some((e) => e.slug === entry.slug) ? prev : [...prev, entry]
-        );
-      }, []);
+      const addEntry = useCallback(
+        (entry: PickerEntry) => {
+          const connectionPath = pickerEntryConnectionPath(entry);
+          if (connectionPath) {
+            router.push(connectionPath);
+            return;
+          }
+          setActiveEntries((prev) =>
+            prev.some(
+              (candidate) => pickerEntryKey(candidate) === pickerEntryKey(entry)
+            )
+              ? prev
+              : [...prev, entry]
+          );
+        },
+        [router]
+      );
 
-      const removeEntry = useCallback((slug: string) => {
-        setActiveEntries((prev) => prev.filter((e) => e.slug !== slug));
+      const removeEntry = useCallback((entryKey: string) => {
+        setActiveEntries((prev) =>
+          prev.filter((entry) => pickerEntryKey(entry) !== entryKey)
+        );
       }, []);
 
       const slashPicker = useSlashPicker({
@@ -160,7 +183,7 @@ const CraftInputBar = memo(
         (text: string): boolean => {
           const slug = text.trim().match(/^\/(\S+)$/)?.[1];
           const entry = slug
-            ? (flattenSections(pickerSections).find((e) => e.slug === slug) ??
+            ? (pickerSections.skills.find((entry) => entry.slug === slug) ??
               null)
             : null;
           if (entry) {
@@ -174,11 +197,11 @@ const CraftInputBar = memo(
 
       const handleSubmit = useCallback(
         (message: string) => {
-          const skillPrefixes = activeEntries
-            .map((e) => `/${e.slug}`)
+          const entryPrefixes = activeEntries
+            .map(pickerEntryPromptPrefix)
             .join(" ");
-          const fullMessage = skillPrefixes
-            ? `${skillPrefixes} ${message}`
+          const fullMessage = entryPrefixes
+            ? `${entryPrefixes} ${message}`
             : message;
           onSubmit(fullMessage, currentMessageFiles);
           setActiveEntries([]);
@@ -198,7 +221,6 @@ const CraftInputBar = memo(
         />
       );
 
-      const router = useRouter();
       const plusMenuItems = useMemo(
         () =>
           buildEntryMenuItems(pickerSections, {
@@ -224,6 +246,13 @@ const CraftInputBar = memo(
           {interruptible && <InterruptHint interrupting={isInterrupting} />}
         </>
       );
+
+      const bottomRightSlot = contextUsage ? (
+        <ContextRing
+          usedTokens={contextUsage.usedTokens}
+          contextLimit={contextUsage.contextLimit}
+        />
+      ) : undefined;
 
       return (
         <>
@@ -255,6 +284,7 @@ const CraftInputBar = memo(
             isInterrupting={isInterrupting}
             topSlot={topSlot}
             bottomLeftSlot={bottomLeftSlot}
+            bottomRightSlot={bottomRightSlot}
             onPasteText={onPasteText}
             onPasteFiles={uploadFiles}
             onInputCallback={slashPicker.onInput}
@@ -271,7 +301,13 @@ const CraftInputBar = memo(
           {entryInfo && (
             <EntryInfoPopover
               name={entryInfo.entry.name}
-              description={entryInfo.entry.description}
+              description={
+                entryInfo.entry.kind === "skill"
+                  ? entryInfo.entry.description
+                  : entryInfo.entry.authenticated
+                    ? "Connected"
+                    : "Connection required"
+              }
               tileElement={entryInfo.chipEl}
               onDismiss={dismissEntryInfo}
             />

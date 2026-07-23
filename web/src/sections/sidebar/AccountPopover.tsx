@@ -9,7 +9,7 @@ import {
   getUserDisplayName,
   getUserEmail,
   logout,
-} from "@/lib/user";
+} from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { Popover, PopoverMenu } from "@opal/components";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -24,9 +24,8 @@ import {
   SvgUser,
   SvgNotificationBubble,
 } from "@opal/icons";
-import { Content } from "@opal/layouts";
+import { Content, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
@@ -78,9 +77,7 @@ function SettingsPopover({
 
         const encodedRedirect = encodeURIComponent(currentUrl);
 
-        router.push(
-          `/auth/login?disableAutoRedirect=true&next=${encodedRedirect}`
-        );
+        router.push(`/auth/login?next=${encodedRedirect}`);
       })
 
       .catch(() => {

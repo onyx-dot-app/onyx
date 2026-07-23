@@ -8,6 +8,7 @@ import {
   ContentAction,
   InputHorizontal,
   InputVertical,
+  toast,
 } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import { Formik, Form } from "formik";
@@ -23,20 +24,19 @@ import {
 } from "@opal/icons";
 import { getSourceMetadata } from "@/lib/sources";
 import Card from "@/refresh-components/cards/Card";
-import { InputTypeIn } from "@opal/components";
+import { InputTextArea, InputTypeIn } from "@opal/components";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { Switch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
-import { toast } from "@/hooks/useToast";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { structureValue } from "@/lib/languageModels/utils";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
-import { useAuthType, useLlmManager } from "@/lib/hooks";
+import { useLlmManager } from "@/lib/hooks";
+import { useIsMultiTenant } from "@/lib/auth/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -47,8 +47,8 @@ import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
+import { ConfirmationModalLayout } from "@opal/layouts";
+import { BasicModalFooter, Modal } from "@opal/components";
 import { Code, CopyButton } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/interfaces";
@@ -473,6 +473,7 @@ function GeneralSettings() {
               description="We'll display this name in the app."
               center
               withLabel
+              responsive
             >
               <InputTypeIn
                 placeholder="Your name"
@@ -499,6 +500,7 @@ function GeneralSettings() {
               description="Share your role to better tailor responses."
               center
               withLabel
+              responsive
             >
               <InputTypeIn
                 placeholder="Your role"
@@ -1301,15 +1303,18 @@ function ChatPreferencesSettings() {
 
 function AccountsAccessSettings() {
   const { user, authTypeMetadata } = useUser();
-  const authType = useAuthType();
+  const isMultiTenant = useIsMultiTenant();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
+  // TODO(auth-refresh): only passwordMinLength is enforced here; the remaining
+  // constraints (max length, uppercase, lowercase, digit, special char) will be
+  // wired up when this form is refreshed as part of auth-refresh.
   const passwordValidationSchema = Yup.object().shape({
     currentPassword: Yup.string().required("Current password is required"),
     newPassword: Yup.string()
       .min(
-        authTypeMetadata.passwordMinLength,
-        `Password must be at least ${authTypeMetadata.passwordMinLength} characters`
+        authTypeMetadata?.passwordMinLength ?? 0,
+        `Password must be at least ${authTypeMetadata?.passwordMinLength ?? 0} characters`
       )
       .required("New password is required"),
     confirmPassword: Yup.string()
@@ -1331,7 +1336,7 @@ function AccountsAccessSettings() {
   const canCreateTokens = useCloudSubscription();
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = authType !== null;
+  const showTokensSection = isMultiTenant !== null;
 
   // Fetch PATs with SWR
   const {
@@ -1691,7 +1696,11 @@ function AccountsAccessSettings() {
                 <Section gap={0}>
                   <Section flexDirection="row" padding={0.25} gap={0.5}>
                     {pats.length === 0 ? (
-                      <Section padding={0.5} alignItems="start">
+                      <Section
+                        padding={0.5}
+                        alignItems="start"
+                        data-testid="access-token-list-status"
+                      >
                         <Text font="secondary-body" color="text-03">
                           {isLoading
                             ? "Loading tokens..."

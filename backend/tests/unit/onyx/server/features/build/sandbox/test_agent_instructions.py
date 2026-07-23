@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from onyx.db.models import ExternalApp
 from onyx.server.features.build.sandbox.util import agent_instructions
 
 _TEMPLATE_PLACEHOLDER_RE = re.compile(r"{{[A-Z0-9_]+}}")
@@ -25,7 +26,6 @@ def test_generate_agent_instructions_uses_configured_approval_timeouts_in_real_t
 
     content = agent_instructions.generate_agent_instructions(
         template_path=_template_path(),
-        skills_section="",
         connectable_apps_section="",
     )
 
@@ -36,12 +36,11 @@ def test_generate_agent_instructions_uses_configured_approval_timeouts_in_real_t
     assert _unresolved_placeholders(content) == set()
 
 
-def test_generate_agent_instructions_populates_real_template_runtime_values() -> None:
-    skills_section = "- **company-search**: SENTINEL_SKILL_DESCRIPTION"
-
+def test_generate_agent_instructions_populates_real_template_without_skills_section() -> (
+    None
+):
     content = agent_instructions.generate_agent_instructions(
         template_path=_template_path(),
-        skills_section=skills_section,
         connectable_apps_section="",
         provider="openai",
         model_name="gpt-5-mini",
@@ -54,7 +53,8 @@ def test_generate_agent_instructions_populates_real_template_runtime_values() ->
     assert "3210" in content
     assert "OpenAI / gpt-5-mini" in content
     assert "web-search, shell" in content
-    assert skills_section in content
+    assert "## Skills" not in content
+    assert "{{AVAILABLE_SKILLS_SECTION}}" not in content
     assert _unresolved_placeholders(content) == set()
 
 
@@ -63,22 +63,71 @@ def test_generate_agent_instructions_omits_optional_sections_when_values_absent(
 ):
     content = agent_instructions.generate_agent_instructions(
         template_path=_template_path(),
-        skills_section="SENTINEL_NO_SKILLS",
         connectable_apps_section="",
     )
 
     assert "You are assisting **" not in content
     assert "**Disabled Tools**" not in content
-    assert "SENTINEL_NO_SKILLS" in content
+    assert _unresolved_placeholders(content) == set()
+
+
+def test_generate_agent_instructions_injects_organization_instructions() -> None:
+    content = agent_instructions.generate_agent_instructions(
+        template_path=_template_path(),
+        connectable_apps_section="",
+        organization_instructions="SENTINEL_ORG_RULE: always use the brand kit.",
+    )
+
+    assert "## Organization instructions" in content
+    assert "SENTINEL_ORG_RULE: always use the brand kit." in content
+    assert content.index("## Hard rules") < content.index(
+        "## Organization instructions"
+    )
+    assert content.index("## Organization instructions") < content.index(
+        "## Environment"
+    )
+    assert _unresolved_placeholders(content) == set()
+
+
+def test_org_instructions_containing_template_tokens_stay_literal() -> None:
+    content = agent_instructions.generate_agent_instructions(
+        template_path=_template_path(),
+        connectable_apps_section="",
+        organization_instructions="Refer to {{CONNECTABLE_APPS_LIST}} below.",
+    )
+
+    assert "Refer to {{CONNECTABLE_APPS_LIST}} below." in content
+
+
+@pytest.mark.parametrize("instructions", [None, "", "   \n  "])
+def test_generate_agent_instructions_omits_org_section_when_blank(
+    instructions: str | None,
+) -> None:
+    content = agent_instructions.generate_agent_instructions(
+        template_path=_template_path(),
+        connectable_apps_section="",
+        organization_instructions=instructions,
+    )
+
+    assert "## Organization instructions" not in content
     assert _unresolved_placeholders(content) == set()
 
 
 def test_build_connectable_apps_list_empty_renders_fallback() -> None:
-    """No connectable apps → a fallback line, mirroring ``build_skills_section_
-    from_data``'s "No skills available." (the template blurb stays either way)."""
     assert (
         agent_instructions.build_connectable_apps_list([])
         == "No connectable apps available."
+    )
+
+
+def test_build_connectable_apps_list_uses_stable_ids_and_names() -> None:
+    apps = [
+        ExternalApp(id=12, name="Zeta"),
+        ExternalApp(id=3, name="Alpha"),
+    ]
+
+    assert agent_instructions.build_connectable_apps_list(apps) == (
+        "- External app ID `3`: **Alpha**\n- External app ID `12`: **Zeta**"
     )
 
 
@@ -87,7 +136,6 @@ def test_generate_agent_instructions_keeps_connectable_blurb_when_empty() -> Non
     resolves to empty, nothing leaks through."""
     content = agent_instructions.generate_agent_instructions(
         template_path=_template_path(),
-        skills_section="- **x**: y",
         connectable_apps_section="",
     )
 
@@ -99,11 +147,11 @@ def test_generate_agent_instructions_fills_connectable_list_from_template() -> N
     """Connectable apps → template-owned blurb renders with the substituted list."""
     content = agent_instructions.generate_agent_instructions(
         template_path=_template_path(),
-        skills_section="- **company-search**: SENTINEL_SKILL",
-        connectable_apps_section="- **slack**: SENTINEL_CONNECTABLE",
+        connectable_apps_section="- External app ID `42`: **SENTINEL_CONNECTABLE**",
     )
 
     assert "## Connectable apps" in content
-    assert "- **company-search**: SENTINEL_SKILL" in content
-    assert "- **slack**: SENTINEL_CONNECTABLE" in content
+    assert "numeric external app ID from the list below" in content
+    assert "with its slug" not in content
+    assert "- External app ID `42`: **SENTINEL_CONNECTABLE**" in content
     assert _unresolved_placeholders(content) == set()

@@ -1,4 +1,4 @@
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import Button from "@/refresh-components/buttons/Button";
 import { useRef, useState } from "react";
 import { DateRange } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";

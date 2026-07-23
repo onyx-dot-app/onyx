@@ -4,10 +4,21 @@ import { useState } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { IconFunctionComponent } from "@opal/types";
 import { Button, Divider, Text } from "@opal/components";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
-import { SvgArrowLeft, SvgPlug, SvgPlus, SvgTrash } from "@opal/icons";
+import {
+  SvgArrowLeft,
+  SvgPlug,
+  SvgPlus,
+  SvgSettings,
+  SvgTrash,
+} from "@opal/icons";
+import { MCPServer, MCPServersResponse } from "@/lib/tools/interfaces";
+import { updateMCPServer } from "@/lib/tools/mcpService";
+import { getActionIcon } from "@/lib/tools/mcpUtils";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   availableBuiltInDescriptors,
   BuiltInExternalAppDescriptor,
@@ -16,43 +27,33 @@ import {
 } from "@/app/craft/v1/apps/registry";
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
 import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
+import McpServerPolicyModal from "@/app/craft/v1/apps/admin/McpServerPolicyModal";
 import {
   deleteExternalApp,
-  setExternalAppEnabled,
+  updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
-import { toast } from "@/hooks/useToast";
 
 interface ModalState {
   descriptor: BuiltInExternalAppDescriptor;
   existingApp: ExternalAppAdminResponse | null;
 }
 
-interface ExternalAppsPageProps {
-  onBack?: () => void;
-}
-
 // Admin External Apps management; members connect their own accounts on the Apps page.
-export default function ExternalAppsPage({
-  onBack,
-}: ExternalAppsPageProps = {}) {
+export default function ExternalAppsPage() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgPlug}
-        title="External Apps"
+        icon={ADMIN_ROUTES.CRAFT_APPS.icon}
+        title={ADMIN_ROUTES.CRAFT_APPS.title}
         description="Connect third-party integrations so users in your org can authorize them with their personal accounts in Onyx Craft."
         rightChildren={
-          onBack ? (
-            <div className="flex items-center gap-2">
-              <Button
-                prominence="secondary"
-                icon={SvgArrowLeft}
-                onClick={onBack}
-              >
-                Back
-              </Button>
-            </div>
-          ) : undefined
+          <Button
+            href="/craft/v1/apps"
+            prominence="secondary"
+            icon={SvgArrowLeft}
+          >
+            Back to Craft
+          </Button>
         }
       />
       <SettingsLayouts.Body>
@@ -113,17 +114,19 @@ function AppsAdminContent() {
             </Text>
             <div className="flex flex-col gap-2">
               {apps.map((app) => (
-                <ConfiguredAppCard
+                <IntegrationCard
                   key={app.id}
-                  app={app}
-                  descriptor={descriptorByAppType.get(app.app_type) ?? null}
-                  onEdit={(descriptor) =>
-                    setModalState({ descriptor, existingApp: app })
-                  }
-                  onEditCustom={(customApp) =>
-                    setCustomModal({ existingApp: customApp })
-                  }
-                  onChange={() => mutateApps()}
+                  integration={externalAppToIntegration(
+                    app,
+                    descriptorByAppType.get(app.app_type) ?? null,
+                    {
+                      onEdit: (descriptor) =>
+                        setModalState({ descriptor, existingApp: app }),
+                      onEditCustom: (customApp) =>
+                        setCustomModal({ existingApp: customApp }),
+                      onChange: () => mutateApps(),
+                    }
+                  )}
                 />
               ))}
             </div>
@@ -132,6 +135,8 @@ function AppsAdminContent() {
           <Divider />
         </>
       )}
+
+      <McpServersSection />
 
       <section className="flex flex-col gap-2">
         <Text font="main-content-emphasis" color="text-04">
@@ -158,7 +163,7 @@ function AppsAdminContent() {
 
       {modalState && (
         <ConfigureProviderModal
-          open={modalState !== null}
+          key={modalState.existingApp?.id ?? modalState.descriptor.app_type}
           onClose={() => setModalState(null)}
           onSaved={() => mutateApps()}
           descriptor={modalState.descriptor}
@@ -178,54 +183,177 @@ function AppsAdminContent() {
   );
 }
 
-// ── Configured app card ───────────────────────────────────────────────
+// ── MCP servers ────────────────────────────────────────────────────────
+//
+// Every configured MCP server, rendered through the same card as the
+// external apps above. Enable/Disable controls Craft availability; Edit
+// opens the per-tool policy dialog. New servers are added on the MCP
+// actions page.
+function McpServersSection() {
+  const { data, mutate } = useSWR<MCPServersResponse>(
+    SWR_KEYS.adminMcpServers,
+    errorHandlingFetcher,
+    { keepPreviousData: true }
+  );
+  const [editServer, setEditServer] = useState<MCPServer | null>(null);
+  const servers = data?.mcp_servers ?? [];
+  if (servers.length === 0) return null;
 
-interface ConfiguredAppCardProps {
-  app: ExternalAppAdminResponse;
-  /** Null when the app's app_type no longer has a backend descriptor. */
-  descriptor: BuiltInExternalAppDescriptor | null;
+  return (
+    <>
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <Text font="main-content-emphasis" color="text-04">
+            MCP servers
+          </Text>
+          <Button
+            href="/admin/actions/mcp"
+            prominence="tertiary"
+            icon={SvgSettings}
+          >
+            Manage in Actions
+          </Button>
+        </div>
+        <Text font="secondary-body" color="text-03">
+          Enable an MCP server to let the Craft agent use its tools; enabled
+          servers appear alongside apps on the Apps page. Edit a server to set
+          each tool&apos;s approval policy.
+        </Text>
+        <div className="flex flex-col gap-2">
+          {servers.map((server) => (
+            <IntegrationCard
+              key={server.id}
+              integration={mcpServerToIntegration(server, {
+                onEdit: () => setEditServer(server),
+                onChange: () => mutate(),
+              })}
+            />
+          ))}
+        </div>
+      </section>
+
+      {editServer && (
+        <McpServerPolicyModal
+          key={editServer.id}
+          onClose={() => setEditServer(null)}
+          onSaved={() => mutate()}
+          server={editServer}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Configured integrations ────────────────────────────────────────────
+//
+// Normalized admin view of anything already granted to the Craft agent.
+// External apps and MCP servers map into this shape upstream, so both render
+// and behave through the same card — only where the data comes from differs.
+interface ConfiguredIntegration {
+  logo: IconFunctionComponent;
+  name: string;
+  statusText: string;
+  enabled: boolean;
+  toggleEnabled: () => Promise<void>;
+  /** Null → no Edit button (e.g. orphaned app types). */
+  edit: (() => void) | null;
+  /** Null → not deletable (MCP servers, Onyx-managed apps). */
+  remove: (() => Promise<void>) | null;
+}
+
+interface ExternalAppHandlers {
   /** Edit a built-in provider instance (driven by its descriptor). */
   onEdit: (descriptor: BuiltInExternalAppDescriptor) => void;
   /** Edit a custom app (no descriptor — config is on the row itself). */
   onEditCustom: (app: ExternalAppAdminResponse) => void;
-  onChange: () => void;
+  onChange: () => Promise<unknown>;
 }
 
-function ConfiguredAppCard({
-  app,
-  descriptor,
-  onEdit,
-  onEditCustom,
-  onChange,
-}: ConfiguredAppCardProps) {
+function externalAppToIntegration(
+  app: ExternalAppAdminResponse,
+  /** Null when the app's app_type no longer has a backend descriptor. */
+  descriptor: BuiltInExternalAppDescriptor | null,
+  { onEdit, onEditCustom, onChange }: ExternalAppHandlers
+): ConfiguredIntegration {
+  return {
+    logo: getAppTypeLogo(app.app_type),
+    name: app.name,
+    statusText: app.enabled
+      ? "Users connect this app on the Apps page to make its skill available"
+      : "Disabled — unavailable to users",
+    enabled: app.enabled,
+    toggleEnabled: async () => {
+      await updateExternalApp(app.id, { enabled: !app.enabled });
+      await onChange();
+    },
+    // Edit only works for custom apps and built-ins whose descriptor still
+    // exists; orphan app_types can only be disabled/deleted.
+    edit:
+      app.app_type === "CUSTOM"
+        ? () => onEditCustom(app)
+        : descriptor
+          ? () => onEdit(descriptor)
+          : null,
+    // Onyx-managed built-ins are provisioned by Onyx.
+    remove: app.is_onyx_managed
+      ? null
+      : async () => {
+          await deleteExternalApp(app.id);
+          await onChange();
+        },
+  };
+}
+
+interface McpServerHandlers {
+  onEdit: () => void;
+  onChange: () => Promise<unknown>;
+}
+
+function mcpServerToIntegration(
+  server: MCPServer,
+  { onEdit, onChange }: McpServerHandlers
+): ConfiguredIntegration {
+  const enabled = server.available_in_craft ?? false;
+  return {
+    logo: getActionIcon(server.server_url, server.name),
+    name: server.name,
+    statusText: enabled
+      ? "Available to the Craft agent — tool calls follow their approval policies"
+      : "Disabled — unavailable to the Craft agent",
+    enabled,
+    toggleEnabled: async () => {
+      await updateMCPServer(server.id, { available_in_craft: !enabled });
+      await onChange();
+    },
+    edit: onEdit,
+    remove: null,
+  };
+}
+
+// ── Configured-integration card ────────────────────────────────────────
+
+interface IntegrationCardProps {
+  integration: ConfiguredIntegration;
+}
+
+function IntegrationCard({ integration }: IntegrationCardProps) {
+  const {
+    logo: Logo,
+    name,
+    statusText,
+    enabled,
+    toggleEnabled,
+    edit,
+    remove,
+  } = integration;
   const [isMutating, setIsMutating] = useState(false);
-  const Logo = getAppTypeLogo(app.app_type);
 
-  async function toggleEnabled() {
+  async function run(action: () => Promise<void>, failureMessage: string) {
     setIsMutating(true);
     try {
-      await setExternalAppEnabled(app, !app.enabled);
-      onChange();
+      await action();
     } catch (e) {
-      toast.error(
-        e instanceof Error
-          ? e.message
-          : `Failed to ${app.enabled ? "disable" : "enable"} "${app.name}"`
-      );
-    } finally {
-      setIsMutating(false);
-    }
-  }
-
-  async function remove() {
-    setIsMutating(true);
-    try {
-      await deleteExternalApp(app.id);
-      onChange();
-    } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : `Failed to delete "${app.name}"`
-      );
+      toast.error(e instanceof Error ? e.message : failureMessage);
     } finally {
       setIsMutating(false);
     }
@@ -236,47 +364,37 @@ function ConfiguredAppCard({
       <div className="flex items-center gap-3 w-full">
         <Logo className="w-8 h-8" />
         <div className="flex-1 flex flex-col gap-0.5">
-          <Text font="main-ui-action">{app.name}</Text>
+          <Text font="main-ui-action">{name}</Text>
           <Text font="secondary-body" color="text-03">
-            {app.enabled ? "Enabled" : "Disabled"}
+            {statusText}
           </Text>
         </div>
         <div className="flex items-center gap-2">
-          {app.app_type === "CUSTOM" ? (
-            <Button
-              prominence="secondary"
-              onClick={() => onEditCustom(app)}
-              disabled={isMutating}
-            >
+          {edit && (
+            <Button prominence="secondary" onClick={edit} disabled={isMutating}>
               Edit
             </Button>
-          ) : (
-            descriptor && (
-              <Button
-                prominence="secondary"
-                onClick={() => onEdit(descriptor)}
-                disabled={isMutating}
-              >
-                Edit
-              </Button>
-            )
           )}
           <Button
             prominence="secondary"
-            onClick={toggleEnabled}
+            onClick={() =>
+              run(
+                toggleEnabled,
+                `Failed to ${enabled ? "disable" : "enable"} "${name}"`
+              )
+            }
             disabled={isMutating}
           >
-            {isMutating ? "…" : app.enabled ? "Disable" : "Enable"}
+            {enabled ? "Disable" : "Enable"}
           </Button>
-          {/* Onyx-managed built-ins (cloud) can't be deleted — only disabled. */}
-          {!app.is_onyx_managed && (
+          {remove && (
             <Button
               prominence="tertiary"
               variant="danger"
               icon={SvgTrash}
-              onClick={remove}
+              onClick={() => run(remove, `Failed to delete "${name}"`)}
               disabled={isMutating}
-              aria-label={`Delete ${app.name}`}
+              aria-label={`Delete ${name}`}
             />
           )}
         </div>
@@ -298,11 +416,8 @@ function AvailableAppCard({ descriptor, onClick }: AvailableAppCardProps) {
     <Card className="h-full flex flex-col justify-center">
       <div className="flex items-center gap-3 w-full">
         <Logo className="w-8 h-8 shrink-0" />
-        <div className="flex-1 flex flex-col gap-0.5">
+        <div className="flex-1">
           <Text font="main-ui-action">{descriptor.name}</Text>
-          <Text font="secondary-body" color="text-03">
-            {descriptor.description}
-          </Text>
         </div>
         <Button icon={SvgPlus} onClick={onClick}>
           Add

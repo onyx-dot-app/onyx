@@ -1,6 +1,6 @@
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
-import { Icon } from "@/components/ui/icon";
+import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useSidebar } from "@/components/sidebar";
 import SvgSidebar from "@/icons/sidebar";
@@ -15,16 +15,13 @@ export function ChatHeader({ title }: ChatHeaderProps) {
   const { setFolded } = useSidebar();
 
   return (
-    <View className="flex-row items-center gap-2 px-4 py-3">
-      <Pressable
-        onPress={() => setFolded(false)}
-        hitSlop={8}
-        accessibilityRole="button"
+    <View className="flex-row items-center gap-2 px-4 py-12">
+      <Button
+        prominence="internal"
+        icon={SvgSidebar}
         accessibilityLabel="Open sidebar"
-        className="rounded-08 p-2 active:bg-background-tint-03"
-      >
-        <Icon as={SvgSidebar} size={24} className="text-text-04" />
-      </Pressable>
+        onPress={() => setFolded(false)}
+      />
       {title ? (
         <Text font="main-ui-action" numberOfLines={1} className="flex-1">
           {title}

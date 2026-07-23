@@ -1,4 +1,4 @@
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { createConnector, runConnector } from "@/lib/connector";
 import { linkCredential } from "@/lib/credential";
 import { GoogleSitesConfig } from "@/lib/connectors/connectors";

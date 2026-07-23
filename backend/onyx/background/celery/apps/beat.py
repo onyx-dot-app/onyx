@@ -1,9 +1,9 @@
+from collections.abc import ItemsView
 from datetime import timedelta
 from typing import Any
 
-from celery import Celery
-from celery import signals
-from celery.beat import PersistentScheduler  # ty: ignore[unresolved-import]
+from celery import Celery, signals
+from celery.beat import PersistentScheduler
 from celery.signals import beat_init
 from celery.utils.log import get_task_logger
 
@@ -15,8 +15,7 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.variable_functionality import fetch_versioned_implementation
-from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST, MULTI_TENANT
 
 task_logger = get_task_logger(__name__)
 
@@ -58,7 +57,7 @@ class DynamicTenantScheduler(PersistentScheduler):
     def setup_schedule(self) -> None:
         super().setup_schedule()
 
-    def tick(self) -> float:
+    def tick(self) -> float:  # ty: ignore[invalid-method-override]
         retval = super().tick()
         now = self.app.now()
         if (
@@ -238,7 +237,9 @@ class DynamicTenantScheduler(PersistentScheduler):
         self.last_beat_multiplier = beat_multiplier
 
     @staticmethod
-    def _compare_schedules(schedule1: dict, schedule2: dict) -> bool:
+    def _compare_schedules(
+        schedule1: ItemsView[str, Any], schedule2: dict[str, Any]
+    ) -> bool:
         """Compare schedules by task name only to determine if an update is needed.
         True if equivalent, False if not."""
         current_tasks = set(name for name, _ in schedule1)

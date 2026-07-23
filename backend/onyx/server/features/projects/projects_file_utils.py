@@ -1,26 +1,25 @@
 from math import ceil
 
 from fastapi import UploadFile
-from PIL import Image
-from PIL import ImageOps
-from PIL import UnidentifiedImageError
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
+from PIL import Image, ImageOps, UnidentifiedImageError
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
-from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_UPLOAD
+from onyx.configs.app_configs import (
+    MAX_EMBEDDED_IMAGES_PER_FILE,
+    MAX_EMBEDDED_IMAGES_PER_UPLOAD,
+)
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.db.llm import fetch_default_llm_model
-from onyx.file_processing.extract_file_text import count_docx_embedded_images
-from onyx.file_processing.extract_file_text import count_pdf_embedded_images
-from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_processing.extract_file_text import get_file_ext
+from onyx.file_processing.extract_file_text import (
+    count_docx_embedded_images,
+    count_pdf_embedded_images,
+    extract_file_text,
+    get_file_ext,
+)
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.password_validation import is_file_password_protected
-from onyx.natural_language_processing.utils import count_tokens
-from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.natural_language_processing.utils import count_tokens, get_tokenizer
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 

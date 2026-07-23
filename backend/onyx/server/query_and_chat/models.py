@@ -3,16 +3,10 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import model_validator
+from pydantic import BaseModel, model_validator
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import SessionType
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SearchDoc
-from onyx.context.search.models import Tag
+from onyx.configs.constants import DocumentSource, MessageType, SessionType
+from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
@@ -31,6 +25,7 @@ class MessageOrigin(str, Enum):
     SLACKBOT = "slackbot"
     WIDGET = "widget"
     DISCORDBOT = "discordbot"
+    MOBILE = "mobile"
     UNKNOWN = "unknown"
     UNSET = "unset"
 

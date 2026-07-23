@@ -9,12 +9,14 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import Request
 
-from onyx.auth.permissions import ALL_PERMISSIONS
-from onyx.auth.permissions import get_effective_permissions
-from onyx.auth.permissions import IMPLIED_PERMISSIONS
-from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
-from onyx.auth.permissions import require_permission
-from onyx.auth.permissions import resolve_effective_permissions
+from onyx.auth.permissions import (
+    ALL_PERMISSIONS,
+    IMPLIED_PERMISSIONS,
+    NON_TOGGLEABLE_PERMISSIONS,
+    get_effective_permissions,
+    require_permission,
+    resolve_effective_permissions,
+)
 from onyx.auth.users import get_anonymous_user
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -44,7 +46,13 @@ class TestResolveEffectivePermissions:
 
     def test_basic_implies_api_surface_scopes(self) -> None:
         result = resolve_effective_permissions({"basic"})
-        assert result == {"basic", "read:search", "read:chat", "write:chat"}
+        assert result == {
+            "basic",
+            "read:search",
+            "read:chat",
+            "write:chat",
+            "generate:image",
+        }
 
     def test_write_chat_implies_read_chat(self) -> None:
         result = resolve_effective_permissions({"write:chat"})
@@ -110,6 +118,7 @@ class TestResolveEffectivePermissions:
             "read:search",
             "read:chat",
             "write:chat",
+            "generate:image",
             "add:agents",
             "read:agents",
             "manage:connectors",
@@ -133,7 +142,12 @@ class TestResolveEffectivePermissions:
         """The Craft sandbox PAT may only company-search — it must NOT inherit the
         chat surfaces (the reason it isn't `basic`)."""
         result = resolve_effective_permissions({"craft_sandbox"})
-        assert result == {"craft_sandbox", "read:search"}
+        assert result == {
+            "craft_sandbox",
+            "read:search",
+            "generate:image",
+            "use:llm_gateway",
+        }
         assert "read:chat" not in result
         assert "write:chat" not in result
         assert "basic" not in result
@@ -167,6 +181,7 @@ class TestGetEffectivePermissions:
             Permission.READ_SEARCH,
             Permission.READ_CHAT,
             Permission.WRITE_CHAT,
+            Permission.GENERATE_IMAGE,
         }
 
     def test_empty_column(self) -> None:
@@ -282,6 +297,25 @@ class TestRequirePermission:
         assert result is user
 
     @pytest.mark.asyncio
+    async def test_craft_sandbox_scope_reaches_generate_image(self) -> None:
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+
+        dep = require_permission(Permission.GENERATE_IMAGE)
+        result = await dep(request=_request([Permission.CRAFT_SANDBOX]), user=user)
+        assert result is user
+
+    @pytest.mark.asyncio
+    async def test_search_only_scope_denied_generate_image(self) -> None:
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+
+        dep = require_permission(Permission.GENERATE_IMAGE)
+        with pytest.raises(OnyxError) as exc_info:
+            await dep(request=_request([Permission.READ_SEARCH]), user=user)
+        assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+    @pytest.mark.asyncio
     async def test_empty_pat_scopes_deny_all(self) -> None:
         """An explicit empty scope set grants nothing — fail-closed."""
         user = MagicMock()
@@ -299,6 +333,7 @@ class TestAnonymousUserPermissions:
             Permission.READ_SEARCH,
             Permission.READ_CHAT,
             Permission.WRITE_CHAT,
+            Permission.GENERATE_IMAGE,
         }
 
     @pytest.mark.asyncio
@@ -324,7 +359,7 @@ class TestAnonymousUserPermissions:
 
 class TestApiSurfaceScopeRegistration:
     # Hardcoded spec: the complete implied-only set (4 READ_* capability reads
-    # + 4 API-surface scopes). Equality, not subset, so an accidentally
+    # + 6 API-surface scopes). Equality, not subset, so an accidentally
     # over-broad set (a real capability made un-grantable) is also caught.
     EXPECTED_IMPLIED = {
         "read:connectors",
@@ -334,6 +369,8 @@ class TestApiSurfaceScopeRegistration:
         "read:search",
         "read:chat",
         "write:chat",
+        "generate:image",
+        "use:llm_gateway",
         "read:admin",
     }
 
@@ -350,7 +387,13 @@ class TestApiSurfaceScopeRegistration:
             "read:search",
             "read:chat",
             "write:chat",
+            "generate:image",
         }
         assert IMPLIED_PERMISSIONS["write:chat"] == {"read:chat"}
-        # The craft role scope grants only company-search, never the chat surfaces.
-        assert IMPLIED_PERMISSIONS["craft_sandbox"] == {"read:search"}
+        # The craft role scope grants company-search and image generation, never
+        # the chat surfaces.
+        assert IMPLIED_PERMISSIONS["craft_sandbox"] == {
+            "read:search",
+            "generate:image",
+            "use:llm_gateway",
+        }

@@ -1,69 +1,72 @@
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import File
-from fastapi import Form
-from fastapi import UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ExternalAppType
-from onyx.db.enums import Permission
-from onyx.db.enums import SandboxStatus
-from onyx.db.external_app import create_external_app
-from onyx.db.external_app import delete_external_app
-from onyx.db.external_app import get_external_app_by_id
-from onyx.db.external_app import get_external_apps
-from onyx.db.external_app import get_policies
-from onyx.db.external_app import get_user_credentials_by_app_id
-from onyx.db.external_app import required_user_credential_keys
-from onyx.db.external_app import update_external_app
-from onyx.db.external_app import upsert_external_app_user_credential
-from onyx.db.external_app import validate_auth_template
-from onyx.db.models import ExternalApp
-from onyx.db.models import ExternalAppUserCredential
-from onyx.db.models import User
+from onyx.db.enums import (
+    EndpointPolicy,
+    ExternalAppType,
+    GatedAppKind,
+    Permission,
+    SandboxStatus,
+)
+from onyx.db.external_app import (
+    create_external_app,
+    delete_external_app,
+    get_external_app_by_id,
+    get_external_apps,
+    get_first_skill_for_external_app,
+    get_skills_for_external_app,
+    get_user_credentials_by_app_id,
+    required_user_credential_keys,
+    update_external_app,
+    upsert_external_app_user_credential,
+    validate_auth_template,
+)
+from onyx.db.gated_app import get_action_policies
+from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
 from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.utils import none_as_unset
-from onyx.db.utils import UNSET
+from onyx.db.utils import UNSET, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.models import BuiltInExternalAppDescriptor
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.registry import action_policy_views
-from onyx.external_apps.providers.registry import fetch_available_built_in_apps
-from onyx.external_apps.providers.registry import get_onyx_managed_provider
-from onyx.external_apps.providers.registry import get_provider_for_app
-from onyx.external_apps.providers.registry import resolve_action_overrides
+from onyx.external_apps.providers.registry import (
+    action_policy_views,
+    fetch_available_built_in_apps,
+    get_onyx_managed_provider,
+    get_provider_for_app,
+    resolve_action_overrides,
+)
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.external_apps.models import ConnectAppDecisionRequest
 from onyx.server.features.build.external_apps.models import (
+    ConnectAppDecisionRequest,
     CreateBuiltInExternalAppRequest,
+    ExternalAppAdminResponse,
+    ExternalAppUserResponse,
+    UpdateExternalAppRequest,
+    UpsertUserCredentialsRequest,
 )
-from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
-from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
-from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
-from onyx.server.features.build.external_apps.models import UpsertUserCredentialsRequest
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.skills.bundle import read_bundle_file
-from onyx.skills.ingest import delete_bundle_blob
-from onyx.skills.ingest import ingest_skill_bundle
-from onyx.skills.push import push_skill_to_affected_sandboxes
-from onyx.skills.push import push_skills_for_users
+from onyx.skills.ingest import delete_bundle_blob, ingested_skill_bundle
+from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
 from onyx.utils.encryption import mask_string
 from onyx.utils.pydantic_util import parse_json_form_field
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
+
+admin_router = APIRouter()
 
 # Adapters for the structured custom-app form fields, which arrive as JSON
 # strings (multipart can't carry native lists/objects).
@@ -81,13 +84,16 @@ def _get_app_or_404(db_session: Session, external_app_id: int) -> ExternalApp:
     return app
 
 
-def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
-    stored = {policy.action_id: policy.policy for policy in app.policies}
+def _to_admin_response(
+    app: ExternalApp,
+    *,
+    stored: dict[str, EndpointPolicy],
+) -> ExternalAppAdminResponse:
+    # ``stored`` is the app's per-action policy overrides.
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
     return ExternalAppAdminResponse(
         id=app.id,
-        name=app.skill.name,
-        description=app.skill.description,
+        name=app.name,
         app_type=app.app_type,
         # Managed built-ins: hide Onyx-owned config/creds. Else mask secrets — the
         # write path restores masked values echoed back unchanged.
@@ -96,7 +102,7 @@ def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
         organization_credentials=(
             {} if managed else app.organization_credentials.get_value(apply_mask=True)
         ),
-        enabled=app.skill.enabled,
+        enabled=app.enabled,
         actions=action_policy_views(app.app_type, stored),
         is_onyx_managed=managed,
     )
@@ -126,9 +132,7 @@ def _to_user_response(
 
     return ExternalAppUserResponse(
         id=app.id,
-        name=app.skill.name,
-        description=app.skill.description,
-        slug=app.skill.slug,
+        name=app.name,
         app_type=app.app_type,
         credential_keys=required_keys,
         credential_values=credential_values,
@@ -142,7 +146,7 @@ def _to_user_response(
 # =============================================================================
 
 
-@router.post("/admin/apps/built-in")
+@admin_router.post("/apps/built-in")
 def create_built_in_external_app(
     request: CreateBuiltInExternalAppRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -162,21 +166,20 @@ def create_built_in_external_app(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx; use PATCH /admin/apps/{id} to "
-            "enable/disable them or set action policies.",
+            "set action policies.",
         )
 
     action_policies = resolve_action_overrides(
         request.app_type, request.action_policies, {}
     )
 
-    # Default-public; skill identity is server-derived from app_type.
+    # Default-public; skill identity is server-derived from app_type. Built-in
+    # skill content carries its own metadata on disk.
     app = create_external_app(
         db_session=db_session,
         name=request.name,
-        description=request.description,
         bundle_file_id="",
         bundle_sha256="",
-        enabled=request.enabled,
         is_public=True,
         app_type=request.app_type,
         upstream_url_patterns=request.upstream_url_patterns,
@@ -186,12 +189,14 @@ def create_built_in_external_app(
     )
 
     # Push before commit so a push failure rolls back the create.
-    push_skill_to_affected_sandboxes(app.skill, db_session)
+    for skill in app.associated_skills:
+        push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
-    return _to_admin_response(app)
+    # ``action_policies`` is exactly what was persisted — no need to re-read.
+    return _to_admin_response(app, stored=action_policies)
 
 
-@router.patch("/admin/apps/{external_app_id}")
+@admin_router.patch("/apps/{external_app_id}")
 def update_external_app_admin(
     external_app_id: int,
     request: UpdateExternalAppRequest,
@@ -200,7 +205,7 @@ def update_external_app_admin(
 ) -> ExternalAppAdminResponse:
     """Partial update of any app (404 if absent). ``None`` fields are left
     untouched. For Onyx-managed built-ins (cloud) the gateway-config fields
-    are Onyx-owned and ignored — only ``enabled`` + ``action_policies`` apply.
+    are Onyx-owned and ignored — only ``enabled`` and ``action_policies`` apply.
     A custom app's bundle bytes are swapped via ``PUT /admin/apps/{id}/bundle``.
     """
     app = _get_app_or_404(db_session, external_app_id)
@@ -219,15 +224,14 @@ def update_external_app_admin(
     action_policies = resolve_action_overrides(
         app.app_type,
         request.action_policies,
-        get_policies(db_session, external_app_id),
+        get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app_id),
     )
     app, _old = update_external_app(
         db_session=db_session,
         external_app_id=external_app_id,
         app_type=app.app_type,
-        name=none_as_unset(request.name),
-        description=none_as_unset(request.description),
         enabled=none_as_unset(request.enabled),
+        name=none_as_unset(request.name),
         # Gateway config is Onyx-owned for managed built-ins; leave it untouched.
         upstream_url_patterns=(
             UNSET if managed else none_as_unset(request.upstream_url_patterns)
@@ -239,27 +243,27 @@ def update_external_app_admin(
         action_policies=action_policies,
     )
     # Push before commit so a push failure rolls back the change.
-    push_skill_to_affected_sandboxes(app.skill, db_session)
+    for skill in app.associated_skills:
+        push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
-    return _to_admin_response(app)
+    # ``action_policies`` is exactly what was persisted — no need to re-read.
+    return _to_admin_response(app, stored=action_policies)
 
 
-@router.post("/admin/apps/custom")
+@admin_router.post("/apps/custom")
 def create_custom_external_app(
     name: str = Form(...),
-    description: str = Form(""),
     upstream_url_patterns: str = Form(...),
     auth_template: str = Form(...),
     organization_credentials: str = Form(...),
-    enabled: bool = Form(True),
     bundle: UploadFile | None = File(None),
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ExternalAppAdminResponse:
     """Create a CUSTOM (bundle-backed) external app. Multipart; structured fields
-    are JSON-encoded form strings, bundle required, blank ``description`` falls
-    back to the bundle's. Field edits use ``PATCH /admin/apps/{id}``, bundle
-    replacement ``PUT /admin/apps/{id}/bundle``.
+    are JSON-encoded form strings and the bundle is required. Field edits use
+    ``PATCH /admin/apps/{id}``; bundle replacement uses
+    ``PUT /admin/apps/{id}/bundle``.
     """
     parsed_patterns = parse_json_form_field(
         upstream_url_patterns, _STR_LIST_ADAPTER, "upstream_url_patterns"
@@ -296,42 +300,41 @@ def create_custom_external_app(
         )
 
     file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        read_bundle_file(bundle.file), bundle.filename, file_store
-    )
-    try:
+    with ingested_skill_bundle(
+        read_bundle_file(bundle.file),
+        bundle.filename,
+        file_store,
+    ) as ingested:
         app = create_external_app(
             db_session=db_session,
             name=name.strip(),
-            description=description.strip() or ingested.description,
             bundle_file_id=ingested.bundle_file_id,
             bundle_sha256=ingested.bundle_sha256,
             app_type=ExternalAppType.CUSTOM,
             upstream_url_patterns=parsed_patterns,
             auth_template=parsed_auth_template,
             organization_credentials=parsed_org_credentials,
-            enabled=enabled,
             is_public=True,
-            slug=ingested.slug,
+            skill_name=ingested.canonical_name,
+            skill_description=ingested.description,
         )
         # Push before commit so a failure rolls back the create + orphaned blob.
-        push_skill_to_affected_sandboxes(app.skill, db_session)
+        for skill in app.associated_skills:
+            push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
-    return _to_admin_response(app)
+    # A freshly created custom app has no stored policy overrides.
+    return _to_admin_response(app, stored={})
 
 
-@router.put("/admin/apps/{external_app_id}/bundle")
+@admin_router.put("/apps/{external_app_id}/bundle")
 def replace_custom_app_bundle(
     external_app_id: int,
     bundle: UploadFile = File(...),
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ExternalAppAdminResponse:
-    """Replace a CUSTOM app's bundle bytes, keeping its slug. Multipart-only
+    """Replace a CUSTOM app's bundle bytes, keeping its skill name. Multipart-only
     channel for bundle swaps; field edits use ``PATCH /admin/apps/{id}``. 404 if
     absent; rejects built-in apps (no bundle).
     """
@@ -342,11 +345,14 @@ def replace_custom_app_bundle(
             "Only custom apps have a replaceable bundle.",
         )
 
+    skill = get_first_skill_for_external_app(db_session, app.id)
     file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        read_bundle_file(bundle.file), bundle.filename, file_store, slug=app.skill.slug
-    )
-    try:
+    with ingested_skill_bundle(
+        read_bundle_file(bundle.file),
+        bundle.filename,
+        file_store,
+        expected_name=skill.name,
+    ) as ingested:
         app, old_bundle_file_id = update_external_app(
             db_session=db_session,
             external_app_id=external_app_id,
@@ -355,30 +361,38 @@ def replace_custom_app_bundle(
             new_bundle_sha256=ingested.bundle_sha256,
         )
         # Push before commit so a failure rolls back the swap + orphaned blob.
-        push_skill_to_affected_sandboxes(app.skill, db_session)
+        for associated_skill in app.associated_skills:
+            push_skill_to_affected_sandboxes(associated_skill, db_session)
         db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
     # Drop the superseded blob only after the swap committed.
     if old_bundle_file_id:
         delete_bundle_blob(file_store, old_bundle_file_id)
 
-    return _to_admin_response(app)
+    return _to_admin_response(
+        app,
+        stored=get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, app.id),
+    )
 
 
-@router.get("/admin/apps")
+@admin_router.get("/apps")
 def list_external_apps_admin(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ExternalAppAdminResponse]:
     """List all external apps with admin-only fields (org credentials, auth template)."""
     apps = get_external_apps(db_session=db_session)
-    return [_to_admin_response(app) for app in apps]
+    # One policy query per app; admin app lists are small.
+    return [
+        _to_admin_response(
+            app,
+            stored=get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, app.id),
+        )
+        for app in apps
+    ]
 
 
-@router.get("/admin/apps/built-in/options")
+@admin_router.get("/apps/built-in/options")
 def list_built_in_external_apps(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[BuiltInExternalAppDescriptor]:
@@ -386,7 +400,7 @@ def list_built_in_external_apps(
     return fetch_available_built_in_apps()
 
 
-@router.delete("/admin/apps/{external_app_id}")
+@admin_router.delete("/apps/{external_app_id}")
 def delete_external_app_admin(
     external_app_id: int,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -402,7 +416,9 @@ def delete_external_app_admin(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx and cannot be deleted.",
         )
-    affected = affected_user_ids_for_skill(app.skill, db_session)
+    affected: set[UUID] = set()
+    for skill in get_skills_for_external_app(db_session, app.id):
+        affected.update(affected_user_ids_for_skill(skill, db_session))
 
     delete_external_app(db_session=db_session, external_app_id=external_app_id)
 
@@ -427,6 +443,13 @@ def upsert_user_credentials(
 
     Returns 404 if no app with `external_app_id` exists.
     """
+    app = _get_app_or_404(db_session, external_app_id)
+    if not app.enabled:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This app is currently disabled by an admin.",
+        )
+
     upsert_external_app_user_credential(
         db_session=db_session,
         external_app_id=external_app_id,
@@ -437,6 +460,7 @@ def upsert_user_credentials(
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes now.
     push_skills_for_users({user.id}, db_session)
+    db_session.commit()
 
 
 @router.get("/apps")
@@ -449,15 +473,11 @@ def list_external_apps(
     ``authenticated`` flag. Org credentials and the raw auth template aren't
     exposed.
     """
-    apps = get_external_apps(db_session=db_session)
+    apps = get_external_apps(db_session=db_session, enabled_only=True)
     user_creds_by_app = get_user_credentials_by_app_id(
         db_session=db_session, user_id=user.id
     )
-    return [
-        _to_user_response(app, user_creds_by_app.get(app.id))
-        for app in apps
-        if app.skill.enabled
-    ]
+    return [_to_user_response(app, user_creds_by_app.get(app.id)) for app in apps]
 
 
 @router.post("/apps/connect/{request_id}/decision")

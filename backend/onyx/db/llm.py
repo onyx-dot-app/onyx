@@ -1,32 +1,36 @@
-from sqlalchemy import delete
-from sqlalchemy import or_
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only, selectinload
 
+from onyx.auth.schemas import UserRole
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
-from onyx.db.models import DocumentSet
-from onyx.db.models import ImageGenerationConfig
-from onyx.db.models import LLMModelFlow
+from onyx.db.models import (
+    DocumentSet,
+    ImageGenerationConfig,
+    LLMModelFlow,
+    LLMProvider__Persona,
+    LLMProvider__UserGroup,
+    ModelConfiguration,
+    Persona,
+    SearchSettings,
+    User,
+    User__UserGroup,
+    UserGroup,
+)
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import LLMProvider__Persona
-from onyx.db.models import LLMProvider__UserGroup
-from onyx.db.models import ModelConfiguration
-from onyx.db.models import Persona
-from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
-from onyx.server.manage.embedding.models import CloudEmbeddingProvider
-from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import SyncModelEntry
+from onyx.server.manage.embedding.models import (
+    CloudEmbeddingProvider,
+    CloudEmbeddingProviderCreationRequest,
+)
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    LLMProviderView,
+    SyncModelEntry,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
 
@@ -517,6 +521,49 @@ def fetch_existing_llm_providers(
     return providers
 
 
+def fetch_first_accessible_llm_provider_by_type(
+    provider_type: str,
+    user: User,
+    db_session: Session,
+) -> LLMProviderModel | None:
+    """Fetch the lowest-ID provider usable without a persona context.
+
+    Load only the fields and relationships used by the existing access policy,
+    then load the API key for the selected provider.
+    """
+    providers = db_session.scalars(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.provider == provider_type)
+        .options(
+            load_only(
+                LLMProviderModel.id,
+                LLMProviderModel.is_public,
+            ),
+            selectinload(LLMProviderModel.groups).load_only(UserGroup.id),
+            selectinload(LLMProviderModel.personas).load_only(Persona.id),
+        )
+        .order_by(LLMProviderModel.id.asc())
+    )
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    is_admin = user.role == UserRole.ADMIN
+    provider = next(
+        (
+            provider
+            for provider in providers
+            if can_user_access_llm_provider(
+                provider,
+                user_group_ids,
+                persona=None,
+                is_admin=is_admin,
+            )
+        ),
+        None,
+    )
+    if provider is not None:
+        db_session.refresh(provider, attribute_names=["api_key"])
+    return provider
+
+
 def fetch_existing_llm_provider(
     name: str, db_session: Session
 ) -> LLMProviderModel | None:
@@ -547,6 +594,25 @@ def fetch_existing_llm_provider_by_id(
     )
 
     return provider_model
+
+
+def fetch_accessible_llm_provider_by_id(
+    db_session: Session, user: User, provider_id: int
+) -> LLMProviderView | None:
+    """``provider_id``'s view when ``user`` may access it (is_public / group
+    rules; persona-restricted providers are excluded — no persona context)."""
+    provider_model = fetch_existing_llm_provider_by_id(provider_id, db_session)
+    if provider_model is None:
+        return None
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    if not can_user_access_llm_provider(
+        provider_model,
+        user_group_ids,
+        persona=None,
+        is_admin=user.role == UserRole.ADMIN,
+    ):
+        return None
+    return LLMProviderView.from_model(provider_model)
 
 
 def fetch_existing_llm_provider_by_name_and_type(

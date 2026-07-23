@@ -8,48 +8,51 @@ from fastapi.datastructures import Headers
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import ChatHistoryResult
-from onyx.chat.models import ChatLoadedFile
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import FileToolMetadata
-from onyx.chat.models import ToolCallSimple
-from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.chat.models import (
+    ChatHistoryResult,
+    ChatLoadedFile,
+    ChatMessageSimple,
+    FileToolMetadata,
+    ToolCallSimple,
+)
+from onyx.configs.constants import (
+    DEFAULT_PERSONA_ID,
+    TMP_DRALPHA_PERSONA_NAME,
+    FileOrigin,
+    MessageType,
+)
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.utils import sandbox_filename_for_document
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import get_chat_messages_by_session
-from onyx.db.chat import get_or_create_root_message
+from onyx.db.chat import (
+    create_chat_session,
+    get_chat_messages_by_session,
+    get_or_create_root_message,
+)
 from onyx.db.file_record import FileRecordNotFoundError
-from onyx.db.kg_config import get_kg_config_settings
-from onyx.db.kg_config import is_kg_config_settings_enabled_valid
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
-from onyx.db.models import Persona
+from onyx.db.kg_config import (
+    get_kg_config_settings,
+    is_kg_config_settings_enabled_valid,
+)
+from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
 from onyx.db.models import SearchDoc as DbSearchDoc
-from onyx.db.models import User
-from onyx.db.models import UserFile
 from onyx.db.persona import user_can_access_persona
 from onyx.db.projects import check_project_ownership
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import FileDescriptor
-from onyx.file_store.utils import plaintext_file_name_for_id
-from onyx.file_store.utils import store_plaintext
+from onyx.file_store.models import ChatFileType, FileDescriptor
+from onyx.file_store.utils import plaintext_file_name_for_id, store_plaintext
 from onyx.kg.models import KGException
 from onyx.kg.setup.kg_default_entity_definitions import (
     populate_missing_default_entity_types__commit,
 )
-from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
-from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
+from onyx.prompts.chat_prompts import (
+    ADDITIONAL_CONTEXT_PROMPT,
+    TOOL_CALL_RESPONSE_CROSS_MESSAGE,
+)
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.tools.models import ChatFile
-from onyx.tools.models import ToolCallKickoff
+from onyx.tools.models import ChatFile, ToolCallKickoff
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time

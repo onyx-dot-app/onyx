@@ -132,9 +132,7 @@ backoff==2.2.1 \
 boto3==1.39.11 \
     --hash=sha256:3027edf20642fe1d5f9dc50a420d0fe2733073ed6a9f0f047b60fe08c3682132 \
     --hash=sha256:af8f1dad35eceff7658fab43b39b0f55892b6e3dd12308733521cc24dd2c9a02
-    # via
-    #   aiobotocore
-    #   cohere
+    # via aiobotocore
 botocore==1.39.11 \
     --hash=sha256:1545352931a8a186f3e977b1e1a4542d7d434796e274c3c62efd0210b5ea76dc \
     --hash=sha256:953b12909d6799350e346ab038e55b6efe622c616f80aef74d7a6683ffdd972c
@@ -252,9 +250,9 @@ click==8.3.1 \
     # via
     #   litellm
     #   uvicorn
-cohere==5.6.1 \
-    --hash=sha256:1c8bcd39a54622d64b83cafb865f102cd2565ce091b0856fd5ce11bf7169109a \
-    --hash=sha256:5d7efda64f0e512d4cc35aa04b17a6f74b3d8c175a99f2797991a7f31dfac349
+cohere==7.0.5 \
+    --hash=sha256:7fc682bb5c408402fc5ce59322bfa3f6aae27bde1ecc2450b0a25370040707ed \
+    --hash=sha256:fd98f82be28c969da7625adddede0bb85f8f84de399daf3a98c40c0e7b93e104
     # via onyx
 colorama==0.4.6 ; sys_platform == 'win32' \
     --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
@@ -603,10 +601,6 @@ httpx==0.28.1 \
     #   google-genai
     #   litellm
     #   openai
-httpx-sse==0.4.3 \
-    --hash=sha256:0ac1c9fe3c0afad2e0ebb25a934a59f4c7823b60792691f779fad2c5568830fc \
-    --hash=sha256:9b1ed0127459a66014aec3c56bebd93da3c1bc8bb6618c8082039a44889a755d
-    # via cohere
 huggingface-hub==0.36.2 \
     --hash=sha256:1934304d2fb224f8afa3b87007d58501acfda9215b334eed53072dd5e815ff7a \
     --hash=sha256:48f0c8eac16145dfce371e9d2d7772854a4f591bcb56c9cf548accf531d54270
@@ -688,9 +682,12 @@ jsonschema-specifications==2025.9.1 \
     --hash=sha256:98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe \
     --hash=sha256:b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d
     # via jsonschema
-litellm==1.85.1 \
-    --hash=sha256:3b8ef0c89ff2736cbd27109f17ff31f1bd0ab59dee9be8cadb28ec3cb167ce0d \
-    --hash=sha256:c89eb5dfd18cce3d40b59e79c74f7f645bc7814a417c6ab25e53c786f0a6ab7b
+litellm==1.93.0 \
+    --hash=sha256:140bf215e264c71601bca9c06d2436c5451bb59e1e195ea23fc2d3d87b6929ec \
+    --hash=sha256:1a476ebc340c070c982eab15b4673fa63a70f5936935f9f20e4d2acb5f35d23b \
+    --hash=sha256:23b8eea4fb8b3b6ade05e7b6085ec9ca12daffcfb38d033d0bbce9c1d5894da5 \
+    --hash=sha256:98c15e84d32e922a821c105308bf9ddae8700de9ed396530bee2cbb1cacf4cbb \
+    --hash=sha256:cd70ccd4ba3ef1a395535c287bce72d30c7d937ecca4290c0db37a00738f7ada
     # via onyx
 markupsafe==3.0.3 \
     --hash=sha256:0eb9ff8191e8498cca014656ae6b8d61f39da5f95b488805da4bb029cccbfbaf \
@@ -873,17 +870,13 @@ openai==2.38.0 \
     # via
     #   litellm
     #   onyx
-packaging==24.2 \
-    --hash=sha256:09abb1bccd265c01f4a3aa3f7a7db064b36514d2cba19a2f694fe6150451a759 \
-    --hash=sha256:c228a6dc5e932d346bc5739379109d49e8853dd8223571c7c5b55260edc0b97f
+packaging==25.0 \
+    --hash=sha256:29572ef2b1f17581046b3a2227d5c611fb25ec70ca1ba8554b24b0e69331a484 \
+    --hash=sha256:d443872c98d677bf60f6a1f2f8c1cb748e8fe762d2bf9d3148b5599295b0fc4f
     # via
     #   google-cloud-aiplatform
     #   google-cloud-bigquery
     #   huggingface-hub
-parameterized==0.9.0 \
-    --hash=sha256:4e0758e3d41bea3bbd05ec14fc2c24736723f243b28d702081aef438c9372b1b \
-    --hash=sha256:7fc905272cefa4f364c1a3429cbbe9c0f98b793988efb5bf90aac80f08db09b1
-    # via cohere
 posthog==3.7.4 \
     --hash=sha256:19384bd09d330f9787a7e2446aba14c8057ece56144970ea2791072d4e40cd36 \
     --hash=sha256:21c18c6bf43b2de303ea4cd6e95804cc0f24c20cb2a96a8fd09da2ed50b62faa
@@ -987,9 +980,9 @@ protobuf==6.33.5 \
     #   grpc-google-iam-v1
     #   grpcio-status
     #   proto-plus
-pyasn1==0.6.3 \
-    --hash=sha256:697a8ecd6d98891189184ca1fa05d1bb00e2f84b5977c481452050549c8a72cf \
-    --hash=sha256:a80184d120f0864a52a073acc6fc642847d0be408e7c7252f31390c0f4eadcde
+pyasn1==0.6.4 \
+    --hash=sha256:9c447d8431c947fe4c8febc4ed9e760bc29011a5b01e5c74b67025bd9fb8ce81 \
+    --hash=sha256:deda9277cfd454080ec40b207fb6df82206a3a2688735233cdcd8d3d565f088b
     # via
     #   pyasn1-modules
     #   rsa
@@ -1032,7 +1025,9 @@ pydantic-core==2.33.2 \
     --hash=sha256:c8e7af2f4e0194c22b5b37205bfb293d166a7344a5b0d0eaccebc376546d77d5 \
     --hash=sha256:e80b087132752f6b3d714f041ccf74403799d3b23a72722ea2e6ba2e892555b9 \
     --hash=sha256:f517ca031dfc037a9c07e748cefd8d96235088b83b4f4ba8939105d20fa1dcd6
-    # via pydantic
+    # via
+    #   cohere
+    #   pydantic
 python-dateutil==2.9.0.post0 \
     --hash=sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3 \
     --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427

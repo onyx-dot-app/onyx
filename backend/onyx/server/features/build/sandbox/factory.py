@@ -6,8 +6,7 @@ subclasses (which all import base).
 
 import threading
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.utils.logger import setup_logger
 

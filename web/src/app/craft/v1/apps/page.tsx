@@ -8,22 +8,20 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import useOnMount from "@/hooks/useOnMount";
 import { cn } from "@opal/utils";
 import { Button, Card, InputTypeIn, Text } from "@opal/components";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { SvgCheckCircle, SvgPlug, SvgSettings } from "@opal/icons";
+import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
+import { MCPServersResponse } from "@/lib/tools/interfaces";
 import {
-  ExternalAppUserResponse,
-  getAppTypeLogo,
-} from "@/app/craft/v1/apps/registry";
-import {
-  disconnectUserFromApp,
-  startExternalAppOAuth,
-} from "@/app/craft/services/externalAppsService";
+  ConnectableApp,
+  externalAppToConnectable,
+  mcpServerToConnectable,
+} from "@/app/craft/v1/apps/connectableApps";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
-import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
 
-// The user's own app connections. Org-wide configuration lives at
-// /craft/v1/apps/manage (admin-only); admins get a shortcut button to it here.
+// The user's own app connections. Org-wide configuration lives in the admin
+// panel's Craft section; admins get a shortcut button to it here.
 export default function ExternalAppsPage() {
   const { isAdmin } = useUser();
   const [query, setQuery] = useState("");
@@ -44,15 +42,13 @@ export default function ExternalAppsPage() {
         description="Connect the tools Onyx Craft can use as context while it works."
         rightChildren={
           isAdmin ? (
-            <div className="flex items-center gap-2">
-              <Button
-                href="/craft/v1/apps/manage"
-                prominence="secondary"
-                icon={SvgSettings}
-              >
-                Manage apps
-              </Button>
-            </div>
+            <Button
+              href="/admin/craft/apps"
+              prominence="secondary"
+              icon={SvgSettings}
+            >
+              Manage apps
+            </Button>
           ) : undefined
         }
       >
@@ -76,25 +72,43 @@ interface AppConnectionsProps {
 }
 
 function AppConnections({ query }: AppConnectionsProps) {
-  const { data, mutate } = useSWR<ExternalAppUserResponse[]>(
-    SWR_KEYS.buildExternalApps,
+  const { data: externalApps, mutate: mutateApps } = useSWR<
+    ExternalAppUserResponse[]
+  >(SWR_KEYS.buildExternalApps, errorHandlingFetcher, {
+    keepPreviousData: true,
+  });
+  const { data: mcpData, mutate: mutateMcp } = useSWR<MCPServersResponse>(
+    SWR_KEYS.mcpServersCraft,
     errorHandlingFetcher,
     { keepPreviousData: true }
   );
-  const connectSlug = useSearchParams().get("connect");
+  const connectParam = useSearchParams().get("connect");
 
-  const { connected, browse } = useMemo(() => {
+  const refresh = () => {
+    void mutateApps();
+    void mutateMcp();
+  };
+
+  const { connected, browse, isLoading, isEmpty } = useMemo(() => {
+    const items = [
+      ...(externalApps ?? []).map(externalAppToConnectable),
+      ...(mcpData?.mcp_servers ?? [])
+        .map(mcpServerToConnectable)
+        .filter((item): item is ConnectableApp => item !== null),
+    ].sort((a, b) => a.name.localeCompare(b.name));
     const q = query.trim().toLowerCase();
-    const filtered = (data ?? []).filter((app) =>
-      q ? app.name.toLowerCase().includes(q) : true
+    const filtered = items.filter((item) =>
+      q ? item.name.toLowerCase().includes(q) : true
     );
     return {
-      connected: filtered.filter((app) => app.authenticated),
-      browse: filtered.filter((app) => !app.authenticated),
+      connected: filtered.filter((item) => item.authenticated),
+      browse: filtered.filter((item) => !item.authenticated),
+      isLoading: externalApps === undefined && mcpData === undefined,
+      isEmpty: items.length === 0,
     };
-  }, [data, query]);
+  }, [externalApps, mcpData, query]);
 
-  if (data === undefined) {
+  if (isLoading) {
     return (
       <Card background="none" border="dashed" rounding="lg">
         <Text font="main-content-body">Loading…</Text>
@@ -102,12 +116,11 @@ function AppConnections({ query }: AppConnectionsProps) {
     );
   }
 
-  if (data.length === 0) {
+  if (isEmpty) {
     return (
       <Card background="none" border="dashed" rounding="lg">
         <Text font="main-content-body" color="text-03">
-          No external apps are enabled for your org yet. Ask an admin to enable
-          one.
+          No external apps are configured for your organization yet.
         </Text>
       </Card>
     );
@@ -121,12 +134,12 @@ function AppConnections({ query }: AppConnectionsProps) {
             Connected
           </Text>
           <div className="flex flex-col gap-2">
-            {connected.map((userApp) => (
+            {connected.map((item) => (
               <ProviderConnectCard
-                key={userApp.id}
+                key={item.key}
                 variant="row"
-                userApp={userApp}
-                onChange={() => mutate()}
+                app={item}
+                onChange={refresh}
               />
             ))}
           </div>
@@ -143,13 +156,15 @@ function AppConnections({ query }: AppConnectionsProps) {
           </Text>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {browse.map((userApp) => (
+            {browse.map((item) => (
               <ProviderConnectCard
-                key={userApp.id}
+                key={item.key}
                 variant="tile"
-                userApp={userApp}
-                highlight={connectSlug === userApp.slug}
-                onChange={() => mutate()}
+                app={item}
+                highlight={
+                  connectParam !== null && connectParam === item.connectId
+                }
+                onChange={refresh}
               />
             ))}
           </div>
@@ -160,14 +175,14 @@ function AppConnections({ query }: AppConnectionsProps) {
 }
 
 interface ProviderConnectCardProps {
-  userApp: ExternalAppUserResponse;
+  app: ConnectableApp;
   variant: "row" | "tile";
   highlight?: boolean;
   onChange: () => void;
 }
 
 function ProviderConnectCard({
-  userApp,
+  app,
   variant,
   highlight,
   onChange,
@@ -187,16 +202,13 @@ function ProviderConnectCard({
   }, [highlight]);
 
   async function connect() {
-    // Custom apps have no OAuth provider — collect the user's credentials
-    // directly via a popup instead of redirecting to an authorize URL.
-    if (userApp.app_type === "CUSTOM") {
+    if (app.connectMode === "credentials") {
       setCredModalOpen(true);
       return;
     }
     setIsStarting(true);
     try {
-      const { authorize_url } = await startExternalAppOAuth(userApp.id);
-      window.location.href = authorize_url;
+      window.location.href = await app.startOAuth();
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : "Failed to start authorization"
@@ -205,12 +217,11 @@ function ProviderConnectCard({
     }
   }
 
-  // Overwrite stored creds with `{}` — flips `authenticated` to false
-  // on the next list call. Avoids a dedicated DELETE endpoint.
   async function disconnect() {
+    if (!app.disconnect) return;
     setIsStarting(true);
     try {
-      await disconnectUserFromApp(userApp.id);
+      await app.disconnect();
       onChange();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to disconnect");
@@ -219,7 +230,7 @@ function ProviderConnectCard({
     }
   }
 
-  const Logo = getAppTypeLogo(userApp.app_type);
+  const Logo = app.logo;
 
   return (
     <>
@@ -236,29 +247,31 @@ function ProviderConnectCard({
               <Logo className="w-8 h-8" />
               <div className="flex-1 flex flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  <Text font="main-ui-action">{userApp.name}</Text>
+                  <Text font="main-ui-action">{app.name}</Text>
                   <SvgCheckCircle className="w-4 h-4 text-status-success-05" />
                 </div>
                 <Text font="secondary-body" color="text-03">
                   Connected
                 </Text>
               </div>
-              <Button
-                prominence="secondary"
-                disabled={isStarting}
-                onClick={disconnect}
-              >
-                {isStarting ? "…" : "Disconnect"}
-              </Button>
+              {app.disconnect && (
+                <Button
+                  prominence="secondary"
+                  disabled={isStarting}
+                  onClick={disconnect}
+                >
+                  {isStarting ? "…" : "Disconnect"}
+                </Button>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-3 w-full">
               <div className="flex items-center gap-3">
                 <Logo className="w-8 h-8" />
-                <Text font="main-ui-action">{userApp.name}</Text>
+                <Text font="main-ui-action">{app.name}</Text>
               </div>
               <Text font="secondary-body" color="text-03">
-                {userApp.description}
+                {app.description}
               </Text>
               <Button disabled={isStarting} onClick={connect}>
                 {isStarting ? "Redirecting…" : "Connect"}
@@ -272,7 +285,11 @@ function ProviderConnectCard({
         open={credModalOpen}
         onClose={() => setCredModalOpen(false)}
         onSaved={onChange}
-        userApp={userApp}
+        name={app.name}
+        logo={app.logo}
+        credentialKeys={app.credentialKeys}
+        credentialValues={app.credentialValues}
+        save={app.saveCredentials}
       />
     </>
   );

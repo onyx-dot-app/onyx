@@ -4,52 +4,48 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import exists
-from sqlalchemy import func
-from sqlalchemy import not_
-from sqlalchemy import or_
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, exists, func, not_, or_, select, update
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS
-from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.constants import NotificationType
+from onyx.configs.constants import DEFAULT_PERSONA_ID, NotificationType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.document_access import get_accessible_documents_by_ids
 from onyx.db.document_set import filter_document_set_ids_by_user_access
-from onyx.db.enums import AccountType
-from onyx.db.enums import PersonaSharePermission
+from onyx.db.enums import AccountType, PersonaSharePermission
 from onyx.db.hierarchy import filter_accessible_hierarchy_node_ids
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Document
-from onyx.db.models import DocumentSet
-from onyx.db.models import FederatedConnector__DocumentSet
-from onyx.db.models import HierarchyNode
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import Persona__UserGroup
-from onyx.db.models import PersonaLabel
-from onyx.db.models import StarterMessage
-from onyx.db.models import Tool
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserFile
-from onyx.db.models import UserGroup
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    DocumentSet,
+    FederatedConnector__DocumentSet,
+    HierarchyNode,
+    Persona,
+    Persona__User,
+    Persona__UserGroup,
+    PersonaLabel,
+    StarterMessage,
+    Tool,
+    User,
+    User__UserGroup,
+    UserFile,
+    UserGroup,
+)
 from onyx.db.notification import create_notification
-from onyx.db.persona_sharing import get_persona_access_level
-from onyx.db.persona_sharing import get_user_group_ids_for_user
-from onyx.db.persona_sharing import persona_ownership_is_vacant
-from onyx.server.features.persona.models import FullPersonaSnapshot
-from onyx.server.features.persona.models import MinimalPersonaSnapshot
-from onyx.server.features.persona.models import PersonaSharedNotificationData
-from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.db.persona_sharing import (
+    get_persona_access_level,
+    get_user_group_ids_for_user,
+    persona_ownership_is_vacant,
+)
+from onyx.server.features.persona.models import (
+    FullPersonaSnapshot,
+    MinimalPersonaSnapshot,
+    PersonaSharedNotificationData,
+    PersonaSnapshot,
+    PersonaUpsertRequest,
+)
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -754,6 +750,11 @@ def _build_persona_filters(
     return stmt
 
 
+def _user_may_view_persona_owner_email(user: User, persona: Persona) -> bool:
+    """Owner email is PII — only the persona's owner or an admin may see it."""
+    return user.role == UserRole.ADMIN or persona.user_id == user.id
+
+
 def get_minimal_persona_snapshots_for_user(
     user: User,
     db_session: Session,
@@ -795,6 +796,7 @@ def get_minimal_persona_snapshots_for_user(
         MinimalPersonaSnapshot.from_model(
             persona,
             user_permission=get_persona_access_level(persona, user, user_group_ids),
+            include_owner_email=_user_may_view_persona_owner_email(user, persona),
         )
         for persona in results
     ]
@@ -951,6 +953,7 @@ def get_minimal_persona_snapshots_paginated(
         MinimalPersonaSnapshot.from_model(
             persona,
             user_permission=get_persona_access_level(persona, user, user_group_ids),
+            include_owner_email=_user_may_view_persona_owner_email(user, persona),
         )
         for persona in results
     ]
@@ -1325,6 +1328,32 @@ def upsert_persona(
         tools = db_session.query(Tool).filter(Tool.id.in_(tool_ids)).all()
         if not tools and tool_ids:
             raise ValueError("Tools not found")
+
+        # Existing tools survive access revocation; newly attached tools require access.
+        if user is not None:
+            # local import to avoid circular import (mirrors built_in_tools below)
+            from onyx.db.mcp import user_can_access_mcp_server
+
+            existing_tool_ids = (
+                {tool.id for tool in existing_persona.tools}
+                if existing_persona
+                else set()
+            )
+            checked_servers: set[int] = set()
+            for tool in tools:
+                server_id = tool.mcp_server_id
+                if (
+                    tool.id in existing_tool_ids
+                    or server_id is None
+                    or server_id in checked_servers
+                ):
+                    continue
+                checked_servers.add(server_id)
+                if not user_can_access_mcp_server(user, server_id, db_session):
+                    raise ValueError(
+                        "You do not have access to one or more of the "
+                        "selected MCP servers."
+                    )
 
     # Fetch and attach document_sets by IDs
     document_sets = None

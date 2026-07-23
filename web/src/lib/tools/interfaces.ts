@@ -1,5 +1,6 @@
 import type React from "react";
 import type { IconProps } from "@opal/types";
+import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
 
 // Generic action status for UI components
 export enum ActionStatus {
@@ -37,8 +38,19 @@ export interface MCPServer {
   admin_credentials?: Record<string, string>;
   user_credentials?: Record<string, string>;
   status: MCPServerStatus;
+  is_public: boolean;
+  groups: number[];
+  users: string[];
+  available_in_craft?: boolean;
+  // Sparse per-tool Craft approval overrides (unlisted tools default to ASK).
+  // Present on owner/admin views only.
+  tool_policies?: Record<string, EndpointPolicy> | null;
   last_refreshed_at?: string;
   tool_count: number;
+}
+
+export interface AgentEditorMCPServer extends MCPServer {
+  can_attach: boolean;
 }
 
 export interface MCPServersResponse {
@@ -50,12 +62,22 @@ export interface MCPServerCreateRequest {
   name: string;
   description?: string;
   server_url: string;
+  is_public: boolean;
+  groups: number[];
+  users: string[];
 }
 
 export interface MCPServerUpdateRequest {
   name?: string;
   description?: string;
   server_url?: string;
+  // Omit to leave the server's existing access unchanged.
+  is_public?: boolean;
+  groups?: number[];
+  users?: string[];
+  available_in_craft?: boolean;
+  // Full replace of the stored per-tool overrides; omit to leave unchanged.
+  tool_policies?: Record<string, EndpointPolicy>;
 }
 
 export interface MCPTool {

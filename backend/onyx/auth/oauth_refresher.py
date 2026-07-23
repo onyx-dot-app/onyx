@@ -2,23 +2,19 @@ import asyncio
 import os
 import time
 import uuid
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import Dict
-from typing import List
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 from fastapi_users.manager import BaseUserManager
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from onyx.configs.app_configs import OAUTH_CLIENT_ID
-from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
-from onyx.configs.app_configs import OPENID_CONFIG_URL
-from onyx.db.models import OAuthAccount
-from onyx.db.models import User
+from onyx.configs.app_configs import (
+    OAUTH_CLIENT_ID,
+    OAUTH_CLIENT_SECRET,
+    OPENID_CONFIG_URL,
+)
+from onyx.db.models import OAuthAccount, User
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 
@@ -259,6 +255,7 @@ async def refresh_oauth_token(
                     await user_manager.user_db.update(
                         user, {"oidc_expiry": oidc_expiry}
                     )
+                    user.oidc_expiry = oidc_expiry
 
             # Update the OAuth account
             await user_manager.user_db.update_oauth_account(  # ty: ignore[invalid-argument-type]

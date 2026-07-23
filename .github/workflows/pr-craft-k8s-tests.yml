@@ -91,10 +91,10 @@ jobs:
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
@@ -103,9 +103,20 @@ jobs:
               - 'backend/Dockerfile'
               - 'backend/onyx/sandbox_proxy/**'
               - 'backend/onyx/server/features/build/**'
+              - 'backend/onyx/server/features/skill/**'
               - 'backend/onyx/skills/**'
               - 'backend/shared_configs/**'
-              - 'deployment/helm/**'
+              # Only the sandbox/craft-specific chart bits gate this lane. Generic
+              # chart changes (workers, deps, version bumps) are install-tested by
+              # the `Helm - Lint and Test Charts` lane (`ct install` into kind), so
+              # they don't need the full sandbox suite here.
+              - 'deployment/helm/charts/onyx/templates/sandbox-*'
+              - 'deployment/helm/charts/onyx/templates/sandbox-proxy/**'
+              - 'deployment/helm/charts/onyx/templates/network-policy-sandbox-*'
+              - 'deployment/helm/charts/onyx/templates/craft-*'
+              - 'deployment/helm/charts/onyx/templates/celery-worker-scheduled-tasks*'
+              - 'deployment/helm/charts/onyx/charts/code-interpreter-*'
+              - 'deployment/helm/charts/onyx/values-ci.yaml'
               - 'backend/tests/integration/tests/craft/*.py'
               - 'backend/tests/integration/tests/craft/k8s/**'
               - 'backend/tests/common/craft/**'
@@ -126,7 +137,7 @@ jobs:
       test-files: ${{ steps.set-matrix.outputs.test-files }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -162,7 +173,9 @@ jobs:
             context: ./backend/onyx/server/features/build/sandbox/image
             file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
             # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
-            # so skip LibreOffice et al. to keep the CI image lean.
+            # so skip LibreOffice et al. to keep the CI image lean. Browser stays
+            # on (ENABLE_BROWSER defaults true) — chromium is lighter and the
+            # browser integration test needs it.
             extra_build_args: "ENABLE_SKILLS=false"
           - image: backend
             context: ./backend
@@ -179,10 +192,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -192,10 +205,10 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Build and push ${{ matrix.image }} image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
@@ -241,10 +254,10 @@ jobs:
       DISABLE_VECTOR_DB: "false"
 
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 

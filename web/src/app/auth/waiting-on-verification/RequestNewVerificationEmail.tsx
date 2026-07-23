@@ -1,6 +1,6 @@
 "use client";
 
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { requestEmailVerification } from "../lib";
 import { Spinner } from "@/components/Spinner";
 import { useState, JSX } from "react";

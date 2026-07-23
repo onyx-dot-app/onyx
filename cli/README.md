@@ -127,6 +127,7 @@ When called without a TTY (e.g., by an AI agent or piped into another command), 
 - **Results to stdout**, progress/errors to stderr
 - **No ANSI codes** or interactive prompts
 - **`ask` output truncated** to 50000 bytes by default; full response saved to a temp file. Use `--max-output 0` to disable.
+- **`search` stdout stays valid JSON**: over the limit, whole results are dropped and a `truncation` object carries metadata plus the temp file path of the full response.
 
 ### Configuration
 

@@ -1,72 +1,59 @@
 import copy
 import os
-import threading
+import re
+import time
 from collections.abc import Iterator
-from contextlib import contextmanager
-from typing import Any
-from typing import cast
-from typing import TYPE_CHECKING
-from typing import Union
+from contextlib import AbstractContextManager, contextmanager, nullcontext
+from typing import TYPE_CHECKING, Any, Union, cast
 
-from onyx.configs.app_configs import MOCK_LLM_RESPONSE
-from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
-from onyx.configs.chat_configs import LLM_FIRST_CHUNK_MAX_RETRIES
-from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
-from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.configs.model_configs import LITELLM_EXTRA_BODY
+from readerwriterlock import rwlock
+
+from onyx.configs.app_configs import (
+    MOCK_LLM_RESPONSE,
+    SEND_USER_METADATA_TO_LLM_PROVIDER,
+)
+from onyx.configs.chat_configs import (
+    LLM_FIRST_CHUNK_MAX_RETRIES,
+    LLM_SOCKET_READ_TIMEOUT,
+)
+from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.cost import calculate_llm_cost_cents
-from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.interfaces import ReasoningEffort
-from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.model_response import Usage
-from onyx.llm.models import ANTHROPIC_ADAPTIVE_REASONING_EFFORT
-from onyx.llm.models import ANTHROPIC_REASONING_EFFORT_BUDGET
-from onyx.llm.models import OPENAI_REASONING_EFFORT
+from onyx.llm.cost import compute_cost_cents
+from onyx.llm.custom_config_mapping import (
+    UI_ONLY_CONFIG_KEYS,
+    map_custom_config_to_model_kwargs,
+)
+from onyx.llm.interfaces import (
+    LLM,
+    LanguageModelInput,
+    LLMConfig,
+    LLMUserIdentity,
+    ReasoningEffort,
+    ToolChoiceOptions,
+)
+from onyx.llm.model_capabilities import is_true_openai_model, model_is_reasoning_model
+from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
+from onyx.llm.models import (
+    ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
+    ANTHROPIC_REASONING_EFFORT_BUDGET,
+    OPENAI_REASONING_EFFORT,
+)
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
-from onyx.llm.utils import is_true_openai_model
-from onyx.llm.utils import model_is_reasoning_model
-from onyx.llm.well_known_providers.constants import AWS_ACCESS_KEY_ID_KWARG
-from onyx.llm.well_known_providers.constants import (
-    AWS_ACCESS_KEY_ID_KWARG_ENV_VAR_FORMAT,
-)
-from onyx.llm.well_known_providers.constants import (
-    AWS_BEARER_TOKEN_BEDROCK_KWARG_ENV_VAR_FORMAT,
-)
-from onyx.llm.well_known_providers.constants import AWS_REGION_NAME_KWARG
-from onyx.llm.well_known_providers.constants import AWS_REGION_NAME_KWARG_ENV_VAR_FORMAT
-from onyx.llm.well_known_providers.constants import AWS_SECRET_ACCESS_KEY_KWARG
-from onyx.llm.well_known_providers.constants import (
-    AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
-)
-from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
-from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
-from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
-from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
-from onyx.llm.well_known_providers.constants import (
-    VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT,
-)
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
-from onyx.utils.encryption import mask_env_value_for_logging
-from onyx.utils.encryption import mask_string
+from onyx.utils.encryption import mask_env_value_for_logging, mask_string
 from onyx.utils.logger import setup_logger
-from onyx.utils.timing import log_generator_function_time
 
 logger = setup_logger()
 
-_env_lock = threading.Lock()
+# Write-preferring reader-writer lock guarding os.environ during litellm calls.
+# Calls that inject custom_config env vars hold the write lock; all other calls
+# hold a read lock so they never observe injected secrets but still run
+# concurrently with each other.
+_env_rwlock = rwlock.RWLockWrite()
 
 if TYPE_CHECKING:
-    from litellm import CustomStreamWrapper
-    from litellm import HTTPHandler
+    from litellm import CustomStreamWrapper, HTTPHandler
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
@@ -79,37 +66,22 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
     "claude-opus-4-8",
 )
 
-# Anthropic models that require the adaptive thinking API (thinking.type.adaptive
-# + output_config.effort) instead of the legacy thinking.type.enabled + budget_tokens.
-_ANTHROPIC_ADAPTIVE_THINKING_MODELS = (
-    "claude-opus-4-7",
-    "claude-opus-4-8",
-    "claude-fable-5",
-    "claude-5-fable",
-    "claude-mythos-5",
-    "claude-5-mythos",
-)
+# Starting with Claude Opus 4.7, Anthropic requires the adaptive thinking API
+# (thinking.type.adaptive + output_config.effort) in place of the legacy
+# thinking.type.enabled + budget_tokens, and rejects any non-default sampling
+# parameter (temperature/top_p/top_k) with a 400 invalid_request_error. Every
+# later model — Opus 4.8, the Claude 5 line (fable/mythos/sonnet), and beyond —
+# inherits both behaviors, so we gate on the parsed model version rather than an
+# explicit list. This lets new releases be handled without a code change, and
+# avoids relying on LiteLLM's drop_params (unreliable here, since AnthropicConfig
+# still advertises temperature as supported).
+_ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
 
-# Anthropic models that reject any non-default sampling parameter (temperature,
-# top_p, top_k). For these models we must omit these params entirely from the
-# request payload — passing them returns a 400 invalid_request_error. LiteLLM's
-# drop_params is unreliable here because AnthropicConfig still lists temperature
-# as supported. Match on substring to cover proxy/Vertex naming variants (e.g.
-# "claude-4.7-opus" via litellm_proxy).
-_ANTHROPIC_NO_SAMPLING_PARAMS_MODELS = (
-    "claude-opus-4-7",
-    "claude-opus-4.7",
-    "claude-4-7-opus",
-    "claude-4.7-opus",
-    "claude-opus-4-8",
-    "claude-opus-4.8",
-    "claude-4-8-opus",
-    "claude-4.8-opus",
-    "claude-fable-5",
-    "claude-5-fable",
-    "claude-mythos-5",
-    "claude-5-mythos",
-)
+# Named tiers spanning Claude's naming schemes, including the Claude 5 line whose
+# version digit can precede or follow the tier ("claude-sonnet-5" vs
+# "claude-5-sonnet").
+_ANTHROPIC_MODEL_TIERS = ("opus", "sonnet", "haiku", "fable", "mythos")
+_ANTHROPIC_VERSION_PATTERN = r"\d+(?:[.-]\d+)?"
 
 
 class LLMTimeoutError(Exception):
@@ -272,19 +244,71 @@ def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
     )
 
 
+def _parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
+    """Extract the (major, minor) version from a Claude model name.
+
+    Handles the naming variants that reach LiteLLM: tier-first
+    ("claude-opus-4-8"), version-first ("claude-4-8-opus"), dot-separated
+    ("claude-opus-4.8"), the named Claude 5 tiers ("claude-fable-5",
+    "claude-5-sonnet"), legacy names ("claude-3-5-sonnet-20241022"), and
+    provider-prefixed / date-snapshot forms. Returns None when the name is not a
+    Claude model or carries no parseable version.
+    """
+    name = model_name.lower()
+    if "claude" not in name:
+        return None
+    # Drop any provider prefix (e.g. "anthropic/", "bedrock/anthropic.").
+    name = name[name.index("claude") :]
+    # Drop date/snapshot suffixes ("@20260101", "-20241022") so their digits
+    # can't be mistaken for a version.
+    name = name.split("@")[0]
+    name = re.sub(r"\d{6,}", "", name)
+
+    tier = next((t for t in _ANTHROPIC_MODEL_TIERS if t in name), None)
+    if tier is not None:
+        # The version can sit on either side of the tier depending on scheme.
+        match = re.search(
+            rf"{tier}[.-]?({_ANTHROPIC_VERSION_PATTERN})", name
+        ) or re.search(rf"({_ANTHROPIC_VERSION_PATTERN})[.-]?{tier}", name)
+        version_str = match.group(1) if match else None
+    else:
+        match = re.search(_ANTHROPIC_VERSION_PATTERN, name)
+        version_str = match.group(0) if match else None
+
+    if not version_str:
+        return None
+    parts = re.split(r"[.-]", version_str)
+    major = int(parts[0])
+    minor = int(parts[1]) if len(parts) > 1 else 0
+    return (major, minor)
+
+
 def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
-    normalized_model_name = model_name.lower()
-    return any(
-        adaptive_model in normalized_model_name
-        for adaptive_model in _ANTHROPIC_ADAPTIVE_THINKING_MODELS
-    )
+    version = _parse_anthropic_model_version(model_name)
+    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
 
 
 def _anthropic_omits_sampling_params(model_name: str) -> bool:
-    normalized_model_name = model_name.lower()
-    return any(
-        no_sampling_model in normalized_model_name
-        for no_sampling_model in _ANTHROPIC_NO_SAMPLING_PARAMS_MODELS
+    version = _parse_anthropic_model_version(model_name)
+    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
+
+
+def _env_injection_enabled() -> bool:
+    # Deferred import: the security store pulls in the DB layer, which this
+    # module must not import at module load.
+    from onyx.server.security.store import llm_custom_config_env_injection_enabled
+
+    return llm_custom_config_env_injection_enabled()
+
+
+def _warn_dropped_env_only_keys(
+    model_provider: str, dropped_keys: tuple[str, ...]
+) -> None:
+    logger.warning(
+        "Dropping custom_config key(s) with no LiteLLM kwarg equivalent for "
+        "provider %s (env injection is disabled on this deployment): %s",
+        model_provider,
+        list(dropped_keys),
     )
 
 
@@ -333,51 +357,23 @@ class LitellmLLM(LLM):
         # Create a dictionary for model-specific arguments if it's None
         model_kwargs = model_kwargs or {}
 
-        vertex_auth_method = (
-            (custom_config or {}).get(VERTEX_AUTH_METHOD_KWARG)
-            if model_provider == LlmProviderNames.VERTEX_AI
-            else None
+        custom_config_mapping = map_custom_config_to_model_kwargs(
+            model_provider=model_provider,
+            custom_config=custom_config,
+            api_key=api_key,
+            api_base=api_base,
         )
-        vertex_is_workload_identity = (
-            vertex_auth_method == VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
-        )
-
-        if custom_config:
-            for k, v in custom_config.items():
-                if model_provider == LlmProviderNames.VERTEX_AI:
-                    # In Workload Identity mode, omit vertex_credentials so LiteLLM
-                    # falls back to google.auth.default() (the GKE metadata server).
-                    if k == VERTEX_CREDENTIALS_FILE_KWARG:
-                        if not vertex_is_workload_identity:
-                            model_kwargs[k] = v
-                    elif k == VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT:
-                        if not vertex_is_workload_identity:
-                            model_kwargs[VERTEX_CREDENTIALS_FILE_KWARG] = v
-                    elif k == VERTEX_LOCATION_KWARG:
-                        model_kwargs[k] = v
-                    elif k == VERTEX_PROJECT_KWARG:
-                        model_kwargs[k] = v
-                elif model_provider == LlmProviderNames.OLLAMA_CHAT:
-                    if k == OLLAMA_API_KEY_CONFIG_KEY:
-                        model_kwargs["api_key"] = v
-                elif model_provider == LlmProviderNames.LM_STUDIO:
-                    if k == LM_STUDIO_API_KEY_CONFIG_KEY:
-                        model_kwargs["api_key"] = v
-                elif model_provider == LlmProviderNames.BEDROCK:
-                    if k == AWS_REGION_NAME_KWARG:
-                        model_kwargs[k] = v
-                    elif k == AWS_REGION_NAME_KWARG_ENV_VAR_FORMAT:
-                        model_kwargs[AWS_REGION_NAME_KWARG] = v
-                    elif k == AWS_BEARER_TOKEN_BEDROCK_KWARG_ENV_VAR_FORMAT:
-                        model_kwargs["api_key"] = v
-                    elif k == AWS_ACCESS_KEY_ID_KWARG:
-                        model_kwargs[k] = v
-                    elif k == AWS_ACCESS_KEY_ID_KWARG_ENV_VAR_FORMAT:
-                        model_kwargs[AWS_ACCESS_KEY_ID_KWARG] = v
-                    elif k == AWS_SECRET_ACCESS_KEY_KWARG:
-                        model_kwargs[k] = v
-                    elif k == AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT:
-                        model_kwargs[AWS_SECRET_ACCESS_KEY_KWARG] = v
+        model_kwargs.update(custom_config_mapping.model_kwargs)
+        # Keys with no LiteLLM kwarg equivalent. Injected into os.environ during
+        # the call on deployments that allow it; dropped (with a warning at call
+        # time) otherwise. UI-only form-state keys are neither injected nor
+        # warned about.
+        self._env_only_custom_config: dict[str, str] = {
+            k: v
+            for k, v in (custom_config or {}).items()
+            if k not in custom_config_mapping.consumed_keys
+            and k not in UI_ONLY_CONFIG_KEYS
+        }
 
         # LM Studio: LiteLLM defaults to "fake-api-key" when no key is provided,
         # which LM Studio rejects. Ensure we always pass an explicit key (or empty
@@ -462,21 +458,26 @@ class LitellmLLM(LLM):
             return
         # Import here to avoid circular imports
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
-        from onyx.db.usage import increment_usage
-        from onyx.db.usage import UsageType
+        from onyx.db.usage import UsageType, increment_usage
 
-        # Calculate cost in cents
-        cost_cents = calculate_llm_cost_cents(
-            model_name=self._model_version,
-            prompt_tokens=usage.prompt_tokens,
-            completion_tokens=usage.completion_tokens,
-        )
-
-        if cost_cents <= 0:
-            return
+        cache_read = usage.cache_read_input_tokens
+        # prompt_tokens is cache-inclusive; price non-cached + cache separately.
+        non_cached_input = max(usage.prompt_tokens - cache_read, 0)
+        provider = self._custom_llm_provider or self._model_provider
 
         try:
             with get_session_with_current_tenant() as db_session:
+                input_cents, output_cents = compute_cost_cents(
+                    self._model_version,
+                    provider,
+                    non_cached_input,
+                    usage.completion_tokens,
+                    cache_read_tokens=cache_read,
+                    db_session=db_session,
+                )
+                cost_cents = input_cents + output_cents
+                if cost_cents <= 0:
+                    return
                 increment_usage(db_session, UsageType.LLM_COST, cost_cents)
                 db_session.commit()
         except Exception as e:
@@ -498,8 +499,7 @@ class LitellmLLM(LLM):
         client: "HTTPHandler | None" = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
-        from litellm.exceptions import RateLimitError
-        from litellm.exceptions import Timeout
+        from litellm.exceptions import RateLimitError, Timeout
 
         from onyx.llm.litellm_singleton import litellm
 
@@ -507,6 +507,7 @@ class LitellmLLM(LLM):
         # Flags that modify the final arguments
         #########################
         is_claude_model = "claude" in self.config.model_name.lower()
+        is_qwen_model = "qwen" in self.config.model_name.lower()
         is_reasoning = model_is_reasoning_model(
             self.config.model_name, self.config.model_provider
         )
@@ -552,9 +553,15 @@ class LitellmLLM(LLM):
             model = f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
 
         # Tool choice
-        if is_claude_model and tool_choice == ToolChoiceOptions.REQUIRED:
-            # Claude models will not use reasoning if tool_choice is required
-            # let it choose tools automatically so reasoning can still be used
+        # Downgrade tool_choice=required to AUTO for models that mishandle it:
+        # Claude skips reasoning when it's set, and Qwen thinking models reject
+        # it with a 400. The chat loop's fallback tool-call extraction still
+        # enforces the forced tool. Matched by model name rather than
+        # `is_reasoning` because the litellm/local registry lags behind new
+        # Qwen releases (e.g. qwen3.7-plus).
+        if (is_claude_model or is_qwen_model) and (
+            tool_choice == ToolChoiceOptions.REQUIRED
+        ):
             tool_choice = ToolChoiceOptions.AUTO
 
         # If no tools are provided, tool_choice should be None
@@ -753,7 +760,20 @@ class LitellmLLM(LLM):
             if tools and tool_choice is not None:
                 optional_kwargs["tool_choice"] = tool_choice
 
-            with temporary_env_and_lock(self._custom_config or {}):
+            # Injection disabled means no env writer exists anywhere in the
+            # process, so skip the rwlock entirely.
+            env_ctx: AbstractContextManager[None]
+            if _env_injection_enabled():
+                env_ctx = temporary_env_and_lock(self._env_only_custom_config)
+            else:
+                if self._env_only_custom_config:
+                    _warn_dropped_env_only_keys(
+                        self._model_provider,
+                        tuple(sorted(self._env_only_custom_config)),
+                    )
+                env_ctx = nullcontext()
+
+            with env_ctx:
                 response = litellm.completion(
                     mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
@@ -849,11 +869,12 @@ class LitellmLLM(LLM):
             client = HTTPHandler(timeout=timeout_override or self._timeout)
 
         try:
-            # When custom_config is set, env vars are temporarily injected
-            # under a global lock. Using stream=True here means the lock is
-            # only held during connection setup (not the full inference).
-            # The chunks are then collected outside the lock and reassembled
-            # into a single ModelResponse via stream_chunk_builder.
+            # When env-only custom_config keys are injected (self-hosted
+            # deployments only), they are set under a global lock. Using
+            # stream=True here means the lock is only held during connection
+            # setup (not the full inference). The chunks are then collected
+            # outside the lock and reassembled into a single ModelResponse
+            # via stream_chunk_builder.
             from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
             from litellm import stream_chunk_builder
 
@@ -999,25 +1020,32 @@ class LitellmLLM(LLM):
 
 
 @contextmanager
-@log_generator_function_time()
 def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
     """
-    Temporarily sets the environment variables to the given values.
-    _env_lock is held while the environment variables are set, so no concurrent
-    LLM call can observe them. Then cleans up the environment and releases the
-    lock.
+    Temporarily sets the environment variables to the given values while holding
+    the exclusive write side of _env_rwlock, so no concurrent LLM call can
+    observe them. Then cleans up the environment and releases the lock.
+
+    Calls without env_variables hold the shared read side instead: they run
+    concurrently with each other and only block while a writer has env vars
+    injected.
     """
-    if env_variables:
-        masked_env = {
-            key: mask_env_value_for_logging(key, value)
-            for key, value in env_variables.items()
-        }
-        logger.info(
-            "temporary_env_and_lock setting custom_config env var(s): %s",
-            masked_env,
-        )
-    with _env_lock:
-        logger.debug("Acquired lock in temporary_env_and_lock")
+    if not env_variables:
+        with _env_rwlock.gen_rlock():
+            yield
+        return
+
+    masked_env = {
+        key: mask_env_value_for_logging(key, value)
+        for key, value in env_variables.items()
+    }
+    logger.info(
+        "temporary_env_and_lock setting custom_config env var(s): %s",
+        masked_env,
+    )
+    start_time = time.monotonic()
+    with _env_rwlock.gen_wlock():
+        logger.debug("Acquired env write lock in temporary_env_and_lock")
         # Store original values (None if key didn't exist)
         original_values: dict[str, str | None] = {
             key: os.environ.get(key) for key in env_variables
@@ -1032,4 +1060,7 @@ def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
                 else:
                     os.environ[key] = original_value  # Restore original value
 
-    logger.debug("Released lock in temporary_env_and_lock")
+    logger.info(
+        "temporary_env_and_lock write section took %.3f seconds",
+        time.monotonic() - start_time,
+    )

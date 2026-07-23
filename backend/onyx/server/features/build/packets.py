@@ -23,13 +23,11 @@ Custom Onyx packets (defined here):
 - subagent_started: A child opencode session was created under a parent turn
 """
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 # =============================================================================
 # Base Packet Type
@@ -81,14 +79,25 @@ class ConnectAppRequestPacket(BasePacket):
     """The agent's ``connect_app`` tool is asking the user to connect an org app.
 
     The FE renders the connect card from this packet (resolving the app from the
-    registry by ``app_slug``) and POSTs the decision to
+    registry by ``external_app_id``) and POSTs the decision to
     ``/build/apps/connect/{request_id}/decision`` to answer the agent's tool call.
     """
 
     type: Literal["connect_app_request"] = "connect_app_request"
     request_id: str
-    app_slug: str
+    external_app_id: int
     reason: str | None = None
+
+
+class ContextUsagePacket(BasePacket):
+    type: Literal["context_usage"] = "context_usage"
+    used_tokens: int
+    cost: float | None = None
+
+
+class CompactionPacket(BasePacket):
+    type: Literal["compaction"] = "compaction"
+    summary: str | None = None
 
 
 # =============================================================================
@@ -100,4 +109,6 @@ BuildPacket = (
     | ApprovalRequestedPacket
     | SubagentStartedPacket
     | ConnectAppRequestPacket
+    | ContextUsagePacket
+    | CompactionPacket
 )

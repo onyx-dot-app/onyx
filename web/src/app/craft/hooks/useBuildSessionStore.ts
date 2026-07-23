@@ -8,6 +8,7 @@ import {
   Artifact,
   ArtifactType,
   BuildMessage,
+  FileSystemEntry,
   SessionHistoryItem,
   SessionOrigin,
   SessionStatus,
@@ -17,6 +18,7 @@ import {
   StreamItem,
   ToolCallState,
   TodoListState,
+  type ContextUsage,
   type PanelTab,
   panelTabId,
   type SubagentState,
@@ -172,13 +174,32 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
         }
         break;
 
-      // agent_plan_update and other packet types are not rendered as stream items
+      case "compaction":
+        items.push({
+          type: "compaction",
+          id: message.id || genId("compaction"),
+          summary: packet.summary,
+        });
+        break;
+
       default:
         break;
     }
   }
 
   return items;
+}
+
+function deriveContextUsage(messages: BuildMessage[]): ContextUsage | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const metadata = messages[i]?.message_metadata;
+    if (!metadata || typeof metadata !== "object") continue;
+    const packet = parsePacket(metadata);
+    if (packet.type === "context_usage") {
+      return { usedTokens: packet.usedTokens };
+    }
+  }
+  return null;
 }
 
 /**
@@ -546,7 +567,9 @@ export interface FilesTabState {
   expandedPaths: string[];
   scrollTop: number;
   /** Cached directory listings by path - avoids refetch on tab switch */
-  directoryCache: Record<string, unknown[]>;
+  directoryCache: Record<string, FileSystemEntry[]>;
+  /** Last refresh generation completed by the Files tab. */
+  lastRefreshGeneration?: number;
 }
 
 /** Tab history entry - can be a pinned tab or a transient panel tab */
@@ -608,13 +631,19 @@ export interface BuildSessionData {
   /** Model this session runs on (from the row); seeds the composer picker. */
   agentProvider: string | null;
   agentModel: string | null;
+  skillsStale: boolean;
+  /** Incremented only with skillsStale so async refreshes can reject stale responses. */
+  skillsStaleRevision: number;
   origin: SessionOrigin;
   abortController: AbortController;
   lastAccessed: Date;
   isLoaded: boolean;
+  contextUsage: ContextUsage | null;
   outputPanelOpen: boolean;
   /** Counter to trigger webapp refresh when web/ files change (increments on each edit) */
   webappNeedsRefresh: number;
+  /** Counter to force an iframe remount (restore only — live edits are handled by HMR) */
+  webappNeedsRemount: number;
   /** Counter to trigger files list refresh when outputs/ directory changes (increments on each write/edit) */
   filesNeedsRefresh: number;
   /** Transient panel tabs open in this session (files, subagents, etc.) */
@@ -761,6 +790,14 @@ interface BuildSessionStore {
     sessionId: string,
     updates: Partial<FilesTabState>
   ) => void;
+  mergeFilesTabDirectoryCache: (
+    sessionId: string,
+    listings: Record<string, FileSystemEntry[]>
+  ) => void;
+  retainFilesTabDirectoryCache: (
+    sessionId: string,
+    retainedPaths: ReadonlySet<string>
+  ) => void;
 
   // Subagent Actions
   /** Swap the main column to show a subagent's transcript in place of the chat. */
@@ -842,19 +879,28 @@ const createInitialSessionData = (
   sandbox: null,
   agentProvider: null,
   agentModel: null,
+  skillsStale: false,
+  skillsStaleRevision: 0,
   origin: "INTERACTIVE",
   abortController: new AbortController(),
   lastAccessed: new Date(),
   isLoaded: false,
+  contextUsage: null,
   outputPanelOpen: false,
   webappNeedsRefresh: 0,
+  webappNeedsRemount: 0,
   filesNeedsRefresh: 0,
   panelTabs: [],
   subagents: new Map(),
   viewedSubagentSessionId: null,
   activeOutputTab: "preview",
   activePanelTabId: null,
-  filesTabState: { expandedPaths: [], scrollTop: 0, directoryCache: {} },
+  filesTabState: {
+    expandedPaths: [],
+    scrollTop: 0,
+    directoryCache: {},
+    lastRefreshGeneration: 0,
+  },
   tabHistory: {
     entries: [{ type: "pinned", tab: "preview" }],
     currentIndex: 0,
@@ -980,6 +1026,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         ...updates,
+        skillsStaleRevision:
+          updates.skillsStale === undefined
+            ? session.skillsStaleRevision
+            : session.skillsStaleRevision + 1,
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -1514,12 +1564,16 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
+        skillsStale: sessionData.skills_stale,
         origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,
         activeTurnLocalOwner: useDbMessages
           ? false
           : currentSession!.activeTurnLocalOwner,
+        contextUsage: useDbMessages
+          ? deriveContextUsage(messages)
+          : currentSession!.contextUsage,
         error: null,
         isLoaded: true,
       });
@@ -1539,19 +1593,28 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           return;
         }
 
-        // Hold the chip on "restoring" (and refresh the preview) until the
+        // Hold the chip on "restoring" (and poll webapp readiness) until the
         // webapp actually serves, then flip to the real status below.
         updateSessionData(sessionId, {
           status: sessionData.status === "active" ? "active" : "idle",
           sandbox: sessionData.sandbox
             ? { ...sessionData.sandbox, status: "restoring" }
             : sessionData.sandbox,
+          skillsStale: sessionData.skills_stale,
           webappNeedsRefresh:
             (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
         });
 
+        // Remount the iframe only once the restored pod serves — the old
+        // page's HMR socket died with the old pod. If readiness times out the
+        // remount still runs: worst case the iframe lands on the offline page,
+        // which reloads itself until the server responds.
         await waitForWebappReady(sessionId);
-        updateSessionData(sessionId, { sandbox: sessionData.sandbox });
+        updateSessionData(sessionId, {
+          sandbox: sessionData.sandbox,
+          webappNeedsRemount:
+            (get().sessions.get(sessionId)?.webappNeedsRemount || 0) + 1,
+        });
 
         // An artifact-fetch failure must NOT flip the sandbox to "failed".
         try {
@@ -1832,17 +1895,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     const session = get().sessions.get(sessionId);
     if (session) {
       // Increment refresh counter to trigger files list refresh
-      // Using a counter ensures each write/edit triggers a new refresh
-      // Also collapse the attachments directory to show fresh state
-      const collapsedExpandedPaths = session.filesTabState.expandedPaths.filter(
-        (path) => path !== "attachments" && !path.startsWith("attachments/")
-      );
+      // Using a counter ensures each filesystem change triggers a new refresh
       get().updateSessionData(sessionId, {
         filesNeedsRefresh: (session.filesNeedsRefresh || 0) + 1,
-        filesTabState: {
-          ...session.filesTabState,
-          expandedPaths: collapsedExpandedPaths,
-        },
       });
     }
   },
@@ -2090,6 +2145,62 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         filesTabState: { ...session.filesTabState, ...updates },
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  mergeFilesTabDirectoryCache: (
+    sessionId: string,
+    listings: Record<string, FileSystemEntry[]>
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        filesTabState: {
+          ...session.filesTabState,
+          directoryCache: {
+            ...session.filesTabState.directoryCache,
+            ...listings,
+          },
+        },
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  retainFilesTabDirectoryCache: (
+    sessionId: string,
+    retainedPaths: ReadonlySet<string>
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const cachedListings = Object.entries(
+        session.filesTabState.directoryCache
+      );
+      const retainedListings = cachedListings.filter(([path]) =>
+        retainedPaths.has(path)
+      );
+      if (retainedListings.length === cachedListings.length) return state;
+
+      const directoryCache = Object.fromEntries(retainedListings);
+      const updatedSession: BuildSessionData = {
+        ...session,
+        filesTabState: {
+          ...session.filesTabState,
+          directoryCache,
+        },
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -2511,6 +2622,7 @@ const EMPTY_FILES_TAB_STATE: FilesTabState = {
   expandedPaths: [],
   scrollTop: 0,
   directoryCache: {},
+  lastRefreshGeneration: 0,
 };
 const EMPTY_TAB_HISTORY: TabNavigationHistory = {
   entries: [],
@@ -2610,6 +2722,14 @@ export const useWebappNeedsRefresh = () =>
     const { currentSessionId, sessions } = state;
     if (!currentSessionId) return 0;
     return sessions.get(currentSessionId)?.webappNeedsRefresh ?? 0;
+  });
+
+// Webapp remount selector
+export const useWebappNeedsRemount = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return 0;
+    return sessions.get(currentSessionId)?.webappNeedsRemount ?? 0;
   });
 
 // Files refresh selector

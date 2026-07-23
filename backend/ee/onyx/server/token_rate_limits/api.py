@@ -1,23 +1,30 @@
 from collections import defaultdict
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.token_limit import fetch_all_user_group_token_rate_limits_by_group
-from ee.onyx.db.token_limit import fetch_user_group_token_rate_limits_for_user
-from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
+from ee.onyx.db.token_limit import (
+    fetch_all_user_group_token_rate_limits_by_group,
+    fetch_user_group_token_rate_limits_for_user,
+    insert_user_group_token_rate_limit,
+)
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.db.token_limit import fetch_all_user_token_rate_limits
-from onyx.db.token_limit import insert_user_token_rate_limit
-from onyx.server.query_and_chat.token_limit import any_rate_limit_exists
-from onyx.server.token_rate_limits.models import TokenRateLimitArgs
-from onyx.server.token_rate_limits.models import TokenRateLimitDisplay
+from onyx.db.token_limit import (
+    fetch_all_user_token_rate_limits,
+    insert_user_token_rate_limit,
+)
+from onyx.server.query_and_chat.token_limit import (
+    invalidate_any_rate_limit_exists_cache,
+)
+from onyx.server.token_rate_limits.models import (
+    TokenRateLimitArgs,
+    TokenRateLimitDisplay,
+)
 
 router = APIRouter(prefix="/admin/token-rate-limits", tags=PUBLIC_API_TAGS)
 
@@ -76,7 +83,7 @@ def create_group_token_limit_settings(
         )
     )
     # clear cache in case this was the first rate limit created
-    any_rate_limit_exists.cache_clear()
+    invalidate_any_rate_limit_exists_cache()
     return rate_limit_display
 
 
@@ -106,5 +113,5 @@ def create_user_token_limit_settings(
         insert_user_token_rate_limit(db_session, token_limit_settings)
     )
     # clear cache in case this was the first rate limit created
-    any_rate_limit_exists.cache_clear()
+    invalidate_any_rate_limit_exists_cache()
     return rate_limit_display

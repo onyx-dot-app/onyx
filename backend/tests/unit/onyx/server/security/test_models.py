@@ -5,21 +5,24 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from onyx.server.security.models import _derive_operator_locked_fields
-from onyx.server.security.models import _operator_locked
-from onyx.server.security.models import _tenant_editable
-from onyx.server.security.models import OPERATOR_LOCKED_FIELDS
-from onyx.server.security.models import PASSWORD_LENGTH_CAP
-from onyx.server.security.models import PASSWORD_MAX_LENGTH_FLOOR
-from onyx.server.security.models import SecuritySettings
-from onyx.server.security.models import SecuritySettingsOverrides
-from onyx.server.security.models import SSRFProtectionLevel
+from onyx.server.security.models import (
+    OPERATOR_LOCKED_FIELDS,
+    PASSWORD_LENGTH_CAP,
+    PASSWORD_MAX_LENGTH_FLOOR,
+    SecuritySettings,
+    SecuritySettingsOverrides,
+    SSRFProtectionLevel,
+    _derive_operator_locked_fields,
+    _operator_locked,
+    _tenant_editable,
+)
 
 _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {
     "user_directory_admin_only": False,
     "track_external_idp_expiry": False,
     "ssrf_protection_level": SSRFProtectionLevel.VALIDATE_LLM,
     "mask_credential_prefix": True,
+    "llm_custom_config_env_injection": True,
     "valid_email_domains": (),
     "password_min_length": 8,
     "password_max_length": 64,

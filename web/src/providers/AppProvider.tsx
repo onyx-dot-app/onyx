@@ -19,6 +19,7 @@
  * 5. **ModalProvider** - Global modal state management
  * 6. **SidebarStateProvider** - Sidebar open/closed state
  * 7. **QueryControllerProvider** - Search/Chat mode + query lifecycle
+ * 8. **UnsavedChangesNavigationProvider** - Cross-layout navigation guards
  */
 
 "use client";
@@ -29,11 +30,12 @@ import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
 import { SettingsProvider } from "@/providers/SettingsProvider";
 import { ModalProvider } from "@/components/context/ModalContext";
-import { SidebarStateProvider } from "@opal/layouts";
+import { SidebarStateProvider, ToastProvider } from "@opal/layouts";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
-import ToastProvider from "@/providers/ToastProvider";
+import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
 import { FullWidthChatProvider } from "@/providers/FullWidthChatProvider";
+import { UnsavedChangesNavigationProvider } from "@/providers/UnsavedChangesNavigationProvider";
 
 interface SidebarPersistenceProviderProps {
   children: React.ReactNode;
@@ -80,7 +82,17 @@ export default function AppProvider({ children }: AppProviderProps) {
               <SidebarPersistenceProvider>
                 <QueryControllerProvider>
                   <FullWidthChatProvider>
-                    <ToastProvider>{children}</ToastProvider>
+                    <UnsavedChangesNavigationProvider>
+                      <ToastProvider
+                        errorAppendix={
+                          NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK
+                            ? "Need help? Join our community at https://discord.gg/4NA5SbzrWb for support!"
+                            : undefined
+                        }
+                      >
+                        {children}
+                      </ToastProvider>
+                    </UnsavedChangesNavigationProvider>
                   </FullWidthChatProvider>
                 </QueryControllerProvider>
               </SidebarPersistenceProvider>

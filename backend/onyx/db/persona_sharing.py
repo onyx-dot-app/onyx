@@ -7,12 +7,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
-from onyx.db.enums import PersonaAccessLevel
-from onyx.db.enums import PersonaSharePermission
-from onyx.db.enums import PersonaSharingStatus
-from onyx.db.models import Persona
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
+from onyx.db.enums import (
+    PersonaAccessLevel,
+    PersonaSharePermission,
+    PersonaSharingStatus,
+)
+from onyx.db.models import Persona, User, User__UserGroup
 
 
 def get_user_group_ids_for_user(db_session: Session, user_id: UUID) -> set[int]:
@@ -21,6 +21,16 @@ def get_user_group_ids_for_user(db_session: Session, user_id: UUID) -> set[int]:
             select(User__UserGroup.user_group_id).where(
                 User__UserGroup.user_id == user_id
             )
+        ).all()
+    )
+
+
+def get_curated_user_group_ids_for_user(db_session: Session, user_id: UUID) -> set[int]:
+    return set(
+        db_session.scalars(
+            select(User__UserGroup.user_group_id)
+            .where(User__UserGroup.user_id == user_id)
+            .where(User__UserGroup.is_curator.is_(True))
         ).all()
     )
 

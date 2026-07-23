@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { CopyButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgDownload, SvgMaximize2, SvgX } from "@opal/icons";

@@ -1,10 +1,7 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import cast
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import cast, select, update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -13,8 +10,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
-from onyx.db.models import Notification
-from onyx.db.models import User
+from onyx.db.models import Notification, User
 
 
 def _notification_filters(
@@ -85,6 +81,36 @@ def create_notification(
     if autocommit:
         db_session.commit()
     return notification
+
+
+def delete_notifications_by_additional_data(
+    notif_type: NotificationType,
+    db_session: Session,
+    additional_data: dict | None = None,
+) -> None:
+    """Delete every notification of this type whose additional_data matches,
+    regardless of user. Matches the COALESCE(additional_data, '{}') equality
+    used at creation, so it clears exactly the rows create_notification /
+    batch_create_notifications would have written for the same key."""
+    additional_data_normalized = additional_data if additional_data is not None else {}
+    db_session.query(Notification).filter(
+        Notification.notif_type == notif_type,
+        func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
+        == additional_data_normalized,
+    ).delete(synchronize_session=False)
+
+
+def delete_notifications_by_type(
+    notif_type: NotificationType,
+    db_session: Session,
+) -> None:
+    """Hard-delete every notification of this type for all users, so an
+    admin-authored source that changed out-of-band re-materializes fresh on
+    the next read."""
+    db_session.query(Notification).filter(Notification.notif_type == notif_type).delete(
+        synchronize_session=False
+    )
+    db_session.commit()
 
 
 def get_notification_by_id(

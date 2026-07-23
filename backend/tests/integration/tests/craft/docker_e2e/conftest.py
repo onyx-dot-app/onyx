@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 import subprocess
-from typing import NamedTuple
-from typing import Protocol
+from typing import NamedTuple, Protocol
 from uuid import UUID
 
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.enums import SandboxStatus
-from onyx.db.external_app import create_external_app
-from onyx.db.external_app import get_built_in_external_app
+from onyx.db.enums import EndpointPolicy, ExternalAppType, SandboxStatus
+from onyx.db.external_app import create_external_app, get_built_in_external_app
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -106,7 +102,7 @@ def provision_sandbox() -> ProvisionSandbox:
 @pytest.fixture(scope="module")
 def slack_external_app() -> None:
     """
-    Seeds Slack directly with ``enabled=True`` and an ``ASK`` policy on
+    Seeds Slack directly with an ``ASK`` policy on
     ``slack.messages.write`` so the gate matcher claims ``chat.postMessage``.
 
     Unlike the cloud migration that seeds built-in apps per tenant (when
@@ -120,14 +116,12 @@ def slack_external_app() -> None:
             create_external_app(
                 db_session=db,
                 name="Slack",
-                description="Slack integration for gate-flow e2e tests.",
                 bundle_file_id="",
                 bundle_sha256="",
                 app_type=ExternalAppType.SLACK,
                 upstream_url_patterns=["https://slack\\.com/api/.*"],
                 auth_template={"Authorization": "Bearer {access_token}"},
                 organization_credentials={"access_token": "fake-test-token"},
-                enabled=True,
                 is_public=True,
                 action_policies={"slack.messages.write": EndpointPolicy.ASK},
             )

@@ -25,6 +25,8 @@ Usage:
     python backend/scripts/env_inventory.py --json out.json
     python backend/scripts/env_inventory.py --drift-only   # just the drift report
     python backend/scripts/env_inventory.py --shortlist    # should-document names
+    python backend/scripts/env_inventory.py --write-baseline  # snapshot the CI baseline
+    python backend/scripts/env_inventory.py --check-baseline  # CI drift gate (exit 1 on drift)
 
 Run from the repo root (it auto-detects paths relative to this file).
 """
@@ -38,9 +40,7 @@ import json
 import re
 import sys
 from collections import defaultdict
-from dataclasses import asdict
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 # --- repo layout --------------------------------------------------------------
@@ -569,6 +569,65 @@ def should_document_list(reads: list[EnvRead]) -> list[str]:
     )
 
 
+# --- drift baseline (CI gate) -------------------------------------------------
+#
+# The baseline freezes the CURRENT should-document backlog so the CI gate only
+# catches NEW drift, not the pre-existing tail. Golden-file semantics: the gate
+# asserts the live should-document set equals the committed baseline exactly, so
+# the file shrinks in lockstep as Phase-2 documentation lands.
+
+BASELINE_PATH = BACKEND_DIR / "scripts" / "env_inventory_baseline.txt"
+
+_BASELINE_HEADER = """\
+# Env-var drift baseline — operator-facing tunables that backend code READS but
+# no deployment template (env.template / Helm values.yaml) documents yet.
+#
+# GENERATED — do not hand-edit. Managed by backend/scripts/env_inventory.py.
+# Regenerate:
+#   python backend/scripts/env_inventory.py --write-baseline
+#
+# The CI drift gate (`--check-baseline`) fails when this list drifts from what
+# the code actually reads:
+#   * a NEW undocumented tunable appeared -> document it in env.template + Helm
+#     values.yaml (preferred), OR regenerate this file if it's intentionally
+#     left undocumented for now.
+#   * a listed var became documented/removed -> regenerate so the backlog shrinks.
+#
+# One VAR_NAME per line, sorted.
+"""
+
+
+def read_baseline(path: Path) -> set[str]:
+    """Parse a baseline file into a set of names (ignores blanks + `#` comments)."""
+    names: set[str] = set()
+    if not path.exists():
+        return names
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line and not line.startswith("#"):
+            names.add(line)
+    return names
+
+
+def format_baseline(names: list[str]) -> str:
+    """Render the canonical baseline file body (header + sorted names)."""
+    body = "\n".join(sorted(set(names)))
+    return f"{_BASELINE_HEADER}\n{body}\n" if body else f"{_BASELINE_HEADER}\n"
+
+
+def diff_baseline(current: set[str], baseline: set[str]) -> tuple[list[str], list[str]]:
+    """Compare the live should-document set to a committed baseline.
+
+    Returns (new_drift, resolved):
+      * new_drift -> tunables the code reads that are neither documented nor in
+                     the baseline (the gate FAILS on these).
+      * resolved  -> baseline entries the code no longer reads-and-leaves-
+                     undocumented (now documented or deleted; baseline is stale).
+    Both empty means the gate passes.
+    """
+    return sorted(current - baseline), sorted(baseline - current)
+
+
 def human_report(reads: list[EnvRead], drift_only: bool = False) -> None:
     summaries = summarize(reads)
     dupes = find_duplicate_assignments(reads)
@@ -795,12 +854,83 @@ def main() -> int:
         help="print only the operator-facing-tunable + undocumented names "
         "(one per line; for piping into doc-gen / a CI gate)",
     )
+    parser.add_argument(
+        "--write-baseline",
+        nargs="?",
+        type=Path,
+        const=BASELINE_PATH,
+        metavar="PATH",
+        help="snapshot the current should-document set to the drift baseline "
+        f"(default: {BASELINE_PATH.relative_to(REPO_ROOT)})",
+    )
+    parser.add_argument(
+        "--check-baseline",
+        nargs="?",
+        type=Path,
+        const=BASELINE_PATH,
+        metavar="PATH",
+        help="CI drift gate: exit non-zero if the should-document set drifts "
+        f"from the committed baseline (default: {BASELINE_PATH.relative_to(REPO_ROOT)})",
+    )
     args = parser.parse_args()
 
     reads = collect_reads()
     if not reads:
         print(
             "No env reads found — are you running from the repo root?", file=sys.stderr
+        )
+        return 1
+
+    if args.write_baseline is not None:
+        path = args.write_baseline
+        path.parent.mkdir(parents=True, exist_ok=True)
+        current = should_document_list(reads)
+        path.write_text(format_baseline(current), encoding="utf-8")
+        print(f"Wrote drift baseline ({len(current)} undocumented tunables) -> {path}")
+        return 0
+
+    if args.check_baseline is not None:
+        path = args.check_baseline
+        if not path.exists():
+            print(
+                f"Drift baseline not found: {path}\n"
+                "Generate it with: python backend/scripts/env_inventory.py "
+                "--write-baseline",
+                file=sys.stderr,
+            )
+            return 1
+        current = should_document_list(reads)
+        new_drift, resolved = diff_baseline(set(current), read_baseline(path))
+        if not new_drift and not resolved:
+            print(
+                f"env drift gate OK — {len(current)} undocumented operator-facing "
+                "tunables, all baselined."
+            )
+            return 0
+        if new_drift:
+            print(
+                f"❌ {len(new_drift)} NEW undocumented operator-facing env var(s):",
+                file=sys.stderr,
+            )
+            for n in new_drift:
+                print(f"    + {n}", file=sys.stderr)
+            print(
+                "  → Document each in deployment/docker_compose/env.template and "
+                "deployment/helm/charts/onyx/values.yaml,\n"
+                "    or (if intentionally left undocumented) regenerate the baseline.",
+                file=sys.stderr,
+            )
+        if resolved:
+            print(
+                f"⚠️  {len(resolved)} baseline entr(y/ies) no longer undocumented "
+                "(now documented or removed) — baseline is stale:",
+                file=sys.stderr,
+            )
+            for n in resolved:
+                print(f"    - {n}", file=sys.stderr)
+        print(
+            "  → Regenerate: python backend/scripts/env_inventory.py --write-baseline",
+            file=sys.stderr,
         )
         return 1
 

@@ -5,20 +5,19 @@ from __future__ import annotations
 import time
 from collections.abc import Generator
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 from sqlalchemy import select
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskStatus
-from onyx.db.enums import ScheduledTaskTriggerSource
-from onyx.db.models import ScheduledTask
-from onyx.db.models import ScheduledTaskRun
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.enums import (
+    ScheduledTaskRunStatus,
+    ScheduledTaskStatus,
+    ScheduledTaskTriggerSource,
+)
+from onyx.db.models import ScheduledTask, ScheduledTaskRun
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -204,7 +203,7 @@ def test_patch_task_recomputes_next_run_at_on_schedule_change(
             "editor_payload": {
                 "unit": "days",
                 "every": 1,
-                "time_of_day": "03:00",
+                "time_of_day": "03:17",
             },
         },
     )

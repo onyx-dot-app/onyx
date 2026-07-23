@@ -68,3 +68,25 @@ updates:
     labels:
       - "dependabot:docker"
       - "dependabot:sandbox"
+  - package-ecosystem: "docker"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 1
+    assignees:
+      - "jmelahman"
+    labels:
+      - "dependabot:docker"
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 1
+    assignees:
+      - "jmelahman"
+    labels:
+      - "dependabot:docker"

@@ -1,11 +1,8 @@
 import csv
 import os
 import time
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from io import BytesIO
-from io import StringIO
+from datetime import datetime, timedelta, timezone
+from io import BytesIO, StringIO
 from uuid import UUID
 from zipfile import ZipFile
 

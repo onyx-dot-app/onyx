@@ -9,31 +9,31 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.access.access import get_access_for_user_files
 from onyx.access.models import DocumentAccess
-from onyx.configs.constants import DEFAULT_BOOST
-from onyx.configs.constants import NotificationType
-from onyx.connectors.models import Document
+from onyx.configs.constants import DEFAULT_BOOST, NotificationType
+from onyx.connectors.models import ConnectorStopSignal, Document
 from onyx.db.enums import UserFileStatus
-from onyx.db.models import Persona
-from onyx.db.models import UserFile
+from onyx.db.models import Persona, UserFile
 from onyx.db.notification import create_notification
-from onyx.db.user_file import fetch_chunk_counts_for_user_files
-from onyx.db.user_file import fetch_persona_ids_for_user_files
-from onyx.db.user_file import fetch_user_project_ids_for_user_files
+from onyx.db.user_file import (
+    fetch_chunk_counts_for_user_files,
+    fetch_persona_ids_for_user_files,
+    fetch_user_project_ids_for_user_files,
+)
 from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
-from onyx.indexing.models import ChunkEnrichmentContext
-from onyx.indexing.models import DocAwareChunk
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import IndexChunk
-from onyx.indexing.models import UpdatableChunkData
+from onyx.indexing.models import (
+    ChunkEnrichmentContext,
+    DocAwareChunk,
+    DocMetadataAwareIndexChunk,
+    IndexChunk,
+    UpdatableChunkData,
+)
 from onyx.llm.factory import get_default_llm
-from onyx.natural_language_processing.utils import count_tokens
-from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.natural_language_processing.utils import count_tokens, get_tokenizer
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -42,22 +42,35 @@ _NUM_LOCK_ATTEMPTS = 3
 retry_delay = 0.5
 
 
+class UserFileDeletingSkip(ConnectorStopSignal):
+    """A user file is DELETING at write time — skip the write, don't retry or fail. Subclasses
+    ConnectorStopSignal so the pipeline handler re-raises it (rather than turning it into an
+    indexing failure), and the lock retry loop (OperationalError only) lets it propagate. The
+    delete owns removal from every index; writing would resurrect it (the port sweep can't
+    remove these non-port chunks)."""
+
+
 def _acquire_user_file_locks(db_session: Session, user_file_ids: list[str]) -> bool:
-    """Acquire locks for the specified user files."""
+    """Acquire locks for the specified user files, skipping any being deleted."""
     # Convert to UUIDs for the DB comparison
     user_file_uuid_list = [UUID(user_file_id) for user_file_id in user_file_ids]
     stmt = (
-        select(UserFile.id)
+        select(UserFile.id, UserFile.status)
         .where(UserFile.id.in_(user_file_uuid_list))
         .with_for_update(nowait=True)
     )
     # will raise exception if any of the documents are already locked
-    documents = db_session.scalars(stmt).all()
+    rows = db_session.execute(stmt).all()
 
     # make sure we found every document
-    if len(documents) != len(set(user_file_ids)):
+    if len(rows) != len(set(user_file_ids)):
         logger.warning("Didn't find row for all specified user file IDs. Aborting.")
         return False
+
+    # Intentional skip, distinct from a missing/contended lock: raise so the pipeline stops
+    # this batch cleanly and callers skip it, instead of retrying then reporting a failure.
+    if any(status == UserFileStatus.DELETING for _, status in rows):
+        raise UserFileDeletingSkip("user file is being deleted; skipping index write")
 
     return True
 
@@ -74,6 +87,7 @@ class UserFileIndexingAdapter:
         self,
         documents: list[Document],
         ignore_time_skip: bool,  # noqa: ARG002
+        index_to_secondary: bool,  # noqa: ARG002
     ) -> DocumentBatchPrepareContext:
         return DocumentBatchPrepareContext(
             updatable_docs=documents,
@@ -244,8 +258,13 @@ class UserFileIndexingAdapter:
         filtered_documents: list[Document],  # noqa: ARG002
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
+        index_to_secondary: bool,
     ) -> None:
         assert isinstance(enrichment, UserFileChunkEnricher)
+        if index_to_secondary:
+            # Secondary (reindex-port) write: chunks are written; the PRESENT pass owns the
+            # terminal side-effects (status/chunk_count/plaintext/notifications) — leave them.
+            return
         user_file_ids = [doc.id for doc in context.updatable_docs]
 
         user_files = (

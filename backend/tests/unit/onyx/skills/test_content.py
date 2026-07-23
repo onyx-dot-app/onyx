@@ -9,8 +9,10 @@ from onyx.db.models import Skill
 from onyx.file_store.file_store import FileStore
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.content import read_builtin_skill_instructions
-from onyx.skills.content import read_custom_skill_bundle_instructions
+from onyx.skills.content import (
+    read_builtin_skill_instructions,
+    read_custom_skill_bundle_instructions,
+)
 
 
 def _build_zip(entries: list[tuple[str, bytes]]) -> bytes:
@@ -60,7 +62,7 @@ def test_read_custom_skill_bundle_instructions_reads_bundle_from_file_store() ->
     file_store.read_file.return_value = io.BytesIO(zip_bytes)
 
     instructions = read_custom_skill_bundle_instructions(
-        Skill(slug="preview-test", bundle_file_id="bundle-file-id"),
+        Skill(name="preview-test", bundle_file_id="bundle-file-id"),
         file_store,
     )
 

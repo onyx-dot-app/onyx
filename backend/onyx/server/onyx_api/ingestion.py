@@ -1,35 +1,40 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.configs.constants import DEFAULT_CC_PAIR_ID
-from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.connectors.models import Document
-from onyx.connectors.models import IndexAttemptMetadata
+from onyx.configs.constants import DEFAULT_CC_PAIR_ID, PUBLIC_API_TAGS
+from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.document import delete_documents_complete
-from onyx.db.document import get_document
-from onyx.db.document import get_documents_by_cc_pair
-from onyx.db.document import get_ingestion_documents
+from onyx.db.document import (
+    delete_documents_complete,
+    get_document,
+    get_documents_by_cc_pair,
+    get_ingestion_documents,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
-from onyx.db.search_settings import get_active_search_settings
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_secondary_search_settings
+from onyx.db.port_orphan_candidate import (
+    delete_port_orphan_candidates_by_id,
+    record_port_orphan_candidates_for_document,
+)
+from onyx.db.search_settings import (
+    get_active_search_settings,
+    get_current_search_settings,
+    get_secondary_search_settings,
+)
 from onyx.document_index.factory import get_all_document_indices
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
 )
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
-from onyx.server.onyx_api.models import DocMinimalInfo
-from onyx.server.onyx_api.models import IngestionDocument
-from onyx.server.onyx_api.models import IngestionResult
+from onyx.server.onyx_api.models import (
+    DocMinimalInfo,
+    IngestionDocument,
+    IngestionResult,
+)
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -157,6 +162,9 @@ def upsert_ingestion_doc(
             embedder=new_index_embedding_model,
             document_indices=sec_document_indices,
             ignore_time_skip=True,
+            # FUTURE write: skip content_hash dedup, else the primary run's hash
+            # suppresses this into a no-op.
+            index_to_secondary=True,
             db_session=db_session,
             tenant_id=tenant_id,
             document_batch=[document],
@@ -188,17 +196,37 @@ def delete_ingestion_doc(
         )
 
     active_search_settings = get_active_search_settings(db_session)
+
+    # If a port is filling a target index, record this delete before the index delete
+    # below so a racing create-only copy that resurrects the doc is swept back out.
+    recorded_ids = record_port_orphan_candidates_for_document(
+        db_session,
+        document_id,
+        active_search_settings.primary,
+        active_search_settings.secondary,
+    )
+    if recorded_ids:
+        db_session.commit()
+
     # This flow is for deletion so we get all indices.
     document_indices = get_all_document_indices(
         active_search_settings.primary,
         active_search_settings.secondary,
         None,
     )
-    for document_index in document_indices:
-        document_index.delete(
-            document_id,
-            chunk_count=document.chunk_count,
-        )
-
-    # Delete from database
-    delete_documents_complete(db_session, [document_id])
+    try:
+        for document_index in document_indices:
+            document_index.delete(
+                document_id,
+                chunk_count=document.chunk_count,
+            )
+        delete_documents_complete(db_session, [document_id])
+    except Exception:
+        # A failed DB delete leaves the session aborted; roll back before the candidate
+        # cleanup or it raises and masks the real error. The doc stays live (no retry here),
+        # so drop only the rows this call inserted to keep the sweep off its live chunks.
+        db_session.rollback()
+        if recorded_ids:
+            delete_port_orphan_candidates_by_id(db_session, recorded_ids)
+            db_session.commit()
+        raise

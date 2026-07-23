@@ -139,4 +139,55 @@ describe("parsePacket", () => {
         "task_id: child-session-1 (for resuming to continue this task if needed)\n\n<task_result>done</task_result>",
     });
   });
+
+  it("parses connect-app requests with their correlation id and app ID", () => {
+    expect(
+      parsePacket({
+        type: "connect_app_request",
+        request_id: "req-1",
+        external_app_id: 17,
+        reason: "to schedule events",
+      })
+    ).toEqual({
+      type: "connect_app_request",
+      requestId: "req-1",
+      externalAppId: 17,
+      reason: "to schedule events",
+    });
+  });
+
+  it.each([undefined, null, 0, -1, 1.5, Number.NaN, "17"])(
+    "rejects connect-app requests with invalid app ID %p",
+    (externalAppId) => {
+      expect(
+        parsePacket({
+          type: "connect_app_request",
+          request_id: "req-1",
+          external_app_id: externalAppId,
+        })
+      ).toEqual({ type: "unknown" });
+    }
+  );
+
+  it("parses context_usage from persisted (snake_case) and live (camelCase) shapes", () => {
+    expect(parsePacket({ type: "context_usage", used_tokens: 15526 })).toEqual({
+      type: "context_usage",
+      usedTokens: 15526,
+    });
+
+    expect(parsePacket({ type: "context_usage", usedTokens: 42 })).toEqual({
+      type: "context_usage",
+      usedTokens: 42,
+    });
+  });
+
+  it("parses compaction packets, defaulting a missing summary to null", () => {
+    expect(
+      parsePacket({ type: "compaction", summary: "Recap of earlier work" })
+    ).toEqual({ type: "compaction", summary: "Recap of earlier work" });
+    expect(parsePacket({ type: "compaction" })).toEqual({
+      type: "compaction",
+      summary: null,
+    });
+  });
 });

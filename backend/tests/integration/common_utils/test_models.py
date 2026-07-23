@@ -4,19 +4,18 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import QAFeedbackType
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SearchDoc
+from onyx.configs.constants import MessageType, QAFeedbackType
+from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.db.enums import AccessType
-from onyx.server.documents.models import DocumentSource
-from onyx.server.documents.models import IndexAttemptSnapshot
-from onyx.server.documents.models import IndexingStatus
-from onyx.server.documents.models import InputType
+from onyx.server.documents.models import (
+    DocumentSource,
+    IndexAttemptSnapshot,
+    IndexingStatus,
+    InputType,
+)
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 
 """
@@ -317,14 +316,3 @@ class DATestDiscordChannelConfig(BaseModel):
     thread_only_mode: bool = False
     require_bot_invocation: bool = True
     persona_override_id: int | None = None
-
-
-class DATestSkill(BaseModel):
-    id: UUID | None = None
-    slug: str
-    name: str
-    description: str
-    is_public: bool = False
-    enabled: bool = True
-    granted_group_ids: list[int] = Field(default_factory=list)
-    is_personal: bool = False

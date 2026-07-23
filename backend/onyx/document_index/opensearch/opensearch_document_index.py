@@ -5,59 +5,67 @@ from typing import Any
 from opensearchpy.helpers.errors import BulkIndexError
 
 from onyx.access.models import DocumentAccess
-from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
-from onyx.configs.app_configs import VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import PUBLIC_DOC_PAT
+from onyx.configs.app_configs import (
+    MAX_CHUNKS_PER_DOC_BATCH,
+    VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT,
+)
+from onyx.configs.constants import PUBLIC_DOC_PAT, OnyxRedisLocks
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
 from onyx.connectors.models import convert_metadata_list_of_strings_to_dict
 from onyx.context.search.enums import QueryType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.models import (
+    IndexFilters,
+    InferenceChunk,
+    InferenceChunkUncleaned,
+)
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.models import DocumentSource
-from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.chunk_content_enrichment import (
+    cleanup_content_for_chunks,
     generate_enriched_content_for_chunk_text,
 )
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentInsertionRecord
-from onyx.document_index.interfaces_new import DocumentSectionRequest
-from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
-from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.client import OpenSearchClient
-from onyx.document_index.opensearch.client import OpenSearchIndexClient
-from onyx.document_index.opensearch.client import SearchHit
+from onyx.document_index.interfaces_new import (
+    DocumentIndex,
+    DocumentInsertionRecord,
+    DocumentSectionRequest,
+    IndexingMetadata,
+    MetadataUpdateRequest,
+    SecondaryIndexDocumentMissingError,
+    TenantState,
+)
+from onyx.document_index.opensearch.client import (
+    OpenSearchClient,
+    OpenSearchDocumentMissingError,
+    OpenSearchIndexClient,
+    SearchHit,
+)
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
-from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
-from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
-from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
-from onyx.document_index.opensearch.schema import DocumentChunk
-from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
-from onyx.document_index.opensearch.schema import DocumentSchema
-from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
-from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
-from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
-from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
-from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
-from onyx.document_index.opensearch.search import DocumentQuery
+from onyx.document_index.opensearch.schema import (
+    ACCESS_CONTROL_LIST_FIELD_NAME,
+    CONTENT_FIELD_NAME,
+    CREATED_AT_FIELD_NAME,
+    DOCUMENT_SETS_FIELD_NAME,
+    GLOBAL_BOOST_FIELD_NAME,
+    HIDDEN_FIELD_NAME,
+    PERSONAS_FIELD_NAME,
+    USER_PROJECTS_FIELD_NAME,
+    DocumentChunk,
+    DocumentChunkWithoutVectors,
+    DocumentSchema,
+    get_opensearch_doc_chunk_id,
+)
 from onyx.document_index.opensearch.search import (
+    DocumentQuery,
     get_min_max_normalization_pipeline_name_and_config,
-)
-from onyx.document_index.opensearch.search import (
     get_normalization_pipeline_name_and_config,
-)
-from onyx.document_index.opensearch.search import (
     get_zscore_normalization_pipeline_name_and_config,
 )
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import Document
+from onyx.indexing.models import DocMetadataAwareIndexChunk, Document
 from onyx.redis.lock_context import redis_shared_lock
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 from shared_configs.configs import MULTI_TENANT
@@ -68,6 +76,10 @@ logger = setup_logger(__name__)
 
 VERIFY_INDEX_LOCK_TTL_S = 60
 VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
+
+# Batch size for the orphan sweep's delete-by-query terms filter — well under the
+# OpenSearch terms cap (65536) so a large mid-port purge can't build an oversized query.
+_PORT_ORPHAN_DELETE_BATCH_SIZE = 1000
 
 
 # Per-process cache of indices we've already verified/created/applied the
@@ -116,7 +128,7 @@ def set_cluster_state(client: OpenSearchClient) -> None:
     )
 
 
-def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+def convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
     chunk: DocumentChunkWithoutVectors,
     score: float | None,
     highlights: dict[str, list[str]],
@@ -217,6 +229,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         metadata_list=filtered_metadata_list,
         metadata_suffix=filtered_metadata_suffix,
         last_updated=chunk.source_document.doc_updated_at,
+        created_at=chunk.source_document.doc_created_at,
         public=chunk.access.is_public,
         access_control_list=generate_opensearch_filtered_access_control_list(
             chunk.access
@@ -531,9 +544,31 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return self._client.delete_by_query(query_body)
 
+    def delete_port_written_chunks(self, document_ids: list[str]) -> int:
+        """Delete only port-written chunks (written_by_port=true) for the given docs.
+
+        Used by the orphan sweep to remove a doc a create-only port copy resurrected,
+        without touching a legitimately re-added doc (whose forward-written chunks are
+        unmarked). Dedups and batches the ids under the OpenSearch terms cap so a large
+        mid-port purge can't build an oversized terms query. Returns chunks deleted.
+        """
+        unique_ids = list(dict.fromkeys(document_ids))
+        if not unique_ids:
+            return 0
+        deleted = 0
+        for i in range(0, len(unique_ids), _PORT_ORPHAN_DELETE_BATCH_SIZE):
+            batch = unique_ids[i : i + _PORT_ORPHAN_DELETE_BATCH_SIZE]
+            query_body = DocumentQuery.delete_port_written_chunks_query(
+                document_ids=batch,
+                tenant_state=self._tenant_state,
+            )
+            deleted += self._client.delete_by_query(query_body)
+        return deleted
+
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],
+        surface_document_missing: bool = False,
     ) -> None:
         """Updates some set of chunks.
 
@@ -563,6 +598,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
             len(update_requests),
             self._index_name,
         )
+        # When surfacing, keep going past a missing-doc request so later
+        # requests still update; attribute only the docs that were truly missing.
+        missing_chunk_ids: list[str] = []
+        missing_document_ids: set[str] = set()
         for update_request in update_requests:
             properties_to_update: dict[str, Any] = dict()
             # TODO(andrei): Nit but consider if we can use DocumentChunk here so
@@ -592,6 +631,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 properties_to_update[PERSONAS_FIELD_NAME] = list(
                     update_request.persona_ids
                 )
+            if update_request.created_at is not None:
+                # Stored as epoch seconds
+                properties_to_update[CREATED_AT_FIELD_NAME] = int(
+                    datetime_to_utc(update_request.created_at).timestamp()
+                )
 
             if not properties_to_update:
                 if len(update_request.document_ids) > 1:
@@ -605,6 +649,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 continue
 
             doc_chunk_ids_to_update: list[str] = []
+            chunk_id_to_doc_id: dict[str, str] = {}
             for doc_id in update_request.document_ids:
                 doc_chunk_count = update_request.doc_id_to_chunk_cnt.get(doc_id, -1)
                 if doc_chunk_count < 0:
@@ -640,11 +685,30 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         chunk_index=chunk_index,
                     )
                     doc_chunk_ids_to_update.append(document_chunk_id)
+                    chunk_id_to_doc_id[document_chunk_id] = doc_id
 
-            self._client.bulk_update_documents(
-                document_chunk_ids=doc_chunk_ids_to_update,
-                properties_to_update=properties_to_update,
-                ignore_missing=True,
+            try:
+                self._client.bulk_update_documents(
+                    document_chunk_ids=doc_chunk_ids_to_update,
+                    properties_to_update=properties_to_update,
+                    # Normal metadata sync tolerates benign 404s (indexing race);
+                    # a port surfaces them instead so deferred-sync can retry.
+                    ignore_missing=not surface_document_missing,
+                    surface_document_missing=surface_document_missing,
+                )
+            except OpenSearchDocumentMissingError as e:
+                # Only raised when surfacing; record the missing docs and keep
+                # processing the remaining requests.
+                missing_chunk_ids.extend(e.missing_chunk_ids)
+                missing_document_ids.update(
+                    chunk_id_to_doc_id[cid]
+                    for cid in e.missing_chunk_ids
+                    if cid in chunk_id_to_doc_id
+                )
+
+        if missing_chunk_ids:
+            raise OpenSearchDocumentMissingError(
+                missing_chunk_ids, sorted(missing_document_ids)
             )
 
     def id_based_retrieval(
@@ -689,7 +753,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 search_type=OpenSearchSearchType.DOC_ID_RETRIEVAL,
             )
             inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-                _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+                convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                     search_hit.document_chunk, None, {}
                 )
                 for search_hit in search_hits
@@ -745,7 +809,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # Good place for a breakpoint to inspect the search hits if you have
         # "explain" enabled.
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits
@@ -790,7 +854,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits
@@ -834,7 +898,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits
@@ -867,7 +931,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             search_type=OpenSearchSearchType.RANDOM,
         )
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits
@@ -878,22 +942,32 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return inference_chunks
 
-    def index_raw_chunks(self, chunks: list[DocumentChunk]) -> None:
+    def index_raw_chunks(
+        self, chunks: list[DocumentChunk], use_create_only: bool = False
+    ) -> None:
         """Indexes raw document chunks into OpenSearch.
 
-        Used in the Vespa migration task. Can be deleted after migrations are
-        complete.
+        Used by the Vespa migration task and the reindex port. The reindex port
+        passes use_create_only=True so its stale backlog snapshot can never
+        overwrite a chunk a live/forward writer already owns in FUTURE (an
+        existing chunk is a benign 409). The port is pure gap-fill backfill of
+        PRESENT, which is always >= the port in recency, so it never needs to
+        overwrite an existing chunk.
         """
         logger.debug(
             "[OpenSearchDocumentIndex] Indexing %s raw chunks for index %s.",
             len(chunks),
             self._index_name,
         )
-        # Do not raise if the document already exists, just update. This is
-        # because the document may already have been indexed during the
-        # OpenSearch transition period.
+        # Migration path (use_create_only=False): update_if_exists overwrites,
+        # since the doc may already have been indexed during the OpenSearch
+        # transition period. Port path (use_create_only=True): create-only, so
+        # it never overwrites.
         self._client.bulk_index_documents(
-            documents=chunks, tenant_state=self._tenant_state, update_if_exists=True
+            documents=chunks,
+            tenant_state=self._tenant_state,
+            update_if_exists=True,
+            use_create_only=use_create_only,
         )
 
 
@@ -918,6 +992,8 @@ class OpenSearchIndexPair(DocumentIndex):
         # TODO(andrei): This is dumb, fix this.
         secondary_embedding_dim: int | None = None,
         secondary_embedding_precision: EmbeddingPrecision | None = None,
+        # INSTANT reindex-port: primary is a promoted, still-backfilling index; see update().
+        primary_backfill_in_progress: bool = False,
     ) -> None:
         # All three secondary fields must be set together or all None — checked
         # independently so a partially-set state surfaces here rather than
@@ -936,6 +1012,7 @@ class OpenSearchIndexPair(DocumentIndex):
         self._secondary = secondary
         self._secondary_embedding_dim = secondary_embedding_dim
         self._secondary_embedding_precision = secondary_embedding_precision
+        self._primary_backfill_in_progress = primary_backfill_in_progress
 
     def verify_and_create_index_if_necessary(
         self,
@@ -970,9 +1047,24 @@ class OpenSearchIndexPair(DocumentIndex):
         return total
 
     def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
-        self._primary.update(update_requests)
+        if self._primary_backfill_in_progress:
+            # A doc the port hasn't copied into this now-live primary yet is silently
+            # missing; surface it (typed signal, like secondary) so the caller defers
+            # instead of clearing needs_sync and letting the create-only port reinstall
+            # a stale, possibly-revoked ACL nothing would correct.
+            try:
+                self._primary.update(update_requests, surface_document_missing=True)
+            except OpenSearchDocumentMissingError as e:
+                raise SecondaryIndexDocumentMissingError(e.missing_document_ids)
+        else:
+            self._primary.update(update_requests)
         if self._secondary is not None:
-            self._secondary.update(update_requests)
+            # FUTURE may not have the doc yet (port); re-raise as a typed signal
+            # carrying only the docs that were actually missing.
+            try:
+                self._secondary.update(update_requests, surface_document_missing=True)
+            except OpenSearchDocumentMissingError as e:
+                raise SecondaryIndexDocumentMissingError(e.missing_document_ids)
 
     def id_based_retrieval(
         self,

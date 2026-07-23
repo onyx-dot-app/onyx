@@ -2,7 +2,7 @@ import type {
   ExternalAppType,
   ExternalAppUserResponse,
 } from "@/app/craft/v1/apps/registry";
-import type { SkillsList } from "@/views/admin/SkillsPage/interfaces";
+import type { SkillsList } from "@/lib/skills/types";
 
 export interface PickerSkill {
   kind: "skill";
@@ -13,9 +13,8 @@ export interface PickerSkill {
 
 export interface PickerApp {
   kind: "app";
-  slug: string;
+  externalAppId: number;
   name: string;
-  description: string;
   appType: ExternalAppType;
   authenticated: boolean;
 }
@@ -29,8 +28,8 @@ export interface PickerSections {
 
 const EMPTY_SECTIONS: PickerSections = { skills: [], apps: [] };
 
-// `/api/skills` omits external-app-backed skills; the Apps section is built
-// from `/api/build/apps` instead.
+// Skill rows provide per-user enablement; app metadata and credential state
+// come from `/api/build/apps`.
 export function toPickerSections(
   skillsData: SkillsList | undefined,
   externalApps: ExternalAppUserResponse[] | undefined
@@ -39,22 +38,21 @@ export function toPickerSections(
 
   const skills: PickerSkill[] = [];
   const apps: PickerApp[] = [];
-
   for (const b of skillsData?.builtins ?? []) {
-    if (!b.is_available) continue;
+    if (!b.is_available || !b.enabled) continue;
     skills.push({
       kind: "skill",
-      slug: b.slug,
+      slug: b.name,
       name: b.name,
       description: b.description,
     });
   }
 
   for (const c of skillsData?.customs ?? []) {
-    if (!c.enabled) continue;
+    if (!c.enabled || c.is_valid === false) continue;
     skills.push({
       kind: "skill",
-      slug: c.slug,
+      slug: c.name,
       name: c.name,
       description: c.description,
     });
@@ -63,16 +61,19 @@ export function toPickerSections(
   for (const app of externalApps ?? []) {
     apps.push({
       kind: "app",
-      slug: app.slug,
+      externalAppId: app.id,
       name: app.name,
-      description: app.description,
       appType: app.app_type,
       authenticated: app.authenticated,
     });
   }
 
   skills.sort((a, b) => a.slug.localeCompare(b.slug));
-  apps.sort((a, b) => a.slug.localeCompare(b.slug));
+  apps.sort(
+    (a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
+      a.externalAppId - b.externalAppId
+  );
 
   return { skills, apps };
 }
@@ -103,9 +104,31 @@ export function detectSlashTrigger(
 
 function matchesQuery(entry: PickerEntry, query: string): boolean {
   if (!query) return true;
-  return [entry.slug, entry.name, entry.description].some((field) =>
-    field.toLowerCase().includes(query)
-  );
+  const fields =
+    entry.kind === "skill"
+      ? [entry.slug, entry.name, entry.description]
+      : [String(entry.externalAppId), entry.name];
+  return fields.some((field) => field.toLowerCase().includes(query));
+}
+
+export function pickerEntryKey(entry: PickerEntry): string {
+  return entry.kind === "skill"
+    ? `skill:${entry.slug}`
+    : `app:${entry.externalAppId}`;
+}
+
+export function pickerEntryPromptPrefix(entry: PickerEntry): string {
+  return entry.kind === "skill"
+    ? `/${entry.slug}`
+    : `[Use external app ${JSON.stringify(entry.name)} (ID: ${entry.externalAppId})]`;
+}
+
+export function pickerEntryConnectionPath(
+  entry: PickerEntry
+): `/craft/v1/apps?connect=${number}` | null {
+  return entry.kind === "app" && !entry.authenticated
+    ? `/craft/v1/apps?connect=${entry.externalAppId}`
+    : null;
 }
 
 export function filterPickerSections(
@@ -120,7 +143,7 @@ export function filterPickerSections(
   };
 }
 
-// Skills first, then apps — must match the popover's visual render order so
+// Skills first, then apps; must match the popover's visual render order so
 // keyboard nav indices line up.
 export function flattenSections(sections: PickerSections): PickerEntry[] {
   return [...sections.skills, ...sections.apps];

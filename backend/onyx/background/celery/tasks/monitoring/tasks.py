@@ -2,57 +2,67 @@ import json
 import time
 from datetime import timedelta
 from itertools import islice
-from typing import Any
-from typing import cast
-from typing import Literal
+from typing import Any, Literal, cast
 
 import psutil
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import BaseModel
 from redis import Redis
 from redis.lock import Lock as RedisLock
-from sqlalchemy import select
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from onyx import __version__
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_redis import celery_get_broker_client
-from onyx.background.celery.celery_redis import celery_get_queue_length
-from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.celery_redis import (
+    celery_get_broker_client,
+    celery_get_queue_length,
+    celery_get_unacked_task_ids,
+)
 from onyx.background.celery.memory_monitoring import emit_process_memory
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
-from onyx.db.engine.tenant_utils import get_all_tenant_ids
-from onyx.db.engine.tenant_utils import validate_tenant_id
+from onyx.configs.app_configs import DISABLE_TELEMETRY
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    ONYX_CLOUD_TENANT_ID,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisLocks,
+)
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_shared_schema,
+)
+from onyx.db.engine.tenant_utils import get_all_tenant_ids, validate_tenant_id
 from onyx.db.engine.time_utils import get_db_current_time
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import SyncStatus
-from onyx.db.enums import SyncType
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import DocumentSet
-from onyx.db.models import IndexAttempt
-from onyx.db.models import SyncRecord
-from onyx.db.models import UserGroup
+from onyx.db.enums import IndexingStatus, SyncStatus, SyncType
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    DocumentSet,
+    IndexAttempt,
+    SyncRecord,
+    UserGroup,
+)
 from onyx.db.search_settings import get_active_search_settings_list
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import redis_lock_dump
+from onyx.redis.redis_pool import (
+    get_redis_client,
+    get_shared_redis_client,
+    redis_lock_dump,
+)
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.utils.platform_utils import is_running_in_container
-from onyx.utils.platform_utils import is_running_in_kubernetes
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.platform_utils import is_running_in_container, is_running_in_kubernetes
+from onyx.utils.telemetry import RecordType, optional_telemetry
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 _MONITORING_SOFT_TIME_LIMIT = 60 * 5  # 5 minutes
 _MONITORING_TIME_LIMIT = _MONITORING_SOFT_TIME_LIMIT + 60  # 6 minutes
+
+# Queue lengths are broker-global, so they are emitted by at most one tenant per
+# window rather than once per tenant every cycle. Keep the lease shorter than the
+# 5-minute monitor beat so it expires before the next cycle and never blocks it.
+_GLOBAL_QUEUE_METRICS_LEASE = "monitoring_global_queue_metrics_lease"
+_GLOBAL_QUEUE_METRICS_LEASE_TTL = 60 * 4  # 4 minutes
 
 _CONNECTOR_INDEX_ATTEMPT_START_LATENCY_KEY_FMT = (
     "monitoring_connector_index_attempt_start_latency:{cc_pair_id}:{index_attempt_id}"
@@ -150,6 +160,7 @@ def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
     queue_mappings = {
         "celery_queue_length": OnyxCeleryQueues.PRIMARY,
         "docprocessing_queue_length": OnyxCeleryQueues.DOCPROCESSING,
+        "port_queue_length": OnyxCeleryQueues.PORT,
         "docfetching_queue_length": OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
         "sync_queue_length": OnyxCeleryQueues.VESPA_METADATA_SYNC,
         "deletion_queue_length": OnyxCeleryQueues.CONNECTOR_DELETION,
@@ -161,10 +172,12 @@ def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
         "llm_model_update_queue_length": OnyxCeleryQueues.LLM_MODEL_UPDATE,
         "checkpoint_cleanup_queue_length": OnyxCeleryQueues.CHECKPOINT_CLEANUP,
         "index_attempt_cleanup_queue_length": OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
+        "chat_ttl_deletion_queue_length": OnyxCeleryQueues.CHAT_TTL_DELETION,
         "csv_generation_queue_length": OnyxCeleryQueues.CSV_GENERATION,
         "user_file_processing_queue_length": OnyxCeleryQueues.USER_FILE_PROCESSING,
         "user_file_project_sync_queue_length": OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
         "user_file_delete_queue_length": OnyxCeleryQueues.USER_FILE_DELETE,
+        "user_file_port_queue_length": OnyxCeleryQueues.USER_FILE_PORT,
         "monitoring_queue_length": OnyxCeleryQueues.MONITORING,
         "sandbox_queue_length": OnyxCeleryQueues.SANDBOX,
         "opensearch_migration_queue_length": OnyxCeleryQueues.OPENSEARCH_MIGRATION,
@@ -710,7 +723,17 @@ def monitor_background_processes(self: Task, *, tenant_id: str) -> None:
 
         # Collect queue metrics with broker connection
         r_celery = celery_get_broker_client(self.app)
-        queue_metrics = _collect_queue_metrics(r_celery)
+
+        # Queue lengths are broker-global. Emit them from only one tenant per
+        # short window by taking a cross-tenant lease, so the same values are not
+        # re-sent once per tenant. The lease is intentionally left to expire on
+        # its own so the next window re-acquires it.
+        queue_metrics: list[Metric] = []
+        queue_lease = get_shared_redis_client().lock(
+            _GLOBAL_QUEUE_METRICS_LEASE, timeout=_GLOBAL_QUEUE_METRICS_LEASE_TTL
+        )
+        if queue_lease.acquire(blocking=False):
+            queue_metrics = _collect_queue_metrics(r_celery)
 
         # Collect remaining metrics (no broker connection needed)
         with get_session_with_current_tenant() as db_session:
@@ -910,6 +933,7 @@ def monitor_celery_queues_helper(
         OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
     )
     n_docprocessing = celery_get_queue_length(OnyxCeleryQueues.DOCPROCESSING, r_celery)
+    n_port = celery_get_queue_length(OnyxCeleryQueues.PORT, r_celery)
 
     n_user_file_processing = celery_get_queue_length(
         OnyxCeleryQueues.USER_FILE_PROCESSING, r_celery
@@ -919,6 +943,9 @@ def monitor_celery_queues_helper(
     )
     n_user_file_delete = celery_get_queue_length(
         OnyxCeleryQueues.USER_FILE_DELETE, r_celery
+    )
+    n_user_file_port = celery_get_queue_length(
+        OnyxCeleryQueues.USER_FILE_PORT, r_celery
     )
     n_sync = celery_get_queue_length(OnyxCeleryQueues.VESPA_METADATA_SYNC, r_celery)
     n_deletion = celery_get_queue_length(OnyxCeleryQueues.CONNECTOR_DELETION, r_celery)
@@ -966,9 +993,11 @@ def monitor_celery_queues_helper(
         f"docfetching_prefetched={len(n_docfetching_prefetched)} "
         f"docprocessing={n_docprocessing} "
         f"docprocessing_prefetched={len(n_docprocessing_prefetched)} "
+        f"port={n_port} "
         f"user_file_processing={n_user_file_processing} "
         f"user_file_project_sync={n_user_file_project_sync} "
         f"user_file_delete={n_user_file_delete} "
+        f"user_file_port={n_user_file_port} "
         f"sync={n_sync} "
         f"deletion={n_deletion} "
         f"pruning={n_pruning} "
@@ -1122,3 +1151,45 @@ def cloud_monitor_celery_pidbox(
 
     # Enable later in case we want some aggregate metrics
     # task_logger.info(f"Deleted idle pidbox: pidbox={key_str}")
+
+
+"""Version telemetry heartbeat"""
+
+_VERSION_TELEMETRY_EMITTED_KEY = "monitoring_version_telemetry_emitted"
+_VERSION_TELEMETRY_TTL_SECONDS = 24 * 60 * 60
+
+
+@shared_task(
+    name=OnyxCeleryTask.EMIT_VERSION_TELEMETRY,
+    ignore_result=True,
+    queue=OnyxCeleryQueues.MONITORING,
+)
+def emit_version_telemetry(*, tenant_id: str) -> None:
+    """Daily heartbeat reporting the running build of self-hosted instances.
+
+    Scheduled hourly (beat schedule state doesn't survive restarts, so a daily
+    interval could never fire); the 1-day-TTL Redis marker enforces the daily
+    cadence.
+    """
+    if MULTI_TENANT or DISABLE_TELEMETRY:
+        return
+
+    redis_std = get_redis_client(tenant_id=tenant_id)
+    # atomically claim the daily slot so overlapping runs can't double-report
+    if not redis_std.set(
+        _VERSION_TELEMETRY_EMITTED_KEY,
+        "1",
+        nx=True,
+        ex=_VERSION_TELEMETRY_TTL_SECONDS,
+    ):
+        return
+
+    delivered = optional_telemetry(
+        record_type=RecordType.VERSION,
+        data={"version": __version__},
+        tenant_id=tenant_id,
+        blocking=True,
+    )
+    if not delivered:
+        # release the slot so the next hourly tick retries
+        redis_std.delete(_VERSION_TELEMETRY_EMITTED_KEY)

@@ -1,6 +1,6 @@
 "use client";
 
-import Logo from "@/refresh-components/Logo";
+import { Logo } from "@/lib/app/components";
 import { useSettings } from "@/lib/settings/hooks";
 
 export default function OnyxInitializingLoader() {

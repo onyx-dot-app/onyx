@@ -10,7 +10,7 @@ import {
   builtinFixture,
   customFixture,
 } from "@/lib/skills/__fixtures__/picker";
-import type { SkillsList } from "@/views/admin/SkillsPage/interfaces";
+import type { SkillsList } from "@/lib/skills/types";
 import type { PickerEntry } from "@/lib/skills/picker";
 import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
 import type { LibraryEntry } from "@/app/craft/types/user-library";
@@ -24,13 +24,13 @@ const SWR_NO_FETCH = {
 };
 
 const skillsList: SkillsList = {
-  builtins: [builtinFixture(), builtinFixture({ slug: "pdf", name: "PDF" })],
+  builtins: [builtinFixture(), builtinFixture({ name: "pdf" })],
   customs: [customFixture()],
 };
 
 const apps = [
-  appFixture({ slug: "slack", app_type: "SLACK" }),
-  appFixture({ slug: "gmail", app_type: "GMAIL", authenticated: false }),
+  appFixture({ id: 1, name: "Slack", app_type: "SLACK" }),
+  appFixture({ id: 2, name: "Gmail", app_type: "GMAIL", authenticated: false }),
 ];
 
 const libraryTree: LibraryEntry[] = [
@@ -71,14 +71,13 @@ const skillEntry = (slug: string, name: string): PickerEntry => ({
 });
 
 const appEntry = (
-  slug: string,
+  externalAppId: number,
   name: string,
   appType: ExternalAppType
 ): PickerEntry => ({
   kind: "app",
-  slug,
+  externalAppId,
   name,
-  description: "",
   appType,
   authenticated: true,
 });
@@ -111,7 +110,7 @@ const meta: Meta<typeof CraftInputBar> = {
 export default meta;
 type Story = StoryObj<typeof CraftInputBar>;
 
-/** Idle input — + button replaces old paperclip; typing /skill opens the picker. */
+/** Idle input: + button replaces old paperclip; typing /skill opens the picker. */
 export const Default: Story = {};
 
 /** While a response streams: Stop button appears, InterruptHint shows. */
@@ -152,7 +151,7 @@ export const WithSkillChips: Story = {
     initialEntries: [
       skillEntry("pptx", "PPTX"),
       skillEntry("report-writer", "Report Writer"),
-      appEntry("slack", "Slack", "SLACK"),
+      appEntry(1, "Slack", "SLACK"),
     ],
   },
 };
@@ -165,9 +164,9 @@ export const WithManySkillChips: Story = {
       skillEntry("pdf", "PDF"),
       skillEntry("report-writer", "Report Writer"),
       skillEntry("data-analysis", "Data Analysis"),
-      appEntry("slack", "Slack", "SLACK"),
-      appEntry("gmail", "Gmail", "GMAIL"),
-      appEntry("github", "GitHub", "GITHUB"),
+      appEntry(1, "Slack", "SLACK"),
+      appEntry(2, "Gmail", "GMAIL"),
+      appEntry(3, "GitHub", "GITHUB"),
     ],
   },
 };

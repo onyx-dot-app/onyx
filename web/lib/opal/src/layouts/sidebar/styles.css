@@ -29,7 +29,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   SidebarRoot — mobile / medium overlays
+   SidebarRoot — mobile / small overlays
    --------------------------------------------------------------------------- */
 
 /* Shared visual column styles for overlaid sidebar */
@@ -53,12 +53,12 @@
   @apply translate-x-0;
 }
 
-/* Medium: fixed overlay (spacer holds width in the layout flow) */
-.opal-sidebar-root__overlay[data-variant="medium"] {
+/* Small: fixed overlay (spacer holds width in the layout flow) */
+.opal-sidebar-root__overlay[data-variant="small"] {
   @apply fixed inset-y-0 left-0 z-50;
 }
 
-/* Spacer that reserves the folded width in the flex row on medium screens */
+/* Spacer that reserves the folded width in the flex row on small screens */
 .opal-sidebar-root__spacer {
   @apply shrink-0;
   width: var(--sidebar-width-folded);
@@ -87,7 +87,11 @@
 }
 
 .opal-sidebar-header__topbar {
-  @apply flex flex-row justify-between items-start pt-3 px-2;
+  @apply pt-3 px-2;
+}
+
+.opal-sidebar-header__topbar-inner {
+  @apply flex flex-row justify-between items-start px-1 w-full;
 }
 
 .opal-sidebar-header__content {
@@ -124,12 +128,17 @@
    SidebarBody
    --------------------------------------------------------------------------- */
 
+/* Applied to the ShadowDiv wrapper, which provides positioning and column flow */
 .opal-sidebar-body {
-  @apply relative flex-1 min-h-0 overflow-y-hidden flex flex-col;
+  @apply flex-1;
 }
 
+/* Applied to the ShadowDiv scroll container, which provides overflow-y-auto.
+   Thin themed scrollbar keeps position/drag affordance without the default bar. */
 .opal-sidebar-body__scroll {
-  @apply flex-1 min-h-0 overflow-y-auto flex flex-col;
+  @apply flex-1 min-h-0 flex flex-col;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-02) transparent;
 }
 
 .opal-sidebar-body__content {
@@ -141,15 +150,6 @@
 
 .opal-sidebar-body__spacer {
   min-height: 2rem;
-}
-
-.opal-sidebar-body__fade {
-  @apply absolute bottom-0 left-0 right-0 h-4 z-20 pointer-events-none;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    var(--background-tint-02)
-  );
 }
 
 /* ---------------------------------------------------------------------------

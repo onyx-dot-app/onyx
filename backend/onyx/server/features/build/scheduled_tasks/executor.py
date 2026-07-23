@@ -41,21 +41,23 @@ import time
 from typing import Any
 from uuid import UUID
 
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import NotificationType
+from onyx.configs.constants import MessageType, NotificationType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ScheduledTaskErrorClass
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import SessionOrigin
+from onyx.db.enums import ScheduledTaskErrorClass, ScheduledTaskRunStatus, SessionOrigin
 from onyx.db.notification import create_notification
-from onyx.db.scheduled_task import get_run
-from onyx.db.scheduled_task import mark_run_status
-from onyx.server.features.build.db.build_session import create_message
-from onyx.server.features.build.db.build_session import get_session_messages
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import RequestPermissionRequest
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
+from onyx.db.scheduled_task import get_run, mark_run_status
+from onyx.server.features.build.db.build_session import (
+    create_message,
+    get_session_messages,
+)
+from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.sandbox.event_schema import (
+    TURN_ERROR_CODE_TIMEOUT,
+    Error,
+    PromptResponse,
+    RequestPermissionRequest,
+)
+from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.utils.logger import setup_logger
@@ -76,6 +78,16 @@ SUMMARY_MAX_CHARS = 120
 PROVISIONING_WAIT_SECONDS = 120
 
 
+def _clip_summary(text: str) -> str:
+    if len(text) <= SUMMARY_MAX_CHARS:
+        return text
+    clipped = text[:SUMMARY_MAX_CHARS]
+    last_space = clipped.rfind(" ")
+    if last_space > SUMMARY_MAX_CHARS // 2:
+        clipped = clipped[:last_space]
+    return clipped.rstrip() + "…"
+
+
 def _summary_from_state(state: BuildStreamingState, fallback: str = "") -> str:
     """Build a ~120-char summary from accumulated agent message text.
 
@@ -85,8 +97,8 @@ def _summary_from_state(state: BuildStreamingState, fallback: str = "") -> str:
     if state.message_chunks:
         full = "".join(state.message_chunks).strip()
         if full:
-            return full[:SUMMARY_MAX_CHARS]
-    return fallback[:SUMMARY_MAX_CHARS] if fallback else ""
+            return _clip_summary(full)
+    return _clip_summary(fallback) if fallback else ""
 
 
 def _summary_from_session_messages(session_id: UUID, db_session: Any) -> str:
@@ -108,7 +120,7 @@ def _summary_from_session_messages(session_id: UUID, db_session: Any) -> str:
         if isinstance(content, dict):
             text = content.get("text") or ""
             if isinstance(text, str) and text.strip():
-                return text.strip()[:SUMMARY_MAX_CHARS]
+                return _clip_summary(text.strip())
     return ""
 
 
@@ -334,39 +346,41 @@ def _drive_agent(
     with get_session_with_current_tenant() as db_session:
         session_manager = SessionManager(db_session)
 
-        # Create the BuildSession. SCHEDULED origin keeps it out of the
-        # Craft sidebar (see `get_user_build_sessions`).
-        build_session = session_manager.create_session__no_commit(
-            user_id=task_user_id,
-            origin=SessionOrigin.SCHEDULED,
-            name=f"Scheduled: {task_name}",
-        )
-        session_id = build_session.id
+        with session_creation_lock(task_user_id):
+            # Create the BuildSession. SCHEDULED origin keeps it out of the
+            # Craft sidebar (see `get_user_build_sessions`).
+            build_session = session_manager.create_session__no_commit(
+                user_id=task_user_id,
+                origin=SessionOrigin.SCHEDULED,
+                name=f"Scheduled: {task_name}",
+            )
+            session_id = build_session.id
 
-        # Persist the user prompt as turn 0 so the transcript matches an
-        # interactive run exactly (interactive flow does the same in
-        # `_stream_cli_agent_response`).
-        create_message(
-            session_id=session_id,
-            message_type=MessageType.USER,
-            turn_index=0,
-            message_metadata={
-                "type": "user_message",
-                "content": {"type": "text", "text": task_prompt},
-            },
-            db_session=db_session,
-        )
+            # Persist the user prompt as turn 0 so the transcript matches an
+            # interactive run exactly (interactive flow does the same in
+            # `_stream_cli_agent_response`).
+            create_message(
+                session_id=session_id,
+                message_type=MessageType.USER,
+                turn_index=0,
+                message_metadata={
+                    "type": "user_message",
+                    "content": {"type": "text", "text": task_prompt},
+                },
+                db_session=db_session,
+            )
 
-        # Wire the session id onto the run row so the UI can deep-link
-        # from the run history into the session view as soon as anything
-        # is persisted.
-        mark_run_status(
-            db_session=db_session,
-            run_id=run_id,
-            status=ScheduledTaskRunStatus.RUNNING,
-            session_id=session_id,
-        )
-        db_session.commit()
+            # Wire the session id onto the run row so the UI can deep-link
+            # from the run history into the session view as soon as anything
+            # is persisted.
+            mark_run_status(
+                db_session=db_session,
+                run_id=run_id,
+                status=ScheduledTaskRunStatus.RUNNING,
+                session_id=session_id,
+            )
+            update_sandbox_heartbeat(db_session, sandbox_id)
+            db_session.commit()
 
         state = BuildStreamingState(turn_index=0)
         deadline = time.monotonic() + budget_seconds
@@ -387,7 +401,8 @@ def _drive_agent(
         # agent loop. __enter__/__exit__ used directly (rather than a
         # `with`) to avoid reindenting the existing try/except block.
         prompt_slot_cm = session_manager.prompt_slot(sandbox_id, session_id)
-        if not prompt_slot_cm.__enter__():
+        slot = prompt_slot_cm.__enter__()
+        if not slot.acquired:
             prompt_slot_cm.__exit__(None, None, None)
             mark_run_status(
                 db_session=db_session,
@@ -408,8 +423,31 @@ def _drive_agent(
             return False
         try:
             for sandbox_event in session_manager.yield_sandbox_events(
-                sandbox_id, session_id, task_prompt
+                sandbox_id,
+                session_id,
+                task_prompt,
+                turn_timeout_seconds=float(budget_seconds),
             ):
+                slot.extend()
+                if slot.lost:
+                    session_manager.finalize_persist(session_id, state)
+                    mark_run_status(
+                        db_session=db_session,
+                        run_id=run_id,
+                        status=ScheduledTaskRunStatus.FAILED,
+                        error_class=ScheduledTaskErrorClass.AGENT_EXCEPTION,
+                        error_detail="Prompt slot lease lost mid-turn.",
+                    )
+                    _notify(
+                        db_session=db_session,
+                        user_id=task_user_id,
+                        task_name=task_name,
+                        task_id=task_id,
+                        run_id=run_id,
+                        notif_type=NotificationType.SCHEDULED_TASK_FAILED,
+                    )
+                    db_session.commit()
+                    return False
                 # Approval gate: mark awaiting_approval, return. Resume
                 # mechanics are owned by the approvals project; this is
                 # "terminal for display" until it ships.
