@@ -1,0 +1,102 @@
+# =============================================================================
+# ONYX SIZE PROFILE: LARGE
+# =============================================================================
+# Org-wide deployments: 1,000+ users, multi-million documents, sustained
+# large re-indexes. Encodes the incident-driven tuning our largest production
+# deployments converged on.
+#
+# Pairs with `size = "large"` in the deployment/terraform/modules/aws/onyx
+# module (m7i.4xlarge main nodes ×2-8, r6i.4xlarge document-index node).
+#
+# Usage:
+#   helm install onyx ./deployment/helm/charts/onyx \
+#     -f ./deployment/helm/charts/onyx/values-large.yaml \
+#     -f my-overrides.yaml   # your overrides layer on top
+# =============================================================================
+
+webserver:
+  replicaCount: 3
+
+api:
+  # Generous CPU limit: bursty agent work (deep research, code interpreter)
+  # exhausting the CFS quota stalls the async /health endpoint and causes
+  # liveness kills. Memory request covers the ~1-1.5Gi working set of
+  # long-running agent requests.
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 4
+    maxReplicas: 12
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: null
+
+# Two embedders with high CPU limits: one embedder pegged at its limit for
+# hours during a large re-index starves docprocessing heartbeats and trips
+# the indexing stall watchdog.
+indexCapability:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 4000m
+      memory: 3Gi
+    limits:
+      cpu: 12000m
+      memory: 6Gi
+
+celery_worker_docfetching:
+  replicaCount: 2
+
+celery_worker_docprocessing:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 1000m
+      memory: 18Gi
+
+# Metadata-sync throughput: a single light worker drains ~800 tasks/min,
+# which turns into multi-day backlogs after resyncs of multi-million-doc
+# document sets.
+celery_worker_light:
+  replicaCount: 3
+
+celery_worker_user_file_processing:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+opensearch:
+  # Off-heap (k-NN native memory + Lucene page cache) dominates at this
+  # index size; raise total memory well past heap. Heap goes to 6g, the
+  # rest stays available off-heap.
+  resources:
+    requests:
+      cpu: 2000m
+      memory: 12Gi
+    limits:
+      cpu: 4000m
+      memory: 16Gi
+  opensearchJavaOpts: "-Xmx6g -Xms6g"
+  persistence:
+    size: 512Gi
+  # Let the index StatefulSet use the dedicated document-index node group
+  # provisioned by the terraform module (tainted vespa-dedicated=true on
+  # newly created clusters).
+  tolerations:
+    - key: vespa-dedicated
+      operator: Equal
+      value: "true"
+      effect: NoSchedule

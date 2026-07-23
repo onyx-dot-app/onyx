@@ -1,0 +1,97 @@
+# =============================================================================
+# ONYX SIZE PROFILE: SMALL
+# =============================================================================
+# Full-featured deployment trimmed for pilots and small teams: up to ~200
+# users, < ~500k documents. Unlike values-lite.yaml, nothing is disabled —
+# requests are sized so the whole stack (including in-cluster OpenSearch) fits
+# a single 8-vCPU / 32 GiB node (e.g. m7i.2xlarge) when Postgres, Redis, and
+# object storage are external (RDS/ElastiCache/S3, as provisioned by the
+# terraform module). Keeping those in-cluster too needs a second node.
+#
+# Pairs with `size = "small"` in the deployment/terraform/modules/aws/onyx
+# module. Calibrated from production fleet telemetry: at this scale the stack's
+# steady-state usage is ~1 vCPU / ~10 GiB; the values below keep scheduling
+# headroom for indexing bursts without reserving multiples of real usage.
+#
+# Usage:
+#   helm install onyx ./deployment/helm/charts/onyx \
+#     -f ./deployment/helm/charts/onyx/values-small.yaml \
+#     -f my-overrides.yaml   # your overrides layer on top
+# =============================================================================
+
+webserver:
+  # 2 replicas keep rolling deploys seamless without tripling the footprint.
+  replicaCount: 2
+
+# Model servers: at this scale embedding traffic is light and bursty — low
+# requests keep the pods schedulable on a small node, limits give burst room.
+inferenceCapability:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 3Gi
+    limits:
+      cpu: 3000m
+      memory: 10Gi
+
+indexCapability:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 3Gi
+    limits:
+      cpu: 3000m
+      memory: 6Gi
+
+# The Craft build-loop worker is only useful when Craft/sandbox features are
+# in use; skip the idle pod otherwise. Set back to 1 if you enable Craft.
+celery_worker_scheduled_tasks:
+  replicaCount: 0
+
+# Coordination singletons measure single-digit millicores in production;
+# half-size requests free real scheduling room on a small node (limits keep
+# their burst headroom).
+celery_beat:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+celery_worker_monitoring:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 4Gi
+
+celery_worker_primary:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 2Gi
+    limits:
+      cpu: 1000m
+      memory: 4Gi
+
+slackbot:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2000Mi
+
+opensearch:
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 4Gi
+    limits:
+      cpu: 2000m
+      memory: 8Gi

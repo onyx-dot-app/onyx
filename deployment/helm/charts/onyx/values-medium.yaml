@@ -1,0 +1,75 @@
+# =============================================================================
+# ONYX SIZE PROFILE: MEDIUM
+# =============================================================================
+# The configuration a typical department/company deployment converges on:
+# ~200-1,000 users, ~0.5-2M documents. Mirrors what production deployments at
+# this scale actually run.
+#
+# Pairs with `size = "medium"` in the deployment/terraform/modules/aws/onyx
+# module (m7i.4xlarge main nodes ×1-5).
+#
+# Usage:
+#   helm install onyx ./deployment/helm/charts/onyx \
+#     -f ./deployment/helm/charts/onyx/values-medium.yaml \
+#     -f my-overrides.yaml   # your overrides layer on top
+# =============================================================================
+
+webserver:
+  replicaCount: 3
+
+api:
+  # Load testing showed a single api-server pegging its CPU under concurrent
+  # slow-stream load; scale out on CPU instead of scaling the pod up. No
+  # memory target: idle RSS (~1.1Gi) already sits near the request, which
+  # would pin the HPA at max.
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: null
+
+inferenceCapability:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 3Gi
+    limits:
+      cpu: 4000m
+      memory: 10Gi
+
+indexCapability:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 3Gi
+    limits:
+      cpu: 3000m
+      memory: 6Gi
+
+# 2 replicas (4 fetch slots across 2 pods) so concurrent connector backfills
+# don't starve each other, and one bad fetch doesn't take out all ingestion.
+celery_worker_docfetching:
+  replicaCount: 2
+
+opensearch:
+  # Working sets at this scale run 5-6Gi+; the pressure is off-heap (k-NN
+  # native memory + Lucene page cache), so memory grows while heap stays at
+  # the chart default (~4g) — do not raise heap proportionally.
+  resources:
+    requests:
+      cpu: 2000m
+      memory: 6Gi
+    limits:
+      cpu: 4000m
+      memory: 12Gi
+  persistence:
+    size: 128Gi
+  # Let the index StatefulSet use the dedicated document-index node group
+  # provisioned by the terraform module (tainted vespa-dedicated=true on
+  # newly created clusters).
+  tolerations:
+    - key: vespa-dedicated
+      operator: Equal
+      value: "true"
+      effect: NoSchedule

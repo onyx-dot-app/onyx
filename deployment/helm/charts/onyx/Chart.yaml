@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.7.2
+version: 0.8.0
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,13 +16,16 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: added
+      description: Size profiles values-small.yaml / values-medium.yaml / values-large.yaml —
+        full-featured tier presets calibrated from production fleet usage, pairing with the
+        terraform module's small/medium/large sizes.
     - kind: changed
-      description: The inference and indexing model servers now run on a distroless Docker
-        Hardened Image (no shell or package manager) as nonroot (the onyx user, UID 1001). Custom CA
-        certificates for the model servers are merged with certifi's public roots in Python
-        at startup instead of via update-ca-certificates. This chart version requires the
-        distroless model-server image — upgrade the chart and the model-server image
-        together (see values.yaml).
+      description: Default resources retuned from production evidence — api-server CPU raised
+        (request 1, limit 3; a 1-core limit stalls /health under load and causes liveness
+        kills), model-server CPU requests lowered to 1 (limits unchanged), heavy-worker and
+        code-interpreter memory limits raised to stop production OOMKills, and the OpenSearch
+        PVC default grown to 64Gi. Existing OpenSearch PVCs are not resized by upgrades.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
