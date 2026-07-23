@@ -2,5 +2,17 @@
   "enabledPlugins": {
     "security-guidance@claude-plugins-official": true,
     "claude-security@claude-plugins-official": true
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_ENV_FILE\" ] && echo \"export PATH=\\\"$CLAUDE_PROJECT_DIR/.venv/bin:\\$PATH\\\"\" >> \"$CLAUDE_ENV_FILE\" || true"
+          }
+        ]
+      }
+    ]
   }
 }
