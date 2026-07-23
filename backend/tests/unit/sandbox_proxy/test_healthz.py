@@ -6,7 +6,11 @@ from http.server import HTTPServer
 import pytest
 
 from onyx.sandbox_proxy.identity import SandboxIPLookup
-from onyx.sandbox_proxy.server import _build_healthz_handler, _Readiness
+from onyx.sandbox_proxy.server import (
+    _build_healthz_handler,
+    _HealthzHTTPServer,
+    _Readiness,
+)
 
 
 class _FakeLookup(SandboxIPLookup):
@@ -121,3 +125,44 @@ def test_loses_readiness_on_watch_disconnect_even_after_initial_sync(
 
     lookup._synced = False
     assert _get(port, "/healthz")[0] == 503
+
+
+def test_healthz_server_binds_ipv6_dual_stack() -> None:
+    """An IPv6 listen host (e.g. "::" on IPv6-only clusters) must bind an
+    AF_INET6 socket that still answers IPv4-mapped clients (V6ONLY off)."""
+    readiness = _Readiness()
+    readiness.ca_ready = True
+    lookup = _FakeLookup(synced=True)
+    handler_cls = _build_healthz_handler(readiness, lookup)
+    try:
+        server = _HealthzHTTPServer("::1", 0, handler_cls)
+    except OSError:
+        pytest.skip("IPv6 unavailable on this host")
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        conn = http.client.HTTPConnection("::1", port)
+        try:
+            conn.request("GET", "/healthz")
+            assert conn.getresponse().status == 200
+        finally:
+            conn.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_healthz_server_keeps_ipv4_default() -> None:
+    """The default (IPv4 host) path keeps working unchanged."""
+    readiness = _Readiness()
+    readiness.ca_ready = True
+    lookup = _FakeLookup(synced=True)
+    handler_cls = _build_healthz_handler(readiness, lookup)
+    server = _HealthzHTTPServer("127.0.0.1", 0, handler_cls)
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        assert _get(port, "/healthz")[0] == 200
+    finally:
+        server.shutdown()
+        server.server_close()
