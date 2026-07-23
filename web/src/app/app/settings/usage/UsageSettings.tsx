@@ -45,7 +45,7 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
   // Drives the relative bar widths in the breakdown.
   const maxRowCost = rows.reduce(
     (max, row) => Math.max(max, row.cost_cents),
-    0,
+    0
   );
   const hasCache = rows.some((row) => row.cache_read_tokens > 0);
 
@@ -107,7 +107,7 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
 
                 <Text font="secondary-body" color="text-01">
                   {`${formatTokens(row.input_tokens)} in · ${formatTokens(
-                    row.output_tokens,
+                    row.output_tokens
                   )} out${
                     hasCache
                       ? ` · ${formatTokens(row.cache_read_tokens)} cache`
@@ -155,7 +155,7 @@ function ModelPriceSection({ prices, defaultModel }: ModelPriceSectionProps) {
       prices.find((p) => p.model === defaultModel)?.provider ??
       groups[0]?.provider ??
       null,
-    [prices, defaultModel, groups],
+    [prices, defaultModel, groups]
   );
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -205,13 +205,17 @@ function ModelPriceSection({ prices, defaultModel }: ModelPriceSectionProps) {
                       <SvgChevronRight
                         className={cn(
                           "w-4 h-4 text-text-03 transition-transform",
-                          open && "rotate-90",
+                          open && "rotate-90"
                         )}
                       />
                     </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <Section gap={0} alignItems="stretch" justifyContent="start">
+                    <Section
+                      gap={0}
+                      alignItems="stretch"
+                      justifyContent="start"
+                    >
                       {models.map((price) => (
                         <div
                           key={`${provider}-${price.model}`}
@@ -224,9 +228,9 @@ function ModelPriceSection({ prices, defaultModel }: ModelPriceSectionProps) {
                           </Text>
                           <Text font="secondary-body" color="text-01" nowrap>
                             {`${formatMtok(price.input_per_mtok)} in · ${formatMtok(
-                              price.output_per_mtok,
+                              price.output_per_mtok
                             )} out · ${formatMtok(
-                              price.cache_per_mtok ?? price.input_per_mtok,
+                              price.cache_per_mtok ?? price.input_per_mtok
                             )} cache`}
                           </Text>
                         </div>
@@ -311,7 +315,7 @@ function BudgetSection({
                   "h-full rounded-full",
                   usedFraction >= 1
                     ? "bg-status-error-05"
-                    : "bg-theme-primary-05",
+                    : "bg-theme-primary-05"
                 )}
                 style={{ width: `${usedFraction * 100}%` }}
               />

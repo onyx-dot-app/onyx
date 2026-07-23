@@ -27,7 +27,7 @@ export function useUsageExport() {
   const { data, error, isLoading, mutate } = useSWR<UsageExportResponse>(
     SWR_KEYS.adminUsageExport,
     errorHandlingFetcher,
-    { revalidateOnFocus: false },
+    { revalidateOnFocus: false }
   );
 
   return { usage: data, isLoading, error, refetch: mutate };

@@ -21,7 +21,7 @@ interface CreateRateLimitModalProps {
     period_hours: number,
     token_budget: number | null,
     cost_budget_cents: number | null,
-    group_id: number,
+    group_id: number
   ) => void;
   forSpecificScope?: Scope;
   forSpecificUserGroup?: number;
@@ -36,7 +36,7 @@ export default function CreateRateLimitModal({
 }: CreateRateLimitModalProps) {
   const [modalUserGroups, setModalUserGroups] = useState([]);
   const [shouldFetchUserGroups, setShouldFetchUserGroups] = useState(
-    forSpecificScope === Scope.USER_GROUP,
+    forSpecificScope === Scope.USER_GROUP
   );
 
   useEffect(() => {
@@ -87,24 +87,24 @@ export default function CreateRateLimitModal({
               // this, "" coerces to NaN and trips .min(1) even when only a cost
               // budget is set. Mirrors the cost_budget_dollars transform below.
               .transform((value, original) =>
-                original === "" ? undefined : value,
+                original === "" ? undefined : value
               )
               .min(1, "Token Budget must be at least 1")
               .test(
                 "budget-required",
                 "Set a token budget and/or a cost budget",
                 (value, context) =>
-                  value != null || context.parent.cost_budget_dollars !== "",
+                  value != null || context.parent.cost_budget_dollars !== ""
               ),
             cost_budget_dollars: Yup.number()
               // Empty (no cost budget) is allowed; a 0 would make the gate fire
               // on the first request (cost_since >= 0 is always true).
               .transform((value, original) =>
-                original === "" ? undefined : value,
+                original === "" ? undefined : value
               )
               .moreThan(0, "Cost Budget must be greater than 0"),
             target_scope: Yup.string().required(
-              "Target Scope is a required field",
+              "Target Scope is a required field"
             ),
             user_group_id: Yup.string().test(
               "user_group_id",
@@ -115,7 +115,7 @@ export default function CreateRateLimitModal({
                   (context.parent.target_scope === "user_group" &&
                     value !== undefined)
                 );
-              },
+              }
             ),
           })}
           onSubmit={async (values, formikHelpers) => {
@@ -133,7 +133,7 @@ export default function CreateRateLimitModal({
               Number(values.period_days) * HOURS_PER_DAY,
               tokenBudget,
               costBudgetCents,
-              Number(values.user_group_id),
+              Number(values.user_group_id)
             );
             return formikHelpers.setSubmitting(false);
           }}

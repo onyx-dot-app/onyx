@@ -2,9 +2,7 @@
 
 import { ChangeEvent, useState } from "react";
 import { useSWRConfig } from "swr";
-import { toast } from "@/hooks/useToast";
-import { PageLoader } from "@/refresh-components/PageLoader";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, PageLoader, toast } from "@opal/layouts";
 import {
   Button,
   Card,
@@ -55,15 +53,15 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const { mutate } = useSWRConfig();
   const [model, setModel] = useState(existing?.model ?? "");
   const [inputRate, setInputRate] = useState(
-    existing ? String(existing.input_cost_per_mtok) : "",
+    existing ? String(existing.input_cost_per_mtok) : ""
   );
   const [outputRate, setOutputRate] = useState(
-    existing ? String(existing.output_cost_per_mtok) : "",
+    existing ? String(existing.output_cost_per_mtok) : ""
   );
   const [cacheRate, setCacheRate] = useState(
     existing?.cache_read_cost_per_mtok != null
       ? String(existing.cache_read_cost_per_mtok)
-      : "",
+      : ""
   );
   const [submitting, setSubmitting] = useState(false);
 
@@ -242,7 +240,7 @@ function OverrideRow({ override }: OverrideRowProps) {
             </Text>
             <Text font="secondary-body" color="text-03">
               {`In ${formatRate(override.input_cost_per_mtok)} · Out ${formatRate(
-                override.output_cost_per_mtok,
+                override.output_cost_per_mtok
               )}${
                 override.cache_read_cost_per_mtok != null
                   ? ` · Cache ${formatRate(override.cache_read_cost_per_mtok)}`
@@ -298,7 +296,7 @@ export default function CostOverridesPanel() {
       <ContentAction
         title="Cost Overrides"
         description={markdown(
-          `Set negotiated per-model rates in **${RATE_UNIT_LABEL}**. These override the built-in price book for usage cost calculations.`,
+          `Set negotiated per-model rates in **${RATE_UNIT_LABEL}**. These override the built-in price book for usage cost calculations.`
         )}
         sizePreset="main-content"
         variant="section"

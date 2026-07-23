@@ -36,7 +36,7 @@ export function useCostOverrides() {
   const { data, error, isLoading, mutate } = useSWR<CostOverride[]>(
     SWR_KEYS.costOverrides,
     errorHandlingFetcher,
-    { revalidateOnFocus: false },
+    { revalidateOnFocus: false }
   );
 
   return {
@@ -53,7 +53,7 @@ export function useCostOverrides() {
  * @throws Error with the API detail message on failure.
  */
 export async function upsertCostOverride(
-  body: CostOverrideUpsert,
+  body: CostOverrideUpsert
 ): Promise<CostOverride> {
   const response = await fetch(SWR_KEYS.costOverrides, {
     method: "PUT",
@@ -75,7 +75,7 @@ export async function upsertCostOverride(
  */
 export async function deleteCostOverride(
   model: string,
-  provider: string = "",
+  provider: string = ""
 ): Promise<void> {
   // Keep "/" as real path separators (backend route is {model:path}) but encode
   // each segment, so slash-containing model ids (e.g. "bedrock/...") delete.
@@ -86,7 +86,7 @@ export async function deleteCostOverride(
   const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
   const response = await fetch(
     `${SWR_KEYS.costOverrides}/${encodedModel}${query}`,
-    { method: "DELETE" },
+    { method: "DELETE" }
   );
 
   if (response.ok || response.status === 404) {
@@ -98,7 +98,7 @@ export async function deleteCostOverride(
 
 /** Revalidate the overrides list after a mutation. */
 export async function refreshCostOverrides(
-  mutate: ScopedMutator,
+  mutate: ScopedMutator
 ): Promise<void> {
   await mutate(SWR_KEYS.costOverrides);
 }
