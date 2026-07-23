@@ -462,4 +462,35 @@ describe("SkillsPage preference toggles", () => {
       screen.queryByRole("switch", { name: "other-skill" })
     ).not.toBeInTheDocument();
   });
+
+  it("shows all skills when an app focus no longer resolves", () => {
+    mockSearchParamsGet.mockImplementation((key: string) =>
+      key === "externalAppId" ? "999" : null
+    );
+    skillsData = {
+      builtins: [],
+      customs: [
+        {
+          ...customSkill("associated-id", "crm-workflow"),
+          external_app: {
+            external_app_id: 42,
+            name: "Acme CRM",
+            enabled: true,
+            ready: true,
+          },
+        },
+        customSkill("other-id", "other-skill"),
+      ],
+    };
+
+    render(<SkillsPage />);
+
+    expect(screen.queryByText(/Skills for app/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: "crm-workflow" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: "other-skill" })
+    ).toBeInTheDocument();
+  });
 });

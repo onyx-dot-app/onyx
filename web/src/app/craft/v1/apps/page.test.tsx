@@ -165,6 +165,20 @@ describe("Apps associated-skill setup notice", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("does not claim an external app is ready before skills load", () => {
+    mockUseUserSkills.mockReturnValue({
+      data: undefined,
+      refresh: mockRefreshSkills,
+    });
+
+    render(<ExternalAppsPage />);
+
+    expect(screen.queryByLabelText("App ready")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Skill setup required")
+    ).not.toBeInTheDocument();
+  });
+
   it("continues guiding the user until every associated skill is selected", () => {
     mockUseUserSkills.mockReturnValue({
       data: skills(true, false, false),

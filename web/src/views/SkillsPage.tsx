@@ -261,7 +261,7 @@ export default function SkillsPage() {
     const q = searchQuery.trim().toLowerCase();
     return items.filter(
       (item) =>
-        (focusedExternalAppId === null ||
+        (focusedAppName === null ||
           (item.source === "custom" &&
             item.skill.external_app?.external_app_id ===
               focusedExternalAppId)) &&
@@ -269,7 +269,7 @@ export default function SkillsPage() {
           item.name.toLowerCase().includes(q) ||
           item.description.toLowerCase().includes(q))
     );
-  }, [focusedExternalAppId, items, searchQuery]);
+  }, [focusedAppName, focusedExternalAppId, items, searchQuery]);
   const previewUnavailableReason = (() => {
     if (previewTarget?.source === "builtin" && !previewTarget.is_available) {
       return (

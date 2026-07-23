@@ -160,6 +160,9 @@ function AppConnections({ query }: AppConnectionsProps) {
                 key={item.key}
                 variant="row"
                 app={item}
+                skillSetupKnown={
+                  item.externalAppId === null || skillsData !== undefined
+                }
                 skillSetup={
                   item.externalAppId === null
                     ? undefined
@@ -204,6 +207,7 @@ interface ProviderConnectCardProps {
   app: ConnectableApp;
   variant: "row" | "tile";
   highlight?: boolean;
+  skillSetupKnown?: boolean;
   skillSetup?: { total: number; selected: number };
   onChange: () => void;
 }
@@ -212,6 +216,7 @@ function ProviderConnectCard({
   app,
   variant,
   highlight,
+  skillSetupKnown = true,
   skillSetup,
   onChange,
 }: ProviderConnectCardProps) {
@@ -285,12 +290,12 @@ function ProviderConnectCard({
                       className="w-4 h-4 text-status-warning-05"
                       aria-label="Skill setup required"
                     />
-                  ) : (
+                  ) : skillSetupKnown ? (
                     <SvgCheckCircle
                       className="w-4 h-4 text-status-success-05"
                       aria-label="App ready"
                     />
-                  )}
+                  ) : null}
                 </div>
                 <Text font="secondary-body" color="text-03">
                   {needsSkillSetup
