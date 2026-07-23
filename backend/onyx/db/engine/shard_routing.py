@@ -43,6 +43,7 @@ from onyx.db.engine.shard_registry import (
     get_default_shard_name,
     get_engine_for_shard,
     get_shard_specs,
+    is_sharded,
 )
 from onyx.db.engine.shard_version import poll_shard_map_version
 from onyx.utils.logger import setup_logger
@@ -207,7 +208,7 @@ def get_shard_for_tenant(tenant_id: str) -> str:
     default_shard = get_default_shard_name()
 
     # Single-database deployments never consult the catalog.
-    if not MULTI_TENANT or len(get_shard_specs()) == 1:
+    if not MULTI_TENANT or not is_sharded():
         return default_shard
 
     overrides = get_shard_overrides()

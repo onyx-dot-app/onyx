@@ -181,12 +181,27 @@ def reset_shard_specs() -> None:
         _SHARD_SPECS = None
 
 
-def shard_pool_divisor() -> int:
-    """Divisor applied to per-engine pool sizes so the total stays bounded.
+def is_sharded() -> bool:
+    """True when more than one physical database is configured.
 
-    With a single shard this is 1, i.e. pool sizing is exactly as it has always been.
+    The single-shard answer is always the default shard, so callers use this to skip
+    routing work — including the catalog and Redis I/O that resolution would do.
     """
-    return max(1, len(get_shard_specs()))
+    return len(get_shard_specs()) > 1
+
+
+def divide_pool_budget(pool_size: int, max_overflow: int) -> tuple[int, int]:
+    """Split a connection budget across shards, keeping the total roughly constant.
+
+    Multiplying it per shard would put N times the connection load on the
+    database/pooler, which is how this deployment has hurt itself before. An explicit
+    zero-overflow budget (celery beat) stays zero rather than being floored to 1.
+    """
+    divisor = max(1, len(get_shard_specs()))
+    return (
+        max(1, pool_size // divisor),
+        0 if max_overflow == 0 else max(1, max_overflow // divisor),
+    )
 
 
 def is_default_shard(shard_name: str) -> bool:

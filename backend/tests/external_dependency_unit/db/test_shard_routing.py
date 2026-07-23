@@ -59,6 +59,28 @@ SHARD_PROBE = Table(
 )
 
 
+def _set_tenant_shard(tenant_id: str, shard_name: str) -> None:
+    """Map a tenant to a shard, as a migrator's flip would."""
+    with get_catalog_engine().connect() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO public.tenant_shard (tenant_id, shard_name) "
+                "VALUES (:t, :s) ON CONFLICT (tenant_id) DO UPDATE SET shard_name = :s"
+            ),
+            {"t": tenant_id, "s": shard_name},
+        )
+        conn.commit()
+
+
+def _clear_tenant_shard(tenant_id: str) -> None:
+    with get_catalog_engine().connect() as conn:
+        conn.execute(
+            text("DELETE FROM public.tenant_shard WHERE tenant_id = :t"),
+            {"t": tenant_id},
+        )
+        conn.commit()
+
+
 def _admin_engine() -> Engine:
     """Engine on the `postgres` maintenance DB, for CREATE/DROP DATABASE."""
     from sqlalchemy import create_engine
@@ -134,15 +156,7 @@ def two_shards(
             _probe_metadata.create_all(conn)
             conn.commit()
 
-    with catalog_engine.connect() as conn:
-        conn.execute(
-            text(
-                "INSERT INTO public.tenant_shard (tenant_id, shard_name) "
-                "VALUES (:t, :s) ON CONFLICT (tenant_id) DO UPDATE SET shard_name = :s"
-            ),
-            {"t": tenant_b, "s": SECOND_SHARD},
-        )
-        conn.commit()
+    _set_tenant_shard(tenant_b, SECOND_SHARD)
     invalidate_shard_cache()
 
     yield {"tenant_a": tenant_a, "tenant_b": tenant_b, "second_db": second_database}
@@ -154,12 +168,7 @@ def two_shards(
         with engine.connect() as conn:
             conn.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
             conn.commit()
-    with catalog_engine.connect() as conn:
-        conn.execute(
-            text("DELETE FROM public.tenant_shard WHERE tenant_id = :t"),
-            {"t": tenant_b},
-        )
-        conn.commit()
+    _clear_tenant_shard(tenant_b)
     shard_registry.reset_shard_specs()
     invalidate_shard_cache()
     reset_shard_map_version_poller()
@@ -243,15 +252,7 @@ def test_flipping_the_map_reroutes_after_invalidation(
     tenant_a = two_shards["tenant_a"]
     assert get_shard_for_tenant(tenant_a) == "default"
 
-    with get_catalog_engine().connect() as conn:
-        conn.execute(
-            text(
-                "INSERT INTO public.tenant_shard (tenant_id, shard_name) VALUES (:t, :s) "
-                "ON CONFLICT (tenant_id) DO UPDATE SET shard_name = :s"
-            ),
-            {"t": tenant_a, "s": SECOND_SHARD},
-        )
-        conn.commit()
+    _set_tenant_shard(tenant_a, SECOND_SHARD)
 
     # Still cached from the assertion above.
     assert get_shard_for_tenant(tenant_a) == "default"
@@ -259,12 +260,7 @@ def test_flipping_the_map_reroutes_after_invalidation(
     invalidate_shard_cache(tenant_a)
     assert get_shard_for_tenant(tenant_a) == SECOND_SHARD
 
-    with get_catalog_engine().connect() as conn:
-        conn.execute(
-            text("DELETE FROM public.tenant_shard WHERE tenant_id = :t"),
-            {"t": tenant_a},
-        )
-        conn.commit()
+    _clear_tenant_shard(tenant_a)
     invalidate_shard_cache(tenant_a)
 
 
@@ -297,27 +293,14 @@ def test_unknown_shard_in_map_raises_rather_than_falling_back(
     database it was moved off.
     """
     tenant_a = two_shards["tenant_a"]
-    with get_catalog_engine().connect() as conn:
-        conn.execute(
-            text(
-                "INSERT INTO public.tenant_shard (tenant_id, shard_name) VALUES (:t, :s) "
-                "ON CONFLICT (tenant_id) DO UPDATE SET shard_name = :s"
-            ),
-            {"t": tenant_a, "s": "shard-that-does-not-exist"},
-        )
-        conn.commit()
+    _set_tenant_shard(tenant_a, "shard-that-does-not-exist")
     invalidate_shard_cache(tenant_a)
 
     try:
         with pytest.raises(ShardConfigurationError):
             get_shard_for_tenant(tenant_a)
     finally:
-        with get_catalog_engine().connect() as conn:
-            conn.execute(
-                text("DELETE FROM public.tenant_shard WHERE tenant_id = :t"),
-                {"t": tenant_a},
-            )
-            conn.commit()
+        _clear_tenant_shard(tenant_a)
         invalidate_shard_cache(tenant_a)
 
 
@@ -329,7 +312,13 @@ def test_requesting_an_unconfigured_shard_raises(two_shards: dict[str, Any]) -> 
 def test_pool_budget_is_divided_not_multiplied(two_shards: dict[str, Any]) -> None:  # noqa: ARG001
     """Adding a shard must not multiply the connection load on the database."""
     assert len(get_shard_specs()) == 2
-    assert shard_registry.shard_pool_divisor() == 2
+    assert shard_registry.is_sharded()
+
+    pool_size, max_overflow = shard_registry.divide_pool_budget(20, 10)
+    assert (pool_size, max_overflow) == (10, 5)
+
+    # An explicit zero-overflow budget (celery beat) must survive the division.
+    assert shard_registry.divide_pool_budget(20, 0) == (10, 0)
 
 
 def _poll_immediately(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -351,26 +340,13 @@ def test_version_bump_invalidates_without_a_local_invalidate_call(
     # Prime the cache with the pre-flip answer.
     assert get_shard_for_tenant(tenant_a) == "default"
 
-    with get_catalog_engine().connect() as conn:
-        conn.execute(
-            text(
-                "INSERT INTO public.tenant_shard (tenant_id, shard_name) VALUES (:t, :s) "
-                "ON CONFLICT (tenant_id) DO UPDATE SET shard_name = :s"
-            ),
-            {"t": tenant_a, "s": SECOND_SHARD},
-        )
-        conn.commit()
+    _set_tenant_shard(tenant_a, SECOND_SHARD)
 
     bump_shard_map_version()
 
     assert get_shard_for_tenant(tenant_a) == SECOND_SHARD
 
-    with get_catalog_engine().connect() as conn:
-        conn.execute(
-            text("DELETE FROM public.tenant_shard WHERE tenant_id = :t"),
-            {"t": tenant_a},
-        )
-        conn.commit()
+    _clear_tenant_shard(tenant_a)
     bump_shard_map_version()
 
 
@@ -440,16 +416,7 @@ def test_schema_creation_follows_the_shard_map(
     from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
 
     tenant_id = f"tenant_{uuid4()}"
-    catalog_engine = get_catalog_engine()
-    with catalog_engine.connect() as conn:
-        conn.execute(
-            text(
-                "INSERT INTO public.tenant_shard (tenant_id, shard_name) "
-                "VALUES (:t, :s)"
-            ),
-            {"t": tenant_id, "s": SECOND_SHARD},
-        )
-        conn.commit()
+    _set_tenant_shard(tenant_id, SECOND_SHARD)
     invalidate_shard_cache()
 
     default_engine = shard_registry.get_engine_for_shard("default")
@@ -463,12 +430,7 @@ def test_schema_creation_follows_the_shard_map(
         with second_engine.connect() as conn:
             conn.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
             conn.commit()
-        with catalog_engine.connect() as conn:
-            conn.execute(
-                text("DELETE FROM public.tenant_shard WHERE tenant_id = :t"),
-                {"t": tenant_id},
-            )
-            conn.commit()
+        _clear_tenant_shard(tenant_id)
 
 
 def test_drop_schema_follows_the_shard_map(two_shards: dict[str, Any]) -> None:
@@ -795,16 +757,28 @@ async def test_async_sessions_reach_different_physical_databases(
     PAT, SAML, and token-refresh work for a migrated tenant would read a stale
     schema on the old database and write to an abandoned copy.
     """
-    from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+    from onyx.db.engine.async_sql_engine import (
+        get_async_session_context_manager,
+        reset_sqlalchemy_async_engine,
+    )
 
-    async with get_async_session_context_manager(two_shards["tenant_a"]) as session:
-        db_a = str((await session.execute(text("SELECT current_database()"))).scalar())
-    async with get_async_session_context_manager(two_shards["tenant_b"]) as session:
-        db_b = str((await session.execute(text("SELECT current_database()"))).scalar())
+    try:
+        async with get_async_session_context_manager(two_shards["tenant_a"]) as session:
+            db_a = str(
+                (await session.execute(text("SELECT current_database()"))).scalar()
+            )
+        async with get_async_session_context_manager(two_shards["tenant_b"]) as session:
+            db_b = str(
+                (await session.execute(text("SELECT current_database()"))).scalar()
+            )
 
-    assert db_a == POSTGRES_DB
-    assert db_b == two_shards["second_db"]
-    assert db_a != db_b
+        assert db_a == POSTGRES_DB
+        assert db_b == two_shards["second_db"]
+        assert db_a != db_b
+    finally:
+        # Async pools are bound to this test's event loop; leaving them open leaks
+        # connections and makes a later test fail depending on selection order.
+        await reset_sqlalchemy_async_engine()
 
 
 @pytest.mark.asyncio
@@ -816,9 +790,9 @@ async def test_async_engine_is_reused_per_shard(two_shards: dict[str, Any]) -> N
     )
 
     try:
-        first = get_async_engine_for_tenant(two_shards["tenant_b"])
-        second = get_async_engine_for_tenant(two_shards["tenant_b"])
+        first = await get_async_engine_for_tenant(two_shards["tenant_b"])
+        second = await get_async_engine_for_tenant(two_shards["tenant_b"])
         assert first is second
-        assert first is not get_async_engine_for_tenant(two_shards["tenant_a"])
+        assert first is not await get_async_engine_for_tenant(two_shards["tenant_a"])
     finally:
         await reset_sqlalchemy_async_engine()

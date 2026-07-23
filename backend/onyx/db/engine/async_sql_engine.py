@@ -1,3 +1,4 @@
+import asyncio
 import threading
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -19,10 +20,11 @@ from onyx.db.engine.iam_auth import get_iam_auth_token
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.db.engine.shard_registry import (
     ShardSpec,
+    divide_pool_budget,
     get_default_shard_name,
     get_shard_spec,
     is_default_shard,
-    shard_pool_divisor,
+    is_sharded,
 )
 from onyx.db.engine.shard_routing import get_shard_for_tenant
 from onyx.db.engine.sql_engine import (
@@ -77,14 +79,8 @@ def _build_async_engine(spec: ShardSpec) -> AsyncEngine:
     if POSTGRES_USE_NULL_POOL:
         engine_kwargs["poolclass"] = pool.NullPool  # ty: ignore[invalid-assignment]
     else:
-        # Divide rather than multiply the budget across shards, matching the sync
-        # engine. With one shard the divisor is 1, i.e. sizing is unchanged.
-        divisor = shard_pool_divisor()
-        engine_kwargs["pool_size"] = max(1, POSTGRES_API_SERVER_POOL_SIZE // divisor)
-        engine_kwargs["max_overflow"] = (
-            0
-            if POSTGRES_API_SERVER_POOL_OVERFLOW == 0
-            else max(1, POSTGRES_API_SERVER_POOL_OVERFLOW // divisor)
+        engine_kwargs["pool_size"], engine_kwargs["max_overflow"] = divide_pool_budget(
+            POSTGRES_API_SERVER_POOL_SIZE, POSTGRES_API_SERVER_POOL_OVERFLOW
         )
 
     engine = create_async_engine(connection_string, **engine_kwargs)
@@ -128,9 +124,18 @@ def get_async_engine_for_shard(shard_name: str) -> AsyncEngine:
         return engine
 
 
-def get_async_engine_for_tenant(tenant_id: str) -> AsyncEngine:
-    """Async engine for the database holding this tenant's schema."""
-    return get_async_engine_for_shard(get_shard_for_tenant(tenant_id))
+async def get_async_engine_for_tenant(tenant_id: str) -> AsyncEngine:
+    """Async engine for the database holding this tenant's schema.
+
+    Shard resolution does synchronous Redis and catalog I/O on a cache miss, so it is
+    offloaded rather than run on the event loop — otherwise one miss stalls every
+    other request on the worker, and an invalidation stalls all of them at once.
+    Single-shard deployments resolve without any I/O and skip the hop.
+    """
+    if not is_sharded():
+        return get_async_engine_for_shard(get_default_shard_name())
+    shard_name = await asyncio.to_thread(get_shard_for_tenant, tenant_id)
+    return get_async_engine_for_shard(shard_name)
 
 
 def get_sqlalchemy_async_engine() -> AsyncEngine:
@@ -175,7 +180,7 @@ async def get_async_session(
 
     # Routes to the tenant's shard, not just its schema. With one shard configured
     # this is the same engine the process has always used.
-    engine = get_async_engine_for_tenant(tenant_id)
+    engine = await get_async_engine_for_tenant(tenant_id)
 
     # no need to use the schema translation map for self-hosted + default schema
     if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
