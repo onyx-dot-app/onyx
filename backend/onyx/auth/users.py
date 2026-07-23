@@ -2309,7 +2309,7 @@ class OAuth2AuthorizeResponse(BaseModel):
 
 
 def generate_state_token(
-    data: Dict[str, str],
+    data: Dict[str, Any],
     secret: SecretType,
     lifetime_seconds: int = STATE_TOKEN_LIFETIME_SECONDS,
 ) -> str:
@@ -2344,7 +2344,7 @@ def decode_and_validate_oauth_state(
     state_secret: SecretType,
     csrf_token_cookie_name: str = CSRF_TOKEN_COOKIE_NAME,
     expected_provider_name: str | None = None,
-) -> Dict[str, str]:
+) -> Dict[str, Any]:
     """Decode the signed OAuth state and enforce the CSRF double-submit.
     Optionally bind the flow to a provider so a state minted for one provider
     cannot be replayed on another provider's callback."""

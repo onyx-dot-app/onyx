@@ -29,19 +29,26 @@ class _ProviderConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class GoogleProviderConfig(_ProviderConfig):
+class _OAuth2ProviderConfig(_ProviderConfig):
     client_id: str
     client_secret: str
     # Rows migrated from single-provider env config keep the redirect URI the
     # customer's IdP client already allowlists.
     legacy_callback: bool = False
+    # PKCE for this provider's login flow. The deployment-wide env flag can
+    # still force it on while that flag exists.
+    pkce_enabled: bool = False
+    # OAuth scopes requested at login. Empty falls back to the env override,
+    # then the built-in defaults.
+    scopes: list[str] = []
 
 
-class OIDCProviderConfig(_ProviderConfig):
-    client_id: str
-    client_secret: str
+class GoogleProviderConfig(_OAuth2ProviderConfig):
+    pass
+
+
+class OIDCProviderConfig(_OAuth2ProviderConfig):
     openid_config_url: str
-    legacy_callback: bool = False
     # Strict opt-in: reject sign-ins when userinfo omits the optional
     # email_verified claim (some IdPs, e.g. Microsoft Entra ID, omit it).
     # Any present value other than true is rejected regardless.

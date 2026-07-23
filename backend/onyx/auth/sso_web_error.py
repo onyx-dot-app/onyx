@@ -18,7 +18,7 @@ from fastapi.responses import RedirectResponse
 from starlette.responses import Response
 
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.error_handling.exceptions import OnyxError
+from onyx.error_handling.exceptions import OnyxError, clear_marked_cookie
 
 
 def redirect_sso_errors_to_web(
@@ -41,9 +41,12 @@ def redirect_sso_errors_to_web(
                 raise
             detail = error.detail
             detail_str = detail.value if isinstance(detail, enum.Enum) else str(detail)
-            return RedirectResponse(
+            response = RedirectResponse(
                 f"{WEB_DOMAIN}/auth/error?error={quote(detail_str)}",
                 status_code=302,
             )
+            if isinstance(request, Request):
+                clear_marked_cookie(request, response)
+            return response
 
     return wrapper
