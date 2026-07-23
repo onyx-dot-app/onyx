@@ -106,6 +106,38 @@ describe("toPickerSections", () => {
     ]);
   });
 
+  it("requires both selection and app readiness for associated customs", () => {
+    const dependency = {
+      external_app_id: 42,
+      name: "Acme CRM",
+      enabled: true,
+      ready: false,
+    };
+    const data = skillsList({
+      customs: [
+        customFixture({
+          name: "ready-app-skill",
+          enabled: true,
+          external_app: { ...dependency, ready: true },
+        }),
+        customFixture({
+          name: "disconnected-app-skill",
+          enabled: true,
+          external_app: dependency,
+        }),
+        customFixture({
+          name: "unselected-ready-app-skill",
+          enabled: false,
+          external_app: { ...dependency, ready: true },
+        }),
+      ],
+    });
+
+    expect(
+      toPickerSections(data, []).skills.map((skill) => skill.slug)
+    ).toEqual(["ready-app-skill"]);
+  });
+
   it("builds the Apps section from the external-apps payload with auth state", () => {
     const apps = [
       appFixture({

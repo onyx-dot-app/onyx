@@ -1,10 +1,10 @@
-"""Provision-time validation of SANDBOX_API_SERVER_URL.
+"""Provision-time validation of ONYX_SERVER_URL.
 
-SANDBOX_API_SERVER_URL is the full base URL a sandbox client uses, any API
-path prefix included. The classic misconfiguration is a public URL without
-its /api prefix, which fails far from the cause: every LLM-gateway and
-onyx-cli call inside the sandbox 404s. Probe once per process at provision
-time and fail with the corrected value instead.
+ONYX_SERVER_URL is the full base URL a client uses, any API path prefix
+included. The classic misconfiguration is a public URL without its /api
+prefix, which fails far from the cause: every LLM-gateway and onyx-cli call
+inside the sandbox 404s. Probe once per process at provision time and fail
+with the corrected value instead.
 """
 
 import threading
@@ -68,7 +68,7 @@ def validate_sandbox_api_url(api_server_url: str) -> None:
     response = _probe_health(base)
     if response is None:
         logger.warning(
-            "Could not probe %s/health to validate SANDBOX_API_SERVER_URL; "
+            "Could not probe %s/health to validate ONYX_SERVER_URL; "
             "skipping the prefix check",
             base,
         )
@@ -91,14 +91,14 @@ def validate_sandbox_api_url(api_server_url: str) -> None:
     if prefixed_response is not None and _is_health_response(prefixed_response):
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
-            f"SANDBOX_API_SERVER_URL={api_server_url!r} is missing its API path "
+            f"ONYX_SERVER_URL={api_server_url!r} is missing its API path "
             f"prefix: {base}/health does not serve the API health payload "
             f"(HTTP {response.status_code}) while {prefixed}/health does. "
-            f"Set SANDBOX_API_SERVER_URL to {prefixed!r} — the full base URL a "
+            f"Set ONYX_SERVER_URL to {prefixed!r} — the full base URL a "
             "sandbox client uses.",
         )
     logger.warning(
-        "SANDBOX_API_SERVER_URL=%s: %s/health did not serve the API health "
+        "ONYX_SERVER_URL=%s: %s/health did not serve the API health "
         "payload (HTTP %s) and %s/health did not either; sandbox API calls "
         "will likely fail. Verify the URL is the full base URL including any "
         "path prefix.",

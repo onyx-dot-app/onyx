@@ -31,7 +31,8 @@ Environment variables override config file values:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ONYX_SERVER_URL` | No | Server URL (default: `https://cloud.onyx.app`) |
+| `ONYX_SERVER_URL` | No | Server origin or already-prefixed API base (default: `https://cloud.onyx.app`) |
+| `ONYX_API_PREFIX` | No | API path prefix (default: `/api`); set to empty for direct backend access |
 | `ONYX_PAT` | No | Personal access token for authentication (required if no config file) |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
 | `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |

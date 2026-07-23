@@ -86,6 +86,7 @@ export default function SetupCard({
     setDecision(result);
     if (result === "connected") {
       void mutate(SWR_KEYS.buildExternalApps);
+      void mutate(SWR_KEYS.userSkills);
     }
   }
 

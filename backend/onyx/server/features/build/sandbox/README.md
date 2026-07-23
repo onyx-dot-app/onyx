@@ -54,9 +54,13 @@ The Docker backend is intentionally the closest single-VM analogue of the Kubern
 
 #### Docker mode trust boundary
 
-`api_server` and `background` mount the host Docker socket so they can drive sandbox containers. Anything that can talk to that socket is effectively root on the host — only enable Craft on hosts you fully control. Sandbox containers themselves run unprivileged: `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL`).
+`api_server` and `background` mount the host Docker socket so they can drive sandbox containers. Anything that can talk to that socket is effectively root on the host — only enable Craft on hosts you fully control. Sandbox containers themselves run unprivileged: `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL` + `ONYX_API_PREFIX`).
 
-`SANDBOX_API_SERVER_URL` must be the **public** HTTPS URL that the agent reaches Onyx through (same way any onyx-cli client would). Compose hostnames like `http://api_server:8080` do not resolve from inside the sandbox bridge.
+`ONYX_SERVER_URL` is the complete API base URL used by both the host-side
+manager and the sandbox client. The Craft Compose overlay defaults it to
+`http://onyx-craft-api:8080`, a private alias on the sandbox bridge. Public
+reverse-proxy overrides must include their API path prefix, for example
+`https://onyx.your-org.example/api`.
 
 On EC2 the Docker bridge by default routes to `169.254.169.254` (IMDS), which can hand out IAM credentials. `install.sh --include-craft` installs a host-level `DOCKER-USER` iptables rule to drop sandbox→IMDS traffic when it has sudo/iptables access, and prints the manual command otherwise. There is no application-level fallback — fix this at the host firewall.
 
@@ -169,10 +173,10 @@ SANDBOX_SERVICE_ACCOUNT_NAME=sandbox      # No storage credentials required
 
 ```bash
 
-# Public URL the sandbox agent uses to reach Onyx (HTTPS, externally resolvable —
-# compose hostnames like http://api_server:8080 will not resolve from inside the
-# sandbox bridge).
-SANDBOX_API_SERVER_URL=https://onyx.your-org.example
+# Complete API base URL. The Craft Compose overlay defaults to its private
+# http://onyx-craft-api:8080 alias; override only to route through a public
+# reverse proxy.
+ONYX_SERVER_URL=https://onyx.your-org.example/api
 
 # Host path of the Docker socket mounted into api_server/background
 SANDBOX_DOCKER_SOCKET=/var/run/docker.sock      # Default: /var/run/docker.sock
@@ -222,7 +226,8 @@ uv run pytest backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox.
 - Confirm `api_server` actually has the Docker socket: `docker compose exec api_server ls -l /var/run/docker.sock`
 - Confirm the dedicated bridge exists: `docker network inspect onyx_craft_sandbox` (created by `install.sh --include-craft`, or run `docker network create onyx_craft_sandbox` manually)
 - Check sandbox logs: `docker logs sandbox-<id8>`
-- Confirm `SANDBOX_API_SERVER_URL` is a publicly resolvable HTTPS URL (the agent cannot reach `http://api_server:8080` from inside the sandbox bridge)
+- Confirm `ONYX_SERVER_URL` resolves from the sandbox bridge and includes any
+  API path prefix. The Compose default is `http://onyx-craft-api:8080`.
 
 ### Sandbox Stuck in PROVISIONING (Kubernetes)
 
@@ -252,7 +257,7 @@ uv run pytest backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox.
 - **Sandbox app containers and sidecar init containers** do not receive FileStore, S3, or MinIO credentials
 - **Network policies** can restrict sandbox egress traffic
 - **Resource limits** prevent resource exhaustion
-- **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL`)
+- **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL` + `ONYX_API_PREFIX`)
 - **Docker network isolation** is enforced by joining only the dedicated `onyx_craft_sandbox` bridge — compose's default network (postgres/redis/minio/model servers) is unreachable by DNS from inside a sandbox
 - **EC2 IMDS** must be blocked at the host firewall (`install.sh --include-craft` installs a `DOCKER-USER` iptables rule on EC2 when sudo is available) — there is no app-level fallback
 

@@ -34,7 +34,8 @@ export ONYX_PAT="your-pat"
 
 | Variable          | Required | Description                                              |
 | ----------------- | -------- | -------------------------------------------------------- |
-| `ONYX_SERVER_URL` | No       | Onyx server URL (default: `https://cloud.onyx.app`) |
+| `ONYX_SERVER_URL` | No       | Server origin or already-prefixed API base (default: `https://cloud.onyx.app`) |
+| `ONYX_API_PREFIX` | No       | API path prefix (default: `/api`); empty for direct backend access |
 | `ONYX_PAT`    | Yes      | Personal access token for authentication (unless config file exists) |
 | `ONYX_PERSONA_ID` | No       | Default agent/persona ID                                 |
 | `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |

@@ -97,9 +97,9 @@ ENABLE_OPENCODE_DEBUGGING = (
     os.environ.get("ENABLE_OPENCODE_DEBUGGING", "false").lower() == "true"
 )
 
-# Must be set when SANDBOX_BACKEND=kubernetes (no default — varies per
-# deployment).
-SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
+# Complete Onyx API base URL reachable from the sandbox, including any path
+# prefix. Must be set when SANDBOX_BACKEND=kubernetes.
+ONYX_SERVER_URL = os.environ.get("ONYX_SERVER_URL", "")
 
 # ==============================================================================
 # Sandbox egress proxy

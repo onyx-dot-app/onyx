@@ -250,7 +250,7 @@ def proxy_kwargs() -> ContainerCreateKwargs:
         tenant_id=TENANT_ID,
         image="onyxdotapp/sandbox:test",
         onyx_pat=SANDBOX_PROXY_INJECTED_PLACEHOLDER,
-        api_server_url="https://onyx.example.com",
+        api_server_url="https://onyx.example.com/api",
         network="onyx_craft_sandbox",
         volume_name="onyx-craft-sandbox-12345678",
         memory_limit="2g",
@@ -359,6 +359,7 @@ def test_container_kwargs_env_allowlist_excludes_storage_credentials(
     # Required env
     assert env["ONYX_PAT"] == "pat-redacted"
     assert env["ONYX_SERVER_URL"] == "http://api_server:8080"
+    assert env["ONYX_API_PREFIX"] == ""
     # opencode-serve transport wiring
     assert env["OPENCODE_SERVER_PASSWORD"] == _OPENCODE_PASSWORD
     assert env["OPENCODE_CONFIG_CONTENT"] == _OPENCODE_CONFIG_JSON
@@ -493,6 +494,7 @@ def test_container_kwargs_env_is_a_minimal_allowlist(
     assert set(env.keys()) == {
         "ONYX_PAT",
         "ONYX_SERVER_URL",
+        "ONYX_API_PREFIX",
         "OPENCODE_SERVER_PASSWORD",
         "OPENCODE_CONFIG_CONTENT",
     }
@@ -526,7 +528,7 @@ def test_container_kwargs_mounts_tmp_as_tmpfs(
 def test_container_kwargs_warns_on_internal_compose_host(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Deployers that point SANDBOX_API_SERVER_URL at compose DNS get warned."""
+    """Deployers that point ONYX_SERVER_URL at compose DNS get warned."""
     import logging
 
     with caplog.at_level(logging.WARNING):
@@ -563,7 +565,7 @@ def test_container_kwargs_no_warning_for_public_url(
             tenant_id=TENANT_ID,
             image="onyxdotapp/sandbox:test",
             onyx_pat="pat",
-            api_server_url="https://onyx.example.com",
+            api_server_url="https://onyx.example.com/api",
             network="onyx_craft_sandbox",
             volume_name="vol",
             memory_limit="2g",
@@ -656,10 +658,11 @@ def test_proxy_kwargs_env_contains_proxy_and_ca_keys(
     contract vars.
     """
     env = proxy_kwargs["environment"]
-    # The legacy 4-key core is preserved; ONYX_PAT is the proxy placeholder in
-    # this posture (real value lives in Postgres, proxy injects on wire).
+    # The compatibility core is preserved; ONYX_PAT is the proxy placeholder
+    # in this posture (real value lives in Postgres, proxy injects on wire).
     assert env["ONYX_PAT"] == SANDBOX_PROXY_INJECTED_PLACEHOLDER
-    assert env["ONYX_SERVER_URL"] == "https://onyx.example.com"
+    assert env["ONYX_SERVER_URL"] == "https://onyx.example.com/api"
+    assert env["ONYX_API_PREFIX"] == ""
     assert env["OPENCODE_SERVER_PASSWORD"] == _OPENCODE_PASSWORD
     assert env["OPENCODE_CONFIG_CONTENT"] == _OPENCODE_CONFIG_JSON
     # firewall-init.sh contract.
@@ -729,6 +732,7 @@ def test_proxy_kwargs_env_is_a_locked_allowlist(
         # Legacy core
         "ONYX_PAT",
         "ONYX_SERVER_URL",
+        "ONYX_API_PREFIX",
         "OPENCODE_SERVER_PASSWORD",
         "OPENCODE_CONFIG_CONTENT",
         # firewall-init.sh contract
@@ -777,7 +781,7 @@ def test_proxy_kwargs_requires_ca_volume() -> None:
             tenant_id=TENANT_ID,
             image="onyxdotapp/sandbox:test",
             onyx_pat="pat",
-            api_server_url="https://onyx.example.com",
+            api_server_url="https://onyx.example.com/api",
             network="onyx_craft_sandbox",
             volume_name="vol",
             memory_limit="2g",
