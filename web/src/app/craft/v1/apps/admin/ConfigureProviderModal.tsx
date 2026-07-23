@@ -94,7 +94,6 @@ export default function ConfigureProviderModal({
       );
       const shared = {
         name: (values[NAME_KEY] ?? "").trim(),
-        description: descriptor.description,
         upstream_url_patterns: descriptor.upstream_url_patterns,
         auth_template: descriptor.auth_template,
         action_policies: policies,

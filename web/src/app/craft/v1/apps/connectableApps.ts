@@ -28,8 +28,8 @@ export interface ConnectableApp {
   key: string;
   name: string;
   description: string;
-  /** Deep-link (`?connect=`) target; external apps only. */
-  slug: string | null;
+  /** Deep-link (`?connect=`) target — the external app's id; null for MCP. */
+  connectId: string | null;
   authenticated: boolean;
   logo: IconFunctionComponent;
   /** How the user connects; null = nothing for the user to do (org-managed). */
@@ -49,11 +49,13 @@ export function externalAppToConnectable(
   return {
     key: `app-${app.id}`,
     name: app.name,
-    description: app.description,
-    slug: app.slug,
+    description: app.supports_oauth
+      ? "Connect with OAuth"
+      : "Connect with credentials",
+    connectId: String(app.id),
     authenticated: app.authenticated,
     logo: getAppTypeLogo(app.app_type),
-    connectMode: app.app_type === "CUSTOM" ? "credentials" : "oauth",
+    connectMode: app.supports_oauth ? "oauth" : "credentials",
     credentialKeys: app.credential_keys,
     credentialValues: app.credential_values,
     startOAuth: async () => (await startExternalAppOAuth(app.id)).authorize_url,
@@ -87,7 +89,7 @@ export function mcpServerToConnectable(
     key: `mcp-${server.id}`,
     name: server.name,
     description: server.description ?? "",
-    slug: null,
+    connectId: null,
     authenticated,
     logo: getActionIcon(server.server_url, server.name),
     connectMode: !perUser

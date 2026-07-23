@@ -82,7 +82,7 @@ function AppConnections({ query }: AppConnectionsProps) {
     errorHandlingFetcher,
     { keepPreviousData: true }
   );
-  const connectSlug = useSearchParams().get("connect");
+  const connectParam = useSearchParams().get("connect");
 
   const refresh = () => {
     void mutateApps();
@@ -161,7 +161,9 @@ function AppConnections({ query }: AppConnectionsProps) {
                 key={item.key}
                 variant="tile"
                 app={item}
-                highlight={connectSlug !== null && connectSlug === item.slug}
+                highlight={
+                  connectParam !== null && connectParam === item.connectId
+                }
                 onChange={refresh}
               />
             ))}
