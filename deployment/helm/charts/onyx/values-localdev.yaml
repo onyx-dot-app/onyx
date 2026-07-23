@@ -79,7 +79,8 @@ codeInterpreter:
 configMap:
   ENABLE_CRAFT: "true"
   # Host gateway (Docker Desktop), not internal cluster DNS; Linux-kind devs sub their own.
-  SANDBOX_API_SERVER_URL: "http://host.docker.internal:3000"
+  # Full base URL, path prefix included — the Next dev server proxies the API under /api.
+  SANDBOX_API_SERVER_URL: "http://host.docker.internal:3000/api"
   ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
 
 sandboxProxy:

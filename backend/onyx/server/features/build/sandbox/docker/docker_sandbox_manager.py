@@ -566,6 +566,9 @@ def build_container_create_kwargs(
     env: dict[str, str] = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
+        # The URL already carries any API path prefix; pin the CLI's default
+        # off so it doesn't append its "/api" default on top.
+        "ONYX_API_PREFIX": "",
         OPENCODE_SERVER_PASSWORD: opencode_password,
         "OPENCODE_CONFIG_CONTENT": opencode_config_json,
     }

@@ -376,6 +376,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     assert set(env.keys()) == {
         "ONYX_PAT",
         "ONYX_SERVER_URL",
+        "ONYX_API_PREFIX",
         OPENCODE_SERVER_PASSWORD,
         "OPENCODE_CONFIG_CONTENT",
     }
