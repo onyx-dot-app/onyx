@@ -49,7 +49,7 @@ def user_permission_for_skill(
     user_group_ids: set[int],
     curated_user_group_ids: set[int] | None = None,
 ) -> SkillAccessLevel | None:
-    if skill.built_in_skill_id is not None:
+    if not skill.is_custom:
         return SkillAccessLevel.VIEWER
 
     if skill.author_user_id == user.id:
@@ -173,7 +173,7 @@ def skills_list_response_for_user(
             user_group_ids=user_group_ids,
             curated_user_group_ids=curated_user_group_ids,
         )
-        (builtins if skill.built_in_skill_id is not None else customs).append(response)
+        (customs if skill.is_custom else builtins).append(response)
 
     return SkillsList(builtins=builtins, customs=customs)
 

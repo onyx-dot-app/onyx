@@ -4583,7 +4583,7 @@ class FileContent(Base):
 
 
 class Skill(Base):
-    """A custom (admin-uploaded) skill.
+    """A built-in or custom skill.
 
     Skill metadata is shared schema state. Group-based grants use user_group,
     which is available in the base migration chain even though its ORM model
@@ -4668,6 +4668,10 @@ class Skill(Base):
             name="ck_skill_definition_source",
         ),
     )
+
+    @property
+    def is_custom(self) -> bool:
+        return self.built_in_skill_id is None
 
 
 """

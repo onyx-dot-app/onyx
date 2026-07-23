@@ -218,10 +218,6 @@ def _skill_select_with_eager_load(*, order_by_name: bool) -> Select[tuple[Skill]
     return stmt
 
 
-def _has_external_app_dependency() -> ColumnElement[bool]:
-    return exists().where(ExternalApp__Skill.skill_id == Skill.id)
-
-
 def _skill_select_for_management_policy(
     *,
     policy: SkillManagementPolicy,
@@ -236,7 +232,7 @@ def _skill_select_for_management_policy(
         stmt = stmt.where(
             or_(
                 Skill.built_in_skill_id.is_(None),
-                ~_has_external_app_dependency(),
+                ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
             )
         )
         if user.role == UserRole.ADMIN:
@@ -331,12 +327,11 @@ def list_runtime_skills_for_user(
         for skill_id, dependency in external_app_dependencies.items()
         if dependency.ready
     ]
-    has_external_app_dependency = _has_external_app_dependency()
     stmt = _skill_select_with_eager_load(order_by_name=True).where(
         skill_visible_to_user(user),
         _is_enabled_for_user(user),
         or_(
-            ~has_external_app_dependency,
+            ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
             Skill.id.in_(ready_external_app_skill_ids),
         ),
         or_(
@@ -412,7 +407,7 @@ def replace_skill_bundle(
 
     Rejects built-in rows — they have no bundle.
     """
-    if skill.built_in_skill_id is not None:
+    if not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"Skill '{skill.name}' is a built-in and has no bundle.",
@@ -608,7 +603,7 @@ def transfer_skill_ownership(
     new_owner_user_id: UUID,
     db_session: Session,
 ) -> None:
-    if skill.built_in_skill_id is not None:
+    if not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"Skill '{skill.name}' is a built-in and cannot have its ownership transferred.",

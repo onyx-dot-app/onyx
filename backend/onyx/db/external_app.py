@@ -497,7 +497,7 @@ def delete_external_app(
         )
 
     skills = get_skills_for_external_app(db_session, app.id)
-    custom_skill_ids = [skill.id for skill in skills if skill.built_in_skill_id is None]
+    custom_skill_ids = [skill.id for skill in skills if skill.is_custom]
     if custom_skill_ids:
         db_session.execute(
             delete(UserSkillPreference).where(
@@ -507,7 +507,7 @@ def delete_external_app(
 
     db_session.delete(app)
     for skill in skills:
-        if skill.built_in_skill_id is not None:
+        if not skill.is_custom:
             db_session.delete(skill)
     db_session.flush()
 

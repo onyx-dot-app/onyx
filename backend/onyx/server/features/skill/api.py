@@ -660,7 +660,7 @@ def transfer_current_user_skill_ownership(
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    if skill.built_in_skill_id is not None:
+    if not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"Skill '{skill.name}' is a built-in and cannot change ownership.",
