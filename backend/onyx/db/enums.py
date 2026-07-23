@@ -217,6 +217,22 @@ class IndexModelStatus(str, PyEnum):
         return self == IndexModelStatus.FUTURE
 
 
+class IndexReclaimStatus(str, PyEnum):
+    """Lifecycle of reclaiming a now-PAST index's data after a reindex-port.
+
+    PENDING: consented at reindex submit; waiting for the swap + port to drain.
+    SOAKING: the old index stopped being read; waiting out the retention window.
+    DELETING: deleting the old index's data (loops until count-verified empty).
+    BLOCKED: parked after repeated failures; alerted, needs operator/cooldown revival.
+    On success the PAST row is deleted, so there is no persisted terminal state.
+    """
+
+    PENDING = "PENDING"
+    SOAKING = "SOAKING"
+    DELETING = "DELETING"
+    BLOCKED = "BLOCKED"
+
+
 class ChatSessionSharedStatus(str, PyEnum):
     PUBLIC = "public"
     PRIVATE = "private"
