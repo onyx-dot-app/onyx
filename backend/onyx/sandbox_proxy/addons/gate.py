@@ -60,7 +60,7 @@ from onyx.sandbox_proxy.logging_utils import (
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
-    SANDBOX_API_SERVER_URL,
+    ONYX_SERVER_URL,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
 )
 from onyx.server.features.build.db import action_approval
@@ -91,9 +91,9 @@ PARSER_MAX_BODY_BYTES = 32 * 1024 * 1024
 # in-cluster name resolving to an internal IP, while still denying every other port
 # on that host (e.g. a co-located Redis/Postgres reachable at the same hostname).
 def _parse_api_server() -> tuple[str | None, int | None]:
-    if not SANDBOX_API_SERVER_URL:
+    if not ONYX_SERVER_URL:
         return None, None
-    parsed = urlparse(SANDBOX_API_SERVER_URL)
+    parsed = urlparse(ONYX_SERVER_URL)
     host = (parsed.hostname or "").lower() or None
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     return host, port

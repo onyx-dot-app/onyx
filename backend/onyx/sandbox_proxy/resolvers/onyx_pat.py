@@ -1,9 +1,9 @@
 """Onyx-API PAT credential resolver.
 
-Claims requests bound for the Onyx API host (the host of
-``SANDBOX_API_SERVER_URL``) and sets both auth headers to the sandbox's real
-per-sandbox PAT, read encrypted off ``Sandbox.encrypted_pat``. The tenant is
-embedded in the PAT itself, so no separate tenant header is injected.
+Claims requests bound for the Onyx API host (the host of ``ONYX_SERVER_URL``)
+and sets both auth headers to the sandbox's real per-sandbox PAT, read
+encrypted off ``Sandbox.encrypted_pat``. The tenant is embedded in the PAT
+itself, so no separate tenant header is injected.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from onyx.sandbox_proxy.credential_injection import (
     InjectionContext,
 )
 from onyx.sandbox_proxy.logging_utils import full_log_id, short_log_id
-from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
+from onyx.server.features.build.configs import ONYX_SERVER_URL
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.utils.logger import setup_logger
 
@@ -35,7 +35,7 @@ class OnyxPatResolver(CredentialResolver):
     """Injects the sandbox's Onyx API PAT on requests to the configured API host."""
 
     def __init__(self) -> None:
-        parsed = urlparse(SANDBOX_API_SERVER_URL) if SANDBOX_API_SERVER_URL else None
+        parsed = urlparse(ONYX_SERVER_URL) if ONYX_SERVER_URL else None
         host = parsed.hostname if parsed else None
         self._api_host = host.lower() if host else None
         if parsed is not None and host:

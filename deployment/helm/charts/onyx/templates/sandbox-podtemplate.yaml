@@ -25,7 +25,7 @@ kubelet evicts sandbox pods first under node disk pressure. */}}
 {{- $proxyPort := include "onyx.sandboxProxyPort" . }}
 {{- $proxyHost := include "onyx.sandboxProxyHost" . }}
 {{- $caConfigMap := (index $cm "SANDBOX_PROXY_CA_CONFIGMAP") | default "sandbox-proxy-ca-bundle" }}
-{{- $serverUrl := (index $cm "SANDBOX_API_SERVER_URL") }}
+{{- $serverUrl := (index $cm "ONYX_SERVER_URL") }}
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
 {{- $caBundleFile := "/etc/ssl/sandbox/ca-bundle.crt" }}
 apiVersion: v1
@@ -140,6 +140,8 @@ template:
         env:
           - { name: ONYX_PAT, value: "replaced_by_egress_proxy" }
           - { name: ONYX_SERVER_URL, value: "{{ $serverUrl }}" }
+          {{/* The deployment value is the exact API base; do not append the CLI default. */}}
+          - { name: ONYX_API_PREFIX, value: "" }
           - { name: GH_TOKEN, value: "replaced_by_egress_proxy" }
           - { name: GH_NO_UPDATE_NOTIFIER, value: "1" }
           - { name: OPENCODE_DATA_HOME, value: "/workspace/opencode-data" }
