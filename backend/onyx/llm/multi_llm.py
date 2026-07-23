@@ -4,6 +4,7 @@ import re
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Union, cast
 
 from readerwriterlock import rwlock
@@ -71,6 +72,11 @@ if TYPE_CHECKING:
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
 STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
+
+# Azure api-versions that route to the modern /openai/v1/* surface. Mirrors
+# LiteLLM's BaseAzureLLM._is_azure_v1_api_version.
+_AZURE_V1_API_VERSIONS = frozenset({"preview", "latest", "v1"})
+
 _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
     "claude-opus-4-5",
     "claude-opus-4-6",
@@ -246,6 +252,24 @@ def _prompt_contains_tool_call_history(prompt: LanguageModelInput) -> bool:
 
     msgs = prompt if isinstance(prompt, list) else [prompt]
     return any(isinstance(msg, AssistantMessage) and msg.tool_calls for msg in msgs)
+
+
+@lru_cache(maxsize=None)
+def _log_azure_responses_api_version_override(
+    api_base: str | None, configured_api_version: str
+) -> None:
+    """Log once per provider config per process (LLM instances and calls are
+    per-request, so unconditional logging here would fire on every LLM call)."""
+    logger.warning(
+        "Azure responses API calls for %s ignore the configured api_version %s: "
+        "dated api-versions target the legacy /openai/responses surface, which "
+        "some clouds (e.g. Azure Government) do not serve. These calls use "
+        "LiteLLM's responses default instead (AZURE_DEFAULT_RESPONSES_API_VERSION, "
+        "default 'preview'); the configured version still applies to "
+        "chat-completions calls.",
+        api_base,
+        configured_api_version,
+    )
 
 
 def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
@@ -558,6 +582,25 @@ class LitellmLLM(LLM):
             if is_openai_model  # Uses litellm's completions -> responses bridge
             else self.config.model_provider
         )
+
+        # Azure responses-bridge calls must target the v1 responses surface:
+        # with a dated api-version, LiteLLM builds the legacy /openai/responses
+        # URL, which sovereign clouds (e.g. Azure Government) do not serve
+        # (#11420). Dropping the dated version lets LiteLLM apply its responses
+        # default (AZURE_DEFAULT_RESPONSES_API_VERSION env var, default
+        # "preview"), which routes to /openai/v1/responses — working on all
+        # clouds with reasoning summaries intact. Admin-configured v1 versions
+        # ("preview"/"latest"/"v1") pass through, and the dated version still
+        # applies to every non-bridge call (e.g. Azure chat completions).
+        api_version = self._api_version or None
+        if (
+            is_openai_model
+            and self._model_provider == LlmProviderNames.AZURE
+            and api_version is not None
+            and api_version not in _AZURE_V1_API_VERSIONS
+        ):
+            _log_azure_responses_api_version_override(self._api_base, api_version)
+            api_version = None
         if is_openai_compatible_proxy:
             # OpenAI-compatible proxies (Bifrost, generic OpenAI-compatible
             # servers) expect model names sent directly to their endpoint.
@@ -780,7 +823,7 @@ class LitellmLLM(LLM):
                     mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
                     base_url=self._api_base or None,
-                    api_version=self._api_version or None,
+                    api_version=api_version,
                     custom_llm_provider=self._custom_llm_provider or None,
                     messages=messages,
                     tools=tools,
