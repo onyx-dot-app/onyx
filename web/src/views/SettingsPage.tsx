@@ -489,7 +489,9 @@ function GeneralSettings() {
                 onBlur={() => {
                   // Only save if the value has changed
                   if (personalizationValues.name !== initialNameRef.current) {
-                    void handleSavePersonalization();
+                    void handleSavePersonalization({
+                      name: personalizationValues.name,
+                    });
                     initialNameRef.current = personalizationValues.name;
                   }
                 }}
@@ -516,7 +518,9 @@ function GeneralSettings() {
                 onBlur={() => {
                   // Only save if the value has changed
                   if (personalizationValues.role !== initialRoleRef.current) {
-                    void handleSavePersonalization();
+                    void handleSavePersonalization({
+                      role: personalizationValues.role,
+                    });
                     initialRoleRef.current = personalizationValues.role;
                   }
                 }}
@@ -1149,7 +1153,11 @@ function ChatPreferencesSettings() {
             placeholder="Describe how you want the system to behave and the tone it should use."
             value={personalizationValues.user_preferences}
             onChange={(e) => updateUserPreferences(e.target.value)}
-            onBlur={() => void handleSavePersonalization()}
+            onBlur={() =>
+              void handleSavePersonalization({
+                user_preferences: personalizationValues.user_preferences,
+              })
+            }
             rows={4}
             maxRows={10}
             autoResize
