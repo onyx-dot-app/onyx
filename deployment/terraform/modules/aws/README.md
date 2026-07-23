@@ -137,14 +137,19 @@ its tier.
 were `db.t4g.large` with 20 GB gp2 and no storage autoscaling, `cache.m6g.xlarge`, and a
 3×r8g.large multi-AZ OpenSearch domain. The default `medium` tier keeps the same EKS node
 groups and Redis node type, and grows Postgres storage online (gp2→gp3 conversion is also
-online; storage can never shrink). If you enabled OpenSearch and relied on the old
-defaults, `medium` would reconfigure the domain to a single-node shape — an in-place AWS
-blue/green change that preserves index data but shrinks capacity and drops multi-AZ
-redundancy, so pin the old values explicitly (`opensearch_instance_count = 3`,
+online; storage can never shrink).
+
+⚠️ If you enabled OpenSearch and relied on the old defaults, applying `medium` **replaces
+the domain and loses its index data**: a single-AZ domain must live in exactly one subnet,
+and the Terraform AWS provider marks `vpc_options` as ForceNew, so the 3-subnet → 1-subnet
+change destroys and recreates the domain (capacity-only changes that don't touch subnets —
+instance type/count, masters, EBS — are in-place blue/green updates). To keep the old
+topology, pin it explicitly: `opensearch_instance_count = 3`,
 `opensearch_zone_awareness_enabled = true`, `opensearch_multi_az_with_standby_enabled =
 true`, `opensearch_dedicated_master_type = "m7g.large.search"`,
-`opensearch_instance_type = "r8g.large.search"`) if you want to keep the old topology.
-Review the plan before applying either way.
+`opensearch_instance_type = "r8g.large.search"`. To adopt the new shape on an existing
+domain, take a manual snapshot first and plan a restore. Either way, check `terraform
+plan` for `-/+ destroy and then create replacement` on the domain before applying.
 
 ### Using an existing VPC
 If you already have a VPC and subnets, disable VPC creation and provide IDs, CIDR, and the ID of the existing S3 gateway endpoint in that VPC:

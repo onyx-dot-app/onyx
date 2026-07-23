@@ -107,7 +107,10 @@ locals {
   opensearch_ebs_throughput                = coalesce(var.opensearch_ebs_throughput, local.sizing.opensearch_ebs_throughput)
 
   # A domain's subnet count must match its AZ spread: 1 subnet without zone
-  # awareness (single-data-node tiers), 3 with it.
+  # awareness (single-data-node tiers), 3 with it. Changing the subnet set on
+  # an existing domain REPLACES it (vpc_options is ForceNew in the provider) —
+  # see the README migration note before toggling zone awareness or size tiers
+  # on a live domain.
   opensearch_subnet_ids = length(var.opensearch_subnet_ids) > 0 ? var.opensearch_subnet_ids : (
     local.opensearch_zone_awareness_enabled ? slice(local.private_subnets, 0, 3) : slice(local.private_subnets, 0, 1)
   )
