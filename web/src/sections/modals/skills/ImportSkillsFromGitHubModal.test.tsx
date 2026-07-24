@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { importGitHubSkills, previewGitHubSkills } from "@/lib/skills/api";
 import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
@@ -64,7 +63,7 @@ describe("ImportSkillsFromGitHubModal", () => {
   });
 
   it("imports selected skills and explains every outcome", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const onImported = jest.fn();
     mockedPreview.mockResolvedValue(preview);
     mockedImport.mockResolvedValue({
@@ -115,7 +114,7 @@ describe("ImportSkillsFromGitHubModal", () => {
   });
 
   it("shows name conflicts as successful disabled imports", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     mockedPreview.mockResolvedValue({
       ...preview,
       skills: [preview.skills[0]!],
