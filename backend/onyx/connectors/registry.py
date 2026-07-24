@@ -1,5 +1,3 @@
-"""Registry mapping for connector classes."""
-
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
@@ -12,13 +10,13 @@ class ConnectorMapping(BaseModel):
 
 # Mapping of DocumentSource to connector details for lazy loading
 CONNECTOR_CLASS_MAP = {
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: ConnectorMapping(
+        module_path="onyx.connectors.jira_service_management.connector",
+        class_name="JiraServiceManagementConnector",
+    ),
     DocumentSource.WEB: ConnectorMapping(
         module_path="onyx.connectors.web.connector",
         class_name="WebConnector",
-    ),
-    DocumentSource.FILE: ConnectorMapping(
-        module_path="onyx.connectors.file.connector",
-        class_name="LocalFileConnector",
     ),
     DocumentSource.SLACK: ConnectorMapping(
         module_path="onyx.connectors.slack.connector",
@@ -28,21 +26,13 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.github.connector",
         class_name="GithubConnector",
     ),
-    DocumentSource.GMAIL: ConnectorMapping(
-        module_path="onyx.connectors.gmail.connector",
-        class_name="GmailConnector",
-    ),
-    DocumentSource.GITLAB: ConnectorMapping(
-        module_path="onyx.connectors.gitlab.connector",
-        class_name="GitlabConnector",
-    ),
-    DocumentSource.GITBOOK: ConnectorMapping(
-        module_path="onyx.connectors.gitbook.connector",
-        class_name="GitbookConnector",
-    ),
     DocumentSource.GOOGLE_DRIVE: ConnectorMapping(
         module_path="onyx.connectors.google_drive.connector",
         class_name="GoogleDriveConnector",
+    ),
+    DocumentSource.GMAIL: ConnectorMapping(
+        module_path="onyx.connectors.gmail.connector",
+        class_name="GmailConnector",
     ),
     DocumentSource.BOOKSTACK: ConnectorMapping(
         module_path="onyx.connectors.bookstack.connector",
@@ -72,13 +62,21 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.coda.connector",
         class_name="CodaConnector",
     ),
+    DocumentSource.GITLAB: ConnectorMapping(
+        module_path="onyx.connectors.gitlab.connector",
+        class_name="GitlabConnector",
+    ),
     DocumentSource.CANVAS: ConnectorMapping(
         module_path="onyx.connectors.canvas.connector",
         class_name="CanvasConnector",
     ),
-    DocumentSource.NOTION: ConnectorMapping(
-        module_path="onyx.connectors.notion.connector",
-        class_name="NotionConnector",
+    DocumentSource.GITBOOK: ConnectorMapping(
+        module_path="onyx.connectors.gitbook.connector",
+        class_name="GitbookConnector",
+    ),
+    DocumentSource.GURUTOM: ConnectorMapping(
+        module_path="onyx.connectors.gurutom.connector",
+        class_name="GuruTomConnector",
     ),
     DocumentSource.ZULIP: ConnectorMapping(
         module_path="onyx.connectors.zulip.connector",
@@ -91,6 +89,10 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.LINEAR: ConnectorMapping(
         module_path="onyx.connectors.linear.connector",
         class_name="LinearConnector",
+    ),
+    DocumentSource.NOTION: ConnectorMapping(
+        module_path="onyx.connectors.notion.connector",
+        class_name="NotionConnector",
     ),
     DocumentSource.HUBSPOT: ConnectorMapping(
         module_path="onyx.connectors.hubspot.connector",
@@ -128,10 +130,6 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.sharepoint.connector",
         class_name="SharepointConnector",
     ),
-    DocumentSource.TEAMS: ConnectorMapping(
-        module_path="onyx.connectors.teams.connector",
-        class_name="TeamsConnector",
-    ),
     DocumentSource.SALESFORCE: ConnectorMapping(
         module_path="onyx.connectors.salesforce.connector",
         class_name="SalesforceConnector",
@@ -161,8 +159,8 @@ CONNECTOR_CLASS_MAP = {
         class_name="AsanaConnector",
     ),
     DocumentSource.S3: ConnectorMapping(
-        module_path="onyx.connectors.blob.connector",
-        class_name="BlobStorageConnector",
+        module_path="onyx.connectors.s3.connector",
+        class_name="S3Connector",
     ),
     DocumentSource.R2: ConnectorMapping(
         module_path="onyx.connectors.blob.connector",
