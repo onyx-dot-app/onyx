@@ -110,7 +110,9 @@ export default function CreateCustomAppModal({
         Object.keys(toRecord(headers)).length ||
         Object.keys(toRecord(orgCredentials)).length
       );
-  const unsavedChanges = useUnsavedChangesGuard({ isDirty: configDirty });
+  const unsavedChanges = useUnsavedChangesGuard({
+    isDirty: createdApp === null && configDirty,
+  });
 
   // Headers and org credentials are optional; name + at least one upstream
   // pattern are required.

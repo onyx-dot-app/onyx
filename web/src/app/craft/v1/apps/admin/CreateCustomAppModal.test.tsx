@@ -156,6 +156,10 @@ describe("CreateCustomAppModal", () => {
       screen.getByRole("button", { name: "Associate existing" })
     ).toBeInTheDocument();
 
+    const beforeUnload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(beforeUnload);
+    expect(beforeUnload.defaultPrevented).toBe(false);
+
     fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();

@@ -239,6 +239,7 @@ export default function ConfigureProviderModal({
       emptyPoliciesMessage="This provider has no actions to configure."
       saveLabel={existingApp ? "Save" : "Add"}
       autoFocusFirstField={existingApp === null}
+      allowPristineSave={existingApp === null}
       onSave={save}
       closeAfterSave={existingApp !== null}
       bodyAfterPolicies={

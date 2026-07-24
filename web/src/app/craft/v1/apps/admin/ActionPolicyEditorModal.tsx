@@ -67,6 +67,8 @@ interface ActionPolicyEditorModalProps {
     requestLeave: (navigate: () => void) => void
   ) => React.ReactNode;
   autoFocusFirstField?: boolean;
+  /** Allow create flows to persist valid defaults without an artificial edit. */
+  allowPristineSave?: boolean;
   /** Keep the modal mounted when save advances its caller to another step. */
   closeAfterSave?: boolean;
 }
@@ -92,6 +94,7 @@ export default function ActionPolicyEditorModal({
   onSave,
   bodyAfterPolicies,
   autoFocusFirstField = true,
+  allowPristineSave = false,
   closeAfterSave = true,
 }: ActionPolicyEditorModalProps) {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({
@@ -112,7 +115,10 @@ export default function ActionPolicyEditorModal({
   const confirmationOpen =
     alternateContentConfirmationOpen || unsavedChanges.confirmationOpen;
   const canSave =
-    fieldsFilled && policyItems !== undefined && !isSaving && isDirty;
+    fieldsFilled &&
+    policyItems !== undefined &&
+    !isSaving &&
+    (allowPristineSave || isDirty);
 
   async function save() {
     setIsSaving(true);

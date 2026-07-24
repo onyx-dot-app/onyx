@@ -134,6 +134,43 @@ describe("ConfigureProviderModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("creates a provider whose valid defaults need no manual edits", async () => {
+    const noInputDescriptor: BuiltInExternalAppDescriptor = {
+      ...DESCRIPTOR,
+      required_org_credential_fields: [],
+    };
+    jest
+      .mocked(externalAppsService.createBuiltInExternalApp)
+      .mockResolvedValue({ ...APP, associated_skills: [] });
+
+    render(
+      <ConfigureProviderModal
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        descriptor={noInputDescriptor}
+        existingApp={null}
+      />
+    );
+
+    const addButton = screen.getByRole("button", { name: "Add" });
+    expect(addButton).toBeEnabled();
+    fireEvent.click(addButton);
+
+    await waitFor(() =>
+      expect(externalAppsService.createBuiltInExternalApp).toHaveBeenCalledWith(
+        {
+          name: "Slack",
+          app_type: "SLACK",
+          upstream_url_patterns: DESCRIPTOR.upstream_url_patterns,
+          auth_template: DESCRIPTOR.auth_template,
+          organization_credentials: {},
+          action_policies: {},
+        }
+      )
+    );
+    expect(await screen.findByText("Add skills to Slack")).toBeInTheDocument();
+  });
+
   it("guards unsaved provider edits before skill creation", () => {
     const { onClose } = renderExistingProvider();
     fireEvent.change(screen.getByPlaceholderText("Token"), {

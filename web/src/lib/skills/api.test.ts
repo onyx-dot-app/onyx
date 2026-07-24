@@ -29,9 +29,12 @@ describe("skills API", () => {
     expect(
       (fetchMock.mock.calls[0]![1]!.body as FormData).get("auto_enable")
     ).toBe("false");
+    expect(
+      (fetchMock.mock.calls[0]![1]!.body as FormData).get("external_app_id")
+    ).toBeNull();
   });
 
-  it("sends app context only for app-launched skill creation", async () => {
+  it("sends app context for app-launched skill creation", async () => {
     await createCustomSkillFromEditor({
       name: "acme-lookup",
       description: "Looks up Acme records",
