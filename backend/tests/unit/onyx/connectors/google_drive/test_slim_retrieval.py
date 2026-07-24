@@ -105,6 +105,47 @@ class TestBuildSlimDocumentPermissions:
         assert access_kwargs["admin_drive_service"] is admin_service
         assert access_kwargs["fallback_user_email"] == _RETRIEVER_EMAIL
 
+    def test_skips_retriever_fallback_when_retriever_owns_file(self) -> None:
+        creds = MagicMock()
+        owner_service = MagicMock()
+        admin_service = MagicMock()
+        file = {
+            "id": "file-id",
+            "mimeType": "text/plain",
+            "webViewLink": "https://drive.google.com/file/d/file-id/view",
+            "owners": [{"emailAddress": _RETRIEVER_EMAIL}],
+        }
+        permission_sync_context = PermissionSyncContext(
+            primary_admin_email=_ADMIN_EMAIL,
+            google_domain="example.com",
+        )
+
+        with (
+            patch(
+                f"{_DOC_CONVERSION_MODULE}.get_drive_service",
+                side_effect=[owner_service, admin_service],
+            ) as mock_get_drive_service,
+            patch(
+                f"{_DOC_CONVERSION_MODULE}._get_external_access_for_raw_gdrive_file",
+                return_value=ExternalAccess.empty(),
+            ) as mock_get_external_access,
+        ):
+            build_slim_document(
+                creds,
+                file,
+                permission_sync_context,
+                _RETRIEVER_EMAIL,
+            )
+            fallback_drive_service_factory = mock_get_external_access.call_args.kwargs[
+                "fallback_drive_service_factory"
+            ]
+            assert fallback_drive_service_factory() is None
+
+        assert mock_get_drive_service.call_args_list == [
+            call(creds, user_email=_RETRIEVER_EMAIL),
+            call(creds, user_email=_ADMIN_EMAIL),
+        ]
+
 
 class TestGoogleDriveSlimConnectorInterface:
     def test_implements_slim_connector(self) -> None:

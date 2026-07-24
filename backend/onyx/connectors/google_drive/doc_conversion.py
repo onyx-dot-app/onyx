@@ -592,7 +592,9 @@ def _get_external_access_for_raw_gdrive_file(
     admin_drive_service: GoogleDriveService,
     fallback_user_email: str,
     add_prefix: bool = False,
-    fallback_drive_service_factory: Callable[[], GoogleDriveService] | None = None,
+    fallback_drive_service_factory: (
+        Callable[[], GoogleDriveService | None] | None
+    ) = None,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
@@ -612,7 +614,7 @@ def _get_external_access_for_raw_gdrive_file(
                 GoogleDriveService,
                 str,
                 bool,
-                Callable[[], GoogleDriveService] | None,
+                Callable[[], GoogleDriveService | None] | None,
             ],
             ExternalAccess,
         ],
@@ -975,9 +977,13 @@ def build_slim_document(
                 user_email=permission_sync_context.primary_admin_email,
             ),
             fallback_user_email=retriever_email,
-            fallback_drive_service_factory=lambda: get_drive_service(
-                creds,
-                user_email=retriever_email,
+            fallback_drive_service_factory=lambda: (
+                None
+                if retriever_email == owner_email
+                else get_drive_service(
+                    creds,
+                    user_email=retriever_email,
+                )
             ),
         )
         if permission_sync_context

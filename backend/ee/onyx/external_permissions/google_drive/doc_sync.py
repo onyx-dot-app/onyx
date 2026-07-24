@@ -104,7 +104,9 @@ def get_external_access_for_raw_gdrive_file(
     admin_drive_service: GoogleDriveService,
     fallback_user_email: str,
     add_prefix: bool = False,
-    fallback_drive_service_factory: Callable[[], GoogleDriveService] | None = None,
+    fallback_drive_service_factory: (
+        Callable[[], GoogleDriveService | None] | None
+    ) = None,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
@@ -152,12 +154,14 @@ def get_external_access_for_raw_gdrive_file(
             len(permissions_list) != len(permission_ids)
             and fallback_drive_service_factory
         ):
-            permissions_list = _merge_permissions_lists(
-                [
-                    permissions_list,
-                    _get_permissions(fallback_drive_service_factory()),
-                ]
-            )
+            fallback_drive_service = fallback_drive_service_factory()
+            if fallback_drive_service:
+                permissions_list = _merge_permissions_lists(
+                    [
+                        permissions_list,
+                        _get_permissions(fallback_drive_service),
+                    ]
+                )
 
         if len(permissions_list) != len(permission_ids):
             permissions_list = _merge_permissions_lists(
