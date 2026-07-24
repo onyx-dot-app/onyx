@@ -22,9 +22,15 @@ def _build_gdoc_section_link(doc_id: str, tab_id: str, heading_id: str | None) -
     return f"https://docs.google.com/document/d/{doc_id}/edit?tab={tab_id}{heading_str}"
 
 
-def _extract_id_from_heading(paragraph: dict[str, Any]) -> str:
-    """Extracts the id from a heading paragraph element"""
-    return paragraph["paragraphStyle"]["headingId"]
+def _extract_id_from_heading(paragraph: dict[str, Any]) -> str | None:
+    """Extracts the id from a heading paragraph element, if present.
+
+    Google Docs does not always populate ``headingId`` for a heading paragraph
+    (and, defensively, ``paragraphStyle`` may be absent entirely), so fall back
+    to ``None`` instead of raising a ``KeyError`` that would abort indexing of
+    the whole document. A missing id simply yields a section link without a
+    ``#heading=`` anchor (see ``_build_gdoc_section_link``)."""
+    return paragraph.get("paragraphStyle", {}).get("headingId")
 
 
 def _extract_text_from_paragraph(paragraph: dict[str, Any]) -> str:
