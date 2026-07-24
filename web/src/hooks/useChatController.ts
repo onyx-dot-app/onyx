@@ -204,6 +204,10 @@ export default function useChatController({
   const currentChatState = useCurrentChatState();
 
   const navigatingAway = useRef(false);
+  // Session whose pre-send override writes failed. The manager binds the
+  // session row on the render after adoption, so without this marker a
+  // retry would skip the writes and send with the override unpersisted.
+  const overrideWritesFailedForSession = useRef<string | null>(null);
 
   // Sync store state changes
   useEffect(() => {
@@ -880,7 +884,10 @@ export default function useChatController({
         // Overrides picked before the session row existed are not yet
         // persisted. Await the writes so the backend's session-row read
         // during the send sees them. A failed write surfaces as a chat error.
-        if (!llmManager.hasBoundSession) {
+        if (
+          !llmManager.hasBoundSession ||
+          overrideWritesFailedForSession.current === currChatSessionId
+        ) {
           const overrideWrites: Promise<Response>[] = [];
           if (llmManager.reasoningEffort) {
             overrideWrites.push(
@@ -899,6 +906,9 @@ export default function useChatController({
             );
           }
           if (overrideWrites.length > 0) {
+            // Marked failed until every write lands, covering both rejected
+            // promises and non-ok responses.
+            overrideWritesFailedForSession.current = currChatSessionId;
             const overrideResponses = await Promise.all(overrideWrites);
             const failedWrite = overrideResponses.find(
               (response) => !response.ok
@@ -908,6 +918,7 @@ export default function useChatController({
                 `Failed to persist chat session overrides: ${failedWrite.status}`
               );
             }
+            overrideWritesFailedForSession.current = null;
           }
         }
 
