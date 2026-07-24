@@ -75,7 +75,7 @@ class ChatSessionManager:
     def create(
         user_performing_action: DATestUser,
         persona_id: int = 0,
-        description: str = "Test chat session",
+        description: str | None = "Test chat session",
         project_id: int | None = None,
     ) -> DATestChatSession:
         chat_session_creation_req = ChatSessionCreationRequest(
@@ -347,6 +347,27 @@ class ChatSessionManager:
             ],
             error=error,
         )
+
+    @staticmethod
+    def get_user_chat_sessions(
+        user_performing_action: DATestUser,
+        page_size: int | None = None,
+        before: str | None = None,
+    ) -> dict:
+        """Raw response of GET /chat/get-user-chat-sessions:
+        {"sessions": [...], "has_more": bool}."""
+        params: dict[str, str | int] = {}
+        if page_size is not None:
+            params["page_size"] = page_size
+        if before is not None:
+            params["before"] = before
+        response = client.get(
+            f"{API_SERVER_URL}/chat/get-user-chat-sessions",
+            params=params,
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return response.json()
 
     @staticmethod
     def get_chat_history(

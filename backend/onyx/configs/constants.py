@@ -214,6 +214,14 @@ CHAT_TTL_DELETE_BATCH_SIZE = 100
 # growth; if a task expires the beat starts a fresh chain on its next run.
 CELERY_CHAT_TTL_DELETE_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 
+# Failed-chat (husk) GC tuning. Each sweep task scans one primary-key-ordered
+# batch of chat_session rows for sessions older than
+# FAILED_CHAT_CLEANUP_AFTER_DAYS that have never contained a non-SYSTEM
+# message, hard-deletes them, and chains the next batch on the light queue.
+FAILED_CHAT_CLEANUP_BATCH_SIZE = 500
+# See CELERY_CHAT_TTL_DELETE_TASK_EXPIRES; same role for the failed-chat chain.
+CELERY_FAILED_CHAT_CLEANUP_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
+
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
 
 TMP_DRALPHA_PERSONA_NAME = "KG Beta"
@@ -442,8 +450,9 @@ class OnyxCeleryQueues:
     CONNECTOR_HIERARCHY_FETCHING = "connector_hierarchy_fetching"
     CSV_GENERATION = "csv_generation"
 
-    # Chat retention (TTL) hard-deletion queue, consumed by the light worker.
-    # Kept off the primary "celery" queue so cleanup never starves check_for_indexing.
+    # Chat hard-deletion queue (retention TTL + failed-chat GC), consumed by the
+    # light worker. Kept off the primary "celery" queue so cleanup never starves
+    # check_for_indexing.
     CHAT_TTL_DELETION = "chat_ttl_deletion"
 
     # User file processing queue
@@ -498,6 +507,8 @@ class OnyxRedisLocks:
     # In-flight marker: set while a chat-TTL cleanup chain is active (spanning
     # its chained tasks) so the beat won't start a second chain per tenant.
     CHAT_TTL_CHAIN_ACTIVE = "da_lock:chat_ttl_chain_active"
+    # Same, for the failed-chat (husk) GC sweep chain.
+    FAILED_CHAT_CLEANUP_CHAIN_ACTIVE = "da_lock:failed_chat_cleanup_chain_active"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 
@@ -653,6 +664,10 @@ class OnyxCeleryTask:
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     PERFORM_TTL_MANAGEMENT_TASK = "perform_ttl_management_task"
+
+    # failed-chat (husk) garbage collection
+    CHECK_FAILED_CHAT_CLEANUP_TASK = "check_failed_chat_cleanup_task"
+    PERFORM_FAILED_CHAT_CLEANUP_TASK = "perform_failed_chat_cleanup_task"
 
     GENERATE_USAGE_REPORT_TASK = "generate_usage_report_task"
 

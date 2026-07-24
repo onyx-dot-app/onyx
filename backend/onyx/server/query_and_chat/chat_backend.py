@@ -171,10 +171,14 @@ def get_user_chat_sessions(
     db_session: Session = Depends(get_session),
     project_id: int | None = None,
     only_non_project_chats: bool = True,
+    # Deprecated no-op, accepted for public-API compatibility: "failed"
+    # sessions (only SYSTEM messages) are no longer filtered at read time —
+    # they are prevented at the source and garbage-collected in the background.
     include_failed_chats: bool = False,
     page_size: int = Query(default=50, ge=1, le=100),
     before: str | None = Query(default=None),
 ) -> ChatSessionsResponse:
+    _ = include_failed_chats
     user_id = user.id
 
     try:
@@ -192,7 +196,6 @@ def get_user_chat_sessions(
             db_session=db_session,
             project_id=project_id,
             only_non_project_chats=only_non_project_chats,
-            include_failed_chats=include_failed_chats,
             limit=page_size + 1,
             before=before_dt,
         )

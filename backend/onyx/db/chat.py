@@ -103,8 +103,13 @@ def get_chat_sessions_by_user(
     before: datetime | None = None,
     project_id: int | None = None,
     only_non_project_chats: bool = False,
-    include_failed_chats: bool = False,
 ) -> list[ChatSession]:
+    """Single indexed SELECT backed by
+    ix_chat_session_user_id_onyxbot_flow_time_updated. "Failed" sessions (only
+    SYSTEM messages) are no longer filtered out here: husk creation is
+    prevented at the source by the send-message failure path and stragglers
+    are reclaimed by the failed-chat cleanup task, so what exists is what is
+    returned. A limit of 0 means no limit."""
     stmt = (
         select(ChatSession)
         .where(ChatSession.user_id == user_id)
@@ -123,42 +128,10 @@ def get_chat_sessions_by_user(
     elif only_non_project_chats:
         stmt = stmt.where(ChatSession.project_id.is_(None))
 
-    # When filtering out failed chats, we apply the limit in Python after
-    # filtering rather than in SQL, since the post-filter may remove rows.
-    if limit and include_failed_chats:
+    if limit:
         stmt = stmt.limit(limit)
 
-    result = db_session.execute(stmt)
-    chat_sessions = list(result.scalars().all())
-
-    if not include_failed_chats and chat_sessions:
-        # Filter out "failed" sessions (those with only SYSTEM messages)
-        # using a separate efficient query instead of a correlated EXISTS
-        # subquery, which causes full sequential scans of chat_message.
-        leeway = datetime.now(timezone.utc) - timedelta(minutes=5)
-        session_ids = [cs.id for cs in chat_sessions if cs.time_created < leeway]
-
-        if session_ids:
-            valid_session_ids_stmt = (
-                select(ChatMessage.chat_session_id)
-                .where(ChatMessage.chat_session_id.in_(session_ids))
-                .where(ChatMessage.message_type != MessageType.SYSTEM)
-                .distinct()
-            )
-            valid_session_ids = set(
-                db_session.execute(valid_session_ids_stmt).scalars().all()
-            )
-
-            chat_sessions = [
-                cs
-                for cs in chat_sessions
-                if cs.time_created >= leeway or cs.id in valid_session_ids
-            ]
-
-        if limit:
-            chat_sessions = chat_sessions[:limit]
-
-    return chat_sessions
+    return list(db_session.scalars(stmt).all())
 
 
 def delete_orphaned_search_docs(db_session: Session) -> None:
@@ -400,6 +373,115 @@ def get_chat_sessions_older_than(
     ]
 
     return returned_sessions
+
+
+def get_failed_chat_session_batch(
+    db_session: Session,
+    cutoff: datetime,
+    after_id: UUID | None,
+    batch_size: int,
+) -> tuple[list[tuple[UUID | None, UUID]], UUID | None]:
+    """Find "failed" chat sessions (husks) in one primary-key-ordered batch.
+
+    A failed session is one that has never contained a non-SYSTEM message —
+    the web client creates sessions lazily at first send and the SYSTEM root
+    message is written before the user message, so a SYSTEM-only session holds
+    no user-visible content. Only sessions whose time_created, time_updated
+    and every message time_sent all predate ``cutoff`` qualify; the message
+    recency guard keeps a sweep from racing a first send into an old
+    pre-created session (the root SYSTEM message lands moments before the user
+    message commits).
+
+    The scan is keyset-paginated over ChatSession.id so a sweep can walk the
+    whole table in bounded batches: pass ``after_id=None`` for the first batch
+    and the returned cursor for each subsequent one. The message check is a
+    single IN-list aggregate per batch rather than a correlated subquery,
+    which would seq-scan chat_message on deployments without the
+    chat_message(chat_session_id) index (see #9802).
+
+    Returns ``(failed_sessions, next_after_id)`` where failed_sessions are
+    (user_id, chat_session_id) tuples and next_after_id is None once the table
+    is exhausted.
+    """
+    stmt = (
+        select(ChatSession.id, ChatSession.user_id)
+        .where(ChatSession.time_created < cutoff)
+        .where(ChatSession.time_updated < cutoff)
+        .order_by(ChatSession.id)
+        .limit(batch_size)
+    )
+    if after_id is not None:
+        stmt = stmt.where(ChatSession.id > after_id)
+
+    candidates = db_session.execute(stmt).all()
+    if not candidates:
+        return [], None
+    next_after_id = candidates[-1][0] if len(candidates) == batch_size else None
+
+    message_stats: dict[UUID, tuple[bool, datetime]] = {
+        session_id: (has_non_system, last_time_sent)
+        for session_id, has_non_system, last_time_sent in db_session.execute(
+            select(
+                ChatMessage.chat_session_id,
+                func.bool_or(ChatMessage.message_type != MessageType.SYSTEM),
+                func.max(ChatMessage.time_sent),
+            )
+            .where(
+                ChatMessage.chat_session_id.in_(
+                    [session_id for session_id, _ in candidates]
+                )
+            )
+            .group_by(ChatMessage.chat_session_id)
+        ).all()
+    }
+
+    failed_sessions: list[tuple[UUID | None, UUID]] = []
+    for session_id, user_id in candidates:
+        stats = message_stats.get(session_id)
+        if stats is None:
+            failed_sessions.append((user_id, session_id))
+            continue
+        has_non_system, last_time_sent = stats
+        if not has_non_system and last_time_sent < cutoff:
+            failed_sessions.append((user_id, session_id))
+
+    return failed_sessions, next_after_id
+
+
+def delete_chat_session_if_never_used(
+    chat_session_id: UUID,
+    db_session: Session,
+) -> bool:
+    """Hard-delete a chat session iff it has never contained a non-SYSTEM
+    message, i.e. holds no user-visible content.
+
+    Used best-effort by the send-message failure path: a failure before the
+    user message was committed would otherwise leave an unnamed husk session
+    in the sidebar. Returns True if the session was deleted.
+    """
+    session_exists = db_session.execute(
+        select(ChatSession.id).where(ChatSession.id == chat_session_id)
+    ).scalar_one_or_none()
+    if session_exists is None:
+        return False
+
+    has_user_visible_message = db_session.execute(
+        select(ChatMessage.id)
+        .where(ChatMessage.chat_session_id == chat_session_id)
+        .where(ChatMessage.message_type != MessageType.SYSTEM)
+        .limit(1)
+    ).scalar_one_or_none()
+    if has_user_visible_message is not None:
+        return False
+
+    delete_chat_session(
+        user_id=None,
+        chat_session_id=chat_session_id,
+        db_session=db_session,
+        include_deleted=True,
+        hard_delete=True,
+    )
+    return True
 
 
 def get_chat_message(
