@@ -42,7 +42,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
+from onyx.configs.chat_configs import (
+    DISABLE_SEARCH_QUERY_EXPANSION,
+    MAX_CHUNKS_FED_TO_CHAT,
+)
 from onyx.configs.constants import DocumentSource, FederatedConnectorSource
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
@@ -615,7 +618,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         decision is computed once per turn and cached. Both auto decisions are
         gated by ``auto_detect_filters``.
         """
-        expand_queries = not skip_query_expansion
+        expand_queries = not (skip_query_expansion or DISABLE_SEARCH_QUERY_EXPANSION)
         decide_scope = self.auto_detect_filters and not self._scope_decision_settled
         decide_time = self.auto_detect_filters and not self._time_filter_computed
 

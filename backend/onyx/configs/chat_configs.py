@@ -95,6 +95,12 @@ USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH = (
     == "true"
 )
 
+# Skip semantic and keyword query expansion in SearchTool. Source-scope and
+# time-filter decisions still run.
+DISABLE_SEARCH_QUERY_EXPANSION = (
+    os.environ.get("DISABLE_SEARCH_QUERY_EXPANSION", "false").lower() == "true"
+)
+
 # Chat History Compression
 # Trigger compression when history exceeds this ratio of available context window
 COMPRESSION_TRIGGER_RATIO = float(os.environ.get("COMPRESSION_TRIGGER_RATIO", "0.75"))

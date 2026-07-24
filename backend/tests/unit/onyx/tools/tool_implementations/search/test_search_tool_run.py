@@ -250,6 +250,25 @@ def test_cached_expansion_is_reused_on_a_new_filter_not_a_repeat() -> None:
     )
 
 
+def test_deployment_flag_skips_first_call_query_expansion() -> None:
+    tool = _make_tool()
+
+    with patch(f"{MODULE}.DISABLE_SEARCH_QUERY_EXPANSION", True):
+        mock_search_pipeline = _run(
+            tool,
+            decision=[DocumentSource.CONFLUENCE],
+            connected_sources=[DocumentSource.CONFLUENCE, DocumentSource.GITHUB],
+        )
+
+    queries = _queries_sent(mock_search_pipeline)
+    assert "ticket" in queries
+    assert "rephrased query" not in queries
+    assert all(
+        applied is not None and applied.source_type == [DocumentSource.CONFLUENCE]
+        for applied in _filters_passed_to_search(mock_search_pipeline)
+    )
+
+
 def test_no_scope_decision_is_not_repeated_within_a_turn() -> None:
     """Once a cycle's scope decision comes back unscoped, the conversation has no
     source directive (which can't change this turn), so later cycles skip the

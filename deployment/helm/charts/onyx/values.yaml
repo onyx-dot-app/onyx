@@ -1575,6 +1575,7 @@ configMap:
   DEFAULT_LLM_INPUT_COST_PER_MTOK: ""
   DEFAULT_LLM_OUTPUT_COST_PER_MTOK: ""
   # Query Options
+  DISABLE_SEARCH_QUERY_EXPANSION: ""
   DOC_TIME_DECAY: ""
   HYBRID_ALPHA: ""
   # Don't change the NLP models unless you know what you're doing
