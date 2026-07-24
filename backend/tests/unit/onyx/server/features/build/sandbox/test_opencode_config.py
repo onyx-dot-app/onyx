@@ -14,7 +14,6 @@ from onyx.server.features.build.sandbox.util.mcp_config import craft_mcp_fingerp
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_base_config,
     build_provider_opencode_config,
-    build_session_opencode_config,
 )
 
 
@@ -71,7 +70,9 @@ def test_default_must_exist_in_gateway_catalog() -> None:
 
 
 def test_session_config_is_json_for_gateway() -> None:
-    rendered = build_session_opencode_config(_gateway(), ["question"])
+    rendered = json.dumps(
+        build_provider_opencode_config(_gateway(), disabled_tools=["question"])
+    )
     assert json.loads(rendered)["permission"]["question"] == "deny"
 
 

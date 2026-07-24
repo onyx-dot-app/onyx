@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import cast
 from unittest.mock import MagicMock, patch
 
@@ -11,7 +12,7 @@ from onyx.server.features.build.sandbox.models import (
     LLMProviderConfig,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_session_opencode_config,
+    build_provider_opencode_config,
 )
 from onyx.server.features.build.session import llm_config
 from onyx.server.features.build.session import manager as manager_module
@@ -214,8 +215,10 @@ def _fresh_session() -> BuildSession:
 def test_empty_gateway_session_skips_unchanged_catalog() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
-    expected = build_session_opencode_config(
-        config, manager_module.OPENCODE_DISABLED_TOOLS
+    expected = json.dumps(
+        build_provider_opencode_config(
+            config, disabled_tools=manager_module.OPENCODE_DISABLED_TOOLS
+        )
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -239,8 +242,10 @@ def test_unchanged_catalog_retries_pending_dispose() -> None:
     marker must force a dispose retry on the next reconcile."""
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
-    expected = build_session_opencode_config(
-        config, manager_module.OPENCODE_DISABLED_TOOLS
+    expected = json.dumps(
+        build_provider_opencode_config(
+            config, disabled_tools=manager_module.OPENCODE_DISABLED_TOOLS
+        )
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()

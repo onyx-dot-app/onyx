@@ -7,6 +7,7 @@ It orchestrates session CRUD, message handling, artifact management, and file sy
 import contextlib
 import hashlib
 import io
+import json
 import mimetypes
 import threading
 import uuid
@@ -72,7 +73,7 @@ from onyx.server.features.build.sandbox.util.mcp_config import (
     resolve_craft_mcp_servers,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_session_opencode_config,
+    build_provider_opencode_config,
 )
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import (
@@ -271,8 +272,13 @@ class SessionManager:
         selection = parse_agent_selection(session.agent_provider, session.agent_model)
         llm_config = self.build_llm_configs(user, selection)
         mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
-        expected = build_session_opencode_config(
-            llm_config, OPENCODE_DISABLED_TOOLS, mcp_servers, str(session.id)
+        expected = json.dumps(
+            build_provider_opencode_config(
+                llm_config,
+                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                mcp_servers=mcp_servers,
+                session_id=str(session.id),
+            )
         )
 
         try:

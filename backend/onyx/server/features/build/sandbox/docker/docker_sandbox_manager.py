@@ -139,7 +139,7 @@ from onyx.server.features.build.sandbox.util.api_url_check import (
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_base_config,
-    build_session_opencode_config,
+    build_provider_opencode_config,
 )
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -1066,8 +1066,13 @@ class DockerSandboxManager(SandboxManager):
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
-        session_opencode_config = build_session_opencode_config(
-            llm_config, OPENCODE_DISABLED_TOOLS, mcp_servers, str(session_id)
+        session_opencode_config = json.dumps(
+            build_provider_opencode_config(
+                llm_config,
+                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                mcp_servers=mcp_servers,
+                session_id=str(session_id),
+            )
         )
         session_opencode_config_setup = (
             f"printf '%s' {shlex.quote(session_opencode_config)} > "
@@ -1519,8 +1524,13 @@ fi
             user_name=user_name,
         )
         session_opencode_config = (
-            build_session_opencode_config(
-                llm_config, OPENCODE_DISABLED_TOOLS, mcp_servers, str(session_id)
+            json.dumps(
+                build_provider_opencode_config(
+                    llm_config,
+                    disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    mcp_servers=mcp_servers,
+                    session_id=str(session_id),
+                )
             )
             if llm_config is not None
             else None

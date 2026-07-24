@@ -9,7 +9,6 @@ instance is disposed — so a model change or an MCP-set change hot-reloads
 without a pod re-provision.
 """
 
-import json
 import re
 from collections.abc import Sequence
 from typing import Any
@@ -284,19 +283,3 @@ def build_provider_opencode_config(
         assert session_id is not None  # guarded above
         config["mcp"] = _build_session_mcp_block(mcp_servers, session_id)
     return config
-
-
-def build_session_opencode_config(
-    llm_provider_config: LLMProviderConfig,
-    disabled_tools: list[str],
-    mcp_servers: Sequence[CraftMCPServerConfig] = (),
-    session_id: str | None = None,
-) -> str:
-    return json.dumps(
-        build_provider_opencode_config(
-            llm_provider_config,
-            disabled_tools=disabled_tools,
-            mcp_servers=mcp_servers,
-            session_id=session_id,
-        )
-    )
