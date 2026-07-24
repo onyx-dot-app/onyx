@@ -1,5 +1,6 @@
 """Tests for proxy endpoints for self-hosted data planes."""
 
+import inspect
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,6 +16,7 @@ from ee.onyx.server.tenants.proxy import (
     get_license_payload,
     get_license_payload_allow_expired,
     get_optional_license_payload,
+    proxy_license_fetch,
     verify_license_auth,
 )
 
@@ -606,3 +608,45 @@ class TestProxyCheckoutSessionWithSeats:
             body = call_kwargs["json"]
             assert body["seats"] == 10
             assert "tenant_id" not in body
+
+
+class TestProxyLicenseFetch:
+    """Tests for proxy_license_fetch."""
+
+    def test_route_authenticates_with_expired_licenses_allowed(self) -> None:
+        # Direct handler calls bypass Depends, so guard the wiring itself:
+        # renewal delivery breaks if this route ever reverts to strict expiry.
+        dep = (
+            inspect.signature(proxy_license_fetch).parameters["license_payload"].default
+        )
+        assert dep.dependency is get_license_payload_allow_expired
+
+    @pytest.mark.asyncio
+    async def test_rejects_mismatched_tenant_id(self) -> None:
+        payload = make_license_payload(tenant_id="tenant_a")
+
+        with pytest.raises(HTTPException) as exc_info:
+            await proxy_license_fetch(
+                tenant_id="tenant_b",
+                license_payload=payload,
+            )
+
+        assert exc_info.value.status_code == 403
+        assert "different tenant" in str(exc_info.value.detail).lower()
+
+    @pytest.mark.asyncio
+    async def test_accepts_expired_license_for_same_tenant(self) -> None:
+        payload = make_license_payload(tenant_id="tenant_123", expired=True)
+
+        with patch(
+            "ee.onyx.server.tenants.proxy.forward_to_control_plane",
+            new=AsyncMock(return_value={"license": "signed-license"}),
+        ) as mock_forward:
+            result = await proxy_license_fetch(
+                tenant_id="tenant_123",
+                license_payload=payload,
+            )
+
+        assert result.license == "signed-license"
+        assert result.tenant_id == "tenant_123"
+        mock_forward.assert_awaited_once_with("GET", "/license/tenant_123")

@@ -665,8 +665,9 @@ class OnyxCeleryTask:
     # Hook execution log retention
     HOOK_EXECUTION_LOG_CLEANUP_TASK = "hook_execution_log_cleanup_task"
 
-    # License expiry tiered warnings
+    # License expiry monitoring and renewal
     CHECK_LICENSE_EXPIRY_NOTIFICATIONS = "check_license_expiry_notifications"
+    RECLAIM_LICENSE = "reclaim_license"
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"

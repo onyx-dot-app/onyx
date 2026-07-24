@@ -15,7 +15,7 @@ Auth levels by endpoint:
 - /claim-license: Session ID based (one-time after Stripe payment)
 - /create-customer-portal-session: Expired license OK (need portal to fix payment)
 - /billing-information: Valid license required
-- /license/{tenant_id}: Valid license required
+- /license/{tenant_id}: Valid signature required, expired OK (renewal), path tenant_id must match license tenant_id
 - /seats/update: Valid license required
 """
 
@@ -430,11 +430,11 @@ class LicenseFetchResponse(BaseModel):
 @router.get("/license/{tenant_id}")
 async def proxy_license_fetch(
     tenant_id: str,
-    license_payload: LicensePayload = Depends(get_license_payload),
+    license_payload: LicensePayload = Depends(get_license_payload_allow_expired),
 ) -> LicenseFetchResponse:
     """Proxy license fetch to control plane.
 
-    Auth: Valid license required.
+    Auth: Valid signature required, expired OK for renewal delivery.
     The tenant_id in path must match the authenticated tenant.
     """
     # tenant_id is a required field in LicensePayload (Pydantic validates this),

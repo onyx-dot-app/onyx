@@ -1,4 +1,4 @@
-"""RSA-4096 license signature verification utilities."""
+"""License signature verification, persistence, and control-plane re-claim."""
 
 import base64
 import json
@@ -6,12 +6,16 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+from pydantic import BaseModel, ValidationError
+from sqlalchemy.orm import Session
 
-from ee.onyx.server.license.models import LicenseData, LicensePayload
+from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
+from ee.onyx.server.license.models import LicenseData, LicensePayload, LicenseSource
 from onyx.server.settings.models import ApplicationStatus
 from onyx.utils.logger import setup_logger
 
@@ -21,6 +25,10 @@ logger = setup_logger()
 _LICENSE_PUBLIC_KEY_PATH = (
     Path(__file__).parent.parent.parent.parent / "keys" / "license_public_key.pem"
 )
+
+
+class ControlPlaneLicenseResponse(BaseModel):
+    license: str
 
 
 def _get_public_key() -> RSAPublicKey:
@@ -98,6 +106,71 @@ def verify_license_signature(license_data: str) -> LicensePayload:
     except Exception:
         logger.exception("[verify_license] FAILED: Unexpected error")
         raise ValueError("License verification failed: unexpected error")
+
+
+def verify_and_store_license(
+    db_session: Session,
+    license_data: str,
+    *,
+    source: LicenseSource,
+) -> LicensePayload:
+    """Persist a license blob only after its signature verifies.
+
+    Raises ValueError on an unverifiable blob, leaving the stored license untouched.
+    """
+    # Keep the utils -> db dependency call-time only so db/license.py can
+    # import this module at top level.
+    from ee.onyx.db.license import update_license_cache, upsert_license
+
+    payload = verify_license_signature(license_data)
+    upsert_license(db_session, license_data)
+
+    # The cache is derived state that self-heals on the next read, so a cache
+    # outage must not discard a license that is already persisted.
+    try:
+        update_license_cache(payload, source=source)
+    except Exception as cache_error:
+        logger.warning("Failed to update license cache: %s", cache_error)
+
+    return payload
+
+
+def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | None:
+    """Re-fetch this instance's license from the control plane, authenticating with the stored one.
+
+    Returns None when no usable stored license exists to authenticate with.
+    Raises ValueError when the control plane response has no valid license.
+    """
+    # Keep the utils -> db dependency call-time only so db/license.py can
+    # import this module at top level.
+    from ee.onyx.db.license import get_license, get_license_metadata
+
+    metadata = get_license_metadata(db_session)
+    if not metadata or not metadata.tenant_id:
+        return None
+
+    license_row = get_license(db_session)
+    if not license_row or not license_row.license_data:
+        return None
+
+    response = requests.get(
+        f"{CLOUD_DATA_PLANE_URL}/proxy/license/{metadata.tenant_id}",
+        headers={
+            "Authorization": f"Bearer {license_row.license_data}",
+            "Content-Type": "application/json",
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+
+    try:
+        response_data = ControlPlaneLicenseResponse.model_validate(response.json())
+    except ValidationError as e:
+        raise ValueError("No license in response") from e
+
+    return verify_and_store_license(
+        db_session, response_data.license, source=LicenseSource.AUTO_FETCH
+    )
 
 
 def get_license_status(

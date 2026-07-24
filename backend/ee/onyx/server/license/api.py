@@ -12,17 +12,15 @@ Cloud licensing is managed via the control plane and gated_tenants Redis key.
 
 import requests
 from fastapi import APIRouter, Depends, File, UploadFile
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.db.license import delete_license as db_delete_license
 from ee.onyx.db.license import (
-    get_license,
     get_license_metadata,
     invalidate_license_cache,
     refresh_license_cache,
-    update_license_cache,
-    upsert_license,
 )
 from ee.onyx.server.license.models import (
     LicenseResponse,
@@ -31,7 +29,11 @@ from ee.onyx.server.license.models import (
     LicenseUploadResponse,
     SeatUsageResponse,
 )
-from ee.onyx.utils.license import verify_license_signature
+from ee.onyx.utils.license import (
+    ControlPlaneLicenseResponse,
+    reclaim_license_from_control_plane,
+    verify_and_store_license,
+)
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.db.engine.sql_engine import get_session
@@ -113,22 +115,11 @@ async def claim_license(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LicenseResponse:
-    """
-    Claim a license from the control plane (self-hosted only).
+    """Claim a license from the control plane (self-hosted only).
 
-    Two modes:
-    1. With session_id: After Stripe checkout, exchange session_id for license
-    2. Without session_id: Re-claim using existing license for auth
-
-    Use without session_id after:
-    - Updating seats via the billing API
-    - Returning from the Stripe customer portal
-    - Any operation that regenerates the license on control plane
-    Claim a license from the control plane (self-hosted only).
-
-    Two modes:
-    1. With session_id: After Stripe checkout, exchange session_id for license
-    2. Without session_id: Re-claim using existing license for auth
+    With a session_id, exchanges a completed Stripe checkout for a license. Without one,
+    re-claims using the stored license for auth, which picks up a license the control
+    plane regenerated after a seat change, portal visit, or renewal.
     """
     if MULTI_TENANT:
         raise OnyxError(
@@ -138,58 +129,31 @@ async def claim_license(
 
     try:
         if session_id:
-            # Claim license after checkout using session_id
-            url = f"{CLOUD_DATA_PLANE_URL}/proxy/claim-license"
             response = requests.post(
-                url,
+                f"{CLOUD_DATA_PLANE_URL}/proxy/claim-license",
                 json={"session_id": session_id},
                 headers={"Content-Type": "application/json"},
                 timeout=30,
             )
+            response.raise_for_status()
+
+            try:
+                license_data = ControlPlaneLicenseResponse.model_validate(
+                    response.json()
+                ).license
+            except ValidationError:
+                raise OnyxError(OnyxErrorCode.NOT_FOUND, "No license in response")
+
+            payload = verify_and_store_license(
+                db_session, license_data, source=LicenseSource.AUTO_FETCH
+            )
         else:
-            # Re-claim using existing license for auth
-            metadata = get_license_metadata(db_session)
-            if not metadata or not metadata.tenant_id:
+            payload = reclaim_license_from_control_plane(db_session)
+            if payload is None:
                 raise OnyxError(
                     OnyxErrorCode.VALIDATION_ERROR,
                     "No license found. Provide session_id after checkout.",
                 )
-
-            license_row = get_license(db_session)
-            if not license_row or not license_row.license_data:
-                raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    "No license found in database",
-                )
-
-            url = f"{CLOUD_DATA_PLANE_URL}/proxy/license/{metadata.tenant_id}"
-            response = requests.get(
-                url,
-                headers={
-                    "Authorization": f"Bearer {license_row.license_data}",
-                    "Content-Type": "application/json",
-                },
-                timeout=30,
-            )
-
-        response.raise_for_status()
-
-        data = response.json()
-        license_data = data.get("license")
-
-        if not license_data:
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, "No license in response")
-
-        # Verify signature before persisting
-        payload = verify_license_signature(license_data)
-
-        # Store in DB
-        upsert_license(db_session, license_data)
-
-        try:
-            update_license_cache(payload, source=LicenseSource.AUTO_FETCH)
-        except Exception as cache_error:
-            logger.warning("Failed to update license cache: %s", cache_error)
 
         logger.info(
             "License claimed: seats=%s, expires=%s",
@@ -245,20 +209,14 @@ async def upload_license(
     except UnicodeDecodeError:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid license file format")
 
-    # Verify cryptographic signature - this is the only validation needed
-    # The license's tenant_id identifies the customer in control plane, not locally
+    # The signature is the only validation needed. The license's tenant_id identifies
+    # the customer in the control plane, not locally.
     try:
-        payload = verify_license_signature(license_data)
+        payload = verify_and_store_license(
+            db_session, license_data, source=LicenseSource.MANUAL_UPLOAD
+        )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
-
-    # Persist to DB and update cache
-    upsert_license(db_session, license_data)
-
-    try:
-        update_license_cache(payload, source=LicenseSource.MANUAL_UPLOAD)
-    except Exception as cache_error:
-        logger.warning("Failed to update license cache: %s", cache_error)
 
     return LicenseUploadResponse(
         success=True,
