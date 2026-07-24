@@ -1,6 +1,6 @@
 "use client";
 
-import {
+import React, {
   memo,
   useState,
   useMemo,
@@ -412,11 +412,11 @@ const SourceTagInner = ({
   }, [isOpen, isMore, toggleSource, showDetailsCard, isQuery]);
 
   const handlePrev = useCallback(() => {
-    setCurrentIndex((prev) => Math.max(0, prev - 1));
+    setCurrentIndex((prev: number) => Math.max(0, prev - 1));
   }, []);
 
   const handleNext = useCallback(() => {
-    setCurrentIndex((prev) => Math.min(sources.length - 1, prev + 1));
+    setCurrentIndex((prev: number) => Math.min(sources.length - 1, prev + 1));
   }, [sources.length]);
 
   // Reset to first source when tooltip closes
@@ -427,13 +427,21 @@ const SourceTagInner = ({
     }
   }, []);
 
-  const handleClick = useCallback(() => {
-    // Only expand if truncated
-    if (isQuery && !expanded && isTruncated) {
-      setExpanded(true);
-    }
-    onSourceClick?.();
-  }, [isQuery, expanded, isTruncated, onSourceClick]);
+  const handleClick = useCallback(
+    (e?: React.MouseEvent | React.PointerEvent) => {
+      if (e) {
+        e.preventDefault();
+        // Stop propagation so parent elements don't also trigger (e.g., if this is inside a larger clickable area)
+        e.stopPropagation();
+      }
+      // Only expand if truncated
+      if (isQuery && !expanded && isTruncated) {
+        setExpanded(true);
+      }
+      onSourceClick?.();
+    },
+    [isQuery, expanded, isTruncated, onSourceClick]
+  );
 
   const buttonContent = (
     <button
@@ -449,6 +457,19 @@ const SourceTagInner = ({
         className
       )}
       onClick={handleClick}
+      onPointerDown={(e: React.PointerEvent) => {
+        // Keep eager activation for mouse only; touch/pen should activate on click (release)
+      onPointerDown={(e: React.PointerEvent) => {
+        // Eagerly trigger click handler on pointer down. 
+        // This solves the issue where rapid re-rendering during streaming destroys the DOM node 
+        // between mousedown and mouseup, causing the native onClick to never fire.
+        // Skip for touch: letting touch go through the normal click path avoids blocking
+        // scroll gestures when the user swipes near a citation chip on mobile.
+        if (e.pointerType !== "mouse") return;
+        if (e.button !== 0) return; // Only react to left-clicks
+        handleClick(e);
+      }}
+      }}
     >
       {/* Stacked icons container - only for tag variant */}
       {!inlineCitation && !isMore && (

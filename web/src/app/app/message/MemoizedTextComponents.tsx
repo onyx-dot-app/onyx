@@ -199,8 +199,17 @@ export const MemoizedLink = memo(
       return (
         <a
           href="#"
-          onClick={(e) => {
+          onClick={(e: React.MouseEvent) => {
             e.preventDefault();
+            updatePresentingDocument({
+              document_id: fileId,
+              semantic_identifier: filename,
+            });
+          }}
+          onPointerDown={(e: React.PointerEvent) => {
+            if (e.pointerType === "mouse" && e.button !== 0) return;
+            e.preventDefault();
+            e.stopPropagation();
             updatePresentingDocument({
               document_id: fileId,
               semantic_identifier: filename,
@@ -217,7 +226,13 @@ export const MemoizedLink = memo(
       <a
         href={url}
         target="_blank"
-        rel="noopener noreferrer"
+        onClick={undefined}
+        onPointerDown={(e: React.PointerEvent) => {
+          if (e.pointerType === "mouse" && e.button !== 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+          window.open(url, "_blank", "noopener,noreferrer");
+        }}
         className="cursor-pointer text-link hover:text-link-hover"
       >
         {rest.children}
