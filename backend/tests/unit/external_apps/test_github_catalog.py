@@ -9,13 +9,14 @@ pure rule layer (including GraphQL body parsing) directly."""
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
 from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
-from onyx.external_apps.providers.github import GitHubAction
+from onyx.external_apps.providers.github import GitHubAction, GitHubProvider
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 
 _CATALOG = get_endpoint_catalog(ExternalAppType.GITHUB)
@@ -81,6 +82,12 @@ def _graphql(query: str) -> bytes:
         ),
         ("POST", "/repos/onyx/onyx/git/refs", {GitHubAction.REFS_WRITE}),
         ("POST", "/repos/onyx/onyx/pulls", {GitHubAction.PULLS_CREATE}),
+        # Git smart-HTTP over github.com (clone / fetch / push).
+        ("GET", "/onyx-dot-app/onyx.git/info/refs", {GitHubAction.GIT_HTTP_READ}),
+        ("POST", "/onyx-dot-app/onyx.git/git-upload-pack", {GitHubAction.GIT_HTTP_READ}),
+        ("POST", "/onyx-dot-app/onyx.git/git-receive-pack", {GitHubAction.GIT_HTTP_WRITE}),
+        # The `.git` suffix is optional.
+        ("GET", "/onyx-dot-app/onyx/info/refs", {GitHubAction.GIT_HTTP_READ}),
     ],
 )
 def test_rest_route_resolves_to_exactly_one_action(
@@ -170,6 +177,8 @@ def test_rest_request_does_not_trigger_graphql_match() -> None:
         (GitHubAction.CONTENTS_WRITE, EndpointPolicy.ASK),
         (GitHubAction.REFS_WRITE, EndpointPolicy.ASK),
         (GitHubAction.PULLS_CREATE, EndpointPolicy.ASK),
+        (GitHubAction.GIT_HTTP_READ, EndpointPolicy.ALWAYS),
+        (GitHubAction.GIT_HTTP_WRITE, EndpointPolicy.ASK),
     ],
 )
 def test_default_policies(
@@ -177,3 +186,20 @@ def test_default_policies(
 ) -> None:
     by_id = {endpoint.id: endpoint for endpoint in _CATALOG}
     assert by_id[action].default_policy == expected_policy
+
+
+@pytest.mark.parametrize(
+    "url, should_match",
+    [
+        ("https://github.com/onyx-dot-app/onyx.git/info/refs?service=git-receive-pack", True),
+        ("https://github.com/onyx-dot-app/onyx.git/git-receive-pack", True),
+        ("https://github.com/onyx-dot-app/onyx.git/git-upload-pack", True),
+        ("https://api.github.com/repos/onyx-dot-app/onyx", True),
+        # A plain github.com web page must NOT be claimed by the git patterns.
+        ("https://github.com/onyx-dot-app/onyx", False),
+    ],
+)
+def test_upstream_url_patterns_match_git_endpoints(url: str, should_match: bool) -> None:
+    patterns = GitHubProvider.spec.descriptor.upstream_url_patterns
+    matched = any(re.fullmatch(p, url) for p in patterns)
+    assert matched is should_match
