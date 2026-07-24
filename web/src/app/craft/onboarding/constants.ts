@@ -32,17 +32,15 @@ export function craftRecommendedModels(
   );
 }
 
-export const CRAFT_PROVIDERS: {
-  key: ProviderKey;
-  apiKeyPlaceholder: string;
-  recommended?: boolean;
-}[] = [
-  { key: "anthropic", apiKeyPlaceholder: "sk-ant-...", recommended: true },
-  { key: "openai", apiKeyPlaceholder: "sk-..." },
-  { key: "openrouter", apiKeyPlaceholder: "sk-or-..." },
+// Common providers sorted first in the onboarding catalog. Craft routes every
+// provider through the gateway, so this is display ordering only, not a gate.
+export const CRAFT_PROVIDERS: ProviderKey[] = [
+  "anthropic",
+  "openai",
+  "openrouter",
 ];
 
-const CRAFT_PROVIDER_KEYS = new Set<string>(CRAFT_PROVIDERS.map((p) => p.key));
+const CRAFT_PROVIDER_KEYS = new Set<string>(CRAFT_PROVIDERS);
 
 interface MinimalLlmProvider {
   id: number;
