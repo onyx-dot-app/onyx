@@ -21,17 +21,18 @@ import pytest
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.search_settings import get_current_search_settings
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import MAX_DELAY
+from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.reindex_port import ReindexPortManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestAPIKey,
+    DATestLLMProvider,
+    DATestUser,
+)
 
 _EE_ONLY = pytest.mark.skipif(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",

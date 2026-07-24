@@ -1,9 +1,7 @@
 import time
 
-from onyx.db.port_attempt import ReindexErrorRow
-from onyx.db.port_attempt import ReindexProgressCounts
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import MAX_DELAY
+from onyx.db.port_attempt import ReindexErrorRow, ReindexProgressCounts
+from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
