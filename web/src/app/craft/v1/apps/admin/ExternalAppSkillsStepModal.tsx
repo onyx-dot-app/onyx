@@ -61,7 +61,7 @@ export default function ExternalAppSkillsStepModal({
     if (unsavedChanges.confirmationOpen) {
       unsavedChanges.cancelLeave();
     } else if (upload.isOpen) {
-      upload.dismiss();
+      upload.requestDismiss();
     } else {
       unsavedChanges.requestLeave(onClose);
     }
@@ -90,7 +90,7 @@ export default function ExternalAppSkillsStepModal({
   const confirmationContent = upload.confirmationOpen ? (
     <UnsavedChangesModalContent
       onCancel={upload.cancelDiscard}
-      onDiscard={upload.confirmDiscard}
+      onDiscard={upload.discardAndClose}
     />
   ) : unsavedChanges.confirmationOpen ? (
     <UnsavedChangesModalContent
@@ -112,7 +112,7 @@ export default function ExternalAppSkillsStepModal({
           <>
             <CreateSkillModalContent
               hidden={confirmationOpen}
-              onClose={upload.close}
+              onRequestClose={upload.requestDismiss}
               onBusyChange={upload.setBusy}
               onDirtyChange={upload.setDirty}
               preserveDraftOnContinue

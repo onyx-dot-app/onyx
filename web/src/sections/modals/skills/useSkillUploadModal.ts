@@ -12,14 +12,14 @@ export default function useSkillUploadModal() {
     setIsOpen(true);
   }
 
-  function close() {
+  function discardAndClose() {
     if (isBusy) return;
     setIsOpen(false);
     setIsDirty(false);
     setConfirmationOpen(false);
   }
 
-  function dismiss() {
+  function requestDismiss() {
     if (isBusy) {
       return;
     }
@@ -28,7 +28,7 @@ export default function useSkillUploadModal() {
     } else if (isDirty) {
       setConfirmationOpen(true);
     } else {
-      close();
+      discardAndClose();
     }
   }
 
@@ -36,9 +36,8 @@ export default function useSkillUploadModal() {
     isOpen,
     confirmationOpen,
     open,
-    close,
-    dismiss,
-    confirmDiscard: close,
+    requestDismiss,
+    discardAndClose,
     cancelDiscard: () => setConfirmationOpen(false),
     setBusy: setIsBusy,
     setDirty: setIsDirty,

@@ -17,9 +17,10 @@ interface CreateSkillModalProps {
 
 interface CreateSkillModalContentProps extends Omit<
   CreateSkillModalProps,
-  "open"
+  "open" | "onClose"
 > {
   hidden?: boolean;
+  onRequestClose: () => void;
   onBusyChange?: (busy: boolean) => void;
   onDirtyChange?: (dirty: boolean) => void;
   preserveDraftOnContinue?: boolean;
@@ -27,7 +28,7 @@ interface CreateSkillModalContentProps extends Omit<
 
 export function CreateSkillModalContent({
   hidden = false,
-  onClose,
+  onRequestClose,
   onContinue,
   onBusyChange,
   onDirtyChange,
@@ -52,8 +53,7 @@ export function CreateSkillModalContent({
 
   function handleClose() {
     if (busy) return;
-    reset();
-    onClose();
+    onRequestClose();
   }
 
   async function handleContinue() {
@@ -167,7 +167,7 @@ export default function CreateSkillModal({
     <Modal open={open} onOpenChange={(isOpen) => !isOpen && !busy && onClose()}>
       <Modal.Content width="sm">
         <CreateSkillModalContent
-          onClose={onClose}
+          onRequestClose={onClose}
           onContinue={onContinue}
           onBusyChange={setBusy}
           validateDraft={validateDraft}

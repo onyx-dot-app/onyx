@@ -2,7 +2,13 @@
  * @jest-environment jsdom
  */
 
-import { fireEvent, render, screen, waitFor } from "@tests/setup/test-utils";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@tests/setup/test-utils";
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
 import type {
   BuiltInExternalAppDescriptor,
@@ -26,12 +32,12 @@ jest.mock("@/lib/skills/creationDraft", () => ({
 jest.mock("@/sections/modals/skills/CreateSkillModal", () => ({
   CreateSkillModalContent: ({
     hidden = false,
-    onClose,
+    onRequestClose,
     onContinue,
     onDirtyChange,
   }: {
     hidden?: boolean;
-    onClose: () => void;
+    onRequestClose: () => void;
     onContinue: (draft: SkillCreationDraft) => void;
     onDirtyChange?: (dirty: boolean) => void;
   }) =>
@@ -41,7 +47,7 @@ jest.mock("@/sections/modals/skills/CreateSkillModal", () => ({
         <button type="button" onClick={() => onDirtyChange?.(true)}>
           Select bundle
         </button>
-        <button type="button" onClick={onClose}>
+        <button type="button" onClick={onRequestClose}>
           Cancel
         </button>
         <button
@@ -221,9 +227,16 @@ describe("ConfigureProviderModal", () => {
     ).toBeVisible();
     expect(onClose).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+      ).getByRole("button", { name: "Cancel" })
+    );
     expect(screen.getByText("Upload skill")).toBeInTheDocument();
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+    ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
 
     expect(screen.getByRole("dialog", { name: /Edit Slack/ })).toBeVisible();
@@ -276,6 +289,41 @@ describe("ConfigureProviderModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it("guards a selected upload in the post-create skills step", async () => {
+    jest
+      .mocked(externalAppsService.createBuiltInExternalApp)
+      .mockResolvedValue({ ...APP, associated_skills: [] });
+
+    render(
+      <ConfigureProviderModal
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        descriptor={DESCRIPTOR}
+        existingApp={null}
+      />
+    );
+    fireEvent.change(screen.getByPlaceholderText("Token"), {
+      target: { value: "org-token" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(await screen.findByText("Add skills to Slack")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    const confirmation = screen.getByRole("dialog", {
+      name: "Discard unsaved changes?",
+    });
+    fireEvent.click(
+      within(confirmation).getByRole("button", { name: "Cancel" })
+    );
+
+    expect(screen.getByText("Upload skill")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled();
   });
 
   it("guards pending post-create associations before reviewing an upload", async () => {

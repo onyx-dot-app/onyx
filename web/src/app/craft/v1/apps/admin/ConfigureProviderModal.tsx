@@ -193,7 +193,7 @@ export default function ConfigureProviderModal({
               <>
                 <CreateSkillModalContent
                   hidden={hidden || upload.confirmationOpen}
-                  onClose={upload.close}
+                  onRequestClose={upload.requestDismiss}
                   onBusyChange={upload.setBusy}
                   onDirtyChange={upload.setDirty}
                   preserveDraftOnContinue
@@ -207,7 +207,7 @@ export default function ConfigureProviderModal({
                 {upload.confirmationOpen && (
                   <UnsavedChangesModalContent
                     onCancel={upload.cancelDiscard}
-                    onDiscard={upload.confirmDiscard}
+                    onDiscard={upload.discardAndClose}
                   />
                 )}
               </>
@@ -216,7 +216,7 @@ export default function ConfigureProviderModal({
       }
       alternateContentConfirmationOpen={upload.confirmationOpen}
       isAdditionalContentDirty={existingAssociationDirty}
-      onClose={upload.isOpen ? upload.dismiss : onClose}
+      onClose={upload.isOpen ? upload.requestDismiss : onClose}
       title={
         existingApp ? `Edit ${existingApp.name}` : `Add ${descriptor.name}`
       }

@@ -204,7 +204,7 @@ export default function CreateCustomAppModal({
       return;
     }
     if (upload.isOpen) {
-      upload.dismiss();
+      upload.requestDismiss();
     } else {
       unsavedChanges.requestLeave(onClose);
     }
@@ -215,7 +215,7 @@ export default function CreateCustomAppModal({
   const confirmationContent = upload.confirmationOpen ? (
     <UnsavedChangesModalContent
       onCancel={upload.cancelDiscard}
-      onDiscard={upload.confirmDiscard}
+      onDiscard={upload.discardAndClose}
     />
   ) : unsavedChanges.confirmationOpen ? (
     <UnsavedChangesModalContent
@@ -250,7 +250,7 @@ export default function CreateCustomAppModal({
           <>
             <CreateSkillModalContent
               hidden={confirmationOpen}
-              onClose={upload.close}
+              onRequestClose={upload.requestDismiss}
               onBusyChange={upload.setBusy}
               onDirtyChange={upload.setDirty}
               preserveDraftOnContinue

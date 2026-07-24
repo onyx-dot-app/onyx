@@ -427,12 +427,16 @@ describe("CreateCustomAppModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
 
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(
       screen.getByRole("dialog", { name: "Discard unsaved changes?" })
     ).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+      ).getByRole("button", { name: "Cancel" })
+    );
     expect(screen.getByText("Upload skill")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled();
   });
