@@ -60,6 +60,7 @@ from onyx.prompts.tool_prompts import (
     INTERNAL_SEARCH_GUIDANCE,
     MEMORY_GUIDANCE,
     OPEN_URLS_GUIDANCE,
+    POSTGRES_QUERY_GUIDANCE,
     PYTHON_TOOL_GUIDANCE,
     TOOL_DESCRIPTION_SEARCH_GUIDANCE,
     TOOL_SECTION_HEADER,
@@ -87,6 +88,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -494,6 +496,7 @@ def build_system_prompt(
             PYTHON_TOOL_GUIDANCE,
             GENERATE_IMAGE_GUIDANCE,
             MEMORY_GUIDANCE,
+            POSTGRES_QUERY_GUIDANCE,
         ]
         system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_sections)
         return system_prompt
@@ -507,6 +510,7 @@ def build_system_prompt(
             isinstance(tool, ImageGenerationTool) for tool in tools
         )
         has_memory = any(isinstance(tool, MemoryTool) for tool in tools)
+        has_postgres = any(isinstance(tool, PostgresTool) for tool in tools)
 
         tool_guidance_sections: list[str] = []
 
@@ -540,6 +544,9 @@ def build_system_prompt(
 
         if has_memory or include_all_guidance:
             tool_guidance_sections.append(MEMORY_GUIDANCE)
+
+        if has_postgres or include_all_guidance:
+            tool_guidance_sections.append(POSTGRES_QUERY_GUIDANCE)
 
         if tool_guidance_sections:
             system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_guidance_sections)

@@ -130,6 +130,14 @@ export function useTimelineHeader(
       };
     }
 
+    if (packetType === PacketType.POSTGRES_TOOL_START) {
+      return {
+        headerText: t("header.queryingKnowledgeBase.label"),
+        hasPackets,
+        userStopped,
+      };
+    }
+
     if (packetType === PacketType.REASONING_START) {
       return {
         headerText: t("header.thinking.label"),

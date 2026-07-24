@@ -12985,6 +12985,9 @@
           "generatingPlan": {
             "label": "Generando plan"
           },
+          "queryingKnowledgeBase": {
+            "label": "Consultando la base de conocimiento"
+          },
           "reading": {
             "label": "Leyendo"
           },
@@ -13049,6 +13052,14 @@
           },
           "updated": {
             "label": "Memoria actualizada"
+          }
+        },
+        "postgres": {
+          "queried": {
+            "status": "Base de conocimiento consultada"
+          },
+          "querying": {
+            "status": "Consultando la base de conocimiento"
           }
         },
         "python": {
@@ -13129,6 +13140,7 @@
           "generateImage": "Generar imagen",
           "generatePlan": "Generar plan",
           "internalSearch": "Búsqueda interna",
+          "knowledgeBaseQuery": "Consulta de la base de conocimiento",
           "memory": "Memoria",
           "openUrls": "Abrir URL",
           "researchAgent": "Agente de investigación",

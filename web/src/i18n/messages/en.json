@@ -12985,6 +12985,9 @@
           "generatingPlan": {
             "label": "Generating plan"
           },
+          "queryingKnowledgeBase": {
+            "label": "Querying knowledge base"
+          },
           "reading": {
             "label": "Reading"
           },
@@ -13049,6 +13052,14 @@
           },
           "updated": {
             "label": "Updated memory"
+          }
+        },
+        "postgres": {
+          "queried": {
+            "status": "Queried knowledge base"
+          },
+          "querying": {
+            "status": "Querying knowledge base"
           }
         },
         "python": {
@@ -13129,6 +13140,7 @@
           "generateImage": "Generate Image",
           "generatePlan": "Generate plan",
           "internalSearch": "Internal Search",
+          "knowledgeBaseQuery": "Knowledge Base Query",
           "memory": "Memory",
           "openUrls": "Open URLs",
           "researchAgent": "Research agent",
