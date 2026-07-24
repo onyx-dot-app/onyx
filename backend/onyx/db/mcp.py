@@ -1,10 +1,11 @@
 import datetime
+from collections.abc import Mapping
 from typing import cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Select, and_, delete, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
 from onyx.db.constants import UNSET, UnsetType
@@ -65,8 +66,15 @@ def get_craft_enabled_mcp_servers(
 ) -> list[MCPServer]:
     """MCP servers an admin has made available to the Craft agent, filtered to
     those ``user`` may use (public / shared / owned). ``None`` skips the access
-    filter — only for host matching before a user is known (proxy claim path)."""
-    stmt = select(MCPServer).where(MCPServer.available_in_craft.is_(True))
+    filter — only for host matching before a user is known (proxy claim path).
+
+    Eager-loads ``admin_connection_config`` so credential resolution across the
+    returned set doesn't lazy-load one row per admin-managed server."""
+    stmt = (
+        select(MCPServer)
+        .where(MCPServer.available_in_craft.is_(True))
+        .options(selectinload(MCPServer.admin_connection_config))
+    )
     if user is not None:
         stmt = _add_mcp_server_access_filter(stmt, user)
     return list(db_session.scalars(stmt).all())
@@ -452,6 +460,8 @@ def resolve_mcp_credentials(
     mcp_server: MCPServer,
     user: User,
     db_session: Session,
+    *,
+    user_configs: Mapping[int, MCPConnectionConfig] | None = None,
 ) -> ResolvedMCPCredentials:
     """Resolve which stored credentials authenticate `user` against `mcp_server`.
 
@@ -461,6 +471,11 @@ def resolve_mcp_credentials(
     - API_TOKEN / OAUTH: the user's own `mcp_connection_config` row for
       PER_USER servers, the admin config row otherwise.
     - NONE: no credentials.
+
+    `user_configs` lets a caller resolving many servers pre-load the per-user
+    rows in one query (see `get_user_connection_configs`) instead of one per
+    server. It must cover every server the caller resolves — a miss reads as no
+    stored credential, not as unknown.
 
     Raises MCPCredentialsError for PT_OAUTH with the anonymous user, who has no
     login OAuth token.
@@ -482,8 +497,10 @@ def resolve_mcp_credentials(
         MCPAuthenticationType.OAUTH,
     ):
         if mcp_server.auth_performer == MCPAuthenticationPerformer.PER_USER:
-            connection_config = get_user_connection_config(
-                mcp_server.id, user.email, db_session
+            connection_config = (
+                user_configs.get(mcp_server.id)
+                if user_configs is not None
+                else get_user_connection_config(mcp_server.id, user.email, db_session)
             )
         else:
             connection_config = mcp_server.admin_connection_config
@@ -498,21 +515,44 @@ def can_resolve_mcp_credentials(
     mcp_server: MCPServer,
     user: User,
     db_session: Session,
+    *,
+    user_configs: Mapping[int, MCPConnectionConfig] | None = None,
 ) -> bool:
     """Whether the sandbox proxy will be able to authenticate `user` against
     `mcp_server`, mirroring `MCPServerResolver._resolve_for_server`'s block
     condition so callers can't drift from what injection does.
 
     Not the same as the user having their own connection config: admin-managed,
-    `PT_OAUTH`, and no-auth servers all authenticate without one.
+    `PT_OAUTH`, and no-auth servers all authenticate without one. See
+    `resolve_mcp_credentials` for `user_configs`.
     """
     if mcp_server.auth_type in (None, MCPAuthenticationType.NONE):
         return True
     try:
-        credentials = resolve_mcp_credentials(mcp_server, user, db_session)
+        credentials = resolve_mcp_credentials(
+            mcp_server, user, db_session, user_configs=user_configs
+        )
     except MCPCredentialsError:
         return False
     return bool(credentials.build_headers())
+
+
+def get_user_connection_configs(
+    server_ids: list[int], user_email: str, db_session: Session
+) -> dict[int, MCPConnectionConfig]:
+    """`user_email`'s own connection configs for `server_ids`, keyed by server id.
+    One query, for callers resolving credentials across many servers."""
+    if not server_ids:
+        return {}
+    rows = db_session.scalars(
+        select(MCPConnectionConfig).where(
+            and_(
+                MCPConnectionConfig.mcp_server_id.in_(server_ids),
+                MCPConnectionConfig.user_email == user_email,
+            )
+        )
+    )
+    return {row.mcp_server_id: row for row in rows if row.mcp_server_id is not None}
 
 
 def get_user_connection_configs_for_server(

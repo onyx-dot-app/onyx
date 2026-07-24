@@ -12,6 +12,7 @@ from collections.abc import Generator
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
@@ -159,6 +160,78 @@ def test_no_auth_server_emitted_with_no_credentials_stored(
     assert craft.id in {
         c.server_id for c in resolve_craft_mcp_servers(db_session, user)
     }
+
+
+def test_query_count_flat_in_number_of_servers(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Resolution runs per user in the admin restamp fan-out, which for a public
+    server covers every user with a running sandbox — so credential state must be
+    batch-loaded rather than queried per server."""
+    user = create_test_user(db_session, "mcp_queries")
+    created: list[MCPServer] = []
+
+    def _add_per_user_server(*, connected: bool) -> None:
+        server = create_mcp_server__no_commit(
+            owner_email="admin@example.com",
+            name=f"perf-{uuid4().hex[:8]}",
+            description=None,
+            server_url=f"https://api-{uuid4().hex[:8]}.example.com/mcp",
+            auth_type=MCPAuthenticationType.API_TOKEN,
+            transport=MCPTransport.STREAMABLE_HTTP,
+            auth_performer=MCPAuthenticationPerformer.PER_USER,
+            db_session=db_session,
+        )
+        update_mcp_server__no_commit(
+            server_id=server.id, db_session=db_session, available_in_craft=True
+        )
+        if connected:
+            create_connection_config(
+                {"headers": {"Authorization": "Bearer x"}},
+                db_session,
+                mcp_server_id=server.id,
+                user_email=user.email,
+            )
+        created.append(server)
+
+    def _executed_statements() -> list[str]:
+        statements: list[str] = []
+
+        def _record(
+            _conn: object, _cursor: object, statement: str, *_rest: object
+        ) -> None:
+            statements.append(statement)
+
+        db_session.expire_all()
+        event.listen(db_session.bind, "before_cursor_execute", _record)
+        try:
+            resolve_craft_mcp_servers(db_session, user)
+        finally:
+            event.remove(db_session.bind, "before_cursor_execute", _record)
+        return statements
+
+    try:
+        for _ in range(2):
+            _add_per_user_server(connected=True)
+            _add_per_user_server(connected=False)
+        db_session.commit()
+        baseline = _executed_statements()
+
+        for _ in range(6):
+            _add_per_user_server(connected=True)
+            _add_per_user_server(connected=False)
+        db_session.commit()
+        grown = _executed_statements()
+        assert len(grown) == len(baseline), (
+            f"4 servers -> {len(baseline)} queries, 16 -> {len(grown)}: "
+            f"{grown[len(baseline) :]}"
+        )
+    finally:
+        db_session.rollback()
+        for server in created:
+            db_session.delete(server)
+        db_session.commit()
 
 
 def test_private_unshared_server_excluded_for_user(

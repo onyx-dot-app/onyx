@@ -16,6 +16,7 @@ from onyx.db.mcp import (
     can_resolve_mcp_credentials,
     get_craft_enabled_mcp_servers,
     get_mcp_tools_for_servers,
+    get_user_connection_configs,
 )
 from onyx.db.models import MCPServer, User
 from onyx.server.features.build.sandbox.models import CraftMCPServerConfig
@@ -46,10 +47,20 @@ def resolve_craft_mcp_servers(
 
     Filtered by access and by resolvable credentials — injection blocks an
     unauthenticated server's tool discovery, so emitting it only buys a
-    permanently failed MCP client."""
+    permanently failed MCP client.
+
+    Query count is flat in the number of servers: this runs per user in the
+    admin restamp fan-out (``refresh_mcp_config_hashes_for_users``), which for a
+    public server covers every user with a running sandbox."""
+    accessible = get_craft_enabled_mcp_servers(db_session, user)
+    user_configs = get_user_connection_configs(
+        [s.id for s in accessible], user.email, db_session
+    )
     servers: list[MCPServer] = []
-    for server in get_craft_enabled_mcp_servers(db_session, user):
-        if can_resolve_mcp_credentials(server, user, db_session):
+    for server in accessible:
+        if can_resolve_mcp_credentials(
+            server, user, db_session, user_configs=user_configs
+        ):
             servers.append(server)
         else:
             # Craft reads no MCP status back from opencode; this is the only
