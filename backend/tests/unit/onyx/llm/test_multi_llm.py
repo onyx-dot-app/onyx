@@ -965,6 +965,164 @@ def test_user_identity_metadata_disabled_omits_identity(
         assert "metadata" not in kwargs
 
 
+def test_user_identity_forwarded_via_extra_body(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
+    ):
+        mock_completion.return_value = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="gpt-3.5-turbo",
+            ),
+        ]
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        default_multi_llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["user"] == "user_123"
+        assert kwargs["metadata"]["session_id"] == "session_abc"
+        assert kwargs["extra_body"]["user"] == "user_123"
+        assert kwargs["extra_body"]["chat_session_id"] == "session_abc"
+
+
+def test_user_identity_extra_body_respects_caller_provided_extra_body() -> None:
+    model_provider = LlmProviderNames.OPENAI
+    model_name = "gpt-3.5-turbo"
+
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+        model_kwargs={
+            "extra_body": {"custom_key": "v", "user": "caller_set"},
+        },
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
+    ):
+        mock_completion.return_value = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="gpt-3.5-turbo",
+            ),
+        ]
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["extra_body"]["custom_key"] == "v"
+        assert kwargs["extra_body"]["user"] == "caller_set"
+        assert kwargs["extra_body"]["chat_session_id"] == "session_abc"
+
+
+def test_user_identity_extra_body_truncates_long_user_id(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
+    ):
+        mock_completion.return_value = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="gpt-3.5-turbo",
+            ),
+        ]
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        long_user_id = "u" * 82
+        identity = LLMUserIdentity(user_id=long_user_id, session_id="session_abc")
+
+        default_multi_llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["extra_body"]["user"] == long_user_id[:64]
+
+
+def test_user_identity_disabled_omits_extra_body_identity_keys() -> None:
+    model_provider = LlmProviderNames.OPENAI
+    model_name = "gpt-3.5-turbo"
+
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+        model_kwargs={"extra_body": {"custom_key": "v"}},
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+    ):
+        mock_completion.return_value = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="gpt-3.5-turbo",
+            ),
+        ]
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["extra_body"] == {"custom_key": "v"}
+
+
 def test_existing_metadata_pass_through_when_identity_disabled() -> None:
     model_provider = LlmProviderNames.OPENAI
     model_name = "gpt-3.5-turbo"
