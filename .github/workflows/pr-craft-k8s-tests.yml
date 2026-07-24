@@ -434,11 +434,12 @@ jobs:
           cat "${RUNNER_TEMP}/postgres-port-forward.log" || true
           exit 1
 
-      - name: Run migrations
+      - name: Wait for migrations
         run: |
-          cd backend
-          alembic upgrade head
-          alembic heads --verbose
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
+            deployment/onyx-api-server --timeout=360s
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" exec deployment/onyx-api-server -- \
+            alembic current --check-heads
 
       - name: Wait for chart OpenSearch ready
         run: |
