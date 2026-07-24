@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ -n \"$CLAUDE_ENV_FILE\" ] && printf 'export PATH=%q\\n' \"$CLAUDE_PROJECT_DIR/.venv/bin:$PATH\" >> \"$CLAUDE_ENV_FILE\" || true"
+            "command": "[ -n \"$CLAUDE_ENV_FILE\" ] && printf 'export PATH=\"%s\"\\n' \"$CLAUDE_PROJECT_DIR/.venv/bin${PATH:+:$PATH}\" >> \"$CLAUDE_ENV_FILE\" || true"
           }
         ]
       }
