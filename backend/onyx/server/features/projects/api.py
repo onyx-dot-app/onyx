@@ -31,6 +31,8 @@ from onyx.db.projects import (
     get_project_token_count,
     upload_files_to_user_files_with_indexing,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.projects.models import (
     CategorizedFilesSnapshot,
     ChatSessionRequest,
@@ -570,7 +572,19 @@ def move_chat_session(
         .one_or_none()
     )
     if chat_session is None:
-        raise HTTPException(status_code=404, detail="Chat session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chat session not found")
+
+    # The target project must belong to the caller; otherwise a user could
+    # attach their session to another user's project and read that project's
+    # instructions back through the default agent.
+    project = (
+        db_session.query(UserProject)
+        .filter(UserProject.id == project_id, UserProject.user_id == user_id)
+        .one_or_none()
+    )
+    if project is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
+
     chat_session.project_id = project_id
     db_session.commit()
     return Response(status_code=204)
