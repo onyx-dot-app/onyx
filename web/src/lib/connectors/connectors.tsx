@@ -1366,6 +1366,34 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     ],
     advanced_values: [],
   },
+  clickup_docs: {
+    description: "Configure ClickUp Docs connector",
+    values: [
+      {
+        type: "select",
+        query: "Select the connector type:",
+        label: "Connector Type",
+        name: "connector_type",
+        optional: false,
+        options: [
+          { name: "doc", value: "doc" },
+          { name: "list", value: "list" },
+          { name: "folder", value: "folder" },
+          { name: "space", value: "space" },
+          { name: "workspace", value: "workspace" },
+        ],
+      },
+      {
+        type: "list",
+        query: "Enter connector IDs:",
+        label: "Connector IDs",
+        name: "connector_ids",
+        description: "Specify 0 or more id(s) to index from.",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   google_sites: {
     description: "Configure Google Sites connector",
     values: [
@@ -2235,6 +2263,11 @@ export interface ClickupConfig {
   connector_type: "list" | "folder" | "space" | "workspace";
   connector_ids?: string[];
   retrieve_task_comments: boolean;
+}
+
+export interface ClickupDocsConfig {
+  connector_type: "doc" | "list" | "folder" | "space" | "workspace";
+  connector_ids?: string[];
 }
 
 export interface GoogleSitesConfig {
