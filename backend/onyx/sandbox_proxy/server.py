@@ -3,6 +3,7 @@
 import asyncio
 import os
 import signal
+import socket
 import sys
 import threading
 import uuid
@@ -35,6 +36,7 @@ from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
 from onyx.server.features.build.configs import (
     SANDBOX_NAMESPACE,
     SANDBOX_PROXY_HEALTHZ_PORT,
+    SANDBOX_PROXY_LISTEN_HOST,
     SANDBOX_PROXY_LISTEN_PORT,
 )
 from onyx.utils.logger import setup_logger
@@ -107,10 +109,30 @@ def _build_healthz_handler(
     return _HealthzHandler
 
 
+class _HealthzHTTPServer(HTTPServer):
+    """HTTPServer that honors SANDBOX_PROXY_LISTEN_HOST. When the host is an
+    IPv6 literal (e.g. ``::`` on IPv6-only clusters) it binds an AF_INET6
+    socket with V6ONLY off so the kubelet probe reaches it on the pod's IPv6
+    address (and IPv4-mapped clients still work on dual-stack)."""
+
+    def __init__(
+        self, host: str, port: int, handler: type[BaseHTTPRequestHandler]
+    ) -> None:
+        if ":" in host:
+            self.address_family = socket.AF_INET6
+        super().__init__((host, port), handler)
+
+    def server_bind(self) -> None:
+        if self.address_family == socket.AF_INET6:
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        super().server_bind()
+
+
 def _start_healthz_server(readiness: _Readiness, lookup: SandboxIPLookup) -> HTTPServer:
     handler = _build_healthz_handler(readiness, lookup)
-    server = HTTPServer(
-        ("0.0.0.0", SANDBOX_PROXY_HEALTHZ_PORT),  # noqa: S104 — container scope
+    server = _HealthzHTTPServer(
+        SANDBOX_PROXY_LISTEN_HOST,  # noqa: S104 — container scope
+        SANDBOX_PROXY_HEALTHZ_PORT,
         handler,
     )
     thread = threading.Thread(
@@ -119,7 +141,11 @@ def _start_healthz_server(readiness: _Readiness, lookup: SandboxIPLookup) -> HTT
         daemon=True,
     )
     thread.start()
-    logger.info("healthz listening on 0.0.0.0:%d", SANDBOX_PROXY_HEALTHZ_PORT)
+    logger.info(
+        "healthz listening on %s:%d",
+        SANDBOX_PROXY_LISTEN_HOST,
+        SANDBOX_PROXY_HEALTHZ_PORT,
+    )
     return server
 
 
@@ -148,7 +174,7 @@ def _build_cache_factory() -> Callable[[str], CacheBackend]:
 
 def _build_mitm_options() -> Options:
     return Options(
-        listen_host="0.0.0.0",  # noqa: S104 — container scope; pod network only
+        listen_host=SANDBOX_PROXY_LISTEN_HOST,  # noqa: S104 — container scope
         listen_port=SANDBOX_PROXY_LISTEN_PORT,
         confdir=_MITM_CONFDIR,
         mode=["regular"],

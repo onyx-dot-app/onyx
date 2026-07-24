@@ -31,7 +31,7 @@ def _non_negative_int_env(name: str, default: int) -> int:
 #####
 # App Configs
 #####
-APP_HOST = "0.0.0.0"  # noqa: S104 — server bind address; intentional default for containerized deployment
+APP_HOST = os.environ.get("APP_HOST", "0.0.0.0")  # noqa: S104 — server bind address; default suits containers, set "::" on IPv6-only clusters
 APP_PORT = 8080
 # API_PREFIX is used to prepend a base path for all API routes
 # generally used if using a reverse proxy which doesn't support stripping the `/api`
