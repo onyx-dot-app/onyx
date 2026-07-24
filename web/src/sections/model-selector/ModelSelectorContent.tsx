@@ -142,14 +142,6 @@ function formatContextWindow(tokens: number): string {
   return tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : `${tokens}`;
 }
 
-const CONTEXT_AXIS_STOPS = [
-  200_000, 500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000,
-];
-
-function contextAxisMax(tokens: number): number {
-  return CONTEXT_AXIS_STOPS.find((stop) => stop >= tokens) ?? tokens;
-}
-
 /** Both views render at this height so the popover never resizes. */
 const PANE_HEIGHT_CLASS = "h-[352px]";
 
@@ -191,7 +183,7 @@ function PaneSlider({
 }: PaneSliderProps) {
   return (
     <SliderPrimitive.Root
-      className="relative flex h-7 w-full touch-none select-none items-center"
+      className="relative flex h-7 w-full cursor-pointer touch-none select-none items-center"
       value={[value]}
       min={min}
       max={max}
@@ -207,22 +199,6 @@ function PaneSlider({
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb className={SLIDER_THUMB_CLASS} />
     </SliderPrimitive.Root>
-  );
-}
-
-/** Read-only gauge matching the PaneSlider look, for informational rows. */
-function ContextGauge({ fraction }: { fraction: number }) {
-  const pct = Math.min(100, Math.max(0, fraction * 100));
-  return (
-    <div className="relative flex h-7 w-full items-center">
-      <div className={SLIDER_TRACK_CLASS}>
-        <div className={SLIDER_FILL_CLASS} style={{ width: `${pct}%` }} />
-      </div>
-      <div
-        className={cn(SLIDER_THUMB_CLASS, "absolute -translate-x-1/2")}
-        style={{ left: `${pct}%` }}
-      />
-    </div>
   );
 }
 
@@ -315,14 +291,10 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   if (temperatureFraction < 1 / 3) temperatureAnchor = 0;
   else if (temperatureFraction > 2 / 3) temperatureAnchor = 2;
 
-  const hasContextWindow =
-    option.maxInputTokens != null && option.maxInputTokens > 0;
-  const contextLabel = hasContextWindow
-    ? formatContextWindow(option.maxInputTokens!)
-    : "—";
-  const contextAxis = hasContextWindow
-    ? contextAxisMax(option.maxInputTokens!)
-    : 1;
+  const contextLabel =
+    option.maxInputTokens != null && option.maxInputTokens > 0
+      ? formatContextWindow(option.maxInputTokens)
+      : "—";
 
   return (
     <div
@@ -355,24 +327,7 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
         title="Context Window"
         value={contextLabel}
         caption="Tokens limit for each session"
-      >
-        {hasContextWindow && (
-          <>
-            <ContextGauge fraction={option.maxInputTokens! / contextAxis} />
-            <div className="flex flex-row items-center justify-between">
-              <Text font="figure-small-value" color="text-02">
-                0
-              </Text>
-              <Text font="figure-small-value" color="text-04">
-                {contextLabel}
-              </Text>
-              <Text font="figure-small-value" color="text-02">
-                {formatContextWindow(contextAxis)}
-              </Text>
-            </div>
-          </>
-        )}
-      </SettingRow>
+      />
 
       <Disabled
         disabled={!temperatureEnabled}
