@@ -400,6 +400,7 @@ def test_execute_task_body_drives_one_step_under_lock(
 ) -> None:
     """The dispatched task body loads the row under its per-row lock and drives one
     step (PENDING -> SOAKING here)."""
+    monkeypatch.setattr(reclaim_tasks, "OLD_INDEX_RECLAIM_ENABLED", True)
     monkeypatch.setattr(
         reclaim_tasks, "is_active_port_backfill_source", lambda *_a, **_k: False
     )
@@ -411,5 +412,28 @@ def test_execute_task_body_drives_one_step_under_lock(
         driven = get_search_settings_by_id(db_session, ss_id)
         assert driven is not None
         assert driven.reclaim_status == IndexReclaimStatus.SOAKING
+    finally:
+        _delete_settings(db_session, ss)
+
+
+def test_execute_task_body_honors_kill_switch(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A task queued before the flag was flipped off must not drive its row — the kill
+    switch is re-checked in the task body, so ENABLED=False is an instant stop."""
+    monkeypatch.setattr(reclaim_tasks, "OLD_INDEX_RECLAIM_ENABLED", False)
+    monkeypatch.setattr(
+        reclaim_tasks, "is_active_port_backfill_source", lambda *_a, **_k: False
+    )
+    ss = _make_past_settings(db_session, IndexReclaimStatus.PENDING)
+    ss_id = ss.id
+    try:
+        reclaim_tasks.execute_old_index_reclaim(MagicMock(), "tenant", ss_id)
+        db_session.expire_all()
+        row = get_search_settings_by_id(db_session, ss_id)
+        assert row is not None
+        assert row.reclaim_status == IndexReclaimStatus.PENDING  # untouched
     finally:
         _delete_settings(db_session, ss)

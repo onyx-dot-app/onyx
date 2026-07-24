@@ -267,6 +267,8 @@ def execute_old_index_reclaim(
     """Body of run_old_index_reclaim_task (testable): under the per-row lock, drive one
     reclaim step for this PAST index. The lock (TTL) makes a duplicate/concurrent
     dispatch for the same row a no-op and self-heals if a worker dies mid-run."""
+    if not OLD_INDEX_RECLAIM_ENABLED:
+        return
     redis_client = get_redis_client()
     row_lock: RedisLock = redis_client.lock(
         _reclaim_row_lock_key(search_settings_id),
