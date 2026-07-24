@@ -35,6 +35,27 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
+def apply_search_start_floor(
+    updated_at_range: TimeRange | None, search_start_date: datetime | None
+) -> TimeRange | None:
+    """The persona's search_start_date is a floor on the updated-at range that a
+    request can raise but never loosen."""
+    floor_starts = [
+        bound
+        for bound in (
+            updated_at_range.start if updated_at_range else None,
+            search_start_date,
+        )
+        if bound is not None
+    ]
+    if not floor_starts:
+        return updated_at_range
+    return TimeRange(
+        start=max(floor_starts),
+        end=updated_at_range.end if updated_at_range else None,
+    )
+
+
 @log_function_time()
 def _build_index_filters(
     user_provided_filters: BaseFilters | None,
@@ -69,21 +90,9 @@ def _build_index_filters(
         else persona_document_sets
     )
 
-    # The persona's search_start_date floor must never be loosened.
-    updated_at_range = base_filters.updated_at_range
-    floor_starts = [
-        bound
-        for bound in (
-            updated_at_range.start if updated_at_range else None,
-            persona_time_cutoff,
-        )
-        if bound is not None
-    ]
-    if floor_starts:
-        updated_at_range = TimeRange(
-            start=max(floor_starts),
-            end=updated_at_range.end if updated_at_range else None,
-        )
+    updated_at_range = apply_search_start_floor(
+        base_filters.updated_at_range, persona_time_cutoff
+    )
 
     source_filter = base_filters.source_type
 
