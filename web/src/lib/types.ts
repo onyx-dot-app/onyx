@@ -597,6 +597,7 @@ export enum ValidSources {
   Gitbook = "gitbook",
   Highspot = "highspot",
   DrupalWiki = "drupal_wiki",
+  JiraServiceManagement = "jira_service_management",
   Imap = "imap",
   Bitbucket = "bitbucket",
   TestRail = "testrail",
