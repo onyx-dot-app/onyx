@@ -819,6 +819,40 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext: `Configure which Jira Service Management (JSM) project to index. Specify the project key of the service desk project you want to index.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira / Atlassian Cloud instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "text",
+        query: "Enter the JSM project key:",
+        label: "Project Key",
+        name: "project_key",
+        optional: false,
+        description:
+          "The key of the Jira Service Management project to index (e.g., 'IT', 'HELP').",
+      },
+      {
+        type: "list",
+        query: "Enter email addresses to blacklist from comments:",
+        label: "Comment Email Blacklist",
+        name: "comment_email_blacklist",
+        description:
+          "This is generally useful to ignore certain bots. Add user emails whose comments should NOT be indexed.",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
