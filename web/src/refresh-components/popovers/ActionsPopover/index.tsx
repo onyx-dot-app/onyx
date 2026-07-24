@@ -19,6 +19,7 @@ import {
   MCPAuthenticationPerformer,
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
+import { computeInitialForcedToolIds } from "@/lib/hooks/computeInitialForcedToolIds";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useUser } from "@/providers/UserProvider";
@@ -264,10 +265,35 @@ export default function ActionsPopover({
     useAgentPreferences();
   const { forcedToolIds, setForcedToolIds } = useForcedTools();
 
-  // Reset state when assistant changes
+  // Initialize forced tools when the user switches to a new agent. For agents
+  // with knowledge attached (document sets, hierarchy nodes, user files,
+  // attached documents), pre-force the internal-search tool so the LLM
+  // actually uses the configured corpus instead of silently answering from
+  // model priors (#7314, #9303). User can still unforce via the pill in the
+  // input bar.
+  //
+  // Two subtleties, both enforced by the ref-based init-once gate:
+  //  1. We wait for `agentPreferences` to load before initializing — otherwise
+  //     we'd auto-force the search tool even when the user has persisted a
+  //     `disabled_tool_ids` entry for it on this agent.
+  //  2. Once initialized for a given agent, we don't recompute on unrelated
+  //     `agentPreferences` updates (SWR revalidation, a different tool being
+  //     toggled) that would otherwise clobber the user's manual unforce.
+  //     The per-agent tool-disable path (`toggleToolForCurrentAgent` below)
+  //     releases the force inline, so the effect doesn't need to react here.
+  const initializedForAgentIdRef = useRef<number | null>(null);
   useEffect(() => {
-    setForcedToolIds([]);
-  }, [selectedAgent.id, setForcedToolIds]);
+    if (initializedForAgentIdRef.current === selectedAgent.id) return;
+    if (agentPreferences == null) return;
+
+    initializedForAgentIdRef.current = selectedAgent.id;
+    setForcedToolIds(
+      computeInitialForcedToolIds(
+        selectedAgent,
+        agentPreferences[selectedAgent.id]
+      )
+    );
+  }, [selectedAgent, agentPreferences, setForcedToolIds]);
 
   const { isAdmin, isCurator } = useUser();
   const { vectorDbEnabled } = useSettings();
