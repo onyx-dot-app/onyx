@@ -1,6 +1,17 @@
 import type { OnboardingActions } from "@/interfaces/onboarding";
 import type { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 
+/**
+ * Per-session reasoning-effort override. Mirrors the backend ReasoningEffort
+ * enum minus "auto", since no override (null) already means auto.
+ */
+export type ReasoningEffortOverride =
+  | "off"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
+
 export interface ModelConfiguration {
   id?: number;
   name: string;
