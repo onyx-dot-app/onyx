@@ -115,7 +115,6 @@ export interface GitHubSkillsPreview {
 
 export interface GitHubImportedSkill {
   skill: CustomSkill;
-  enabled: boolean;
   disabled_reason: string | null;
 }
 

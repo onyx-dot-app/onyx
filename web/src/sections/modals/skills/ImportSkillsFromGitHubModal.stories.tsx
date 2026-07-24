@@ -89,7 +89,6 @@ export const PartialSuccess: Story = {
             name: "research",
             description: "Research a topic and report the findings.",
           }),
-          enabled: true,
           disabled_reason: null,
         },
         {
@@ -99,7 +98,6 @@ export const PartialSuccess: Story = {
             description: "Review a change.",
             enabled: false,
           }),
-          enabled: false,
           disabled_reason: "Another skill named “review” is already enabled.",
         },
       ],
@@ -124,7 +122,6 @@ export const AllImported: Story = {
             name: "research",
             description: "Research a topic and report the findings.",
           }),
-          enabled: true,
           disabled_reason: null,
         },
       ],

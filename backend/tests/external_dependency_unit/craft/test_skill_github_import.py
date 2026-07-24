@@ -114,9 +114,9 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
     )
 
     imported_by_name = {result.skill.name: result for result in response.imported}
-    assert imported_by_name[conflict_name].enabled is False
+    assert imported_by_name[conflict_name].skill.enabled is False
     assert "already enabled" in (imported_by_name[conflict_name].disabled_reason or "")
-    assert imported_by_name[unique_name].enabled is True
+    assert imported_by_name[unique_name].skill.enabled is True
     assert imported_by_name[unique_name].disabled_reason is None
     assert [(item.name, item.reason) for item in response.not_imported] == [
         ("pptx", "A built-in Onyx skill already uses this name.")
@@ -195,7 +195,7 @@ def test_import_enables_only_first_new_skill_with_each_name(
         db_session=db_session,
     )
 
-    assert [result.enabled for result in response.imported] == [True, False]
+    assert [result.skill.enabled for result in response.imported] == [True, False]
     assert response.imported[1].disabled_reason is not None
     assert response.not_imported == []
 

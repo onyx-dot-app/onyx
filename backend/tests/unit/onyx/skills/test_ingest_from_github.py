@@ -11,6 +11,8 @@ import pytest
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.skills import ingest_from_github
+from onyx.skills.bundle import NormalizedSkillBundle
 from onyx.skills.ingest_from_github import fetch_github_skill_bundles
 
 _REVISION = "a" * 40
@@ -220,6 +222,58 @@ def test_import_uses_previewed_revision_without_resolving_head(
     ]
     assert repository.subpath == "skills/beta"
     assert [skill.name for skill in skills] == ["beta"]
+
+
+def test_import_builds_only_selected_skill_bundles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_repository(
+        monkeypatch,
+        {
+            "skills/alpha/SKILL.md": _skill_md("alpha"),
+            "skills/beta/SKILL.md": _skill_md("beta"),
+        },
+    )
+    normalized_skill_documents: list[bytes] = []
+    normalize_custom_bundle = ingest_from_github.normalize_custom_bundle
+
+    def record_normalized_bundle(bundle_bytes: bytes) -> NormalizedSkillBundle:
+        bundle = normalize_custom_bundle(bundle_bytes)
+        with zipfile.ZipFile(io.BytesIO(bundle.content)) as archive:
+            normalized_skill_documents.append(archive.read("SKILL.md"))
+        return bundle
+
+    monkeypatch.setattr(
+        ingest_from_github,
+        "normalize_custom_bundle",
+        record_normalized_bundle,
+    )
+
+    _, skills = fetch_github_skill_bundles(
+        "owner/repository",
+        revision=_REVISION,
+        selected_paths={"skills/beta"},
+    )
+
+    assert [skill.name for skill in skills] == ["beta"]
+    assert normalized_skill_documents == [_skill_md("beta")]
+
+
+def test_rejects_repositories_with_too_many_skills(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_repository(
+        monkeypatch,
+        {
+            f"skills/skill-{index}/SKILL.md": _skill_md(f"skill-{index}")
+            for index in range(501)
+        },
+    )
+
+    with pytest.raises(OnyxError, match="more than 500 skills") as exc_info:
+        fetch_github_skill_bundles("owner/repository")
+
+    assert exc_info.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
 
 
 def test_private_token_is_not_forwarded_to_archive_host(

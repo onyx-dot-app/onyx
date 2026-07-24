@@ -4,6 +4,7 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 SKILL_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+GITHUB_SKILL_MAX_COUNT: Final[int] = 500
 
 
 class SkillMetadata(BaseModel):
