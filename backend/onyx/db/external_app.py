@@ -419,6 +419,11 @@ def associate_custom_skill_with_external_app__no_commit(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in skills cannot be associated through the admin workflow.",
         )
+    if skill.is_valid is False:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Invalid skill '{skill.name}' cannot be associated with an app.",
+        )
 
     existing_app = get_external_app_by_skill_id(db_session, skill.id)
     if existing_app is not None:
@@ -428,6 +433,24 @@ def associate_custom_skill_with_external_app__no_commit(
                 f"Skill '{skill.name}' is already associated with "
                 f"app '{existing_app.name}'."
             ),
+        )
+
+    if db_session.scalar(
+        select(Skill.id)
+        .join(
+            ExternalApp__Skill,
+            ExternalApp__Skill.skill_id == Skill.id,
+        )
+        .where(
+            ExternalApp__Skill.external_app_id == app.id,
+            Skill.name == skill.name,
+            Skill.id != skill.id,
+        )
+        .limit(1)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.SKILL_NAME_CONFLICT,
+            (f"App '{app.name}' already has an associated skill named '{skill.name}'."),
         )
 
     skill.public_permission = SkillSharePermission.VIEWER
@@ -479,6 +502,44 @@ def replace_custom_skill_associations__no_commit(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in skills cannot be associated through the admin workflow.",
+        )
+    invalid_skill = next(
+        (skill for skill in target_skills if skill.is_valid is False),
+        None,
+    )
+    if invalid_skill is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Invalid skill '{invalid_skill.name}' cannot be associated with an app.",
+        )
+
+    preserved_provider_skills = list(
+        db_session.scalars(
+            select(Skill)
+            .join(
+                ExternalApp__Skill,
+                ExternalApp__Skill.skill_id == Skill.id,
+            )
+            .where(
+                ExternalApp__Skill.external_app_id == app.id,
+                Skill.built_in_skill_id.is_not(None),
+            )
+        )
+    )
+    seen_names: set[str] = set()
+    conflicting_name: str | None = None
+    for skill in [*preserved_provider_skills, *target_skills]:
+        if skill.name in seen_names:
+            conflicting_name = skill.name
+            break
+        seen_names.add(skill.name)
+    if conflicting_name is not None:
+        raise OnyxError(
+            OnyxErrorCode.SKILL_NAME_CONFLICT,
+            (
+                f"App '{app.name}' cannot have more than one associated skill "
+                f"named '{conflicting_name}'."
+            ),
         )
 
     conflicting_app = db_session.execute(

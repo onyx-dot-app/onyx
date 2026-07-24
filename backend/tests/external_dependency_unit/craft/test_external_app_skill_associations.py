@@ -121,6 +121,107 @@ def test_associate_rejects_built_in_and_already_associated_skills(
     assert dependency.id == first_app_id
 
 
+def test_associate_rejects_a_second_skill_with_the_same_name(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    app_id = _make_app(db_session)
+    associated = make_skill(db_session, name="shared-app-skill", is_public=True)
+    conflicting = make_skill(db_session, name=associated.name, is_public=False)
+    associate_custom_skill_with_external_app__no_commit(
+        db_session,
+        external_app_id=app_id,
+        skill_id=associated.id,
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        associate_custom_skill_with_external_app__no_commit(
+            db_session,
+            external_app_id=app_id,
+            skill_id=conflicting.id,
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.SKILL_NAME_CONFLICT
+    assert get_external_app_by_skill_id(db_session, conflicting.id) is None
+    assert conflicting.public_permission is None
+    assert get_skills_for_external_app(db_session, app_id) == [associated]
+
+
+def test_associate_rejects_an_invalid_skill_without_promoting_it(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    app_id = _make_app(db_session)
+    invalid = make_skill(db_session, name="invalid-app-skill", is_public=False)
+    invalid.is_valid = False
+    db_session.flush()
+
+    with pytest.raises(OnyxError) as exc_info:
+        associate_custom_skill_with_external_app__no_commit(
+            db_session,
+            external_app_id=app_id,
+            skill_id=invalid.id,
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert get_external_app_by_skill_id(db_session, invalid.id) is None
+    assert invalid.public_permission is None
+
+
+def test_replace_rejects_same_named_skills_without_mutating_associations(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    app_id = _make_app(db_session)
+    original = make_skill(db_session, name="original-skill", is_public=True)
+    first = make_skill(db_session, name="duplicate-name", is_public=False)
+    second = make_skill(db_session, name=first.name, is_public=False)
+    associate_custom_skill_with_external_app__no_commit(
+        db_session,
+        external_app_id=app_id,
+        skill_id=original.id,
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        replace_custom_skill_associations__no_commit(
+            db_session,
+            external_app_id=app_id,
+            skill_ids=[first.id, second.id],
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.SKILL_NAME_CONFLICT
+    assert get_skills_for_external_app(db_session, app_id) == [original]
+    assert first.public_permission is None
+    assert second.public_permission is None
+
+
+def test_replace_rejects_an_invalid_skill_without_mutating_associations(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    app_id = _make_app(db_session)
+    original = make_skill(db_session, name="original-skill", is_public=True)
+    invalid = make_skill(db_session, name="invalid-app-skill", is_public=False)
+    invalid.is_valid = False
+    associate_custom_skill_with_external_app__no_commit(
+        db_session,
+        external_app_id=app_id,
+        skill_id=original.id,
+    )
+    db_session.flush()
+
+    with pytest.raises(OnyxError) as exc_info:
+        replace_custom_skill_associations__no_commit(
+            db_session,
+            external_app_id=app_id,
+            skill_ids=[invalid.id],
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert get_skills_for_external_app(db_session, app_id) == [original]
+    assert invalid.public_permission is None
+
+
 def test_unlink_retains_skill_visibility_content_and_preferences(
     db_session: Session,
     test_user: User,  # noqa: ARG001
@@ -210,7 +311,6 @@ def test_app_update_batches_associations_into_one_sandbox_refresh(
         is_public=False,
         author_user_id=owner.id,
     )
-    skill.is_valid = False
     second_skill = make_skill(
         db_session,
         is_public=False,
@@ -238,12 +338,6 @@ def test_app_update_batches_associations_into_one_sandbox_refresh(
         second_skill.id,
     }
     assert linked.name == "Renamed CRM"
-    assert (
-        next(
-            summary for summary in linked.associated_skills if summary.id == skill.id
-        ).is_valid
-        is False
-    )
     assert {owner.id, other_user.id} <= pushed_user_sets[0]
     assert len(pushed_user_sets) == 1
 
