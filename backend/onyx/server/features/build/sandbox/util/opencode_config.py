@@ -7,6 +7,7 @@ key otherwise — letting per-prompt model overrides cross providers without a
 restart.
 """
 
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -16,19 +17,28 @@ from onyx.server.features.build.sandbox.models import (
     LLMProviderConfig,
 )
 
-# 4.6+ supports adaptive thinking; older needs enabled+budgetTokens.
 _ADAPTIVE_THINKING_MODELS = frozenset(
     {"claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6"}
 )
+_CLAUDE_MAJOR_VERSION = re.compile(r"claude[.-](?:[a-z]+[.-])?(\d+)")
+
+
+def _uses_adaptive_thinking(model_name: str) -> bool:
+    normalized_name = model_name.lower()
+    if normalized_name in _ADAPTIVE_THINKING_MODELS or normalized_name.startswith(
+        tuple(f"{model}-" for model in _ADAPTIVE_THINKING_MODELS)
+    ):
+        return True
+
+    match = _CLAUDE_MAJOR_VERSION.search(normalized_name)
+    return match is not None and int(match.group(1)) >= 5
 
 
 def _model_options(provider: str, model_name: str) -> dict[str, Any]:
     if provider == "openai":
         return {"reasoningEffort": "high"}
     if provider in ("anthropic", "bedrock"):
-        if model_name in _ADAPTIVE_THINKING_MODELS or model_name.startswith(
-            tuple(f"{m}-" for m in _ADAPTIVE_THINKING_MODELS)
-        ):
+        if _uses_adaptive_thinking(model_name):
             return {"thinking": {"type": "adaptive", "display": "summarized"}}
         return {"thinking": {"type": "enabled", "budgetTokens": 16000}}
     if provider == "google":
