@@ -7,6 +7,34 @@ defined below — names and file contents must match character-for-character.
 The unit tests under `backend/tests/unit/onyx/connectors/box/` need none of
 this; they run fully offline.
 
+## Incremental indexing (how the connector polls)
+
+Box's folder-listing API (`GET /folders/:id/items`) has no server-side
+modified-time filter, so a naive poll would re-list the entire corpus every
+run. The connector avoids that:
+
+- **First index, folder-scoped connectors, pruning, and permission sync** do a
+  full BFS crawl of the folder tree.
+- **Steady-state whole-enterprise polls** (poll window ≤ 7 days) instead consume
+  the Box enterprise **events stream** (`GET /events?stream_type=admin_logs`,
+  filtered to content-change event types) and re-index only the files that
+  actually changed. The queried window is delayed by 24 hours because Box warns
+  that historical admin-log events can arrive after a near-real-time filter
+  window has already been read.
+- A window wider than 7 days (e.g. a long outage) falls back to a full crawl,
+  which doubles as periodic reconciliation. If the events API errors (e.g.
+  missing admin scope) the run falls back to a full crawl rather than indexing
+  nothing. Folder move/rename events also trigger a full crawl because they can
+  change the paths of every descendant.
+- Connectors that index Box web links always use full crawls because enterprise
+  event sources only identify files and folders.
+- Deletions are reconciled by the slim-based pruning job, not the events path
+  (the events path only re-indexes changed/added files).
+
+There is no daily test for the events path — admin-log ingestion lag makes a
+synchronous live assertion flaky — but it's covered comprehensively offline in
+`backend/tests/unit/onyx/connectors/box/test_box_events.py`.
+
 ## 1. Create a Box developer account
 
 Sign up at <https://developer.box.com> (free). This provisions a sandbox

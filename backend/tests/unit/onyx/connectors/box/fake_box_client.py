@@ -2,11 +2,17 @@
 Box connector touches. Backed by real box_sdk_gen schema objects so the
 connector exercises the same attribute access paths as against the live API."""
 
+from datetime import datetime
 from io import BytesIO
 
 from box_sdk_gen.box.errors import BoxAPIError, RequestInfo, ResponseInfo
+from box_sdk_gen.managers.events import GetEventsEventType
 from box_sdk_gen.schemas.collaboration import Collaboration
 from box_sdk_gen.schemas.collaborations import Collaborations
+from box_sdk_gen.schemas.event import Event
+from box_sdk_gen.schemas.event_source import EventSource, EventSourceItemTypeField
+from box_sdk_gen.schemas.events import Events
+from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder_full import FolderFull
 from box_sdk_gen.schemas.group_full import GroupFull
 from box_sdk_gen.schemas.group_membership import GroupMembership
@@ -16,6 +22,38 @@ from box_sdk_gen.schemas.items import Items
 from box_sdk_gen.schemas.user_full import UserFull
 from box_sdk_gen.schemas.user_mini import UserMini
 from box_sdk_gen.schemas.users import Users
+
+
+def make_events_page(file_ids: list[str], next_stream_position: str | None) -> Events:
+    """Build enterprise events with the EventSource shape returned by Box."""
+    entries = [
+        Event(
+            source=EventSource(
+                item_type=EventSourceItemTypeField.FILE,
+                item_id=file_id,
+                item_name=f"file-{file_id}",
+            )
+        )
+        for file_id in file_ids
+    ]
+    return Events(entries=entries, next_stream_position=next_stream_position)
+
+
+def make_folder_event_page(
+    folder_id: str, next_stream_position: str | None = None
+) -> Events:
+    return Events(
+        entries=[
+            Event(
+                source=EventSource(
+                    item_type=EventSourceItemTypeField.FOLDER,
+                    item_id=folder_id,
+                    item_name=f"folder-{folder_id}",
+                )
+            )
+        ],
+        next_stream_position=next_stream_position,
+    )
 
 
 def make_box_api_error(status_code: int) -> BoxAPIError:
@@ -80,6 +118,63 @@ class FakeDownloadsManager:
         if file_id not in self._file_contents:
             raise make_box_api_error(404)
         return BytesIO(self._file_contents[file_id])
+
+
+class FakeFilesManager:
+    def __init__(
+        self, files_by_id: dict[str, FileFull], fail_status_by_id: dict[str, int]
+    ) -> None:
+        self._files_by_id = files_by_id
+        self._fail_status_by_id = fail_status_by_id
+        self.fetch_calls: list[str] = []
+
+    def get_file_by_id(
+        self,
+        file_id: str,
+        *,
+        fields: list[str] | None = None,  # noqa: ARG002
+    ) -> FileFull:
+        self.fetch_calls.append(file_id)
+        if file_id in self._fail_status_by_id:
+            raise make_box_api_error(self._fail_status_by_id[file_id])
+        if file_id not in self._files_by_id:
+            raise make_box_api_error(404)
+        return self._files_by_id[file_id]
+
+
+class FakeEventsManager:
+    def __init__(
+        self,
+        event_pages: list[Events],
+        fail_status_by_call: dict[int, int],
+    ) -> None:
+        # each call returns the next page in order
+        self._event_pages = event_pages
+        self._fail_status_by_call = fail_status_by_call
+        self.calls: list[str | None] = []
+        self.created_windows: list[tuple[datetime | None, datetime | None]] = []
+        self.event_types: list[list[GetEventsEventType] | None] = []
+
+    def get_events(
+        self,
+        *,
+        stream_type: object = None,  # noqa: ARG002
+        event_type: list[GetEventsEventType] | None = None,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
+        stream_position: str | None = None,
+        limit: int | None = None,  # noqa: ARG002
+    ) -> Events:
+        self.calls.append(stream_position)
+        self.created_windows.append((created_after, created_before))
+        self.event_types.append(event_type)
+        call_number = len(self.calls)
+        if call_number in self._fail_status_by_call:
+            raise make_box_api_error(self._fail_status_by_call[call_number])
+        index = call_number - 1
+        if index < len(self._event_pages):
+            return self._event_pages[index]
+        return Events(entries=[], next_stream_position=stream_position)
 
 
 class FakeListCollaborationsManager:
@@ -221,6 +316,11 @@ class FakeBoxClient:
         groups: list[GroupFull] | None = None,
         members_by_group: dict[str, list[UserMini]] | None = None,
         membership_fail_status_by_group: dict[str, int] | None = None,
+        files_by_id: dict[str, FileFull] | None = None,
+        file_fetch_fail_status_by_id: dict[str, int] | None = None,
+        event_pages: list[Events] | None = None,
+        events_fail_status: int | None = None,
+        events_fail_status_by_call: dict[int, int] | None = None,
         # small page so pagination loops run without thousands of fake entries
         page_size: int = 2,
     ) -> None:
@@ -228,6 +328,9 @@ class FakeBoxClient:
             folders_by_id, pages, fail_listing_folder_ids or set()
         )
         self.downloads = FakeDownloadsManager(file_contents or {})
+        self.files = FakeFilesManager(
+            files_by_id or {}, file_fetch_fail_status_by_id or {}
+        )
         self.list_collaborations = FakeListCollaborationsManager(
             folder_collaborations or {}, file_collaborations or {}
         )
@@ -238,3 +341,7 @@ class FakeBoxClient:
         self.memberships = FakeMembershipsManager(
             members_by_group or {}, page_size, membership_fail_status_by_group or {}
         )
+        fail_status_by_call = dict(events_fail_status_by_call or {})
+        if events_fail_status is not None:
+            fail_status_by_call[1] = events_fail_status
+        self.events = FakeEventsManager(event_pages or [], fail_status_by_call)

@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 
 from box_sdk_gen import BoxCCGAuth, BoxClient, CCGConfig
 from box_sdk_gen.box.errors import BoxAPIError
+from box_sdk_gen.managers.events import GetEventsEventType, GetEventsStreamType
+from box_sdk_gen.schemas.event_source import EventSource, EventSourceItemTypeField
 from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder_mini import FolderMini
 from box_sdk_gen.schemas.user_full import UserFull
@@ -22,7 +24,11 @@ from onyx.connectors.box.access import (
     resolve_box_folder_access,
     resolve_box_web_link_access,
 )
-from onyx.connectors.box.models import BoxConnectorCheckpoint, BoxFolderFrontierEntry
+from onyx.connectors.box.models import (
+    BoxConnectorCheckpoint,
+    BoxFolderFrontierEntry,
+    BoxTraversalMode,
+)
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import datetime_to_utc
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -89,6 +95,33 @@ _ITEM_FIELDS = [
     "description",
 ]
 
+# Fields needed to convert a single file fetched via the events path, including
+# the parent chain (path_collection) for hierarchy + inherited permissions.
+_FILE_FETCH_FIELDS = _ITEM_FIELDS + ["parent", "path_collection"]
+
+# --- Incremental (events) tuning ---
+_BOX_EVENTS_PAGE_SIZE = 500
+# Box warns that querying admin_logs near real time can miss events that arrive
+# after the requested time window. Delay each window beyond Box's documented
+# reporting latency while preserving the framework's normal overlap.
+_BOX_EVENTS_LAG_SECONDS = 24 * 60 * 60
+# Poll windows at or below this use the enterprise events stream; wider windows
+# (first index, long gaps) fall back to a full crawl. This threshold doubles as
+# the reconciliation cadence: a connector idle longer than this re-crawls fully.
+_EVENTS_MAX_WINDOW_SECONDS = 7 * 24 * 60 * 60  # 7 days
+
+# Box event types that mean a file's content, name, location, or existence
+# changed and it should be re-fetched + re-indexed. Deletes/trashes are handled
+# by the slim-based pruning job, so they're intentionally excluded here.
+_CONTENT_CHANGE_EVENT_TYPES = [
+    GetEventsEventType.UPLOAD,
+    GetEventsEventType.EDIT,
+    GetEventsEventType.COPY,
+    GetEventsEventType.MOVE,
+    GetEventsEventType.RENAME,
+    GetEventsEventType.UNDELETE,
+    GetEventsEventType.FILE_VERSION_RESTORE,
+]
 BOX_GROUP_ID_PREFIX = "box-group"
 BOX_ALL_ENTERPRISE_USERS_GROUP_PREFIX = "box-enterprise-all-users"
 
@@ -594,7 +627,14 @@ class BoxConnector(
                 checkpoint.has_more = bool(checkpoint.todo)
                 return checkpoint
 
-        yield HierarchyNode(
+        yield self._folder_hierarchy_node(entry)
+        checkpoint.current = entry
+        checkpoint.current_marker = None
+        checkpoint.has_more = True
+        return checkpoint
+
+    def _folder_hierarchy_node(self, entry: BoxFolderFrontierEntry) -> HierarchyNode:
+        return HierarchyNode(
             raw_node_id=entry.folder_id,
             raw_parent_id=entry.parent_folder_id,
             display_name=entry.display_name,
@@ -602,10 +642,6 @@ class BoxConnector(
             node_type=HierarchyNodeType.FOLDER,
             external_access=entry.access,
         )
-        checkpoint.current = entry
-        checkpoint.current_marker = None
-        checkpoint.has_more = True
-        return checkpoint
 
     def _load_one_page(
         self,
@@ -619,16 +655,65 @@ class BoxConnector(
         None,
         BoxConnectorCheckpoint,
     ]:
-        """Advances the BFS crawl by one unit: seed the frontier on the first
-        cycle, start the next folder, or read one page of the current folder's
-        items."""
+        """Advances the traversal by one unit. On the first cycle it picks a
+        mode (FULL crawl vs incremental EVENTS) and seeds it; thereafter it
+        dispatches one page of work to the chosen mode."""
         checkpoint = deepcopy(checkpoint)
 
-        if checkpoint.todo is None:
-            checkpoint.todo = self._seed_frontier(include_permissions)
+        if checkpoint.mode is None:
+            # Use the incremental events stream only for a steady-state,
+            # short-window poll of a whole-enterprise connector. Everything else
+            # crawls the tree: slim (pruning / perm-sync must enumerate the
+            # whole corpus), folder-scoped connectors (events can't scope to a
+            # subtree), and the first index / long gaps (window > the
+            # reconciliation cadence) which also serve as a full reconciliation.
+            window = end - start if start is not None and end is not None else None
+            use_events = (
+                not slim
+                and not self.include_web_links
+                and self.entry_folder_ids == [BOX_ROOT_FOLDER_ID]
+                and window is not None
+                and 0 < window <= _EVENTS_MAX_WINDOW_SECONDS
+            )
+            checkpoint.mode = (
+                BoxTraversalMode.EVENTS if use_events else BoxTraversalMode.FULL
+            )
+            if checkpoint.mode == BoxTraversalMode.FULL:
+                checkpoint.todo = self._seed_frontier(include_permissions)
             checkpoint.has_more = True
             return checkpoint
 
+        if checkpoint.mode == BoxTraversalMode.EVENTS:
+            if start is None or end is None:
+                # EVENTS is only selected for a bounded window (see the decision
+                # above); if that ever fails to hold, fall back to a full crawl.
+                return self._switch_to_full_crawl(checkpoint, include_permissions)
+            new_checkpoint = yield from self._advance_events(
+                checkpoint, start, end, include_permissions
+            )
+            return new_checkpoint
+
+        full_start = None if checkpoint.full_reconciliation else start
+        full_end = None if checkpoint.full_reconciliation else end
+        new_checkpoint = yield from self._advance_full(
+            checkpoint, full_start, full_end, include_permissions, slim
+        )
+        return new_checkpoint
+
+    def _advance_full(
+        self,
+        checkpoint: BoxConnectorCheckpoint,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
+        include_permissions: bool,
+        slim: bool,
+    ) -> Generator[
+        Document | SlimDocument | HierarchyNode | ConnectorFailure,
+        None,
+        BoxConnectorCheckpoint,
+    ]:
+        """One unit of the BFS crawl: start the next folder, or read one page
+        of the current folder's items."""
         if checkpoint.current is None:
             return (
                 yield from self._pick_current_from_todos(
@@ -703,6 +788,164 @@ class BoxConnector(
             checkpoint.current = None
             checkpoint.current_marker = None
         checkpoint.has_more = checkpoint.current is not None or bool(checkpoint.todo)
+        return checkpoint
+
+    def _folder_entries_for_file(
+        self, file: FileFull, include_permissions: bool
+    ) -> list[BoxFolderFrontierEntry]:
+        """Build the full root-to-parent hierarchy for an event-sourced file."""
+        if file.parent is None:
+            return []
+        path_entries = list(
+            (file.path_collection.entries if file.path_collection else None) or []
+        )
+        if not path_entries or path_entries[-1].id != file.parent.id:
+            path_entries.append(file.parent)
+
+        folder_entries: list[BoxFolderFrontierEntry] = []
+        for index, path_entry in enumerate(path_entries):
+            entries_through_folder = path_entries[: index + 1]
+            access = (
+                resolve_box_ancestor_access(
+                    self.content_client, entries_through_folder, self.enterprise_id
+                )
+                if include_permissions
+                else None
+            )
+            folder_entries.append(
+                BoxFolderFrontierEntry(
+                    folder_id=path_entry.id,
+                    display_name=path_entry.name or path_entry.id,
+                    parent_folder_id=(
+                        path_entries[index - 1].id if index > 0 else None
+                    ),
+                    path="/".join(
+                        entry.name or entry.id for entry in entries_through_folder
+                    ),
+                    access=access,
+                )
+            )
+        return folder_entries
+
+    def _switch_to_full_crawl(
+        self,
+        checkpoint: BoxConnectorCheckpoint,
+        include_permissions: bool,
+    ) -> BoxConnectorCheckpoint:
+        checkpoint.mode = BoxTraversalMode.FULL
+        checkpoint.todo = self._seed_frontier(include_permissions)
+        checkpoint.current = None
+        checkpoint.current_marker = None
+        checkpoint.seen_folder_ids = set()
+        checkpoint.full_reconciliation = True
+        checkpoint.event_stream_position = None
+        checkpoint.event_seen_file_ids = set()
+        checkpoint.has_more = True
+        return checkpoint
+
+    def _advance_events(
+        self,
+        checkpoint: BoxConnectorCheckpoint,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        include_permissions: bool,
+    ) -> Generator[
+        Document | HierarchyNode | ConnectorFailure, None, BoxConnectorCheckpoint
+    ]:
+        """One page of the enterprise events stream: fetch changed files and
+        yield their re-indexed documents (+ parent folder nodes). Deletes are
+        left to the slim-based pruning job."""
+        created_after = datetime.fromtimestamp(
+            max(0, start - _BOX_EVENTS_LAG_SECONDS), tz=timezone.utc
+        )
+        created_before = datetime.fromtimestamp(
+            max(0, end - _BOX_EVENTS_LAG_SECONDS), tz=timezone.utc
+        )
+        try:
+            events = self.enterprise_client.events.get_events(
+                stream_type=GetEventsStreamType.ADMIN_LOGS,
+                event_type=_CONTENT_CHANGE_EVENT_TYPES,
+                created_after=created_after,
+                created_before=created_before,
+                stream_position=checkpoint.event_stream_position,
+                limit=_BOX_EVENTS_PAGE_SIZE,
+            )
+        except BoxAPIError as e:
+            # Events need the admin/enterprise scope and can hit transient
+            # issues. Rather than silently index nothing, fall back to a full
+            # crawl for this run (mirrors SharePoint's 410 -> full-resync).
+            logger.warning(
+                "Box events fetch failed (status=%s); falling back to a full "
+                "crawl for this run.",
+                box_api_status_code(e),
+            )
+            return self._switch_to_full_crawl(checkpoint, include_permissions)
+
+        entries = events.entries or []
+        for event in entries:
+            source = event.source
+            if not isinstance(source, EventSource):
+                continue
+            if source.item_type == EventSourceItemTypeField.FOLDER:
+                # A folder move/rename changes every descendant's path and
+                # hierarchy. Reconcile the whole tree rather than leaving stale
+                # descendants until a later maintenance operation.
+                return self._switch_to_full_crawl(checkpoint, include_permissions)
+            if source.item_type != EventSourceItemTypeField.FILE:
+                continue
+            file_id = source.item_id
+            if file_id in checkpoint.event_seen_file_ids:
+                continue
+            checkpoint.event_seen_file_ids.add(file_id)
+
+            try:
+                file = self.content_client.files.get_file_by_id(
+                    file_id, fields=_FILE_FETCH_FIELDS
+                )
+            except BoxAPIError as e:
+                status = box_api_status_code(e)
+                if status in (403, 404):
+                    # Not visible to the indexing user, or already gone; a
+                    # deletion is reconciled by pruning.
+                    continue
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=box_file_document_id(file_id),
+                        document_link=box_file_link(file_id),
+                    ),
+                    failure_message=(
+                        f"Failed to fetch changed Box file {file_id} "
+                        f"(status={status}): {e.message}"
+                    ),
+                    exception=e,
+                )
+                continue
+
+            folder_entries = self._folder_entries_for_file(file, include_permissions)
+            if not folder_entries:
+                continue
+            for folder_entry in folder_entries:
+                if folder_entry.folder_id in checkpoint.seen_folder_ids:
+                    continue
+                checkpoint.seen_folder_ids.add(folder_entry.folder_id)
+                yield self._folder_hierarchy_node(folder_entry)
+            converted = self._convert_file(
+                file, folder_entries[-1], include_permissions
+            )
+            if converted is not None:
+                yield converted
+
+        next_position = events.next_stream_position
+        next_str = str(next_position) if next_position is not None else None
+        if (
+            not entries
+            or next_str is None
+            or next_str == checkpoint.event_stream_position
+        ):
+            checkpoint.has_more = False
+        else:
+            checkpoint.event_stream_position = next_str
+            checkpoint.has_more = True
         return checkpoint
 
     def _load_from_checkpoint(
