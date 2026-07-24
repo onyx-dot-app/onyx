@@ -159,6 +159,8 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.doc_permission_syncing",
             "onyx.background.celery.tasks.docprocessing",
             "onyx.background.celery.tasks.opensearch_migration",
+            # Failed-chat (husk) GC; runs on the chat_ttl_deletion queue
+            "onyx.background.celery.tasks.chat_cleanup",
             # Sandbox cleanup tasks (build feature)
             "onyx.background.celery.tasks.build",
         ]
