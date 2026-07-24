@@ -97,6 +97,30 @@ _BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset(
     {"temperature", "stream_options"}
 )
 
+# Substrings provider 400s use to name each strippable kwarg (legacy thinking
+# errors cite the inner budget_tokens field, effort errors may cite only the
+# inner effort field of reasoning or output_config).
+_KWARG_ERROR_ALIASES: dict[str, tuple[str, ...]] = {
+    "thinking": ("thinking", "budget_tokens"),
+    "output_config": ("output_config", "effort"),
+    "reasoning": ("reasoning", "effort"),
+    "reasoning_effort": ("reasoning_effort", "effort"),
+    "temperature": ("temperature",),
+    "stream_options": ("stream_options",),
+}
+
+
+def _rejection_names_strippable_kwargs(error: Exception, strippable: set[str]) -> bool:
+    """True when the 400's message names a kwarg a later attempt would drop.
+    Unrelated 400s (context length, malformed input) must not be retried."""
+    message = str(error).lower()
+    return any(
+        alias in message
+        for key in strippable
+        for alias in _KWARG_ERROR_ALIASES.get(key, (key,))
+    )
+
+
 # Named tiers spanning Claude's naming schemes, including the Claude 5 line whose
 # version digit can precede or follow the tier ("claude-sonnet-5" vs
 # "claude-5-sonnet").
@@ -869,6 +893,10 @@ class LitellmLLM(LLM):
                     return _call_litellm(opts)
                 except BadRequestError as e:
                     if i == len(attempts) - 1:
+                        raise
+                    # Only retry rejections a later attempt can strip away.
+                    remaining_strippable = set(opts) - set(attempts[-1])
+                    if not _rejection_names_strippable_kwargs(e, remaining_strippable):
                         raise
                     logger.warning(
                         "Provider rejected request for model %s. Retrying "

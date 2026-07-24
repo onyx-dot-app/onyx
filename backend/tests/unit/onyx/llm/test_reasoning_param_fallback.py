@@ -75,11 +75,24 @@ def test_bad_request_after_strip_propagates() -> None:
 
     def completion(**kwargs: Any) -> Any:
         calls.append(kwargs)
-        raise _bad_request("still broken")
+        raise _bad_request("thinking is not supported on this endpoint")
 
     with pytest.raises(BadRequestError):
         _run(_make_llm(), completion, ReasoningEffort.HIGH)
     assert len(calls) == 2
+
+
+def test_unrelated_bad_request_is_not_retried() -> None:
+    calls: list[dict[str, Any]] = []
+
+    def completion(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        raise _bad_request("prompt is too long: 250000 tokens > 200000 maximum")
+
+    # The 400 names no strippable kwarg, so the ladder must not burn retries.
+    with pytest.raises(BadRequestError):
+        _run(_make_llm(), completion, ReasoningEffort.HIGH)
+    assert len(calls) == 1
 
 
 def test_ladder_strips_reasoning_then_all_best_effort_kwargs() -> None:
@@ -87,8 +100,10 @@ def test_ladder_strips_reasoning_then_all_best_effort_kwargs() -> None:
 
     def completion(**kwargs: Any) -> Any:
         calls.append(kwargs)
-        if "reasoning" in kwargs or "temperature" in kwargs:
-            raise _bad_request()
+        if "reasoning" in kwargs:
+            raise _bad_request("reasoning is not supported with this model")
+        if "temperature" in kwargs:
+            raise _bad_request("temperature is not supported with this model")
         return _SENTINEL
 
     # gpt-5.4 sets both a reasoning kwarg and temperature, exercising the
