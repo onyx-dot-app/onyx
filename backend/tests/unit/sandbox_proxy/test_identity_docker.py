@@ -1,16 +1,18 @@
 import threading
 import time
 from typing import cast
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from docker import DockerClient
 
 from onyx.sandbox_proxy.identity import SandboxIdentity
 from onyx.sandbox_proxy.identity_docker import (
+    _DOCKER_API_REQUEST_TIMEOUT_SECONDS,
     DockerEventsLookup,
     _identity_from_container,
 )
+from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
 
 _DEFAULT_NETWORK = "onyx_craft_sandbox"
 
@@ -64,6 +66,16 @@ def _make_lookup() -> tuple[DockerEventsLookup, MagicMock]:
         network=_DEFAULT_NETWORK,
     )
     return lookup, docker_client
+
+
+def test_default_client_uses_bounded_api_timeout() -> None:
+    with patch("onyx.sandbox_proxy.identity_docker.DockerClient") as docker_client:
+        DockerEventsLookup()
+
+    docker_client.assert_called_once_with(
+        base_url=f"unix://{SANDBOX_DOCKER_SOCKET}",
+        timeout=_DOCKER_API_REQUEST_TIMEOUT_SECONDS,
+    )
 
 
 # ------------------------------------------------------------------------------
