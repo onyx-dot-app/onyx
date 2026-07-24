@@ -407,24 +407,6 @@ def get_user_connection_config(
     )
 
 
-def get_user_authenticated_server_ids(
-    server_ids: list[int], user_email: str, db_session: Session
-) -> set[int]:
-    """Subset of ``server_ids`` for which ``user_email`` has a stored connection
-    config (per-user credentials / OAuth tokens)."""
-    if not server_ids:
-        return set()
-    rows = db_session.scalars(
-        select(MCPConnectionConfig.mcp_server_id).where(
-            and_(
-                MCPConnectionConfig.mcp_server_id.in_(server_ids),
-                MCPConnectionConfig.user_email == user_email,
-            )
-        )
-    )
-    return {sid for sid in rows if sid is not None}
-
-
 class MCPCredentialsError(Exception):
     """Credentials for an MCP server cannot be resolved for this user."""
 
@@ -510,6 +492,29 @@ def resolve_mcp_credentials(
         )
 
     return ResolvedMCPCredentials(connection_config=None, user_oauth_token=None)
+
+
+def can_resolve_mcp_credentials(
+    mcp_server: MCPServer,
+    user: User,
+    db_session: Session,
+) -> bool:
+    """Whether the sandbox proxy will be able to authenticate `user` against
+    `mcp_server`.
+
+    Mirrors `MCPServerResolver._resolve_for_server`'s terminal condition
+    (`requires_auth and not headers` blocks the request), so callers deciding
+    whether a server is usable cannot drift from what injection actually does.
+    Note this is NOT the same as the user having their own connection config:
+    admin-managed, `PT_OAUTH`, and no-auth servers all authenticate without one.
+    """
+    if mcp_server.auth_type in (None, MCPAuthenticationType.NONE):
+        return True
+    try:
+        credentials = resolve_mcp_credentials(mcp_server, user, db_session)
+    except MCPCredentialsError:
+        return False
+    return bool(credentials.build_headers())
 
 
 def get_user_connection_configs_for_server(

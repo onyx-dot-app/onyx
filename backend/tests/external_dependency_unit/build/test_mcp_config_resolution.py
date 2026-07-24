@@ -1,8 +1,9 @@
 """External-dependency-unit tests for `resolve_craft_mcp_servers`.
 
 Verifies the DB → opencode-config-input step: only craft-enabled servers the
-user may access are emitted, tools split into enabled/disabled by the admin's
-chat-side curation, and the opencode server key is stable + identifier-safe.
+user may access *and the proxy can authenticate them against* are emitted, tools
+split into enabled/disabled by the admin's chat-side curation, and the opencode
+server key is stable + identifier-safe.
 """
 
 from __future__ import annotations
@@ -39,12 +40,14 @@ def craft_server(
     created: list[MCPServer] = []
 
     def _server(name: str, *, available_in_craft: bool) -> MCPServer:
+        # NONE auth keeps these fixtures about access + tool curation: they need
+        # no stored credentials to pass the emission filter.
         server = create_mcp_server__no_commit(
             owner_email="admin@example.com",
             name=name,
             description=None,
             server_url=f"https://api-{uuid4().hex[:8]}.example.com/mcp",
-            auth_type=MCPAuthenticationType.API_TOKEN,
+            auth_type=MCPAuthenticationType.NONE,
             transport=MCPTransport.STREAMABLE_HTTP,
             auth_performer=MCPAuthenticationPerformer.ADMIN,
             db_session=db_session,
@@ -86,22 +89,24 @@ def test_only_craft_enabled_servers_resolved_with_tool_curation(
     assert config.disabled_tools == ("delete_issue",)
 
 
-def test_resolve_populates_server_id_and_user_auth(
+def test_per_user_server_emitted_only_once_credentials_connected(
     db_session: Session,
     craft_server: tuple[MCPServer, MCPServer],
 ) -> None:
-    """``server_id`` and ``authenticated`` feed the runtime hash: connecting
-    credentials must flip ``authenticated`` and change the fingerprint so the
-    user's session hot-reloads (tool discovery is credential-gated)."""
+    """A PER_USER server the proxy can't authenticate is not emitted at all —
+    its tool discovery would be blocked at injection. Connecting credentials adds
+    it to the set, which changes the fingerprint so the session hot-reloads."""
     craft, _ = craft_server
+    craft.auth_type = MCPAuthenticationType.API_TOKEN
+    craft.auth_performer = MCPAuthenticationPerformer.PER_USER
+    db_session.commit()
     user = create_test_user(db_session, "mcp_auth")
 
-    before = {c.server_id: c for c in resolve_craft_mcp_servers(db_session, user)}
-    assert craft.id in before
-    assert before[craft.id].authenticated is False
-    fp_before = craft_mcp_fingerprint(list(before.values()))
+    before = resolve_craft_mcp_servers(db_session, user)
+    assert craft.id not in {c.server_id for c in before}
+    fp_before = craft_mcp_fingerprint(before)
 
-    create_connection_config(
+    config = create_connection_config(
         {"headers": {"Authorization": "Bearer x"}},
         db_session,
         mcp_server_id=craft.id,
@@ -109,9 +114,53 @@ def test_resolve_populates_server_id_and_user_auth(
     )
     db_session.commit()
 
-    after = {c.server_id: c for c in resolve_craft_mcp_servers(db_session, user)}
-    assert after[craft.id].authenticated is True
-    assert craft_mcp_fingerprint(list(after.values())) != fp_before
+    after = resolve_craft_mcp_servers(db_session, user)
+    assert craft.id in {c.server_id for c in after}
+    assert craft_mcp_fingerprint(after) != fp_before
+
+    # Disconnecting drops it back out, restoring the original fingerprint.
+    db_session.delete(config)
+    db_session.commit()
+    assert (
+        craft_mcp_fingerprint(resolve_craft_mcp_servers(db_session, user)) == fp_before
+    )
+
+
+def test_admin_managed_server_emitted_without_per_user_credentials(
+    db_session: Session,
+    craft_server: tuple[MCPServer, MCPServer],
+) -> None:
+    """An ADMIN-performer server authenticates every user off the admin's stored
+    credential (`user_email=""`), so it must be emitted for a user who has no
+    per-user row of their own."""
+    craft, _ = craft_server
+    craft.auth_type = MCPAuthenticationType.API_TOKEN
+    craft.auth_performer = MCPAuthenticationPerformer.ADMIN
+    craft.admin_connection_config = create_connection_config(
+        {"headers": {"Authorization": "Bearer admin-token"}},
+        db_session,
+        mcp_server_id=craft.id,
+        user_email="",
+    )
+    db_session.commit()
+
+    user = create_test_user(db_session, "mcp_admin_managed")
+    assert craft.id in {
+        c.server_id for c in resolve_craft_mcp_servers(db_session, user)
+    }
+
+
+def test_no_auth_server_emitted_with_no_credentials_stored(
+    db_session: Session,
+    craft_server: tuple[MCPServer, MCPServer],
+) -> None:
+    """`auth_type=NONE` needs no credentials, so it is emitted as-is."""
+    craft, _ = craft_server
+    assert craft.auth_type == MCPAuthenticationType.NONE
+    user = create_test_user(db_session, "mcp_no_auth")
+    assert craft.id in {
+        c.server_id for c in resolve_craft_mcp_servers(db_session, user)
+    }
 
 
 def test_private_unshared_server_excluded_for_user(
