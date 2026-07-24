@@ -180,6 +180,9 @@ interface SetNewSearchSettingsArgs {
   switchoverType: SwitchoverType;
   enableContextualRag: boolean;
   contextualRagModelConfigurationId: number | null;
+  // cc_pairs the admin consented to delete (shown as "won't be re-indexed"). The server
+  // recomputes the authoritative set and rejects if it includes an unacknowledged one.
+  acknowledgedWontPortCcPairIds: number[];
 }
 
 export async function setNewSearchSettings({
@@ -188,6 +191,7 @@ export async function setNewSearchSettings({
   switchoverType,
   enableContextualRag,
   contextualRagModelConfigurationId,
+  acknowledgedWontPortCcPairIds,
 }: SetNewSearchSettingsArgs): Promise<Response> {
   // The backend's EmbeddingProvider enum only contains cloud providers
   // (openai/cohere/voyage/google/litellm/azure). Self-hosted models live
@@ -212,6 +216,7 @@ export async function setNewSearchSettings({
       enable_contextual_rag: enableContextualRag,
       contextual_rag_model_configuration_id: contextualRagModelConfigurationId,
       switchover_type: switchoverType,
+      acknowledged_wont_port_cc_pair_ids: acknowledgedWontPortCcPairIds,
     }),
   });
 }
