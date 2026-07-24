@@ -159,7 +159,7 @@ dev = [
     "types-beautifulsoup4==4.12.0.3",
     "types-html5lib==1.1.11.13",
     "types-oauthlib==3.2.0.9",
-    "types-openpyxl==3.0.4.7",
+    "types-openpyxl==3.1.5.20260518",
     "types-passlib==1.7.7.20240106",
     "types-Pillow==10.2.0.20240822",
     "types-psutil==7.1.3.20251125",
