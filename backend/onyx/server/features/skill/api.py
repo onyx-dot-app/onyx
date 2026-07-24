@@ -304,6 +304,7 @@ def create_custom_skill_from_editor(
         instructions_markdown=create_request.instructions_markdown,
     )
     file_store = get_default_file_store()
+    should_auto_enable = auto_enable and external_app_id is None
     with ingested_skill_bundle(
         bundle_bytes,
         f"{canonical_name}.zip",
@@ -318,9 +319,6 @@ def create_custom_skill_from_editor(
                 bundle_sha256=ingested.bundle_sha256,
                 is_valid=True,
                 author_user_id=user.id,
-                public_permission=(
-                    SkillSharePermission.VIEWER if external_app_id is not None else None
-                ),
             ),
             db_session,
         )
@@ -330,9 +328,6 @@ def create_custom_skill_from_editor(
                 external_app_id=external_app_id,
                 skill_id=skill.id,
             )
-        # App-originated skills become org content first; each user selects them
-        # after the app is available to that user.
-        should_auto_enable = auto_enable and external_app_id is None
         if should_auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         ):

@@ -14,7 +14,7 @@ from onyx.db.external_app import (
     get_skills_for_external_app,
     replace_custom_skill_associations__no_commit,
 )
-from onyx.db.models import ExternalApp, Skill, User, UserRole, UserSkillPreference
+from onyx.db.models import Skill, User, UserRole, UserSkillPreference
 from onyx.db.skill import set_skill_public_permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -60,10 +60,6 @@ def test_associate_promotes_visibility_and_preserves_preferences(
     )
     db_session.flush()
     app_id = _make_app(db_session)
-    app = db_session.get(ExternalApp, app_id)
-    assert app is not None
-    app.enabled = False
-    db_session.flush()
 
     associated = associate_custom_skill_with_external_app__no_commit(
         db_session,

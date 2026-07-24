@@ -435,7 +435,7 @@ def associate_custom_skill_with_external_app__no_commit(
             ),
         )
 
-    if db_session.scalar(
+    conflicting_skill_id = db_session.scalar(
         select(Skill.id)
         .join(
             ExternalApp__Skill,
@@ -447,7 +447,8 @@ def associate_custom_skill_with_external_app__no_commit(
             Skill.id != skill.id,
         )
         .limit(1)
-    ):
+    )
+    if conflicting_skill_id is not None:
         raise OnyxError(
             OnyxErrorCode.SKILL_NAME_CONFLICT,
             (f"App '{app.name}' already has an associated skill named '{skill.name}'."),
@@ -488,13 +489,17 @@ def replace_custom_skill_associations__no_commit(
             f"External app with id {external_app_id} not found.",
         )
 
-    target_skills = list(
-        db_session.scalars(
-            select(Skill)
-            .where(Skill.id.in_(target_ids))
-            .order_by(Skill.id)
-            .with_for_update()
+    target_skills = (
+        list(
+            db_session.scalars(
+                select(Skill)
+                .where(Skill.id.in_(target_ids))
+                .order_by(Skill.id)
+                .with_for_update()
+            )
         )
+        if target_ids
+        else []
     )
     if len(target_skills) != len(target_ids):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "One or more skills were not found.")
@@ -513,22 +518,12 @@ def replace_custom_skill_associations__no_commit(
             f"Invalid skill '{invalid_skill.name}' cannot be associated with an app.",
         )
 
-    preserved_provider_skills = list(
-        db_session.scalars(
-            select(Skill)
-            .join(
-                ExternalApp__Skill,
-                ExternalApp__Skill.skill_id == Skill.id,
-            )
-            .where(
-                ExternalApp__Skill.external_app_id == app.id,
-                Skill.built_in_skill_id.is_not(None),
-            )
-        )
-    )
+    associated_skills = get_skills_for_external_app(db_session, app.id)
+    provider_skills = [skill for skill in associated_skills if not skill.is_custom]
+    current_custom_skills = [skill for skill in associated_skills if skill.is_custom]
     seen_names: set[str] = set()
     conflicting_name: str | None = None
-    for skill in [*preserved_provider_skills, *target_skills]:
+    for skill in [*provider_skills, *target_skills]:
         if skill.name in seen_names:
             conflicting_name = skill.name
             break
@@ -560,20 +555,7 @@ def replace_custom_skill_associations__no_commit(
             f"Skill '{skill_name}' is already associated with app '{app_name}'.",
         )
 
-    current_skills = list(
-        db_session.scalars(
-            select(Skill)
-            .join(
-                ExternalApp__Skill,
-                ExternalApp__Skill.skill_id == Skill.id,
-            )
-            .where(
-                ExternalApp__Skill.external_app_id == app.id,
-                Skill.built_in_skill_id.is_(None),
-            )
-        )
-    )
-    current_ids = {skill.id for skill in current_skills}
+    current_ids = {skill.id for skill in current_custom_skills}
 
     removed_ids = current_ids - target_ids
     if removed_ids:
@@ -592,7 +574,7 @@ def replace_custom_skill_associations__no_commit(
             )
 
     db_session.flush()
-    return current_skills + [
+    return current_custom_skills + [
         skill for skill in target_skills if skill.id not in current_ids
     ]
 
