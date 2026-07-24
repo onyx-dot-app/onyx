@@ -127,7 +127,10 @@ opensearch:
 
   persistence:
     enabled: true
-    size: 30Gi
+    # A moderately sized index fills 30Gi; hitting the disk flood-stage
+    # watermark write-blocks the whole index. Existing PVCs are not resized by
+    # upgrades — expand them online instead.
+    size: 64Gi
     storageClass: ""
 
   # Java heap should be ~50% of memory limit.
@@ -171,9 +174,12 @@ inferenceCapability:
   podLabels:
     - key: app
       value: inference-model-server
+  # Embedding work is bursty: a modest CPU request keeps the pod schedulable
+  # on smaller nodes while the limit provides burst headroom for query-time
+  # embedding.
   resources:
     requests:
-      cpu: 2000m
+      cpu: 1000m
       memory: 3Gi
     limits:
       cpu: 4000m
@@ -244,9 +250,14 @@ indexCapability:
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
   limitConcurrency: 10
+  # Indexing embeds in batches and tolerates throttling at low ingest volume;
+  # the limit, not the request, governs re-index throughput. Deployments doing
+  # sustained large re-indexes should raise the CPU limit (and consider a
+  # second replica) — an embedder pegged at its limit for hours can starve
+  # docprocessing heartbeats and trip the indexing watchdog.
   resources:
     requests:
-      cpu: 4000m
+      cpu: 1000m
       memory: 3Gi
     limits:
       cpu: 6000m
@@ -525,12 +536,16 @@ api:
     targetPort: api-server-port
     portName: api-server-port
 
+  # CPU limit must stay well above the request: under concurrent slow-stream
+  # load a 1-core limit exhausts the CFS quota and stalls the async /health
+  # endpoint, causing liveness kills. Idle RSS is ~1.1Gi, so keep the memory
+  # request at or above 1Gi.
   resources:
     requests:
-      cpu: 500m
+      cpu: 1000m
       memory: 1Gi
     limits:
-      cpu: 1000m
+      cpu: 3000m
       memory: 3Gi
 
   # Optional health probes
@@ -687,13 +702,15 @@ celery_worker_heavy:
     scope: onyx-backend-celery
   deploymentLabels:
     app: celery-worker-heavy
+  # Pruning and permission-sync walk large connector corpora; 2Gi limits have
+  # OOMed in production on big syncs.
   resources:
     requests:
       cpu: 500m
-      memory: 512Mi
+      memory: 1Gi
     limits:
       cpu: 1000m
-      memory: 2Gi
+      memory: 4Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
@@ -1166,99 +1183,32 @@ minio:
   affinity: {}
 
 # Code Interpreter - Python code execution service (beta feature)
+# The code-interpreter subchart's enable condition lives at
+# codeInterpreter.enabled, but the subchart itself is configured under the
+# hyphenated `code-interpreter:` key below — the dependency has no alias, so
+# Helm only passes values nested under the dependency's name. Any other key
+# placed in THIS block is silently ignored.
 codeInterpreter:
   enabled: true
 
-  replicaCount: 1
-
-  image:
-    repository: onyxdotapp/code-interpreter
-    pullPolicy: Always
-    tag: ""  # Empty uses chart appVersion
-
-  # Service configuration
+  # Used by the parent chart to compose CODE_INTERPRETER_BASE_URL; must match
+  # the subchart's service port.
   service:
-    type: ClusterIP
-    port: 8000
-    targetPort: 8000
-
-  # Execution limits
-  codeInterpreter:
-    maxExecTimeoutMs: 60000
-    maxOutputBytes: "1000000"
-    cpuTimeLimitSec: 5
-    memoryLimitMb: 256
-    host: "0.0.0.0"
     port: 8000
 
-    # Kubernetes executor configuration (creates pods for code execution)
-    kubernetesExecutor:
-      namespace: ""  # Empty = same namespace as release
-      image: ""  # Empty = default sandbox image
-      serviceAccount: ""
-      podResources:
-        limits:
-          cpu: "1"
-          memory: "256Mi"
-        requests:
-          cpu: "100m"
-          memory: "64Mi"
-
-  # API container resources
+# Values passed through to the code-interpreter subchart.
+code-interpreter:
+  # API container resources. Workspace archives staged into sandboxes are
+  # routinely tens of MB and the base64-encoded snapshot path roughly doubles
+  # in-flight memory; the subchart's default 512Mi limit repeatedly OOMKilled
+  # this pod in production (and parent OOMs leak spawned code-exec pods).
   resources:
     requests:
       cpu: 100m
-      memory: 128Mi
+      memory: 512Mi
     limits:
       cpu: 1000m
-      memory: 512Mi
-
-  # RBAC for pod management (required for kubernetes executor)
-  rbac:
-    create: true
-
-  # Security context
-  podSecurityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    fsGroup: 1000
-
-  securityContext:
-    capabilities:
-      drop:
-        - ALL
-    readOnlyRootFilesystem: false
-    runAsNonRoot: true
-    runAsUser: 1000
-    allowPrivilegeEscalation: false
-
-  # Health probes
-  livenessProbe:
-    httpGet:
-      path: /health
-      port: http
-    initialDelaySeconds: 10
-    periodSeconds: 10
-
-  readinessProbe:
-    httpGet:
-      path: /health
-      port: http
-    initialDelaySeconds: 5
-    periodSeconds: 5
-
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
-
-  # Optional features
-  ingress:
-    enabled: false
-  networkPolicy:
-    enabled: false
-  serviceAccount:
-    create: true
-    automount: true
+      memory: 2Gi
 
 ingress:
   enabled: false
