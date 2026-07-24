@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, Divider, Text } from "@opal/components";
-import { SettingsLayouts, toast } from "@opal/layouts";
+import { ConfirmationModalLayout, SettingsLayouts, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import {
   SvgArrowLeft,
@@ -64,6 +66,8 @@ export default function ExternalAppsPage() {
 }
 
 function AppsAdminContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: descriptors } = useSWR<BuiltInExternalAppDescriptor[]>(
     SWR_KEYS.buildExternalAppsBuiltInOptions,
     errorHandlingFetcher,
@@ -80,14 +84,24 @@ function AppsAdminContent() {
   const [customModal, setCustomModal] = useState<{
     existingApp: ExternalAppAdminResponse | null;
   } | null>(null);
+  const [dismissedDeepLink, setDismissedDeepLink] = useState<string | null>(
+    null
+  );
 
   const isReady = descriptors !== undefined && apps !== undefined;
   const hasConfigured = isReady && apps.length > 0;
 
   // Edit only works for apps whose app_type still has a descriptor. Apps with
   // an orphan app_type still render but can only be disabled/deleted.
-  const descriptorByAppType = new Map<string, BuiltInExternalAppDescriptor>(
-    (descriptors ?? []).map((d) => [d.app_type, d])
+  const descriptorByAppType = useMemo(
+    () =>
+      new Map<string, BuiltInExternalAppDescriptor>(
+        (descriptors ?? []).map((descriptor) => [
+          descriptor.app_type,
+          descriptor,
+        ])
+      ),
+    [descriptors]
   );
 
   // Already-configured providers drop off the available list (one per provider).
@@ -95,6 +109,34 @@ function AppsAdminContent() {
     descriptors ?? [],
     apps ?? []
   );
+
+  const deepLinkedAppId = searchParams.get("editAppId");
+  const deepLinkedApp =
+    deepLinkedAppId !== null && deepLinkedAppId !== dismissedDeepLink
+      ? apps?.find((app) => app.id === Number(deepLinkedAppId))
+      : undefined;
+  const deepLinkedDescriptor = deepLinkedApp
+    ? descriptorByAppType.get(deepLinkedApp.app_type)
+    : undefined;
+  const activeCustomModal =
+    customModal ??
+    (deepLinkedApp?.app_type === "CUSTOM"
+      ? { existingApp: deepLinkedApp }
+      : null);
+  const activeProviderModal =
+    modalState ??
+    (deepLinkedApp && deepLinkedDescriptor
+      ? { descriptor: deepLinkedDescriptor, existingApp: deepLinkedApp }
+      : null);
+
+  function closeAppModal() {
+    setCustomModal(null);
+    setModalState(null);
+    if (deepLinkedAppId) {
+      setDismissedDeepLink(deepLinkedAppId);
+      router.replace("/admin/craft/apps" as Route);
+    }
+  }
 
   if (!isReady) {
     return (
@@ -161,22 +203,25 @@ function AppsAdminContent() {
         </div>
       </section>
 
-      {modalState && (
+      {activeProviderModal && (
         <ConfigureProviderModal
-          key={modalState.existingApp?.id ?? modalState.descriptor.app_type}
-          onClose={() => setModalState(null)}
+          key={
+            activeProviderModal.existingApp?.id ??
+            activeProviderModal.descriptor.app_type
+          }
+          onClose={closeAppModal}
           onSaved={() => mutateApps()}
-          descriptor={modalState.descriptor}
-          existingApp={modalState.existingApp}
+          descriptor={activeProviderModal.descriptor}
+          existingApp={activeProviderModal.existingApp}
         />
       )}
 
-      {customModal && (
+      {activeCustomModal && (
         <CreateCustomAppModal
-          open={customModal !== null}
-          onClose={() => setCustomModal(null)}
+          key={activeCustomModal.existingApp?.id ?? "new"}
+          onClose={closeAppModal}
           onSaved={() => mutateApps()}
-          existingApp={customModal.existingApp}
+          existingApp={activeCustomModal.existingApp}
         />
       )}
     </div>
@@ -258,7 +303,10 @@ interface ConfiguredIntegration {
   /** Null → no Edit button (e.g. orphaned app types). */
   edit: (() => void) | null;
   /** Null → not deletable (MCP servers, Onyx-managed apps). */
-  remove: (() => Promise<void>) | null;
+  remove: {
+    run: () => Promise<void>;
+    retainedCustomSkillCount: number;
+  } | null;
 }
 
 interface ExternalAppHandlers {
@@ -279,7 +327,7 @@ function externalAppToIntegration(
     logo: getAppTypeLogo(app.app_type),
     name: app.name,
     statusText: app.enabled
-      ? "Users connect this app on the Apps page to make its skill available"
+      ? "Users connect this app from the Apps page"
       : "Disabled — unavailable to users",
     enabled: app.enabled,
     toggleEnabled: async () => {
@@ -297,9 +345,12 @@ function externalAppToIntegration(
     // Onyx-managed built-ins are provisioned by Onyx.
     remove: app.is_onyx_managed
       ? null
-      : async () => {
-          await deleteExternalApp(app.id);
-          await onChange();
+      : {
+          retainedCustomSkillCount: app.associated_skills.length,
+          run: async () => {
+            await deleteExternalApp(app.id);
+            await onChange();
+          },
         },
   };
 }
@@ -347,13 +398,19 @@ function IntegrationCard({ integration }: IntegrationCardProps) {
     remove,
   } = integration;
   const [isMutating, setIsMutating] = useState(false);
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
 
-  async function run(action: () => Promise<void>, failureMessage: string) {
+  async function run(
+    action: () => Promise<void>,
+    failureMessage: string
+  ): Promise<boolean> {
     setIsMutating(true);
     try {
       await action();
+      return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : failureMessage);
+      return false;
     } finally {
       setIsMutating(false);
     }
@@ -392,13 +449,40 @@ function IntegrationCard({ integration }: IntegrationCardProps) {
               prominence="tertiary"
               variant="danger"
               icon={SvgTrash}
-              onClick={() => run(remove, `Failed to delete "${name}"`)}
+              onClick={() => setConfirmingRemoval(true)}
               disabled={isMutating}
               aria-label={`Delete ${name}`}
             />
           )}
         </div>
       </div>
+      {confirmingRemoval && remove && (
+        <ConfirmationModalLayout
+          icon={SvgTrash}
+          title={`Delete “${name}”?`}
+          description="This deletes the app configuration, connection data, and any provider-managed skills."
+          onClose={isMutating ? undefined : () => setConfirmingRemoval(false)}
+          submit={
+            <Button
+              variant="danger"
+              disabled={isMutating}
+              onClick={async () => {
+                if (await run(remove.run, `Failed to delete "${name}"`)) {
+                  setConfirmingRemoval(false);
+                }
+              }}
+            >
+              {isMutating ? "Deleting…" : "Delete app"}
+            </Button>
+          }
+        >
+          {remove.retainedCustomSkillCount === 0
+            ? "No associated custom skills will be deleted."
+            : `${remove.retainedCustomSkillCount} associated custom ${
+                remove.retainedCustomSkillCount === 1 ? "skill" : "skills"
+              } will be kept, unlinked from this app, and disabled for everyone.`}
+        </ConfirmationModalLayout>
+      )}
     </Card>
   );
 }

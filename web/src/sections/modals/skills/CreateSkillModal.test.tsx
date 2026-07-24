@@ -74,6 +74,7 @@ describe("CreateSkillModal", () => {
     );
     expect(draft.upload.file).toBeInstanceOf(File);
     expect(mockInspectSkillBundle).toHaveBeenCalledWith(draft.upload.file);
+    expect(screen.getByRole("button", { name: "Review skill" })).toBeDisabled();
   });
 
   it("keeps the modal open and reports inspection failures", async () => {
@@ -101,23 +102,51 @@ describe("CreateSkillModal", () => {
     );
   });
 
-  it("prevents duplicate review submissions while inspection is pending", async () => {
+  it("keeps a rejected inspected draft in the upload modal", async () => {
     const user = setupUser();
-    const inspection = deferred<SkillBundleContents>();
-    mockInspectSkillBundle.mockReturnValue(inspection.promise);
+    const onContinue = jest.fn();
+    const validationMessage =
+      "App “Acme CRM” already has an associated skill named “report-writer”. Upload a skill with a different name.";
+    mockInspectSkillBundle.mockResolvedValue(inspectedContents);
 
     render(
-      <CreateSkillModal open onClose={jest.fn()} onContinue={jest.fn()} />
+      <CreateSkillModal
+        open
+        onClose={jest.fn()}
+        onContinue={onContinue}
+        validateDraft={() => validationMessage}
+      />
     );
+    await user.click(screen.getByRole("button", { name: "Select bundle" }));
+    await user.click(screen.getByRole("button", { name: "Review skill" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      validationMessage
+    );
+    expect(onContinue).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled();
+  });
+
+  it("cannot submit again or close while inspection is pending", async () => {
+    const user = setupUser();
+    const inspection = deferred<SkillBundleContents>();
+    const onClose = jest.fn();
+    mockInspectSkillBundle.mockReturnValue(inspection.promise);
+
+    render(<CreateSkillModal open onClose={onClose} onContinue={jest.fn()} />);
     await user.click(screen.getByRole("button", { name: "Select bundle" }));
     await user.click(screen.getByRole("button", { name: "Review skill" }));
 
     expect(screen.getByRole("button", { name: "Opening…" })).toBeDisabled();
     expect(mockInspectSkillBundle).toHaveBeenCalledTimes(1);
+    await user.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
 
     await act(async () => {
       inspection.resolve(inspectedContents);
       await inspection.promise;
     });
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

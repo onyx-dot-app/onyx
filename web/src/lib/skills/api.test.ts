@@ -29,6 +29,24 @@ describe("skills API", () => {
     expect(
       (fetchMock.mock.calls[0]![1]!.body as FormData).get("auto_enable")
     ).toBe("false");
+    expect(
+      (fetchMock.mock.calls[0]![1]!.body as FormData).get("external_app_id")
+    ).toBeNull();
+  });
+
+  it("sends app context for app-launched skill creation", async () => {
+    await createCustomSkillFromEditor({
+      name: "acme-lookup",
+      description: "Looks up Acme records",
+      instructions_markdown: "Use the Acme API.",
+      auto_enable: false,
+      external_app_id: 17,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = fetchMock.mock.calls[0]![1]!.body as FormData;
+    expect(body.get("external_app_id")).toBe("17");
+    expect(body.get("auto_enable")).toBe("false");
   });
 
   it("recognizes only the dedicated skill-name conflict", () => {
