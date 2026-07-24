@@ -63,6 +63,29 @@ def test_adaptive_anthropic_models_request_readable_thinking_summaries() -> None
     ] == {"type": "adaptive", "display": "summarized"}
 
 
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "claude-opus-5",
+        "claude-fable-5",
+        "claude-5-sonnet",
+        "anthropic.claude-mythos-6@20270101",
+    ],
+)
+def test_current_and_future_claude_models_use_adaptive_thinking(
+    model_name: str,
+) -> None:
+    config = build_multi_provider_opencode_config(
+        providers=[_cfg("anthropic", model_name)],
+        default_provider="anthropic",
+        default_model=model_name,
+    )
+
+    assert config["provider"]["anthropic"]["models"][model_name]["options"][
+        "thinking"
+    ] == {"type": "adaptive", "display": "summarized"}
+
+
 def test_multi_provider_each_gets_its_own_block() -> None:
     """
     All three providers should be pre-loaded with their own api_key so
