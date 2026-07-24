@@ -150,6 +150,8 @@ function TokenLimitSection({
                       value={limit.costBudgetDollars}
                       onChange={(v) => updateLimit(i, "costBudgetDollars", v)}
                       min={0}
+                      step={0.01}
+                      decimalPlaces={2}
                       placeholder="Cost limit"
                     />
                   </div>

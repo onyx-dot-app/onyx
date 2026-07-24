@@ -15,6 +15,7 @@ import { Hoverable } from "@opal/core";
 import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { getProvider } from "@/lib/languageModels";
 import { LLMOption } from "@/lib/languageModels/options";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
@@ -26,6 +27,11 @@ import {
 } from "@/lib/languageModels/costOverrides";
 
 const RATE_UNIT_LABEL = "USD per 1M tokens";
+const ALL_PROVIDERS_LABEL = "All providers";
+
+function getProviderDisplayName(provider: string): string {
+  return provider ? getProvider(provider).companyName : ALL_PROVIDERS_LABEL;
+}
 
 // Accepts integers/decimals only; "" is allowed mid-edit, validated on submit.
 function parseRate(raw: string): number | null {
@@ -39,9 +45,7 @@ function formatRate(value: number): string {
   return `$${value.toFixed(2)}`;
 }
 
-// ============================================================================
-// OverrideForm — shared add/edit form (PUT upsert)
-// ============================================================================
+// Shared add/edit form for the idempotent upsert.
 
 interface OverrideFormProps {
   // Editing an existing row locks the model name (it's the upsert key).
@@ -52,6 +56,7 @@ interface OverrideFormProps {
 function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const { mutate } = useSWRConfig();
   const [model, setModel] = useState(existing?.model ?? "");
+  const [provider, setProvider] = useState(existing?.provider ?? "");
   const [inputRate, setInputRate] = useState(
     existing ? String(existing.input_cost_per_mtok) : ""
   );
@@ -76,6 +81,9 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   // but unparseable value must block submit, not silently drop to null.
   const parsedCache = parseRate(cacheRate);
   const cacheValid = cacheRate.trim() === "" || parsedCache !== null;
+  const modelLabel = model
+    ? `${getProviderDisplayName(provider)} · ${model}`
+    : "";
   const canSubmit =
     model.trim() !== "" &&
     parsedInput !== null &&
@@ -88,6 +96,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
     try {
       await upsertCostOverride({
         model: model.trim(),
+        provider,
         input_cost_per_mtok: parsedInput,
         output_cost_per_mtok: parsedOutput,
         // Empty cache rate => null (cache reads bill at the input rate).
@@ -118,16 +127,17 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
             Model
           </Text>
           {isEdit ? (
-            <InputTypeIn value={model} variant="readOnly" />
+            <InputTypeIn value={modelLabel} variant="readOnly" />
           ) : (
             <ModelSelector
               value={modelConfigId}
               onChange={(opt: LLMOption) => {
                 setModel(opt.modelName);
+                setProvider(opt.provider);
                 setModelConfigId(opt.modelConfigurationId ?? null);
               }}
               renderTrigger={() => (
-                <OpenButton>{model || "Select a model"}</OpenButton>
+                <OpenButton>{modelLabel || "Select a model"}</OpenButton>
               )}
               side="bottom"
             />
@@ -197,9 +207,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   );
 }
 
-// ============================================================================
-// OverrideRow — one configured override with edit + delete
-// ============================================================================
+// One configured override with edit and delete actions.
 
 interface OverrideRowProps {
   override: CostOverride;
@@ -209,6 +217,7 @@ function OverrideRow({ override }: OverrideRowProps) {
   const { mutate } = useSWRConfig();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const providerDisplayName = getProviderDisplayName(override.provider);
 
   async function handleDelete() {
     setDeleting(true);
@@ -239,9 +248,9 @@ function OverrideRow({ override }: OverrideRowProps) {
               {override.model}
             </Text>
             <Text font="secondary-body" color="text-03">
-              {`In ${formatRate(override.input_cost_per_mtok)} · Out ${formatRate(
-                override.output_cost_per_mtok
-              )}${
+              {`${providerDisplayName} · In ${formatRate(
+                override.input_cost_per_mtok
+              )} · Out ${formatRate(override.output_cost_per_mtok)}${
                 override.cache_read_cost_per_mtok != null
                   ? ` · Cache ${formatRate(override.cache_read_cost_per_mtok)}`
                   : ""
@@ -258,7 +267,7 @@ function OverrideRow({ override }: OverrideRowProps) {
             <Button
               icon={SvgEdit}
               prominence="tertiary"
-              aria-label={`Edit override for ${override.model}`}
+              aria-label={`Edit ${providerDisplayName} override for ${override.model}`}
               disabled={deleting}
               onClick={() => setEditing(true)}
             />
@@ -266,7 +275,7 @@ function OverrideRow({ override }: OverrideRowProps) {
               <Button
                 icon={SvgTrash}
                 prominence="tertiary"
-                aria-label={`Delete override for ${override.model}`}
+                aria-label={`Delete ${providerDisplayName} override for ${override.model}`}
                 disabled={deleting}
                 onClick={handleDelete}
               />
@@ -278,9 +287,7 @@ function OverrideRow({ override }: OverrideRowProps) {
   );
 }
 
-// ============================================================================
-// CostOverridesPanel — section embedded on the Language Models page
-// ============================================================================
+// Section embedded on the Language Models page.
 
 export default function CostOverridesPanel() {
   const { costOverrides, isLoading, error } = useCostOverrides();

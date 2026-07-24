@@ -48,6 +48,7 @@ export interface InputNumberProps {
   min?: number;
   max?: number;
   step?: number;
+  decimalPlaces?: number;
   defaultValue?: number;
   showReset?: boolean;
   variant?: Variants;
@@ -62,6 +63,7 @@ export default function InputNumber({
   min,
   max,
   step = 1,
+  decimalPlaces = 0,
   defaultValue,
   showReset = false,
   variant = "primary",
@@ -74,6 +76,8 @@ export default function InputNumber({
     value === null ? "" : String(value)
   );
   const isDisabled = disabled || variant === "disabled";
+  const inputPattern =
+    decimalPlaces === 0 ? "[0-9]*" : `[0-9]*[.]?[0-9]{0,${decimalPlaces}}`;
 
   // Sync input value when external value changes (e.g., from stepper buttons or reset)
   React.useEffect(() => {
@@ -86,17 +90,19 @@ export default function InputNumber({
     value !== null && (min === undefined || effectiveValue > min);
   const canReset =
     showReset && defaultValue !== undefined && value !== defaultValue;
+  const normalizePrecision = (newValue: number) =>
+    Number(newValue.toFixed(decimalPlaces));
 
   const handleIncrement = () => {
     if (canIncrement) {
-      const newValue = effectiveValue + step;
+      const newValue = normalizePrecision(effectiveValue + step);
       onChange(max !== undefined ? Math.min(newValue, max) : newValue);
     }
   };
 
   const handleDecrement = () => {
     if (canDecrement) {
-      const newValue = effectiveValue - step;
+      const newValue = normalizePrecision(effectiveValue - step);
       onChange(min !== undefined ? Math.max(newValue, min) : newValue);
     }
   };
@@ -119,8 +125,7 @@ export default function InputNumber({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawValue = e.target.value;
 
-    // Only allow digits (and empty string)
-    if (rawValue !== "" && !/^\d+$/.test(rawValue)) {
+    if (rawValue !== "" && !new RegExp(`^${inputPattern}$`).test(rawValue)) {
       return;
     }
 
@@ -131,7 +136,10 @@ export default function InputNumber({
       return;
     }
 
-    const val = parseInt(rawValue, 10);
+    const val = Number(rawValue);
+    if (!Number.isFinite(val)) {
+      return;
+    }
     let newValue = val;
     if (min !== undefined) newValue = Math.max(newValue, min);
     if (max !== undefined) newValue = Math.min(newValue, max);
@@ -150,8 +158,8 @@ export default function InputNumber({
       <input
         ref={inputRef}
         type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
+        inputMode={decimalPlaces === 0 ? "numeric" : "decimal"}
+        pattern={inputPattern}
         disabled={isDisabled}
         value={inputValue}
         placeholder={placeholder}

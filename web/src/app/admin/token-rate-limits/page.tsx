@@ -36,6 +36,7 @@ const USER_GROUP_DESCRIPTION =
   all users in the group will be temporarily blocked from spending tokens, regardless \
   of their individual limits. If a user is in multiple groups, the most lenient limit \
   will apply.";
+const CREATE_ERROR_MESSAGE = "Failed to create token rate limit";
 
 const handleCreateTokenRateLimit = async (
   target_scope: Scope,
@@ -43,7 +44,7 @@ const handleCreateTokenRateLimit = async (
   token_budget: number | null,
   cost_budget_cents: number | null,
   group_id: number = -1
-) => {
+): Promise<void> => {
   const tokenRateLimitArgs = {
     enabled: true,
     token_budget: token_budget,
@@ -52,14 +53,21 @@ const handleCreateTokenRateLimit = async (
   };
 
   if (target_scope === Scope.GLOBAL) {
-    return await insertGlobalTokenRateLimit(tokenRateLimitArgs);
-  } else if (target_scope === Scope.USER) {
-    return await insertUserTokenRateLimit(tokenRateLimitArgs);
-  } else if (target_scope === Scope.USER_GROUP) {
-    return await insertGroupTokenRateLimit(tokenRateLimitArgs, group_id);
-  } else {
-    throw new Error(`Invalid target_scope: ${target_scope}`);
+    await insertGlobalTokenRateLimit(tokenRateLimitArgs);
+    return;
   }
+
+  if (target_scope === Scope.USER) {
+    await insertUserTokenRateLimit(tokenRateLimitArgs);
+    return;
+  }
+
+  if (target_scope === Scope.USER_GROUP) {
+    await insertGroupTokenRateLimit(tokenRateLimitArgs, group_id);
+    return;
+  }
+
+  throw new Error(`Invalid target_scope: ${target_scope}`);
 };
 
 function Main() {
@@ -81,28 +89,29 @@ function Main() {
     }
   };
 
-  const handleSubmit = (
+  const handleSubmit = async (
     target_scope: Scope,
     period_hours: number,
     token_budget: number | null,
     cost_budget_cents: number | null,
     group_id: number = -1
-  ) => {
-    handleCreateTokenRateLimit(
-      target_scope,
-      period_hours,
-      token_budget,
-      cost_budget_cents,
-      group_id
-    )
-      .then(() => {
-        setModalIsOpen(false);
-        toast.success("Token rate limit created!");
-        updateTable(target_scope);
-      })
-      .catch((error) => {
-        toast.error(error.message);
-      });
+  ): Promise<void> => {
+    try {
+      await handleCreateTokenRateLimit(
+        target_scope,
+        period_hours,
+        token_budget,
+        cost_budget_cents,
+        group_id
+      );
+      setModalIsOpen(false);
+      toast.success("Token rate limit created!");
+      updateTable(target_scope);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : CREATE_ERROR_MESSAGE
+      );
+    }
   };
 
   return (
