@@ -13063,6 +13063,9 @@
           "generatingPlan": {
             "label": "جارٍ توليد الخطة"
           },
+          "queryingKnowledgeBase": {
+            "label": "جارٍ الاستعلام عن قاعدة المعرفة"
+          },
           "reading": {
             "label": "جارٍ القراءة"
           },
@@ -13130,6 +13133,14 @@
           },
           "updated": {
             "label": "تم تحديث الذاكرة"
+          }
+        },
+        "postgres": {
+          "queried": {
+            "status": "تم الاستعلام عن قاعدة المعرفة"
+          },
+          "querying": {
+            "status": "جارٍ الاستعلام عن قاعدة المعرفة"
           }
         },
         "python": {
@@ -13210,6 +13221,7 @@
           "generateImage": "توليد صورة",
           "generatePlan": "توليد خطة",
           "internalSearch": "بحث داخلي",
+          "knowledgeBaseQuery": "استعلام قاعدة المعرفة",
           "memory": "الذاكرة",
           "openUrls": "فتح عناوين URL",
           "researchAgent": "وكيل البحث",

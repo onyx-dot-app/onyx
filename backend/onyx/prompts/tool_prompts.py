@@ -99,6 +99,18 @@ Only add memories that are specific, likely to remain true, and likely to be use
 Focus on enduring preferences, long-term goals, stable constraints, and explicit "remember this" type requests.
 """.lstrip()
 
+POSTGRES_QUERY_GUIDANCE = """
+## postgres_query
+Use the `postgres_query` tool for questions about metadata, counts, or the user's own chat history — things top-k search cannot answer exhaustively:
+- Counting/aggregation: "how many Salesforce docs changed last month", document counts broken down by source or owner.
+- Exhaustive listing by metadata: every document matching a title substring, date range, owner, source, or folder — when completeness matters.
+- The user's own history: finding past conversations or messages, and which documents a past answer cited.
+- Verifying absence: before stating that no documents exist about something, confirm with a count.
+It sees metadata only (titles, dates, owners, sources, folder structure) — for questions about document *content* or meaning, use `internal_search`. \
+When the result-set size is unknown, run with `count=true` first, then narrow filters before listing rows. \
+Listed documents carry citation numbers like [3]; cite the ones you mention the same way as search results.
+""".lstrip()
+
 TOOL_CALL_FAILURE_PROMPT = """
 LLM attempted to call a tool but failed. Most likely the tool name or arguments were misspelled.
 """.strip()

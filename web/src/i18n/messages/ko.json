@@ -13063,6 +13063,9 @@
           "generatingPlan": {
             "label": "계획 생성 중"
           },
+          "queryingKnowledgeBase": {
+            "label": "지식 베이스 조회 중"
+          },
           "reading": {
             "label": "읽는 중"
           },
@@ -13130,6 +13133,14 @@
           },
           "updated": {
             "label": "메모리 업데이트됨"
+          }
+        },
+        "postgres": {
+          "queried": {
+            "status": "지식 베이스 조회 완료"
+          },
+          "querying": {
+            "status": "지식 베이스 조회 중"
           }
         },
         "python": {
@@ -13210,6 +13221,7 @@
           "generateImage": "이미지 생성",
           "generatePlan": "계획 생성",
           "internalSearch": "내부 검색",
+          "knowledgeBaseQuery": "지식 베이스 쿼리",
           "memory": "메모리",
           "openUrls": "URL 열기",
           "researchAgent": "리서치 에이전트",

@@ -28,6 +28,7 @@ import CustomToolRenderer from "@/app/app/message/messageComponents/renderers/Cu
 import { FileReaderToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/filereader/FileReaderToolRenderer";
 import { FetchToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/fetch/FetchToolRenderer";
 import { MemoryToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/memory/MemoryToolRenderer";
+import { PostgresToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/postgres/PostgresToolRenderer";
 import { DeepResearchPlanRenderer } from "@/app/app/message/messageComponents/timeline/renderers/deepresearch/DeepResearchPlanRenderer";
 import { ResearchAgentRenderer } from "@/app/app/message/messageComponents/timeline/renderers/deepresearch/ResearchAgentRenderer";
 import { WebSearchToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/search/WebSearchToolRenderer";
@@ -87,6 +88,10 @@ function isMemoryToolPacket(packet: Packet) {
     packet.obj.type === PacketType.MEMORY_TOOL_START ||
     packet.obj.type === PacketType.MEMORY_TOOL_NO_ACCESS
   );
+}
+
+function isPostgresToolPacket(packet: Packet) {
+  return packet.obj.type === PacketType.POSTGRES_TOOL_START;
 }
 
 function isReasoningPacket(packet: Packet): packet is ReasoningPacket {
@@ -156,6 +161,9 @@ export function findRenderer(
   }
   if (packets.some(isMemoryToolPacket)) {
     return MemoryToolRenderer;
+  }
+  if (packets.some(isPostgresToolPacket)) {
+    return PostgresToolRenderer;
   }
   // SECTION_END and ERROR match here, so this check must stay last.
   if (packets.some(isReasoningPacket)) {

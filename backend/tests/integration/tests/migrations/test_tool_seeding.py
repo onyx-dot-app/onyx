@@ -69,6 +69,12 @@ EXPECTED_TOOLS = {
         in_code_tool_id="CodingAgentTool",
         user_id=None,
     ),
+    "PostgresTool": ToolSeedingExpectedResult(
+        name="postgres_query",
+        display_name="Knowledge Base Query",
+        in_code_tool_id="PostgresTool",
+        user_id=None,
+    ),
 }
 
 
@@ -109,8 +115,8 @@ def test_tool_seeding_migration() -> None:
         )
         tools = result.fetchall()
 
-        assert len(tools) == 11, (
-            f"Should have created exactly 11 builtin tools, got {len(tools)}"
+        assert len(tools) == 12, (
+            f"Should have created exactly 12 builtin tools, got {len(tools)}"
         )
 
         def validate_tool(expected: ToolSeedingExpectedResult) -> None:
@@ -154,3 +160,5 @@ def test_tool_seeding_migration() -> None:
         validate_tool(EXPECTED_TOOLS["MemoryTool"])
 
         validate_tool(EXPECTED_TOOLS["CodingAgentTool"])
+
+        validate_tool(EXPECTED_TOOLS["PostgresTool"])

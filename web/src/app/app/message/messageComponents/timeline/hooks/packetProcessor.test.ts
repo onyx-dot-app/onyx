@@ -675,6 +675,25 @@ describe("packetProcessor", () => {
     });
   });
 
+  describe("Postgres Tool flow", () => {
+    test("POSTGRES_TOOL_DOCUMENTS extracts documents to documentMap", () => {
+      const state = createInitialState(1);
+      const packets = [
+        createPacket(PacketType.POSTGRES_TOOL_START, { turn_index: 0 }),
+        createPacket(
+          PacketType.POSTGRES_TOOL_DOCUMENTS,
+          { turn_index: 0 },
+          { documents: [{ document_id: "listed-doc" }] }
+        ),
+        createPacket(PacketType.SECTION_END, { turn_index: 0 }),
+      ];
+      const result = processPackets(state, packets);
+
+      expect(result.toolGroups.length).toBe(1);
+      expect(result.documentMap.has("listed-doc")).toBe(true);
+    });
+  });
+
   describe("Python Tool flow", () => {
     test("PYTHON_TOOL_START categorizes group as tool", () => {
       const state = createInitialState(1);

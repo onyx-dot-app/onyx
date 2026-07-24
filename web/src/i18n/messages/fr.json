@@ -13063,6 +13063,9 @@
           "generatingPlan": {
             "label": "Génération du plan"
           },
+          "queryingKnowledgeBase": {
+            "label": "Interrogation de la base de connaissances"
+          },
           "reading": {
             "label": "Lecture"
           },
@@ -13130,6 +13133,14 @@
           },
           "updated": {
             "label": "Mémoire mise à jour"
+          }
+        },
+        "postgres": {
+          "queried": {
+            "status": "Base de connaissances interrogée"
+          },
+          "querying": {
+            "status": "Interrogation de la base de connaissances"
           }
         },
         "python": {
@@ -13210,6 +13221,7 @@
           "generateImage": "Générer une image",
           "generatePlan": "Générer un plan",
           "internalSearch": "Recherche interne",
+          "knowledgeBaseQuery": "Requête de la base de connaissances",
           "memory": "Mémoire",
           "openUrls": "Ouvrir des URL",
           "researchAgent": "Agent de recherche",
