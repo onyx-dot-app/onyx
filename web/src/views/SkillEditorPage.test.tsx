@@ -142,7 +142,7 @@ describe("SkillEditorPage", () => {
     );
     await waitFor(() =>
       expect(consoleError).toHaveBeenCalledWith(
-        "Failed to refresh skill list after creation",
+        "Failed to refresh skill data after creation",
         expect.any(Error)
       )
     );
@@ -203,6 +203,38 @@ describe("SkillEditorPage", () => {
     expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills");
   });
 
+  it("creates an app-associated skill disabled and returns to that app", async () => {
+    const user = setupUser();
+    mockCreateCustomSkillFromEditor.mockResolvedValue({
+      id: "created-id",
+      name: "report-writer",
+      enabled: false,
+    } as SkillEditableDetail);
+
+    render(<SkillEditorPage externalAppId={42} externalAppName="Acme CRM" />);
+    expect(
+      screen.getByText("Add an organization skill to app “Acme CRM”")
+    ).toBeInTheDocument();
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
+        {
+          name: "report-writer",
+          description: "Writes reports",
+          instructions_markdown: "Write the requested report.",
+          auto_enable: false,
+          external_app_id: 42,
+        },
+        undefined
+      )
+    );
+    expect(mockRouterReplace).toHaveBeenCalledWith(
+      "/admin/craft/apps?editAppId=42"
+    );
+  });
+
   it("confirms before canceling a create page with unsaved changes", async () => {
     const user = setupUser();
     render(<SkillEditorPage />);
@@ -249,6 +281,30 @@ describe("SkillEditorPage", () => {
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/skills");
     expect(mockDiscardSkillCreationDraft).not.toHaveBeenCalled();
+  });
+
+  it("returns an app-launched edit to that app on Cancel", async () => {
+    const user = setupUser();
+    const skill = existingSkill();
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+
+    render(
+      <SkillEditorPage
+        skillId={skill.id}
+        externalAppId={42}
+        externalAppName="Acme CRM"
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/admin/craft/apps?editAppId=42"
+    );
   });
 
   it("shows the app dependency and required organization visibility", () => {

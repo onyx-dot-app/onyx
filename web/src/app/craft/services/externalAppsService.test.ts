@@ -1,6 +1,7 @@
 import {
   createCustomExternalApp,
   disconnectUserFromApp,
+  updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
 
 describe("createCustomExternalApp", () => {
@@ -38,5 +39,21 @@ describe("createCustomExternalApp", () => {
       "/api/build/apps/17/credentials",
       { method: "DELETE" }
     );
+  });
+
+  it("sends one complete custom-skill association replacement", async () => {
+    await updateExternalApp(17, {
+      name: "Acme CRM",
+      associated_skill_ids: ["skill-a", "skill-b"],
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/build/admin/apps/17", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Acme CRM",
+        associated_skill_ids: ["skill-a", "skill-b"],
+      }),
+    });
   });
 });

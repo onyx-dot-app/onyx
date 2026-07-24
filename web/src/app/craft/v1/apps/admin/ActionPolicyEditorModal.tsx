@@ -51,6 +51,11 @@ interface ActionPolicyEditorModalProps {
     fieldValues: Record<string, string>,
     policies: Record<string, EndpointPolicy>
   ) => Promise<void>;
+  bodyAfterPolicies?: (
+    saveWithoutClosing: () => Promise<boolean>
+  ) => React.ReactNode;
+  /** Keep the modal mounted when save advances its caller to another step. */
+  closeAfterSave?: boolean;
 }
 
 /** The one edit dialog for everything the Craft agent can be granted.
@@ -69,6 +74,8 @@ export default function ActionPolicyEditorModal({
   emptyPoliciesMessage,
   saveLabel,
   onSave,
+  bodyAfterPolicies,
+  closeAfterSave = true,
 }: ActionPolicyEditorModalProps) {
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({
     ...initialFieldValues,
@@ -78,23 +85,27 @@ export default function ActionPolicyEditorModal({
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const fieldsFilled = fields.every(
     (field) => (fieldValues[field.key] ?? "").trim().length > 0
   );
   const canSave = fieldsFilled && policyItems !== undefined && !isSaving;
 
-  async function save() {
+  async function persist(): Promise<boolean> {
     setIsSaving(true);
     setError(null);
     try {
       await onSave(fieldValues, policies);
-      onClose();
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      return false;
     } finally {
       setIsSaving(false);
     }
+  }
+
+  async function save() {
+    if ((await persist()) && closeAfterSave) onClose();
   }
 
   return (
@@ -146,6 +157,8 @@ export default function ActionPolicyEditorModal({
                 onChange={setPolicies}
               />
             )}
+
+            {bodyAfterPolicies?.(persist)}
 
             {error && (
               <Text font="secondary-body" color="text-03">

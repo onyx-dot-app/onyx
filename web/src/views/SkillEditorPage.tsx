@@ -64,10 +64,13 @@ import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 import SkillFileTree from "@/sections/skills/SkillFileTree";
 import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
 import { ConfirmationModalLayout } from "@opal/layouts";
+import { useUser } from "@/providers/UserProvider";
 
 interface SkillEditorPageProps {
   skillId?: string;
   draftId?: string;
+  externalAppId?: number;
+  externalAppName?: string;
 }
 
 function getSharingStatus(skill: SkillEditableDetail): {
@@ -114,9 +117,14 @@ function getSharingStatus(skill: SkillEditableDetail): {
 export default function SkillEditorPage({
   skillId,
   draftId,
+  externalAppId,
+  externalAppName,
 }: SkillEditorPageProps) {
   const isCreating = skillId === undefined;
+  const hasAppContext = externalAppId !== undefined;
+  const isCreatingForApp = isCreating && hasAppContext;
   const router = useRouter();
+  const { isAdmin } = useUser();
   const creationDraft = useMemo(
     () => (isCreating && draftId ? getSkillCreationDraft(draftId) : undefined),
     [draftId, isCreating]
@@ -217,7 +225,11 @@ export default function SkillEditorPage({
     !isSaving;
 
   function leaveEditor() {
-    router.push("/craft/v1/skills" as Route);
+    router.push(
+      hasAppContext
+        ? (`/admin/craft/apps?editAppId=${externalAppId}` as Route)
+        : ("/craft/v1/skills" as Route)
+    );
   }
 
   function handleCancel() {
@@ -243,17 +255,28 @@ export default function SkillEditorPage({
             name,
             description,
             instructions_markdown: instructionsMarkdown,
-            auto_enable: !createDisabled,
+            auto_enable: isCreatingForApp ? false : !createDisabled,
+            ...(externalAppId !== undefined
+              ? { external_app_id: externalAppId }
+              : {}),
           },
           pendingFilesUpload?.file
         );
         setConflictingSkillName(null);
         if (draftId) discardSkillCreationDraft(draftId);
-        void refreshSkillList().catch((error: unknown) => {
-          console.error("Failed to refresh skill list after creation", error);
+        const refreshes = [mutate(SWR_KEYS.userSkills)];
+        if (isCreatingForApp) {
+          refreshes.push(mutate(SWR_KEYS.buildExternalAppsAdmin));
+        }
+        void Promise.all(refreshes).catch((error: unknown) => {
+          console.error("Failed to refresh skill data after creation", error);
         });
         toast.success(`Created "${created.name}"`);
-        router.replace("/craft/v1/skills" as Route);
+        router.replace(
+          isCreatingForApp
+            ? (`/admin/craft/apps?editAppId=${externalAppId}` as Route)
+            : ("/craft/v1/skills" as Route)
+        );
         return;
       }
 
@@ -382,7 +405,7 @@ export default function SkillEditorPage({
       // the successful delete or block navigation off the dead editor page.
       void refreshSkillList();
       toast.success(`Deleted "${skill.name}"`);
-      router.push("/craft/v1/skills" as Route);
+      leaveEditor();
     } catch (err) {
       console.error("Failed to delete skill", err);
       toast.error(
@@ -442,7 +465,9 @@ export default function SkillEditorPage({
           title={isCreating ? "Create skill" : "Edit skill"}
           description={
             isCreating
-              ? "Build a personal skill"
+              ? isCreatingForApp
+                ? `Add an organization skill to app “${externalAppName ?? "External app"}”`
+                : "Build a personal skill"
               : "Update skill details and files"
           }
           rightChildren={
@@ -682,12 +707,23 @@ export default function SkillEditorPage({
                             }
                             center
                           >
-                            <Tag
-                              title={skill.external_app.name}
-                              color={
-                                skill.external_app.ready ? "blue" : "amber"
-                              }
-                            />
+                            <div className="flex items-center gap-2">
+                              <Tag
+                                title={skill.external_app.name}
+                                color={
+                                  skill.external_app.ready ? "blue" : "amber"
+                                }
+                              />
+                              {isAdmin && (
+                                <Button
+                                  type="button"
+                                  prominence="secondary"
+                                  href={`/admin/craft/apps?editAppId=${skill.external_app.external_app_id}`}
+                                >
+                                  Manage in app settings
+                                </Button>
+                              )}
+                            </div>
                           </InputHorizontal>
                         )}
                         {sharingStatus && (

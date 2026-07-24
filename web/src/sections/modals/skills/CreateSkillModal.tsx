@@ -12,12 +12,15 @@ interface CreateSkillModalProps {
   open: boolean;
   onClose: () => void;
   onContinue: (draft: SkillCreationDraft) => void;
+  /** Omit the second scrim when this dialog is layered over another modal. */
+  skipOverlay?: boolean;
 }
 
 export default function CreateSkillModal({
   open,
   onClose,
   onContinue,
+  skipOverlay = false,
 }: CreateSkillModalProps) {
   const [bundle, setBundle] = useState<PreparedSkillBundle | null>(null);
   const [preparing, setPreparing] = useState(false);
@@ -64,7 +67,7 @@ export default function CreateSkillModal({
 
   return (
     <Modal open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <Modal.Content width="sm">
+      <Modal.Content width="sm" skipOverlay={skipOverlay}>
         <Modal.Header
           icon={SvgUploadCloud}
           title="Upload skill"
