@@ -71,6 +71,11 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_default_llm, get_llm_for_persona, get_llm_token_counter
+from onyx.llm.models import (
+    USER_SELECTABLE_REASONING_EFFORTS,
+    ReasoningEffort,
+    parse_user_selectable_reasoning_effort,
+)
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
@@ -95,6 +100,7 @@ from onyx.server.query_and_chat.models import (
     RenameChatSessionResponse,
     SendMessageRequest,
     SetPreferredResponseRequest,
+    UpdateChatSessionReasoningRequest,
     UpdateChatSessionTemperatureRequest,
     UpdateChatSessionThreadRequest,
 )
@@ -208,6 +214,7 @@ def get_user_chat_sessions(
                 shared_status=chat.shared_status,
                 current_alternate_model=chat.current_alternate_model,
                 current_temperature_override=chat.temperature_override,
+                current_reasoning_effort_override=chat.reasoning_effort_override,
             )
             for chat in chat_sessions
         ],
@@ -251,6 +258,41 @@ def update_chat_session_temperature(
 
     chat_session.temperature_override = update_thread_req.temperature_override
 
+    db_session.add(chat_session)
+    db_session.commit()
+
+
+@router.put("/update-chat-session-reasoning")
+def update_chat_session_reasoning(
+    update_thread_req: UpdateChatSessionReasoningRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    chat_session = get_chat_session_by_id(
+        chat_session_id=update_thread_req.chat_session_id,
+        user_id=user.id,
+        db_session=db_session,
+    )
+
+    # NULL clears the override. Any set value must be a user-selectable effort.
+    reasoning_effort: ReasoningEffort | None = None
+    if update_thread_req.reasoning_effort_override is not None:
+        try:
+            reasoning_effort = parse_user_selectable_reasoning_effort(
+                update_thread_req.reasoning_effort_override
+            )
+        except ValueError:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "reasoning_effort_override must be one of: "
+                + ", ".join(
+                    effort.value
+                    for effort in ReasoningEffort
+                    if effort in USER_SELECTABLE_REASONING_EFFORTS
+                ),
+            )
+
+    chat_session.reasoning_effort_override = reasoning_effort
     db_session.add(chat_session)
     db_session.commit()
 
@@ -379,6 +421,7 @@ def get_chat_session(
         time_created=chat_session.time_created,
         shared_status=chat_session.shared_status,
         current_temperature_override=chat_session.temperature_override,
+        current_reasoning_effort_override=chat_session.reasoning_effort_override,
         deleted=chat_session.deleted,
         owner_name=chat_session.user.personal_name if chat_session.user else None,
         # Packets are now directly serialized as Packet Pydantic models
@@ -993,6 +1036,7 @@ def search_chats(
             shared_status=session.shared_status,
             current_alternate_model=session.current_alternate_model,
             current_temperature_override=session.temperature_override,
+            current_reasoning_effort_override=session.reasoning_effort_override,
         )
 
         if session_date == today:

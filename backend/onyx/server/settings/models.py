@@ -63,7 +63,7 @@ class Settings(BaseModel):
     # Resolved per-tenant tier for ENTERPRISE-only feature gating in the FE.
     tier: Tier = Tier.COMMUNITY
 
-    temperature_override_enabled: bool | None = False
+    temperature_override_enabled: bool | None = True
     auto_scroll: bool | None = False
     query_history_type: QueryHistoryType | None = None
 

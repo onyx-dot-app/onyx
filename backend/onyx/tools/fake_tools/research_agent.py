@@ -102,6 +102,7 @@ def generate_intermediate_report(
     user_identity: LLMUserIdentity | None,
     emitter: Emitter,
     placement: Placement,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> str:
     # NOTE: This step outputs a lot of tokens and has been observed to run for more than 10 minutes in a nontrivial percentage of
     # research tasks. This is also model / inference provider dependent.
@@ -142,7 +143,7 @@ def generate_intermediate_report(
             placement=placement,
             citation_processor=citation_processor,
             state_container=state_container,
-            reasoning_effort=ReasoningEffort.LOW,
+            reasoning_effort=reasoning_effort,
             final_documents=None,
             user_identity=user_identity,
             max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
@@ -222,6 +223,7 @@ def run_research_agent_call(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> ResearchAgentCallResult | None:
     turn_index = research_agent_call.placement.turn_index
     tab_index = research_agent_call.placement.tab_index
@@ -371,7 +373,7 @@ def run_research_agent_call(
                     ),
                     citation_processor=None,
                     state_container=None,
-                    reasoning_effort=ReasoningEffort.LOW,
+                    reasoning_effort=reasoning_effort,
                     final_documents=None,
                     user_identity=user_identity,
                     custom_token_processor=custom_processor,
@@ -412,6 +414,7 @@ def run_research_agent_call(
                         citation_processor=citation_processor,
                         user_identity=user_identity,
                         emitter=emitter,
+                        reasoning_effort=reasoning_effort,
                         placement=Placement(
                             turn_index=turn_index,
                             tab_index=tab_index,
@@ -612,6 +615,7 @@ def run_research_agent_call(
                 citation_processor=citation_processor,
                 user_identity=user_identity,
                 emitter=emitter,
+                reasoning_effort=reasoning_effort,
                 placement=Placement(
                     turn_index=turn_index,
                     tab_index=tab_index,
@@ -670,6 +674,7 @@ def run_research_agent_calls(
     token_counter: Callable[[str], int],
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None = None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> CombinedResearchAgentCallResult:
     # Run all research agent calls in parallel with timeout
     functions_with_args = [
@@ -685,6 +690,7 @@ def run_research_agent_calls(
                 is_reasoning_model,
                 token_counter,
                 user_identity,
+                reasoning_effort,
             ),
         )
         for research_agent_call, parent_tool_call_id in zip(

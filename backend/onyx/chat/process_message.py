@@ -100,7 +100,7 @@ from onyx.hooks.points.query_processing import (
 )
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import LLMErrorInfo
+from onyx.llm.models import LLMErrorInfo, ReasoningEffort
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.request_context import reset_llm_mock_response, set_llm_mock_response
 from onyx.llm.utils import (
@@ -1018,6 +1018,7 @@ def build_chat_turn(
         reserved_messages=reserved_messages,
         processing_run_id=processing_run_id,
         reserved_token_count=reserved_token_count,
+        reasoning_effort=chat_session.reasoning_effort_override or ReasoningEffort.AUTO,
         search_params=search_params,
         all_injected_file_metadata=all_injected_file_metadata,
         available_files=available_files,
@@ -1274,6 +1275,7 @@ def _run_models(
                     custom_agent_prompt=setup.custom_agent_prompt,
                     llm=model_llm,
                     token_counter=get_llm_token_counter(model_llm),
+                    reasoning_effort=setup.reasoning_effort,
                     skip_clarification=setup.skip_clarification,
                     user_identity=setup.user_identity,
                     chat_session_id=str(setup.chat_session.id),
@@ -1295,6 +1297,7 @@ def _run_models(
                     user_identity=setup.user_identity,
                     chat_session_id=str(setup.chat_session.id),
                     chat_files=setup.chat_files_for_tools,
+                    reasoning_effort=setup.reasoning_effort,
                     include_citations=setup.new_msg_req.include_citations,
                     all_injected_file_metadata=setup.all_injected_file_metadata,
                     inject_memories_in_prompt=user.use_memories,
