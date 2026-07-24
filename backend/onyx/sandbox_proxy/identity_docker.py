@@ -20,8 +20,13 @@ from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 from docker.types.daemon import CancellableStream
 from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import RequestException
 
-from onyx.sandbox_proxy.identity import SandboxIdentity, SandboxIPLookup
+from onyx.sandbox_proxy.identity import (
+    SandboxIdentity,
+    SandboxIPLookup,
+    resolve_identity_with_watcher_grace,
+)
 from onyx.server.features.build.configs import (
     SANDBOX_DOCKER_NETWORK,
     SANDBOX_DOCKER_SOCKET,
@@ -38,6 +43,7 @@ logger = setup_logger()
 
 _RECONNECT_INITIAL_SECONDS = 1.0
 _RECONNECT_MAX_SECONDS = 30.0
+_DOCKER_API_REQUEST_TIMEOUT_SECONDS = 2.0
 
 
 def _safe_close(stream: CancellableStream) -> None:
@@ -105,7 +111,12 @@ class DockerEventsLookup(SandboxIPLookup):
         network: str = SANDBOX_DOCKER_NETWORK,
     ) -> None:
         if docker_client is None:
-            docker_client = DockerClient(base_url=f"unix://{SANDBOX_DOCKER_SOCKET}")
+            # Docker's events API explicitly disables this timeout for its
+            # long-lived stream; ordinary list/get calls remain fail-fast.
+            docker_client = DockerClient(
+                base_url=f"unix://{SANDBOX_DOCKER_SOCKET}",
+                timeout=_DOCKER_API_REQUEST_TIMEOUT_SECONDS,
+            )
         self._docker = docker_client
         self._network = network
 
@@ -114,6 +125,7 @@ class DockerEventsLookup(SandboxIPLookup):
         # carry IPs) and on restart with a new IP.
         self._by_id: dict[str, str] = {}
         self._cache_lock = threading.Lock()
+        self._cache_updated = threading.Condition()
 
         self._initial_sync_done = threading.Event()
         self._stop_event = threading.Event()
@@ -137,6 +149,8 @@ class DockerEventsLookup(SandboxIPLookup):
 
     def stop(self) -> None:
         self._stop_event.set()
+        with self._cache_updated:
+            self._cache_updated.notify_all()
         with self._stream_lock:
             stream = self._stream
         if stream is not None:
@@ -153,6 +167,61 @@ class DockerEventsLookup(SandboxIPLookup):
     def lookup(self, src_ip: str) -> SandboxIdentity | None:
         with self._cache_lock:
             return self._cache.get(src_ip)
+
+    def wait_for_identity(
+        self, src_ip: str, timeout_seconds: float
+    ) -> SandboxIdentity | None:
+        return resolve_identity_with_watcher_grace(
+            backend="docker",
+            src_ip=src_ip,
+            timeout_seconds=timeout_seconds,
+            lookup=self.lookup,
+            read_through=self._query_identity_by_ip,
+            cache_updated=self._cache_updated,
+            stop_event=self._stop_event,
+        )
+
+    def _query_identity_by_ip(self, src_ip: str) -> SandboxIdentity | None:
+        try:
+            containers = self._docker.containers.list(
+                filters={
+                    "label": (
+                        f"{LABEL_DOCKER_COMPONENT}={LABEL_DOCKER_COMPONENT_SANDBOX}"
+                    )
+                },
+            )
+            identities = [
+                identity
+                for container in containers
+                if (identity := _identity_from_container(container, self._network))
+                is not None
+                and identity.sandbox_ip == src_ip
+            ]
+        except (APIError, RequestException, OSError) as e:
+            logger.warning(
+                "identity_readthrough_error backend=docker src_ip=%s error=%s",
+                src_ip,
+                e,
+            )
+            return None
+
+        if len(identities) != 1:
+            if identities:
+                logger.warning(
+                    "identity_readthrough_ambiguous backend=docker "
+                    "src_ip=%s sandboxes=%s",
+                    src_ip,
+                    [str(identity.sandbox_id) for identity in identities],
+                )
+            return None
+
+        identity = identities[0]
+        logger.info(
+            "identity_readthrough_hit backend=docker src_ip=%s sandbox=%s",
+            src_ip,
+            identity.sandbox_name,
+        )
+        return identity
 
     def _run(self) -> None:
         backoff = _RECONNECT_INITIAL_SECONDS
@@ -226,6 +295,8 @@ class DockerEventsLookup(SandboxIPLookup):
         with self._cache_lock:
             self._cache = new_cache
             self._by_id = new_by_id
+        with self._cache_updated:
+            self._cache_updated.notify_all()
 
         logger.info(
             "Docker events initial sync: %d sandbox containers cached.", len(new_cache)
@@ -312,6 +383,8 @@ class DockerEventsLookup(SandboxIPLookup):
 
                 self._cache[identity.sandbox_ip] = identity
                 self._by_id[container_id] = identity.sandbox_ip
+            with self._cache_updated:
+                self._cache_updated.notify_all()
             return
 
         if action in ("die", "destroy", "kill", "stop"):

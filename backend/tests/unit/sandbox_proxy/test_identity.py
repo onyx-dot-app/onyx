@@ -84,6 +84,36 @@ def test_resolve_sandbox_unknown_ip_skips_db(monkeypatch: pytest.MonkeyPatch) ->
     assert factory.last_tenant_id is None
 
 
+def test_resolve_sandbox_can_wait_for_an_initial_cache_miss(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sandbox_user_id = uuid4()
+    stub = _StubSession([sandbox_user_id])
+    factory = _factory(stub)
+
+    class _WatcherLagLookup(StaticLookup):
+        def __init__(self) -> None:
+            super().__init__({})
+            self.wait_calls: list[tuple[str, float]] = []
+
+        def wait_for_identity(
+            self, src_ip: str, timeout_seconds: float
+        ) -> SandboxIdentity | None:
+            self.wait_calls.append((src_ip, timeout_seconds))
+            return _identity(src_ip)
+
+    lookup = _WatcherLagLookup()
+    monkeypatch.setattr(identity_mod, "get_session_with_tenant", factory)
+
+    sandbox = IdentityResolver(ip_lookup=lookup).resolve_sandbox(
+        "10.0.0.1", wait_timeout_seconds=5
+    )
+
+    assert sandbox is not None
+    assert sandbox.user_id == sandbox_user_id
+    assert lookup.wait_calls == [("10.0.0.1", 5)]
+
+
 def test_resolve_sandbox_missing_sandbox_row_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

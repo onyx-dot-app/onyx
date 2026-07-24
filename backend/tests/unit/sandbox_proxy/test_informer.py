@@ -1,8 +1,11 @@
+import threading
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
 from kubernetes import client
 
+from onyx.sandbox_proxy.identity import SandboxIdentity
 from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup, _identity_from_pod
 
 
@@ -29,6 +32,10 @@ def _make_pod(
 
 def _make_lookup() -> K8sInformerLookup:
     return K8sInformerLookup(core_api=MagicMock(spec=client.CoreV1Api))
+
+
+def _mock_core(lookup: K8sInformerLookup) -> MagicMock:
+    return cast(MagicMock, lookup._core)
 
 
 def test_identity_from_pod_returns_none_when_missing_ip() -> None:
@@ -63,6 +70,77 @@ def test_apply_event_added_populates_cache() -> None:
     identity = lookup.lookup("10.0.0.1")
     assert identity is not None
     assert identity.sandbox_name == "sandbox-aaaa1111"
+
+
+def test_wait_for_identity_returns_readthrough_hit_without_updating_cache() -> None:
+    lookup = _make_lookup()
+    core_api = _mock_core(lookup)
+    core_api.list_namespaced_pod.return_value = client.V1PodList(items=[_make_pod()])
+
+    identity = lookup.wait_for_identity("10.0.0.1", timeout_seconds=1)
+
+    assert identity is not None
+    assert identity.sandbox_name == "sandbox-aaaa1111"
+    assert lookup.lookup("10.0.0.1") is None
+    core_api.list_namespaced_pod.assert_called_once_with(
+        namespace="onyx-sandboxes",
+        label_selector=(
+            "app.kubernetes.io/component=sandbox,app.kubernetes.io/managed-by=onyx"
+        ),
+        field_selector="status.podIP=10.0.0.1",
+        _request_timeout=(1.0, 2.0),
+    )
+
+
+def test_wait_for_identity_is_woken_by_added_event() -> None:
+    lookup = _make_lookup()
+    _mock_core(lookup).list_namespaced_pod.return_value = client.V1PodList(items=[])
+    finished = threading.Event()
+    results: list[SandboxIdentity | None] = []
+
+    def lookup_identity() -> None:
+        results.append(lookup.wait_for_identity("10.0.0.1", timeout_seconds=1))
+        finished.set()
+
+    thread = threading.Thread(target=lookup_identity)
+    thread.start()
+    assert not finished.wait(timeout=0.05)
+
+    lookup._apply_event({"type": "ADDED", "object": _make_pod()})
+
+    assert finished.wait(timeout=1)
+    thread.join(timeout=1)
+    assert len(results) == 1
+    assert results[0] is not None
+
+
+def test_wait_for_identity_fails_closed_on_ambiguous_readthrough() -> None:
+    lookup = _make_lookup()
+    _mock_core(lookup).list_namespaced_pod.return_value = client.V1PodList(
+        items=[
+            _make_pod(name="sandbox-a"),
+            _make_pod(
+                name="sandbox-b",
+                sandbox_id="22222222-2222-2222-2222-222222222222",
+            ),
+        ]
+    )
+
+    assert lookup.wait_for_identity("10.0.0.1", timeout_seconds=0) is None
+
+
+def test_wait_for_identity_refreshes_after_missed_watcher_event() -> None:
+    lookup = _make_lookup()
+    core_api = _mock_core(lookup)
+    core_api.list_namespaced_pod.side_effect = [
+        client.V1PodList(items=[]),
+        client.V1PodList(items=[_make_pod()]),
+    ]
+
+    identity = lookup.wait_for_identity("10.0.0.1", timeout_seconds=0.01)
+
+    assert identity is not None
+    assert core_api.list_namespaced_pod.call_count == 2
 
 
 def test_apply_event_modified_with_new_ip_evicts_old() -> None:
