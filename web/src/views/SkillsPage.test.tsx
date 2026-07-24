@@ -84,6 +84,16 @@ jest.mock("@/sections/modals/skills/CreateSkillModal", () => ({
     ) : null,
 }));
 
+jest.mock("@/sections/modals/skills/ImportSkillsFromGitHubModal", () => ({
+  __esModule: true,
+  default: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
+    open ? (
+      <button type="button" onClick={onClose}>
+        GitHub import open
+      </button>
+    ) : null,
+}));
+
 jest.mock("@/sections/modals/SkillPreviewModal", () => ({
   __esModule: true,
   default: () => null,
@@ -166,6 +176,18 @@ describe("SkillsPage preference toggles", () => {
       "/craft/v1/skills/new?draft=draft-id"
     );
     expect(mockRefresh).not.toHaveBeenCalled();
+  });
+
+  it("offers GitHub import from the create menu", async () => {
+    const user = setupUser();
+    render(<SkillsPage />);
+
+    await user.click(screen.getByRole("button", { name: "Create skill" }));
+    await user.click(screen.getAllByText("Import from GitHub")[0]!);
+
+    expect(
+      screen.getByRole("button", { name: "GitHub import open" })
+    ).toBeInTheDocument();
   });
 
   it("optimistically enables and disables only the pending skill switch", async () => {

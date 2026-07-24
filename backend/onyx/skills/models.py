@@ -74,3 +74,22 @@ class CustomSkillBundleContents(BaseModel):
 
     instructions_markdown: str
     files: list[SkillBundleFile]
+
+
+class GitHubRepository(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    owner: str
+    repo: str
+    revision: str
+    subpath: str | None = None
+
+
+class GitHubSkillBundle(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    name: str
+    description: str | None
+    bundle_bytes: bytes | None
+    unavailable_reason: str | None = None

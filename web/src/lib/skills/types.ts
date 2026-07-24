@@ -98,3 +98,34 @@ export interface SkillBundleContents {
   instructions_markdown: string;
   files: SkillBundleFile[];
 }
+
+export interface GitHubSkillPreview {
+  path: string;
+  name: string;
+  description: string | null;
+  unavailable_reason: string | null;
+}
+
+export interface GitHubSkillsPreview {
+  repository: string;
+  revision: string;
+  subpath: string | null;
+  skills: GitHubSkillPreview[];
+}
+
+export interface GitHubImportedSkill {
+  skill: CustomSkill;
+  enabled: boolean;
+  disabled_reason: string | null;
+}
+
+export interface GitHubSkillNotImported {
+  path: string;
+  name: string;
+  reason: string;
+}
+
+export interface GitHubSkillsImportResult {
+  imported: GitHubImportedSkill[];
+  not_imported: GitHubSkillNotImported[];
+}
