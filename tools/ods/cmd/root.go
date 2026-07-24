@@ -48,6 +48,7 @@ func NewRootCommand() *cobra.Command {
 	// Add subcommands
 	cmd.AddCommand(NewAuditCommand())
 	cmd.AddCommand(NewBackendCommand())
+	cmd.AddCommand(NewBackgroundCommand())
 	cmd.AddCommand(NewCheckLazyImportsCommand())
 	cmd.AddCommand(NewCherryPickCommand())
 	cmd.AddCommand(NewDBCommand())
