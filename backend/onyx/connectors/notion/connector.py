@@ -38,7 +38,7 @@ from onyx.utils.retry_wrapper import retry_builder
 logger = setup_logger()
 
 _NOTION_PAGE_SIZE = 100
-_NOTION_CALL_TIMEOUT = 30  # 30 seconds
+_NOTION_CALL_TIMEOUT = 120  # seconds; large Notion pages can be slow over cloud networks
 _MAX_PAGES = 1000
 
 
