@@ -21,6 +21,13 @@ export interface SkillGroupShare {
   permission: SkillSharePermission;
 }
 
+export interface SkillExternalAppDependency {
+  external_app_id: number;
+  name: string;
+  enabled: boolean;
+  ready: boolean;
+}
+
 export interface Skill {
   source: SkillSource;
   id: string;
@@ -48,6 +55,7 @@ export interface Skill {
   group_shares: SkillGroupShare[];
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
+  external_app: SkillExternalAppDependency | null;
 }
 
 export type BuiltinSkill = Skill & {
@@ -71,6 +79,7 @@ export interface SkillPreview {
   description: string;
   author_email: string | null;
   instructions_markdown: string;
+  external_app: SkillExternalAppDependency | null;
 }
 
 export type SkillEditableDetail = CustomSkill & {

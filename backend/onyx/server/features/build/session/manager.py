@@ -44,7 +44,7 @@ from onyx.server.features.build.db.build_session import (
     get_empty_session_for_user,
     get_session_messages,
     get_user_build_sessions,
-    skills_are_stale,
+    session_runtime_stale,
     update_session_activity,
 )
 from onyx.server.features.build.db.sandbox import (
@@ -66,6 +66,9 @@ from onyx.server.features.build.sandbox.serve_transport import (
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
+)
+from onyx.server.features.build.sandbox.util.mcp_config import (
+    write_session_mcp_config,
 )
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import (
@@ -243,6 +246,7 @@ class SessionManager:
             )
             session.opencode_session_id = opencode_session_id
             session.skills_hash = sandbox.skills_hash
+            session.mcp_config_hash = sandbox.mcp_config_hash
             self._db_session.flush()
 
     def reload_session_skills(self, session_id: UUID, user: User) -> bool:
@@ -252,10 +256,11 @@ class SessionManager:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
 
         sandbox = get_sandbox_by_user_id(self._db_session, user.id)
-        if sandbox is None or not skills_are_stale(session, sandbox):
+        if sandbox is None or not session_runtime_stale(session, sandbox):
             return False
 
         skills_hash = sandbox.skills_hash
+        mcp_config_hash = sandbox.mcp_config_hash
         if sandbox.status == SandboxStatus.PROVISIONING:
             raise OnyxError(
                 OnyxErrorCode.CONFLICT,
@@ -295,6 +300,15 @@ class SessionManager:
                         ),
                         user_name=user.personal_name,
                     )
+                    # Rewrite the per-session MCP config BEFORE disposing the
+                    # instance so the fresh instance re-reads the current set.
+                    write_session_mcp_config(
+                        self._sandbox_manager,
+                        self._db_session,
+                        user,
+                        sandbox.id,
+                        session_id,
+                    )
                     if session.opencode_session_id is not None:
                         self._sandbox_manager.dispose_opencode_instance(
                             sandbox.id, session_id
@@ -311,9 +325,10 @@ class SessionManager:
                     ) from exc
 
             session.skills_hash = skills_hash
+            session.mcp_config_hash = mcp_config_hash
             self._db_session.flush()
             self._db_session.refresh(sandbox)
-            return skills_are_stale(session, sandbox)
+            return session_runtime_stale(session, sandbox)
 
     def ensure_sandbox_running(
         self,
@@ -476,6 +491,13 @@ class SessionManager:
             nextjs_port=nextjs_port,
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
+        )
+        write_session_mcp_config(
+            self._sandbox_manager,
+            self._db_session,
+            user,
+            sandbox.id,
+            build_session.id,
         )
         self._prewarm_opencode_session(sandbox, build_session)
 

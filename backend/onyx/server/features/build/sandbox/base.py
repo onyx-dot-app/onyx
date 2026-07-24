@@ -16,7 +16,7 @@ Architecture Note (User-Shared Sandbox Model):
 
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
@@ -31,7 +31,6 @@ from onyx.server.features.build.sandbox.event_schema import (
     ToolCallStart,
 )
 from onyx.server.features.build.sandbox.models import (
-    CraftMCPServerConfig,
     FatalWriteError,
     FileSet,
     FilesystemEntry,
@@ -121,7 +120,6 @@ class SandboxManager(_ServeMixin, ABC):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
@@ -130,9 +128,9 @@ class SandboxManager(_ServeMixin, ABC):
         so per-prompt model overrides can cross providers without restarting
         the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
 
-        ``mcp_servers``: craft-enabled MCP servers to pre-register as remote
-        MCP endpoints in opencode's startup config (URL only; the proxy
-        injects credentials).
+        Craft MCP servers are NOT registered here — they live in per-session
+        ``opencode.json`` (see ``write_session_mcp_config``) so they can
+        hot-reload without a pod re-provision.
 
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces

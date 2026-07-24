@@ -10,7 +10,11 @@ import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import EndpointPolicy, ExternalAppType, SandboxStatus
-from onyx.db.external_app import create_external_app, get_built_in_external_app
+from onyx.db.external_app import (
+    associate_built_in_skill__no_commit,
+    create_external_app,
+    get_built_in_external_app,
+)
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -113,16 +117,14 @@ def slack_external_app() -> None:
     with get_session_with_tenant(tenant_id="public") as db:
         existing = get_built_in_external_app(db, ExternalAppType.SLACK)
         if existing is None:
-            create_external_app(
+            app = create_external_app(
                 db_session=db,
                 name="Slack",
-                bundle_file_id="",
-                bundle_sha256="",
                 app_type=ExternalAppType.SLACK,
                 upstream_url_patterns=["https://slack\\.com/api/.*"],
                 auth_template={"Authorization": "Bearer {access_token}"},
                 organization_credentials={"access_token": "fake-test-token"},
-                is_public=True,
                 action_policies={"slack.messages.write": EndpointPolicy.ASK},
             )
+            associate_built_in_skill__no_commit(db, app)
             db.commit()

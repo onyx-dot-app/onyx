@@ -49,7 +49,7 @@ import tarfile
 import tempfile
 import threading
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
@@ -64,10 +64,10 @@ from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
+    ONYX_SERVER_URL,
     OPENCODE_DISABLED_TOOLS,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
-    SANDBOX_API_SERVER_URL,
     SANDBOX_CONTAINER_IMAGE,
     SANDBOX_NAMESPACE,
     SANDBOX_NEXTJS_PORT_END,
@@ -108,7 +108,6 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_TENANT_ID,
 )
 from onyx.server.features.build.sandbox.models import (
-    CraftMCPServerConfig,
     FatalWriteError,
     FileSet,
     FilesystemEntry,
@@ -126,6 +125,9 @@ from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
     generate_agent_instructions,
+)
+from onyx.server.features.build.sandbox.util.api_url_check import (
+    validate_sandbox_api_url,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
@@ -1008,7 +1010,6 @@ class KubernetesSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -1047,10 +1048,11 @@ class KubernetesSandboxManager(SandboxManager):
 
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Kubernetes sandbox provisioning")
-        if not SANDBOX_API_SERVER_URL:
+        if not ONYX_SERVER_URL:
             raise ValueError(
-                "SANDBOX_API_SERVER_URL must be set for Kubernetes sandbox provisioning"
+                "ONYX_SERVER_URL must be set for Kubernetes sandbox provisioning"
             )
+        validate_sandbox_api_url(ONYX_SERVER_URL)
         if not SANDBOX_PROXY_HOST:
             raise ValueError(
                 "SANDBOX_PROXY_HOST must be set for Kubernetes sandbox provisioning"
@@ -1122,7 +1124,6 @@ class KubernetesSandboxManager(SandboxManager):
                             _OPENCODE_CONNECT_APP_PLUGIN_PATH,
                             _OPENCODE_SESSION_TAG_PLUGIN_PATH,
                         ],
-                        mcp_servers=mcp_servers,
                     )
                 )
                 self._provision_opencode_secret(str(sandbox_id), opencode_config_json)

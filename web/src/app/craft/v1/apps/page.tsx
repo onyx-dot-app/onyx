@@ -9,7 +9,12 @@ import useOnMount from "@/hooks/useOnMount";
 import { cn } from "@opal/utils";
 import { Button, Card, InputTypeIn, Text } from "@opal/components";
 import { SettingsLayouts, toast } from "@opal/layouts";
-import { SvgCheckCircle, SvgPlug, SvgSettings } from "@opal/icons";
+import {
+  SvgAlertCircle,
+  SvgCheckCircle,
+  SvgPlug,
+  SvgSettings,
+} from "@opal/icons";
 import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 import { MCPServersResponse } from "@/lib/tools/interfaces";
 import {
@@ -19,6 +24,7 @@ import {
 } from "@/app/craft/v1/apps/connectableApps";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { useUser } from "@/providers/UserProvider";
+import useUserSkills from "@/hooks/useUserSkills";
 
 // The user's own app connections. Org-wide configuration lives in the admin
 // panel's Craft section; admins get a shortcut button to it here.
@@ -82,11 +88,26 @@ function AppConnections({ query }: AppConnectionsProps) {
     errorHandlingFetcher,
     { keepPreviousData: true }
   );
+  const { data: skillsData, refresh: refreshSkills } = useUserSkills();
   const connectParam = useSearchParams().get("connect");
+
+  const skillSetupByAppId = useMemo(() => {
+    const setup = new Map<number, { total: number; selected: number }>();
+    for (const skill of skillsData?.customs ?? []) {
+      const externalAppId = skill.external_app?.external_app_id;
+      if (externalAppId === undefined) continue;
+      const current = setup.get(externalAppId) ?? { total: 0, selected: 0 };
+      current.total += 1;
+      if (skill.enabled) current.selected += 1;
+      setup.set(externalAppId, current);
+    }
+    return setup;
+  }, [skillsData]);
 
   const refresh = () => {
     void mutateApps();
     void mutateMcp();
+    void refreshSkills();
   };
 
   const { connected, browse, isLoading, isEmpty } = useMemo(() => {
@@ -139,6 +160,14 @@ function AppConnections({ query }: AppConnectionsProps) {
                 key={item.key}
                 variant="row"
                 app={item}
+                skillSetupKnown={
+                  item.externalAppId === null || skillsData !== undefined
+                }
+                skillSetup={
+                  item.externalAppId === null
+                    ? undefined
+                    : skillSetupByAppId.get(item.externalAppId)
+                }
                 onChange={refresh}
               />
             ))}
@@ -178,6 +207,8 @@ interface ProviderConnectCardProps {
   app: ConnectableApp;
   variant: "row" | "tile";
   highlight?: boolean;
+  skillSetupKnown?: boolean;
+  skillSetup?: { total: number; selected: number };
   onChange: () => void;
 }
 
@@ -185,6 +216,8 @@ function ProviderConnectCard({
   app,
   variant,
   highlight,
+  skillSetupKnown = true,
+  skillSetup,
   onChange,
 }: ProviderConnectCardProps) {
   const [isStarting, setIsStarting] = useState(false);
@@ -231,6 +264,10 @@ function ProviderConnectCard({
   }
 
   const Logo = app.logo;
+  const needsSkillSetup =
+    skillSetup !== undefined &&
+    skillSetup.total > 0 &&
+    skillSetup.selected < skillSetup.total;
 
   return (
     <>
@@ -248,15 +285,35 @@ function ProviderConnectCard({
               <div className="flex-1 flex flex-col gap-0.5">
                 <div className="flex items-center gap-2">
                   <Text font="main-ui-action">{app.name}</Text>
-                  <SvgCheckCircle className="w-4 h-4 text-status-success-05" />
+                  {needsSkillSetup ? (
+                    <SvgAlertCircle
+                      className="w-4 h-4 text-status-warning-05"
+                      aria-label="Skill setup required"
+                    />
+                  ) : skillSetupKnown ? (
+                    <SvgCheckCircle
+                      className="w-4 h-4 text-status-success-05"
+                      aria-label="App ready"
+                    />
+                  ) : null}
                 </div>
                 <Text font="secondary-body" color="text-03">
-                  Connected
+                  {needsSkillSetup
+                    ? "Connected · Not all associated skills are enabled. This app may not work correctly."
+                    : "Connected"}
                 </Text>
               </div>
-              {app.disconnect && (
+              {needsSkillSetup && app.externalAppId !== null && (
                 <Button
                   prominence="secondary"
+                  href={`/craft/v1/skills?externalAppId=${app.externalAppId}`}
+                >
+                  Review skills
+                </Button>
+              )}
+              {app.disconnect && (
+                <Button
+                  prominence={needsSkillSetup ? "tertiary" : "secondary"}
                   disabled={isStarting}
                   onClick={disconnect}
                 >

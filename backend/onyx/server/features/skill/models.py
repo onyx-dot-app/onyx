@@ -25,6 +25,13 @@ class SkillGroupShare(BaseModel):
     permission: SkillSharePermission
 
 
+class SkillExternalAppDependencyResponse(BaseModel):
+    external_app_id: int
+    name: str
+    enabled: bool
+    ready: bool
+
+
 class SkillResponse(BaseModel):
     source: Literal["builtin", "custom"]
     id: UUID
@@ -48,6 +55,7 @@ class SkillResponse(BaseModel):
     public_permission: SkillSharePermission | None = None
     is_personal: bool = False
     user_permission: SkillAccessLevel | None = None
+    external_app: SkillExternalAppDependencyResponse | None = None
 
     @classmethod
     def from_builtin(
@@ -79,6 +87,7 @@ class SkillResponse(BaseModel):
         can_toggle: bool = True,
         user_permission: SkillAccessLevel | None = None,
         include_share_details: bool = False,
+        external_app: SkillExternalAppDependencyResponse | None = None,
     ) -> "SkillResponse":
         user_shares = [
             SkillUserShare(
@@ -126,6 +135,7 @@ class SkillResponse(BaseModel):
             and not user_shares
             and not group_shares,
             user_permission=user_permission,
+            external_app=external_app,
         )
 
 
@@ -141,6 +151,7 @@ class SkillPreviewResponse(BaseModel):
     description: str
     author_email: str | None = None
     instructions_markdown: str
+    external_app: SkillExternalAppDependencyResponse | None = None
 
     @classmethod
     def from_builtin(
@@ -164,6 +175,7 @@ class SkillPreviewResponse(BaseModel):
         skill: Skill,
         *,
         instructions_markdown: str,
+        external_app: SkillExternalAppDependencyResponse | None = None,
     ) -> "SkillPreviewResponse":
         return cls(
             source="custom",
@@ -172,6 +184,7 @@ class SkillPreviewResponse(BaseModel):
             description=skill.description,
             author_email=skill.author.email if skill.author is not None else None,
             instructions_markdown=instructions_markdown,
+            external_app=external_app,
         )
 
 

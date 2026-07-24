@@ -491,7 +491,7 @@ The proxy uses first-claim-wins credential dispatch. Resolvers must keep
 ### Onyx PAT Resolver
 
 `OnyxPatResolver` claims requests whose host and port match
-`SANDBOX_API_SERVER_URL`.
+`ONYX_SERVER_URL`.
 
 It loads the sandbox row and decrypts `Sandbox.encrypted_pat`, then injects both
 Onyx API key header names as bearer tokens. The tenant is embedded in the PAT,
@@ -747,7 +747,8 @@ Relevant config:
 
 - `ENABLE_CRAFT=true` enables Craft chart resources.
 - `SANDBOX_BACKEND` is `kubernetes` or `docker`.
-- `SANDBOX_API_SERVER_URL` must be set for sandbox API calls and PAT injection.
+- `ONYX_SERVER_URL` must be the complete API base for sandbox API calls and PAT
+  injection.
 - `SANDBOX_PROXY_HOST` and `SANDBOX_PROXY_PORT` tell sandboxes where to proxy.
 - `SANDBOX_PROXY_LISTEN_PORT` and `SANDBOX_PROXY_HEALTHZ_PORT` configure the
   proxy process.

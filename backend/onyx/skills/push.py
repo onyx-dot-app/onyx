@@ -15,10 +15,9 @@ from onyx.db.external_app import (
 )
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
-    SkillAccessPolicy,
     SkillValidityUpdate,
     affected_user_ids_for_skill,
-    list_skills,
+    list_runtime_skills_for_user,
     persist_skill_validity,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -59,7 +58,9 @@ def compute_skill_runtime_hash(
     files: FileSet,
     connectable_apps_section: str,
 ) -> str:
-    """Digest skill files and the app guidance rendered into ``AGENTS.md``."""
+    """Digest the skill files and the app guidance rendered into ``AGENTS.md``.
+    A change makes a live session stale so it hot-reloads. The craft MCP set is
+    tracked separately via ``mcp_config_hash`` (see ``session_runtime_stale``)."""
     digest = hashlib.sha256()
     connectable_apps_bytes = connectable_apps_section.encode()
     digest.update(len(connectable_apps_bytes).to_bytes(8))
@@ -235,11 +236,7 @@ def _assemble_fileset(
 
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     """Return a flat ``{path: bytes}`` map of every skill the user can see."""
-    skills = list_skills(
-        policy=SkillAccessPolicy.USE,
-        user=user,
-        db_session=db_session,
-    )
+    skills = list_runtime_skills_for_user(user=user, db_session=db_session)
     return _assemble_fileset(skills, user, db_session)
 
 
@@ -249,11 +246,7 @@ def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, Fil
     The connectable-apps section lists org apps the user has not connected yet,
     so the agent can offer to set one up through the connect tool.
     """
-    skills = list_skills(
-        policy=SkillAccessPolicy.USE,
-        user=user,
-        db_session=db_session,
-    )
+    skills = list_runtime_skills_for_user(user=user, db_session=db_session)
     files = _assemble_fileset(skills, user, db_session)
     connectable_apps_section = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)

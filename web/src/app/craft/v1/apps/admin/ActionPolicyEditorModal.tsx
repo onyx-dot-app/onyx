@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, InputTypeIn, Modal, Text } from "@opal/components";
-import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
+import {
+  Button,
+  InputTypeIn,
+  Modal,
+  PasswordInputTypeIn,
+  Text,
+} from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import PolicyToggle from "@/sections/actions/PolicyToggle";

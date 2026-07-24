@@ -4583,7 +4583,7 @@ class FileContent(Base):
 
 
 class Skill(Base):
-    """A custom (admin-uploaded) skill.
+    """A built-in or custom skill.
 
     Skill metadata is shared schema state. Group-based grants use user_group,
     which is available in the base migration chain even though its ORM model
@@ -4668,6 +4668,10 @@ class Skill(Base):
             name="ck_skill_definition_source",
         ),
     )
+
+    @property
+    def is_custom(self) -> bool:
+        return self.built_in_skill_id is None
 
 
 """
@@ -5510,6 +5514,8 @@ class MCPConnectionConfig(Base):
     #   "refresh_token": "<token>",  # OAuth only
     #   "access_token": "<token>",   # OAuth only
     #   "headers": {"key": "value", "key2": "value2"},
+    #   "header_template": {"Authorization": "Bearer {api_key}"}, # shared API-token config
+    #   "api_token": "<token>",  # shared API-token config
     #   "header_substitutions": {"<key>": "<value>"}, # stored header template substitutions
     #   "request_body": ["path/in/body:value", "path2/in2/body2:value2"] # TBD
     #   "client_id": "<id>",  # For dynamically registered OAuth clients
@@ -5911,6 +5917,7 @@ class BuildSession(Base):
     agent_provider: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_model: Mapped[str | None] = mapped_column(String, nullable=True)
     skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mcp_config_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
@@ -5965,6 +5972,7 @@ class Sandbox(Base):
         DateTime(timezone=True), nullable=True
     )
     skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mcp_config_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True

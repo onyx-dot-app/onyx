@@ -1,6 +1,8 @@
 import re
+from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any, cast
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -22,6 +24,7 @@ from onyx.db.models import (
     ExternalAppUserCredential,
     Skill,
     User,
+    UserSkillPreference,
 )
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -34,6 +37,14 @@ from onyx.utils.sensitive import SensitiveValue
 logger = setup_logger()
 
 _PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
+
+
+@dataclass(frozen=True)
+class SkillExternalAppDependencyState:
+    external_app_id: int
+    name: str
+    enabled: bool
+    ready: bool
 
 
 def _placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:
@@ -175,20 +186,6 @@ def get_skills_for_external_app(
     )
 
 
-def get_first_skill_for_external_app(
-    db_session: Session,
-    external_app_id: int,
-) -> Skill:
-    """Return the first associated skill for transitional bundle operations."""
-    skills = get_skills_for_external_app(db_session, external_app_id)
-    if not skills:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            f"External app {external_app_id} has no associated skills.",
-        )
-    return skills[0]
-
-
 def get_connectable_apps_for_user(
     db_session: Session,
     user: User,
@@ -206,12 +203,13 @@ def get_connectable_apps_for_user(
     ]
 
 
-def available_external_app_skill_ids_for_user(
+def get_skill_external_app_dependencies(
     db_session: Session,
     user: User,
-) -> list[UUID]:
-    """Return app-backed skill IDs whose credentials are ready for this user."""
-    rows = db_session.execute(
+    skill_ids: Iterable[UUID] | None = None,
+) -> dict[UUID, SkillExternalAppDependencyState]:
+    """Return dependency state for all or selected associated skills."""
+    stmt = (
         select(ExternalApp__Skill.skill_id, ExternalApp, ExternalAppUserCredential)
         .join(
             ExternalApp,
@@ -225,13 +223,23 @@ def available_external_app_skill_ids_for_user(
             ),
             isouter=True,
         )
-        .where(ExternalApp.enabled.is_(True))
-    ).all()
-    return [
-        skill_id
+    )
+    if skill_ids is not None:
+        requested_ids = set(skill_ids)
+        if not requested_ids:
+            return {}
+        stmt = stmt.where(ExternalApp__Skill.skill_id.in_(requested_ids))
+
+    rows = db_session.execute(stmt).all()
+    return {
+        skill_id: SkillExternalAppDependencyState(
+            external_app_id=app.id,
+            name=app.name,
+            enabled=app.enabled,
+            ready=app.enabled and is_user_authenticated_for_app(app, credential),
+        )
         for skill_id, app, credential in rows
-        if is_user_authenticated_for_app(app, credential)
-    ]
+    }
 
 
 def get_external_apps(
@@ -255,10 +263,9 @@ def get_built_in_external_app(
 ) -> ExternalApp | None:
     """The tenant's built-in external app of the given type, or None.
 
-    Built-in apps are unique per type per tenant (enforced when their backing
-    skill is created), so at most one row matches. ``CUSTOM`` is rejected: it
-    can repeat, so "the app of this type" is meaningless — callers must pass a
-    built-in type.
+    Callers expect at most one configured row for a built-in provider type.
+    ``CUSTOM`` is rejected because multiple custom apps may share that type, so
+    callers must identify them by ID instead.
     """
     if not app_type.is_built_in:
         raise OnyxError(
@@ -304,76 +311,27 @@ def get_external_app_user_credential(
 def create_external_app(
     db_session: Session,
     name: str,
-    bundle_file_id: str,
-    bundle_sha256: str,
     app_type: ExternalAppType,
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
     organization_credentials: dict[str, str],
-    is_public: bool = False,
-    author_user_id: UUID | None = None,
-    skill_name: str | None = None,
-    skill_description: str = "",
     action_policies: dict[str, EndpointPolicy] | None = None,
 ) -> ExternalApp:
-    """Create the backing Skill row and the ExternalApp that references it (flush
-    only — the caller commits after pushing, so a push failure rolls back). The
-    linked skill owns bundle metadata and its canonical Agent Skills name; the
-    external app owns display metadata, gateway state, and availability.
+    """Create an external-app gateway row and its policy state.
 
-    Built-in providers (``EXTERNAL_APP_BUILT_IN_SKILL_IDS``) get a built-in
-    skill row whose name is the provider id. App-backed skill names remain
-    exclusive until app content is decoupled from skills, so a duplicate raises
-    ``DUPLICATE_RESOURCE``. CUSTOM apps get a bundle-backed skill using
-    ``skill_name``, or a generated ``custom-<uuid>`` name when omitted.
+    Flush only; callers own the transaction. Built-in provisioning separately
+    associates its system skill with ``associate_built_in_skill__no_commit``.
     """
-    from onyx.db.skill import add_new_skill__no_commit
-
     # No existing app to restore from on create, so a masked value is rejected.
     organization_credentials = resolve_masked_credentials(
         organization_credentials, None
     )
-
-    built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app_type)
-    if built_in_skill_id is not None:
-        skill = add_new_skill__no_commit(
-            Skill(
-                name=built_in_skill_id,
-                description=skill_description,
-                built_in_skill_id=built_in_skill_id,
-                bundle_file_id=None,
-                bundle_sha256=None,
-                is_valid=True,
-                public_permission=(SkillSharePermission.VIEWER if is_public else None),
-                author_user_id=author_user_id,
-            ),
-            db_session,
-            is_external_app_backing=True,
-        )
-    else:
-        # CUSTOM: use the bundle's canonical name supplied by ingestion, falling
-        # back to a generated name when no bundle is supplied.
-        custom_skill_name = skill_name or f"{app_type.value.lower()}-{uuid4().hex[:8]}"
-        skill = add_new_skill__no_commit(
-            Skill(
-                name=custom_skill_name,
-                description=skill_description,
-                bundle_file_id=bundle_file_id,
-                bundle_sha256=bundle_sha256,
-                is_valid=True,
-                public_permission=(SkillSharePermission.VIEWER if is_public else None),
-                author_user_id=author_user_id,
-            ),
-            db_session,
-            is_external_app_backing=True,
-        )
     app = ExternalApp(
         name=name,
         app_type=app_type,
         upstream_url_patterns=upstream_url_patterns,
         auth_template=auth_template,
         organization_credentials=organization_credentials,
-        associated_skills=[skill],
     )
     db_session.add(app)
     # Policies key off the gated_app identity row, which needs app.id.
@@ -381,6 +339,56 @@ def create_external_app(
     if action_policies is not None:
         _write_policies__no_commit(db_session, app, action_policies)
     return app
+
+
+def associate_built_in_skill__no_commit(
+    db_session: Session,
+    app: ExternalApp,
+) -> Skill:
+    """Create or reuse a provider's canonical built-in skill and link it to app.
+
+    The association is non-owning. Reusing an orphaned row lets a deleted and
+    later recreated provider recover its system skill without manufacturing a
+    duplicate. Flush only; callers own the transaction.
+    """
+    from onyx.db.skill import add_new_skill__no_commit
+
+    built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app.app_type)
+    if built_in_skill_id is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only built-in external apps have a system skill.",
+        )
+
+    skill = db_session.scalar(
+        select(Skill).where(
+            Skill.built_in_skill_id == built_in_skill_id,
+            Skill.name == built_in_skill_id,
+        )
+    )
+    if skill is None:
+        skill = add_new_skill__no_commit(
+            Skill(
+                name=built_in_skill_id,
+                description="",
+                built_in_skill_id=built_in_skill_id,
+                bundle_file_id=None,
+                bundle_sha256=None,
+                is_valid=True,
+                public_permission=SkillSharePermission.VIEWER,
+            ),
+            db_session,
+        )
+    elif get_external_app_by_skill_id(db_session, skill.id) is not None:
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            f"The built-in app '{app.app_type.value}' is already configured.",
+        )
+
+    skill.public_permission = SkillSharePermission.VIEWER
+    app.associated_skills.append(skill)
+    db_session.flush()
+    return skill
 
 
 def update_external_app(
@@ -392,19 +400,13 @@ def update_external_app(
     upstream_url_patterns: list[str] | UnsetType = UNSET,
     auth_template: dict[str, Any] | UnsetType = UNSET,
     organization_credentials: dict[str, str] | UnsetType = UNSET,
-    new_bundle_file_id: str | None = None,
-    new_bundle_sha256: str | None = None,
     action_policies: dict[str, EndpointPolicy] | UnsetType = UNSET,
-) -> tuple[ExternalApp, str | None]:
-    """Partial-update the external app and legacy bundle content (flush only — the
-    caller commits after pushing, so a push failure rolls back). Returns
-    ``(app, old_bundle_file_id)``.
+) -> ExternalApp:
+    """Partial-update external-app gateway state (flush only).
 
     Patch fields default to ``UNSET`` (left untouched); pass a value to set one.
     ``app_type`` is required and immutable — a mismatch raises, blocking
-    cross-editing built-in vs custom. Passing ``new_bundle_file_id`` swaps the
-    bundle (skill name unchanged) and returns the previous blob id for post-commit
-    cleanup, else ``None``.
+    cross-editing built-in vs custom.
 
     Raises ``OnyxError(NOT_FOUND)`` if absent, or ``INVALID_INPUT`` on app_type
     mismatch.
@@ -429,14 +431,6 @@ def update_external_app(
         app.enabled = enabled
     if is_set(name):
         app.name = name
-    old_bundle_file_id: str | None = None
-    if new_bundle_file_id is not None:
-        skill = get_first_skill_for_external_app(db_session, app.id)
-        # Keep the skill name; only the bundle bytes change.
-        old_bundle_file_id = skill.bundle_file_id
-        skill.bundle_file_id = new_bundle_file_id
-        skill.bundle_sha256 = new_bundle_sha256
-        skill.is_valid = True
 
     if is_set(upstream_url_patterns):
         app.upstream_url_patterns = upstream_url_patterns
@@ -453,7 +447,7 @@ def update_external_app(
         _write_policies__no_commit(db_session, app, action_policies)
 
     db_session.flush()
-    return app, old_bundle_file_id
+    return app
 
 
 def set_external_app_organization_credentials(
@@ -489,12 +483,11 @@ def _write_policies__no_commit(
 def delete_external_app(
     db_session: Session,
     external_app_id: int,
-) -> list[str]:
-    """Delete the app and its currently associated skills.
+) -> None:
+    """Delete an app, detach custom skills, and remove provider-owned skills.
 
-    Flush only — the caller commits after pushing, so a push failure rolls back.
-    Returns bundle file IDs for post-commit cleanup. Raises
-    ``OnyxError(NOT_FOUND)`` if absent.
+    Detached custom skills remain organization-visible but become ordinary
+    disabled skills. Flush only; the caller owns the transaction.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -504,12 +497,19 @@ def delete_external_app(
         )
 
     skills = get_skills_for_external_app(db_session, app.id)
-    bundle_file_ids = [skill.bundle_file_id for skill in skills if skill.bundle_file_id]
+    custom_skill_ids = [skill.id for skill in skills if skill.is_custom]
+    if custom_skill_ids:
+        db_session.execute(
+            delete(UserSkillPreference).where(
+                UserSkillPreference.skill_id.in_(custom_skill_ids)
+            )
+        )
+
     db_session.delete(app)
     for skill in skills:
-        db_session.delete(skill)
+        if not skill.is_custom:
+            db_session.delete(skill)
     db_session.flush()
-    return bundle_file_ids
 
 
 def upsert_external_app_user_credential(
@@ -578,18 +578,29 @@ def upsert_external_app_user_credential(
     return cred
 
 
-def delete_external_app_user_credential(
+def disconnect_external_app_for_user(
     db_session: Session,
     *,
     external_app_id: int,
     user_id: UUID,
 ) -> None:
-    """Delete the user's stored credentials for one app, and commit (no-op if
-    absent). Used when a refresh terminally fails so the user reconnects."""
+    """Remove a user's app credentials and associated skill preferences.
+
+    Flush only; the caller refreshes the user's sandbox and commits.
+    """
     db_session.execute(
         delete(ExternalAppUserCredential).where(
             ExternalAppUserCredential.external_app_id == external_app_id,
             ExternalAppUserCredential.user_id == user_id,
         )
     )
-    db_session.commit()
+    associated_skill_ids = select(ExternalApp__Skill.skill_id).where(
+        ExternalApp__Skill.external_app_id == external_app_id
+    )
+    db_session.execute(
+        delete(UserSkillPreference).where(
+            UserSkillPreference.user_id == user_id,
+            UserSkillPreference.skill_id.in_(associated_skill_ids),
+        )
+    )
+    db_session.flush()

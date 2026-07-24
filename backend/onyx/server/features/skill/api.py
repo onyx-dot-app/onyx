@@ -13,7 +13,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccountType, Permission, SkillSharePermission
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
-    SkillAccessPolicy,
+    SkillManagementPolicy,
     add_new_skill__no_commit,
     affected_user_ids_for_skill,
     delete_skill,
@@ -137,7 +137,7 @@ def list_skills_for_current_user(
     db_session: Session = Depends(get_session),
 ) -> SkillsList:
     rows = list_skills(
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
     )
@@ -172,7 +172,7 @@ def fetch_skill_for_current_user(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
     )
@@ -189,13 +189,13 @@ def preview_skill_for_current_user(
 ) -> SkillPreviewResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    return skill_preview_response(skill)
+    return skill_preview_response(skill, user, db_session)
 
 
 @user_router.post("/custom")
@@ -327,7 +327,7 @@ def fetch_custom_skill_for_edit(
 ) -> SkillEditableDetailResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
     )
@@ -378,7 +378,7 @@ def replace_current_user_skill_bundle(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -423,7 +423,7 @@ def upload_current_user_skill_files(
 ) -> SkillEditableDetailResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -451,7 +451,7 @@ def remove_current_user_skill_file(
 ) -> SkillEditableDetailResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -479,7 +479,7 @@ def patch_current_user_skill(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -578,7 +578,7 @@ def share_current_user_skill(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -653,14 +653,14 @@ def transfer_current_user_skill_ownership(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
         lock_for_update=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    if skill.built_in_skill_id is not None:
+    if not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"Skill '{skill.name}' is a built-in and cannot change ownership.",
@@ -731,7 +731,7 @@ def delete_current_user_skill(
 ) -> None:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,

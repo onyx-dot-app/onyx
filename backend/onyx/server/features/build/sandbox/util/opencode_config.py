@@ -10,6 +10,7 @@ restart.
 from collections.abc import Sequence
 from typing import Any
 
+from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
 from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     LLMProviderConfig,
@@ -108,7 +109,6 @@ _TMP_EXTERNAL_DIRECTORY_RULES: dict[str, str] = {
 def _build_permissions(
     disabled_tools: list[str] | None,
     dev_mode: bool,
-    mcp_servers: Sequence[CraftMCPServerConfig],
 ) -> dict[str, Any]:
     permissions: dict[str, Any] = {
         k: (v.copy() if isinstance(v, dict) else v)
@@ -120,23 +120,53 @@ def _build_permissions(
     if disabled_tools:
         for tool in disabled_tools:
             permissions[tool] = "deny"
-    # MCP tool ids are ``<serverKey>_<toolName>``. The wildcard allow defers
-    # gating to the proxy and covers tools discovered at runtime.
-    for server in mcp_servers:
-        permissions[f"{server.key}_*"] = "allow"
-        for tool_name in server.disabled_tools:
-            permissions[f"{server.key}_{tool_name}"] = "deny"
     return permissions
 
 
-def _build_mcp_block(
+def build_session_mcp_config(
     mcp_servers: Sequence[CraftMCPServerConfig],
-) -> dict[str, dict[str, Any]]:
-    """opencode remote `mcp` entries. No auth headers — the proxy injects them."""
-    return {
-        server.key: {"type": "remote", "url": server.url, "enabled": True}
-        for server in mcp_servers
-    }
+    session_id: str,
+) -> dict[str, Any]:
+    """Per-session ``opencode.json`` fragment carrying the craft MCP servers and
+    their per-tool permission gates. opencode deep-merges this project-level
+    config with the pod-global config (providers/base permissions) — combining
+    keys, not replacing — and re-reads it when the session's instance is disposed,
+    so the server set hot-reloads without a pod re-provision. The MCP-gate
+    ``permission`` keys (``<serverKey>_*``) don't collide with the pod-global base
+    permissions, so both survive the merge.
+
+    Each server carries the ``MCP_SESSION_TAG_HEADER`` header stamped with
+    ``session_id``: opencode's in-process MCP client uses the untagged base proxy
+    env, so this header is how the egress proxy attributes a tool call to its
+    session for approval (the proxy strips it before the origin sees it). The tag
+    is a same-user attribution hint, not a security boundary — a sandbox is one
+    trust domain per user, so the value is not tamper-proof against a compromised
+    process in it (see the note in the gate).
+
+    MCP tool ids are ``<serverKey>_<toolName>``. The wildcard allow defers gating
+    to the sandbox proxy and covers tools discovered at runtime.
+    """
+    permission: dict[str, str] = {}
+    for server in mcp_servers:
+        permission[f"{server.key}_*"] = "allow"
+        for tool_name in server.disabled_tools:
+            permission[f"{server.key}_{tool_name}"] = "deny"
+    config: dict[str, Any] = {"$schema": "https://opencode.ai/config.json"}
+    if permission:
+        config["permission"] = permission
+    if mcp_servers:
+        # Credentials are injected by the proxy; the only header we set is the
+        # session tag the proxy consumes and strips.
+        config["mcp"] = {
+            server.key: {
+                "type": "remote",
+                "url": server.url,
+                "enabled": True,
+                "headers": {MCP_SESSION_TAG_HEADER: session_id},
+            }
+            for server in mcp_servers
+        }
+    return config
 
 
 def _build_provider_block(
@@ -160,16 +190,15 @@ def build_multi_provider_opencode_config(
     disabled_tools: list[str] | None = None,
     dev_mode: bool = False,
     plugins: list[str] | None = None,
-    mcp_servers: Sequence[CraftMCPServerConfig] = (),
 ) -> dict[str, Any]:
-    """opencode.json with every provider pre-registered so per-prompt
+    """Pod-global opencode.json with every provider pre-registered so per-prompt
     ``body["model"]`` overrides can target any of them.
 
     ``plugins`` is an optional list of opencode plugin specs (npm names or
     absolute file paths) loaded once per session Instance.
 
-    ``mcp_servers`` are craft-enabled servers exposed as remote MCP endpoints
-    (URL only; the proxy injects credentials).
+    Craft MCP servers are NOT emitted here — they live in per-session config
+    (``build_session_mcp_config``) so they can hot-reload without a pod restart.
 
     Raises:
         ValueError: If ``providers`` is empty or ``default_provider`` is
@@ -195,7 +224,7 @@ def build_multi_provider_opencode_config(
             f" {sorted(provider_names)}"
         )
 
-    permissions = _build_permissions(disabled_tools, dev_mode, mcp_servers)
+    permissions = _build_permissions(disabled_tools, dev_mode)
     config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
         "model": f"{default_provider}/{default_model}",
@@ -205,6 +234,4 @@ def build_multi_provider_opencode_config(
     }
     if plugins:
         config["plugin"] = list(plugins)
-    if mcp_servers:
-        config["mcp"] = _build_mcp_block(mcp_servers)
     return config

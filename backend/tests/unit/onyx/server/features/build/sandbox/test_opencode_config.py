@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import pytest
 
+from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
 from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     LLMProviderConfig,
 )
+from onyx.server.features.build.sandbox.util.mcp_config import craft_mcp_fingerprint
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
+    build_session_mcp_config,
 )
 
 
@@ -250,10 +253,14 @@ def _mcp(
     url: str = "https://mcp.example.com/mcp",
     disabled_tools: tuple[str, ...] = (),
 ) -> CraftMCPServerConfig:
-    return CraftMCPServerConfig(key=key, url=url, disabled_tools=disabled_tools)
+    return CraftMCPServerConfig(
+        key=key, url=url, disabled_tools=disabled_tools, server_id=1
+    )
 
 
-def test_no_mcp_servers_omits_mcp_key() -> None:
+def test_pod_global_config_never_carries_mcp() -> None:
+    # Craft MCP servers live in per-session config so they can hot-reload; the
+    # pod-global config must not carry them.
     config = build_multi_provider_opencode_config(
         providers=[_cfg("anthropic", "claude-opus-4-7")],
         default_provider="anthropic",
@@ -262,28 +269,30 @@ def test_no_mcp_servers_omits_mcp_key() -> None:
     assert "mcp" not in config
 
 
-def test_mcp_servers_emit_remote_entries_without_headers() -> None:
-    config = build_multi_provider_opencode_config(
-        providers=[_cfg("anthropic", "claude-opus-4-7")],
-        default_provider="anthropic",
-        default_model="claude-opus-4-7",
-        mcp_servers=[_mcp("linear-7", url="https://mcp.linear.app/mcp")],
+def test_no_mcp_servers_emits_only_schema() -> None:
+    config = build_session_mcp_config([], "sess-1")
+    assert config == {"$schema": "https://opencode.ai/config.json"}
+
+
+def test_mcp_servers_emit_remote_entries_with_session_tag_header() -> None:
+    config = build_session_mcp_config(
+        [_mcp("linear-7", url="https://mcp.linear.app/mcp")], "sess-abc"
     )
     assert config["mcp"] == {
         "linear-7": {
             "type": "remote",
             "url": "https://mcp.linear.app/mcp",
             "enabled": True,
+            # The proxy reads this to attribute the tool call to a session for
+            # approval (no per-user credentials — the proxy injects those).
+            "headers": {MCP_SESSION_TAG_HEADER: "sess-abc"},
         }
     }
 
 
 def test_mcp_tool_curation_maps_to_wildcard_allow_and_deny_permissions() -> None:
-    config = build_multi_provider_opencode_config(
-        providers=[_cfg("anthropic", "claude-opus-4-7")],
-        default_provider="anthropic",
-        default_model="claude-opus-4-7",
-        mcp_servers=[_mcp("linear-7", disabled_tools=("delete_issue",))],
+    config = build_session_mcp_config(
+        [_mcp("linear-7", disabled_tools=("delete_issue",))], "sess-1"
     )
     permission = config["permission"]
     assert permission["linear-7_*"] == "allow"
@@ -293,10 +302,46 @@ def test_mcp_tool_curation_maps_to_wildcard_allow_and_deny_permissions() -> None
 def test_uncurated_mcp_server_still_gets_wildcard_allow() -> None:
     # Zero Tool rows: the wildcard must still allow so runtime-discovered tools
     # don't fall through to opencode's default "ask".
-    config = build_multi_provider_opencode_config(
-        providers=[_cfg("anthropic", "claude-opus-4-7")],
-        default_provider="anthropic",
-        default_model="claude-opus-4-7",
-        mcp_servers=[_mcp("linear-7")],
-    )
+    config = build_session_mcp_config([_mcp("linear-7")], "sess-1")
     assert config["permission"]["linear-7_*"] == "allow"
+
+
+def _srv(
+    server_id: int,
+    url: str = "https://mcp.example.com/mcp",
+    disabled_tools: tuple[str, ...] = (),
+    authenticated: bool = False,
+) -> CraftMCPServerConfig:
+    return CraftMCPServerConfig(
+        key=f"s-{server_id}",
+        url=url,
+        disabled_tools=disabled_tools,
+        server_id=server_id,
+        authenticated=authenticated,
+    )
+
+
+def test_craft_mcp_fingerprint_is_order_independent() -> None:
+    a, b = _srv(1, url="u1"), _srv(2, url="u2")
+    assert craft_mcp_fingerprint([a, b]) == craft_mcp_fingerprint([b, a])
+
+
+def test_craft_mcp_fingerprint_reacts_to_each_input() -> None:
+    base = [_srv(1, url="u1", disabled_tools=("x",), authenticated=False)]
+    baseline = craft_mcp_fingerprint(base)
+    # server set
+    assert craft_mcp_fingerprint(base + [_srv(2)]) != baseline
+    # url
+    assert craft_mcp_fingerprint([_srv(1, url="u2", disabled_tools=("x",))]) != baseline
+    # disabled-tool set
+    assert (
+        craft_mcp_fingerprint([_srv(1, url="u1", disabled_tools=("x", "y"))])
+        != baseline
+    )
+    # per-user auth
+    assert (
+        craft_mcp_fingerprint(
+            [_srv(1, url="u1", disabled_tools=("x",), authenticated=True)]
+        )
+        != baseline
+    )

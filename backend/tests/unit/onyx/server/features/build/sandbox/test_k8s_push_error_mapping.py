@@ -41,6 +41,7 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
 )
 from onyx.server.features.build.sandbox.kubernetes import sidecar_client
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
+    OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
     KubernetesSandboxManager,
     _build_targz,
 )
@@ -703,7 +704,7 @@ def test_restore_opencode_history_posts_archive_to_sidecar(
         assert archive_file.read() == archive_body
         assert sha256_hex == hashlib.sha256(archive_body).hexdigest()
         assert operation_label == "opencode history restore"
-        assert timeout_seconds == 300.0
+        assert timeout_seconds == OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
         calls.append("restore")
 
     sidecar_client = MagicMock()
@@ -737,7 +738,7 @@ def test_restore_opencode_history_marks_sidecar_ready_when_no_snapshot(
         assert sandbox_id == expected_sandbox_id
         assert endpoint_path == SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH
         assert operation_label == "opencode history restore marker"
-        assert timeout_seconds == 300.0
+        assert timeout_seconds == OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
 
     sidecar_client = MagicMock()
     sidecar_client.post_empty.side_effect = fake_mark_restored
@@ -753,7 +754,8 @@ def test_provision_cleans_up_pod_when_opencode_history_restore_fails(
 ) -> None:
     import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 
-    monkeypatch.setattr(ksm, "SANDBOX_API_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "ONYX_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "validate_sandbox_api_url", lambda *_: None)
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "proxy.local")
 
     sandbox_id = _sandbox_id()
@@ -797,7 +799,8 @@ def test_provision_existing_healthy_pod_does_not_restore_opencode_history(
 ) -> None:
     import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 
-    monkeypatch.setattr(ksm, "SANDBOX_API_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "ONYX_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "validate_sandbox_api_url", lambda *_: None)
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "proxy.local")
 
     sandbox_id = _sandbox_id()
@@ -834,7 +837,8 @@ def test_provision_conflicting_healthy_pod_skips_startup_restore(
 ) -> None:
     import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 
-    monkeypatch.setattr(ksm, "SANDBOX_API_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "ONYX_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "validate_sandbox_api_url", lambda *_: None)
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "proxy.local")
 
     sandbox_id = _sandbox_id()
@@ -883,7 +887,8 @@ def test_provision_conflicting_not_ready_pod_runs_startup_restore(
 ) -> None:
     import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 
-    monkeypatch.setattr(ksm, "SANDBOX_API_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "ONYX_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "validate_sandbox_api_url", lambda *_: None)
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "proxy.local")
 
     sandbox_id = _sandbox_id()
@@ -944,7 +949,8 @@ def test_provision_conflicting_not_ready_pod_restore_failure_does_not_cleanup(
 ) -> None:
     import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 
-    monkeypatch.setattr(ksm, "SANDBOX_API_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "ONYX_SERVER_URL", "http://api-server")
+    monkeypatch.setattr(ksm, "validate_sandbox_api_url", lambda *_: None)
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "proxy.local")
 
     sandbox_id = _sandbox_id()

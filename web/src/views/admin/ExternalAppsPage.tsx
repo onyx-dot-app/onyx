@@ -441,8 +441,7 @@ function CreateCustomAppCard({ onClick }: CreateCustomAppCardProps) {
         <div className="flex-1 flex flex-col gap-0.5">
           <Text font="main-ui-action">Custom app</Text>
           <Text font="secondary-body" color="text-03">
-            Bring your own integration: upload a skill bundle and configure its
-            credentials.
+            Configure credentials and network access for your own integration.
           </Text>
         </div>
         <Button icon={SvgPlus} onClick={onClick}>

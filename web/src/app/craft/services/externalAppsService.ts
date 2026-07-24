@@ -53,61 +53,22 @@ interface CreateCustomExternalAppInput {
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
-  /** Required skill bundle; its SKILL.md defines the linked skill name. */
-  bundle: File;
 }
 
 /**
- * Create a CUSTOM external app (`POST /admin/apps/custom`). Multipart so the
- * bundle can be uploaded; structured fields are JSON-encoded form strings.
- * Field edits go through {@link updateExternalApp}; bundle replacement through
- * {@link replaceCustomAppBundle}.
+ * Create a CUSTOM external app (`POST /admin/apps/custom`). Skill content is
+ * created and managed independently through the Skills experience.
  */
 export async function createCustomExternalApp(
   input: CreateCustomExternalAppInput
 ): Promise<ExternalAppAdminResponse> {
-  const form = new FormData();
-  form.append("name", input.name);
-  form.append(
-    "upstream_url_patterns",
-    JSON.stringify(input.upstream_url_patterns)
-  );
-  form.append("auth_template", JSON.stringify(input.auth_template));
-  form.append(
-    "organization_credentials",
-    JSON.stringify(input.organization_credentials)
-  );
-  form.append("bundle", input.bundle);
-
-  // No explicit Content-Type — the browser sets the multipart boundary.
   const res = await fetch(`${BUILD_API_BASE}/admin/apps/custom`, {
     method: "POST",
-    body: form,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Save failed"));
-  }
-  return res.json();
-}
-
-/**
- * Replace a custom app's bundle bytes, keeping its skill name
- * (`PUT /admin/apps/{id}/bundle`). The only multipart channel for edits; all
- * other field edits go through {@link updateExternalApp}.
- */
-export async function replaceCustomAppBundle(
-  id: number,
-  bundle: File
-): Promise<ExternalAppAdminResponse> {
-  const form = new FormData();
-  form.append("bundle", bundle);
-
-  const res = await fetch(`${BUILD_API_BASE}/admin/apps/${id}/bundle`, {
-    method: "PUT",
-    body: form,
-  });
-  if (!res.ok) {
-    throw new Error(await readErrorDetail(res, "Bundle replace failed"));
   }
   return res.json();
 }
@@ -126,7 +87,7 @@ interface UpdateExternalAppBody {
 /**
  * Partial update of any app (PATCH /admin/apps/{id}). For Onyx-managed built-ins
  * the gateway-config fields are ignored server-side (only policies
- * apply); a custom app's bundle bytes go through {@link replaceCustomAppBundle}.
+ * apply).
  */
 export async function updateExternalApp(
   id: number,
@@ -229,9 +190,14 @@ export async function upsertUserCredentials(
   }
 }
 
-/** "Disconnect" by clearing stored user credentials. */
 export async function disconnectUserFromApp(
   externalAppId: number
 ): Promise<void> {
-  return upsertUserCredentials(externalAppId, {});
+  const res = await fetch(
+    `${BUILD_API_BASE}/apps/${externalAppId}/credentials`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Failed to disconnect app"));
+  }
 }

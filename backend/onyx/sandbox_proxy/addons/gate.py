@@ -59,7 +59,8 @@ from onyx.sandbox_proxy.logging_utils import (
 )
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.server.features.build.configs import (
-    SANDBOX_API_SERVER_URL,
+    MCP_SESSION_TAG_HEADER,
+    ONYX_SERVER_URL,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
 )
 from onyx.server.features.build.db import action_approval
@@ -90,9 +91,9 @@ PARSER_MAX_BODY_BYTES = 32 * 1024 * 1024
 # in-cluster name resolving to an internal IP, while still denying every other port
 # on that host (e.g. a co-located Redis/Postgres reachable at the same hostname).
 def _parse_api_server() -> tuple[str | None, int | None]:
-    if not SANDBOX_API_SERVER_URL:
+    if not ONYX_SERVER_URL:
         return None, None
-    parsed = urlparse(SANDBOX_API_SERVER_URL)
+    parsed = urlparse(ONYX_SERVER_URL)
     host = (parsed.hostname or "").lower() or None
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     return host, port
@@ -379,8 +380,9 @@ class GateAddon:
             return
 
         gate_target = await self._resolve_and_match(flow)
-        # Strip the in-band session tag so it never reaches the origin
+        # Strip the in-band session tags so they never reach the origin
         flow.request.headers.pop("Proxy-Authorization", None)
+        flow.request.headers.pop(MCP_SESSION_TAG_HEADER, None)
         if gate_target is None:
             return
         ctx, matched_actions = gate_target
@@ -1285,7 +1287,16 @@ class GateAddon:
         cached = self._conn_session_tags.get(conn_id) if conn_id else None
         direct_auth_header = flow.request.headers.get("Proxy-Authorization")
         direct = _parse_proxy_auth_username(direct_auth_header)
-        tag = cached or direct
+        # opencode's in-process MCP client can't ride the proxy-userinfo tag
+        # (shared process, untagged base proxy), so it carries the session id in a
+        # header stamped by the per-session opencode.json, which wins for MCP
+        # requests. This is a same-user attribution hint, not a security boundary:
+        # the sandbox is one trust domain per user, so a compromised process can
+        # read any of its sessions' tags and forge this header — signing it buys
+        # nothing (the value is stored in-sandbox in plaintext). Cross-user is
+        # still blocked by the src-IP-pinned sandbox identity in resolve_sandbox.
+        mcp_header = flow.request.headers.get(MCP_SESSION_TAG_HEADER)
+        tag = mcp_header or cached or direct
 
         logger.debug(
             "session_tag_resolved conn=%s host=%s cached=%s direct=%s "

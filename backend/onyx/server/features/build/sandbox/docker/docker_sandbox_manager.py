@@ -29,6 +29,7 @@ Sandbox containers run with:
 - no Docker socket mount
 - no S3 / MinIO / Postgres / Redis / FileStore credentials in env
 - a fixed env allowlist (``ONYX_PAT``, ``ONYX_SERVER_URL``,
+  ``ONYX_API_PREFIX``,
   opencode auth/config only)
 - only the dedicated sandbox bridge network — never compose's default
   network. As a result api_server / postgres / redis / minio /
@@ -47,8 +48,9 @@ Outbound communication is intentionally limited to:
 1. Public internet over HTTPS (the bridge has default internet egress; block at
    the host's ``DOCKER-USER`` chain if you need a stricter posture, e.g. for EC2
    IMDS).
-2. The Onyx API via ``ONYX_SERVER_URL`` — which must be the *public* HTTPS URL
-   the agent reaches just like any other onyx-cli client.
+2. The Onyx API via the complete ``ONYX_SERVER_URL`` API base. The Craft
+   overlay uses a private alias on the sandbox bridge by default; deployments
+   may instead provide a public HTTPS API URL.
 
 Most control-plane traffic from api_server → sandbox uses the Docker
 Engine API (``docker exec``). Prompt/event transport uses opencode-serve over
@@ -68,7 +70,7 @@ import shlex
 import tarfile
 import threading
 import time
-from collections.abc import Generator, Sequence
+from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict
 from uuid import UUID
@@ -82,10 +84,10 @@ from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     ATTACHMENTS_DIRECTORY,
+    ONYX_SERVER_URL,
     OPENCODE_DISABLED_TOOLS,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
-    SANDBOX_API_SERVER_URL,
     SANDBOX_CONTAINER_IMAGE,
     SANDBOX_DOCKER_CPU_LIMIT,
     SANDBOX_DOCKER_MEMORY_LIMIT,
@@ -120,7 +122,6 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_TENANT_ID,
 )
 from onyx.server.features.build.sandbox.models import (
-    CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
     LLMProviderConfig,
@@ -133,6 +134,9 @@ from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
     generate_agent_instructions,
+)
+from onyx.server.features.build.sandbox.util.api_url_check import (
+    validate_sandbox_api_url,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
@@ -324,9 +328,9 @@ _COMPOSE_INTERNAL_HOSTNAMES = {
 def _looks_like_internal_compose_host(url: str) -> bool:
     """Heuristic: Does ``url`` reference a compose-internal service hostname?
 
-    Used to warn deployers that pointed SANDBOX_API_SERVER_URL at the
-    api_server's compose DNS name. Sandboxes can't resolve that — they only join
-    the craft bridge network — so the URL must be the public Onyx URL.
+    Used to warn deployers that pointed ONYX_SERVER_URL at a service available
+    only on Compose's default network. Sandboxes can resolve the dedicated
+    ``onyx-craft-api`` alias, but not these unrelated service names.
     """
     if not url:
         return False
@@ -540,10 +544,10 @@ def build_container_create_kwargs(
       ``firewall-init.sh`` to read ``ca.crt``. That volume also contains
       root-only ``ca.key``; the agent runs as UID 1000 after init.
 
-    ``ONYX_SERVER_URL`` must be the *public* Onyx URL (the one onyx-cli inside
-    the sandbox will hit over HTTPS) — not an internal compose DNS name. We emit
-    a warning if it looks like the latter, since reaching it would require the
-    sandbox to be on the compose default network.
+    ``ONYX_SERVER_URL`` is the complete API base used by onyx-cli inside the
+    sandbox. The default ``onyx-craft-api`` alias is attached to the sandbox
+    bridge; we warn about other Compose DNS names because they exist only on the
+    default network.
 
     ``opencode_password`` is generated per-provision by the manager and injected
     as the env var named by ``OPENCODE_SERVER_PASSWORD``. The api_server reads
@@ -554,16 +558,19 @@ def build_container_create_kwargs(
     """
     if _looks_like_internal_compose_host(api_server_url):
         logger.warning(
-            "SANDBOX_API_SERVER_URL=%s looks like an internal compose hostname. Sandboxes only "
-            "join the craft bridge network and reach the API server like any other public client, "
-            "so this URL must resolve publicly (e.g. https://onyx.your-org.com). Internal DNS will "
-            "fail and the agent will see 'connection refused'.",
+            "ONYX_SERVER_URL=%s looks like an internal compose hostname. Sandboxes only "
+            "join the craft bridge network, so default-network DNS will fail. Use the "
+            "http://onyx-craft-api:8080 bridge alias or a public API base such as "
+            "https://onyx.your-org.com/api.",
             api_server_url,
         )
 
     env: dict[str, str] = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
+        # The deployment URL is already the exact API base. Disable the CLI's
+        # compatibility prefix for direct services and prefixed ingress URLs.
+        "ONYX_API_PREFIX": "",
         OPENCODE_SERVER_PASSWORD: opencode_password,
         "OPENCODE_CONFIG_CONTENT": opencode_config_json,
     }
@@ -827,14 +834,14 @@ class DockerSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
-        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning.")
-        if not SANDBOX_API_SERVER_URL:
+        if not ONYX_SERVER_URL:
             raise ValueError(
-                "SANDBOX_API_SERVER_URL must be set for Docker sandbox provisioning."
+                "ONYX_SERVER_URL must be set for Docker sandbox provisioning."
             )
+        validate_sandbox_api_url(ONYX_SERVER_URL)
 
         logger.info(
             "Provisioning Docker sandbox %s for user %s, tenant %s.",
@@ -877,7 +884,6 @@ class DockerSandboxManager(SandboxManager):
                     default_model=llm_config.model_name,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
                     plugins=plugins,
-                    mcp_servers=mcp_servers,
                 )
             )
             self._ensure_sandbox_image()
@@ -998,7 +1004,7 @@ class DockerSandboxManager(SandboxManager):
             tenant_id=tenant_id,
             image=self._image,
             onyx_pat=onyx_pat,
-            api_server_url=SANDBOX_API_SERVER_URL,
+            api_server_url=ONYX_SERVER_URL,
             network=self._network_name,
             volume_name=volume_name,
             memory_limit=self._memory_limit,

@@ -55,7 +55,7 @@ def _patch_skill_state(
     stale: bool = False,
 ) -> None:
     monkeypatch.setattr(messages_api, "get_sandbox_by_user_id", lambda *_: object())
-    monkeypatch.setattr(messages_api, "skills_are_stale", lambda *_: stale)
+    monkeypatch.setattr(messages_api, "session_runtime_stale", lambda *_: stale)
 
 
 def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) -> None:

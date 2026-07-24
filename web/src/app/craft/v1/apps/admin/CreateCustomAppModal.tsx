@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal } from "@opal/components";
 import {
   Button,
@@ -9,7 +9,6 @@ import {
   Text,
   Tooltip,
 } from "@opal/components";
-import { SvgUploadCloud } from "@opal/icons";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
 import InputKeyValue, {
   KeyValue,
@@ -17,7 +16,6 @@ import InputKeyValue, {
 import { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 import {
   createCustomExternalApp,
-  replaceCustomAppBundle,
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
 
@@ -63,10 +61,8 @@ export default function CreateCustomAppModal({
   const [orgCredentials, setOrgCredentials] = useState<KeyValue[]>([
     { key: "", value: "" },
   ]);
-  const [file, setFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Re-seed every time the modal opens: from the existing app when editing,
   // blank when creating. Prevents a prior attempt from leaking in.
@@ -84,16 +80,11 @@ export default function CreateCustomAppModal({
         ? toKeyValues(existingApp.organization_credentials)
         : [{ key: "", value: "" }]
     );
-    setFile(null);
     setError(null);
   }, [open, existingApp]);
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    setFile(event.target.files?.[0] ?? null);
-  }
-
   // Headers and org credentials are optional; name + at least one upstream
-  // pattern are required. A bundle is required only on create (optional on edit).
+  // pattern are required.
   const disabledCreateReason = (() => {
     if (isSaving) return "Save is already in progress.";
     if (name.trim().length === 0) {
@@ -101,9 +92,6 @@ export default function CreateCustomAppModal({
     }
     if (upstreamPatterns.length === 0) {
       return "Add at least one upstream URL pattern. Type a pattern and press Enter.";
-    }
-    if (!isEdit && file === null) {
-      return "Upload a bundle .zip file before creating this custom app.";
     }
     return null;
   })();
@@ -122,18 +110,8 @@ export default function CreateCustomAppModal({
   async function save() {
     setIsSaving(true);
     setError(null);
-    // Edit is two calls (bundle + fields); track the bundle step to message
-    // partial success accurately.
-    let bundleSaved = false;
     try {
       if (existingApp) {
-        // Bundle first (the failure-prone step): a failure here leaves fields
-        // unsent. Clear the file so a retry doesn't re-upload it.
-        if (file) {
-          await replaceCustomAppBundle(existingApp.id, file);
-          setFile(null);
-          bundleSaved = true;
-        }
         await updateExternalApp(existingApp.id, {
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
@@ -141,26 +119,18 @@ export default function CreateCustomAppModal({
           organization_credentials: toRecord(orgCredentials),
         });
       } else {
-        // Create: bundle is required (enforced by `canSave`).
         await createCustomExternalApp({
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
-          bundle: file!,
         });
       }
       onSaved();
       onClose();
     } catch (e) {
-      // A step may have committed; refresh the list to reflect what persisted.
-      onSaved();
       const detail = e instanceof Error ? e.message : String(e);
-      setError(
-        bundleSaved
-          ? `The new bundle was saved, but updating the other fields failed — retry to finish: ${detail}`
-          : detail
-      );
+      setError(detail);
     } finally {
       setIsSaving(false);
     }
@@ -173,8 +143,8 @@ export default function CreateCustomAppModal({
           title={existingApp ? `Edit ${existingApp.name}` : "Create custom app"}
           description={
             isEdit
-              ? "Update this custom app's configuration, and optionally upload a new bundle to replace its files."
-              : "Define a custom external app: upload its skill bundle and configure how the egress proxy authenticates outbound requests."
+              ? "Update how the egress proxy reaches and authenticates this app."
+              : "Configure how the egress proxy reaches and authenticates this app. A skill is not required."
           }
         />
         <Modal.Body>
@@ -235,44 +205,6 @@ export default function CreateCustomAppModal({
                 mode="line"
                 addButtonLabel="Add credential"
               />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <Text font="main-ui-action">
-                {isEdit ? "Replace bundle (.zip)" : "Bundle (.zip)"}
-              </Text>
-              <Text font="secondary-body" color="text-03">
-                {isEdit
-                  ? "Optional — upload a new zip to replace the current bundle. Leave empty to keep it. The skill name stays the same."
-                  : "A zip containing SKILL.md plus any other files. The linked skill name comes from SKILL.md."}
-              </Text>
-              <div className="flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".zip,application/zip"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-                <Button
-                  icon={SvgUploadCloud}
-                  prominence="secondary"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {file
-                    ? "Change file"
-                    : isEdit
-                      ? "Choose new zip"
-                      : "Choose zip"}
-                </Button>
-                <Text font="main-ui-body" color="text-03">
-                  {file
-                    ? file.name
-                    : isEdit
-                      ? "Keeping current bundle"
-                      : "No file selected"}
-                </Text>
-              </div>
             </div>
 
             {error && (

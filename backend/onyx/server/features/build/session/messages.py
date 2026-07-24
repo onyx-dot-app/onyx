@@ -19,7 +19,7 @@ from onyx.server.features.build.db.build_session import (
     count_user_messages,
     create_message,
     get_build_session,
-    skills_are_stale,
+    session_runtime_stale,
 )
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_by_user_id,
@@ -137,7 +137,7 @@ def send_message(
             )
 
         sandbox = get_sandbox_by_user_id(db_session, user.id)
-        if skills_are_stale(session, sandbox):
+        if session_runtime_stale(session, sandbox):
             SessionManager(db_session).reload_session_skills(session_id, user)
 
         check_build_rate_limits(user=user, db_session=db_session)
