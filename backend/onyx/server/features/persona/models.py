@@ -46,7 +46,11 @@ class PersonaOwnerGroupSnapshot(BaseModel):
 def _user_shares_from_model(persona: Persona) -> list[PersonaUserShare]:
     return [
         PersonaUserShare(
-            user=MinimalUserSnapshot(id=share.user.id, email=share.user.email),
+            user=MinimalUserSnapshot(
+                id=share.user.id,
+                email=share.user.email,
+                personal_name=share.user.personal_name,
+            ),
             permission=share.permission,
         )
         for share in persona.user_shares
@@ -294,11 +298,15 @@ class MinimalPersonaSnapshot(BaseModel):
             builtin_persona=persona.builtin_persona,
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
-                # Owner email is PII: keep the id (needed for ownership/creator
-                # filtering) but blank the email for non-owner/non-admin callers.
+                # Owner email and display name are PII: keep the id (needed for
+                # ownership/creator filtering) but blank them for
+                # non-owner/non-admin callers.
                 MinimalUserSnapshot(
                     id=persona.user.id,
                     email=persona.user.email if include_owner_email else "",
+                    personal_name=(
+                        persona.user.personal_name if include_owner_email else None
+                    ),
                 )
                 if persona.user
                 else None
@@ -375,13 +383,19 @@ class PersonaSnapshot(BaseModel):
                 for doc in persona.attached_documents
             ],
             owner=(
-                MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
+                MinimalUserSnapshot(
+                    id=persona.user.id,
+                    email=persona.user.email,
+                    personal_name=persona.user.personal_name,
+                )
                 if persona.user
                 else None
             ),
             owner_group=_owner_group_from_model(persona),
             users=[
-                MinimalUserSnapshot(id=user.id, email=user.email)
+                MinimalUserSnapshot(
+                    id=user.id, email=user.email, personal_name=user.personal_name
+                )
                 for user in persona.users
             ],
             groups=[user_group.id for user_group in persona.groups],
@@ -435,7 +449,9 @@ class FullPersonaSnapshot(PersonaSnapshot):
             builtin_persona=persona.builtin_persona,
             starter_messages=persona.starter_messages,
             users=[
-                MinimalUserSnapshot(id=user.id, email=user.email)
+                MinimalUserSnapshot(
+                    id=user.id, email=user.email, personal_name=user.personal_name
+                )
                 for user in persona.users
             ],
             groups=[user_group.id for user_group in persona.groups],
@@ -458,7 +474,11 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 for doc in persona.attached_documents
             ],
             owner=(
-                MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
+                MinimalUserSnapshot(
+                    id=persona.user.id,
+                    email=persona.user.email,
+                    personal_name=persona.user.personal_name,
+                )
                 if persona.user
                 else None
             ),

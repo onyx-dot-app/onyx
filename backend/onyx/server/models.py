@@ -28,6 +28,8 @@ class IdReturn(BaseModel):
 class MinimalUserSnapshot(BaseModel):
     id: UUID
     email: str
+    # User.personal_name, or None when unset. Callers fall back to email.
+    personal_name: str | None = None
 
 
 class UserGroupInfo(BaseModel):
