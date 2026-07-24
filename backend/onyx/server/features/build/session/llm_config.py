@@ -16,7 +16,7 @@ from onyx.server.features.build.sandbox.models import (
     LLMProviderConfig,
 )
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
-from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -28,6 +28,14 @@ def _visible_models_by_name(provider: LLMProviderView) -> list[str]:
     return sorted(
         model.name for model in provider.model_configurations if model.is_visible
     )
+
+
+def _provider_label(provider: LLMProviderView) -> str:
+    return provider.name or get_provider_display_name(provider.provider)
+
+
+def _model_display_name(model: ModelConfigurationView) -> str:
+    return model.custom_display_name or model.display_name or model.name
 
 
 @dataclass(frozen=True)
@@ -86,10 +94,7 @@ def _gateway_provider_order(
 ) -> list[LLMProviderView]:
     return sorted(
         providers,
-        key=lambda provider: (
-            (provider.name or get_provider_display_name(provider.provider)).casefold(),
-            provider.id,
-        ),
+        key=lambda provider: (_provider_label(provider).casefold(), provider.id),
     )
 
 
@@ -155,22 +160,17 @@ def build_onyx_gateway_config(
     if not visible_models or default_selection is None:
         return None
 
-    clean_display_names = [
-        model.custom_display_name or model.display_name or model.name
-        for _, model in visible_models
-    ]
-    display_name_counts = Counter(clean_display_names)
+    display_name_counts = Counter(
+        _model_display_name(model) for _, model in visible_models
+    )
     # Model configs don't track max output tokens; derive it from the litellm
     # map (as the main app does) so opencode's per-model limit is accurate.
     model_map = get_model_map()
     models: list[GatewayModelConfig] = []
     for provider, model in visible_models:
-        display_name = model.custom_display_name or model.display_name or model.name
+        display_name = _model_display_name(model)
         if display_name_counts[display_name] > 1:
-            provider_label = provider.name or get_provider_display_name(
-                provider.provider
-            )
-            display_name = f"{display_name} ({provider_label})"
+            display_name = f"{display_name} ({_provider_label(provider)})"
         models.append(
             GatewayModelConfig(
                 id=f"{provider.id}/{model.name}",

@@ -269,8 +269,7 @@ class SessionManager:
         session: BuildSession,
         user: User,
     ) -> None:
-        selection = parse_agent_selection(session.agent_provider, session.agent_model)
-        llm_config = self.build_llm_configs(user, selection)
+        llm_config = self._session_llm_config(session, user)
         mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
         expected = json.dumps(
             build_provider_opencode_config(
