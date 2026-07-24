@@ -539,7 +539,11 @@ class GateAddon:
             return None
 
         try:
-            sandbox = self._identity.resolve_sandbox(src_ip)
+            # Off the proxy event loop: resolve_sandbox blocks on a DB query and a
+            # one-shot K8s read-through, which would otherwise stall every flow.
+            sandbox = await asyncio.get_running_loop().run_in_executor(
+                None, self._identity.resolve_sandbox, src_ip
+            )
         except Exception:
             # A DB blip can't be allowed to grant ungated egress.
             logger.exception(

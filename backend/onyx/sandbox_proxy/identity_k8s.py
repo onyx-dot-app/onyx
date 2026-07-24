@@ -3,6 +3,11 @@
 Background thread watches sandbox pods and maintains a `{pod_ip:
 SandboxIdentity}` cache. On any error or EOF the watch loop reconnects with
 exponential backoff capped at `_RECONNECT_MAX_SECONDS`; on 410 Gone we relist.
+
+A cache miss falls back to a one-shot read-through query by pod IP. A pod's
+first requests (opencode's boot-time fetches) can beat the watch event for the
+pod by a second or two; without the read-through those requests 403 as
+unidentified and one-shot clients (npm's plugin-SDK install) never retry.
 """
 
 import threading
@@ -41,7 +46,20 @@ _SANDBOX_POD_SELECTOR = ",".join(
     ]
 )
 
+_READTHROUGH_REQUEST_TIMEOUT: tuple[float, float] = (1.0, 2.0)
+# Must exceed the leader's total request deadline, or a coalesced follower gives
+# up before the leader's query completes and fails closed spuriously.
+_READTHROUGH_LEADER_WAIT_SECONDS = 4.0
+
 logger = setup_logger()
+
+
+class _InflightReadThrough:
+    __slots__ = ("done", "result")
+
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.result: SandboxIdentity | None = None
 
 
 def _identity_from_pod(pod: client.V1Pod) -> SandboxIdentity | None:
@@ -93,6 +111,7 @@ class K8sInformerLookup(SandboxIPLookup):
         self._namespace = namespace
         self._cache: dict[str, SandboxIdentity] = {}
         self._cache_lock = threading.Lock()
+        self._inflight_readthroughs: dict[str, _InflightReadThrough] = {}
 
         self._initial_sync_done = threading.Event()
         self._stop_event = threading.Event()
@@ -118,7 +137,78 @@ class K8sInformerLookup(SandboxIPLookup):
 
     def lookup(self, src_ip: str) -> SandboxIdentity | None:
         with self._cache_lock:
-            return self._cache.get(src_ip)
+            hit = self._cache.get(src_ip)
+        if hit is not None:
+            return hit
+        return self._read_through(src_ip)
+
+    def _read_through(self, src_ip: str) -> SandboxIdentity | None:
+        with self._cache_lock:
+            hit = self._cache.get(src_ip)
+            if hit is not None:
+                return hit
+            inflight = self._inflight_readthroughs.get(src_ip)
+            is_leader = inflight is None
+            if inflight is None:
+                inflight = _InflightReadThrough()
+                self._inflight_readthroughs[src_ip] = inflight
+
+        if not is_leader:
+            if not inflight.done.wait(timeout=_READTHROUGH_LEADER_WAIT_SECONDS):
+                return None
+            return inflight.result
+
+        try:
+            result = self._query_identity_by_ip(src_ip)
+        finally:
+            # Publish before de-registering, or a caller arriving between the pop
+            # and the signal misses the entry and fires a duplicate query.
+            inflight.result = result
+            inflight.done.set()
+            with self._cache_lock:
+                self._inflight_readthroughs.pop(src_ip, None)
+        return result
+
+    def _query_identity_by_ip(self, src_ip: str) -> SandboxIdentity | None:
+        try:
+            listing = self._core.list_namespaced_pod(
+                namespace=self._namespace,
+                label_selector=_SANDBOX_POD_SELECTOR,
+                field_selector=f"status.podIP={src_ip}",
+                _request_timeout=_READTHROUGH_REQUEST_TIMEOUT,
+            )
+            identities = [
+                identity
+                for pod in listing.items
+                if (identity := _identity_from_pod(pod)) is not None
+                and identity.sandbox_ip == src_ip
+            ]
+        except Exception as e:
+            logger.warning("identity_readthrough_error src_ip=%s error=%s", src_ip, e)
+            return None
+
+        # Require exactly one validated pod, not just one distinct sandbox_id: an
+        # IP resolving to more than one pod is ambiguous regardless of labels, and
+        # picking identities[0] would trust unspecified list ordering.
+        if len(identities) != 1:
+            if identities:
+                logger.warning(
+                    "identity_readthrough_ambiguous src_ip=%s sandboxes=%s",
+                    src_ip,
+                    [str(identity.sandbox_id) for identity in identities],
+                )
+            return None
+
+        # Deliberately not cached: the watch is the sole cache writer, so a
+        # read-through hit can't linger past a concurrent DELETED event and
+        # misattribute a reused IP to the dead sandbox until the next relist.
+        identity = identities[0]
+        logger.info(
+            "identity_readthrough_hit src_ip=%s sandbox=%s (watch had not caught up)",
+            src_ip,
+            identity.sandbox_name,
+        )
+        return identity
 
     def _run(self) -> None:
         backoff = _RECONNECT_INITIAL_SECONDS
