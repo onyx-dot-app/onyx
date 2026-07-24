@@ -1,8 +1,8 @@
 // Admin-side shapes for the SSO provider list, mirroring the backend response
-// model. String `config` values come back masked (bullets, or a truncated
-// first4...last4 form for longer values) and are accepted back verbatim to
-// keep the stored value. Booleans and non-secret lists (scopes) round-trip
-// as real values.
+// model. Secret `config` fields (client secret, SP private key) come back
+// masked (bullets, or a truncated first4...last4 form) and are accepted back
+// verbatim to keep the stored value. All other fields round-trip as real
+// values.
 
 export type SSOProviderType = "GOOGLE_OAUTH" | "OIDC" | "SAML";
 
