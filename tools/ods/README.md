@@ -418,7 +418,20 @@ ods run-ci <pr-number>
 ```shell
 # Run CI for PR #7353 from a fork
 ods run-ci 7353
+
+# Create a replacement PR for making edits and merging
+ods run-ci 7353 --for-edits
 ```
+
+`--for-edits` derives the editable branch from the contributor's branch. It
+preserves `feat/`, `fix/`, `refactor/`, and `chore/` prefixes; otherwise it adds
+`chore/`. For example, `fix/search-timeout` becomes
+`fix/search-timeout-pr-7353-edits`. It also keeps the contributor's original PR
+description and cherry-pick selection, and marks the new PR as superseding the
+original. The replacement PR should be merged and the original PR closed
+without merging. It cannot be combined with `--rerun`, which would discard
+edits made on the replacement branch. The command also refuses to overwrite an
+existing replacement PR or remote branch.
 
 ### `cherry-pick` - Backport Commits to Release Branches
 
