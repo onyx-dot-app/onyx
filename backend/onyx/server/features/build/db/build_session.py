@@ -7,21 +7,17 @@ from uuid import UUID
 from sqlalchemy import column, desc, exists, select, values
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus, SessionOrigin, SharingScope
-from onyx.db.llm import can_user_access_llm_provider, fetch_user_group_ids
-from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox, User
-from onyx.db.models import LLMProvider as LLMProviderModel
+from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.configs import (
     SANDBOX_NEXTJS_PORT_END,
     SANDBOX_NEXTJS_PORT_START,
 )
-from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_json_like
 
@@ -622,30 +618,3 @@ def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:
     db_session.flush()
     logger.info("Cleared %s nextjs_port allocations for user %s", result, user_id)
     return result
-
-
-def fetch_all_accessible_build_llm_providers(
-    db_session: Session, user: User
-) -> list[LLMProviderView]:
-    """Every provider the ``user`` can access (is_public / group rules).
-    persona=None below: Craft has no persona context, so a provider restricted
-    to specific personas is intentionally excluded even when otherwise
-    public."""
-    provider_models = db_session.scalars(
-        select(LLMProviderModel)
-        .order_by(LLMProviderModel.id.asc())
-        .options(
-            selectinload(LLMProviderModel.model_configurations),
-            selectinload(LLMProviderModel.groups),
-            selectinload(LLMProviderModel.personas),
-        )
-    )
-    user_group_ids = fetch_user_group_ids(db_session, user)
-    is_admin = user.role == UserRole.ADMIN
-    return [
-        LLMProviderView.from_model(p)
-        for p in provider_models
-        if can_user_access_llm_provider(
-            p, user_group_ids, persona=None, is_admin=is_admin
-        )
-    ]

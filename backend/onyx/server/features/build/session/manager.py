@@ -25,6 +25,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.enums import SandboxStatus, SessionOrigin
 from onyx.db.external_app import get_connectable_apps_for_user
+from onyx.db.llm import fetch_all_accessible_llm_providers
 from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -41,7 +42,6 @@ from onyx.server.features.build.db.build_session import (
     allocate_nextjs_port,
     create_build_session__no_commit,
     delete_build_session__no_commit,
-    fetch_all_accessible_build_llm_providers,
     get_build_session,
     get_empty_session_for_user,
     get_session_messages,
@@ -199,7 +199,7 @@ class SessionManager:
         requested_provider_id: int | None = None,
     ) -> LLMProviderConfig:
         gateway_config = build_onyx_gateway_config(
-            fetch_all_accessible_build_llm_providers(self._db_session, user),
+            fetch_all_accessible_llm_providers(self._db_session, user),
             requested_provider_id=requested_provider_id,
             requested_provider_type=requested_provider_type,
             requested_model_name=requested_model_name,

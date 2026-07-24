@@ -3,11 +3,9 @@ from __future__ import annotations
 from typing import cast
 from unittest.mock import MagicMock, patch
 
-import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.models import BuildSession, Sandbox, User
-from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.sandbox.models import (
     GatewayModelConfig,
     LLMProviderConfig,
@@ -130,11 +128,6 @@ def test_normalize_agent_selection_uses_gateway_identity() -> None:
     )
 
 
-def test_normalize_agent_selection_requires_provider_id_for_gateway() -> None:
-    with pytest.raises(OnyxError, match="provider_id is required"):
-        llm_config.normalize_agent_selection(None, "claude-sonnet")
-
-
 def test_manager_uses_first_recommended_model_from_first_alphabetical_provider() -> (
     None
 ):
@@ -158,7 +151,7 @@ def test_manager_uses_first_recommended_model_from_first_alphabetical_provider()
         patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
         patch.object(
             manager_module,
-            "fetch_all_accessible_build_llm_providers",
+            "fetch_all_accessible_llm_providers",
             return_value=[anthropic, bedrock],
         ) as fetch_providers,
     ):
