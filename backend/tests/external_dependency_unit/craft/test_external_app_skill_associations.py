@@ -261,6 +261,7 @@ def test_app_update_batches_associations_into_one_sandbox_refresh(
 def test_editor_creation_with_app_context_is_atomic_and_not_auto_enabled(
     db_session: Session,
     test_user: User,  # noqa: ARG001
+    initialize_file_store: None,  # noqa: ARG001
 ) -> None:
     admin = make_user(db_session, role=UserRole.ADMIN)
     app_id = _make_app(db_session)
