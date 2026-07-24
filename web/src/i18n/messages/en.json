@@ -12440,6 +12440,9 @@
           "generatingPlan": {
             "label": "Generating plan"
           },
+          "queryingKnowledgeBase": {
+            "label": "Querying knowledge base"
+          },
           "reading": {
             "label": "Reading"
           },
@@ -12521,6 +12524,57 @@
             "label": "Updated memory"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "Queried knowledge base"
+          },
+          "querying": {
+            "status": "Querying knowledge base"
+          },
+          "listed": {
+            "label": "{count, plural, one {# document listed} other {# documents listed}}"
+          },
+          "query": {
+            "table": {
+              "document": "Documents",
+              "hierarchy_node": "Folders",
+              "chat_session": "Chat sessions",
+              "chat_message": "Chat messages",
+              "search_doc": "Cited documents"
+            },
+            "count": "Count",
+            "countBy": {
+              "source": "Count by source",
+              "owner": "Count by owner",
+              "month": "Count by month"
+            },
+            "titleContains": "Title contains “{text}”",
+            "nameContains": "Name contains “{text}”",
+            "textContains": "Text contains “{text}”",
+            "updated": {
+              "since": "Updated since {date}",
+              "before": "Updated before {date}",
+              "between": "Updated {start} – {end}"
+            },
+            "created": {
+              "since": "Created since {date}",
+              "before": "Created before {date}",
+              "between": "Created {start} – {end}"
+            },
+            "sent": {
+              "since": "Sent since {date}",
+              "before": "Sent before {date}",
+              "between": "Sent {start} – {end}"
+            },
+            "owner": "Owner: {owner}",
+            "folder": "In folder {id}",
+            "nodeType": "Type: {type}",
+            "author": "From: {author}",
+            "message": "Message {id}",
+            "allRetrieved": "All retrieved",
+            "nextPage": "Next page"
+          }
+        },
         "python": {
           "completed": {
             "status": "Python execution completed"
@@ -12599,6 +12653,7 @@
           "generateImage": "Generate Image",
           "generatePlan": "Generate plan",
           "internalSearch": "Internal Search",
+          "knowledgeBaseQuery": "Knowledge Base Query",
           "memory": "Memory",
           "openUrls": "Open URLs",
           "researchAgent": "Research agent",

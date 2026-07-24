@@ -101,6 +101,19 @@ Only add memories that are specific, likely to remain true, and likely to be use
 Focus on enduring preferences, long-term goals, stable constraints, and explicit "remember this" type requests.
 """.lstrip()
 
+POSTGRES_QUERY_GUIDANCE = """
+## {name}
+Use the `{name}` tool for questions about metadata, counts, or the user's own chat history — things top-k search cannot answer exhaustively:
+- Counting/aggregation: "how many Salesforce docs changed last month", document counts broken down by source or owner.
+- Exhaustive listing by metadata: every document matching a title substring, date range, owner, source, or folder — when completeness matters.
+- The user's own history: finding past conversations or messages, and which documents a past answer cited.
+- Verifying absence by metadata: before stating that no documents match a source, owner, date range, title, or folder, confirm with a count. A zero count says nothing about what documents discuss; check content with search.
+It sees metadata only (titles, dates, owners, sources, folder structure) — for questions about document *content* or meaning, use the internal search tool. \
+When the user asks for every matching document, keep the user's filters and page through all of them: call again with the returned `next_cursor` as `cursor` and the same filters until no `next_cursor` comes back. \
+Otherwise, when the result-set size is unknown, run with `count=true` first and narrow the filters before listing rows. \
+Listed documents carry citation numbers like [3]; cite the ones you mention the same way as search results.
+""".lstrip()
+
 TOOL_CALL_FAILURE_PROMPT = """
 LLM attempted to call a tool but failed. Most likely the tool name or arguments were misspelled.
 """.strip()

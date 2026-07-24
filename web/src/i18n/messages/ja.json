@@ -12440,6 +12440,9 @@
           "generatingPlan": {
             "label": "プランを生成中"
           },
+          "queryingKnowledgeBase": {
+            "label": "ナレッジベースを照会中"
+          },
           "reading": {
             "label": "読み取り中"
           },
@@ -12521,6 +12524,57 @@
             "label": "メモリを更新しました"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "ナレッジベースを照会しました"
+          },
+          "querying": {
+            "status": "ナレッジベースを照会中"
+          },
+          "listed": {
+            "label": "{count, plural, one {# 件のドキュメントを一覧表示} other {# 件のドキュメントを一覧表示}}"
+          },
+          "query": {
+            "table": {
+              "document": "ドキュメント",
+              "hierarchy_node": "フォルダー",
+              "chat_session": "チャットセッション",
+              "chat_message": "チャットメッセージ",
+              "search_doc": "引用されたドキュメント"
+            },
+            "count": "件数",
+            "countBy": {
+              "source": "ソース別の件数",
+              "owner": "所有者別の件数",
+              "month": "月別の件数"
+            },
+            "titleContains": "タイトルに「{text}」を含む",
+            "nameContains": "名前に「{text}」を含む",
+            "textContains": "本文に「{text}」を含む",
+            "updated": {
+              "since": "{date} 以降に更新",
+              "before": "{date} より前に更新",
+              "between": "{start} – {end} に更新"
+            },
+            "created": {
+              "since": "{date} 以降に作成",
+              "before": "{date} より前に作成",
+              "between": "{start} – {end} に作成"
+            },
+            "sent": {
+              "since": "{date} 以降に送信",
+              "before": "{date} より前に送信",
+              "between": "{start} – {end} に送信"
+            },
+            "owner": "所有者: {owner}",
+            "folder": "フォルダー {id} 内",
+            "nodeType": "種類: {type}",
+            "author": "送信者: {author}",
+            "message": "メッセージ {id}",
+            "allRetrieved": "取得したすべて",
+            "nextPage": "次のページ"
+          }
+        },
         "python": {
           "completed": {
             "status": "Python の実行が完了しました"
@@ -12599,6 +12653,7 @@
           "generateImage": "画像生成",
           "generatePlan": "プラン生成",
           "internalSearch": "社内検索",
+          "knowledgeBaseQuery": "ナレッジベースクエリ",
           "memory": "メモリ",
           "openUrls": "URL を開く",
           "researchAgent": "リサーチエージェント",

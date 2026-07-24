@@ -12440,6 +12440,9 @@
           "generatingPlan": {
             "label": "جارٍ توليد الخطة"
           },
+          "queryingKnowledgeBase": {
+            "label": "جارٍ الاستعلام عن قاعدة المعرفة"
+          },
           "reading": {
             "label": "جارٍ القراءة"
           },
@@ -12521,6 +12524,57 @@
             "label": "تم تحديث الذاكرة"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "تم الاستعلام عن قاعدة المعرفة"
+          },
+          "querying": {
+            "status": "جارٍ الاستعلام عن قاعدة المعرفة"
+          },
+          "listed": {
+            "label": "{count, plural, one {مستند واحد مُدرج} other {# مستندات مُدرجة}}"
+          },
+          "query": {
+            "table": {
+              "document": "المستندات",
+              "hierarchy_node": "المجلدات",
+              "chat_session": "جلسات الدردشة",
+              "chat_message": "رسائل الدردشة",
+              "search_doc": "المستندات المستشهد بها"
+            },
+            "count": "العدد",
+            "countBy": {
+              "source": "العدد حسب المصدر",
+              "owner": "العدد حسب المالك",
+              "month": "العدد حسب الشهر"
+            },
+            "titleContains": "العنوان يحتوي على «{text}»",
+            "nameContains": "الاسم يحتوي على «{text}»",
+            "textContains": "النص يحتوي على «{text}»",
+            "updated": {
+              "since": "محدَّث منذ {date}",
+              "before": "محدَّث قبل {date}",
+              "between": "محدَّث {start} – {end}"
+            },
+            "created": {
+              "since": "أُنشئ منذ {date}",
+              "before": "أُنشئ قبل {date}",
+              "between": "أُنشئ {start} – {end}"
+            },
+            "sent": {
+              "since": "أُرسل منذ {date}",
+              "before": "أُرسل قبل {date}",
+              "between": "أُرسل {start} – {end}"
+            },
+            "owner": "المالك: {owner}",
+            "folder": "في المجلد {id}",
+            "nodeType": "النوع: {type}",
+            "author": "من: {author}",
+            "message": "الرسالة {id}",
+            "allRetrieved": "كل ما تم استرجاعه",
+            "nextPage": "الصفحة التالية"
+          }
+        },
         "python": {
           "completed": {
             "status": "اكتمل تنفيذ Python"
@@ -12599,6 +12653,7 @@
           "generateImage": "توليد صورة",
           "generatePlan": "توليد خطة",
           "internalSearch": "بحث داخلي",
+          "knowledgeBaseQuery": "استعلام قاعدة المعرفة",
           "memory": "الذاكرة",
           "openUrls": "فتح عناوين URL",
           "researchAgent": "وكيل البحث",

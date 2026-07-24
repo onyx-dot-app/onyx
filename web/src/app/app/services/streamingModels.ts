@@ -45,6 +45,8 @@ export enum PacketType {
   MEMORY_TOOL_START = "memory_tool_start",
   MEMORY_TOOL_DELTA = "memory_tool_delta",
   MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access",
+  POSTGRES_TOOL_START = "postgres_tool_start",
+  POSTGRES_TOOL_DOCUMENTS = "postgres_tool_documents",
 
   // Reasoning packets
   REASONING_START = "reasoning_start",
@@ -301,6 +303,46 @@ export interface MemoryToolDelta extends BaseObj {
 
 export interface MemoryToolNoAccess extends BaseObj {
   type: "memory_tool_no_access";
+}
+
+// Postgres Tool Packets
+// The arguments of a postgres_query call, as the model sent them.
+export type PostgresToolQueryValue = string | number | boolean | null;
+export interface PostgresToolQuery {
+  table?: PostgresToolQueryValue;
+  count?: PostgresToolQueryValue;
+  group_by?: PostgresToolQueryValue;
+  limit?: PostgresToolQueryValue;
+  cursor?: PostgresToolQueryValue;
+  source_type?: PostgresToolQueryValue;
+  title_contains?: PostgresToolQueryValue;
+  description_contains?: PostgresToolQueryValue;
+  name_contains?: PostgresToolQueryValue;
+  content_contains?: PostgresToolQueryValue;
+  updated_after?: PostgresToolQueryValue;
+  updated_before?: PostgresToolQueryValue;
+  created_after?: PostgresToolQueryValue;
+  created_before?: PostgresToolQueryValue;
+  sent_after?: PostgresToolQueryValue;
+  sent_before?: PostgresToolQueryValue;
+  owned_by?: PostgresToolQueryValue;
+  parent_hierarchy_node_id?: PostgresToolQueryValue;
+  parent_id?: PostgresToolQueryValue;
+  node_type?: PostgresToolQueryValue;
+  message_type?: PostgresToolQueryValue;
+  chat_message_id?: PostgresToolQueryValue;
+  cited_only?: PostgresToolQueryValue;
+}
+
+export interface PostgresToolStart extends BaseObj {
+  type: "postgres_tool_start";
+  // The call's arguments, for the step's query summary.
+  query?: PostgresToolQuery;
+}
+
+export interface PostgresToolDocuments extends BaseObj {
+  type: "postgres_tool_documents";
+  documents: OnyxDocument[];
 }
 
 // Reasoning Packets
@@ -572,6 +614,11 @@ export type ApplyPatchToolObj =
   | ApplyPatchEnd
   | SectionEnd
   | PacketError;
+export type PostgresToolObj =
+  | PostgresToolStart
+  | PostgresToolDocuments
+  | SectionEnd
+  | PacketError;
 export type NewToolObj =
   | SearchToolObj
   | ImageGenerationToolObj
@@ -581,7 +628,8 @@ export type NewToolObj =
   | FileReaderToolObj
   | MemoryToolObj
   | ExecToolObj
-  | ApplyPatchToolObj;
+  | ApplyPatchToolObj
+  | PostgresToolObj;
 
 export type ReasoningObj =
   | ReasoningStart
@@ -800,6 +848,11 @@ export interface ApplyPatchToolPacket {
 export interface MemoryToolPacket {
   placement: Placement;
   obj: MemoryToolObj;
+}
+
+export interface PostgresToolPacket {
+  placement: Placement;
+  obj: PostgresToolObj;
 }
 
 export interface ReasoningPacket {

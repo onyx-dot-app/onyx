@@ -12440,6 +12440,9 @@
           "generatingPlan": {
             "label": "계획 생성 중"
           },
+          "queryingKnowledgeBase": {
+            "label": "지식 베이스 조회 중"
+          },
           "reading": {
             "label": "읽는 중"
           },
@@ -12521,6 +12524,57 @@
             "label": "메모리 업데이트됨"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "지식 베이스 조회 완료"
+          },
+          "querying": {
+            "status": "지식 베이스 조회 중"
+          },
+          "listed": {
+            "label": "{count, plural, one {문서 #개 나열됨} other {문서 #개 나열됨}}"
+          },
+          "query": {
+            "table": {
+              "document": "문서",
+              "hierarchy_node": "폴더",
+              "chat_session": "채팅 세션",
+              "chat_message": "채팅 메시지",
+              "search_doc": "인용된 문서"
+            },
+            "count": "개수",
+            "countBy": {
+              "source": "소스별 개수",
+              "owner": "소유자별 개수",
+              "month": "월별 개수"
+            },
+            "titleContains": "제목에 “{text}” 포함",
+            "nameContains": "이름에 “{text}” 포함",
+            "textContains": "본문에 “{text}” 포함",
+            "updated": {
+              "since": "{date} 이후 업데이트",
+              "before": "{date} 이전 업데이트",
+              "between": "{start} – {end} 업데이트"
+            },
+            "created": {
+              "since": "{date} 이후 생성",
+              "before": "{date} 이전 생성",
+              "between": "{start} – {end} 생성"
+            },
+            "sent": {
+              "since": "{date} 이후 전송",
+              "before": "{date} 이전 전송",
+              "between": "{start} – {end} 전송"
+            },
+            "owner": "소유자: {owner}",
+            "folder": "폴더 {id} 안",
+            "nodeType": "유형: {type}",
+            "author": "보낸 사람: {author}",
+            "message": "메시지 {id}",
+            "allRetrieved": "검색된 모든 항목",
+            "nextPage": "다음 페이지"
+          }
+        },
         "python": {
           "completed": {
             "status": "Python 실행 완료"
@@ -12599,6 +12653,7 @@
           "generateImage": "이미지 생성",
           "generatePlan": "계획 생성",
           "internalSearch": "내부 검색",
+          "knowledgeBaseQuery": "지식 베이스 쿼리",
           "memory": "메모리",
           "openUrls": "URL 열기",
           "researchAgent": "리서치 에이전트",

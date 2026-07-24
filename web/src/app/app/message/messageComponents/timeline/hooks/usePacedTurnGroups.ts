@@ -30,6 +30,7 @@ const TOOL_START_PACKET_TYPES = new Set<PacketType>([
   PacketType.EXEC_COMMAND_START,
   PacketType.WRITE_STDIN_START,
   PacketType.APPLY_PATCH_START,
+  PacketType.POSTGRES_TOOL_START,
 ]);
 
 /**
