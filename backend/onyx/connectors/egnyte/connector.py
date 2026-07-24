@@ -156,6 +156,15 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         return DocumentSource.EGNYTE
 
     @classmethod
+    def oauth_client_id(cls) -> str | None:
+        # When unset (no OAuth app), the UI falls back to manual entry.
+        return EGNYTE_CLIENT_ID
+
+    @classmethod
+    def oauth_client_secret(cls) -> str | None:
+        return EGNYTE_CLIENT_SECRET
+
+    @classmethod
     def oauth_authorization_url(
         cls,
         base_domain: str,
