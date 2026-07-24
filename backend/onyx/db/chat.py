@@ -99,19 +99,18 @@ def get_chat_sessions_by_user(
     user_id: UUID | None,
     deleted: bool | None,
     db_session: Session,
-    include_onyxbot_flows: bool = False,
     limit: int = 50,
     before: datetime | None = None,
     project_id: int | None = None,
     only_non_project_chats: bool = False,
     include_failed_chats: bool = False,
 ) -> list[ChatSession]:
-    stmt = select(ChatSession).where(ChatSession.user_id == user_id)
-
-    if not include_onyxbot_flows:
-        stmt = stmt.where(ChatSession.onyxbot_flow.is_(False))
-
-    stmt = stmt.order_by(desc(ChatSession.time_updated))
+    stmt = (
+        select(ChatSession)
+        .where(ChatSession.user_id == user_id)
+        .where(ChatSession.onyxbot_flow.is_(False))
+        .order_by(desc(ChatSession.time_updated))
+    )
 
     if deleted is not None:
         stmt = stmt.where(ChatSession.deleted == deleted)

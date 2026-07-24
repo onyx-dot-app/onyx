@@ -968,7 +968,6 @@ def search_chats(
         page=page,
         page_size=page_size,
         include_deleted=False,
-        include_onyxbot_flows=False,
     )
 
     # Group chat sessions by time period
