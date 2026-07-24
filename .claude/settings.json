@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ -n \"$CLAUDE_ENV_FILE\" ] && printf 'export PATH=\"%s\"\\n' \"$CLAUDE_PROJECT_DIR/.venv/bin${PATH:+:$PATH}\" >> \"$CLAUDE_ENV_FILE\" || true"
+            "command": "d=\"$CLAUDE_PROJECT_DIR/.venv/bin\"; case \"$PATH\" in \"$d:\"*|\"$d\") ;; *) [ -n \"$CLAUDE_ENV_FILE\" ] && printf 'export PATH=\"%s\"\\n' \"$d${PATH:+:$PATH}\" >> \"$CLAUDE_ENV_FILE\" || true ;; esac"
           }
         ]
       }
