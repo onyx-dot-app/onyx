@@ -787,9 +787,12 @@ export function useLlmManager(
   const [temperatureExplicitlySet, setTemperatureExplicitlySet] =
     useState(false);
 
-  // Set on every override selection, cleared when a send confirms the values
-  // persisted or when a session's stored values are adopted.
-  const unpersistedOverridesRef = useRef(false);
+  // A selection bumps selectionGen alongside its value, and a confirmed
+  // persist records the generation whose values it wrote. Overrides are
+  // unconfirmed while persistedGen trails, so a selection made mid-persist
+  // can never be marked clean by an older persist completing.
+  const [selectionGen, setSelectionGen] = useState(0);
+  const persistedGenRef = useRef(0);
 
   // Serializes every override PUT so an older selection can never land on
   // the server after a newer one. persistOverrides joins the same chain.
@@ -813,7 +816,7 @@ export function useLlmManager(
     if (prevSessionIdRef.current === sessionId) return;
     prevSessionIdRef.current = sessionId;
     setTemperatureExplicitlySet(false);
-    unpersistedOverridesRef.current = false;
+    persistedGenRef.current = selectionGen;
     setReasoningEffort(
       currentChatSession?.current_reasoning_effort_override ?? null
     );
@@ -886,7 +889,7 @@ export function useLlmManager(
       : temperature;
     setTemperature(clampedTemp);
     setTemperatureExplicitlySet(true);
-    unpersistedOverridesRef.current = true;
+    setSelectionGen((generation) => generation + 1);
     const sessionId = chatSession?.id;
     if (sessionId) {
       void enqueueOverrideWrite(() =>
@@ -897,7 +900,7 @@ export function useLlmManager(
 
   const updateReasoningEffort = (effort: ReasoningEffortOverride | null) => {
     setReasoningEffort(effort);
-    unpersistedOverridesRef.current = true;
+    setSelectionGen((generation) => generation + 1);
     const sessionId = chatSession?.id;
     if (sessionId) {
       void enqueueOverrideWrite(() =>
@@ -907,7 +910,11 @@ export function useLlmManager(
   };
 
   const persistOverrides = async (sessionId: string): Promise<void> => {
-    if (chatSession != null && !unpersistedOverridesRef.current) return;
+    // selectionGen is render-captured with the values below, so this persist
+    // confirms exactly the generation whose values it writes.
+    if (chatSession != null && persistedGenRef.current >= selectionGen) {
+      return;
+    }
     const writes: Promise<Response>[] = [];
     if (reasoningEffort) {
       writes.push(
@@ -931,7 +938,7 @@ export function useLlmManager(
         `Failed to persist chat session overrides: ${failed.status}`
       );
     }
-    unpersistedOverridesRef.current = false;
+    persistedGenRef.current = Math.max(persistedGenRef.current, selectionGen);
   };
 
   // Track if any provider exists for the current persona context.
