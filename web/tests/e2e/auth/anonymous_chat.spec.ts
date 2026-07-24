@@ -6,21 +6,16 @@ import { loginAs } from "@tests/e2e/utils/auth";
 // visitor should reach the chat surface (/app) instead of being redirected to
 // the login page.
 
-// Patch global settings via the admin API, mirroring the admin UI's
-// read-modify-write (web/src/refresh-pages/admin/ChatPreferencesPage.tsx).
-// `page` must be authenticated as an admin.
+// Patch global settings via the admin PATCH endpoint, which merges only the
+// fields sent. `page` must be authenticated as an admin.
 async function patchAdminSettings(
   page: Page,
   patch: Record<string, unknown>
 ): Promise<void> {
-  const getRes = await page.request.get("/api/settings");
-  expect(getRes.ok()).toBe(true);
-  const current = await getRes.json();
-
-  const putRes = await page.request.put("/api/admin/settings", {
-    data: { ...current, ...patch },
+  const patchRes = await page.request.patch("/api/admin/settings", {
+    data: patch,
   });
-  expect(putRes.ok()).toBe(true);
+  expect(patchRes.ok()).toBe(true);
 }
 
 // @exclusive: mutates the global `anonymous_user_enabled` setting, which is

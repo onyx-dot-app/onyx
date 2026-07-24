@@ -1,4 +1,8 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.locks import cache_shared_lock
 from onyx.configs.app_configs import (
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_USER_KNOWLEDGE,
@@ -18,11 +22,30 @@ from onyx.server.settings.models import (
     Settings,
 )
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 # TTL for settings keys - 30 days
 SETTINGS_TTL = 30 * 24 * 60 * 60
+
+_SETTINGS_WRITE_LOCK_TIMEOUT_S = 10.0
+
+
+@contextmanager
+def settings_write_lock() -> Iterator[None]:
+    """Serialize read-modify-write of the workspace Settings record so concurrent
+    writers cannot each merge onto a stale snapshot and drop another's field. Any
+    code that loads the Settings record, mutates it, and stores it back must hold
+    this lock. Tenant-scoped, and works on both the Redis and Postgres cache
+    backends."""
+    with cache_shared_lock(
+        lock_name=f"settings_write:{get_current_tenant_id()}",
+        max_time_lock_held_s=_SETTINGS_WRITE_LOCK_TIMEOUT_S,
+        wait_for_lock_s=_SETTINGS_WRITE_LOCK_TIMEOUT_S,
+        logger=logger,
+    ):
+        yield
 
 
 def load_settings(raise_on_error: bool = False) -> Settings:
