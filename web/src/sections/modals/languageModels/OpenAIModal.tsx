@@ -1,13 +1,18 @@
 "use client";
 
 import { useSWRConfig } from "swr";
+import { useFormikContext } from "formik";
 import {
   LLMProviderFormProps,
   LLMProviderName,
+  LLMProviderView,
 } from "@/lib/languageModels/types";
+import { fetchOpenAIModels } from "@/lib/languageModels/svc";
 import {
   useInitialValues,
   buildValidationSchema,
+  BaseLLMFormValues,
+  mergeFetchedModelConfigurations,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -20,6 +25,63 @@ import {
 } from "@/sections/modals/languageModels/shared";
 import { InputDivider, toast } from "@opal/layouts";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
+
+interface OpenAIModalInternalsProps {
+  existingLlmProvider: LLMProviderView | undefined;
+  isOnboarding: boolean;
+}
+
+function OpenAIModalInternals({
+  existingLlmProvider,
+  isOnboarding,
+}: OpenAIModalInternalsProps) {
+  const formikProps = useFormikContext<BaseLLMFormValues>();
+
+  const isFetchDisabled = !formikProps.values.api_key;
+
+  const handleFetchModels = async () => {
+    const { models: fetched, error } = await fetchOpenAIModels({
+      api_key: formikProps.values.api_key,
+      provider_id: existingLlmProvider?.id ?? undefined,
+    });
+    if (error) {
+      throw new Error(error);
+    }
+    formikProps.setFieldValue(
+      "model_configurations",
+      mergeFetchedModelConfigurations(
+        fetched,
+        formikProps.values.model_configurations
+      )
+    );
+  };
+
+  return (
+    <>
+      <APIKeyField providerName="OpenAI" />
+
+      {!isOnboarding && (
+        <>
+          <InputDivider />
+          <DisplayNameField />
+        </>
+      )}
+
+      <InputDivider />
+      <ModelSelectionField
+        shouldShowAutoUpdateToggle={true}
+        onRefetch={isFetchDisabled ? undefined : handleFetchModels}
+      />
+
+      {!isOnboarding && (
+        <>
+          <InputDivider />
+          <ModelAccessField />
+        </>
+      )}
+    </>
+  );
+}
 
 export default function OpenAIModal({
   variant = "llm-configuration",
@@ -81,24 +143,10 @@ export default function OpenAIModal({
         });
       }}
     >
-      <APIKeyField providerName="OpenAI" />
-
-      {!isOnboarding && (
-        <>
-          <InputDivider />
-          <DisplayNameField />
-        </>
-      )}
-
-      <InputDivider />
-      <ModelSelectionField shouldShowAutoUpdateToggle={true} />
-
-      {!isOnboarding && (
-        <>
-          <InputDivider />
-          <ModelAccessField />
-        </>
-      )}
+      <OpenAIModalInternals
+        existingLlmProvider={existingLlmProvider}
+        isOnboarding={isOnboarding}
+      />
     </ModalWrapper>
   );
 }

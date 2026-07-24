@@ -234,6 +234,32 @@ export interface NebiusTokenfactoryModelResponse {
   supported_features: string[];
 }
 
+export interface OpenAIFetchParams {
+  api_key?: string;
+  provider_id?: number;
+}
+
+export interface OpenAIModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+}
+
+export interface AnthropicFetchParams {
+  api_key?: string;
+  provider_id?: number;
+}
+
+export interface AnthropicModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+}
+
 export interface VertexAIFetchParams {
   model_configurations?: ModelConfiguration[];
 }
@@ -253,5 +279,7 @@ export type FetchModelsParams =
   | LiteLLMProxyFetchParams
   | BifrostFetchParams
   | OpenAICompatibleFetchParams
+  | OpenAIFetchParams
+  | AnthropicFetchParams
   | VertexAIFetchParams
   | LMStudioFetchParams;
