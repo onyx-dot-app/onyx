@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ -n \"$CLAUDE_ENV_FILE\" ] && printf 'export PATH=%q\\n' \"$CLAUDE_PROJECT_DIR/.venv/bin:$PATH\" >> \"$CLAUDE_ENV_FILE\" || true"
+            "command": "d=\"$CLAUDE_PROJECT_DIR/.venv/bin\"; case \"$PATH\" in \"$d:\"*|\"$d\") ;; *) [ -n \"$CLAUDE_ENV_FILE\" ] && printf 'IFS= read -r PATH <<%s__ONYX_PATH_EOF__\\n%s\\n__ONYX_PATH_EOF__\\nexport PATH\\n' '\\' \"$d${PATH:+:$PATH}\" >> \"$CLAUDE_ENV_FILE\" || true ;; esac"
           }
         ]
       }
