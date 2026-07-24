@@ -1058,8 +1058,11 @@ def test_openai_model_stream_uses_httphandler_client(
         assert isinstance(kwargs["client"], HTTPHandler)
 
 
-def test_anthropic_model_passes_no_client() -> None:
-    """Test that non-OpenAI models (Anthropic) don't get a client passed."""
+def test_anthropic_model_passes_isolated_client() -> None:
+    """Anthropic gets a per-call HTTPHandler so abandoned streams can't deadlock
+    litellm's shared module_level_client pool (see _uses_isolated_client)."""
+    from litellm import HTTPHandler
+
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
@@ -1089,7 +1092,7 @@ def test_anthropic_model_passes_no_client() -> None:
 
         mock_completion.assert_called_once()
         kwargs = mock_completion.call_args.kwargs
-        assert kwargs["client"] is None
+        assert isinstance(kwargs["client"], HTTPHandler)
 
 
 def test_bedrock_model_passes_no_client() -> None:
