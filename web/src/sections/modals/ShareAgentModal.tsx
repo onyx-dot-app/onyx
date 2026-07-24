@@ -250,14 +250,20 @@ export default function ShareAgentModal({
     serializeDraftState(effectiveState) !==
     serializeDraftState(modalInitialState);
 
-  const existingUserIds = useMemo(
-    () => new Set(draftState.userShares.map((share) => share.user.id)),
-    [draftState.userShares]
-  );
-  const existingGroupIds = useMemo(
-    () => new Set(draftState.groupShares.map((share) => share.group_id)),
-    [draftState.groupShares]
-  );
+  // Owner / Edit / View are mutually exclusive: the owner, owner group, and
+  // current user (the implicit owner in create mode) can't also be a share, so
+  // seed their ids to keep the picker from offering them again.
+  const existingUserIds = useMemo(() => {
+    const ids = new Set(draftState.userShares.map((share) => share.user.id));
+    if (agent?.owner) ids.add(agent.owner.id);
+    if (currentUser) ids.add(currentUser.id);
+    return ids;
+  }, [agent?.owner, currentUser, draftState.userShares]);
+  const existingGroupIds = useMemo(() => {
+    const ids = new Set(draftState.groupShares.map((share) => share.group_id));
+    if (agent?.owner_group) ids.add(agent.owner_group.id);
+    return ids;
+  }, [agent?.owner_group, draftState.groupShares]);
 
   const agentName = agent?.name ?? "Agent";
 
