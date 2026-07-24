@@ -811,6 +811,27 @@ def compute_wont_port_cc_pair_ids(
     return sorted(cc_id for cc_id in db_session.scalars(stmt) if cc_id not in will_port)
 
 
+def filter_cc_pair_ids_still_wont_port(
+    db_session: Session, cc_pair_ids: list[int]
+) -> list[int]:
+    """Of the given cc_pairs, those STILL not recoverable in the new index — i.e. still
+    INVALID or PAUSED. Re-validates a consented deletion set at fire time: a connector
+    re-activated (ACTIVE) or already DELETING before the port completes is spared.
+    One query — the caller must not loop per id."""
+    if not cc_pair_ids:
+        return []
+    stmt = select(ConnectorCredentialPair.id).where(
+        ConnectorCredentialPair.id.in_(cc_pair_ids),
+        ConnectorCredentialPair.status.in_(
+            [
+                ConnectorCredentialPairStatus.INVALID,
+                ConnectorCredentialPairStatus.PAUSED,
+            ]
+        ),
+    )
+    return list(db_session.scalars(stmt))
+
+
 def fetch_connector_credential_pair_for_connector(
     db_session: Session,
     connector_id: int,
