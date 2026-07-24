@@ -413,6 +413,10 @@ export interface LlmManager {
   updateReasoningEffort: (effort: ReasoningEffortOverride | null) => void;
   /** True when updates persist to a session row at selection time. */
   hasBoundSession: boolean;
+  /** True while an override selection is not yet confirmed persisted.
+   * Selection-time PUTs are best-effort and never clear this. */
+  hasUnpersistedOverrides: () => boolean;
+  markOverridesPersisted: () => void;
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
@@ -783,6 +787,10 @@ export function useLlmManager(
   const [temperatureExplicitlySet, setTemperatureExplicitlySet] =
     useState(false);
 
+  // Set on every override selection, cleared when a send confirms the values
+  // persisted or when a session's stored values are adopted.
+  const unpersistedOverridesRef = useRef(false);
+
   // Adopt the stored reasoning override (and reset the explicit-temperature
   // flag) only when session identity changes. Keying on identity, not the
   // object, keeps new-chat dep churn from wiping a pre-first-message choice.
@@ -794,6 +802,7 @@ export function useLlmManager(
     if (prevSessionIdRef.current === sessionId) return;
     prevSessionIdRef.current = sessionId;
     setTemperatureExplicitlySet(false);
+    unpersistedOverridesRef.current = false;
     setReasoningEffort(
       currentChatSession?.current_reasoning_effort_override ?? null
     );
@@ -864,15 +873,17 @@ export function useLlmManager(
       : temperature;
     setTemperature(clampedTemp);
     setTemperatureExplicitlySet(true);
+    unpersistedOverridesRef.current = true;
     if (chatSession) {
-      updateTemperatureOverrideForChatSession(chatSession.id, clampedTemp);
+      void updateTemperatureOverrideForChatSession(chatSession.id, clampedTemp);
     }
   };
 
   const updateReasoningEffort = (effort: ReasoningEffortOverride | null) => {
     setReasoningEffort(effort);
+    unpersistedOverridesRef.current = true;
     if (chatSession) {
-      updateReasoningEffortForChatSession(chatSession.id, effort);
+      void updateReasoningEffortForChatSession(chatSession.id, effort);
     }
   };
 
@@ -891,6 +902,10 @@ export function useLlmManager(
     reasoningEffort,
     updateReasoningEffort,
     hasBoundSession: chatSession != null,
+    hasUnpersistedOverrides: () => unpersistedOverridesRef.current,
+    markOverridesPersisted: () => {
+      unpersistedOverridesRef.current = false;
+    },
     imageFilesPresent,
     updateImageFilesPresent,
     liveAgent: liveAgent ?? null,
