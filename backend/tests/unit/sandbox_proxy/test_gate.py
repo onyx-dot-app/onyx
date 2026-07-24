@@ -221,7 +221,7 @@ async def test_resolve_and_match_sandbox_resolution_fails_closed(
 
 
 @pytest.mark.asyncio
-async def test_sandbox_identity_resolution_is_coalesced_by_source_ip() -> None:
+async def test_sandbox_identity_resolution_is_coalesced_by_connection() -> None:
     started = threading.Event()
     release = threading.Event()
 
@@ -242,14 +242,53 @@ async def test_sandbox_identity_resolution_is_coalesced_by_source_ip() -> None:
     resolver = _BlockingResolver(sandbox=sandbox)
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=None))
 
-    first = asyncio.create_task(addon._resolve_sandbox_identity("10.0.0.1"))
+    first = asyncio.create_task(
+        addon._resolve_sandbox_identity("10.0.0.1", "connection-1")
+    )
     assert await asyncio.to_thread(started.wait, 1)
-    second = asyncio.create_task(addon._resolve_sandbox_identity("10.0.0.1"))
+    second = asyncio.create_task(
+        addon._resolve_sandbox_identity("10.0.0.1", "connection-1")
+    )
     await asyncio.sleep(0)
     release.set()
 
     assert await asyncio.gather(first, second) == [sandbox, sandbox]
     assert resolver.resolve_sandbox_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_reused_source_ip_does_not_coalesce_across_connections() -> None:
+    started = threading.Semaphore(0)
+    release = threading.Event()
+
+    class _BlockingResolver(StubResolver):
+        def resolve_sandbox(
+            self,
+            src_ip: str,  # noqa: ARG002
+            *,
+            wait_timeout_seconds: float = 0,  # noqa: ARG002
+        ) -> ResolvedSandbox | None:
+            self.resolve_sandbox_calls += 1
+            started.release()
+            assert release.wait(timeout=1)
+            return self._sandbox
+
+    sandbox = make_resolved_sandbox()
+    resolver = _BlockingResolver(sandbox=sandbox)
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=None))
+
+    first = asyncio.create_task(
+        addon._resolve_sandbox_identity("10.0.0.1", "old-connection")
+    )
+    assert await asyncio.to_thread(started.acquire, timeout=1)
+    second = asyncio.create_task(
+        addon._resolve_sandbox_identity("10.0.0.1", "replacement-connection")
+    )
+    assert await asyncio.to_thread(started.acquire, timeout=1)
+    release.set()
+
+    assert await asyncio.gather(first, second) == [sandbox, sandbox]
+    assert resolver.resolve_sandbox_calls == 2
 
 
 @pytest.mark.asyncio

@@ -20,6 +20,7 @@ from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 from docker.types.daemon import CancellableStream
 from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import RequestException
 
 from onyx.sandbox_proxy.identity import (
     SandboxIdentity,
@@ -42,6 +43,7 @@ logger = setup_logger()
 
 _RECONNECT_INITIAL_SECONDS = 1.0
 _RECONNECT_MAX_SECONDS = 30.0
+_DOCKER_API_REQUEST_TIMEOUT_SECONDS = 2.0
 
 
 def _safe_close(stream: CancellableStream) -> None:
@@ -109,7 +111,12 @@ class DockerEventsLookup(SandboxIPLookup):
         network: str = SANDBOX_DOCKER_NETWORK,
     ) -> None:
         if docker_client is None:
-            docker_client = DockerClient(base_url=f"unix://{SANDBOX_DOCKER_SOCKET}")
+            # Docker's events API explicitly disables this timeout for its
+            # long-lived stream; ordinary list/get calls remain fail-fast.
+            docker_client = DockerClient(
+                base_url=f"unix://{SANDBOX_DOCKER_SOCKET}",
+                timeout=_DOCKER_API_REQUEST_TIMEOUT_SECONDS,
+            )
         self._docker = docker_client
         self._network = network
 
@@ -190,7 +197,7 @@ class DockerEventsLookup(SandboxIPLookup):
                 is not None
                 and identity.sandbox_ip == src_ip
             ]
-        except (APIError, RequestsConnectionError, OSError) as e:
+        except (APIError, RequestException, OSError) as e:
             logger.warning(
                 "identity_readthrough_error backend=docker src_ip=%s error=%s",
                 src_ip,
