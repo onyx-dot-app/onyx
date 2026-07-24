@@ -33,6 +33,9 @@ def _non_negative_int_env(name: str, default: int) -> int:
 #####
 APP_HOST = "0.0.0.0"  # noqa: S104 — server bind address; intentional default for containerized deployment
 APP_PORT = 8080
+JSM_CONNECTOR_LABELS_TO_SKIP = os .environ.get("JSM_CONNECTOR_LABELS_TO_SKIP", "").split(",")
+JSM_CONNECTOR_MAX_TICKET_SIZE = int(os.environ.get("JSM_CONNECTOR_MAX_TICKET_SIZE", "1048576"))
+JSM_SLIM_PAGE_SIZE = int(os.environ.get("JSM_SLIM_PAGE_SIZE", "100"))
 # API_PREFIX is used to prepend a base path for all API routes
 # generally used if using a reverse proxy which doesn't support stripping the `/api`
 # prefix from requests directed towards the API server. In these cases, set this to `/api`
