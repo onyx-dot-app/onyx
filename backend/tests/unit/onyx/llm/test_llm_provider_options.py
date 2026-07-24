@@ -45,6 +45,87 @@ def test_get_visible_models_dedupes_default_and_prefers_display_name() -> None:
     ]
 
 
+def test_get_visible_models_merges_context_window_across_entries() -> None:
+    # The default entry carries the context window; the additional entry carries
+    # the display name. Neither should be dropped by the dedupe.
+    recommendations = LLMRecommendations(
+        version="test",
+        updated_at=datetime.now(timezone.utc),
+        providers={
+            "anthropic": LLMProviderRecommendation(
+                default_model=SimpleKnownModel(name="claude-opus-4-8"),
+                additional_visible_models=[
+                    SimpleKnownModel(
+                        name="claude-opus-4-8",
+                        display_name="Claude Opus 4.8",
+                        max_input_tokens=200_000,
+                    ),
+                ],
+            )
+        },
+    )
+
+    visible = recommendations.get_visible_models("anthropic")
+
+    assert [(m.name, m.display_name, m.max_input_tokens) for m in visible] == [
+        ("claude-opus-4-8", "Claude Opus 4.8", 200_000),
+    ]
+
+
+def test_model_configurations_use_curated_context_window_as_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # LiteLLM is unaware of the model, so the curated context window from
+    # recommended-models.json must be threaded through as the fallback rather
+    # than the 32K default.
+    monkeypatch.setattr(
+        "onyx.llm.well_known_providers.llm_provider_options.fetch_models_for_provider",
+        lambda _provider_name: [],
+    )
+    monkeypatch.setattr(
+        "onyx.llm.well_known_providers.llm_provider_options.model_supports_image_input",
+        lambda _model_name, _provider_name: False,
+    )
+    captured_fallbacks: dict[str, int | None] = {}
+
+    def fake_get_max_input_tokens(
+        model_name: str,
+        _provider_name: str,
+        fallback_max_input_tokens: int | None = None,
+    ) -> int | None:
+        captured_fallbacks[model_name] = fallback_max_input_tokens
+        return fallback_max_input_tokens
+
+    monkeypatch.setattr(
+        "onyx.llm.well_known_providers.llm_provider_options.get_max_input_tokens",
+        fake_get_max_input_tokens,
+    )
+
+    recommendations = LLMRecommendations(
+        version="test",
+        updated_at=datetime.now(timezone.utc),
+        providers={
+            "anthropic": LLMProviderRecommendation(
+                default_model=SimpleKnownModel(name="claude-opus-4-8"),
+                additional_visible_models=[
+                    SimpleKnownModel(
+                        name="claude-opus-4-8",
+                        display_name="Claude Opus 4.8",
+                        max_input_tokens=200_000,
+                    ),
+                ],
+            )
+        },
+    )
+
+    model_configurations = model_configurations_for_provider(
+        "anthropic", recommendations
+    )
+
+    assert captured_fallbacks == {"claude-opus-4-8": 200_000}
+    assert model_configurations[0].max_input_tokens == 200_000
+
+
 def _build_recommendations(
     provider_name: str, visible_model_names: list[str]
 ) -> LLMRecommendations:
@@ -72,7 +153,7 @@ def test_model_configurations_vertex_are_sorted_by_name(
     )
     monkeypatch.setattr(
         "onyx.llm.well_known_providers.llm_provider_options.get_max_input_tokens",
-        lambda _model_name, _provider_name: None,
+        lambda _model_name, _provider_name, **_kwargs: None,
     )
     monkeypatch.setattr(
         "onyx.llm.well_known_providers.llm_provider_options.model_supports_image_input",
@@ -112,7 +193,7 @@ def test_model_configurations_carry_display_name_and_dedupe_default(
     )
     monkeypatch.setattr(
         "onyx.llm.well_known_providers.llm_provider_options.get_max_input_tokens",
-        lambda _model_name, _provider_name: None,
+        lambda _model_name, _provider_name, **_kwargs: None,
     )
     monkeypatch.setattr(
         "onyx.llm.well_known_providers.llm_provider_options.model_supports_image_input",
@@ -162,7 +243,7 @@ def test_model_configurations_non_vertex_preserve_provider_order(
     )
     monkeypatch.setattr(
         "onyx.llm.well_known_providers.llm_provider_options.get_max_input_tokens",
-        lambda _model_name, _provider_name: None,
+        lambda _model_name, _provider_name, **_kwargs: None,
     )
     monkeypatch.setattr(
         "onyx.llm.well_known_providers.llm_provider_options.model_supports_image_input",

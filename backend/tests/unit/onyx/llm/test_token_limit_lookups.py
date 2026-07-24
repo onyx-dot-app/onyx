@@ -101,6 +101,33 @@ class TestLlmMaxInputTokens:
                 == 5000
             )
 
+    def test_uses_fallback_when_model_not_found(self) -> None:
+        # Model unknown to LiteLLM: the curated context window is used instead of
+        # the 32K default (the recommended-models.json fallback path).
+        assert (
+            llm_max_input_tokens(
+                model_map={},
+                model_name="brand-new-model",
+                model_provider="openai",
+                fallback_max_input_tokens=250_000,
+            )
+            == 250_000
+        )
+
+    def test_litellm_value_wins_over_fallback(self) -> None:
+        # Once LiteLLM knows the model, its value is authoritative and the
+        # curated fallback is ignored.
+        model_map = {"openai/gpt-4o": {"max_input_tokens": 128000}}
+        assert (
+            llm_max_input_tokens(
+                model_map=model_map,
+                model_name="gpt-4o",
+                model_provider="openai",
+                fallback_max_input_tokens=250_000,
+            )
+            == 128000
+        )
+
 
 class TestGetLlmMaxOutputTokens:
     def test_prefers_max_output_tokens(self) -> None:
@@ -184,6 +211,20 @@ class TestGetMaxInputTokens:
                     output_tokens=1024,
                 )
                 == 128000 - 1024
+            )
+
+    def test_fallback_context_window_minus_reserved_output(self) -> None:
+        # Unknown model + curated fallback: the fallback flows through the same
+        # reserved-output subtraction as a real LiteLLM value would.
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value={}):
+            assert (
+                get_max_input_tokens(
+                    model_name="brand-new-model",
+                    model_provider="openai",
+                    output_tokens=1024,
+                    fallback_max_input_tokens=200_000,
+                )
+                == 200_000 - 1024
             )
 
     def test_non_positive_budget_falls_back(self) -> None:
