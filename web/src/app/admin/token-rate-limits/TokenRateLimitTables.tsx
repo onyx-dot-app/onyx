@@ -21,14 +21,9 @@ import { Spacer } from "@opal/components";
 
 const HOURS_PER_DAY = 24;
 const UTC_DAY_LABEL = "UTC day";
-const HOUR_LABEL = "hour";
-function formatPeriod(tokenRateLimit: TokenRateLimitDisplay): string {
-  const isTokenBudget = tokenRateLimit.token_budget !== null;
-  const value = isTokenBudget
-    ? tokenRateLimit.period_hours / HOURS_PER_DAY
-    : tokenRateLimit.period_hours;
-  const unit = isTokenBudget ? UTC_DAY_LABEL : HOUR_LABEL;
-  return `${value} ${unit}${value === 1 ? "" : "s"}`;
+export function formatPeriod(tokenRateLimit: TokenRateLimitDisplay): string {
+  const days = tokenRateLimit.period_hours / HOURS_PER_DAY;
+  return `${days} ${UTC_DAY_LABEL}${days === 1 ? "" : "s"}`;
 }
 
 type TokenRateLimitTableArgs = {
