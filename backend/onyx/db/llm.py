@@ -582,8 +582,10 @@ def fetch_all_accessible_llm_providers(
     )
     user_group_ids = fetch_user_group_ids(db_session, user)
     is_admin = user.role == UserRole.ADMIN
+    # This per-turn catalog never uses the key (the gateway injects it per
+    # selected model), so skip the per-provider decrypt + audit.
     return [
-        LLMProviderView.from_model(p)
+        LLMProviderView.from_model(p, include_api_key=False)
         for p in provider_models
         if can_user_access_llm_provider(
             p, user_group_ids, persona=None, is_admin=is_admin
