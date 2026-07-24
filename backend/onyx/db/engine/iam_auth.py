@@ -39,19 +39,31 @@ def configure_psycopg2_iam_auth(
     cparams["sslrootcert"] = SSL_CERT_FILE
 
 
-def provide_iam_token(
-    dialect: Any,  # noqa: ARG001
-    conn_rec: Any,  # noqa: ARG001
-    cargs: Any,  # noqa: ARG001
-    cparams: Any,
-) -> None:
-    if USE_IAM_AUTH:
-        host = POSTGRES_HOST
-        port = POSTGRES_PORT
-        user = POSTGRES_USER
+def make_provide_iam_token(host: str, port: str, user: str) -> Any:
+    """`do_connect` handler that mints a token for *these* coordinates.
+
+    RDS scopes an IAM auth token to a specific hostname, port, and user, so a shard
+    on different coordinates cannot reuse the token built from the global POSTGRES_*
+    settings — the connection is rejected and every tenant on that shard is
+    unreachable.
+    """
+
+    def _provide(
+        dialect: Any,  # noqa: ARG001
+        conn_rec: Any,  # noqa: ARG001
+        cargs: Any,  # noqa: ARG001
+        cparams: Any,
+    ) -> None:
+        if not USE_IAM_AUTH:
+            return
         region = os.getenv("AWS_REGION_NAME", "us-east-2")
-        # Configure for psycopg2 with IAM token
         configure_psycopg2_iam_auth(cparams, host, port, user, region)
+
+    return _provide
+
+
+# The default engine's handler: the general one bound to the global coordinates.
+provide_iam_token = make_provide_iam_token(POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER)
 
 
 @functools.cache
