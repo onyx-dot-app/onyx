@@ -5,6 +5,7 @@ import { ContentAction, SettingsLayouts, toast } from "@opal/layouts";
 import { Button, MessageCard } from "@opal/components";
 import { SvgDownload } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { downloadFile } from "@/lib/download";
 import Card from "@/refresh-components/cards/Card";
 
 const route = ADMIN_ROUTES.EXPORT_LOGS;
@@ -20,17 +21,6 @@ function extractFilename(response: Response): string {
   return match?.[1]?.trim() ?? FALLBACK_FILENAME;
 }
 
-function triggerBlobDownload(blob: Blob, filename: string): void {
-  const url = window.URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(anchor);
-}
-
 export default function ExportLogsPage() {
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -42,7 +32,9 @@ export default function ExportLogsPage() {
         throw new Error(`Log export failed with status ${response.status}`);
       }
       const blob = await response.blob();
-      triggerBlobDownload(blob, extractFilename(response));
+      const url = URL.createObjectURL(blob);
+      downloadFile(extractFilename(response), { url });
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Error exporting logs:", error);
       toast.error("Failed to export logs.");
