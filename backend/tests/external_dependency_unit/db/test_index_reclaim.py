@@ -29,6 +29,7 @@ from onyx.db.enums import (
 from onyx.db.models import ConnectorCredentialPair, SearchSettings
 from onyx.db.search_settings import (
     advance_to_deleting__no_commit,
+    advance_to_reclaimed__no_commit,
     advance_to_soaking__no_commit,
     clear_reclaim_intent__no_commit,
     create_search_settings,
@@ -183,6 +184,26 @@ def test_advance_to_deleting(
         assert ss.reclaim_status == IndexReclaimStatus.DELETING
         # Off-source no-op: cannot skip the soak from PENDING.
         assert advance_to_deleting__no_commit(ss) is False
+    finally:
+        db_session.delete(ss)
+        db_session.commit()
+
+
+def test_advance_to_reclaimed_keeps_row(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """DELETING -> RECLAIMED is terminal success; the row is kept (only the index is
+    deleted). Off-source (non-DELETING) calls no-op."""
+    ss = _make_past_settings(db_session)
+    try:
+        ss.reclaim_status = IndexReclaimStatus.SOAKING
+        assert advance_to_reclaimed__no_commit(ss) is False  # not DELETING yet
+        ss.reclaim_status = IndexReclaimStatus.DELETING
+        assert advance_to_reclaimed__no_commit(ss) is True
+        db_session.commit()
+        db_session.refresh(ss)
+        assert ss.reclaim_status == IndexReclaimStatus.RECLAIMED
     finally:
         db_session.delete(ss)
         db_session.commit()

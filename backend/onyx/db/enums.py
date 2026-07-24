@@ -223,13 +223,15 @@ class IndexReclaimStatus(str, PyEnum):
     PENDING: consented at reindex submit; waiting for the swap + port to drain.
     SOAKING: the old index stopped being read; waiting out the retention window.
     DELETING: deleting the old index's data (loops until count-verified empty).
+    RECLAIMED: terminal success — the old index's data is gone; the PAST row is kept
+        (not deleted) as the durable record that this index was reclaimed.
     BLOCKED: parked after repeated failures; alerted, needs operator/cooldown revival.
-    On success the PAST row is deleted, so there is no persisted terminal state.
     """
 
     PENDING = "PENDING"
     SOAKING = "SOAKING"
     DELETING = "DELETING"
+    RECLAIMED = "RECLAIMED"
     BLOCKED = "BLOCKED"
 
 

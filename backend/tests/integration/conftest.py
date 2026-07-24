@@ -159,7 +159,7 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     (
         "light",
         "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,"
-        "checkpoint_cleanup,index_attempt_cleanup,opensearch_migration",
+        "checkpoint_cleanup,index_attempt_cleanup,index_reclaim,opensearch_migration",
     ),
     (
         "heavy",
