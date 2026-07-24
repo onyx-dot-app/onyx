@@ -93,9 +93,7 @@ _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
 _REASONING_KWARG_KEYS = frozenset(
     {"thinking", "output_config", "reasoning", "reasoning_effort"}
 )
-_BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset(
-    {"temperature", "stream_options"}
-)
+_BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset({"temperature"})
 
 # Substrings provider 400s use to name each strippable kwarg (legacy thinking
 # errors cite the inner budget_tokens field, effort errors may cite only the
@@ -106,7 +104,6 @@ _KWARG_ERROR_ALIASES: dict[str, tuple[str, ...]] = {
     "reasoning": ("reasoning", "effort"),
     "reasoning_effort": ("reasoning_effort", "effort"),
     "temperature": ("temperature",),
-    "stream_options": ("stream_options",),
 }
 
 

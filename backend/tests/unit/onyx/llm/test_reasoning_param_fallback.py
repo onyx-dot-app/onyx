@@ -27,13 +27,15 @@ def _bad_request(message: str = "effort not supported") -> BadRequestError:
     return BadRequestError(message=message, model="m", llm_provider="anthropic")
 
 
-def _run(llm: LitellmLLM, completion: Any, effort: ReasoningEffort) -> Any:
+def _run(
+    llm: LitellmLLM, completion: Any, effort: ReasoningEffort, stream: bool = False
+) -> Any:
     with patch("onyx.llm.litellm_singleton.litellm.completion", side_effect=completion):
         return llm._completion(
             prompt=[UserMessage(content="hello")],
             tools=None,
             tool_choice=None,
-            stream=False,
+            stream=stream,
             parallel_tool_calls=False,
             reasoning_effort=effort,
         )
@@ -142,6 +144,21 @@ def test_rejected_sampling_params_retry_without_reasoning_tier() -> None:
     assert len(calls) == 2
     assert "temperature" in calls[0]
     assert "temperature" not in calls[1]
+
+
+def test_stream_options_rejection_is_not_retried() -> None:
+    calls: list[dict[str, Any]] = []
+
+    def completion(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        raise _bad_request("stream_options is not supported with this model")
+
+    # Only reasoning kwargs and temperature are strippable, so a 400 naming
+    # stream_options surfaces immediately.
+    with pytest.raises(BadRequestError):
+        _run(_make_llm(), completion, ReasoningEffort.OFF, stream=True)
+    assert len(calls) == 1
+    assert "stream_options" in calls[0]
 
 
 def test_rate_limit_is_not_retried() -> None:
