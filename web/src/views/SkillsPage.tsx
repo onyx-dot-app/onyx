@@ -25,6 +25,7 @@ import {
   SvgSimpleLoader,
   SvgUploadCloud,
 } from "@opal/icons";
+import { SvgGithub } from "@opal/logos";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -33,6 +34,7 @@ import SkillCard, {
   type SkillCardItem,
 } from "@/sections/cards/SkillCard";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
+import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
@@ -53,6 +55,7 @@ export default function SkillsPage() {
   const { data, error, isLoading, refresh } = useUserSkills();
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [githubImportOpen, setGitHubImportOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [previewTarget, setPreviewTarget] = useState<SkillCardItem | null>(
     null
@@ -314,6 +317,17 @@ export default function SkillsPage() {
                 >
                   Upload a skill
                 </LineItem>
+                <LineItem
+                  icon={SvgGithub}
+                  description="Import one or more skills from a repository."
+                  wrapDescription
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    setGitHubImportOpen(true);
+                  }}
+                >
+                  Import from GitHub
+                </LineItem>
               </Popover.Menu>
             </Popover.Content>
           </Popover>
@@ -411,6 +425,21 @@ export default function SkillsPage() {
           router.push(`/craft/v1/skills/new?draft=${draftId}` as Route);
         }}
       />
+
+      {githubImportOpen && (
+        <ImportSkillsFromGitHubModal
+          open
+          onClose={() => setGitHubImportOpen(false)}
+          onImported={() => {
+            void refresh().catch((refreshError: unknown) => {
+              console.error(
+                "Failed to refresh skills after GitHub import",
+                refreshError
+              );
+            });
+          }}
+        />
+      )}
 
       <SkillPreviewModal
         open={previewTarget !== null}
