@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import DISABLE_USER_IDENTITY_IN_PROMPT
 from onyx.db.memory import UserMemoryContext
 from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
@@ -167,7 +168,7 @@ def _build_user_information_section(
     in the correct order: Basic Info → Team Info → Preferences → Memories."""
     sections: list[str] = []
 
-    if user_memory_context:
+    if user_memory_context and not DISABLE_USER_IDENTITY_IN_PROMPT:
         ctx = user_memory_context
         has_basic_info = ctx.user_info.name or ctx.user_info.email or ctx.user_info.role
 
