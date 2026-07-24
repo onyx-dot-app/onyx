@@ -413,10 +413,10 @@ export interface LlmManager {
   updateReasoningEffort: (effort: ReasoningEffortOverride | null) => void;
   /** True when updates persist to a session row at selection time. */
   hasBoundSession: boolean;
-  /** True while an override selection is not yet confirmed persisted.
-   * Selection-time PUTs are best-effort and never clear this. */
-  hasUnpersistedOverrides: () => boolean;
-  markOverridesPersisted: () => void;
+  /** Ensure the session row reflects the local override selections. No-op
+   * when the session is bound and every selection is confirmed persisted.
+   * Throws when a write fails, leaving the overrides unconfirmed for retry. */
+  persistOverrides: (sessionId: string) => Promise<void>;
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
@@ -791,6 +791,17 @@ export function useLlmManager(
   // persisted or when a session's stored values are adopted.
   const unpersistedOverridesRef = useRef(false);
 
+  // Serializes every override PUT so an older selection can never land on
+  // the server after a newer one. persistOverrides joins the same chain.
+  const overrideWriteChainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueueOverrideWrite = (
+    write: () => Promise<Response>
+  ): Promise<Response> => {
+    const next = overrideWriteChainRef.current.then(write, write);
+    overrideWriteChainRef.current = next.catch(() => undefined);
+    return next;
+  };
+
   // Adopt the stored reasoning override (and reset the explicit-temperature
   // flag) only when session identity changes. Keying on identity, not the
   // object, keeps new-chat dep churn from wiping a pre-first-message choice.
@@ -828,24 +839,26 @@ export function useLlmManager(
     if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
       const newTemperature = Math.min(temperature, 1.0);
       setTemperature(newTemperature);
-      if (chatSession?.id) {
-        updateTemperatureOverrideForChatSession(chatSession.id, newTemperature);
+      const sessionId = chatSession?.id;
+      if (sessionId) {
+        void enqueueOverrideWrite(() =>
+          updateTemperatureOverrideForChatSession(sessionId, newTemperature)
+        );
       }
     }
   }, [currentLlm]);
 
   useEffect(() => {
     if (!chatSession && currentChatSession) {
+      const sessionId = currentChatSession.id;
       if (temperature) {
-        updateTemperatureOverrideForChatSession(
-          currentChatSession.id,
-          temperature
+        void enqueueOverrideWrite(() =>
+          updateTemperatureOverrideForChatSession(sessionId, temperature)
         );
       }
       if (reasoningEffort) {
-        updateReasoningEffortForChatSession(
-          currentChatSession.id,
-          reasoningEffort
+        void enqueueOverrideWrite(() =>
+          updateReasoningEffortForChatSession(sessionId, reasoningEffort)
         );
       }
       return;
@@ -874,17 +887,51 @@ export function useLlmManager(
     setTemperature(clampedTemp);
     setTemperatureExplicitlySet(true);
     unpersistedOverridesRef.current = true;
-    if (chatSession) {
-      void updateTemperatureOverrideForChatSession(chatSession.id, clampedTemp);
+    const sessionId = chatSession?.id;
+    if (sessionId) {
+      void enqueueOverrideWrite(() =>
+        updateTemperatureOverrideForChatSession(sessionId, clampedTemp)
+      );
     }
   };
 
   const updateReasoningEffort = (effort: ReasoningEffortOverride | null) => {
     setReasoningEffort(effort);
     unpersistedOverridesRef.current = true;
-    if (chatSession) {
-      void updateReasoningEffortForChatSession(chatSession.id, effort);
+    const sessionId = chatSession?.id;
+    if (sessionId) {
+      void enqueueOverrideWrite(() =>
+        updateReasoningEffortForChatSession(sessionId, effort)
+      );
     }
+  };
+
+  const persistOverrides = async (sessionId: string): Promise<void> => {
+    if (chatSession != null && !unpersistedOverridesRef.current) return;
+    const writes: Promise<Response>[] = [];
+    if (reasoningEffort) {
+      writes.push(
+        enqueueOverrideWrite(() =>
+          updateReasoningEffortForChatSession(sessionId, reasoningEffort)
+        )
+      );
+    }
+    if (temperatureExplicitlySet) {
+      writes.push(
+        enqueueOverrideWrite(() =>
+          updateTemperatureOverrideForChatSession(sessionId, temperature)
+        )
+      );
+    }
+    if (writes.length === 0) return;
+    const responses = await Promise.all(writes);
+    const failed = responses.find((response) => !response.ok);
+    if (failed) {
+      throw new Error(
+        `Failed to persist chat session overrides: ${failed.status}`
+      );
+    }
+    unpersistedOverridesRef.current = false;
   };
 
   // Track if any provider exists for the current persona context.
@@ -902,10 +949,7 @@ export function useLlmManager(
     reasoningEffort,
     updateReasoningEffort,
     hasBoundSession: chatSession != null,
-    hasUnpersistedOverrides: () => unpersistedOverridesRef.current,
-    markOverridesPersisted: () => {
-      unpersistedOverridesRef.current = false;
-    },
+    persistOverrides,
     imageFilesPresent,
     updateImageFilesPresent,
     liveAgent: liveAgent ?? null,

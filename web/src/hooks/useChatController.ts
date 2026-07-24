@@ -5,8 +5,6 @@ import {
   getAvailableContextTokens,
   nameChatSession,
   updateLlmOverrideForChatSession,
-  updateReasoningEffortForChatSession,
-  updateTemperatureOverrideForChatSession,
 } from "@/app/app/services/lib";
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
@@ -877,44 +875,11 @@ export default function useChatController({
       let streamSucceeded = false;
 
       try {
-        // Override selections are only best-effort persisted until a send
-        // confirms them. Await the writes so the backend's session-row read
-        // during the send sees them. A failed write surfaces as a chat error
-        // and leaves the overrides marked unpersisted for the retry.
-        if (
-          !llmManager.hasBoundSession ||
-          llmManager.hasUnpersistedOverrides()
-        ) {
-          const overrideWrites: Promise<Response>[] = [];
-          if (llmManager.reasoningEffort) {
-            overrideWrites.push(
-              updateReasoningEffortForChatSession(
-                currChatSessionId,
-                llmManager.reasoningEffort
-              )
-            );
-          }
-          if (llmManager.temperatureExplicitlySet) {
-            overrideWrites.push(
-              updateTemperatureOverrideForChatSession(
-                currChatSessionId,
-                llmManager.temperature
-              )
-            );
-          }
-          if (overrideWrites.length > 0) {
-            const overrideResponses = await Promise.all(overrideWrites);
-            const failedWrite = overrideResponses.find(
-              (response) => !response.ok
-            );
-            if (failedWrite) {
-              throw new Error(
-                `Failed to persist chat session overrides: ${failedWrite.status}`
-              );
-            }
-            llmManager.markOverridesPersisted();
-          }
-        }
+        // Selection-time override writes are best-effort. Await confirmation
+        // so the backend's session-row read during the send sees the current
+        // selections. A failed write surfaces as a chat error and the next
+        // send re-persists.
+        await llmManager.persistOverrides(currChatSessionId);
 
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
           currentMessageTreeLocal
