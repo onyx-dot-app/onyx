@@ -123,9 +123,7 @@ webserver:
 
 api:
   replicaCount: 1
-  # The workflow runs `alembic upgrade head` once after Postgres is reachable.
-  # Keep API startup from racing that centralized migration step.
-  runStartupMigrations: false
+  runStartupMigrations: true
   resources:
     requests:
       cpu: 250m
