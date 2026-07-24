@@ -256,6 +256,7 @@ class DocumentSource(str, Enum):
     DISCOURSE = "discourse"
     AXERO = "axero"
     CLICKUP = "clickup"
+    CLICKUP_DOCS = "clickup_docs"
     MEDIAWIKI = "mediawiki"
     WIKIPEDIA = "wikipedia"
     ASANA = "asana"
@@ -752,6 +753,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.DISCOURSE: "Community forums and discussions",
     DocumentSource.AXERO: "Employee engagement and intranet content",
     DocumentSource.CLICKUP: "Tasks and project management",
+    DocumentSource.CLICKUP_DOCS: "Docs and knowledge base",
     DocumentSource.MEDIAWIKI: "Wiki pages and articles",
     DocumentSource.WIKIPEDIA: "Encyclopedia articles",
     DocumentSource.ASANA: "Tasks and project management",
