@@ -1,8 +1,11 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.clickup_docs.connector import ClickupDocsConnector
+from onyx.connectors.exceptions import ConnectorValidationError
 
 
 def _mock_response(json_response: Any) -> MagicMock:
@@ -105,3 +108,12 @@ def test_doc_scope_indexes_single_doc_without_listing() -> None:
     assert len(docs) == 1
     assert docs[0].id == "clickup_doc__d1__p1"
     assert not any(c.args[0].endswith("/docs") for c in mock_get.call_args_list)
+
+
+def test_scoped_connector_without_ids_raises() -> None:
+    connector = ClickupDocsConnector(connector_type="space", connector_ids=None)
+    connector.load_credentials(
+        {"clickup_api_token": "test-token", "clickup_team_id": "ws1"}
+    )
+    with pytest.raises(ConnectorValidationError):
+        list(connector.load_from_state())

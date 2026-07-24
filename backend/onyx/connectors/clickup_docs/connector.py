@@ -8,6 +8,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
 )
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
     LoadConnector,
@@ -128,12 +129,19 @@ class ClickupDocsConnector(LoadConnector, PollConnector):
         return self._make_request(f"workspaces/{self.workspace_id}/docs/{doc_id}")
 
     def _docs_to_index(self) -> list[dict]:
+        # Any non-workspace scope must name what to index; otherwise a misconfigured
+        # connector would silently fall back to the whole workspace (over-ingestion).
+        if self.connector_type != "workspace" and not self.connector_ids:
+            raise ConnectorValidationError(
+                f"ClickUp Docs '{self.connector_type}' scope requires at least one "
+                "id in connector_ids."
+            )
         # "doc" scope: connector_ids are Doc IDs indexed directly (skips listing),
         # so a single Doc can be indexed without pulling its whole parent Space.
-        if self.connector_type == "doc" and self.connector_ids:
+        if self.connector_type == "doc":
             return [
                 {"id": doc_id, "name": self._get_doc(doc_id).get("name", "")}
-                for doc_id in self.connector_ids
+                for doc_id in self.connector_ids or []
             ]
         return self._list_docs()
 
