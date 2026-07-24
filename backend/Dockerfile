@@ -50,6 +50,24 @@ RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
 
 
 ####################################################################################################
+# psql builder stage
+#
+# postgresql-client pulls in perl (via postgresql-client-common). We want psql for manual DB
+# debugging but not perl in the shipped image, so we install the client here only to extract the
+# standalone psql binary; the runtime stage copies just that binary.
+####################################################################################################
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:b04b5d7233d2ad9c379e22ea8927cd1378cd15c60d4ef876c065b25ea8fb3bf3 AS psql-builder
+
+RUN apt-get update && \
+    apt-get install -y postgresql-client && \
+    # /usr/bin/psql is a perl wrapper; copy the real binary to a fixed path so the runtime COPY
+    # doesn't depend on the postgres major-version directory.
+    cp /usr/lib/postgresql/*/bin/psql /usr/local/bin/psql && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+
+####################################################################################################
 # Runtime stage
 #
 # The actual shipped image. Installs only runtime system libraries and copies the already-built
@@ -81,7 +99,8 @@ RUN groupadd -g 1001 onyx && \
 # zip for Vespa step further down
 # ca-certificates for HTTPS
 # libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
-# postgresql-client for easy manual tests
+# libpq5 + libreadline8 are the shared libraries for the standalone psql binary from the
+#   psql-builder stage (avoids postgresql-client, which would pull in perl)
 # procps so kubernetes exec sessions can use ps aux for debugging
 RUN apt-get update && \
     apt-get install -y \
@@ -93,6 +112,8 @@ RUN apt-get update && \
         libmount1 \
         libsmartcols1 \
         libuuid1 \
+        libpq5 \
+        libreadline8 \
         nano \
         vim \
         procps \
@@ -116,25 +137,33 @@ COPY --from=builder \
     /usr/local/bin/playwright \
     /usr/local/bin/
 
-# Install the Chromium browser used by Playwright and its OS-level runtime libraries. Must run after
-# the site-packages copy above so the playwright CLI is available.
+# psql for manual DB debugging — just the standalone binary, so postgresql-client's perl dependency
+# never lands in the runtime image.
+COPY --from=psql-builder /usr/local/bin/psql /usr/local/bin/psql
+
+# Install the Chromium browser for Playwright and its OS-level runtime libs. Must run after the
+# site-packages copy so the playwright CLI is available.
 #
-# perl-base is part of the base Python Debian image but not needed for Onyx functionality; it is
-# removed for CVE surface reduction (requires --allow-remove-essential). It must be removed AFTER the
-# first `playwright install-deps`, because the font/X11 packages that install-deps pulls in run perl
-# scripts in their dpkg configure step. The second `playwright install-deps` then restores any
-# chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade.
+# perl-base ships in the base image but Onyx doesn't need it, so we remove it for CVE reduction
+# (--allow-remove-essential), which cascades out the whole perl stack. Ordering matters: remove perl
+# AFTER the first install-deps (the font/X11 packages run perl in their postinst), then run
+# install-deps again to restore chromium libs (libnss3, etc.) that autoremove swept up. Nothing
+# reinstalls perl afterwards — psql comes from the psql-builder stage as a standalone binary.
+#
+# The trailing commands verify the result in this same layer: psql runs (which proves its shared
+# libraries resolve) and perl is gone. ldd is logged only as a diagnostic.
 RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     playwright install chromium && \
     playwright install-deps chromium && \
     apt-get remove -y --allow-remove-essential perl-base && \
     apt-get autoremove -y && \
     playwright install-deps chromium && \
-    # Re-install after autoremove: perl-base removal cascades through postgresql-client's
-    # perl dependency, sweeping it up. Install it here (post-autoremove) so it survives.
-    apt-get install -y postgresql-client && \
     rm -rf /var/lib/apt/lists/* && \
-    apt-get clean
+    apt-get clean && \
+    ldd "$(command -v psql)" && \
+    psql --version && \
+    ! command -v perl && \
+    ! test -e /usr/bin/perl
 
 # Pre-downloading models for setups with limited egress
 RUN python -c "from tokenizers import Tokenizer; \
