@@ -1,5 +1,7 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime, timezone
+
+from google.auth.exceptions import RefreshError
 
 from ee.onyx.external_permissions.google_drive.models import (
     GoogleDrivePermission,
@@ -104,6 +106,9 @@ def get_external_access_for_raw_gdrive_file(
     admin_drive_service: GoogleDriveService,
     fallback_user_email: str,
     add_prefix: bool = False,
+    fallback_drive_service_factory: (
+        Callable[[], GoogleDriveService | None] | None
+    ) = None,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
@@ -144,17 +149,39 @@ def get_external_access_for_raw_gdrive_file(
                 permission_ids=permission_ids,
             )
 
-        permissions_list = _get_permissions(
-            retriever_drive_service or admin_drive_service
-        )
-        if len(permissions_list) != len(permission_ids) and retriever_drive_service:
-            logger.warning(
-                "Failed to get all permissions for file %s with retriever service, trying admin service",
-                doc_id,
+        def _get_non_admin_permissions(
+            drive_service_factory: Callable[[], GoogleDriveService | None],
+        ) -> list[GoogleDrivePermission]:
+            try:
+                drive_service = drive_service_factory()
+                return _get_permissions(drive_service) if drive_service else []
+            except RefreshError as error:
+                logger.warning(
+                    "Could not impersonate non-admin user for document %s: %s",
+                    doc_id,
+                    error,
+                )
+                return []
+
+        if retriever_drive_service:
+            permissions_list = _get_non_admin_permissions(
+                lambda: retriever_drive_service
             )
-            backup_permissions_list = _get_permissions(admin_drive_service)
+
+        if (
+            len(permissions_list) != len(permission_ids)
+            and fallback_drive_service_factory
+        ):
             permissions_list = _merge_permissions_lists(
-                [permissions_list, backup_permissions_list]
+                [
+                    permissions_list,
+                    _get_non_admin_permissions(fallback_drive_service_factory),
+                ]
+            )
+
+        if len(permissions_list) != len(permission_ids):
+            permissions_list = _merge_permissions_lists(
+                [permissions_list, _get_permissions(admin_drive_service)]
             )
 
     # For externally-owned files, the Drive API may return no permissions
