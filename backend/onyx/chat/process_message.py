@@ -71,6 +71,7 @@ from onyx.configs.constants import (
 from onyx.context.search.models import BaseFilters, SearchDoc
 from onyx.db.chat import (
     create_new_chat_message,
+    delete_chat_session_if_never_used,
     get_chat_session_by_id,
     get_or_create_root_message,
     reserve_message_id,
@@ -1517,6 +1518,30 @@ def _run_models(
     return _read_stream()
 
 
+def _cleanup_failed_chat_session(chat_session_id: UUID | None) -> None:
+    """Best-effort: hard-delete the session a failed send left with no
+    user-visible content, so it doesn't linger as an unnamed husk until the
+    background failed-chat cleanup reclaims it. A failure after the user
+    message was committed is a real conversation and is left untouched.
+    Never raises — the original error must propagate unmasked.
+    """
+    if chat_session_id is None:
+        return
+    try:
+        with get_session_with_current_tenant() as db_session:
+            if delete_chat_session_if_never_used(
+                chat_session_id=chat_session_id, db_session=db_session
+            ):
+                logger.info(
+                    "Deleted never-used chat session %s after failed send",
+                    chat_session_id,
+                )
+    except Exception:
+        logger.exception(
+            "Cleanup of never-used chat session %s failed", chat_session_id
+        )
+
+
 def _stream_chat_turn(
     new_msg_req: SendMessageRequest,
     user: User,
@@ -1570,6 +1595,19 @@ def _stream_chat_turn(
     setup: ChatTurnSetup | None = None
     pre_run_packets: list[AnswerStreamPart] = []
     run_started = False
+
+    def _failed_chat_session_id() -> UUID | None:
+        """The session this failed send targeted: known from setup once built,
+        else from the request, else from the CreateChatSessionID packet when
+        the send created the session itself."""
+        if setup is not None:
+            return setup.chat_session.id
+        if new_msg_req.chat_session_id:
+            return new_msg_req.chat_session_id
+        for packet in pre_run_packets:
+            if isinstance(packet, CreateChatSessionID):
+                return packet.chat_session_id
+        return None
 
     try:
         with get_session_with_current_tenant() as setup_db_session:
@@ -1655,6 +1693,7 @@ def _stream_chat_turn(
     except OnyxError as e:
         if e.error_code is not OnyxErrorCode.QUERY_REJECTED:
             log_onyx_error(e)
+        _cleanup_failed_chat_session(_failed_chat_session_id())
         yield StreamingError(
             error=e.detail,
             error_code=e.error_code.code,
@@ -1664,6 +1703,7 @@ def _stream_chat_turn(
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")
+        _cleanup_failed_chat_session(_failed_chat_session_id())
         yield StreamingError(
             error=str(e),
             error_code="VALIDATION_ERROR",
@@ -1694,6 +1734,10 @@ def _stream_chat_turn(
     except Exception as e:
         logger.exception("Failed to process chat message due to %s", e)
         stack_trace = traceback.format_exc()
+        # No-ops when the user message was already committed (the LLM only runs
+        # after it), so this only fires for setup failures. Same applies to the
+        # handlers above; EmptyLLMResponseError is post-commit by construction.
+        _cleanup_failed_chat_session(_failed_chat_session_id())
 
         llm = setup.llms[0] if setup else None
         if llm:
