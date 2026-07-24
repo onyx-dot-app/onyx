@@ -153,11 +153,17 @@ def test_retriever_impersonation_failure_falls_back_to_admin() -> None:
     retriever_service = cast(GoogleDriveService, SimpleNamespace())
     admin_service = cast(GoogleDriveService, SimpleNamespace())
     retriever_service_factory = MagicMock(return_value=retriever_service)
+    refresh_error = RefreshError("unauthorized")
 
-    with patch(
-        "ee.onyx.external_permissions.google_drive.doc_sync.get_permissions_by_ids",
-        side_effect=[[], RefreshError("unauthorized"), [_retriever_user_permission()]],
-    ) as mock_get_permissions:
+    with (
+        patch(
+            "ee.onyx.external_permissions.google_drive.doc_sync.get_permissions_by_ids",
+            side_effect=[[], refresh_error, [_retriever_user_permission()]],
+        ) as mock_get_permissions,
+        patch(
+            "ee.onyx.external_permissions.google_drive.doc_sync.logger.warning"
+        ) as mock_warning,
+    ):
         access = get_external_access_for_raw_gdrive_file(
             file={"id": "doc-1", "permissionIds": ["p1"]},
             company_domain=COMPANY_DOMAIN,
@@ -186,6 +192,11 @@ def test_retriever_impersonation_failure_falls_back_to_admin() -> None:
         ),
     ]
     retriever_service_factory.assert_called_once_with()
+    mock_warning.assert_called_once_with(
+        "Could not impersonate non-admin user for document %s: %s",
+        "doc-1",
+        refresh_error,
+    )
 
 
 def test_indexing_path_prefixes_domain_group() -> None:

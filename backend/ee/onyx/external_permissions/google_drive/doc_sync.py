@@ -155,9 +155,11 @@ def get_external_access_for_raw_gdrive_file(
             try:
                 drive_service = drive_service_factory()
                 return _get_permissions(drive_service) if drive_service else []
-            except RefreshError:
+            except RefreshError as error:
                 logger.warning(
-                    "Could not impersonate non-admin user for document %s", doc_id
+                    "Could not impersonate non-admin user for document %s: %s",
+                    doc_id,
+                    error,
                 )
                 return []
 
