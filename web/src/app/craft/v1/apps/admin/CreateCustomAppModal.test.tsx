@@ -384,6 +384,22 @@ describe("CreateCustomAppModal", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("preserves a selected upload when accidental close is canceled", () => {
+    renderExistingApp();
+    fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByText("Upload skill")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled();
+  });
+
   it("returns to the uploaded draft when navigation is canceled", async () => {
     mockInspectSkillBundle.mockResolvedValue({
       name: "new-skill",

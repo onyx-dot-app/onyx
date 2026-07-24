@@ -19,6 +19,8 @@ import {
 import AssociatedSkillsEditor from "@/app/craft/v1/apps/admin/AssociatedSkillsEditor";
 import ExternalAppSkillsStepModal from "@/app/craft/v1/apps/admin/ExternalAppSkillsStepModal";
 import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
+import useSkillUploadModal from "@/sections/modals/skills/useSkillUploadModal";
+import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import {
   stageSkillCreationDraft,
   type SkillCreationDraft,
@@ -50,8 +52,7 @@ export default function ConfigureProviderModal({
   existingApp,
 }: ConfigureProviderModalProps) {
   const router = useRouter();
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadBusy, setUploadBusy] = useState(false);
+  const upload = useSkillUploadModal();
   const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
     null
   );
@@ -184,31 +185,35 @@ export default function ConfigureProviderModal({
   return (
     <ActionPolicyEditorModal
       alternateContent={
-        uploadOpen && existingApp
+        upload.isOpen && existingApp
           ? ({ requestLeave, hidden }) => (
-              <CreateSkillModalContent
-                hidden={hidden}
-                onClose={() => setUploadOpen(false)}
-                onBusyChange={setUploadBusy}
-                preserveDraftOnContinue
-                validateDraft={validateUploadedSkill}
-                onContinue={(draft) => {
-                  requestLeave(() =>
-                    navigateToSkillEditor(stageSkillCreationDraft(draft))
-                  );
-                }}
-              />
+              <>
+                <CreateSkillModalContent
+                  hidden={hidden || upload.confirmationOpen}
+                  onClose={upload.close}
+                  onBusyChange={upload.setBusy}
+                  onDirtyChange={upload.setDirty}
+                  preserveDraftOnContinue
+                  validateDraft={validateUploadedSkill}
+                  onContinue={(draft) => {
+                    requestLeave(() =>
+                      navigateToSkillEditor(stageSkillCreationDraft(draft))
+                    );
+                  }}
+                />
+                {upload.confirmationOpen && (
+                  <UnsavedChangesModalContent
+                    onCancel={upload.cancelDiscard}
+                    onDiscard={upload.confirmDiscard}
+                  />
+                )}
+              </>
             )
           : undefined
       }
+      alternateContentConfirmationOpen={upload.confirmationOpen}
       isAdditionalContentDirty={existingAssociationDirty}
-      onClose={
-        uploadOpen
-          ? () => {
-              if (!uploadBusy) setUploadOpen(false);
-            }
-          : onClose
-      }
+      onClose={upload.isOpen ? upload.dismiss : onClose}
       title={
         existingApp ? `Edit ${existingApp.name}` : `Add ${descriptor.name}`
       }
@@ -251,7 +256,7 @@ export default function ConfigureProviderModal({
                   onCreateSkill={() =>
                     requestLeave(() => navigateToSkillEditor())
                   }
-                  onUploadSkill={() => setUploadOpen(true)}
+                  onUploadSkill={upload.open}
                 />
               </>
             )

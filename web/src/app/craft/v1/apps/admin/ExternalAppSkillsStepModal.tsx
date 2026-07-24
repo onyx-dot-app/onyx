@@ -19,6 +19,7 @@ import {
 } from "@/lib/skills/creationDraft";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
+import useSkillUploadModal from "@/sections/modals/skills/useSkillUploadModal";
 
 interface ExternalAppSkillsStepModalProps {
   app: ExternalAppAdminResponse;
@@ -35,8 +36,7 @@ export default function ExternalAppSkillsStepModal({
   const router = useRouter();
   const [selectedSkillIds, setSelectedSkillIds] =
     useSyncedAssociatedSkillIds(app);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadBusy, setUploadBusy] = useState(false);
+  const upload = useSkillUploadModal();
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isDirty = !isEqual(
@@ -60,8 +60,8 @@ export default function ExternalAppSkillsStepModal({
     if (preventedByModal || isSaving) return;
     if (unsavedChanges.confirmationOpen) {
       unsavedChanges.cancelLeave();
-    } else if (uploadOpen) {
-      if (!uploadBusy) setUploadOpen(false);
+    } else if (upload.isOpen) {
+      upload.dismiss();
     } else {
       unsavedChanges.requestLeave(onClose);
     }
@@ -85,7 +85,14 @@ export default function ExternalAppSkillsStepModal({
     }
   }
 
-  const confirmationContent = unsavedChanges.confirmationOpen ? (
+  const confirmationOpen =
+    upload.confirmationOpen || unsavedChanges.confirmationOpen;
+  const confirmationContent = upload.confirmationOpen ? (
+    <UnsavedChangesModalContent
+      onCancel={upload.cancelDiscard}
+      onDiscard={upload.confirmDiscard}
+    />
+  ) : unsavedChanges.confirmationOpen ? (
     <UnsavedChangesModalContent
       onCancel={unsavedChanges.cancelLeave}
       onDiscard={unsavedChanges.discardAndLeave}
@@ -95,18 +102,19 @@ export default function ExternalAppSkillsStepModal({
   return (
     <Modal open>
       <Modal.Content
-        width={unsavedChanges.confirmationOpen || uploadOpen ? "sm" : "lg"}
-        height={unsavedChanges.confirmationOpen || uploadOpen ? "fit" : "lg"}
-        preventAccidentalClose={!unsavedChanges.confirmationOpen}
+        width={confirmationOpen || upload.isOpen ? "sm" : "lg"}
+        height={confirmationOpen || upload.isOpen ? "fit" : "lg"}
+        preventAccidentalClose={!confirmationOpen}
         onInteractOutside={handleDismiss}
         onEscapeKeyDown={handleDismiss}
       >
-        {uploadOpen ? (
+        {upload.isOpen ? (
           <>
             <CreateSkillModalContent
-              hidden={unsavedChanges.confirmationOpen}
-              onClose={() => setUploadOpen(false)}
-              onBusyChange={setUploadBusy}
+              hidden={confirmationOpen}
+              onClose={upload.close}
+              onBusyChange={upload.setBusy}
+              onDirtyChange={upload.setDirty}
               preserveDraftOnContinue
               validateDraft={(draft) =>
                 app.associated_skills.some(
@@ -143,7 +151,7 @@ export default function ExternalAppSkillsStepModal({
                   onCreateSkill={() =>
                     unsavedChanges.requestLeave(() => navigateToSkillEditor())
                   }
-                  onUploadSkill={() => setUploadOpen(true)}
+                  onUploadSkill={upload.open}
                 />
                 {error && (
                   <MessageCard

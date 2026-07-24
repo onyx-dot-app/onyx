@@ -28,14 +28,19 @@ jest.mock("@/sections/modals/skills/CreateSkillModal", () => ({
     hidden = false,
     onClose,
     onContinue,
+    onDirtyChange,
   }: {
     hidden?: boolean;
     onClose: () => void;
     onContinue: (draft: SkillCreationDraft) => void;
+    onDirtyChange?: (dirty: boolean) => void;
   }) =>
     hidden ? null : (
       <>
         <div>Upload skill</div>
+        <button type="button" onClick={() => onDirtyChange?.(true)}>
+          Select bundle
+        </button>
         <button type="button" onClick={onClose}>
           Cancel
         </button>
@@ -165,6 +170,27 @@ describe("ConfigureProviderModal", () => {
 
     expect(screen.getByRole("dialog", { name: /Edit Slack/ })).toBeVisible();
     expect(screen.getByPlaceholderText("Token")).toHaveValue("updated-token");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("confirms before accidentally closing a selected upload", () => {
+    const { onClose } = renderExistingProvider();
+    fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+    ).toBeVisible();
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByText("Upload skill")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    expect(screen.getByRole("dialog", { name: /Edit Slack/ })).toBeVisible();
     expect(onClose).not.toHaveBeenCalled();
   });
 

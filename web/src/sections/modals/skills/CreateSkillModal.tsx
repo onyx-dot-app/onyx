@@ -21,6 +21,7 @@ interface CreateSkillModalContentProps extends Omit<
 > {
   hidden?: boolean;
   onBusyChange?: (busy: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
   preserveDraftOnContinue?: boolean;
 }
 
@@ -29,6 +30,7 @@ export function CreateSkillModalContent({
   onClose,
   onContinue,
   onBusyChange,
+  onDirtyChange,
   preserveDraftOnContinue = false,
   validateDraft,
 }: CreateSkillModalContentProps) {
@@ -45,6 +47,7 @@ export function CreateSkillModalContent({
   function reset() {
     setBundle(null);
     setErrorMessage(null);
+    onDirtyChange?.(false);
   }
 
   function handleClose() {
@@ -103,10 +106,12 @@ export function CreateSkillModalContent({
           onChange={(nextBundle) => {
             setBundle(nextBundle);
             setErrorMessage(null);
+            onDirtyChange?.(nextBundle !== null);
           }}
           onError={(message) => {
             setBundle(null);
             setErrorMessage(message);
+            onDirtyChange?.(false);
           }}
         />
         <div className="mt-3">

@@ -43,6 +43,7 @@ interface ActionPolicyEditorModalProps {
     requestLeave: (navigate: () => void) => void;
     hidden: boolean;
   }) => React.ReactNode;
+  alternateContentConfirmationOpen?: boolean;
   isAdditionalContentDirty?: boolean;
   onClose: () => void;
   title: string;
@@ -76,6 +77,7 @@ interface ActionPolicyEditorModalProps {
  * Mount it only while open — initial values are read once. */
 export default function ActionPolicyEditorModal({
   alternateContent,
+  alternateContentConfirmationOpen = false,
   isAdditionalContentDirty = false,
   onClose,
   title,
@@ -107,6 +109,8 @@ export default function ActionPolicyEditorModal({
   const policiesDirty = !isEqual(policies, initialPolicies);
   const isDirty = fieldsDirty || policiesDirty || isAdditionalContentDirty;
   const unsavedChanges = useUnsavedChangesGuard({ isDirty });
+  const confirmationOpen =
+    alternateContentConfirmationOpen || unsavedChanges.confirmationOpen;
   const canSave =
     fieldsFilled && policyItems !== undefined && !isSaving && isDirty;
 
@@ -148,16 +152,12 @@ export default function ActionPolicyEditorModal({
   return (
     <Modal open>
       <Modal.Content
-        width={
-          unsavedChanges.confirmationOpen || alternateContent ? "sm" : "lg"
-        }
-        height={
-          unsavedChanges.confirmationOpen || alternateContent ? "fit" : "lg"
-        }
+        width={confirmationOpen || alternateContent ? "sm" : "lg"}
+        height={confirmationOpen || alternateContent ? "fit" : "lg"}
         onOpenAutoFocus={(event) => {
           if (!autoFocusFirstField) event.preventDefault();
         }}
-        preventAccidentalClose={!unsavedChanges.confirmationOpen}
+        preventAccidentalClose={!confirmationOpen}
         onInteractOutside={handleDismiss}
         onEscapeKeyDown={handleDismiss}
       >
@@ -165,7 +165,7 @@ export default function ActionPolicyEditorModal({
           <>
             {alternateContent({
               requestLeave: unsavedChanges.requestLeave,
-              hidden: unsavedChanges.confirmationOpen,
+              hidden: confirmationOpen,
             })}
             {confirmationContent}
           </>

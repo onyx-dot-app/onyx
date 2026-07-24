@@ -24,6 +24,7 @@ import {
 import AssociatedSkillsEditor from "@/app/craft/v1/apps/admin/AssociatedSkillsEditor";
 import ExternalAppSkillsStepModal from "@/app/craft/v1/apps/admin/ExternalAppSkillsStepModal";
 import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
+import useSkillUploadModal from "@/sections/modals/skills/useSkillUploadModal";
 import { UnsavedChangesModalContent } from "@/sections/modals/UnsavedChangesModal";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import {
@@ -92,8 +93,7 @@ export default function CreateCustomAppModal({
   const [error, setError] = useState<string | null>(null);
   const [selectedSkillIds, setSelectedSkillIds] =
     useSyncedAssociatedSkillIds(existingApp);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadBusy, setUploadBusy] = useState(false);
+  const upload = useSkillUploadModal();
 
   const configDirty = existingApp
     ? name !== existingApp.name ||
@@ -196,14 +196,21 @@ export default function CreateCustomAppModal({
       unsavedChanges.cancelLeave();
       return;
     }
-    if (uploadOpen) {
-      if (!uploadBusy) setUploadOpen(false);
+    if (upload.isOpen) {
+      upload.dismiss();
     } else {
       unsavedChanges.requestLeave(onClose);
     }
   }
 
-  const confirmationContent = unsavedChanges.confirmationOpen ? (
+  const confirmationOpen =
+    upload.confirmationOpen || unsavedChanges.confirmationOpen;
+  const confirmationContent = upload.confirmationOpen ? (
+    <UnsavedChangesModalContent
+      onCancel={upload.cancelDiscard}
+      onDiscard={upload.confirmDiscard}
+    />
+  ) : unsavedChanges.confirmationOpen ? (
     <UnsavedChangesModalContent
       onCancel={unsavedChanges.cancelLeave}
       onDiscard={unsavedChanges.discardAndLeave}
@@ -223,21 +230,22 @@ export default function CreateCustomAppModal({
   return (
     <Modal open>
       <Modal.Content
-        width={unsavedChanges.confirmationOpen || uploadOpen ? "sm" : "lg"}
-        height={unsavedChanges.confirmationOpen || uploadOpen ? "fit" : "lg"}
+        width={confirmationOpen || upload.isOpen ? "sm" : "lg"}
+        height={confirmationOpen || upload.isOpen ? "fit" : "lg"}
         onOpenAutoFocus={(event) => {
           if (isEdit) event.preventDefault();
         }}
-        preventAccidentalClose={!unsavedChanges.confirmationOpen}
+        preventAccidentalClose={!confirmationOpen}
         onInteractOutside={handleDismiss}
         onEscapeKeyDown={handleDismiss}
       >
-        {uploadOpen && existingApp ? (
+        {upload.isOpen && existingApp ? (
           <>
             <CreateSkillModalContent
-              hidden={unsavedChanges.confirmationOpen}
-              onClose={() => setUploadOpen(false)}
-              onBusyChange={setUploadBusy}
+              hidden={confirmationOpen}
+              onClose={upload.close}
+              onBusyChange={upload.setBusy}
+              onDirtyChange={upload.setDirty}
               preserveDraftOnContinue
               validateDraft={(draft) =>
                 existingApp.associated_skills.some(
@@ -335,7 +343,7 @@ export default function CreateCustomAppModal({
                       onChange={setSelectedSkillIds}
                       onOpenSkill={openExistingSkill}
                       onCreateSkill={openSkillEditor}
-                      onUploadSkill={() => setUploadOpen(true)}
+                      onUploadSkill={upload.open}
                     />
                   </>
                 )}
