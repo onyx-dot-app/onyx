@@ -180,36 +180,38 @@ def _build_session_mcp_block(
 
 
 def _build_provider_block(
-    provider_config: LLMProviderConfig,
+    llm_provider_config: LLMProviderConfig,
 ) -> dict[str, Any]:
-    if provider_config.npm_package is not None:
-        return _build_custom_provider_block(provider_config)
+    if llm_provider_config.npm_package is not None:
+        return _build_custom_provider_block(llm_provider_config)
     block: dict[str, Any] = {}
-    if provider_config.api_key:
-        block["options"] = {"apiKey": provider_config.api_key}
-    if provider_config.api_base:
-        block["api"] = provider_config.api_base
-    options = _model_options(provider_config.provider, provider_config.model_name)
+    if llm_provider_config.api_key:
+        block["options"] = {"apiKey": llm_provider_config.api_key}
+    if llm_provider_config.api_base:
+        block["api"] = llm_provider_config.api_base
+    options = _model_options(
+        llm_provider_config.provider, llm_provider_config.model_name
+    )
     if options:
-        block["models"] = {provider_config.model_name: {"options": options}}
+        block["models"] = {llm_provider_config.model_name: {"options": options}}
     return block
 
 
 def _build_custom_provider_block(
-    provider_config: LLMProviderConfig,
+    llm_provider_config: LLMProviderConfig,
 ) -> dict[str, Any]:
     """Unlike native providers, a custom provider's baseURL goes in
     ``options`` and its model list must be explicit (no models.dev entry)."""
     options: dict[str, Any] = {}
-    if provider_config.api_key:
-        options["apiKey"] = provider_config.api_key
-    if provider_config.api_base:
-        options["baseURL"] = provider_config.api_base
-    block: dict[str, Any] = {"npm": provider_config.npm_package, "options": options}
-    if provider_config.display_name:
-        block["name"] = provider_config.display_name
+    if llm_provider_config.api_key:
+        options["apiKey"] = llm_provider_config.api_key
+    if llm_provider_config.api_base:
+        options["baseURL"] = llm_provider_config.api_base
+    block: dict[str, Any] = {"npm": llm_provider_config.npm_package, "options": options}
+    if llm_provider_config.display_name:
+        block["name"] = llm_provider_config.display_name
     models: dict[str, Any] = {}
-    for model in provider_config.models or []:
+    for model in llm_provider_config.models or []:
         entry: dict[str, Any] = {"name": model.display_name}
         if model.supports_reasoning:
             entry["options"] = {"reasoningEffort": "high"}
@@ -245,7 +247,7 @@ def build_opencode_base_config(
 
 
 def build_provider_opencode_config(
-    provider_config: LLMProviderConfig,
+    llm_provider_config: LLMProviderConfig,
     disabled_tools: list[str] | None = None,
     dev_mode: bool = False,
     plugins: list[str] | None = None,
@@ -256,20 +258,24 @@ def build_provider_opencode_config(
     model, plus the craft MCP servers (session-tagged) and their per-tool
     permission gates. opencode deep-merges this over the pod-global base.
     """
-    if provider_config.models is not None and provider_config.model_name not in {
-        model.id for model in provider_config.models
-    }:
+    if (
+        llm_provider_config.models is not None
+        and llm_provider_config.model_name
+        not in {model.id for model in llm_provider_config.models}
+    ):
         raise ValueError(
-            f"default model {provider_config.model_name!r} is not in the provider catalog"
+            f"default model {llm_provider_config.model_name!r} is not in the provider catalog"
         )
     if mcp_servers and session_id is None:
         raise ValueError("session_id is required when mcp_servers are provided")
 
     config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
-        "model": f"{provider_config.provider}/{provider_config.model_name}",
-        "provider": {provider_config.provider: _build_provider_block(provider_config)},
-        "enabled_providers": [provider_config.provider],
+        "model": f"{llm_provider_config.provider}/{llm_provider_config.model_name}",
+        "provider": {
+            llm_provider_config.provider: _build_provider_block(llm_provider_config)
+        },
+        "enabled_providers": [llm_provider_config.provider],
         "permission": _build_permissions(disabled_tools, dev_mode, mcp_servers),
     }
     if plugins:
@@ -281,14 +287,14 @@ def build_provider_opencode_config(
 
 
 def build_session_opencode_config(
-    provider_config: LLMProviderConfig,
+    llm_provider_config: LLMProviderConfig,
     disabled_tools: list[str],
     mcp_servers: Sequence[CraftMCPServerConfig] = (),
     session_id: str | None = None,
 ) -> str:
     return json.dumps(
         build_provider_opencode_config(
-            provider_config,
+            llm_provider_config,
             disabled_tools=disabled_tools,
             mcp_servers=mcp_servers,
             session_id=session_id,
