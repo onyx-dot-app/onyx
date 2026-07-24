@@ -934,7 +934,7 @@ def translate_history_to_llm_format(
                         content_parts.append(
                             TextContentPart(
                                 type="text",
-                                text=f"[attached image — file_id: {img_file.file_id}]",
+                                text=f"[attached image — filename: {img_file.filename or 'unknown'}, file_id: {img_file.file_id}]",
                             )
                         )
                         image_part = ImageContentPart(
