@@ -13,6 +13,7 @@ the task body.
 from __future__ import annotations
 
 import datetime
+from collections.abc import Sequence
 from typing import Callable
 from uuid import UUID, uuid4
 
@@ -28,6 +29,7 @@ from onyx.server.features.build.db.sandbox import (
     get_running_sandboxes,
 )
 from onyx.server.features.build.sandbox.models import (
+    CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
     LLMProviderConfig,
@@ -482,6 +484,7 @@ class _PushRecordingStub(StubSandboxManager):
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         self.ops.append("render_workspace")
         super().setup_session_workspace(
@@ -491,6 +494,7 @@ class _PushRecordingStub(StubSandboxManager):
             nextjs_port,
             connectable_apps_section,
             user_name,
+            mcp_servers,
         )
 
     def restore_snapshot(
@@ -501,6 +505,7 @@ class _PushRecordingStub(StubSandboxManager):
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         connectable_apps_section: str,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         self.ops.append("render_workspace")
         super().restore_snapshot(
@@ -510,6 +515,7 @@ class _PushRecordingStub(StubSandboxManager):
             nextjs_port,
             llm_config,
             connectable_apps_section,
+            mcp_servers,
         )
 
 
