@@ -8,6 +8,7 @@ import {
   Text,
   InputTypeIn,
   PopoverMenu,
+  Tooltip,
 } from "@opal/components";
 import {
   SvgBarChart,
@@ -206,6 +207,8 @@ interface SettingRowProps {
   icon: IconFunctionComponent;
   title: string;
   value?: string;
+  /** Shown when hovering the value readout. */
+  valueTooltip?: string;
   caption: string;
   children?: React.ReactNode;
 }
@@ -214,6 +217,7 @@ function SettingRow({
   icon: Icon,
   title,
   value,
+  valueTooltip,
   caption,
   children,
 }: SettingRowProps) {
@@ -226,9 +230,11 @@ function SettingRow({
         <Text font="main-ui-action">{title}</Text>
         <div className="flex-1" />
         {value !== undefined && (
-          <Text font="secondary-mono" color="text-04">
-            {value}
-          </Text>
+          <Tooltip tooltip={valueTooltip} side="top">
+            <Text font="secondary-mono" color="text-04">
+              {value}
+            </Text>
+          </Tooltip>
         )}
       </div>
       {children}
@@ -247,6 +253,9 @@ interface ModelDetailPaneProps {
 
 const UNSUPPORTED_SETTING_TOOLTIP =
   "Modifying this setting is not supported for this model.";
+
+const UNKNOWN_CONTEXT_TOOLTIP =
+  "Context size is not available for this model. Chats still apply a token limit automatically.";
 
 function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   // Backend pins temperature to 1 (or omits it) for reasoning models, so the
@@ -294,7 +303,7 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   const contextLabel =
     option.maxInputTokens != null && option.maxInputTokens > 0
       ? formatContextWindow(option.maxInputTokens)
-      : "—";
+      : null;
 
   return (
     <div
@@ -325,7 +334,8 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
       <SettingRow
         icon={SvgCode}
         title="Context Window"
-        value={contextLabel}
+        value={contextLabel ?? "—"}
+        valueTooltip={contextLabel ? undefined : UNKNOWN_CONTEXT_TOOLTIP}
         caption="Tokens limit for each session"
       />
 
