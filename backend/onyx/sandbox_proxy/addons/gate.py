@@ -62,6 +62,7 @@ from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
     ONYX_SERVER_URL,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+    SANDBOX_IDENTITY_WAIT_TIMEOUT_SECONDS,
 )
 from onyx.server.features.build.db import action_approval
 from onyx.utils.logger import setup_logger
@@ -164,7 +165,9 @@ def destination_is_blocked(host: str, port: int) -> bool:
 class _IdentityResolver(Protocol):
     """Subset of `IdentityResolver` the gate uses."""
 
-    def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None: ...
+    def resolve_sandbox(
+        self, src_ip: str, *, wait_timeout_seconds: float = 0
+    ) -> ResolvedSandbox | None: ...
 
     def resolve_session_by_id(
         self, session_id: UUID, user_id: UUID, tenant_id: str
@@ -252,6 +255,11 @@ class GateAddon:
         # Tracks running `request()` coroutines so the drain can `asyncio.wait`
         # on real completion instead of sleeping. Self-cleaning.
         self._inflight_tasks: set[asyncio.Task[None]] = set()
+        # Concurrent boot-time requests from one sandbox share the same bounded
+        # backend lookup instead of occupying one worker thread each.
+        self._identity_resolution_tasks: dict[
+            str, asyncio.Task[ResolvedSandbox | None]
+        ] = {}
         # Per-session memoization of the scheduled-run grant lookup.
         # Lock-guarded because `_live_grants` runs on the gate's worker threads.
         self._grant_cache: TTLCache[UUID, ScheduledRunGrants] = TTLCache(
@@ -509,6 +517,27 @@ class GateAddon:
     # request() helpers
     # --------------------------------------------------------------------------
 
+    async def _resolve_sandbox_identity(self, src_ip: str) -> ResolvedSandbox | None:
+        task = self._identity_resolution_tasks.get(src_ip)
+        if task is None:
+            task = asyncio.create_task(self._resolve_sandbox_identity_once(src_ip))
+            self._identity_resolution_tasks[src_ip] = task
+        return await asyncio.shield(task)
+
+    async def _resolve_sandbox_identity_once(
+        self, src_ip: str
+    ) -> ResolvedSandbox | None:
+        current_task = asyncio.current_task()
+        try:
+            return await asyncio.to_thread(
+                self._identity.resolve_sandbox,
+                src_ip,
+                wait_timeout_seconds=SANDBOX_IDENTITY_WAIT_TIMEOUT_SECONDS,
+            )
+        finally:
+            if self._identity_resolution_tasks.get(src_ip) is current_task:
+                del self._identity_resolution_tasks[src_ip]
+
     async def _resolve_and_match(
         self, flow: http.HTTPFlow
     ) -> tuple[SessionContext, AllMatchedActions] | None:
@@ -539,7 +568,7 @@ class GateAddon:
             return None
 
         try:
-            sandbox = self._identity.resolve_sandbox(src_ip)
+            sandbox = await self._resolve_sandbox_identity(src_ip)
         except Exception:
             # A DB blip can't be allowed to grant ungated egress.
             logger.exception(

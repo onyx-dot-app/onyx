@@ -12,7 +12,11 @@ from kubernetes import client, watch
 from kubernetes.client.rest import ApiException
 from urllib3.exceptions import ProtocolError, ReadTimeoutError
 
-from onyx.sandbox_proxy.identity import SandboxIdentity, SandboxIPLookup
+from onyx.sandbox_proxy.identity import (
+    SandboxIdentity,
+    SandboxIPLookup,
+    resolve_identity_with_watcher_grace,
+)
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import build_core_v1_api
 from onyx.server.features.build.sandbox.labels import (
@@ -33,6 +37,7 @@ _WATCH_TIMEOUT_SECONDS = 300
 # `_WATCH_TIMEOUT_SECONDS`), but a connect deadline still lets a half-open
 # reconnect fail fast into the backoff loop.
 _WATCH_CONNECT_TIMEOUT_S = 15.0
+_READTHROUGH_REQUEST_TIMEOUT: tuple[float, float] = (1.0, 2.0)
 
 _SANDBOX_POD_SELECTOR = ",".join(
     [
@@ -93,6 +98,7 @@ class K8sInformerLookup(SandboxIPLookup):
         self._namespace = namespace
         self._cache: dict[str, SandboxIdentity] = {}
         self._cache_lock = threading.Lock()
+        self._cache_updated = threading.Condition()
 
         self._initial_sync_done = threading.Event()
         self._stop_event = threading.Event()
@@ -109,6 +115,8 @@ class K8sInformerLookup(SandboxIPLookup):
 
     def stop(self) -> None:
         self._stop_event.set()
+        with self._cache_updated:
+            self._cache_updated.notify_all()
 
     def wait_for_initial_sync(self, timeout_seconds: float) -> bool:
         return self._initial_sync_done.wait(timeout=timeout_seconds)
@@ -119,6 +127,65 @@ class K8sInformerLookup(SandboxIPLookup):
     def lookup(self, src_ip: str) -> SandboxIdentity | None:
         with self._cache_lock:
             return self._cache.get(src_ip)
+
+    def wait_for_identity(
+        self, src_ip: str, timeout_seconds: float
+    ) -> SandboxIdentity | None:
+        return resolve_identity_with_watcher_grace(
+            backend="kubernetes",
+            src_ip=src_ip,
+            timeout_seconds=timeout_seconds,
+            lookup=self.lookup,
+            read_through=self._query_identity_by_ip,
+            cache_updated=self._cache_updated,
+            stop_event=self._stop_event,
+        )
+
+    def _query_identity_by_ip(self, src_ip: str) -> SandboxIdentity | None:
+        try:
+            listing = self._core.list_namespaced_pod(
+                namespace=self._namespace,
+                label_selector=_SANDBOX_POD_SELECTOR,
+                field_selector=f"status.podIP={src_ip}",
+                _request_timeout=_READTHROUGH_REQUEST_TIMEOUT,
+            )
+            identities = [
+                identity
+                for pod in listing.items
+                if (identity := _identity_from_pod(pod)) is not None
+                and identity.sandbox_ip == src_ip
+            ]
+        except (
+            ApiException,
+            ProtocolError,
+            ReadTimeoutError,
+            ConnectionError,
+            OSError,
+        ) as e:
+            logger.warning(
+                "identity_readthrough_error backend=kubernetes src_ip=%s error=%s",
+                src_ip,
+                e,
+            )
+            return None
+
+        if len(identities) != 1:
+            if identities:
+                logger.warning(
+                    "identity_readthrough_ambiguous backend=kubernetes "
+                    "src_ip=%s sandboxes=%s",
+                    src_ip,
+                    [str(identity.sandbox_id) for identity in identities],
+                )
+            return None
+
+        identity = identities[0]
+        logger.info(
+            "identity_readthrough_hit backend=kubernetes src_ip=%s sandbox=%s",
+            src_ip,
+            identity.sandbox_name,
+        )
+        return identity
 
     def _run(self) -> None:
         backoff = _RECONNECT_INITIAL_SECONDS
@@ -186,6 +253,8 @@ class K8sInformerLookup(SandboxIPLookup):
 
         with self._cache_lock:
             self._cache = new_cache
+        with self._cache_updated:
+            self._cache_updated.notify_all()
 
         logger.info("Informer initial sync: %d sandbox pods cached.", len(new_cache))
 
@@ -246,6 +315,8 @@ class K8sInformerLookup(SandboxIPLookup):
             for stale_ip in stale_ips:
                 del self._cache[stale_ip]
             self._cache[identity.sandbox_ip] = identity
+        with self._cache_updated:
+            self._cache_updated.notify_all()
 
     def _evict_by_pod_name(self, pod_name: str) -> None:
         with self._cache_lock:

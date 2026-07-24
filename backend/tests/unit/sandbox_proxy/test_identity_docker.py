@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 from docker import DockerClient
 
+from onyx.sandbox_proxy.identity import SandboxIdentity
 from onyx.sandbox_proxy.identity_docker import (
     DockerEventsLookup,
     _identity_from_container,
@@ -143,6 +144,71 @@ def test_apply_event_start_populates_cache() -> None:
     identity = lookup.lookup("172.18.0.5")
     assert identity is not None
     assert identity.sandbox_name == "sandbox-aaaa1111"
+
+
+def test_wait_for_identity_returns_readthrough_hit_without_updating_cache() -> None:
+    lookup, client = _make_lookup()
+    client.containers.list.return_value = [
+        _make_container(container_id="cid-1", ip="172.18.0.5")
+    ]
+
+    identity = lookup.wait_for_identity("172.18.0.5", timeout_seconds=1)
+
+    assert identity is not None
+    assert identity.sandbox_name == "sandbox-aaaa1111"
+    assert lookup.lookup("172.18.0.5") is None
+
+
+def test_wait_for_identity_is_woken_by_start_event() -> None:
+    lookup, client = _make_lookup()
+    client.containers.list.return_value = []
+    client.containers.get.return_value = _make_container(
+        container_id="cid-1", ip="172.18.0.5"
+    )
+    finished = threading.Event()
+    results: list[SandboxIdentity | None] = []
+
+    def lookup_identity() -> None:
+        results.append(lookup.wait_for_identity("172.18.0.5", timeout_seconds=1))
+        finished.set()
+
+    thread = threading.Thread(target=lookup_identity)
+    thread.start()
+    assert not finished.wait(timeout=0.05)
+
+    lookup._apply_event({"Action": "start", "Actor": {"ID": "cid-1"}})
+
+    assert finished.wait(timeout=1)
+    thread.join(timeout=1)
+    assert len(results) == 1
+    assert results[0] is not None
+
+
+def test_wait_for_identity_fails_closed_on_ambiguous_readthrough() -> None:
+    lookup, client = _make_lookup()
+    client.containers.list.return_value = [
+        _make_container(container_id="cid-1", ip="172.18.0.5"),
+        _make_container(
+            container_id="cid-2",
+            sandbox_id="22222222-2222-2222-2222-222222222222",
+            ip="172.18.0.5",
+        ),
+    ]
+
+    assert lookup.wait_for_identity("172.18.0.5", timeout_seconds=0) is None
+
+
+def test_wait_for_identity_refreshes_after_missed_watcher_event() -> None:
+    lookup, client = _make_lookup()
+    client.containers.list.side_effect = [
+        [],
+        [_make_container(container_id="cid-1", ip="172.18.0.5")],
+    ]
+
+    identity = lookup.wait_for_identity("172.18.0.5", timeout_seconds=0.01)
+
+    assert identity is not None
+    assert client.containers.list.call_count == 2
 
 
 def test_apply_event_start_with_new_ip_evicts_stale() -> None:

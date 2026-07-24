@@ -19,6 +19,13 @@ class _FakeLookup(SandboxIPLookup):
     def lookup(self, src_ip: str) -> None:  # noqa: ARG002
         return None
 
+    def wait_for_identity(
+        self,
+        src_ip: str,  # noqa: ARG002
+        timeout_seconds: float,  # noqa: ARG002
+    ) -> None:
+        return None
+
     def wait_for_initial_sync(
         self,
         timeout_seconds: float,  # noqa: ARG002

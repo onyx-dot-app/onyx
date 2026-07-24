@@ -92,7 +92,12 @@ class _UpstreamHandler(BaseHTTPRequestHandler):
 class _StubResolver(_IdentityResolver):
     """Resolves any source IP to one sandbox so the request is forwarded."""
 
-    def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox:  # noqa: ARG002
+    def resolve_sandbox(
+        self,
+        src_ip: str,  # noqa: ARG002
+        *,
+        wait_timeout_seconds: float = 0,  # noqa: ARG002
+    ) -> ResolvedSandbox:
         return ResolvedSandbox(
             sandbox_id=UUID("11111111-1111-1111-1111-111111111111"),
             user_id=uuid4(),
