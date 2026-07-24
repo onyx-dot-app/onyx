@@ -17,8 +17,26 @@ variable "instance_type" {
 
 variable "storage_gb" {
   type        = number
-  description = "Storage size in GB"
+  description = "Initial allocated storage in GB. RDS storage can grow but never shrink."
   default     = 20
+}
+
+variable "max_storage_gb" {
+  type        = number
+  description = "Upper limit in GB for RDS storage autoscaling. Null or 0 disables autoscaling."
+  default     = null
+
+  validation {
+    # RDS requires the ceiling to be at least 10% above allocated storage.
+    condition     = var.max_storage_gb == null || coalesce(var.max_storage_gb, 0) == 0 || coalesce(var.max_storage_gb, 0) >= ceil(1.1 * var.storage_gb)
+    error_message = "max_storage_gb must be at least 10% greater than storage_gb (RDS requirement), or null/0 to disable autoscaling."
+  }
+}
+
+variable "storage_type" {
+  type        = string
+  description = "EBS storage type for the RDS instance. gp3 gives 3000 baseline IOPS regardless of size; older stacks created before this variable existed are on gp2."
+  default     = "gp3"
 }
 
 variable "engine_version" {

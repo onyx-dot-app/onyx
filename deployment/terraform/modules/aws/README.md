@@ -93,6 +93,73 @@ terraform init
 terraform apply
 ```
 
+## T-shirt sizing
+The `onyx` module takes a `size` input (`small` | `medium` | `large`, default `medium`) that sets
+coherent defaults for every compute and data-plane knob. Pick a tier from your expected scale:
+
+| Tier | Users | Documents |
+|---|---|---|
+| `small` | up to ~200 | < ~500k |
+| `medium` | ~200–1,000 | ~0.5–2M |
+| `large` | 1,000+ | multi-million |
+
+What each tier provisions:
+
+| Setting | small | medium | large |
+|---|---|---|---|
+| Main EKS node group | m7i.2xlarge ×1–3³ | m7i.4xlarge ×1–5 | m7i.4xlarge ×2–8 |
+| Document-index node¹ | none³ | m6i.2xlarge, 100 GB | r6i.4xlarge, 512 GB |
+| RDS Postgres | db.t4g.large, 64→256 GB | db.t4g.large, 128→512 GB | db.m7g.xlarge, 256→1024 GB |
+| ElastiCache Redis | cache.m6g.large | cache.m6g.xlarge | cache.m6g.2xlarge |
+| OpenSearch data² | r7g.large.search ×1, 256 GB | r8g.xlarge.search ×1, 512 GB | r8g.2xlarge.search ×1, 1 TB (12k IOPS) |
+| OpenSearch masters² | 3× m7g.medium.search | 3× m7g.medium.search | 3× m7g.medium.search |
+
+Pair each tier with the matching sizing snippets from the Helm chart's
+`deployment/helm/charts/onyx/SIZING.md` (chart ≥ 0.8.0) — the tiers here size the
+infrastructure, the chart snippets size the workloads on it.
+
+¹ The dedicated index node group only matters when running the document index in-cluster
+(the Helm chart's bundled OpenSearch StatefulSet). It is created tainted
+(`vespa-dedicated=true`), so the StatefulSet must carry the toleration *and* nodeSelector
+from SIZING.md's placement snippet to use it. If you point the chart at a managed
+OpenSearch domain instead (`enable_opensearch = true` + disable the bundled OpenSearch in
+chart values), set `vespa_node_enabled = false` so the node group isn't created at all.
+² Only created when `enable_opensearch = true`. All tiers default to a single data node
+without zone awareness; RDS is likewise single-AZ. For HA, set
+`opensearch_instance_count = 3`, `opensearch_zone_awareness_enabled = true` (and optionally
+`opensearch_multi_az_with_standby_enabled = true`).
+³ The small tier creates no index node group — the small chart sizing fits the in-cluster
+index on the main nodes. With chart ≥ 0.8.0 and SIZING.md's small snippets the whole stack
+fits one m7i.2xlarge (external Postgres/Redis/S3); with plain chart defaults the
+autoscaler settles at two nodes. Set `vespa_node_enabled = true` to add the dedicated
+node back.
+
+These defaults are calibrated from Onyx's own managed production fleet: memory, not CPU, is
+the binding dimension on the Kubernetes side, and the burstable `db.t4g.large` holds up to
+roughly the medium tier before CPU peaks make a fixed-performance class worthwhile.
+
+Every value in the table is just a default — any sizing variable set to a non-null value
+(e.g. `postgres_instance_type`, `opensearch_instance_type`, `main_node_max_size`) overrides
+its tier.
+
+**Upgrading from a pre-sizing version of these modules:** the previous hardcoded defaults
+were `db.t4g.large` with 20 GB gp2 and no storage autoscaling, `cache.m6g.xlarge`, and a
+3×r8g.large multi-AZ OpenSearch domain. The default `medium` tier keeps the same EKS node
+groups and Redis node type, and grows Postgres storage online (gp2→gp3 conversion is also
+online; storage can never shrink).
+
+⚠️ If you enabled OpenSearch and relied on the old defaults, applying `medium` **replaces
+the domain and loses its index data**: a single-AZ domain must live in exactly one subnet,
+and the Terraform AWS provider marks `vpc_options` as ForceNew, so the 3-subnet → 1-subnet
+change destroys and recreates the domain (capacity-only changes that don't touch subnets —
+instance type/count, masters, EBS — are in-place blue/green updates). To keep the old
+topology, pin it explicitly: `opensearch_instance_count = 3`,
+`opensearch_zone_awareness_enabled = true`, `opensearch_multi_az_with_standby_enabled =
+true`, `opensearch_dedicated_master_type = "m7g.large.search"`,
+`opensearch_instance_type = "r8g.large.search"`. To adopt the new shape on an existing
+domain, take a manual snapshot first and plan a restore. Either way, check `terraform
+plan` for `-/+ destroy and then create replacement` on the domain before applying.
+
 ### Using an existing VPC
 If you already have a VPC and subnets, disable VPC creation and provide IDs, CIDR, and the ID of the existing S3 gateway endpoint in that VPC:
 
@@ -126,6 +193,7 @@ module "onyx" {
 
 Inputs (common):
 - `name` (default `onyx`), `region` (default `us-west-2`), `tags`
+- `size` (`small`/`medium`/`large`, default `medium`) — see "T-shirt sizing" above — plus per-setting overrides (`main_node_*`, `vespa_node_*`, `postgres_instance_type`, `postgres_storage_gb`, `redis_instance_type`, `opensearch_*`)
 - `postgres_username`, `postgres_password`
 - `create_vpc` (default true) or existing VPC details and `s3_vpc_endpoint_id`
 - WAF controls such as `waf_allowed_ip_cidrs`, `waf_common_rule_set_count_rules`, rate limits, geo restrictions, and logging retention
