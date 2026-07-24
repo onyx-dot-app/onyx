@@ -1,7 +1,7 @@
 """add index on chat_session user_id and time_updated
 
 Revision ID: e0ea2ae62e51
-Revises: fe958f19e42b
+Revises: c2cc933f0a40
 Create Date: 2026-07-23 23:13:21.795575
 
 Adds a composite btree index on (user_id, onyxbot_flow, time_updated DESC) to
