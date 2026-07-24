@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.0
+version: 0.8.1
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,16 +16,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: SIZING.md — per-scale tuning guidance (small/medium/large snippets)
-        calibrated from production fleet usage, covering both in-cluster and managed
-        document-index topologies.
-    - kind: changed
-      description: Default resources retuned from production evidence — api-server CPU raised
-        (request 1, limit 3; a 1-core limit stalls /health under load and causes liveness
-        kills), model-server CPU requests lowered to 1 (limits unchanged), heavy-worker and
-        code-interpreter memory limits raised to stop production OOMKills, and the OpenSearch
-        PVC default grown to 64Gi. Existing OpenSearch PVCs are not resized by upgrades.
+    - kind: fixed
+      description: Prevent Craft sandbox startup egress from being rejected when requests race
+        source-IP watcher registration. The proxy now uses bounded Docker and Kubernetes
+        identity resolution, configurable with SANDBOX_IDENTITY_WAIT_TIMEOUT_SECONDS.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
