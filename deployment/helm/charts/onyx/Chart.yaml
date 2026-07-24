@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.5
+version: 0.8.6
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,11 +16,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: Documented that every Onyx image now publishes a -dev twin for each
-        of its tags, so a -dev suffixed global.version (e.g. v1.2.3-dev) selects the dev
-        variant of the whole deployment — including the backend image that carries the
-        debugging tools the opt-in tooling.pgInto helper needs.
+    - kind: fixed
+      description: Prevent Craft sandbox startup egress from being rejected when requests race
+        source-IP watcher registration. The proxy now uses bounded Docker and Kubernetes
+        identity resolution, configurable with SANDBOX_IDENTITY_WAIT_TIMEOUT_SECONDS.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
