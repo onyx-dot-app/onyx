@@ -294,6 +294,16 @@ _ACTIONABLE_RECLAIM_STATUSES = [
     IndexReclaimStatus.DELETING,
 ]
 
+# States where the old index's data still physically exists (not yet reclaimed) —
+# includes BLOCKED, whose deletion never completed. Only RECLAIMED means the data is
+# gone. The name-reuse guard uses this to refuse reusing a still-dirty index name.
+_INDEX_PRESENT_RECLAIM_STATUSES = [
+    IndexReclaimStatus.PENDING,
+    IndexReclaimStatus.SOAKING,
+    IndexReclaimStatus.DELETING,
+    IndexReclaimStatus.BLOCKED,
+]
+
 
 def set_reclaim_intent_on_current__no_commit(
     db_session: Session, consented_cc_pair_ids: list[int]
@@ -394,3 +404,18 @@ def record_failure__no_commit(
         search_settings.reclaim_status = IndexReclaimStatus.BLOCKED
         return True
     return False
+
+
+def find_unreclaimed_past_by_index_name(
+    db_session: Session, index_name: str
+) -> list[SearchSettings]:
+    """PAST rows sharing this physical index_name whose data is not yet reclaimed.
+    The name-reuse guard uses this: ALT_INDEX_SUFFIX alternation can make a new FUTURE's
+    index_name equal an old PAST's, and reusing it would adopt the old data. Multiple
+    generations can share one physical index, so this returns all of them."""
+    stmt = select(SearchSettings).where(
+        SearchSettings.status == IndexModelStatus.PAST,
+        SearchSettings.index_name == index_name,
+        SearchSettings.reclaim_status.in_(_INDEX_PRESENT_RECLAIM_STATUSES),
+    )
+    return list(db_session.scalars(stmt))

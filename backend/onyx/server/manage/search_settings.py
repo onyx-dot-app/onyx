@@ -16,6 +16,7 @@ from onyx.context.search.models import (
     SearchSettingsCreationRequest,
 )
 from onyx.db.connector_credential_pair import (
+    compute_wont_port_cc_pair_ids,
     fetch_indexable_standard_connector_credential_pair_ids,
     get_connector_credential_pairs,
     get_last_successful_attempt_poll_range_end,
@@ -39,11 +40,14 @@ from onyx.db.port_attempt import (
     port_backfill_has_pending_work,
 )
 from onyx.db.search_settings import (
+    clear_reclaim_intent__no_commit,
     create_search_settings,
     delete_search_settings,
+    find_unreclaimed_past_by_index_name,
     get_current_search_settings,
     get_embedding_provider_from_provider_type,
     get_secondary_search_settings,
+    set_reclaim_intent_on_current__no_commit,
     update_current_search_settings,
     update_search_settings_status,
 )
@@ -142,6 +146,22 @@ def set_new_search_settings(
             **search_settings_new.model_dump()
         )
 
+    # ALT_INDEX_SUFFIX alternation can make this FUTURE's index_name equal a PAST's whose
+    # data isn't reclaimed yet. Refuse before verify_and_create_index_if_necessary below
+    # adopts that same-named index and inherits its stale data.
+    if new_search_settings_request.index_name is not None:
+        _guard_index_name_reuse(db_session, new_search_settings_request.index_name)
+
+    # Authoritative won't-port set (the cc_pairs whose data the post-swap reclaim will
+    # delete). Computed + consent-checked BEFORE creating the FUTURE / its index, so a
+    # consent-drift rejection can't leave an orphaned index behind.
+    wont_port_cc_pair_ids = compute_wont_port_cc_pair_ids(
+        db_session, search_settings_new.switchover_type
+    )
+    _reject_on_consent_drift(
+        search_settings_new.acknowledged_wont_port_cc_pair_ids, wont_port_cc_pair_ids
+    )
+
     secondary_search_settings = get_secondary_search_settings(db_session)
 
     if secondary_search_settings:
@@ -230,9 +250,50 @@ def set_new_search_settings(
                 poll_range_end=poll_range_end,
             )
 
+    # Stamp reclaim intent on the current PRESENT (the future PAST) so the post-swap
+    # reclaim can delete the old index + the consented not-ported cc_pairs.
+    set_reclaim_intent_on_current__no_commit(db_session, wont_port_cc_pair_ids)
+
     # Atomic: FUTURE row and its seeds become visible together.
     db_session.commit()
     return IdReturn(id=new_search_settings.id)
+
+
+def _guard_index_name_reuse(db_session: Session, index_name: str) -> None:
+    """Refuse a reindex whose new index_name collides with a PAST index still being
+    reclaimed — reusing it would adopt the old generation's data. The background reclaim
+    owns the deletion; the admin retries once it finishes."""
+    if find_unreclaimed_past_by_index_name(db_session, index_name):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "The previous index of the same name is still being reclaimed. Wait until "
+            "the reclaim completes, then start the reindex.",
+        )
+
+
+def _reject_on_consent_drift(
+    acknowledged: list[int] | None, server_wont_port: list[int]
+) -> None:
+    """Enforce informed consent for the deletions. The admin agreed to delete a specific
+    set (`acknowledged`); if the server-recomputed set now contains a cc_pair the admin
+    never saw — a connector that became INVALID/PAUSED after the page loaded — deleting it
+    would be non-consensual, so reject and make them reconfirm against the current list.
+    The opposite drift (a consented connector re-activated, so no longer in the server set)
+    is the safe direction and just deletes less.
+
+    Skipped when no acknowledgment is sent (non-UI callers). Deletion stays dark until the
+    reclaim flag is flipped, and the UI always sends the field, so nothing is deleted
+    without consent in practice."""
+    if acknowledged is None:
+        return
+    unacknowledged = set(server_wont_port) - set(acknowledged)
+    if unacknowledged:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "The set of connectors that won't be re-indexed changed since you opened "
+            "this page (one or more became paused or invalid). Reload and review the "
+            "deletion list before starting the reindex.",
+        )
 
 
 @router.post("/cancel-new-embedding", dependencies=[Depends(require_vector_db)])
@@ -261,6 +322,12 @@ def cancel_new_embedding(
 
         # remove the old index from the vector db
         primary_search_settings = get_current_search_settings(db_session)
+
+        # The canceled reindex stamped reclaim intent on this PRESENT (the would-be PAST);
+        # clear it so a later swap can't act on a stale consent set. No-op if unset.
+        clear_reclaim_intent__no_commit(db_session, primary_search_settings.id)
+        db_session.commit()
+
         document_index = get_default_document_index(
             primary_search_settings, None, db_session
         )
