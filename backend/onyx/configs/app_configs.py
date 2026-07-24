@@ -999,6 +999,24 @@ MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
     1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
 )
 
+# Old-index reclamation (post-reindex deletion of the now-PAST index).
+# Master switch: when False the reclaim beat task no-ops entirely. Ships dark
+# (default off); flip True to go live. Instant kill switch if anything goes wrong.
+OLD_INDEX_RECLAIM_ENABLED = (
+    os.environ.get("OLD_INDEX_RECLAIM_ENABLED", "").lower() == "true"
+)
+# Soak before deleting a PAST index, anchored to when it stopped being read.
+# 0 = delete immediately once the soak gate is reached.
+OLD_INDEX_RETENTION_HOURS = _non_negative_int_env("OLD_INDEX_RETENTION_HOURS", 24)
+# Bounds the blast radius of a runaway task.
+OLD_INDEX_RECLAIM_MAX_PER_RUN = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_MAX_PER_RUN", 5)
+)
+# Consecutive failures on one reclaim before it is parked as BLOCKED and alerted.
+OLD_INDEX_RECLAIM_MAX_ATTEMPTS = max(
+    1, _non_negative_int_env("OLD_INDEX_RECLAIM_MAX_ATTEMPTS", 5)
+)
+
 _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
 try:
     env_value = os.environ.get("CELERY_WORKER_DOCFETCHING_CONCURRENCY")
