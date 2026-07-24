@@ -297,6 +297,7 @@ def test_guard_reclaimed_past_same_name_is_noop(
 @pytest.mark.parametrize(
     "reclaim_status",
     [
+        None,  # legacy pre-feature PAST row — its orphaned index still exists
         IndexReclaimStatus.PENDING,
         IndexReclaimStatus.SOAKING,
         IndexReclaimStatus.DELETING,
@@ -306,10 +307,10 @@ def test_guard_reclaimed_past_same_name_is_noop(
 def test_guard_conflicts_while_index_unreclaimed(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
-    reclaim_status: IndexReclaimStatus,
+    reclaim_status: IndexReclaimStatus | None,
 ) -> None:
-    """Any not-yet-reclaimed collision is refused until the background reclaim finishes —
-    and the guard doesn't touch the row (no synchronous reclaim)."""
+    """Any collision whose index data is still present is refused — reclaim-tracked rows
+    AND legacy NULL rows. The guard doesn't touch the row (no synchronous reclaim)."""
     name = f"test_collide_{uuid4().hex[:8]}"
     ss = _make_past_settings(db_session, reclaim_status, index_name=name)
     try:
@@ -323,48 +324,59 @@ def test_guard_conflicts_while_index_unreclaimed(
         db_session.commit()
 
 
-def test_find_unreclaimed_includes_blocked_excludes_reclaimed(
+def test_find_unreclaimed_includes_blocked_and_legacy_excludes_reclaimed(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    """The collision query treats BLOCKED as still-present (its delete never finished) and
-    RECLAIMED as gone."""
+    """The collision query treats anything but RECLAIMED as still-present: BLOCKED (its
+    delete never finished) and a legacy NULL row (pre-feature orphan) both count; only
+    RECLAIMED is gone."""
     name = f"test_find_unreclaimed_{uuid4().hex[:8]}"
     blocked = _make_past_settings(
         db_session, IndexReclaimStatus.BLOCKED, index_name=name
     )
+    legacy = _make_past_settings(db_session, None, index_name=name)
     reclaimed = _make_past_settings(
         db_session, IndexReclaimStatus.RECLAIMED, index_name=name
     )
     try:
         found = {s.id for s in find_unreclaimed_past_by_index_name(db_session, name)}
         assert blocked.id in found
+        assert legacy.id in found
         assert reclaimed.id not in found
     finally:
-        for row in (blocked, reclaimed):
+        for row in (blocked, legacy, reclaimed):
             db_session.delete(row)
         db_session.commit()
 
 
-# --- consent drift enforcement + capture ----------------------------------------
+# --- consent resolution + capture -----------------------------------------------
 
 
-def test_consent_drift_no_acknowledgment_is_allowed() -> None:
-    """A non-UI caller that sends no acknowledgment is not consent-checked here."""
-    search_settings_api._reject_on_consent_drift(None, [1, 2])
+def test_resolve_consent_nothing_wont_port_reclaims_only() -> None:
+    """A plain reindex (nothing won't-port) reclaims the old index with no deletions —
+    empty set, never None."""
+    assert search_settings_api._resolve_consented_deletions(None, []) == []
+    assert search_settings_api._resolve_consented_deletions([1], []) == []
 
 
-def test_consent_drift_server_subset_of_acknowledged_is_allowed() -> None:
-    """A connector re-activated after consent (acknowledged but no longer won't-port) is
-    the safe direction — deleting fewer than agreed is fine."""
-    search_settings_api._reject_on_consent_drift([1, 2, 3], [1, 2])
+def test_resolve_consent_no_acknowledgment_skips_reclaim() -> None:
+    """Not-ported connectors + no acknowledgment (e.g. pre-consent-modal frontend) -> None,
+    so the caller skips reclaim rather than drop their data without consent."""
+    assert search_settings_api._resolve_consented_deletions(None, [1, 2]) is None
 
 
-def test_consent_drift_rejects_unacknowledged_deletion() -> None:
+def test_resolve_consent_acknowledged_covers_returns_set() -> None:
+    """Acknowledged covers the server set (incl. the safe drift where a consented connector
+    re-activated) -> stamp the server set."""
+    assert search_settings_api._resolve_consented_deletions([1, 2, 3], [1, 2]) == [1, 2]
+
+
+def test_resolve_consent_rejects_unacknowledged_deletion() -> None:
     """A connector that became paused/invalid after the page loaded is in the server set
     but not acknowledged — deleting it would violate consent, so reject."""
     with pytest.raises(OnyxError) as exc:
-        search_settings_api._reject_on_consent_drift([1], [1, 2])
+        search_settings_api._resolve_consented_deletions([1], [1, 2])
     assert exc.value.error_code == OnyxErrorCode.CONFLICT
 
 
@@ -373,18 +385,12 @@ def test_set_reclaim_intent_marks_present_pending(
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     """Consent capture stamps PENDING + the consented cc_pair ids on the current PRESENT
-    (the future PAST)."""
+    (the future PAST). Asserted in-session then rolled back — never committed — so the
+    shared singleton PRESENT row is left untouched."""
     present = get_current_search_settings(db_session)
-    original_status = present.reclaim_status
-    original_pending = present.pending_cc_pair_deletions
     try:
         set_reclaim_intent_on_current__no_commit(db_session, [101, 202])
-        db_session.commit()
-        db_session.refresh(present)
         assert present.reclaim_status == IndexReclaimStatus.PENDING
         assert present.pending_cc_pair_deletions == [101, 202]
     finally:
-        clear_reclaim_intent__no_commit(db_session, present.id)
-        present.reclaim_status = original_status
-        present.pending_cc_pair_deletions = original_pending
-        db_session.commit()
+        db_session.rollback()

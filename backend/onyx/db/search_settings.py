@@ -1,4 +1,4 @@
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
@@ -294,16 +294,6 @@ _ACTIONABLE_RECLAIM_STATUSES = [
     IndexReclaimStatus.DELETING,
 ]
 
-# States where the old index's data still physically exists (not yet reclaimed) —
-# includes BLOCKED, whose deletion never completed. Only RECLAIMED means the data is
-# gone. The name-reuse guard uses this to refuse reusing a still-dirty index name.
-_INDEX_PRESENT_RECLAIM_STATUSES = [
-    IndexReclaimStatus.PENDING,
-    IndexReclaimStatus.SOAKING,
-    IndexReclaimStatus.DELETING,
-    IndexReclaimStatus.BLOCKED,
-]
-
 
 def set_reclaim_intent_on_current__no_commit(
     db_session: Session, consented_cc_pair_ids: list[int]
@@ -412,10 +402,17 @@ def find_unreclaimed_past_by_index_name(
     """PAST rows sharing this physical index_name whose data is not yet reclaimed.
     The name-reuse guard uses this: ALT_INDEX_SUFFIX alternation can make a new FUTURE's
     index_name equal an old PAST's, and reusing it would adopt the old data. Multiple
-    generations can share one physical index, so this returns all of them."""
+    generations can share one physical index, so this returns all of them.
+
+    "Not reclaimed" = anything but RECLAIMED, including reclaim_status NULL — legacy PAST
+    rows from before this feature, whose orphaned index still physically exists. Only
+    RECLAIMED means the data is confirmed gone."""
     stmt = select(SearchSettings).where(
         SearchSettings.status == IndexModelStatus.PAST,
         SearchSettings.index_name == index_name,
-        SearchSettings.reclaim_status.in_(_INDEX_PRESENT_RECLAIM_STATUSES),
+        or_(
+            SearchSettings.reclaim_status.is_(None),
+            SearchSettings.reclaim_status != IndexReclaimStatus.RECLAIMED,
+        ),
     )
     return list(db_session.scalars(stmt))
