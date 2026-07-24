@@ -1,6 +1,8 @@
 from collections.abc import Callable, Generator
 from datetime import datetime, timezone
 
+from google.auth.exceptions import RefreshError
+
 from ee.onyx.external_permissions.google_drive.models import (
     GoogleDrivePermission,
     PermissionType,
@@ -147,21 +149,33 @@ def get_external_access_for_raw_gdrive_file(
                 permission_ids=permission_ids,
             )
 
+        def _get_non_admin_permissions(
+            drive_service_factory: Callable[[], GoogleDriveService | None],
+        ) -> list[GoogleDrivePermission]:
+            try:
+                drive_service = drive_service_factory()
+                return _get_permissions(drive_service) if drive_service else []
+            except RefreshError:
+                logger.warning(
+                    "Could not impersonate non-admin user for document %s", doc_id
+                )
+                return []
+
         if retriever_drive_service:
-            permissions_list = _get_permissions(retriever_drive_service)
+            permissions_list = _get_non_admin_permissions(
+                lambda: retriever_drive_service
+            )
 
         if (
             len(permissions_list) != len(permission_ids)
             and fallback_drive_service_factory
         ):
-            fallback_drive_service = fallback_drive_service_factory()
-            if fallback_drive_service:
-                permissions_list = _merge_permissions_lists(
-                    [
-                        permissions_list,
-                        _get_permissions(fallback_drive_service),
-                    ]
-                )
+            permissions_list = _merge_permissions_lists(
+                [
+                    permissions_list,
+                    _get_non_admin_permissions(fallback_drive_service_factory),
+                ]
+            )
 
         if len(permissions_list) != len(permission_ids):
             permissions_list = _merge_permissions_lists(
