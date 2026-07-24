@@ -13,7 +13,7 @@ const route = ADMIN_ROUTES.EXPORT_LOGS;
 const DESCRIPTION =
   "Download a zip of server log files to attach to an Onyx support thread.";
 const DOWNLOAD_URL = "/api/admin/log-export/download";
-const FALLBACK_FILENAME = "onyx_api_server_logs.zip";
+const FALLBACK_FILENAME = "onyx_logs.zip";
 
 function extractFilename(response: Response): string {
   const disposition = response.headers.get("Content-Disposition");
