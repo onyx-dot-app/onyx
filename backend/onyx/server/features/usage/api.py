@@ -14,7 +14,7 @@ from onyx.auth.users import current_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.llm import fetch_default_llm_model
+from onyx.db.llm import fetch_default_llm_model, fetch_existing_llm_providers
 from onyx.db.models import TokenRateLimit, User
 from onyx.db.token_limit import (
     fetch_all_global_token_rate_limits,
@@ -29,10 +29,12 @@ from onyx.db.user_usage import (
     get_user_cost_cents_buckets_since,
     get_user_cost_cents_since,
     get_user_usage_by_day_and_model,
+    reset_user_usage,
 )
+from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.cost import get_model_price_per_million
+from onyx.llm.cost import get_model_prices_per_million
 from onyx.llm.cost_overrides import (
     delete_override,
     invalidate_override_cache,
@@ -44,6 +46,8 @@ from onyx.server.features.usage.models import (
     CostOverrideUpsertRequest,
     EffectiveCostBudget,
     ModelPrice,
+    ResetUsageRequest,
+    ResetUsageResponse,
     UsageExportRecord,
     UsageExportResponse,
     UsageExportTotals,
@@ -201,7 +205,7 @@ def get_my_usage(
     selected_model_price: ModelPrice | None = None
     if default_model is not None:
         provider = default_model.llm_provider.provider
-        input_per_mtok, output_per_mtok = get_model_price_per_million(
+        input_per_mtok, output_per_mtok, cache_per_mtok = get_model_prices_per_million(
             default_model.name, provider, db_session
         )
         # Omit price block unless both input/output rates known.
@@ -211,7 +215,33 @@ def get_my_usage(
                 provider=provider,
                 input_per_mtok=input_per_mtok,
                 output_per_mtok=output_per_mtok,
+                cache_per_mtok=cache_per_mtok,
             )
+
+    # Price every configured chat model so users can compare costs, not just the
+    # tenant default. Dedup on (provider, model); skip unpriced models.
+    available_model_prices: list[ModelPrice] = []
+    seen: set[tuple[str, str]] = set()
+    for prov in fetch_existing_llm_providers(db_session, flow_type_filter=[]):
+        for mc in prov.model_configurations:
+            key = (prov.provider, mc.name)
+            if key in seen:
+                continue
+            seen.add(key)
+            in_per_mtok, out_per_mtok, cache_per_mtok = get_model_prices_per_million(
+                mc.name, prov.provider, db_session
+            )
+            if in_per_mtok is not None and out_per_mtok is not None:
+                available_model_prices.append(
+                    ModelPrice(
+                        model=mc.name,
+                        provider=prov.provider,
+                        input_per_mtok=in_per_mtok,
+                        output_per_mtok=out_per_mtok,
+                        cache_per_mtok=cache_per_mtok,
+                    )
+                )
+    available_model_prices.sort(key=lambda p: (p.input_per_mtok or 0.0, p.model))
 
     budget = _user_cost_budget(db_session, user_id)
 
@@ -222,6 +252,7 @@ def get_my_usage(
         budget_remaining_cents=(budget.remaining_cents if budget is not None else None),
         budget_period_hours=budget.period_hours if budget is not None else None,
         selected_model_price=selected_model_price,
+        available_model_prices=available_model_prices,
     )
 
 
@@ -273,6 +304,19 @@ def export_usage(
         end=end_date.isoformat(),
         users=users,
     )
+
+
+@admin_usage_router.post("/reset")
+def reset_usage(
+    payload: ResetUsageRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ResetUsageResponse:
+    """Clear a user's current UTC-day usage bucket."""
+    user = get_user_by_email(payload.user_email, db_session)
+    if user is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
+    return ResetUsageResponse(reset_rows=reset_user_usage(db_session, str(user.id)))
 
 
 @router.get("")

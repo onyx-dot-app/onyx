@@ -22,8 +22,6 @@ import { Spacer } from "@opal/components";
 const HOURS_PER_DAY = 24;
 const UTC_DAY_LABEL = "UTC day";
 const HOUR_LABEL = "hour";
-const COST_ONLY_LABEL = "Cost only";
-
 function formatPeriod(tokenRateLimit: TokenRateLimitDisplay): string {
   const isTokenBudget = tokenRateLimit.token_budget !== null;
   const value = isTokenBudget
@@ -67,6 +65,7 @@ export const TokenRateLimitTable = ({
     updateTokenRateLimit(id, {
       token_budget: tokenRateLimit.token_budget,
       period_hours: tokenRateLimit.period_hours,
+      cost_budget_cents: tokenRateLimit.cost_budget_cents,
       enabled: !tokenRateLimit.enabled,
     }).then(() => {
       mutate(fetchUrl);
@@ -116,7 +115,8 @@ export const TokenRateLimitTable = ({
             <TableHead>Enabled</TableHead>
             {shouldRenderGroupName() && <TableHead>Group Name</TableHead>}
             <TableHead>Time Window</TableHead>
-            <TableHead>Token Budget (Thousands)</TableHead>
+            <TableHead>Token Budget</TableHead>
+            <TableHead>Cost Budget (USD)</TableHead>
             {isAdmin && <TableHead>Delete</TableHead>}
           </TableRow>
         </TableHeader>
@@ -162,9 +162,15 @@ export const TokenRateLimitTable = ({
                 )}
                 <TableCell>{formatPeriod(tokenRateLimit)}</TableCell>
                 <TableCell>
-                  {tokenRateLimit.token_budget === null
-                    ? COST_ONLY_LABEL
-                    : `${tokenRateLimit.token_budget} thousand tokens`}
+                  {tokenRateLimit.token_budget != null
+                    ? (tokenRateLimit.token_budget * 1000).toLocaleString() +
+                      " tokens"
+                    : "—"}
+                </TableCell>
+                <TableCell>
+                  {tokenRateLimit.cost_budget_cents != null
+                    ? "$" + (tokenRateLimit.cost_budget_cents / 100).toFixed(2)
+                    : "—"}
                 </TableCell>
                 {isAdmin && (
                   <TableCell>

@@ -84,6 +84,15 @@ def _make_app(db_session: Session, user: _StubUser) -> FastAPI:
     return app
 
 
+@pytest.fixture(autouse=True)
+def _no_configured_providers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid querying LLM-provider tables absent from the SQLite test DB."""
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_existing_llm_providers",
+        lambda *_a, **_k: [],
+    )
+
+
 class _StubProvider:
     def __init__(self, provider: str | None) -> None:
         self.provider = provider
@@ -121,6 +130,17 @@ def _seed_usage(
         )
     )
     db_session.flush()
+
+
+class _StubMC:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class _StubProviderWithModels:
+    def __init__(self, provider: str | None, model_names: list[str]) -> None:
+        self.provider = provider
+        self.model_configurations = [_StubMC(n) for n in model_names]
 
 
 def _seed_current_window(db_session: Session, user_id: str) -> datetime.datetime:
@@ -310,8 +330,36 @@ def test_budget_reflects_global_cost_limit(
         TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage").json()
     )
     assert body["budget_cents"] == pytest.approx(100.0)
-    # 100 - (1.25 caller + 5.0 other): distinguishes GLOBAL from USER scope.
+    # Includes both users' spend because this is a global limit.
     assert body["budget_remaining_cents"] == pytest.approx(93.75)
+
+
+def test_available_model_prices_lists_priced_models(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    caller = str(uuid4())
+    _seed_current_window(db_session, caller)
+    monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
+    cost_overrides.invalidate_override_cache()
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_existing_llm_providers",
+        lambda *_a, **_k: [
+            _StubProviderWithModels("openai", ["gpt-4o", "totally-unknown-model-xyz"])
+        ],
+    )
+
+    body = (
+        TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage").json()
+    )
+    prices = {p["model"]: p for p in body["available_model_prices"]}
+    assert prices["gpt-4o"]["input_per_mtok"] == pytest.approx(2.5)
+    assert prices["gpt-4o"]["output_per_mtok"] == pytest.approx(10.0)
+    assert "cache_per_mtok" in prices["gpt-4o"]
+    # An unpriced model is skipped, not surfaced with null prices.
+    assert "totally-unknown-model-xyz" not in prices
 
 
 def test_budget_reflects_group_cost_limit(
