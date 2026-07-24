@@ -40,11 +40,10 @@ from onyx.configs.constants import (
     OnyxRedisLocks,
 )
 from onyx.db.connector_credential_pair import (
-    filter_cc_pair_ids_still_wont_port,
-    update_connector_credential_pair_from_id,
+    mark_cc_pairs_deleting_if_still_wont_port__no_commit,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ConnectorCredentialPairStatus, IndexReclaimStatus
+from onyx.db.enums import IndexReclaimStatus
 from onyx.db.models import SearchSettings
 from onyx.db.port_attempt import is_active_port_backfill_source
 from onyx.db.search_settings import (
@@ -107,30 +106,6 @@ def _new_index_can_serve(index_name: str) -> bool:
         client.close()
 
 
-def _fire_cc_pair_deletions(
-    db_session: Session,
-    celery_app: Celery,
-    tenant_id: str,
-    cc_pair_ids: list[int],
-) -> None:
-    """Mark the consented not-ported cc_pairs DELETING and kick the connector-deletion
-    pipeline (which is itself crash-resumable). Mirrors administrative.py's delete
-    trigger. Caller commits before this fires the task so the worker sees the rows."""
-    for cc_pair_id in cc_pair_ids:
-        update_connector_credential_pair_from_id(
-            db_session=db_session,
-            cc_pair_id=cc_pair_id,
-            status=ConnectorCredentialPairStatus.DELETING,
-        )
-    db_session.commit()
-    celery_app.send_task(
-        OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
-        priority=OnyxCeleryPriority.HIGH,
-        kwargs={"tenant_id": tenant_id},
-        expires=BEAT_EXPIRES_DEFAULT,
-    )
-
-
 def _drive_pending(
     db_session: Session,
     celery_app: Celery,
@@ -138,23 +113,35 @@ def _drive_pending(
     search_settings: SearchSettings,
 ) -> None:
     """PENDING: wait until nothing reads the old index anymore (swap done + port
-    drained — the single completeness gate, correct for INSTANT too), then fire the
-    consented cc_pair deletions and start the soak clock."""
+    drained — the single completeness gate, correct for INSTANT too), then atomically
+    move the still-not-recoverable consented connectors to DELETING and start the soak."""
     if is_active_port_backfill_source(db_session, search_settings.id):
         return
 
     consented = search_settings.pending_cc_pair_deletions or []
-    to_delete = filter_cc_pair_ids_still_wont_port(db_session, consented)
-    if to_delete:
-        _fire_cc_pair_deletions(db_session, celery_app, tenant_id, to_delete)
+    # Atomic conditional transition (re-validation + state change in one UPDATE) so a
+    # connector re-activated after consent was captured can't be clobbered into DELETING.
+    deleted = mark_cc_pairs_deleting_if_still_wont_port__no_commit(
+        db_session, consented
+    )
+    advanced = advance_to_soaking__no_commit(search_settings)
+    db_session.commit()
 
-    if advance_to_soaking__no_commit(search_settings):
-        db_session.commit()
+    if deleted:
+        # Kick the connector-deletion pipeline (crash-resumable) now that DELETING is
+        # committed and the worker can see it; mirrors administrative.py's delete trigger.
+        celery_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
+            priority=OnyxCeleryPriority.HIGH,
+            kwargs={"tenant_id": tenant_id},
+            expires=BEAT_EXPIRES_DEFAULT,
+        )
+    if advanced:
         task_logger.info(
             "Old-index reclaim %s -> SOAKING (index=%s, cc_pairs deleted=%d).",
             search_settings.id,
             search_settings.index_name,
-            len(to_delete),
+            len(deleted),
         )
 
 

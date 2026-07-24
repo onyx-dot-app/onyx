@@ -811,25 +811,32 @@ def compute_wont_port_cc_pair_ids(
     return sorted(cc_id for cc_id in db_session.scalars(stmt) if cc_id not in will_port)
 
 
-def filter_cc_pair_ids_still_wont_port(
+def mark_cc_pairs_deleting_if_still_wont_port__no_commit(
     db_session: Session, cc_pair_ids: list[int]
 ) -> list[int]:
-    """Of the given cc_pairs, those STILL not recoverable in the new index — i.e. still
-    INVALID or PAUSED. Re-validates a consented deletion set at fire time: a connector
-    re-activated (ACTIVE) or already DELETING before the port completes is spared.
-    One query — the caller must not loop per id."""
+    """Atomically move the given cc_pairs to DELETING, but ONLY those still INVALID or
+    PAUSED, returning the ids actually transitioned. Re-validation and the state change
+    are one conditional UPDATE, so a connector re-activated (-> ACTIVE) after the reclaim
+    consent set was captured is skipped, never clobbered into DELETING (Postgres rechecks
+    the WHERE under the row lock). The caller fires connector deletion only for the
+    returned ids and commits."""
     if not cc_pair_ids:
         return []
-    stmt = select(ConnectorCredentialPair.id).where(
-        ConnectorCredentialPair.id.in_(cc_pair_ids),
-        ConnectorCredentialPair.status.in_(
-            [
-                ConnectorCredentialPairStatus.INVALID,
-                ConnectorCredentialPairStatus.PAUSED,
-            ]
-        ),
+    stmt = (
+        update(ConnectorCredentialPair)
+        .where(
+            ConnectorCredentialPair.id.in_(cc_pair_ids),
+            ConnectorCredentialPair.status.in_(
+                [
+                    ConnectorCredentialPairStatus.INVALID,
+                    ConnectorCredentialPairStatus.PAUSED,
+                ]
+            ),
+        )
+        .values(status=ConnectorCredentialPairStatus.DELETING)
+        .returning(ConnectorCredentialPair.id)
     )
-    return list(db_session.scalars(stmt))
+    return list(db_session.execute(stmt).scalars().all())
 
 
 def fetch_connector_credential_pair_for_connector(
