@@ -141,6 +141,48 @@ export function buildModelProviderLookup(
 // ---------------------------------------------------------------------------
 
 /**
+ * Proper display names for known model vendors. Vendors arrive lowercase from
+ * the backend (e.g. "openai"), so naive capitalization would produce "Openai".
+ * Unknown vendors fall back to per-word title casing (see `vendorDisplayName`).
+ */
+const VENDOR_DISPLAY_NAMES: Record<string, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  google: "Google",
+  gemini: "Gemini",
+  amazon: "Amazon",
+  meta: "Meta",
+  "meta-llama": "Meta",
+  mistral: "Mistral",
+  mistralai: "Mistral",
+  cohere: "Cohere",
+  deepseek: "DeepSeek",
+  xai: "xAI",
+  perplexity: "Perplexity",
+  ai21: "AI21",
+  nvidia: "NVIDIA",
+  qwen: "Qwen",
+  alibaba: "Alibaba",
+  writer: "Writer",
+  microsoft: "Microsoft",
+  databricks: "Databricks",
+  stability: "Stability",
+};
+
+/**
+ * Resolves a lowercase vendor slug to its display name, using the known-vendor
+ * map and falling back to per-word title casing for unrecognized vendors.
+ */
+function vendorDisplayName(vendor: string): string {
+  const known = VENDOR_DISPLAY_NAMES[vendor.toLowerCase()];
+  if (known) return known;
+  return vendor
+    .split(/[\s_-]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+/**
  * Groups a flat list of model options by provider, treating aggregator
  * providers (e.g. Bedrock) as sub-grouped by vendor. Groups are sorted
  * alphabetically by display name.
@@ -164,9 +206,9 @@ export function groupLlmOptions(
     if (!groups.has(groupKey)) {
       let displayName: string;
       if (isAggregator && option.vendor) {
-        const vendorDisplayName =
-          option.vendor.charAt(0).toUpperCase() + option.vendor.slice(1);
-        displayName = `${option.providerDisplayName}/${vendorDisplayName}`;
+        displayName = `${option.providerDisplayName}/${vendorDisplayName(
+          option.vendor
+        )}`;
       } else {
         displayName = option.providerDisplayName;
       }
