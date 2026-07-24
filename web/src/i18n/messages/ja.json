@@ -3587,7 +3587,9 @@
           "label": "新規および更新されたドキュメントに適用"
         },
         "applyReindex": {
-          "label": "適用して再インデックス"
+          "label": "適用して再インデックス",
+          "statusesLoading": "コネクタの状態を読み込んでいます…",
+          "statusesFailed": "コネクタの状態を読み込めませんでした。再インデックスの前にもう一度お試しください。"
         },
         "rebuildAll": {
           "label": "既存のすべてのドキュメントを再構築"
@@ -3963,6 +3965,15 @@
         "serviceAccountJsonRequired": "サービスアカウント JSON は必須です",
         "targetUrlRequired": "ターゲット URL は必須です",
         "urlInvalid": "有効な URL を入力してください"
+      },
+      "wontPortConsentModal": {
+        "title": "一部のコネクタは再インデックスされません",
+        "submit": "削除して再インデックス",
+        "description": "{count, plural, one {このコネクタは新しいインデックスには引き継がれず、再インデックスの完了後に既存のデータは削除されます:} other {これら # 個のコネクタは新しいインデックスには引き継がれず、再インデックスの完了後に既存のデータは削除されます:}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "無効",
+        "statusPaused": "一時停止中",
+        "restoreHint": "コネクタのデータを後で復元するには、最初から再インデックスしてください。"
       }
     },
     "indexing": {

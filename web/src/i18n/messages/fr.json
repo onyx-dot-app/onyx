@@ -3587,7 +3587,9 @@
           "label": "Appliquer aux documents nouveaux et mis à jour"
         },
         "applyReindex": {
-          "label": "Appliquer et réindexer"
+          "label": "Appliquer et réindexer",
+          "statusesLoading": "Chargement de l'état des connecteurs…",
+          "statusesFailed": "Impossible de charger l'état des connecteurs — réessayez avant de réindexer."
         },
         "rebuildAll": {
           "label": "Reconstruire tous les documents existants"
@@ -3963,6 +3965,15 @@
         "serviceAccountJsonRequired": "Le JSON du compte de service est obligatoire",
         "targetUrlRequired": "L'URL cible est obligatoire",
         "urlInvalid": "Doit être une URL valide"
+      },
+      "wontPortConsentModal": {
+        "title": "Certains connecteurs ne seront pas réindexés",
+        "submit": "Supprimer et réindexer",
+        "description": "{count, plural, one {Ce connecteur ne sera pas repris dans le nouvel index et ses données existantes seront supprimées une fois la réindexation terminée :} other {Ces # connecteurs ne seront pas repris dans le nouvel index et leurs données existantes seront supprimées une fois la réindexation terminée :}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "non valide",
+        "statusPaused": "en pause",
+        "restoreHint": "Pour restaurer les données d'un connecteur plus tard, réindexez-le depuis le début."
       }
     },
     "indexing": {

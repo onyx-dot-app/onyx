@@ -3587,7 +3587,9 @@
           "label": "Auf neue und aktualisierte Dokumente anwenden"
         },
         "applyReindex": {
-          "label": "Anwenden & neu indizieren"
+          "label": "Anwenden & neu indizieren",
+          "statusesLoading": "Connector-Status wird geladen…",
+          "statusesFailed": "Connector-Status konnte nicht geladen werden — bitte vor dem Neuindizieren erneut versuchen."
         },
         "rebuildAll": {
           "label": "Alle vorhandenen Dokumente neu aufbauen"
@@ -3963,6 +3965,15 @@
         "serviceAccountJsonRequired": "Dienstkonto-JSON ist erforderlich",
         "targetUrlRequired": "Ziel-URL ist erforderlich",
         "urlInvalid": "Muss eine gültige URL sein"
+      },
+      "wontPortConsentModal": {
+        "title": "Einige Connectors werden nicht neu indiziert",
+        "submit": "Löschen & neu indizieren",
+        "description": "{count, plural, one {Dieser Connector wird nicht in den neuen Index übernommen, und seine vorhandenen Daten werden nach Abschluss der Neuindizierung gelöscht:} other {Diese # Connectors werden nicht in den neuen Index übernommen, und ihre vorhandenen Daten werden nach Abschluss der Neuindizierung gelöscht:}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "ungültig",
+        "statusPaused": "pausiert",
+        "restoreHint": "Um die Daten eines Connectors später wiederherzustellen, indizieren Sie ihn von Grund auf neu."
       }
     },
     "indexing": {

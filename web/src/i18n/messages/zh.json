@@ -3587,7 +3587,9 @@
           "label": "应用于新增和更新的文档"
         },
         "applyReindex": {
-          "label": "应用并重新索引"
+          "label": "应用并重新索引",
+          "statusesLoading": "正在加载连接器状态…",
+          "statusesFailed": "无法加载连接器状态 — 请在重新索引前重试。"
         },
         "rebuildAll": {
           "label": "重建所有现有文档"
@@ -3963,6 +3965,15 @@
         "serviceAccountJsonRequired": "服务账号 JSON 为必填项",
         "targetUrlRequired": "目标 URL 为必填项",
         "urlInvalid": "必须是有效的 URL"
+      },
+      "wontPortConsentModal": {
+        "title": "部分连接器不会被重新索引",
+        "submit": "删除并重新索引",
+        "description": "{count, plural, one {该连接器不会被迁移到新索引，重新索引完成后其现有数据将被删除：} other {这 # 个连接器不会被迁移到新索引，重新索引完成后它们的现有数据将被删除：}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "无效",
+        "statusPaused": "已暂停",
+        "restoreHint": "如需稍后恢复连接器的数据，请从头重新索引该连接器。"
       }
     },
     "indexing": {
