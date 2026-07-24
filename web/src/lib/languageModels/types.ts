@@ -38,6 +38,7 @@ export enum LLMProviderName {
   LM_STUDIO = "lm_studio",
   AZURE = "azure",
   OPENROUTER = "openrouter",
+  AVIAN = "avian",
   VERTEX_AI = "vertex_ai",
   BEDROCK = "bedrock",
   LITELLM = "litellm",

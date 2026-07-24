@@ -1,6 +1,7 @@
 import type { IconFunctionComponent } from "@opal/types";
 import { SvgCpu, SvgPlug, SvgServer } from "@opal/icons";
 import {
+  SvgAvian,
   SvgBifrost,
   SvgOpenai,
   SvgClaude,
@@ -102,6 +103,12 @@ const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "OpenRouter",
     Modal: OpenRouterModal,
   },
+  [LLMProviderName.AVIAN]: {
+    icon: SvgAvian,
+    productName: "Avian",
+    companyName: "Avian",
+    Modal: OpenAICompatibleModal,
+  },
   [LLMProviderName.LM_STUDIO]: {
     icon: SvgLmStudio,
     productName: "LM Studio",
@@ -178,6 +185,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.BEDROCK,
   "bedrock_converse",
   LLMProviderName.OPENROUTER,
+  LLMProviderName.AVIAN,
   LLMProviderName.OLLAMA_CHAT,
   LLMProviderName.LM_STUDIO,
   LLMProviderName.LITELLM_PROXY,
@@ -195,6 +203,7 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
   [LLMProviderName.LM_STUDIO]: SvgLmStudio,
   [LLMProviderName.OPENROUTER]: SvgOpenrouter,
+  [LLMProviderName.AVIAN]: SvgAvian,
   [LLMProviderName.VERTEX_AI]: SvgGemini,
   [LLMProviderName.BEDROCK]: SvgAws,
   [LLMProviderName.LITELLM_PROXY]: SvgLitellm,
