@@ -402,6 +402,42 @@ def get_chat_sessions_older_than(
     return returned_sessions
 
 
+def delete_chat_session_if_never_used(
+    chat_session_id: UUID,
+    db_session: Session,
+) -> bool:
+    """Hard-delete a chat session iff it has never contained a non-SYSTEM
+    message, i.e. holds no user-visible content.
+
+    Used best-effort by the send-message failure path: a failure before the
+    user message was committed would otherwise leave an unnamed husk session
+    behind. Returns True if the session was deleted.
+    """
+    session_exists = db_session.execute(
+        select(ChatSession.id).where(ChatSession.id == chat_session_id)
+    ).scalar_one_or_none()
+    if session_exists is None:
+        return False
+
+    has_user_visible_message = db_session.execute(
+        select(ChatMessage.id)
+        .where(ChatMessage.chat_session_id == chat_session_id)
+        .where(ChatMessage.message_type != MessageType.SYSTEM)
+        .limit(1)
+    ).scalar_one_or_none()
+    if has_user_visible_message is not None:
+        return False
+
+    delete_chat_session(
+        user_id=None,
+        chat_session_id=chat_session_id,
+        db_session=db_session,
+        include_deleted=True,
+        hard_delete=True,
+    )
+    return True
+
+
 def get_chat_message(
     chat_message_id: int,
     user_id: UUID | None,
