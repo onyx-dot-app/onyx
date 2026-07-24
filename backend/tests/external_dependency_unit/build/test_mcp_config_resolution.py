@@ -40,8 +40,8 @@ def craft_server(
     created: list[MCPServer] = []
 
     def _server(name: str, *, available_in_craft: bool) -> MCPServer:
-        # NONE auth keeps these fixtures about access + tool curation: they need
-        # no stored credentials to pass the emission filter.
+        # NONE auth keeps these fixtures about access + tool curation, not
+        # credentials.
         server = create_mcp_server__no_commit(
             owner_email="admin@example.com",
             name=name,
@@ -93,9 +93,8 @@ def test_per_user_server_emitted_only_once_credentials_connected(
     db_session: Session,
     craft_server: tuple[MCPServer, MCPServer],
 ) -> None:
-    """A PER_USER server the proxy can't authenticate is not emitted at all —
-    its tool discovery would be blocked at injection. Connecting credentials adds
-    it to the set, which changes the fingerprint so the session hot-reloads."""
+    """An unauthenticated PER_USER server is not emitted at all; connecting
+    credentials adds it, changing the fingerprint so the session hot-reloads."""
     craft, _ = craft_server
     craft.auth_type = MCPAuthenticationType.API_TOKEN
     craft.auth_performer = MCPAuthenticationPerformer.PER_USER
@@ -118,7 +117,7 @@ def test_per_user_server_emitted_only_once_credentials_connected(
     assert craft.id in {c.server_id for c in after}
     assert craft_mcp_fingerprint(after) != fp_before
 
-    # Disconnecting drops it back out, restoring the original fingerprint.
+    # Disconnecting drops it back out.
     db_session.delete(config)
     db_session.commit()
     assert (
@@ -131,8 +130,7 @@ def test_admin_managed_server_emitted_without_per_user_credentials(
     craft_server: tuple[MCPServer, MCPServer],
 ) -> None:
     """An ADMIN-performer server authenticates every user off the admin's stored
-    credential (`user_email=""`), so it must be emitted for a user who has no
-    per-user row of their own."""
+    credential (`user_email=""`), so a user with no per-user row still gets it."""
     craft, _ = craft_server
     craft.auth_type = MCPAuthenticationType.API_TOKEN
     craft.auth_performer = MCPAuthenticationPerformer.ADMIN

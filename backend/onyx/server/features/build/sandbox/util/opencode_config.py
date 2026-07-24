@@ -156,10 +156,9 @@ def build_session_mcp_config(
         config["permission"] = permission
     if mcp_servers:
         # Credentials are injected by the proxy; the only header we set is the
-        # session tag the proxy consumes and strips. ``oauth: false`` turns off
-        # opencode's own OAuth auto-detection — it would run discovery and
-        # dynamic client registration against paths the proxy blocks, and report
-        # `needs_auth` for servers the proxy authenticates fine.
+        # session tag the proxy consumes and strips. ``oauth: false`` keeps
+        # opencode from running its own discovery against paths the proxy
+        # blocks, which reports `needs_auth` for servers that work.
         config["mcp"] = {
             server.key: {
                 "type": "remote",

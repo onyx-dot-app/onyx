@@ -28,8 +28,7 @@ class CraftMCPServerConfig(BaseModel):
     the proxy injects credentials). ``key`` is the opencode server id.
 
     ``server_id`` is not emitted into ``opencode.json``; it feeds the per-session
-    runtime hash so a hot reload fires when the server set / tools change or the
-    user (dis)connects credentials (which adds/removes the server)."""
+    runtime hash so a hot reload fires when the server set or tools change."""
 
     key: str
     url: str

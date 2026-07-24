@@ -226,7 +226,7 @@ def test_delete_server_restamps_affected_running_sandbox(
     admin = create_test_user(db_session, "del_reload_admin", role=UserRole.ADMIN)
     sandbox = make_sandbox(db_session, admin, status=SandboxStatus.RUNNING)
     server = _make_craft_server(db_session, owner_email=admin.email, is_public=True)
-    # Credentials are what put the server in the resolved craft set at all.
+    # Credentials are what put the server in the resolved craft set.
     upsert_user_connection_config(
         server_id=server.id,
         user_email=admin.email,

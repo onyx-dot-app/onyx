@@ -44,16 +44,21 @@ def resolve_craft_mcp_servers(
 ) -> list[CraftMCPServerConfig]:
     """Craft-enabled MCP servers ``user`` may use, as opencode config input.
 
-    Filtered by access and by whether the proxy can authenticate ``user``
-    against the server: an unauthenticated server's tool discovery is blocked at
-    injection, so emitting it only buys a permanently failed MCP client. Set
-    membership is what the runtime fingerprint sees, so connecting or
-    disconnecting credentials still hot-reloads the session."""
-    servers = [
-        server
-        for server in get_craft_enabled_mcp_servers(db_session, user)
-        if _emit_or_log_skip(server, user, db_session)
-    ]
+    Filtered by access and by resolvable credentials — injection blocks an
+    unauthenticated server's tool discovery, so emitting it only buys a
+    permanently failed MCP client."""
+    servers: list[MCPServer] = []
+    for server in get_craft_enabled_mcp_servers(db_session, user):
+        if can_resolve_mcp_credentials(server, user, db_session):
+            servers.append(server)
+        else:
+            # Craft reads no MCP status back from opencode; this is the only
+            # trace of why a server is missing from a session's config.
+            logger.info(
+                "craft_mcp_skip_unauthenticated server_id=%s name=%r",
+                server.id,
+                server.name,
+            )
     disabled_by_server: dict[int, list[str]] = defaultdict(list)
     for tool in get_mcp_tools_for_servers([s.id for s in servers], db_session):
         if tool.mcp_server_id is not None and not tool.enabled:
@@ -67,20 +72,6 @@ def resolve_craft_mcp_servers(
         )
         for server in servers
     ]
-
-
-def _emit_or_log_skip(server: MCPServer, user: User, db_session: Session) -> bool:
-    """``can_resolve_mcp_credentials``, logging the skips. Craft reads no MCP
-    status back from opencode, so this is the only trace of why a server is
-    missing from a session's config."""
-    if can_resolve_mcp_credentials(server, user, db_session):
-        return True
-    logger.info(
-        "craft_mcp_skip_unauthenticated server_id=%s name=%r",
-        server.id,
-        server.name,
-    )
-    return False
 
 
 def write_session_mcp_config(
@@ -106,9 +97,9 @@ def write_session_mcp_config(
 def craft_mcp_fingerprint(mcp_servers: Sequence[CraftMCPServerConfig]) -> str:
     """Stable digest of everything about the craft MCP set that a running
     session must be rebuilt to pick up: the server set (id + url) and each
-    server's disabled-tool set. Credential state rides in set membership —
-    ``resolve_craft_mcp_servers`` omits servers the proxy can't authenticate, so
-    (dis)connecting credentials changes this digest. Order-independent."""
+    server's disabled-tool set. Credential state rides in set membership, since
+    ``resolve_craft_mcp_servers`` omits what it can't authenticate.
+    Order-independent."""
     payload = sorted(
         [
             s.server_id,

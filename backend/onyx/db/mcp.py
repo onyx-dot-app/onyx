@@ -500,13 +500,11 @@ def can_resolve_mcp_credentials(
     db_session: Session,
 ) -> bool:
     """Whether the sandbox proxy will be able to authenticate `user` against
-    `mcp_server`.
+    `mcp_server`, mirroring `MCPServerResolver._resolve_for_server`'s block
+    condition so callers can't drift from what injection does.
 
-    Mirrors `MCPServerResolver._resolve_for_server`'s terminal condition
-    (`requires_auth and not headers` blocks the request), so callers deciding
-    whether a server is usable cannot drift from what injection actually does.
-    Note this is NOT the same as the user having their own connection config:
-    admin-managed, `PT_OAUTH`, and no-auth servers all authenticate without one.
+    Not the same as the user having their own connection config: admin-managed,
+    `PT_OAUTH`, and no-auth servers all authenticate without one.
     """
     if mcp_server.auth_type in (None, MCPAuthenticationType.NONE):
         return True
