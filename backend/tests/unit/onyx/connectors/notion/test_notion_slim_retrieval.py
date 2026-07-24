@@ -9,7 +9,7 @@ database rows found only by block traversal).
 from contextlib import ExitStack
 from datetime import datetime, timezone
 from typing import Any, Iterator
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from onyx.connectors.models import Document, HierarchyNode, SlimDocument
 from onyx.connectors.notion.connector import (
@@ -45,6 +45,7 @@ def _raw_page(
 #   page-b: row of db-1 (returned by search)
 #   page-c: child page of page-a (NOT returned by search)
 #   page-e: row of db-1 (NOT returned by search)
+#   page-f: blank + untitled (returned by search; indexing skips it, slim must too)
 _RAW_PAGES: dict[str, dict[str, Any]] = {
     "page-a": _raw_page("page-a", {"type": "workspace", "workspace": True}, "A"),
     "page-b": _raw_page(
@@ -54,6 +55,7 @@ _RAW_PAGES: dict[str, dict[str, Any]] = {
     "page-e": _raw_page(
         "page-e", {"type": "data_source_id", "data_source_id": "ds-1"}, "E"
     ),
+    "page-f": _raw_page("page-f", {"type": "workspace", "workspace": True}),
 }
 
 _BLOCKS: dict[str, list[dict[str, Any]]] = {
@@ -96,7 +98,7 @@ def _search(query_dict: dict[str, Any]) -> NotionSearchResponse:
             has_more=False,
         )
     return NotionSearchResponse(
-        results=[_RAW_PAGES["page-a"], _RAW_PAGES["page-b"]],
+        results=[_RAW_PAGES["page-a"], _RAW_PAGES["page-b"], _RAW_PAGES["page-f"]],
         next_cursor=None,
         has_more=False,
     )
@@ -197,6 +199,8 @@ class TestSlimCoverage:
         full_doc_ids = {i.id for i in full_items if isinstance(i, Document)}
         slim_doc_ids = {i.id for i in slim_items if isinstance(i, SlimDocument)}
         assert full_doc_ids == {"page-a", "page-b", "page-c", "page-e"}
+        # Equality both ways: page-f (blank + untitled) is skipped by indexing,
+        # so slim must not emit it either — else its stale doc would never prune
         assert slim_doc_ids == full_doc_ids
 
         full_nodes = {i.raw_node_id for i in full_items if isinstance(i, HierarchyNode)}
@@ -208,9 +212,6 @@ class TestSlimCoverage:
         connector = NotionConnector()
         with ExitStack() as stack:
             mocks = _mock_workspace(connector, stack)
-            props_spy = stack.enter_context(
-                patch.object(connector, "_properties_to_str", MagicMock())
-            )
             items = _flatten(connector.retrieve_all_slim_docs())
 
         slim_by_id = {i.id: i for i in items if isinstance(i, SlimDocument)}
@@ -222,10 +223,9 @@ class TestSlimCoverage:
             2026, 1, 1, tzinfo=timezone.utc
         )
 
-        # Only non-search pages are fetched individually, and no row text is built
+        # Only non-search pages are fetched individually (lazily, when popped)
         fetched = {call.args[0] for call in mocks["_fetch_page"].call_args_list}
         assert fetched == {"page-c", "page-e"}
-        props_spy.assert_not_called()
 
     def test_root_page_mode_skips_search(self) -> None:
         connector = NotionConnector(root_page_id="page-a")
@@ -248,7 +248,6 @@ class TestSlimCoverage:
         node_ids = {i.raw_node_id for i in items if isinstance(i, HierarchyNode)}
         assert node_ids == {"ws-1", "db-1", "page-a"}
         mocks["_fetch_page"].assert_not_called()
-        mocks["_fetch_data_source"].assert_not_called()
 
 
 class TestSlimBlockWalk:
@@ -285,6 +284,7 @@ class TestSlimBlockWalk:
             "_fetch_child_blocks",
             side_effect=lambda block_id, _cursor=None: cycle[block_id],
         ):
-            output = connector._read_blocks_slim("page-1")
+            output = connector._read_blocks("page-1", is_slim=True)
 
         assert output.child_page_ids == []
+        assert output.blocks == []
