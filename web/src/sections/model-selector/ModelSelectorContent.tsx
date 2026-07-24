@@ -21,7 +21,7 @@ import {
 } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { Disabled, Hoverable, Interactive } from "@opal/core";
 import {
   GLOBAL_DEFAULT_LLM_OPTION,
@@ -152,15 +152,22 @@ const SLIDER_TRACK_CLASS =
   "h-1.5 w-full overflow-hidden rounded bg-background-tint-02";
 const SLIDER_FILL_CLASS = "h-full bg-theme-primary-05";
 
-/** Left icon slot for selectable rows: a blue check, or reserved space. */
-function selectionIcon(selected: boolean): IconFunctionComponent {
-  if (!selected) return (props) => <div {...(props as any)} />;
-  return (props) => (
+function EmptyIconSlot(props: IconProps) {
+  return <div {...(props as any)} />;
+}
+
+function SelectedCheckIcon(props: IconProps) {
+  return (
     <SvgCheck
-      {...(props as any)}
-      className={cn((props as any).className, "text-action-link-05")}
+      {...props}
+      className={cn(props.className, "text-action-link-05")}
     />
   );
+}
+
+/** Left icon slot for selectable rows: a blue check, or reserved space. */
+function selectionIcon(selected: boolean): IconFunctionComponent {
+  return selected ? SelectedCheckIcon : EmptyIconSlot;
 }
 
 interface PaneSliderProps {
@@ -210,6 +217,9 @@ interface SettingRowProps {
   /** Shown when hovering the value readout. */
   valueTooltip?: string;
   caption: string;
+  disabled?: boolean;
+  /** Shown when hovering the row while disabled. */
+  disabledTooltip?: string;
   children?: React.ReactNode;
 }
 
@@ -219,29 +229,33 @@ function SettingRow({
   value,
   valueTooltip,
   caption,
+  disabled = false,
+  disabledTooltip,
   children,
 }: SettingRowProps) {
   return (
-    <div className="flex flex-col rounded-08 p-1.5">
-      <div className="flex flex-row items-center gap-2">
-        <div className="flex size-5 items-center justify-center text-text-04">
-          <Icon size={16} />
+    <Disabled disabled={disabled} tooltip={disabledTooltip} tooltipSide="top">
+      <div className="flex flex-col rounded-08 p-1.5">
+        <div className="flex flex-row items-center gap-2">
+          <div className="flex size-5 items-center justify-center text-text-04">
+            <Icon size={16} />
+          </div>
+          <Text font="main-ui-action">{title}</Text>
+          <div className="flex-1" />
+          {value !== undefined && (
+            <Tooltip tooltip={valueTooltip} side="top">
+              <Text font="secondary-mono" color="text-04">
+                {value}
+              </Text>
+            </Tooltip>
+          )}
         </div>
-        <Text font="main-ui-action">{title}</Text>
-        <div className="flex-1" />
-        {value !== undefined && (
-          <Tooltip tooltip={valueTooltip} side="top">
-            <Text font="secondary-mono" color="text-04">
-              {value}
-            </Text>
-          </Tooltip>
-        )}
+        {children}
+        <Text font="secondary-body" color="text-03">
+          {caption}
+        </Text>
       </div>
-      {children}
-      <Text font="secondary-body" color="text-03">
-        {caption}
-      </Text>
-    </div>
+    </Disabled>
   );
 }
 
@@ -258,9 +272,8 @@ const UNKNOWN_CONTEXT_TOOLTIP =
   "Context size is not available for this model. Chats still apply a token limit automatically.";
 
 function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
-  // Backend pins temperature to 1 (or omits it) for reasoning models, so the
-  // slider is locked at 1. Reasoning is only adjustable when the model
-  // supports it.
+  // Backend pins temperature to 1 (or omits it) for reasoning models, so
+  // the slider is locked at 1.
   const temperatureManager = managers.temperature;
   const reasoningManager = managers.reasoning;
   const temperatureEnabled = !option.supportsReasoning && !!temperatureManager;
@@ -273,6 +286,7 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
     (modelSupportsXhigh(option)
       ? ALL_REASONING_STOPS.length
       : BASE_REASONING_STOPS.length) - 1;
+  const clampStop = (stop: number) => Math.min(stop, maxSupportedStop);
 
   const [localTemperature, setLocalTemperature] = useState(
     temperatureManager?.temperature ?? 0.5
@@ -283,9 +297,8 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
     reasoningManager?.reasoningEffort ?? "medium"
   );
   const [localEffortStop, setLocalEffortStop] = useState(
-    Math.min(
-      storedStop === -1 ? ALL_REASONING_STOPS.indexOf("medium") : storedStop,
-      maxSupportedStop
+    clampStop(
+      storedStop === -1 ? ALL_REASONING_STOPS.indexOf("medium") : storedStop
     )
   );
 
@@ -339,108 +352,97 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
         caption="Tokens limit for each session"
       />
 
-      <Disabled
+      <SettingRow
+        icon={SvgThermometer}
+        title="Temperature"
+        value={displayTemperature.toFixed(1)}
+        caption="How predictable or creative the model should respond"
         disabled={!temperatureEnabled}
-        tooltip={UNSUPPORTED_SETTING_TOOLTIP}
-        tooltipSide="top"
+        disabledTooltip={UNSUPPORTED_SETTING_TOOLTIP}
       >
-        <SettingRow
-          icon={SvgThermometer}
-          title="Temperature"
-          value={displayTemperature.toFixed(1)}
-          caption="How predictable or creative the model should respond"
-        >
-          <PaneSlider
-            value={displayTemperature}
-            min={0}
-            max={maxTemperature}
-            step={0.01}
-            disabled={!temperatureEnabled}
-            onValueChange={setLocalTemperature}
-            onValueCommit={(value) =>
-              temperatureManager?.updateTemperature(value)
-            }
-          />
-          <div className="flex flex-row items-center justify-between">
-            {["Deterministic", "Balanced", "Creative"].map((label, index) => (
-              <Text
-                key={label}
-                font="figure-small-value"
-                color={index === temperatureAnchor ? "text-04" : "text-02"}
-              >
-                {label}
-              </Text>
-            ))}
-          </div>
-        </SettingRow>
-      </Disabled>
+        <PaneSlider
+          value={displayTemperature}
+          min={0}
+          max={maxTemperature}
+          step={0.01}
+          disabled={!temperatureEnabled}
+          onValueChange={setLocalTemperature}
+          onValueCommit={(value) =>
+            temperatureManager?.updateTemperature(value)
+          }
+        />
+        <div className="flex flex-row items-center justify-between">
+          {["Deterministic", "Balanced", "Creative"].map((label, index) => (
+            <Text
+              key={label}
+              font="figure-small-value"
+              color={index === temperatureAnchor ? "text-04" : "text-02"}
+            >
+              {label}
+            </Text>
+          ))}
+        </div>
+      </SettingRow>
 
-      <Disabled
+      <SettingRow
+        icon={SvgBarChart}
+        title="Reasoning Level"
+        value={effortLabel}
+        caption="How much thinking the model should perform before answering"
         disabled={!reasoningEnabled}
-        tooltip={UNSUPPORTED_SETTING_TOOLTIP}
-        tooltipSide="top"
+        disabledTooltip={UNSUPPORTED_SETTING_TOOLTIP}
       >
-        <SettingRow
-          icon={SvgBarChart}
-          title="Reasoning Level"
-          value={effortLabel}
-          caption="How much thinking the model should perform before answering"
-        >
-          <PaneSlider
-            value={localEffortStop}
-            min={0}
-            max={ALL_REASONING_STOPS.length - 1}
-            step={1}
-            disabled={!reasoningEnabled}
-            onValueChange={(value) =>
-              setLocalEffortStop(Math.min(value, maxSupportedStop))
-            }
-            onValueCommit={(value) => {
-              const effort =
-                ALL_REASONING_STOPS[Math.min(value, maxSupportedStop)];
-              if (effort) reasoningManager?.updateReasoningEffort(effort);
-            }}
-          />
-          {/* Labels anchor at the slider's index/lastStop fractions so they
+        <PaneSlider
+          value={localEffortStop}
+          min={0}
+          max={ALL_REASONING_STOPS.length - 1}
+          step={1}
+          disabled={!reasoningEnabled}
+          onValueChange={(value) => setLocalEffortStop(clampStop(value))}
+          onValueCommit={(value) => {
+            const effort = ALL_REASONING_STOPS[clampStop(value)];
+            if (effort) reasoningManager?.updateReasoningEffort(effort);
+          }}
+        />
+        {/* Labels anchor at the slider's index/lastStop fractions so they
               line up with the stops. End labels align to the row edges to
               avoid overflow. */}
-          <div className="relative h-4 w-full">
-            {ALL_REASONING_STOPS.map((stop, index) => {
-              const lastStop = ALL_REASONING_STOPS.length - 1;
-              return (
-                <div
-                  key={stop}
-                  className={cn(
-                    "absolute top-0",
-                    index === lastStop
-                      ? "-translate-x-full"
-                      : index > 0 && "-translate-x-1/2"
-                  )}
-                  style={{ left: `${(index / lastStop) * 100}%` }}
+        <div className="relative h-4 w-full">
+          {ALL_REASONING_STOPS.map((stop, index) => {
+            const lastStop = ALL_REASONING_STOPS.length - 1;
+            return (
+              <div
+                key={stop}
+                className={cn(
+                  "absolute top-0",
+                  index === lastStop
+                    ? "-translate-x-full"
+                    : index > 0 && "-translate-x-1/2"
+                )}
+                style={{ left: `${(index / lastStop) * 100}%` }}
+              >
+                <Disabled
+                  disabled={reasoningEnabled && index > maxSupportedStop}
+                  tooltip={UNSUPPORTED_SETTING_TOOLTIP}
+                  tooltipSide="top"
                 >
-                  <Disabled
-                    disabled={reasoningEnabled && index > maxSupportedStop}
-                    tooltip={UNSUPPORTED_SETTING_TOOLTIP}
-                    tooltipSide="top"
+                  <Text
+                    font="figure-small-value"
+                    color={
+                      reasoningEnabled && index === localEffortStop
+                        ? "text-04"
+                        : "text-02"
+                    }
+                    nowrap
                   >
-                    <Text
-                      font="figure-small-value"
-                      color={
-                        reasoningEnabled && index === localEffortStop
-                          ? "text-04"
-                          : "text-02"
-                      }
-                      nowrap
-                    >
-                      {REASONING_STOP_LABELS[stop]}
-                    </Text>
-                  </Disabled>
-                </div>
-              );
-            })}
-          </div>
-        </SettingRow>
-      </Disabled>
+                    {REASONING_STOP_LABELS[stop]}
+                  </Text>
+                </Disabled>
+              </div>
+            );
+          })}
+        </div>
+      </SettingRow>
     </div>
   );
 }

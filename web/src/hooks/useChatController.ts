@@ -877,9 +877,9 @@ export default function useChatController({
       let streamSucceeded = false;
 
       try {
-        // When the manager has no bound session row, this submit is the only
-        // write path for the overrides. Awaited so the send cannot race the
-        // session-row read. A failure renders as a chat error.
+        // Overrides picked before the session row existed are not yet
+        // persisted. Await the writes so the backend's session-row read
+        // during the send sees them. A failed write surfaces as a chat error.
         if (!llmManager.hasBoundSession) {
           const overrideWrites: Promise<Response>[] = [];
           if (llmManager.reasoningEffort) {
