@@ -202,6 +202,71 @@ class TestGetChatSessionsByUser:
         assert recent_no_msgs.id in result_ids
         assert old_failed.id not in result_ids
 
+    def test_fetches_next_batch_when_filtering_undershoots(
+        self, user_id: UUID, old_time: datetime
+    ) -> None:
+        """When failed sessions shrink a batch below the limit, the next batch
+        is fetched with a keyset cursor instead of fetching the full history."""
+        # limit=2 fetches batches of 2 + slack (10) = 12 rows.
+        first_batch = [
+            _make_session(
+                user_id,
+                time_created=old_time,
+                time_updated=old_time - timedelta(minutes=i),
+            )
+            for i in range(12)
+        ]
+        second_batch = [
+            _make_session(
+                user_id,
+                time_created=old_time,
+                time_updated=old_time - timedelta(minutes=20 + i),
+            )
+            for i in range(2)
+        ]
+
+        db_session = MagicMock(spec=Session)
+
+        # Batch 1: only one of the 12 sessions is valid -> undershoots limit.
+        mock_batch_1 = MagicMock()
+        mock_batch_1.scalars.return_value.all.return_value = first_batch
+        mock_filter_1 = MagicMock()
+        mock_filter_1.scalars.return_value.all.return_value = [first_batch[0].id]
+
+        # Batch 2: both sessions are valid.
+        mock_batch_2 = MagicMock()
+        mock_batch_2.scalars.return_value.all.return_value = second_batch
+        mock_filter_2 = MagicMock()
+        mock_filter_2.scalars.return_value.all.return_value = [
+            s.id for s in second_batch
+        ]
+
+        db_session.execute.side_effect = [
+            mock_batch_1,
+            mock_filter_1,
+            mock_batch_2,
+            mock_filter_2,
+        ]
+
+        result = get_chat_sessions_by_user(
+            user_id=user_id,
+            deleted=False,
+            db_session=db_session,
+            include_failed_chats=False,
+            limit=2,
+        )
+
+        assert [cs.id for cs in result] == [first_batch[0].id, second_batch[0].id]
+        assert db_session.execute.call_count == 4
+
+        # Both session fetches are SQL-limited, and the second one is
+        # keyset-cursored on the last row of the first batch.
+        first_stmt = db_session.execute.call_args_list[0].args[0]
+        second_stmt = db_session.execute.call_args_list[2].args[0]
+        assert "LIMIT" in str(first_stmt)
+        assert "LIMIT" in str(second_stmt)
+        assert first_batch[-1].time_updated in second_stmt.compile().params.values()
+
     def test_empty_result(self, user_id: UUID) -> None:
         """No sessions should return empty list without errors."""
         db_session = MagicMock(spec=Session)

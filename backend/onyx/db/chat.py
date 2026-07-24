@@ -93,6 +93,40 @@ def get_chat_sessions_by_slack_thread_id(
     return db_session.scalars(stmt).all()
 
 
+# Number of extra rows fetched beyond the requested limit when filtering out
+# failed chats, so that a page containing a few failed sessions can still be
+# served by a single query.
+_FAILED_CHAT_FETCH_SLACK = 10
+
+
+def _filter_out_failed_chat_sessions(
+    chat_sessions: list[ChatSession],
+    leeway: datetime,
+    db_session: Session,
+) -> list[ChatSession]:
+    """Drop "failed" sessions: those created before `leeway` with only SYSTEM
+    messages. Uses a separate query on chat_message instead of a correlated
+    EXISTS subquery, which causes full sequential scans of chat_message.
+    """
+    session_ids = [cs.id for cs in chat_sessions if cs.time_created < leeway]
+    if not session_ids:
+        return chat_sessions
+
+    valid_session_ids_stmt = (
+        select(ChatMessage.chat_session_id)
+        .where(ChatMessage.chat_session_id.in_(session_ids))
+        .where(ChatMessage.message_type != MessageType.SYSTEM)
+        .distinct()
+    )
+    valid_session_ids = set(db_session.execute(valid_session_ids_stmt).scalars().all())
+
+    return [
+        cs
+        for cs in chat_sessions
+        if cs.time_created >= leeway or cs.id in valid_session_ids
+    ]
+
+
 # Retrieves chat sessions by user
 # Chat sessions do not include onyxbot flows
 def get_chat_sessions_by_user(
@@ -115,50 +149,45 @@ def get_chat_sessions_by_user(
     if deleted is not None:
         stmt = stmt.where(ChatSession.deleted == deleted)
 
-    if before is not None:
-        stmt = stmt.where(ChatSession.time_updated < before)
-
     if project_id is not None:
         stmt = stmt.where(ChatSession.project_id == project_id)
     elif only_non_project_chats:
         stmt = stmt.where(ChatSession.project_id.is_(None))
 
-    # When filtering out failed chats, we apply the limit in Python after
-    # filtering rather than in SQL, since the post-filter may remove rows.
-    if limit and include_failed_chats:
-        stmt = stmt.limit(limit)
-
-    result = db_session.execute(stmt)
-    chat_sessions = list(result.scalars().all())
-
-    if not include_failed_chats and chat_sessions:
-        # Filter out "failed" sessions (those with only SYSTEM messages)
-        # using a separate efficient query instead of a correlated EXISTS
-        # subquery, which causes full sequential scans of chat_message.
-        leeway = datetime.now(timezone.utc) - timedelta(minutes=5)
-        session_ids = [cs.id for cs in chat_sessions if cs.time_created < leeway]
-
-        if session_ids:
-            valid_session_ids_stmt = (
-                select(ChatMessage.chat_session_id)
-                .where(ChatMessage.chat_session_id.in_(session_ids))
-                .where(ChatMessage.message_type != MessageType.SYSTEM)
-                .distinct()
-            )
-            valid_session_ids = set(
-                db_session.execute(valid_session_ids_stmt).scalars().all()
-            )
-
-            chat_sessions = [
-                cs
-                for cs in chat_sessions
-                if cs.time_created >= leeway or cs.id in valid_session_ids
-            ]
-
+    if include_failed_chats or not limit:
+        # Single fetch: the SQL LIMIT is exact when failed chats are included,
+        # and limit=0 callers want the full history either way.
+        if before is not None:
+            stmt = stmt.where(ChatSession.time_updated < before)
         if limit:
-            chat_sessions = chat_sessions[:limit]
+            stmt = stmt.limit(limit)
+        chat_sessions = list(db_session.execute(stmt).scalars().all())
+        if include_failed_chats:
+            return chat_sessions
+        leeway = datetime.now(timezone.utc) - timedelta(minutes=5)
+        return _filter_out_failed_chat_sessions(chat_sessions, leeway, db_session)
 
-    return chat_sessions
+    # The failed-chat filter runs in Python, so a plain SQL LIMIT could
+    # undershoot after filtering. Instead of fetching the user's entire
+    # history, fetch limit + slack rows at a time and keyset-paginate
+    # (time_updated < last row, the same semantics as `before` — including
+    # its caveat that rows tied on time_updated at a boundary are skipped)
+    # only if filtering leaves fewer than `limit` survivors.
+    leeway = datetime.now(timezone.utc) - timedelta(minutes=5)
+    batch_size = limit + _FAILED_CHAT_FETCH_SLACK
+    cursor = before
+    chat_sessions: list[ChatSession] = []
+    while True:
+        batch_stmt = stmt
+        if cursor is not None:
+            batch_stmt = batch_stmt.where(ChatSession.time_updated < cursor)
+        batch = list(db_session.execute(batch_stmt.limit(batch_size)).scalars().all())
+        chat_sessions.extend(
+            _filter_out_failed_chat_sessions(batch, leeway, db_session)
+        )
+        if len(chat_sessions) >= limit or len(batch) < batch_size:
+            return chat_sessions[:limit]
+        cursor = batch[-1].time_updated
 
 
 def delete_orphaned_search_docs(db_session: Session) -> None:
