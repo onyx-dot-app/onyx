@@ -16,8 +16,8 @@ from onyx.llm.well_known_providers.auto_update_models import (
 )
 from onyx.llm.well_known_providers.models import SimpleKnownModel
 from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
     GatewayModelConfig,
-    LLMProviderConfig,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_provider_opencode_config,
@@ -196,13 +196,12 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
     fetch_providers.assert_called_once_with(manager._db_session, user)  # type: ignore[attr-defined]
 
 
-def _gateway_config() -> LLMProviderConfig:
-    return LLMProviderConfig(
+def _gateway_config() -> CraftLLMProviderConfig:
+    return CraftLLMProviderConfig(
         provider="onyx",
         model_name="13/gpt-5-mini",
         api_key="proxy-placeholder",
         api_base="https://onyx.test/gateway/v1",
-        npm_package="@ai-sdk/openai-compatible",
         models=[
             GatewayModelConfig(
                 id="13/gpt-5-mini",
@@ -226,7 +225,7 @@ def test_gateway_config_falls_back_when_requested_selection_is_stale() -> None:
 
 
 def _reconcile_manager(
-    config: LLMProviderConfig,
+    config: CraftLLMProviderConfig,
 ) -> tuple[SessionManager, MagicMock, MagicMock]:
     """(manager, sandbox_manager mock, build_llm_configs mock) — the mocks are
     returned as plain MagicMocks so assertions don't go through the typed

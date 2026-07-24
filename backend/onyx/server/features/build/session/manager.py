@@ -57,9 +57,9 @@ from onyx.server.features.build.db.sandbox import (
 from onyx.server.features.build.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
     DirectoryListing,
     FilesystemEntry,
-    LLMProviderConfig,
 )
 from onyx.server.features.build.sandbox.serve_transport import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
@@ -196,7 +196,7 @@ class SessionManager:
         self,
         user: User,
         selection: AgentSelection | None = None,
-    ) -> LLMProviderConfig:
+    ) -> CraftLLMProviderConfig:
         gateway_config = build_onyx_gateway_config(
             fetch_all_accessible_llm_providers(self._db_session, user),
             selection,
@@ -256,7 +256,7 @@ class SessionManager:
 
     def _session_llm_config(
         self, session: BuildSession, user: User
-    ) -> LLMProviderConfig:
+    ) -> CraftLLMProviderConfig:
         """Resolve the LLM config a session's opencode.json should carry from
         its persisted provider/model selection (falling back to the gateway
         default when the selection is unset or no longer accessible)."""

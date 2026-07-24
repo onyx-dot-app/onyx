@@ -56,10 +56,10 @@ from uuid import UUID
 
 from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
 from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
     CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
-    LLMProviderConfig,
     SandboxInfo,
     SnapshotResult,
 )
@@ -305,7 +305,7 @@ class StubSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
@@ -347,7 +347,7 @@ class StubSandboxManager(SandboxManager):
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
-        llm_config: LLMProviderConfig | None = None,
+        llm_config: CraftLLMProviderConfig | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         self.regenerate_session_config_count += 1
@@ -412,7 +412,7 @@ class StubSandboxManager(SandboxManager):
         session_id: UUID,
         snapshot_storage_path: str,
         nextjs_port: int | None,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         connectable_apps_section: str,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:

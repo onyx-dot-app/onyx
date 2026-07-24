@@ -6,9 +6,9 @@ import pytest
 
 from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
 from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
     CraftMCPServerConfig,
     GatewayModelConfig,
-    LLMProviderConfig,
 )
 from onyx.server.features.build.sandbox.util.mcp_config import craft_mcp_fingerprint
 from onyx.server.features.build.sandbox.util.opencode_config import (
@@ -17,13 +17,12 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 
 
-def _gateway(*, default: str = "7/gpt-5.5") -> LLMProviderConfig:
-    return LLMProviderConfig(
+def _gateway(*, default: str = "7/gpt-5.5") -> CraftLLMProviderConfig:
+    return CraftLLMProviderConfig(
         provider="onyx",
         model_name=default,
         api_key="proxy-placeholder",
         api_base="https://onyx.test/api/gateway/v1",
-        npm_package="@ai-sdk/openai-compatible",
         display_name="Onyx",
         models=[
             GatewayModelConfig(id="7/gpt-5.5", display_name="GPT-5.5"),

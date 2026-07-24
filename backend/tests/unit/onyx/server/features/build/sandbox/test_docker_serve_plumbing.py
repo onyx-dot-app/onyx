@@ -31,8 +31,8 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     DockerSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
     GatewayModelConfig,
-    LLMProviderConfig,
 )
 
 _SBX = UUID("12345678-1234-1234-1234-1234567890ab")
@@ -231,8 +231,8 @@ def test_load_serve_connection_info_handles_password_with_equals_sign() -> None:
 
 
 @pytest.fixture
-def llm_config() -> LLMProviderConfig:
-    return LLMProviderConfig(
+def llm_config() -> CraftLLMProviderConfig:
+    return CraftLLMProviderConfig(
         provider="openai",
         model_name="gpt-5-mini",
         api_key="sk-test",
@@ -241,7 +241,7 @@ def llm_config() -> LLMProviderConfig:
 
 
 def test_render_agents_md_returns_escaped_string(
-    llm_config: LLMProviderConfig,
+    llm_config: CraftLLMProviderConfig,
 ) -> None:
     mgr = _bare_manager()
     agents_md = mgr._render_agents_md(
@@ -275,12 +275,11 @@ def test_setup_writes_fresh_gateway_catalog_before_instance_start(
     monkeypatch.setattr(
         manager, "_render_agents_md", MagicMock(return_value="instructions")
     )
-    gateway = LLMProviderConfig(
+    gateway = CraftLLMProviderConfig(
         provider="onyx",
         model_name="13/gpt-5-mini",
         api_key="proxy-placeholder",
         api_base="https://onyx.example.com/gateway/v1",
-        npm_package="@ai-sdk/openai-compatible",
         models=[
             GatewayModelConfig(
                 id="13/gpt-5-mini",

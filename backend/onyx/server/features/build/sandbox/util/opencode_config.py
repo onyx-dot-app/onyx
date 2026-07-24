@@ -9,32 +9,14 @@ instance is disposed — so a model change or an MCP-set change hot-reloads
 without a pod re-provision.
 """
 
-import re
 from collections.abc import Sequence
 from typing import Any
 
 from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
 from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
     CraftMCPServerConfig,
-    LLMProviderConfig,
 )
-
-_ADAPTIVE_THINKING_MODELS = frozenset(
-    {"claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6"}
-)
-_CLAUDE_MAJOR_VERSION = re.compile(r"claude[.-](?:[a-z]+[.-])?(\d+)")
-
-
-def _uses_adaptive_thinking(model_name: str) -> bool:
-    normalized_name = model_name.lower()
-    if normalized_name in _ADAPTIVE_THINKING_MODELS or normalized_name.startswith(
-        tuple(f"{model}-" for model in _ADAPTIVE_THINKING_MODELS)
-    ):
-        return True
-
-    match = _CLAUDE_MAJOR_VERSION.search(normalized_name)
-    return match is not None and int(match.group(1)) >= 5
-
 
 # Fallback output budget for gateway models the litellm map has no entry for
 # (build_onyx_gateway_config derives the real per-model value). 128k matches the
@@ -42,19 +24,9 @@ def _uses_adaptive_thinking(model_name: str) -> bool:
 # providers enforce their own real caps regardless.
 _GATEWAY_DEFAULT_MAX_OUTPUT_TOKENS = 128_000
 
-
-def _model_options(provider: str, model_name: str) -> dict[str, Any]:
-    if provider == "openai":
-        return {"reasoningEffort": "high"}
-    if provider in ("anthropic", "bedrock"):
-        if _uses_adaptive_thinking(model_name):
-            return {"thinking": {"type": "adaptive", "display": "summarized"}}
-        return {"thinking": {"type": "enabled", "budgetTokens": 16000}}
-    if provider == "google":
-        return {"thinking_budget": 16000, "thinking_level": "high"}
-    if provider == "azure":
-        return {"reasoningEffort": "high"}
-    return {}
+# The gateway is an OpenAI-compatible endpoint, wired via opencode's
+# openai-compatible SDK package.
+_OPENAI_COMPATIBLE_NPM = "@ai-sdk/openai-compatible"
 
 
 _PERMISSIONS_TEMPLATE: dict[str, Any] = {
@@ -179,34 +151,16 @@ def _build_session_mcp_block(
 
 
 def _build_provider_block(
-    llm_provider_config: LLMProviderConfig,
+    llm_provider_config: CraftLLMProviderConfig,
 ) -> dict[str, Any]:
-    if llm_provider_config.npm_package is not None:
-        return _build_custom_provider_block(llm_provider_config)
-    block: dict[str, Any] = {}
-    if llm_provider_config.api_key:
-        block["options"] = {"apiKey": llm_provider_config.api_key}
-    if llm_provider_config.api_base:
-        block["api"] = llm_provider_config.api_base
-    options = _model_options(
-        llm_provider_config.provider, llm_provider_config.model_name
-    )
-    if options:
-        block["models"] = {llm_provider_config.model_name: {"options": options}}
-    return block
-
-
-def _build_custom_provider_block(
-    llm_provider_config: LLMProviderConfig,
-) -> dict[str, Any]:
-    """Unlike native providers, a custom provider's baseURL goes in
-    ``options`` and its model list must be explicit (no models.dev entry)."""
+    """The gateway is an openai-compatible provider with no models.dev entry, so
+    its baseURL goes in ``options`` and its model list must be explicit."""
     options: dict[str, Any] = {}
     if llm_provider_config.api_key:
         options["apiKey"] = llm_provider_config.api_key
     if llm_provider_config.api_base:
         options["baseURL"] = llm_provider_config.api_base
-    block: dict[str, Any] = {"npm": llm_provider_config.npm_package, "options": options}
+    block: dict[str, Any] = {"npm": _OPENAI_COMPATIBLE_NPM, "options": options}
     if llm_provider_config.display_name:
         block["name"] = llm_provider_config.display_name
     models: dict[str, Any] = {}
@@ -246,7 +200,7 @@ def build_opencode_base_config(
 
 
 def build_provider_opencode_config(
-    llm_provider_config: LLMProviderConfig,
+    llm_provider_config: CraftLLMProviderConfig,
     disabled_tools: list[str] | None = None,
     dev_mode: bool = False,
     plugins: list[str] | None = None,
@@ -265,8 +219,6 @@ def build_provider_opencode_config(
         raise ValueError(
             f"default model {llm_provider_config.model_name!r} is not in the provider catalog"
         )
-    if mcp_servers and session_id is None:
-        raise ValueError("session_id is required when mcp_servers are provided")
 
     config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
@@ -280,6 +232,7 @@ def build_provider_opencode_config(
     if plugins:
         config["plugin"] = list(plugins)
     if mcp_servers:
-        assert session_id is not None  # guarded above
+        if session_id is None:
+            raise ValueError("session_id is required when mcp_servers are provided")
         config["mcp"] = _build_session_mcp_block(mcp_servers, session_id)
     return config

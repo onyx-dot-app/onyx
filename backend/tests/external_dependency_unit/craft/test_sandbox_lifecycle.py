@@ -29,10 +29,10 @@ from onyx.server.features.build.db.sandbox import (
     get_running_sandboxes,
 )
 from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
     CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
-    LLMProviderConfig,
     SandboxInfo,
 )
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
@@ -480,7 +480,7 @@ class _PushRecordingStub(StubSandboxManager):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
@@ -503,7 +503,7 @@ class _PushRecordingStub(StubSandboxManager):
         session_id: UUID,
         snapshot_storage_path: str,
         nextjs_port: int | None,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         connectable_apps_section: str,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:

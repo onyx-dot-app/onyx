@@ -12,8 +12,8 @@ from onyx.server.features.build.configs import (
     SANDBOX_PROXY_INJECTED_PLACEHOLDER,
 )
 from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
     GatewayModelConfig,
-    LLMProviderConfig,
 )
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
@@ -140,7 +140,7 @@ def _select_gateway_default(
 def build_onyx_gateway_config(
     gateway_providers: list[LLMProviderView],
     selection: AgentSelection | None = None,
-) -> LLMProviderConfig | None:
+) -> CraftLLMProviderConfig | None:
     if not ONYX_SERVER_URL:
         return None
 
@@ -186,14 +186,13 @@ def build_onyx_gateway_config(
     api_root = ONYX_SERVER_URL.rstrip("/")
     api_base = f"{api_root}{GATEWAY_PATH_PREFIX}/v1"
     default_provider_id, default_model_name = default_selection
-    return LLMProviderConfig(
+    return CraftLLMProviderConfig(
         provider=ONYX_GATEWAY_PROVIDER_ID,
         model_name=f"{default_provider_id}/{default_model_name}",
         # The egress proxy overwrites auth headers for the API host with the
         # sandbox PAT; the key here is never used.
         api_key=SANDBOX_PROXY_INJECTED_PLACEHOLDER,
         api_base=api_base,
-        npm_package="@ai-sdk/openai-compatible",
         display_name="Onyx",
         models=models,
     )

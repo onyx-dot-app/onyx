@@ -31,11 +31,11 @@ from onyx.server.features.build.sandbox.event_schema import (
     ToolCallStart,
 )
 from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
     CraftMCPServerConfig,
     FatalWriteError,
     FileSet,
     FilesystemEntry,
-    LLMProviderConfig,
     PushFailure,
     PushResult,
     RetriableWriteError,
@@ -162,7 +162,7 @@ class SandboxManager(_ServeMixin, ABC):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
@@ -220,7 +220,7 @@ class SandboxManager(_ServeMixin, ABC):
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
-        llm_config: LLMProviderConfig | None = None,
+        llm_config: CraftLLMProviderConfig | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Rewrite generated session configuration without replacing outputs."""
@@ -264,7 +264,7 @@ class SandboxManager(_ServeMixin, ABC):
         session_id: UUID,
         snapshot_storage_path: str,
         nextjs_port: int | None,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         connectable_apps_section: str,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
