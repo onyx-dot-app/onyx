@@ -318,6 +318,7 @@ def import_github_skills(
         _github_authorization_header(user),
         revision=request.revision,
         subpath=request.subpath,
+        selected_paths=set(request.paths),
     )
     skills_by_path = {skill.path: skill for skill in discovered_skills}
     selected_paths = list(dict.fromkeys(request.paths))
@@ -391,7 +392,6 @@ def import_github_skills(
                     db_session,
                     include_share_details=True,
                 ),
-                enabled=enabled,
                 disabled_reason=(
                     None
                     if enabled

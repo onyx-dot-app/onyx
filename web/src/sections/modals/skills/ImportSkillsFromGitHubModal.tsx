@@ -14,6 +14,7 @@ import {
 } from "@opal/components";
 import { SvgArrowRight } from "@opal/icons";
 import { SvgGithub } from "@opal/logos";
+import { cn } from "@opal/utils";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useUser } from "@/providers/UserProvider";
 import { importGitHubSkills, previewGitHubSkills } from "@/lib/skills/api";
@@ -149,40 +150,38 @@ export function ImportSkillsFromGitHubModalView({
         .map((skill) => skill.path) ?? [],
     [preview]
   );
+  const selectedPathSet = useMemo(
+    () => new Set(selectedPaths),
+    [selectedPaths]
+  );
   const allImportableSelected =
     importablePaths.length > 0 &&
-    importablePaths.every((path) => selectedPaths.includes(path));
+    importablePaths.every((path) => selectedPathSet.has(path));
   const githubApp = externalApps?.find((app) => app.app_type === "GITHUB");
-  const privateRepositoryGuidance = githubApp?.authenticated
-    ? {
-        message:
-          "Public repositories import directly. Private repositories use your GitHub connection.",
-        action: null,
-      }
-    : githubApp
-      ? {
-          message:
-            "Public repositories import directly. Connect GitHub to import private repositories.",
-          action: {
-            label: "Connect GitHub",
-            href: "/craft/v1/apps" as Route,
-          },
-        }
-      : externalApps && isAdmin
-        ? {
-            message:
-              "Public repositories import directly. Set up GitHub before importing private repositories.",
-            action: {
-              label: "Set up GitHub",
-              href: "/admin/craft/apps" as Route,
-            },
-          }
-        : {
-            message: externalApps
-              ? "Public repositories import directly. Ask an admin to set up GitHub before importing private repositories."
-              : "Public repositories import directly. Private repositories require a GitHub connection.",
-            action: null,
-          };
+  let privateRepositoryMessage =
+    "Public repositories import directly. Private repositories require a GitHub connection.";
+  let privateRepositoryAction: { label: string; href: Route } | null = null;
+  if (githubApp?.authenticated) {
+    privateRepositoryMessage =
+      "Public repositories import directly. Private repositories use your GitHub connection.";
+  } else if (githubApp) {
+    privateRepositoryMessage =
+      "Public repositories import directly. Connect GitHub to import private repositories.";
+    privateRepositoryAction = {
+      label: "Connect GitHub",
+      href: "/craft/v1/apps",
+    };
+  } else if (externalApps && isAdmin) {
+    privateRepositoryMessage =
+      "Public repositories import directly. Set up GitHub before importing private repositories.";
+    privateRepositoryAction = {
+      label: "Set up GitHub",
+      href: "/admin/craft/apps",
+    };
+  } else if (externalApps) {
+    privateRepositoryMessage =
+      "Public repositories import directly. Ask an admin to set up GitHub before importing private repositories.";
+  }
 
   const previewUnavailable =
     preview?.skills
@@ -192,22 +191,22 @@ export function ImportSkillsFromGitHubModalView({
         name: skill.name,
         reason: skill.unavailable_reason ?? "This skill cannot be imported.",
       })) ?? [];
+  const previewUnavailablePaths = new Set(
+    previewUnavailable.map((item) => item.path)
+  );
   const resultNotImported = result
     ? [
         ...previewUnavailable,
         ...result.not_imported.filter(
-          (item) =>
-            !previewUnavailable.some(
-              (previewItem) => previewItem.path === item.path
-            )
+          (item) => !previewUnavailablePaths.has(item.path)
         ),
       ]
     : [];
   const enabledCount =
-    result?.imported.filter((item) => item.enabled).length ?? 0;
+    result?.imported.filter((item) => item.skill.enabled).length ?? 0;
   const disabledCount = (result?.imported.length ?? 0) - enabledCount;
   const notSelectedCount = result
-    ? importablePaths.filter((path) => !selectedPaths.includes(path)).length
+    ? importablePaths.filter((path) => !selectedPathSet.has(path)).length
     : 0;
 
   return (
@@ -285,8 +284,8 @@ export function ImportSkillsFromGitHubModalView({
                             )}
                           </div>
                           <Tag
-                            color={item.enabled ? "green" : "gray"}
-                            title={item.enabled ? "Enabled" : "Disabled"}
+                            color={item.skill.enabled ? "green" : "gray"}
+                            title={item.skill.enabled ? "Enabled" : "Disabled"}
                           />
                         </div>
                       ))}
@@ -317,7 +316,7 @@ export function ImportSkillsFromGitHubModalView({
               )}
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="flex w-full flex-col gap-3">
               <div className="flex flex-col gap-1">
                 <Text font="main-ui-action">Repository</Text>
                 <InputTypeIn
@@ -333,16 +332,16 @@ export function ImportSkillsFromGitHubModalView({
 
               <div className="flex items-center justify-between gap-2">
                 <Text font="secondary-body" color="text-03">
-                  {privateRepositoryGuidance.message}
+                  {privateRepositoryMessage}
                 </Text>
-                {privateRepositoryGuidance.action && (
+                {privateRepositoryAction && (
                   <Button
                     size="sm"
                     prominence="tertiary"
-                    href={privateRepositoryGuidance.action.href}
+                    href={privateRepositoryAction.href}
                     rightIcon={SvgArrowRight}
                   >
-                    {privateRepositoryGuidance.action.label}
+                    {privateRepositoryAction.label}
                   </Button>
                 )}
               </div>
@@ -381,11 +380,14 @@ export function ImportSkillsFromGitHubModalView({
                     <div className="max-h-80 divide-y divide-border-01 overflow-y-auto overscroll-contain">
                       {preview.skills.map((skill) => {
                         const unavailable = skill.unavailable_reason !== null;
-                        const checked = selectedPaths.includes(skill.path);
+                        const checked = selectedPathSet.has(skill.path);
                         return (
                           <div
                             key={skill.path}
-                            className={`flex items-start gap-2 px-3 py-2 ${unavailable ? "opacity-50" : ""}`}
+                            className={cn(
+                              "flex items-start gap-2 px-3 py-2",
+                              unavailable && "opacity-50"
+                            )}
                           >
                             <Checkbox
                               checked={checked}
@@ -394,7 +396,9 @@ export function ImportSkillsFromGitHubModalView({
                               onCheckedChange={(nextChecked) =>
                                 onSelectedPathsChange(
                                   nextChecked
-                                    ? [...selectedPaths, skill.path]
+                                    ? checked
+                                      ? selectedPaths
+                                      : [...selectedPaths, skill.path]
                                     : selectedPaths.filter(
                                         (path) => path !== skill.path
                                       )

@@ -11,7 +11,7 @@ from onyx.db.enums import SkillAccessLevel, SkillSharePermission
 from onyx.db.models import Skill
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.models import SkillBundleFile
+from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
 
 
 class SkillUserShare(BaseModel):
@@ -223,12 +223,11 @@ class GitHubSkillsPreviewResponse(BaseModel):
 class GitHubSkillsImportRequest(GitHubSkillsPreviewRequest):
     revision: str = Field(pattern=r"^[0-9a-fA-F]{40}$")
     subpath: str | None = None
-    paths: list[str] = Field(min_length=1)
+    paths: list[str] = Field(min_length=1, max_length=GITHUB_SKILL_MAX_COUNT)
 
 
 class GitHubImportedSkill(BaseModel):
     skill: SkillResponse
-    enabled: bool
     disabled_reason: str | None = None
 
 

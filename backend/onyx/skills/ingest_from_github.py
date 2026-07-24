@@ -23,7 +23,11 @@ from onyx.skills.bundle import (
     normalize_custom_bundle,
 )
 from onyx.skills.metadata import parse_skill_document
-from onyx.skills.models import GitHubRepository, GitHubSkillBundle
+from onyx.skills.models import (
+    GITHUB_SKILL_MAX_COUNT,
+    GitHubRepository,
+    GitHubSkillBundle,
+)
 from onyx.utils.url import SSRFException, ssrf_safe_get
 
 _ARCHIVE_MAX_BYTES: Final[int] = 25 * 1024 * 1024
@@ -38,6 +42,7 @@ def fetch_github_skill_bundles(
     *,
     revision: str | None = None,
     subpath: str | None = None,
+    selected_paths: set[str] | None = None,
 ) -> tuple[GitHubRepository, list[GitHubSkillBundle]]:
     """Fetch one immutable repository revision and discover its skills."""
     value = source.strip().rstrip("/")
@@ -425,6 +430,11 @@ def fetch_github_skill_bundles(
             OnyxErrorCode.NOT_FOUND,
             "No SKILL.md files were found. Add a skill to the repository and try again.",
         )
+    if len(skill_md_paths) > GITHUB_SKILL_MAX_COUNT:
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            f"Repository contains more than {GITHUB_SKILL_MAX_COUNT} skills. Import from a smaller repository or folder.",
+        )
 
     skill_directories = {
         ""
@@ -432,16 +442,26 @@ def fetch_github_skill_bundles(
         else str(PurePosixPath(path).parent)
         for path in skill_md_paths
     }
+    selected_directories = (
+        skill_directories
+        if selected_paths is None
+        else {
+            directory
+            for directory in skill_directories
+            if (directory or ".") in selected_paths
+        }
+    )
     files_by_skill: dict[str, dict[str, bytes]] = {
-        directory: {} for directory in skill_directories
+        directory: {} for directory in selected_directories
     }
     for path, content in files.items():
         parent = str(PurePosixPath(path).parent)
         parent = "" if parent == "." else parent
         while True:
             if parent in skill_directories:
-                prefix = f"{parent}/" if parent else ""
-                files_by_skill[parent][path.removeprefix(prefix)] = content
+                if parent in files_by_skill:
+                    prefix = f"{parent}/" if parent else ""
+                    files_by_skill[parent][path.removeprefix(prefix)] = content
                 break
             if not parent:
                 break
@@ -452,6 +472,8 @@ def fetch_github_skill_bundles(
     for skill_md_path in skill_md_paths:
         skill_directory = str(PurePosixPath(skill_md_path).parent)
         skill_directory = "" if skill_directory == "." else skill_directory
+        if skill_directory not in selected_directories:
+            continue
         expected_name = (
             PurePosixPath(skill_directory).name if skill_directory else repository_name
         )
