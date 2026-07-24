@@ -423,6 +423,16 @@ export default function SkillEditorPage({
     setIsDeleting(true);
     try {
       await deleteUserSkill(skill.id);
+      if (hasAppContext) {
+        try {
+          await mutate(SWR_KEYS.buildExternalAppsAdmin);
+        } catch (error) {
+          console.error(
+            "Failed to refresh external app after skill deletion",
+            error
+          );
+        }
+      }
       // The skill is gone — a transient list-refresh failure must not mask
       // the successful delete or block navigation off the dead editor page.
       void refreshSkillList();

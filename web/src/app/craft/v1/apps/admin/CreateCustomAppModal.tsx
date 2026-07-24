@@ -95,12 +95,15 @@ export default function CreateCustomAppModal({
     useSyncedAssociatedSkillIds(existingApp);
   const upload = useSkillUploadModal();
 
+  const associationDirty =
+    existingApp !== null &&
+    !isEqual(
+      new Set(selectedSkillIds),
+      new Set(existingApp.associated_skills.map((skill) => skill.id))
+    );
   const configDirty = existingApp
     ? name !== existingApp.name ||
-      !isEqual(
-        new Set(selectedSkillIds),
-        new Set(existingApp.associated_skills.map((skill) => skill.id))
-      ) ||
+      associationDirty ||
       !isEqual(upstreamPatterns, existingApp.upstream_url_patterns) ||
       !isEqual(toRecord(headers), existingApp.auth_template) ||
       !isEqual(toRecord(orgCredentials), existingApp.organization_credentials)
@@ -149,7 +152,9 @@ export default function CreateCustomAppModal({
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
-          associated_skill_ids: selectedSkillIds,
+          ...(associationDirty
+            ? { associated_skill_ids: selectedSkillIds }
+            : {}),
         });
         onSaved();
         onClose();

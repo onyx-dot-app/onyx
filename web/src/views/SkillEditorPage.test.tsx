@@ -11,6 +11,7 @@ import type { SkillEditableDetail } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 const mockCreateCustomSkillFromEditor = jest.fn();
+const mockDeleteUserSkill = jest.fn();
 const mockRouterReplace = jest.fn();
 const mockRouterPush = jest.fn();
 const mockGetSkillCreationDraft = jest.fn();
@@ -96,6 +97,7 @@ jest.mock("@/lib/skills/api", () => ({
   ...jest.requireActual("@/lib/skills/api"),
   createCustomSkillFromEditor: (...args: unknown[]) =>
     mockCreateCustomSkillFromEditor(...args),
+  deleteUserSkill: (...args: unknown[]) => mockDeleteUserSkill(...args),
 }));
 
 jest.mock("@/sections/skills/SkillFilesPicker", () => ({
@@ -106,6 +108,8 @@ jest.mock("@/sections/skills/SkillFilesPicker", () => ({
 describe("SkillEditorPage", () => {
   beforeEach(() => {
     mockCreateCustomSkillFromEditor.mockReset();
+    mockDeleteUserSkill.mockReset();
+    mockDeleteUserSkill.mockResolvedValue(undefined);
     mockRouterReplace.mockReset();
     mockRouterPush.mockReset();
     mockGetSkillCreationDraft.mockReset();
@@ -362,6 +366,58 @@ describe("SkillEditorPage", () => {
     expect(mockRouterPush).toHaveBeenCalledWith(
       "/admin/craft/apps?editAppId=42"
     );
+  });
+
+  it("refreshes app associations before returning after skill deletion", async () => {
+    const user = setupUser();
+    const appRefresh = deferred<void>();
+    const skill = existingSkill({
+      external_app: {
+        external_app_id: 42,
+        name: "Acme CRM",
+        enabled: true,
+        ready: true,
+      },
+    });
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      error: undefined,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+    mockMutate.mockImplementation((key: string) =>
+      key === SWR_KEYS.buildExternalAppsAdmin
+        ? appRefresh.promise
+        : Promise.resolve()
+    );
+
+    render(
+      <SkillEditorPage
+        skillId={skill.id}
+        externalAppId={42}
+        externalAppName="Acme CRM"
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "Delete skill" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(mockDeleteUserSkill).toHaveBeenCalledWith(skill.id)
+    );
+    expect(mockRouterPush).not.toHaveBeenCalled();
+
+    await act(async () => {
+      appRefresh.resolve();
+      await appRefresh.promise;
+    });
+
+    await waitFor(() =>
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/admin/craft/apps?editAppId=42"
+      )
+    );
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.buildExternalAppsAdmin);
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.userSkills);
   });
 
   it("returns app-launched skill creation to that app on Cancel", async () => {

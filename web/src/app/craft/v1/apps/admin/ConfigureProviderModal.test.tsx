@@ -111,7 +111,7 @@ describe("ConfigureProviderModal", () => {
     });
   });
 
-  it("saves built-in app settings and custom associations together", async () => {
+  it("omits unchanged associations from a provider settings update", async () => {
     jest.mocked(externalAppsService.updateExternalApp).mockResolvedValue(APP);
     const { onClose } = renderExistingProvider();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
@@ -128,7 +128,6 @@ describe("ConfigureProviderModal", () => {
         auth_template: { Authorization: "Bearer {token}" },
         action_policies: {},
         organization_credentials: { token: "updated-token" },
-        associated_skill_ids: ["custom-skill"],
       })
     );
     expect(onClose).toHaveBeenCalledTimes(1);

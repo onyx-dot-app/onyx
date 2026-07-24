@@ -64,6 +64,9 @@ export default function ConfigureProviderModal({
       new Set(selectedSkillIds),
       new Set(existingApp.associated_skills.map((skill) => skill.id))
     );
+  const associationPatch = existingAssociationDirty
+    ? { associated_skill_ids: selectedSkillIds }
+    : {};
   // Managed built-ins (cloud): Onyx owns creds/config, so the modal only edits
   // policies — cred fields are hidden and the backend ignores them anyway.
   const managed = existingApp?.is_onyx_managed ?? false;
@@ -117,7 +120,7 @@ export default function ConfigureProviderModal({
       // Managed: only policies are persisted; a partial PATCH leaves the rest.
       await updateExternalApp(existingApp.id, {
         action_policies: policies,
-        associated_skill_ids: selectedSkillIds,
+        ...associationPatch,
       });
     } else {
       const credentialValues = Object.fromEntries(
@@ -140,7 +143,7 @@ export default function ConfigureProviderModal({
             ...existingApp.organization_credentials,
             ...credentialValues,
           },
-          associated_skill_ids: selectedSkillIds,
+          ...associationPatch,
         });
       } else {
         const created = await createBuiltInExternalApp({

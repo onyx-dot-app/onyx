@@ -165,6 +165,39 @@ describe("CreateCustomAppModal", () => {
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
   });
 
+  it("omits unchanged associations from a custom app settings update", async () => {
+    jest.mocked(externalAppsService.updateExternalApp).mockResolvedValue({
+      ...CUSTOM_APP,
+      name: "Updated CRM",
+    });
+    render(
+      <CreateCustomAppModal
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+        existingApp={{
+          ...CUSTOM_APP,
+          associated_skills: [
+            { id: "invalid-skill", name: "broken-skill", is_valid: false },
+          ],
+        }}
+      />
+    );
+
+    fireEvent.change(screen.getByDisplayValue("Acme CRM"), {
+      target: { value: "Updated CRM" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledWith(17, {
+        name: "Updated CRM",
+        upstream_url_patterns: ["https://api.acme.test/*"],
+        auth_template: {},
+        organization_credentials: {},
+      })
+    );
+  });
+
   it("confirms visibility promotion and batches association with app edits", async () => {
     const editableSkill = customFixture({
       id: "skill-a",
