@@ -688,6 +688,7 @@ defusedxml==0.7.1 \
     # via
     #   jira
     #   markitdown
+    #   nltk
 deprecated==1.3.1 \
     --hash=sha256:597bfef186b6f60181535a29fbe44865ce137a5079f295b479886c82729d5f3f \
     --hash=sha256:b1b50e0ff0c1fddaa5708a2c6b0a6588bb09b892825ab2b214ac9ea9d92a5223
@@ -1734,9 +1735,9 @@ mypy-extensions==1.0.0 \
 nest-asyncio==1.6.0 \
     --hash=sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe \
     --hash=sha256:87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c
-nltk==3.9.4 \
-    --hash=sha256:ed03bc098a40481310320808b2db712d95d13ca65b27372f8a403949c8b523d0 \
-    --hash=sha256:f2fa301c3a12718ce4a0e9305c5675299da5ad9e26068218b69d692fda84828f
+nltk==3.10.0 \
+    --hash=sha256:4fbac1d98203cbcd1b5d94a2877fb822300072d80604a5e7fae49d2c5f84e8c1 \
+    --hash=sha256:54ff84d4916d3ef127e8953bee0023f6a6b320b75d634a19e06ef056d3d244bf
     # via unstructured
 numpy==2.4.1 \
     --hash=sha256:178de8f87948163d98a4c9ab5bee4ce6519ca918926ec8df195af582de28544d \
