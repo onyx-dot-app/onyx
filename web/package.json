@@ -77,7 +77,7 @@
     "lucide-react": "^1.16.0",
     "mime": "^4.1.0",
     "motion": "^12.40.0",
-    "next": "16.2.10",
+    "next": "16.2.11",
     "next-themes": "^0.4.4",
     "postcss": "^8.5.10",
     "posthog-js": "^1.376.3",
