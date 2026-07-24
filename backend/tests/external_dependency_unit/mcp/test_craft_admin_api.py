@@ -226,6 +226,14 @@ def test_delete_server_restamps_affected_running_sandbox(
     admin = create_test_user(db_session, "del_reload_admin", role=UserRole.ADMIN)
     sandbox = make_sandbox(db_session, admin, status=SandboxStatus.RUNNING)
     server = _make_craft_server(db_session, owner_email=admin.email, is_public=True)
+    # Credentials are what put the server in the resolved craft set.
+    upsert_user_connection_config(
+        server_id=server.id,
+        user_email=admin.email,
+        config_data=MCPConnectionData(headers={"Authorization": "Bearer admin-token"}),
+        db_session=db_session,
+    )
+    db_session.commit()
 
     fp_before = craft_mcp_fingerprint(resolve_craft_mcp_servers(db_session, admin))
     sandbox.mcp_config_hash = fp_before
