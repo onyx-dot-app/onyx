@@ -1,6 +1,7 @@
 """The unified ``PATCH /admin/apps/{id}`` update path, single-tenant (non-managed,
-so config fields are editable): full update, partial update, and push-failure
-rollback. The managed (cloud) variant lives in ``test_managed_external_apps.py``.
+so config fields are editable): full update, partial update, and sandbox
+reconciliation ordering. The managed (cloud) variant lives in
+``test_managed_external_apps.py``.
 """
 
 from __future__ import annotations
@@ -99,30 +100,32 @@ def test_patch_updates_config_on_non_managed_built_in(
     }
 
 
-def test_patch_rolls_back_when_push_fails(
+def test_patch_commits_before_sandbox_reconciliation(
     db_session: Session,
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Push failure leaves the app update uncommitted."""
     app = _slack_app(db_session)
     app_id = app.id
-    original_name = app.name
+    observed_names: list[str] = []
 
-    def _boom(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError("push failed")
+    def _observe_committed_state(*_args: object, **_kwargs: object) -> None:
+        with Session(db_session.get_bind()) as observer:
+            stored = get_external_app_by_id(observer, app_id)
+            assert stored is not None
+            observed_names.append(stored.name)
 
-    monkeypatch.setattr(api, "push_skills_for_users", _boom)
+    monkeypatch.setattr(
+        api,
+        "push_skills_for_users",
+        _observe_committed_state,
+    )
 
-    with pytest.raises(RuntimeError):
-        api.update_external_app_admin(
-            external_app_id=app_id,
-            request=UpdateExternalAppRequest(name="changed"),
-            _=test_user,
-            db_session=db_session,
-        )
+    api.update_external_app_admin(
+        external_app_id=app_id,
+        request=UpdateExternalAppRequest(name="changed"),
+        _=test_user,
+        db_session=db_session,
+    )
 
-    db_session.rollback()
-    stored = get_external_app_by_id(db_session, app_id)
-    assert stored is not None
-    assert stored.name == original_name
+    assert observed_names == ["changed"]
