@@ -2,11 +2,14 @@
 (reclaim helpers in db/search_settings.py; the won't-port picker in
 db/connector_credential_pair.py).
 
-Covers the pure/isolated helpers introduced in PR1:
+Covers the pure/isolated helpers (the happy-path transitions are exercised end-to-end
+in test_index_reclaim_task.py; here we cover the guards + query logic):
 - compute_wont_port_cc_pair_ids: INVALID always; PAUSED only under ACTIVE_ONLY;
   ACTIVE/DELETING never
-- the transition helpers (advance_to_soaking stamps the anchor; advance_to_deleting;
-  record_failure bumps attempts then BLOCKS at the cap; clear_reclaim_intent resets)
+- mark_cc_pairs_deleting_if_still_wont_port: atomic re-validation — spares a reactivated
+  connector, returns only the ids transitioned
+- transition guard: advance_to_soaking no-ops off its source state (won't re-stamp the
+  soak anchor); clear_reclaim_intent resets the row
 - fetch_reclaimable_past_settings: actionable PAST rows only, excludes BLOCKED, honors limit
 
 set_reclaim_intent_on_current targets the singleton PRESENT row and is covered by the
@@ -18,7 +21,10 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.connector_credential_pair import compute_wont_port_cc_pair_ids
+from onyx.db.connector_credential_pair import (
+    compute_wont_port_cc_pair_ids,
+    mark_cc_pairs_deleting_if_still_wont_port__no_commit,
+)
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     EmbeddingPrecision,
@@ -28,13 +34,10 @@ from onyx.db.enums import (
 )
 from onyx.db.models import ConnectorCredentialPair, SearchSettings
 from onyx.db.search_settings import (
-    advance_to_deleting__no_commit,
-    advance_to_reclaimed__no_commit,
     advance_to_soaking__no_commit,
     clear_reclaim_intent__no_commit,
     create_search_settings,
     fetch_reclaimable_past_settings,
-    record_failure__no_commit,
 )
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
@@ -121,28 +124,38 @@ def test_active_and_deleting_cc_pairs_never_wont_port(
         cleanup_cc_pair(db_session, deleting)
 
 
-# --- transitions ----------------------------------------------------------------
-
-
-def test_advance_to_soaking_stamps_anchor(
+def test_mark_deleting_transitions_only_still_wont_port(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    ss = _make_past_settings(db_session)
+    """The atomic fire-time transition moves only still-INVALID/PAUSED consented pairs to
+    DELETING and returns exactly those; a reactivated (ACTIVE) one is spared. Fusing the
+    re-check and the write into one conditional UPDATE closes the reactivation race."""
+    invalid = _make_cc_pair_with_status(
+        db_session, ConnectorCredentialPairStatus.INVALID
+    )
+    paused = _make_cc_pair_with_status(db_session, ConnectorCredentialPairStatus.PAUSED)
+    reactivated = _make_cc_pair_with_status(
+        db_session, ConnectorCredentialPairStatus.ACTIVE
+    )
     try:
-        ss.reclaim_status = IndexReclaimStatus.PENDING
+        transitioned = mark_cc_pairs_deleting_if_still_wont_port__no_commit(
+            db_session, [invalid.id, paused.id, reactivated.id]
+        )
         db_session.commit()
+        for pair in (invalid, paused, reactivated):
+            db_session.refresh(pair)
 
-        assert advance_to_soaking__no_commit(ss) is True
-        db_session.commit()
-        db_session.refresh(ss)
-
-        assert ss.reclaim_status == IndexReclaimStatus.SOAKING
-        assert ss.reclaim_stopped_reading_at is not None
-        assert ss.reclaim_attempts == 0
+        assert set(transitioned) == {invalid.id, paused.id}
+        assert invalid.status == ConnectorCredentialPairStatus.DELETING
+        assert paused.status == ConnectorCredentialPairStatus.DELETING
+        assert reactivated.status == ConnectorCredentialPairStatus.ACTIVE  # spared
     finally:
-        db_session.delete(ss)
-        db_session.commit()
+        for pair in (invalid, paused, reactivated):
+            cleanup_cc_pair(db_session, pair)
+
+
+# --- transitions ----------------------------------------------------------------
 
 
 def test_advance_to_soaking_is_noop_off_source_state(
@@ -163,77 +176,6 @@ def test_advance_to_soaking_is_noop_off_source_state(
         db_session.commit()
         db_session.refresh(ss)
         assert ss.reclaim_stopped_reading_at == first_anchor
-    finally:
-        db_session.delete(ss)
-        db_session.commit()
-
-
-def test_advance_to_deleting(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-) -> None:
-    ss = _make_past_settings(db_session)
-    try:
-        ss.reclaim_status = IndexReclaimStatus.SOAKING
-        db_session.commit()
-
-        assert advance_to_deleting__no_commit(ss) is True
-        db_session.commit()
-        db_session.refresh(ss)
-
-        assert ss.reclaim_status == IndexReclaimStatus.DELETING
-        # Off-source no-op: cannot skip the soak from PENDING.
-        assert advance_to_deleting__no_commit(ss) is False
-    finally:
-        db_session.delete(ss)
-        db_session.commit()
-
-
-def test_advance_to_reclaimed_keeps_row(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-) -> None:
-    """DELETING -> RECLAIMED is terminal success; the row is kept (only the index is
-    deleted). Off-source (non-DELETING) calls no-op."""
-    ss = _make_past_settings(db_session)
-    try:
-        ss.reclaim_status = IndexReclaimStatus.SOAKING
-        assert advance_to_reclaimed__no_commit(ss) is False  # not DELETING yet
-        ss.reclaim_status = IndexReclaimStatus.DELETING
-        assert advance_to_reclaimed__no_commit(ss) is True
-        db_session.commit()
-        db_session.refresh(ss)
-        assert ss.reclaim_status == IndexReclaimStatus.RECLAIMED
-    finally:
-        db_session.delete(ss)
-        db_session.commit()
-
-
-def test_record_failure_bumps_then_blocks_at_cap(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-) -> None:
-    ss = _make_past_settings(db_session)
-    try:
-        ss.reclaim_status = IndexReclaimStatus.DELETING
-        db_session.commit()
-
-        # under the cap: not blocked
-        blocked = record_failure__no_commit(ss, "boom", max_attempts=2)
-        db_session.commit()
-        db_session.refresh(ss)
-        assert blocked is False
-        assert ss.reclaim_attempts == 1
-        assert ss.reclaim_last_error == "boom"
-        assert ss.reclaim_status == IndexReclaimStatus.DELETING
-
-        # reaches the cap: BLOCKED
-        blocked = record_failure__no_commit(ss, "boom again", max_attempts=2)
-        db_session.commit()
-        db_session.refresh(ss)
-        assert blocked is True
-        assert ss.reclaim_attempts == 2
-        assert ss.reclaim_status == IndexReclaimStatus.BLOCKED
     finally:
         db_session.delete(ss)
         db_session.commit()
