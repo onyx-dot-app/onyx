@@ -110,6 +110,7 @@ const EE_ROUTES = [
   "/admin/theme",
   "/admin/performance/custom-analytics",
   "/admin/standard-answer",
+  "/admin/export-logs",
   "/agents/stats",
 ];
 

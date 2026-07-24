@@ -153,6 +153,11 @@ function buildItems(
     ) {
       addGated(SECTIONS.USAGE, ADMIN_ROUTES.QUERY_HISTORY, Tier.BUSINESS);
     }
+    // Log export reads container-local log files; not applicable on
+    // multi-tenant cloud.
+    if (!enableCloud) {
+      addGated(SECTIONS.USAGE, ADMIN_ROUTES.EXPORT_LOGS, Tier.ENTERPRISE);
+    }
   }
 
   // 8. Organization (admin only)
