@@ -64,6 +64,18 @@ export interface ListOption extends Option {
   transform?: (values: string[]) => string[];
 }
 
+export interface StringPairListOption extends Option {
+  type: "string_pair_list";
+  // Object keys each row serializes to, e.g. { leftKey: "source", rightKey: "target" }.
+  leftKey: string;
+  rightKey: string;
+  default?: Record<string, string>[];
+  leftLabel: string;
+  rightLabel: string;
+  leftPlaceholder?: string;
+  rightPlaceholder?: string;
+}
+
 export interface TextOption extends Option {
   type: "text";
   default?: string;
@@ -100,6 +112,7 @@ export interface TabOption extends Option {
     fields: (
       | BooleanOption
       | ListOption
+      | StringPairListOption
       | TextOption
       | NumberOption
       | SelectOption
@@ -118,6 +131,7 @@ export interface ConnectionConfiguration {
   values: (
     | BooleanOption
     | ListOption
+    | StringPairListOption
     | TextOption
     | NumberOption
     | SelectOption
@@ -128,6 +142,7 @@ export interface ConnectionConfiguration {
   advanced_values: (
     | BooleanOption
     | ListOption
+    | StringPairListOption
     | TextOption
     | NumberOption
     | SelectOption
@@ -194,6 +209,24 @@ export const connectorConfigs: Record<
           "Enable if the website requires scrolling for the desired content to load",
         name: "scroll_before_scraping",
         optional: true,
+      },
+      {
+        type: "string_pair_list",
+        query: "Enter URL rewrite rules:",
+        label: "URL Rewrites",
+        name: "url_rewrites",
+        leftKey: "source",
+        rightKey: "target",
+        optional: true,
+        description:
+          "Rewrite document URLs before storing. Useful when crawling through an internal " +
+          "mirror while storing the canonical public links, for example " +
+          "https://internal-mirror.example.com \u2192 https://docs.example.com",
+        leftLabel: "Source URL prefix",
+        rightLabel: "Replacement prefix",
+        leftPlaceholder: "https://internal-mirror.example.com",
+        rightPlaceholder: "https://docs.example.com",
+        default: [],
       },
     ],
     overrideDefaultFreq: 60 * 60 * 24,
@@ -2006,11 +2039,13 @@ export function createConnectorValidationSchema(
               ? Yup.array().of(Yup.string())
               : field.type === "multiselect"
                 ? Yup.array().of(Yup.string())
-                : field.type === "checkbox"
-                  ? Yup.boolean()
-                  : field.type === "file"
-                    ? Yup.mixed()
-                    : Yup.string();
+                : field.type === "string_pair_list"
+                  ? Yup.array().of(Yup.object())
+                  : field.type === "checkbox"
+                    ? Yup.boolean()
+                    : field.type === "file"
+                      ? Yup.mixed()
+                      : Yup.string();
 
         if (!field.optional) {
           schema = schema.required(`${field.label} is required`);
@@ -2073,9 +2108,15 @@ export interface ConnectorSnapshot {
   from_beginning?: boolean;
 }
 
+export interface UrlRewriteRule {
+  source: string;
+  target: string;
+}
+
 export interface WebConfig {
   base_url: string;
   web_connector_type?: "recursive" | "single" | "sitemap";
+  url_rewrites?: UrlRewriteRule[];
 }
 
 export interface GithubConfig {
