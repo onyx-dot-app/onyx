@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from onyx.llm.model_capabilities import get_llm_max_output_tokens, get_model_map
 from onyx.llm.well_known_providers.llm_provider_options import (
     get_provider_display_name,
+    get_recommendations,
 )
 from onyx.server.features.build.configs import (
     ONYX_GATEWAY_PROVIDER_ID,
@@ -19,17 +20,6 @@ from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-CRAFT_RECOMMENDED_MODEL_NAMES = frozenset(
-    {
-        "gpt-5.6-sol",
-        "gpt-5.5",
-        "claude-fable-5",
-        "claude-opus-4-8",
-        "moonshotai/kimi-k3",
-        "z-ai/glm-5.2",
-    }
-)
 
 
 def _visible_models_by_name(provider: LLMProviderView) -> list[str]:
@@ -124,16 +114,22 @@ def _select_gateway_default(
             "falling back"
         )
 
+    # Auto-pick a default: prefer each provider's recommended default model
+    # (recommended-models.json, kept current by the update-recommended-models
+    # workflow) in provider order, else the first provider's first visible model.
+    recommendations = get_recommendations()
     ordered = _gateway_provider_order(providers)
+    fallback: tuple[int, str] | None = None
     for provider in ordered:
-        for name in _visible_models_by_name(provider):
-            if name in CRAFT_RECOMMENDED_MODEL_NAMES:
-                return provider.id, name
-    for provider in ordered:
-        names = _visible_models_by_name(provider)
-        if names:
-            return provider.id, names[0]
-    return None
+        visible = _visible_models_by_name(provider)
+        if not visible:
+            continue
+        default_model = recommendations.get_default_model(provider.provider)
+        if default_model is not None and default_model.name in visible:
+            return provider.id, default_model.name
+        if fallback is None:
+            fallback = (provider.id, visible[0])
+    return fallback
 
 
 def build_onyx_gateway_config(

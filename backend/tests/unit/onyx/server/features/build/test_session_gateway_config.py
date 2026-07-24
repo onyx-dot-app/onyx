@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from datetime import datetime, timezone
 from typing import cast
 from unittest.mock import MagicMock, patch
 
+import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.models import BuildSession, Sandbox, User
+from onyx.llm.well_known_providers.auto_update_models import (
+    LLMProviderRecommendation,
+    LLMRecommendations,
+)
+from onyx.llm.well_known_providers.models import SimpleKnownModel
 from onyx.server.features.build.sandbox.models import (
     GatewayModelConfig,
     LLMProviderConfig,
@@ -52,6 +60,33 @@ def _provider(
         api_key="test-key",
         model_configurations=models,
     )
+
+
+_TEST_RECOMMENDATIONS = LLMRecommendations(
+    version="test",
+    updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    providers={
+        "anthropic": LLMProviderRecommendation(
+            default_model=SimpleKnownModel(name="claude-opus-5")
+        ),
+        "bedrock": LLMProviderRecommendation(
+            default_model=SimpleKnownModel(name="bedrock-pro")
+        ),
+        "openai": LLMProviderRecommendation(
+            default_model=SimpleKnownModel(name="gpt-5.6-sol")
+        ),
+    },
+)
+
+
+@pytest.fixture(autouse=True)
+def _mock_recommendations() -> Iterator[None]:
+    # get_recommendations() otherwise does a live GitHub fetch; pin it so default
+    # selection is deterministic and tests don't drift when the json regenerates.
+    with patch.object(
+        llm_config, "get_recommendations", return_value=_TEST_RECOMMENDATIONS
+    ):
+        yield
 
 
 def test_gateway_config_qualifies_collisions_and_selects_exact_default() -> None:
@@ -127,19 +162,17 @@ def test_gateway_selection_renders_storage_columns() -> None:
     )
 
 
-def test_manager_uses_first_recommended_model_from_first_alphabetical_provider() -> (
-    None
-):
+def test_manager_prefers_provider_recommended_default_in_provider_order() -> None:
     anthropic = _provider(
         3,
         "anthropic",
-        [_model("claude-sonnet"), _model("gpt-5.5")],
+        [_model("claude-sonnet"), _model("claude-opus-5")],
         name="Zulu provider",
     )
     bedrock = _provider(
         7,
         "bedrock",
-        [_model("bedrock-default"), _model("claude-opus-4-8")],
+        [_model("bedrock-lite"), _model("bedrock-pro")],
         name="Alpha provider",
     )
     manager = SessionManager.__new__(SessionManager)
@@ -156,8 +189,10 @@ def test_manager_uses_first_recommended_model_from_first_alphabetical_provider()
     ):
         config = manager.build_llm_configs(user)
 
+    # "Alpha provider" (bedrock) sorts before "Zulu provider"; its recommended
+    # default (bedrock-pro) wins over the alphabetically-first visible model.
     assert config.provider == "onyx"
-    assert config.model_name == "7/claude-opus-4-8"
+    assert config.model_name == "7/bedrock-pro"
     fetch_providers.assert_called_once_with(manager._db_session, user)  # type: ignore[attr-defined]
 
 
