@@ -29,16 +29,6 @@ interface PendingUnlink {
   name: string;
 }
 
-function canAssociate(skill: Skill, appId: number): boolean {
-  const canEdit =
-    skill.user_permission === "OWNER" || skill.user_permission === "EDITOR";
-  return (
-    canEdit &&
-    (skill.external_app === null ||
-      skill.external_app.external_app_id === appId)
-  );
-}
-
 export default function AssociatedSkillsEditor({
   app,
   selectedSkillIds,
@@ -50,6 +40,7 @@ export default function AssociatedSkillsEditor({
   const { data, isLoading } = useUserSkills();
   const [query, setQuery] = useState("");
   const [associateOpen, setAssociateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [pendingPromotion, setPendingPromotion] = useState<Skill | null>(null);
   const [pendingUnlink, setPendingUnlink] = useState<PendingUnlink | null>(
     null
@@ -78,7 +69,13 @@ export default function AssociatedSkillsEditor({
   const selectableSkills = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return customSkills
-      .filter((skill) => canAssociate(skill, app.id))
+      .filter(
+        (skill) =>
+          (skill.user_permission === "OWNER" ||
+            skill.user_permission === "EDITOR") &&
+          (skill.external_app === null ||
+            skill.external_app.external_app_id === app.id)
+      )
       .filter(
         (skill) =>
           normalizedQuery.length === 0 ||
@@ -205,21 +202,27 @@ export default function AssociatedSkillsEditor({
               </div>
             </Popover.Content>
           </Popover>
-          <Popover>
+          <Popover modal open={createOpen} onOpenChange={setCreateOpen}>
             <Popover.Trigger asChild>
               <Button icon={SvgPlus}>Create skill</Button>
             </Popover.Trigger>
             <Popover.Content align="end" sideOffset={4} width="md">
               <Popover.Menu>
                 <LineItem
-                  onClick={onCreateSkill}
+                  onClick={() => {
+                    setCreateOpen(false);
+                    onCreateSkill();
+                  }}
                   description="Write instructions and add supporting files."
                   wrapDescription
                 >
                   Start from scratch
                 </LineItem>
                 <LineItem
-                  onClick={onUploadSkill}
+                  onClick={() => {
+                    setCreateOpen(false);
+                    onUploadSkill();
+                  }}
                   description="Import a SKILL.md file, ZIP file, or skill folder."
                   wrapDescription
                 >

@@ -224,7 +224,7 @@ function AppsAdminContent() {
 
       {activeCustomModal && (
         <CreateCustomAppModal
-          open
+          key={activeCustomModal.existingApp?.id ?? "new"}
           onClose={closeAppModal}
           onSaved={() => mutateApps()}
           existingApp={activeCustomModal.existingApp}
@@ -472,13 +472,11 @@ function IntegrationCard({ integration }: IntegrationCardProps) {
             <Button
               variant="danger"
               disabled={isMutating}
-              onClick={() =>
-                void run(remove.run, `Failed to delete "${name}"`).then(
-                  (removed) => {
-                    if (removed) setConfirmingRemoval(false);
-                  }
-                )
-              }
+              onClick={async () => {
+                if (await run(remove.run, `Failed to delete "${name}"`)) {
+                  setConfirmingRemoval(false);
+                }
+              }}
             >
               {isMutating ? "Deleting…" : "Delete app"}
             </Button>

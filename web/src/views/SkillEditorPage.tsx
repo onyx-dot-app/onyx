@@ -65,6 +65,7 @@ import SkillFileTree from "@/sections/skills/SkillFileTree";
 import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
+import { externalAppAdminUrl } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
 
 interface SkillEditorPageProps {
   skillId?: string;
@@ -227,7 +228,7 @@ export default function SkillEditorPage({
   function leaveEditor() {
     router.push(
       hasAppContext
-        ? (`/admin/craft/apps?editAppId=${externalAppId}` as Route)
+        ? externalAppAdminUrl(externalAppId)
         : ("/craft/v1/skills" as Route)
     );
   }
@@ -274,7 +275,7 @@ export default function SkillEditorPage({
         toast.success(`Created "${created.name}"`);
         router.replace(
           isCreatingForApp
-            ? (`/admin/craft/apps?editAppId=${externalAppId}` as Route)
+            ? externalAppAdminUrl(externalAppId)
             : ("/craft/v1/skills" as Route)
         );
         return;
@@ -295,7 +296,12 @@ export default function SkillEditorPage({
       await refreshSkillList();
       toast.success(`Saved "${updated.name}"`);
     } catch (err) {
-      if (isCreating && !createDisabled && isSkillNameConflict(err)) {
+      if (
+        isCreating &&
+        !isCreatingForApp &&
+        !createDisabled &&
+        isSkillNameConflict(err)
+      ) {
         setConflictingSkillName(name.trim());
         return;
       }
@@ -718,7 +724,9 @@ export default function SkillEditorPage({
                                 <Button
                                   type="button"
                                   prominence="secondary"
-                                  href={`/admin/craft/apps?editAppId=${skill.external_app.external_app_id}`}
+                                  href={externalAppAdminUrl(
+                                    skill.external_app.external_app_id
+                                  )}
                                 >
                                   Manage in app settings
                                 </Button>

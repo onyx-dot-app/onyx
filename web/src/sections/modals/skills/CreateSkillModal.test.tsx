@@ -101,23 +101,26 @@ describe("CreateSkillModal", () => {
     );
   });
 
-  it("prevents duplicate review submissions while inspection is pending", async () => {
+  it("cannot submit again or close while inspection is pending", async () => {
     const user = setupUser();
     const inspection = deferred<SkillBundleContents>();
+    const onClose = jest.fn();
     mockInspectSkillBundle.mockReturnValue(inspection.promise);
 
-    render(
-      <CreateSkillModal open onClose={jest.fn()} onContinue={jest.fn()} />
-    );
+    render(<CreateSkillModal open onClose={onClose} onContinue={jest.fn()} />);
     await user.click(screen.getByRole("button", { name: "Select bundle" }));
     await user.click(screen.getByRole("button", { name: "Review skill" }));
 
     expect(screen.getByRole("button", { name: "Opening…" })).toBeDisabled();
     expect(mockInspectSkillBundle).toHaveBeenCalledTimes(1);
+    await user.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
 
     await act(async () => {
       inspection.resolve(inspectedContents);
       await inspection.promise;
     });
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

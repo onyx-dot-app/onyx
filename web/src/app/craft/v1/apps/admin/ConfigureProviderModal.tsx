@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import isEqual from "lodash/isEqual";
 import { Button, Divider, MessageCard, Modal } from "@opal/components";
 import ActionPolicyEditorModal, {
   EditorField,
@@ -16,7 +17,9 @@ import {
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
 import AssociatedSkillsEditor from "@/app/craft/v1/apps/admin/AssociatedSkillsEditor";
-import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
+import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
+import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
+import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import {
   skillEditorUrlForApp,
@@ -48,11 +51,27 @@ export default function ConfigureProviderModal({
     existingApp?.associated_skills.map((skill) => skill.id) ?? []
   );
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
   const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
     null
   );
   const [isSavingSkills, setIsSavingSkills] = useState(false);
   const [skillsError, setSkillsError] = useState<string | null>(null);
+  const existingAssociationDirty =
+    existingApp !== null &&
+    !isEqual(
+      new Set(selectedSkillIds),
+      new Set(existingApp.associated_skills.map((skill) => skill.id))
+    );
+  const createdAssociationDirty =
+    createdApp !== null &&
+    !isEqual(
+      new Set(selectedSkillIds),
+      new Set(createdApp.associated_skills.map((skill) => skill.id))
+    );
+  const createdAppUnsavedChanges = useUnsavedChangesGuard({
+    isDirty: createdAssociationDirty,
+  });
   // Managed built-ins (cloud): Onyx owns creds/config, so the modal only edits
   // policies — cred fields are hidden and the backend ignores them anyway.
   const managed = existingApp?.is_onyx_managed ?? false;
@@ -147,14 +166,12 @@ export default function ConfigureProviderModal({
   function navigateToSkillEditor(draftId?: string) {
     const app = existingApp ?? createdApp;
     if (!app) return;
-    onClose();
     router.push(skillEditorUrlForApp(app, draftId));
   }
 
   function navigateToExistingSkill(skillId: string) {
     const app = existingApp ?? createdApp;
     if (!app) return;
-    onClose();
     router.push(skillEditUrlForApp(skillId, app));
   }
 
@@ -167,7 +184,7 @@ export default function ConfigureProviderModal({
         associated_skill_ids: selectedSkillIds,
       });
       setCreatedApp(updated);
-      await onSaved();
+      onSaved();
       return true;
     } catch (error) {
       setSkillsError(error instanceof Error ? error.message : String(error));
@@ -180,70 +197,92 @@ export default function ConfigureProviderModal({
   if (createdApp) {
     return (
       <>
-        <Modal open onOpenChange={(open) => !open && onClose()}>
-          <Modal.Content width="lg" height="lg">
-            <Modal.Header
-              title={`Add skills to ${createdApp.name}`}
-              description="Optional — associate existing skills or create one for this app."
-            />
-            <Modal.Body>
-              <div className="flex flex-col gap-3">
-                <AssociatedSkillsEditor
-                  app={createdApp}
-                  selectedSkillIds={selectedSkillIds}
-                  onChange={setSelectedSkillIds}
-                  onOpenSkill={async (skillId) => {
-                    if (await saveCreatedAppSkills()) {
-                      navigateToExistingSkill(skillId);
-                    }
-                  }}
-                  onCreateSkill={async () => {
-                    if (await saveCreatedAppSkills()) navigateToSkillEditor();
-                  }}
-                  onUploadSkill={async () => {
-                    if (await saveCreatedAppSkills()) setUploadOpen(true);
-                  }}
+        <Modal
+          open
+          onOpenChange={(open) => {
+            if (open) return;
+            if (uploadOpen) {
+              if (!uploadBusy) setUploadOpen(false);
+            } else {
+              createdAppUnsavedChanges.requestLeave(onClose);
+            }
+          }}
+        >
+          <Modal.Content
+            width={uploadOpen ? "sm" : "lg"}
+            height={uploadOpen ? "fit" : "lg"}
+          >
+            {uploadOpen ? (
+              <CreateSkillModalContent
+                onClose={() => setUploadOpen(false)}
+                onBusyChange={setUploadBusy}
+                onContinue={(draft) => {
+                  navigateToSkillEditor(stageSkillCreationDraft(draft));
+                }}
+              />
+            ) : (
+              <>
+                <Modal.Header
+                  title={`Add skills to ${createdApp.name}`}
+                  description="Optional — associate existing skills or create one for this app."
                 />
-                {skillsError && (
-                  <MessageCard
-                    variant="error"
-                    title="Couldn't save"
-                    description={skillsError}
-                  />
-                )}
-              </div>
-            </Modal.Body>
-            <Modal.Footer>
-              <div className="flex w-full justify-end gap-2">
-                <Button
-                  prominence="secondary"
-                  onClick={onClose}
-                  disabled={isSavingSkills}
-                >
-                  Skip for now
-                </Button>
-                <Button
-                  disabled={isSavingSkills}
-                  onClick={async () => {
-                    if (await saveCreatedAppSkills()) onClose();
-                  }}
-                >
-                  {isSavingSkills ? "Saving…" : "Save skills"}
-                </Button>
-              </div>
-            </Modal.Footer>
+                <Modal.Body>
+                  <div className="flex flex-col gap-3">
+                    <AssociatedSkillsEditor
+                      app={createdApp}
+                      selectedSkillIds={selectedSkillIds}
+                      onChange={setSelectedSkillIds}
+                      onOpenSkill={(skillId) =>
+                        createdAppUnsavedChanges.requestLeave(() =>
+                          navigateToExistingSkill(skillId)
+                        )
+                      }
+                      onCreateSkill={() =>
+                        createdAppUnsavedChanges.requestLeave(() =>
+                          navigateToSkillEditor()
+                        )
+                      }
+                      onUploadSkill={() => setUploadOpen(true)}
+                    />
+                    {skillsError && (
+                      <MessageCard
+                        variant="error"
+                        title="Couldn't save"
+                        description={skillsError}
+                      />
+                    )}
+                  </div>
+                </Modal.Body>
+                <Modal.Footer>
+                  <div className="flex w-full justify-end gap-2">
+                    <Button
+                      prominence="secondary"
+                      onClick={() =>
+                        createdAppUnsavedChanges.requestLeave(onClose)
+                      }
+                      disabled={isSavingSkills}
+                    >
+                      Skip for now
+                    </Button>
+                    <Button
+                      disabled={isSavingSkills || !createdAssociationDirty}
+                      onClick={async () => {
+                        if (await saveCreatedAppSkills()) onClose();
+                      }}
+                    >
+                      {isSavingSkills ? "Saving…" : "Save skills"}
+                    </Button>
+                  </div>
+                </Modal.Footer>
+              </>
+            )}
           </Modal.Content>
         </Modal>
-        {uploadOpen && (
-          <CreateSkillModal
-            open
-            skipOverlay
-            onClose={() => setUploadOpen(false)}
-            onContinue={(draft) => {
-              navigateToSkillEditor(stageSkillCreationDraft(draft));
-            }}
-          />
-        )}
+        <UnsavedChangesModal
+          open={createdAppUnsavedChanges.confirmationOpen}
+          onCancel={createdAppUnsavedChanges.cancelLeave}
+          onDiscard={createdAppUnsavedChanges.discardAndLeave}
+        />
       </>
     );
   }
@@ -251,7 +290,25 @@ export default function ConfigureProviderModal({
   return (
     <>
       <ActionPolicyEditorModal
-        onClose={onClose}
+        alternateContent={
+          uploadOpen && existingApp ? (
+            <CreateSkillModalContent
+              onClose={() => setUploadOpen(false)}
+              onBusyChange={setUploadBusy}
+              onContinue={(draft) => {
+                navigateToSkillEditor(stageSkillCreationDraft(draft));
+              }}
+            />
+          ) : undefined
+        }
+        isAdditionalContentDirty={existingAssociationDirty}
+        onClose={
+          uploadOpen
+            ? () => {
+                if (!uploadBusy) setUploadOpen(false);
+              }
+            : onClose
+        }
         title={
           existingApp ? `Edit ${existingApp.name}` : `Add ${descriptor.name}`
         }
@@ -280,40 +337,26 @@ export default function ConfigureProviderModal({
         closeAfterSave={existingApp !== null}
         bodyAfterPolicies={
           existingApp
-            ? (saveWithoutClosing) => (
+            ? (requestLeave) => (
                 <>
                   <Divider />
                   <AssociatedSkillsEditor
                     app={existingApp}
                     selectedSkillIds={selectedSkillIds}
                     onChange={setSelectedSkillIds}
-                    onOpenSkill={async (skillId) => {
-                      if (await saveWithoutClosing()) {
-                        navigateToExistingSkill(skillId);
-                      }
-                    }}
-                    onCreateSkill={async () => {
-                      if (await saveWithoutClosing()) navigateToSkillEditor();
-                    }}
-                    onUploadSkill={async () => {
-                      if (await saveWithoutClosing()) setUploadOpen(true);
-                    }}
+                    onOpenSkill={(skillId) =>
+                      requestLeave(() => navigateToExistingSkill(skillId))
+                    }
+                    onCreateSkill={() =>
+                      requestLeave(() => navigateToSkillEditor())
+                    }
+                    onUploadSkill={() => setUploadOpen(true)}
                   />
                 </>
               )
             : undefined
         }
       />
-      {uploadOpen && existingApp && (
-        <CreateSkillModal
-          open
-          skipOverlay
-          onClose={() => setUploadOpen(false)}
-          onContinue={(draft) => {
-            navigateToSkillEditor(stageSkillCreationDraft(draft));
-          }}
-        />
-      )}
     </>
   );
 }

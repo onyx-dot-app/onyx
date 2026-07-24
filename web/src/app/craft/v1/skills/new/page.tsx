@@ -1,4 +1,5 @@
 import SkillEditorPage from "@/views/SkillEditorPage";
+import { externalAppContextFromSearchParams } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
 
 interface CreateSkillPageProps {
   searchParams: Promise<{
@@ -11,22 +12,11 @@ interface CreateSkillPageProps {
 export default async function CreateSkillPage({
   searchParams,
 }: CreateSkillPageProps) {
-  const { draft, externalAppId, externalAppName } = await searchParams;
-  const parsedExternalAppId =
-    typeof externalAppId === "string" ? Number(externalAppId) : undefined;
+  const params = await searchParams;
   return (
     <SkillEditorPage
-      draftId={typeof draft === "string" ? draft : undefined}
-      externalAppId={
-        Number.isInteger(parsedExternalAppId) &&
-        parsedExternalAppId !== undefined &&
-        parsedExternalAppId > 0
-          ? parsedExternalAppId
-          : undefined
-      }
-      externalAppName={
-        typeof externalAppName === "string" ? externalAppName : undefined
-      }
+      draftId={typeof params.draft === "string" ? params.draft : undefined}
+      {...externalAppContextFromSearchParams(params)}
     />
   );
 }

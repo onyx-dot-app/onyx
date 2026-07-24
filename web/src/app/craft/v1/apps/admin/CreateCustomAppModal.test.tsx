@@ -5,8 +5,10 @@
 import { fireEvent, render, screen, waitFor } from "@tests/setup/test-utils";
 import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
 import * as externalAppsService from "@/app/craft/services/externalAppsService";
+import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 
 const mockUseUserSkills = jest.fn();
+const mockRouterPush = jest.fn();
 
 jest.mock("@/app/craft/services/externalAppsService");
 jest.mock("@/hooks/useUserSkills", () => ({
@@ -14,9 +16,39 @@ jest.mock("@/hooks/useUserSkills", () => ({
   default: () => mockUseUserSkills(),
 }));
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: mockRouterPush }),
   usePathname: () => "/admin/craft/apps",
 }));
+
+const CUSTOM_APP: ExternalAppAdminResponse = {
+  id: 17,
+  name: "Acme CRM",
+  app_type: "CUSTOM",
+  upstream_url_patterns: ["https://api.acme.test/*"],
+  auth_template: {},
+  organization_credentials: {},
+  enabled: true,
+  actions: [],
+  associated_skills: [],
+  is_onyx_managed: false,
+};
+
+function renderExistingApp({
+  onClose = jest.fn(),
+  onSaved = jest.fn(),
+}: {
+  onClose?: jest.Mock;
+  onSaved?: jest.Mock;
+} = {}) {
+  render(
+    <CreateCustomAppModal
+      onClose={onClose}
+      onSaved={onSaved}
+      existingApp={CUSTOM_APP}
+    />
+  );
+  return { onClose, onSaved };
+}
 
 describe("CreateCustomAppModal", () => {
   beforeEach(() => {
@@ -30,22 +62,12 @@ describe("CreateCustomAppModal", () => {
   it("persists the app before offering the optional skills step", async () => {
     const onClose = jest.fn();
     const onSaved = jest.fn();
-    jest.mocked(externalAppsService.createCustomExternalApp).mockResolvedValue({
-      id: 17,
-      name: "Acme CRM",
-      app_type: "CUSTOM",
-      upstream_url_patterns: ["https://api.acme.test/*"],
-      auth_template: {},
-      organization_credentials: {},
-      enabled: true,
-      actions: [],
-      associated_skills: [],
-      is_onyx_managed: false,
-    });
+    jest
+      .mocked(externalAppsService.createCustomExternalApp)
+      .mockResolvedValue(CUSTOM_APP);
 
     render(
       <CreateCustomAppModal
-        open
         onClose={onClose}
         onSaved={onSaved}
         existingApp={null}
@@ -93,20 +115,6 @@ describe("CreateCustomAppModal", () => {
   });
 
   it("confirms visibility promotion and batches association with app edits", async () => {
-    const onClose = jest.fn();
-    const onSaved = jest.fn();
-    const existingApp = {
-      id: 17,
-      name: "Acme CRM",
-      app_type: "CUSTOM" as const,
-      upstream_url_patterns: ["https://api.acme.test/*"],
-      auth_template: {},
-      organization_credentials: {},
-      enabled: true,
-      actions: [],
-      associated_skills: [],
-      is_onyx_managed: false,
-    };
     const editableSkill = {
       source: "custom" as const,
       id: "skill-a",
@@ -147,20 +155,13 @@ describe("CreateCustomAppModal", () => {
       isLoading: false,
     });
     jest.mocked(externalAppsService.updateExternalApp).mockResolvedValue({
-      ...existingApp,
+      ...CUSTOM_APP,
       associated_skills: [
         { id: "skill-a", name: "acme-lookup", is_valid: true },
       ],
     });
 
-    render(
-      <CreateCustomAppModal
-        open
-        onClose={onClose}
-        onSaved={onSaved}
-        existingApp={existingApp}
-      />
-    );
+    const { onClose, onSaved } = renderExistingApp();
 
     const appModal = screen.getByRole("dialog", { name: /Edit Acme CRM/ });
     fireEvent.click(screen.getByRole("button", { name: "Associate existing" }));
@@ -183,21 +184,19 @@ describe("CreateCustomAppModal", () => {
       name: "Associate acme-lookup",
     });
     expect(sameNamedSkills).toHaveLength(2);
-    expect(
-      sameNamedSkills.filter(
-        (item) => item.getAttribute("aria-disabled") === "true"
-      )
-    ).toHaveLength(1);
-    expect(
-      screen.getByRole("button", { name: "Associate broken-skill" })
-    ).toHaveAttribute("aria-disabled", "true");
-    expect(
-      screen.getAllByText("Invalid skill — fix it before associating.").length
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText("A skill named “acme-lookup” is already associated.")
-        .length
-    ).toBeGreaterThan(0);
+    const disabledSameNamedSkill = sameNamedSkills.find(
+      (item) => item.getAttribute("aria-disabled") === "true"
+    );
+    expect(disabledSameNamedSkill).toHaveTextContent(
+      "A skill named “acme-lookup” is already associated."
+    );
+    const invalidSkill = screen.getByRole("button", {
+      name: "Associate broken-skill",
+    });
+    expect(invalidSkill).toHaveAttribute("aria-disabled", "true");
+    expect(invalidSkill).toHaveTextContent(
+      "Invalid skill — fix it before associating."
+    );
     fireEvent.keyDown(document, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -214,38 +213,84 @@ describe("CreateCustomAppModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps app settings mounted beneath the upload chooser", () => {
-    const existingApp = {
-      id: 17,
-      name: "Acme CRM",
-      app_type: "CUSTOM" as const,
-      upstream_url_patterns: ["https://api.acme.test/*"],
-      auth_template: {},
-      organization_credentials: {},
-      enabled: true,
-      actions: [],
-      associated_skills: [],
-      is_onyx_managed: false,
-    };
+  it("guards unsaved edits before skill creation without persisting them", () => {
+    const { onClose, onSaved } = renderExistingApp();
 
-    render(
-      <CreateCustomAppModal
-        open
-        onClose={jest.fn()}
-        onSaved={jest.fn()}
-        existingApp={existingApp}
-      />
+    fireEvent.change(screen.getByDisplayValue("Acme CRM"), {
+      target: { value: "Unsaved Acme CRM" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Start from scratch/ })
     );
+
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/craft/v1/skills/new?externalAppId=17&externalAppName=Acme+CRM"
+    );
+    expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("warns before discarding dirty app settings", () => {
+    const { onClose } = renderExistingApp();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    fireEvent.change(screen.getByDisplayValue("Acme CRM"), {
+      target: { value: "Unsaved Acme CRM" },
+    });
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
+  });
+
+  it("restores unsaved app settings after upload is canceled", () => {
+    const { onClose } = renderExistingApp();
+    fireEvent.change(screen.getByDisplayValue("Acme CRM"), {
+      target: { value: "Edited Acme CRM" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
     fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
 
-    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(2);
-    expect(screen.getByText("Edit Acme CRM")).toBeInTheDocument();
+    expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
     expect(screen.getByText("Upload skill")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(screen.getAllByRole("dialog")).toHaveLength(1);
-    expect(screen.getByDisplayValue("Acme CRM")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Edited Acme CRM")).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("preserves the draft when refreshed app data arrives", () => {
+    const props = {
+      onClose: jest.fn(),
+      onSaved: jest.fn(),
+      existingApp: CUSTOM_APP,
+    };
+    const { rerender } = render(<CreateCustomAppModal {...props} />);
+    fireEvent.change(screen.getByDisplayValue("Acme CRM"), {
+      target: { value: "Unsaved Acme CRM" },
+    });
+
+    rerender(
+      <CreateCustomAppModal
+        {...props}
+        existingApp={{ ...CUSTOM_APP, associated_skills: [] }}
+      />
+    );
+
+    expect(screen.getByDisplayValue("Unsaved Acme CRM")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import isEqual from "lodash/isEqual";
 import {
   Button,
   InputTypeIn,
@@ -12,6 +13,8 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import PolicyToggle from "@/sections/actions/PolicyToggle";
 import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
+import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
+import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 
 // One agent-callable capability whose approval policy an admin can set —
 // an external-app action or an MCP tool.
@@ -33,6 +36,9 @@ export interface EditorField {
 }
 
 interface ActionPolicyEditorModalProps {
+  /** Alternate view rendered inside the same modal surface. */
+  alternateContent?: React.ReactNode;
+  isAdditionalContentDirty?: boolean;
   onClose: () => void;
   title: string;
   description: string;
@@ -52,7 +58,7 @@ interface ActionPolicyEditorModalProps {
     policies: Record<string, EndpointPolicy>
   ) => Promise<void>;
   bodyAfterPolicies?: (
-    saveWithoutClosing: () => Promise<boolean>
+    requestLeave: (navigate: () => void) => void
   ) => React.ReactNode;
   /** Keep the modal mounted when save advances its caller to another step. */
   closeAfterSave?: boolean;
@@ -63,6 +69,8 @@ interface ActionPolicyEditorModalProps {
  * policy items and supply the save call; the UI is identical for both.
  * Mount it only while open — initial values are read once. */
 export default function ActionPolicyEditorModal({
+  alternateContent,
+  isAdditionalContentDirty = false,
   onClose,
   title,
   description,
@@ -88,101 +96,127 @@ export default function ActionPolicyEditorModal({
   const fieldsFilled = fields.every(
     (field) => (fieldValues[field.key] ?? "").trim().length > 0
   );
-  const canSave = fieldsFilled && policyItems !== undefined && !isSaving;
+  const fieldsDirty = !isEqual(fieldValues, initialFieldValues);
+  const policiesDirty = !isEqual(policies, initialPolicies);
+  const isDirty = fieldsDirty || policiesDirty || isAdditionalContentDirty;
+  const unsavedChanges = useUnsavedChangesGuard({ isDirty });
+  const canSave =
+    fieldsFilled && policyItems !== undefined && !isSaving && isDirty;
 
-  async function persist(): Promise<boolean> {
+  async function save() {
     setIsSaving(true);
     setError(null);
     try {
       await onSave(fieldValues, policies);
-      return true;
+      if (closeAfterSave) onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-      return false;
     } finally {
       setIsSaving(false);
     }
   }
 
-  async function save() {
-    if ((await persist()) && closeAfterSave) onClose();
-  }
-
   return (
-    <Modal open onOpenChange={(o) => !o && onClose()}>
-      <Modal.Content width="lg" height="lg">
-        <Modal.Header title={title} description={description} />
-        <Modal.Body>
-          <div className="flex flex-col gap-3">
-            {note && (
-              <Text font="secondary-body" color="text-03">
-                {note}
-              </Text>
-            )}
+    <>
+      <Modal
+        open
+        onOpenChange={(open) => {
+          if (open) return;
+          if (alternateContent) {
+            onClose();
+          } else {
+            unsavedChanges.requestLeave(onClose);
+          }
+        }}
+      >
+        <Modal.Content
+          width={alternateContent ? "sm" : "lg"}
+          height={alternateContent ? "fit" : "lg"}
+        >
+          {alternateContent ?? (
+            <>
+              <Modal.Header title={title} description={description} />
+              <Modal.Body>
+                <div className="flex flex-col gap-3">
+                  {note && (
+                    <Text font="secondary-body" color="text-03">
+                      {note}
+                    </Text>
+                  )}
 
-            {fields.map((field) => {
-              const Input = field.secret ? PasswordInputTypeIn : InputTypeIn;
-              return (
-                <div key={field.key} className="flex flex-col gap-1">
-                  <Text font="main-ui-action">{field.label}</Text>
-                  <Input
-                    value={fieldValues[field.key] ?? ""}
-                    onChange={(e) =>
-                      setFieldValues((prev) => ({
-                        ...prev,
-                        [field.key]: e.target.value,
-                      }))
-                    }
-                    placeholder={field.placeholder}
-                  />
-                  <Text font="secondary-body" color="text-03">
-                    {field.description}
-                  </Text>
+                  {fields.map((field) => {
+                    const Input = field.secret
+                      ? PasswordInputTypeIn
+                      : InputTypeIn;
+                    return (
+                      <div key={field.key} className="flex flex-col gap-1">
+                        <Text font="main-ui-action">{field.label}</Text>
+                        <Input
+                          value={fieldValues[field.key] ?? ""}
+                          onChange={(e) =>
+                            setFieldValues((prev) => ({
+                              ...prev,
+                              [field.key]: e.target.value,
+                            }))
+                          }
+                          placeholder={field.placeholder}
+                        />
+                        <Text font="secondary-body" color="text-03">
+                          {field.description}
+                        </Text>
+                      </div>
+                    );
+                  })}
+
+                  {policyItems === undefined ? (
+                    <Text font="main-content-body" color="text-03">
+                      Loading…
+                    </Text>
+                  ) : policyItems.length === 0 ? (
+                    <Text font="secondary-body" color="text-03">
+                      {emptyPoliciesMessage}
+                    </Text>
+                  ) : (
+                    <PolicyEditor
+                      items={policyItems}
+                      policies={policies}
+                      onChange={setPolicies}
+                    />
+                  )}
+
+                  {bodyAfterPolicies?.(unsavedChanges.requestLeave)}
+
+                  {error && (
+                    <Text font="secondary-body" color="text-03">
+                      {error}
+                    </Text>
+                  )}
                 </div>
-              );
-            })}
-
-            {policyItems === undefined ? (
-              <Text font="main-content-body" color="text-03">
-                Loading…
-              </Text>
-            ) : policyItems.length === 0 ? (
-              <Text font="secondary-body" color="text-03">
-                {emptyPoliciesMessage}
-              </Text>
-            ) : (
-              <PolicyEditor
-                items={policyItems}
-                policies={policies}
-                onChange={setPolicies}
-              />
-            )}
-
-            {bodyAfterPolicies?.(persist)}
-
-            {error && (
-              <Text font="secondary-body" color="text-03">
-                {error}
-              </Text>
-            )}
-          </div>
-        </Modal.Body>
-        <Modal.Footer>
-          <div className="flex justify-end gap-2 w-full">
-            <Button
-              prominence="secondary"
-              onClick={onClose}
-              disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button onClick={save} disabled={!canSave}>
-              {isSaving ? "Saving…" : saveLabel}
-            </Button>
-          </div>
-        </Modal.Footer>
-      </Modal.Content>
-    </Modal>
+              </Modal.Body>
+              <Modal.Footer>
+                <div className="flex justify-end gap-2 w-full">
+                  <Button
+                    prominence="secondary"
+                    onClick={() => unsavedChanges.requestLeave(onClose)}
+                    disabled={isSaving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={save} disabled={!canSave}>
+                    {isSaving ? "Saving…" : saveLabel}
+                  </Button>
+                </div>
+              </Modal.Footer>
+            </>
+          )}
+        </Modal.Content>
+      </Modal>
+      <UnsavedChangesModal
+        open={unsavedChanges.confirmationOpen}
+        onCancel={unsavedChanges.cancelLeave}
+        onDiscard={unsavedChanges.discardAndLeave}
+      />
+    </>
   );
 }
 

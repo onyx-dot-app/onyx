@@ -235,6 +235,32 @@ describe("SkillEditorPage", () => {
     );
   });
 
+  it("does not offer a disabled retry for an app association conflict", async () => {
+    const user = setupUser();
+    const consoleError = jest.spyOn(console, "error").mockImplementation();
+    mockCreateCustomSkillFromEditor.mockRejectedValue(
+      Object.assign(new Error("This app already has a skill with that name"), {
+        errorCode: "SKILL_NAME_CONFLICT",
+      })
+    );
+
+    render(<SkillEditorPage externalAppId={42} externalAppName="Acme CRM" />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(consoleError).toHaveBeenCalledWith(
+        "Failed to save skill",
+        expect.any(Error)
+      )
+    );
+    expect(
+      screen.queryByText("Create another “report-writer” skill?")
+    ).not.toBeInTheDocument();
+    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(1);
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+  });
+
   it("confirms before canceling a create page with unsaved changes", async () => {
     const user = setupUser();
     render(<SkillEditorPage />);
@@ -300,6 +326,17 @@ describe("SkillEditorPage", () => {
         externalAppName="Acme CRM"
       />
     );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/admin/craft/apps?editAppId=42"
+    );
+  });
+
+  it("returns app-launched skill creation to that app on Cancel", async () => {
+    const user = setupUser();
+
+    render(<SkillEditorPage externalAppId={42} externalAppName="Acme CRM" />);
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(mockRouterPush).toHaveBeenCalledWith(
