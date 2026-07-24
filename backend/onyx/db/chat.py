@@ -402,6 +402,79 @@ def get_chat_sessions_older_than(
     return returned_sessions
 
 
+def get_failed_chat_session_batch(
+    db_session: Session,
+    cutoff: datetime,
+    after_id: UUID | None,
+    batch_size: int,
+) -> tuple[list[tuple[UUID | None, UUID]], UUID | None]:
+    """Find "failed" chat sessions (husks) in one primary-key-ordered batch.
+
+    A failed session is one that has never contained a non-SYSTEM message —
+    the web client creates sessions lazily at first send and the SYSTEM root
+    message is written before the user message, so a SYSTEM-only session holds
+    no user-visible content. Only sessions whose time_created, time_updated
+    and every message time_sent all predate ``cutoff`` qualify; the message
+    recency guard keeps a sweep from racing a first send into an old
+    pre-created session (the root SYSTEM message lands moments before the user
+    message commits).
+
+    The scan is keyset-paginated over ChatSession.id so a sweep can walk the
+    whole table in bounded batches: pass ``after_id=None`` for the first batch
+    and the returned cursor for each subsequent one. The message check is a
+    single IN-list aggregate per batch rather than a correlated subquery,
+    which would seq-scan chat_message on deployments without the
+    chat_message(chat_session_id) index (see #9802).
+
+    Returns ``(failed_sessions, next_after_id)`` where failed_sessions are
+    (user_id, chat_session_id) tuples and next_after_id is None once the table
+    is exhausted.
+    """
+    stmt = (
+        select(ChatSession.id, ChatSession.user_id)
+        .where(ChatSession.time_created < cutoff)
+        .where(ChatSession.time_updated < cutoff)
+        .order_by(ChatSession.id)
+        .limit(batch_size)
+    )
+    if after_id is not None:
+        stmt = stmt.where(ChatSession.id > after_id)
+
+    candidates = db_session.execute(stmt).all()
+    if not candidates:
+        return [], None
+    next_after_id = candidates[-1][0] if len(candidates) == batch_size else None
+
+    message_stats: dict[UUID, tuple[bool, datetime]] = {
+        session_id: (has_non_system, last_time_sent)
+        for session_id, has_non_system, last_time_sent in db_session.execute(
+            select(
+                ChatMessage.chat_session_id,
+                func.bool_or(ChatMessage.message_type != MessageType.SYSTEM),
+                func.max(ChatMessage.time_sent),
+            )
+            .where(
+                ChatMessage.chat_session_id.in_(
+                    [session_id for session_id, _ in candidates]
+                )
+            )
+            .group_by(ChatMessage.chat_session_id)
+        ).all()
+    }
+
+    failed_sessions: list[tuple[UUID | None, UUID]] = []
+    for session_id, user_id in candidates:
+        stats = message_stats.get(session_id)
+        if stats is None:
+            failed_sessions.append((user_id, session_id))
+            continue
+        has_non_system, last_time_sent = stats
+        if not has_non_system and last_time_sent < cutoff:
+            failed_sessions.append((user_id, session_id))
+
+    return failed_sessions, next_after_id
+
+
 def get_chat_message(
     chat_message_id: int,
     user_id: UUID | None,
