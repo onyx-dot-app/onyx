@@ -71,10 +71,8 @@ export default function AssociatedSkillsEditor({
     return customSkills
       .filter(
         (skill) =>
-          (skill.user_permission === "OWNER" ||
-            skill.user_permission === "EDITOR") &&
-          (skill.external_app === null ||
-            skill.external_app.external_app_id === app.id)
+          skill.user_permission === "OWNER" ||
+          skill.user_permission === "EDITOR"
       )
       .filter(
         (skill) =>
@@ -86,6 +84,12 @@ export default function AssociatedSkillsEditor({
   function unavailableReason(skill: Skill): string | null {
     if (skill.is_valid === false) {
       return "Invalid skill — fix it before associating.";
+    }
+    if (
+      skill.external_app !== null &&
+      skill.external_app.external_app_id !== app.id
+    ) {
+      return `Already associated with app “${skill.external_app.name}”.`;
     }
     if (!selectedIds.has(skill.id) && selectedNames.has(skill.name)) {
       return `A skill named “${skill.name}” is already associated.`;

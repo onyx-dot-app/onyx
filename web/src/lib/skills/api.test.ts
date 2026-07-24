@@ -40,6 +40,7 @@ describe("skills API", () => {
       external_app_id: 17,
     });
 
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = fetchMock.mock.calls[0]![1]!.body as FormData;
     expect(body.get("external_app_id")).toBe("17");
     expect(body.get("auto_enable")).toBe("false");

@@ -12,19 +12,25 @@ interface CreateSkillModalProps {
   open: boolean;
   onClose: () => void;
   onContinue: (draft: SkillCreationDraft) => void;
+  validateDraft?: (draft: SkillCreationDraft) => string | null;
 }
 
 interface CreateSkillModalContentProps extends Omit<
   CreateSkillModalProps,
   "open"
 > {
+  hidden?: boolean;
   onBusyChange?: (busy: boolean) => void;
+  preserveDraftOnContinue?: boolean;
 }
 
 export function CreateSkillModalContent({
+  hidden = false,
   onClose,
   onContinue,
   onBusyChange,
+  preserveDraftOnContinue = false,
+  validateDraft,
 }: CreateSkillModalContentProps) {
   const [bundle, setBundle] = useState<PreparedSkillBundle | null>(null);
   const [preparing, setPreparing] = useState(false);
@@ -62,7 +68,12 @@ export function CreateSkillModalContent({
           containsSkillMd: true,
         },
       };
-      reset();
+      const validationError = validateDraft?.(draft);
+      if (validationError) {
+        setErrorMessage(validationError);
+        return;
+      }
+      if (!preserveDraftOnContinue) reset();
       onContinue(draft);
     } catch (error) {
       console.error("Failed to inspect skill bundle", error);
@@ -73,6 +84,8 @@ export function CreateSkillModalContent({
       setInspecting(false);
     }
   }
+
+  if (hidden) return null;
 
   return (
     <>
@@ -141,6 +154,7 @@ export default function CreateSkillModal({
   open,
   onClose,
   onContinue,
+  validateDraft,
 }: CreateSkillModalProps) {
   const [busy, setBusy] = useState(false);
 
@@ -151,6 +165,7 @@ export default function CreateSkillModal({
           onClose={onClose}
           onContinue={onContinue}
           onBusyChange={setBusy}
+          validateDraft={validateDraft}
         />
       </Modal.Content>
     </Modal>

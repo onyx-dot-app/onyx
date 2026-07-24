@@ -165,6 +165,9 @@ export default function SkillEditorPage({
   const [conflictingSkillName, setConflictingSkillName] = useState<
     string | null
   >(null);
+  const [appConflictingSkillName, setAppConflictingSkillName] = useState<
+    string | null
+  >(null);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
     setName(nextSkill.name);
@@ -249,6 +252,7 @@ export default function SkillEditorPage({
     event?.preventDefault();
     if (!canSave) return;
     setIsSaving(true);
+    setAppConflictingSkillName(null);
     try {
       if (isCreating) {
         const created = await createCustomSkillFromEditor(
@@ -265,11 +269,19 @@ export default function SkillEditorPage({
         );
         setConflictingSkillName(null);
         if (draftId) discardSkillCreationDraft(draftId);
-        const refreshes = [mutate(SWR_KEYS.userSkills)];
         if (isCreatingForApp) {
-          refreshes.push(mutate(SWR_KEYS.buildExternalAppsAdmin));
+          // The app editor reads this cache as soon as we return. Wait for its
+          // association to refresh so the newly created skill is visible.
+          try {
+            await mutate(SWR_KEYS.buildExternalAppsAdmin);
+          } catch (error) {
+            console.error(
+              "Failed to refresh external app after skill creation",
+              error
+            );
+          }
         }
-        void Promise.all(refreshes).catch((error: unknown) => {
+        void mutate(SWR_KEYS.userSkills).catch((error: unknown) => {
           console.error("Failed to refresh skill data after creation", error);
         });
         toast.success(`Created "${created.name}"`);
@@ -296,6 +308,10 @@ export default function SkillEditorPage({
       await refreshSkillList();
       toast.success(`Saved "${updated.name}"`);
     } catch (err) {
+      if (isCreatingForApp && isSkillNameConflict(err)) {
+        setAppConflictingSkillName(name.trim());
+        return;
+      }
       if (
         isCreating &&
         !isCreatingForApp &&
@@ -514,6 +530,14 @@ export default function SkillEditorPage({
 
           {(isCreating || skill) && !isLoading && !error && (
             <>
+              {appConflictingSkillName && (
+                <MessageCard
+                  variant="error"
+                  title="Choose a different skill name"
+                  description={`App “${externalAppName ?? "External app"}” already has an associated skill named “${appConflictingSkillName}”.`}
+                />
+              )}
+
               {isCreating && !creationDraft && (
                 <>
                   <Section gap={0.5} alignItems="stretch" height="auto">
@@ -575,7 +599,10 @@ export default function SkillEditorPage({
                         id="name"
                         name="name"
                         value={name}
-                        onChange={(event) => setName(event.target.value)}
+                        onChange={(event) => {
+                          setName(event.target.value);
+                          setAppConflictingSkillName(null);
+                        }}
                         placeholder="Name your skill"
                         variant={
                           fieldsLocked || !isCreating ? "disabled" : "primary"

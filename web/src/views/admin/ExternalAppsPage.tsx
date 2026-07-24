@@ -73,11 +73,7 @@ function AppsAdminContent() {
     errorHandlingFetcher,
     { keepPreviousData: true }
   );
-  const {
-    data: apps,
-    mutate: mutateApps,
-    isValidating: appsValidating,
-  } = useSWR<ExternalAppAdminResponse[]>(
+  const { data: apps, mutate: mutateApps } = useSWR<ExternalAppAdminResponse[]>(
     SWR_KEYS.buildExternalAppsAdmin,
     errorHandlingFetcher,
     { keepPreviousData: true }
@@ -116,9 +112,7 @@ function AppsAdminContent() {
 
   const deepLinkedAppId = searchParams.get("editAppId");
   const deepLinkedApp =
-    !appsValidating &&
-    deepLinkedAppId !== null &&
-    deepLinkedAppId !== dismissedDeepLink
+    deepLinkedAppId !== null && deepLinkedAppId !== dismissedDeepLink
       ? apps?.find((app) => app.id === Number(deepLinkedAppId))
       : undefined;
   const deepLinkedDescriptor = deepLinkedApp
@@ -311,7 +305,7 @@ interface ConfiguredIntegration {
   /** Null → not deletable (MCP servers, Onyx-managed apps). */
   remove: {
     run: () => Promise<void>;
-    retainedSkillCount: number;
+    retainedCustomSkillCount: number;
   } | null;
 }
 
@@ -352,7 +346,7 @@ function externalAppToIntegration(
     remove: app.is_onyx_managed
       ? null
       : {
-          retainedSkillCount: app.associated_skills.length,
+          retainedCustomSkillCount: app.associated_skills.length,
           run: async () => {
             await deleteExternalApp(app.id);
             await onChange();
@@ -466,7 +460,7 @@ function IntegrationCard({ integration }: IntegrationCardProps) {
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={`Delete “${name}”?`}
-          description="This deletes the app configuration and connection data."
+          description="This deletes the app configuration, connection data, and any provider-managed skills."
           onClose={isMutating ? undefined : () => setConfirmingRemoval(false)}
           submit={
             <Button
@@ -482,10 +476,10 @@ function IntegrationCard({ integration }: IntegrationCardProps) {
             </Button>
           }
         >
-          {remove.retainedSkillCount === 0
-            ? "No skills will be deleted."
-            : `${remove.retainedSkillCount} associated ${
-                remove.retainedSkillCount === 1 ? "skill" : "skills"
+          {remove.retainedCustomSkillCount === 0
+            ? "No associated custom skills will be deleted."
+            : `${remove.retainedCustomSkillCount} associated custom ${
+                remove.retainedCustomSkillCount === 1 ? "skill" : "skills"
               } will be kept, unlinked from this app, and disabled for everyone.`}
         </ConfirmationModalLayout>
       )}

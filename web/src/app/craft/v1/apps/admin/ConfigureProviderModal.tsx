@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import isEqual from "lodash/isEqual";
-import { Button, Divider, MessageCard, Modal } from "@opal/components";
+import { Divider } from "@opal/components";
 import ActionPolicyEditorModal, {
   EditorField,
 } from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
@@ -17,14 +17,17 @@ import {
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
 import AssociatedSkillsEditor from "@/app/craft/v1/apps/admin/AssociatedSkillsEditor";
+import ExternalAppSkillsStepModal from "@/app/craft/v1/apps/admin/ExternalAppSkillsStepModal";
 import { CreateSkillModalContent } from "@/sections/modals/skills/CreateSkillModal";
-import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
-import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
-import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
+import {
+  stageSkillCreationDraft,
+  type SkillCreationDraft,
+} from "@/lib/skills/creationDraft";
 import {
   skillEditorUrlForApp,
   skillEditUrlForApp,
 } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
+import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
 
 // Field key for the instance name; prefixed so it can never collide with a
 // descriptor-declared credential key.
@@ -47,31 +50,19 @@ export default function ConfigureProviderModal({
   existingApp,
 }: ConfigureProviderModalProps) {
   const router = useRouter();
-  const [selectedSkillIds, setSelectedSkillIds] = useState(
-    existingApp?.associated_skills.map((skill) => skill.id) ?? []
-  );
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
     null
   );
-  const [isSavingSkills, setIsSavingSkills] = useState(false);
-  const [skillsError, setSkillsError] = useState<string | null>(null);
+  const [selectedSkillIds, setSelectedSkillIds] =
+    useSyncedAssociatedSkillIds(existingApp);
   const existingAssociationDirty =
     existingApp !== null &&
     !isEqual(
       new Set(selectedSkillIds),
       new Set(existingApp.associated_skills.map((skill) => skill.id))
     );
-  const createdAssociationDirty =
-    createdApp !== null &&
-    !isEqual(
-      new Set(selectedSkillIds),
-      new Set(createdApp.associated_skills.map((skill) => skill.id))
-    );
-  const createdAppUnsavedChanges = useUnsavedChangesGuard({
-    isDirty: createdAssociationDirty,
-  });
   // Managed built-ins (cloud): Onyx owns creds/config, so the modal only edits
   // policies — cred fields are hidden and the backend ignores them anyway.
   const managed = existingApp?.is_onyx_managed ?? false;
@@ -157,206 +148,115 @@ export default function ConfigureProviderModal({
           organization_credentials: credentialValues,
         });
         setCreatedApp(created);
-        setSelectedSkillIds([]);
       }
     }
     onSaved();
   }
 
   function navigateToSkillEditor(draftId?: string) {
-    const app = existingApp ?? createdApp;
-    if (!app) return;
-    router.push(skillEditorUrlForApp(app, draftId));
+    if (!existingApp) return;
+    router.push(skillEditorUrlForApp(existingApp, draftId));
   }
 
   function navigateToExistingSkill(skillId: string) {
-    const app = existingApp ?? createdApp;
-    if (!app) return;
-    router.push(skillEditUrlForApp(skillId, app));
+    if (!existingApp) return;
+    router.push(skillEditUrlForApp(skillId, existingApp));
   }
 
-  async function saveCreatedAppSkills(): Promise<boolean> {
-    if (!createdApp) return false;
-    setIsSavingSkills(true);
-    setSkillsError(null);
-    try {
-      const updated = await updateExternalApp(createdApp.id, {
-        associated_skill_ids: selectedSkillIds,
-      });
-      setCreatedApp(updated);
-      onSaved();
-      return true;
-    } catch (error) {
-      setSkillsError(error instanceof Error ? error.message : String(error));
-      return false;
-    } finally {
-      setIsSavingSkills(false);
-    }
+  function validateUploadedSkill(draft: SkillCreationDraft): string | null {
+    return existingApp?.associated_skills.some(
+      (skill) => skill.name === draft.contents.name
+    )
+      ? `App “${existingApp.name}” already has an associated skill named “${draft.contents.name}”. Upload a skill with a different name.`
+      : null;
   }
 
   if (createdApp) {
     return (
-      <>
-        <Modal
-          open
-          onOpenChange={(open) => {
-            if (open) return;
-            if (uploadOpen) {
-              if (!uploadBusy) setUploadOpen(false);
-            } else {
-              createdAppUnsavedChanges.requestLeave(onClose);
-            }
-          }}
-        >
-          <Modal.Content
-            width={uploadOpen ? "sm" : "lg"}
-            height={uploadOpen ? "fit" : "lg"}
-          >
-            {uploadOpen ? (
-              <CreateSkillModalContent
-                onClose={() => setUploadOpen(false)}
-                onBusyChange={setUploadBusy}
-                onContinue={(draft) => {
-                  navigateToSkillEditor(stageSkillCreationDraft(draft));
-                }}
-              />
-            ) : (
-              <>
-                <Modal.Header
-                  title={`Add skills to ${createdApp.name}`}
-                  description="Optional — associate existing skills or create one for this app."
-                />
-                <Modal.Body>
-                  <div className="flex flex-col gap-3">
-                    <AssociatedSkillsEditor
-                      app={createdApp}
-                      selectedSkillIds={selectedSkillIds}
-                      onChange={setSelectedSkillIds}
-                      onOpenSkill={(skillId) =>
-                        createdAppUnsavedChanges.requestLeave(() =>
-                          navigateToExistingSkill(skillId)
-                        )
-                      }
-                      onCreateSkill={() =>
-                        createdAppUnsavedChanges.requestLeave(() =>
-                          navigateToSkillEditor()
-                        )
-                      }
-                      onUploadSkill={() => setUploadOpen(true)}
-                    />
-                    {skillsError && (
-                      <MessageCard
-                        variant="error"
-                        title="Couldn't save"
-                        description={skillsError}
-                      />
-                    )}
-                  </div>
-                </Modal.Body>
-                <Modal.Footer>
-                  <div className="flex w-full justify-end gap-2">
-                    <Button
-                      prominence="secondary"
-                      onClick={() =>
-                        createdAppUnsavedChanges.requestLeave(onClose)
-                      }
-                      disabled={isSavingSkills}
-                    >
-                      Skip for now
-                    </Button>
-                    <Button
-                      disabled={isSavingSkills || !createdAssociationDirty}
-                      onClick={async () => {
-                        if (await saveCreatedAppSkills()) onClose();
-                      }}
-                    >
-                      {isSavingSkills ? "Saving…" : "Save skills"}
-                    </Button>
-                  </div>
-                </Modal.Footer>
-              </>
-            )}
-          </Modal.Content>
-        </Modal>
-        <UnsavedChangesModal
-          open={createdAppUnsavedChanges.confirmationOpen}
-          onCancel={createdAppUnsavedChanges.cancelLeave}
-          onDiscard={createdAppUnsavedChanges.discardAndLeave}
-        />
-      </>
+      <ExternalAppSkillsStepModal
+        app={createdApp}
+        onClose={onClose}
+        onSaved={onSaved}
+      />
     );
   }
 
   return (
-    <>
-      <ActionPolicyEditorModal
-        alternateContent={
-          uploadOpen && existingApp ? (
-            <CreateSkillModalContent
-              onClose={() => setUploadOpen(false)}
-              onBusyChange={setUploadBusy}
-              onContinue={(draft) => {
-                navigateToSkillEditor(stageSkillCreationDraft(draft));
-              }}
-            />
-          ) : undefined
-        }
-        isAdditionalContentDirty={existingAssociationDirty}
-        onClose={
-          uploadOpen
-            ? () => {
-                if (!uploadBusy) setUploadOpen(false);
-              }
-            : onClose
-        }
-        title={
-          existingApp ? `Edit ${existingApp.name}` : `Add ${descriptor.name}`
-        }
-        description={
-          managed
-            ? "Provided by Onyx — configure what the agent may do."
-            : descriptor.setup_instructions
-        }
-        note={
-          managed
-            ? "This app is provided by Onyx — credentials are managed for you. Choose what the agent may do below. Users connect it from the Apps page."
-            : undefined
-        }
-        fields={fields}
-        initialFieldValues={initialFieldValues}
-        policyItems={descriptor.actions.map((action) => ({
-          id: action.action_id,
-          name: action.normalised_name,
-          description: action.description,
-          defaultPolicy: action.default_policy,
-        }))}
-        initialPolicies={initialPolicies}
-        emptyPoliciesMessage="This provider has no actions to configure."
-        saveLabel={existingApp ? "Save" : "Add"}
-        onSave={save}
-        closeAfterSave={existingApp !== null}
-        bodyAfterPolicies={
-          existingApp
-            ? (requestLeave) => (
-                <>
-                  <Divider />
-                  <AssociatedSkillsEditor
-                    app={existingApp}
-                    selectedSkillIds={selectedSkillIds}
-                    onChange={setSelectedSkillIds}
-                    onOpenSkill={(skillId) =>
-                      requestLeave(() => navigateToExistingSkill(skillId))
-                    }
-                    onCreateSkill={() =>
-                      requestLeave(() => navigateToSkillEditor())
-                    }
-                    onUploadSkill={() => setUploadOpen(true)}
-                  />
-                </>
-              )
-            : undefined
-        }
-      />
-    </>
+    <ActionPolicyEditorModal
+      alternateContent={
+        uploadOpen && existingApp
+          ? ({ requestLeave, hidden }) => (
+              <CreateSkillModalContent
+                hidden={hidden}
+                onClose={() => setUploadOpen(false)}
+                onBusyChange={setUploadBusy}
+                preserveDraftOnContinue
+                validateDraft={validateUploadedSkill}
+                onContinue={(draft) => {
+                  requestLeave(() =>
+                    navigateToSkillEditor(stageSkillCreationDraft(draft))
+                  );
+                }}
+              />
+            )
+          : undefined
+      }
+      isAdditionalContentDirty={existingAssociationDirty}
+      onClose={
+        uploadOpen
+          ? () => {
+              if (!uploadBusy) setUploadOpen(false);
+            }
+          : onClose
+      }
+      title={
+        existingApp ? `Edit ${existingApp.name}` : `Add ${descriptor.name}`
+      }
+      description={
+        managed
+          ? "Provided by Onyx — configure what the agent may do."
+          : descriptor.setup_instructions
+      }
+      note={
+        managed
+          ? "This app is provided by Onyx — credentials are managed for you. Choose what the agent may do below. Users connect it from the Apps page."
+          : undefined
+      }
+      fields={fields}
+      initialFieldValues={initialFieldValues}
+      policyItems={descriptor.actions.map((action) => ({
+        id: action.action_id,
+        name: action.normalised_name,
+        description: action.description,
+        defaultPolicy: action.default_policy,
+      }))}
+      initialPolicies={initialPolicies}
+      emptyPoliciesMessage="This provider has no actions to configure."
+      saveLabel={existingApp ? "Save" : "Add"}
+      autoFocusFirstField={existingApp === null}
+      onSave={save}
+      closeAfterSave={existingApp !== null}
+      bodyAfterPolicies={
+        existingApp
+          ? (requestLeave) => (
+              <>
+                <Divider />
+                <AssociatedSkillsEditor
+                  app={existingApp}
+                  selectedSkillIds={selectedSkillIds}
+                  onChange={setSelectedSkillIds}
+                  onOpenSkill={(skillId) =>
+                    requestLeave(() => navigateToExistingSkill(skillId))
+                  }
+                  onCreateSkill={() =>
+                    requestLeave(() => navigateToSkillEditor())
+                  }
+                  onUploadSkill={() => setUploadOpen(true)}
+                />
+              </>
+            )
+          : undefined
+      }
+    />
   );
 }

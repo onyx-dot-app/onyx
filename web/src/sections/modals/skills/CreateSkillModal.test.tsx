@@ -74,6 +74,7 @@ describe("CreateSkillModal", () => {
     );
     expect(draft.upload.file).toBeInstanceOf(File);
     expect(mockInspectSkillBundle).toHaveBeenCalledWith(draft.upload.file);
+    expect(screen.getByRole("button", { name: "Review skill" })).toBeDisabled();
   });
 
   it("keeps the modal open and reports inspection failures", async () => {
@@ -99,6 +100,31 @@ describe("CreateSkillModal", () => {
       "Failed to inspect skill bundle",
       expect.any(Error)
     );
+  });
+
+  it("keeps a rejected inspected draft in the upload modal", async () => {
+    const user = setupUser();
+    const onContinue = jest.fn();
+    const validationMessage =
+      "App “Acme CRM” already has an associated skill named “report-writer”. Upload a skill with a different name.";
+    mockInspectSkillBundle.mockResolvedValue(inspectedContents);
+
+    render(
+      <CreateSkillModal
+        open
+        onClose={jest.fn()}
+        onContinue={onContinue}
+        validateDraft={() => validationMessage}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "Select bundle" }));
+    await user.click(screen.getByRole("button", { name: "Review skill" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      validationMessage
+    );
+    expect(onContinue).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled();
   });
 
   it("cannot submit again or close while inspection is pending", async () => {
