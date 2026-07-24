@@ -312,6 +312,12 @@ class SessionManager:
                 self._db_session.flush()
             return
 
+        # Set the dispose-pending marker BEFORE writing the config: if we crash
+        # after the write but before the dispose, the file will already match on
+        # the next reconcile, so the marker is the only thing that tells it to
+        # retry the missed dispose. Setting it after the write leaves that exact
+        # window uncovered.
+        cache.set(dispose_pending_key, "1", ex=_DISPOSE_PENDING_TTL_SECONDS)
         self._sandbox_manager.regenerate_session_config(
             sandbox_id=sandbox.id,
             session_id=session.id,
@@ -325,7 +331,6 @@ class SessionManager:
             llm_config=llm_config,
             mcp_servers=mcp_servers,
         )
-        cache.set(dispose_pending_key, "1", ex=_DISPOSE_PENDING_TTL_SECONDS)
         if session.opencode_session_id is not None:
             self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
         cache.delete(dispose_pending_key)
