@@ -83,7 +83,7 @@ function buildColumns(onMutate: () => void) {
       header: "Description",
       weight: 35,
       cell: (value) => (
-        <Text as="span" mainUiBody text03>
+        <Text as="span" mainUiBody text03 className="max-w-md truncate">
           {value || "—"}
         </Text>
       ),
