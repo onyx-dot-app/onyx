@@ -95,7 +95,7 @@ describe("LLMPopover helpers", () => {
         providerDisplayName: "Amazon Bedrock",
         modelName: "claude-3-5-sonnet",
         displayName: "Claude 3.5 Sonnet",
-        vendor: "anthropic",
+        vendor: "Anthropic",
       },
       {
         name: "OpenAI Provider",
