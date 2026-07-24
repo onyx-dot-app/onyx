@@ -258,6 +258,10 @@ def update_external_app_admin(
     affected: set[UUID] = set()
     for skill in affected_skills_by_id.values():
         affected.update(affected_user_ids_for_skill(skill, db_session))
+
+    # The database is the source of truth; sandbox files are a derived,
+    # best-effort projection of the committed app and association state.
+    db_session.commit()
     push_skills_for_users(affected, db_session)
     db_session.commit()
     if request.associated_skill_ids is not None:
