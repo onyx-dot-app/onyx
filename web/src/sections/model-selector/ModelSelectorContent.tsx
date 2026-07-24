@@ -391,26 +391,43 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
               if (effort) reasoningManager?.updateReasoningEffort(effort);
             }}
           />
-          <div className="flex flex-row items-center justify-between">
-            {ALL_REASONING_STOPS.map((stop, index) => (
-              <Disabled
-                key={stop}
-                disabled={reasoningEnabled && index > maxSupportedStop}
-                tooltip={UNSUPPORTED_SETTING_TOOLTIP}
-                tooltipSide="top"
-              >
-                <Text
-                  font="figure-small-value"
-                  color={
-                    reasoningEnabled && index === localEffortStop
-                      ? "text-04"
-                      : "text-02"
-                  }
+          {/* Labels anchor at the slider's index/lastStop fractions so they
+              line up with the stops. End labels align to the row edges to
+              avoid overflow. */}
+          <div className="relative h-4 w-full">
+            {ALL_REASONING_STOPS.map((stop, index) => {
+              const lastStop = ALL_REASONING_STOPS.length - 1;
+              return (
+                <div
+                  key={stop}
+                  className={cn(
+                    "absolute top-0",
+                    index === lastStop
+                      ? "-translate-x-full"
+                      : index > 0 && "-translate-x-1/2"
+                  )}
+                  style={{ left: `${(index / lastStop) * 100}%` }}
                 >
-                  {REASONING_STOP_LABELS[stop]}
-                </Text>
-              </Disabled>
-            ))}
+                  <Disabled
+                    disabled={reasoningEnabled && index > maxSupportedStop}
+                    tooltip={UNSUPPORTED_SETTING_TOOLTIP}
+                    tooltipSide="top"
+                  >
+                    <Text
+                      font="figure-small-value"
+                      color={
+                        reasoningEnabled && index === localEffortStop
+                          ? "text-04"
+                          : "text-02"
+                      }
+                      nowrap
+                    >
+                      {REASONING_STOP_LABELS[stop]}
+                    </Text>
+                  </Disabled>
+                </div>
+              );
+            })}
           </div>
         </SettingRow>
       </Disabled>
