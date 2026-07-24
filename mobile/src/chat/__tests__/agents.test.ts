@@ -25,6 +25,8 @@ function agent(
     builtin_persona: false,
     display_priority: null,
     labels: [],
+    tools: [],
+    knowledge_sources: [],
     ...overrides,
   };
 }

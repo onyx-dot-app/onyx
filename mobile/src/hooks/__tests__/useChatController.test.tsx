@@ -233,6 +233,61 @@ describe("useChatController", () => {
     expect(result.current.messages[0]!.files).toEqual(files);
   });
 
+  it("threads toolOptions onto the send body (deep research / tools / sources)", async () => {
+    useChatSessionStore.getState().ensureSession("s-tools");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const { result } = renderHook(() => useChatController("s-tools"), {
+      wrapper,
+    });
+    await act(async () => {
+      await result.current.submit("hi", [], undefined, {
+        deepResearch: true,
+        allowedToolIds: [1, 3],
+        forcedToolId: 3,
+        internalSearchFilters: { source_type: ["web"] },
+      });
+    });
+
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    const body = streamMock.mock.calls[0]![0] as unknown as {
+      deep_research: boolean;
+      allowed_tool_ids: number[] | null;
+      forced_tool_id: number | null;
+      internal_search_filters: { source_type: string[] | null } | null;
+    };
+    expect(body.deep_research).toBe(true);
+    expect(body.allowed_tool_ids).toEqual([1, 3]);
+    expect(body.forced_tool_id).toBe(3);
+    expect(body.internal_search_filters).toEqual({ source_type: ["web"] });
+  });
+
+  it("defaults the tool fields when no toolOptions are passed (backwards compatible)", async () => {
+    useChatSessionStore.getState().ensureSession("s-defaults");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const { result } = renderHook(() => useChatController("s-defaults"), {
+      wrapper,
+    });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    const body = streamMock.mock.calls[0]![0] as unknown as {
+      deep_research: boolean;
+      allowed_tool_ids: number[] | null;
+      forced_tool_id: number | null;
+      internal_search_filters: unknown;
+    };
+    expect(body.deep_research).toBe(false);
+    expect(body.allowed_tool_ids).toBeNull();
+    expect(body.forced_tool_id).toBeNull();
+    expect(body.internal_search_filters).toBeNull();
+  });
+
   it("creates a session on the first message of a new chat", async () => {
     createSessionMock.mockResolvedValue("new-session");
     streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));

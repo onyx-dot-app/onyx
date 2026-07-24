@@ -12,6 +12,7 @@ import {
   stopChatSession,
 } from "@/api/chat/sessions";
 import {
+  ChatToolOptions,
   isMessageIdInfo,
   isPacket,
   isStreamError,
@@ -169,10 +170,13 @@ export interface ChatController {
   chatState: ChatState;
   // `onAccepted` fires once, past every early return and before the session-create await, so the
   // caller can clear the draft optimistically yet only on a committed send.
+  // `toolOptions` carries the toolbar controls (deep research / forced + allowed tools / sources);
+  // absent = backend defaults.
   submit: (
     text: string,
     files?: FileDescriptor[],
     onAccepted?: () => void,
+    toolOptions?: ChatToolOptions,
   ) => void;
   stop: () => void;
   isHydrating: boolean;
@@ -230,6 +234,7 @@ export function useChatController(
       overrideText: string,
       files?: FileDescriptor[],
       onAccepted?: () => void,
+      toolOptions?: ChatToolOptions,
     ) => {
       const text = overrideText.trim();
       if (!text) return;
@@ -293,8 +298,11 @@ export function useChatController(
           chat_session_id: activeId,
           parent_message_id: parentMessageId,
           file_descriptors: fileDescriptors,
-          deep_research: false,
+          deep_research: toolOptions?.deepResearch ?? false,
           origin: "mobile",
+          allowed_tool_ids: toolOptions?.allowedToolIds ?? null,
+          forced_tool_id: toolOptions?.forcedToolId ?? null,
+          internal_search_filters: toolOptions?.internalSearchFilters ?? null,
         };
 
         if (sessionId == null) {
