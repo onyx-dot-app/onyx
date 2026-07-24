@@ -54,7 +54,7 @@ from onyx.db.sso_provider import (
     validate_sso_config,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
+from onyx.error_handling.exceptions import CLEANUP_COOKIE_STATE_ATTR, OnyxError
 from onyx.utils.url import sanitize_next_url
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -97,11 +97,18 @@ def _resolve_oidc_provider(
     return provider, config
 
 
+def _pkce_enabled(config: dict[str, Any]) -> bool:
+    """PKCE is on when the provider row enables it. The deployment-wide env
+    flag can still force it on while that flag exists."""
+    return bool(config.get("pkce_enabled")) or OIDC_PKCE_ENABLED
+
+
 def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[Any]:
     if provider.provider_type is SSOProviderType.OIDC:
-        # Env override lets deployments request extra API scopes (e.g. MS Graph
-        # User.Read for claims capture). offline_access secures refresh tokens.
-        scopes = list(OIDC_SCOPE_OVERRIDE or BASE_SCOPES)
+        # Scope overrides let providers request extra API scopes (e.g. MS Graph
+        # User.Read for claims capture): the row's scopes win, then the env
+        # override while it exists. offline_access secures refresh tokens.
+        scopes = list(config.get("scopes") or OIDC_SCOPE_OVERRIDE or BASE_SCOPES)
         if "offline_access" not in scopes:
             scopes.append("offline_access")
         return VerifiedEmailOpenID(
@@ -116,7 +123,11 @@ def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[A
         return GoogleOAuth2(
             config["client_id"],
             config["client_secret"],
-            scopes=list(GOOGLE_OAUTH_SCOPE_OVERRIDE or GOOGLE_LOGIN_BASE_SCOPES),
+            scopes=list(
+                config.get("scopes")
+                or GOOGLE_OAUTH_SCOPE_OVERRIDE
+                or GOOGLE_LOGIN_BASE_SCOPES
+            ),
             name=provider.name,
         )
 
@@ -195,10 +206,14 @@ async def oidc_login_for_provider(
     redirect_uri = _callback_uri(provider, config)
     next_url = sanitize_next_url(request.query_params.get("next"))
     csrf_token = generate_csrf_token()
+    use_pkce = _pkce_enabled(config)
     state = generate_state_token(
         {
             "next_url": next_url,
             "provider_name": provider_name,
+            # Pins this flow's PKCE mode, so a provider edit mid-login cannot
+            # make the callback disagree with the authorization request.
+            "pkce": use_pkce,
             CSRF_TOKEN_KEY: csrf_token,
         },
         USER_AUTH_SECRET,
@@ -209,7 +224,7 @@ async def oidc_login_for_provider(
         extras = {"access_type": "offline", "prompt": "consent"}
 
     code_verifier: str | None = None
-    if OIDC_PKCE_ENABLED:
+    if use_pkce:
         code_verifier, code_challenge = generate_pkce_pair()
         authorization_url = await client.get_authorization_url(
             redirect_uri,
@@ -263,6 +278,9 @@ async def oidc_login_callback(
             OnyxErrorCode.VALIDATION_ERROR,
             "Missing state parameter in OAuth callback",
         )
+    # Marked before decode so even a state-validation failure deletes the
+    # flow's single-use PKCE verifier cookie.
+    setattr(request.state, CLEANUP_COOKIE_STATE_ATTR, get_pkce_cookie_name(state))
     state_data = decode_and_validate_oauth_state(
         request=request,
         state_value=state,
@@ -298,6 +316,11 @@ async def oidc_login_callback_for_provider(
     strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
     user_manager: UserManager = Depends(get_user_manager),
 ) -> Response:
+    # Marked first so any failure below deletes the flow's single-use PKCE
+    # verifier cookie, whichever error handler builds the response.
+    if state is not None:
+        setattr(request.state, CLEANUP_COOKIE_STATE_ATTR, get_pkce_cookie_name(state))
+
     provider, config = _resolve_oidc_provider(db_session, provider_name)
     client = await _get_oauth_client(provider, config)
     redirect_uri = _callback_uri(provider, config)
@@ -325,8 +348,13 @@ async def oidc_login_callback_for_provider(
         expected_provider_name=provider_name,
     )
 
+    # The state pins the flow's PKCE mode. States without the claim fall back
+    # to the row's current setting so logins in flight across a deploy complete.
+    use_pkce = (
+        bool(state_data["pkce"]) if "pkce" in state_data else _pkce_enabled(config)
+    )
     code_verifier: str | None = None
-    if OIDC_PKCE_ENABLED:
+    if use_pkce:
         code_verifier = request.cookies.get(get_pkce_cookie_name(state))
         if not code_verifier:
             raise OnyxError(
@@ -355,7 +383,7 @@ async def oidc_login_callback_for_provider(
         allowed_email_domains_override=provider.allowed_email_domains,
     )
 
-    if OIDC_PKCE_ENABLED:
+    if use_pkce:
         _delete_pkce_cookie(redirect_response, state)
 
     return redirect_response

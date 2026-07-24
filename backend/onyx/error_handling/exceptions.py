@@ -23,12 +23,37 @@ use ``status_code_override``::
 """
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
+from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Routes that set a single-use cookie (e.g. the OIDC PKCE verifier) mark the
+# request with the cookie's name so any error response, whichever handler
+# builds it, deletes the cookie instead of leaving it until expiry. The marker
+# carries the computed name, keeping auth knowledge out of this module.
+CLEANUP_COOKIE_STATE_ATTR = "onyx_cleanup_cookie_name"
+
+_COOKIE_SECURE = WEB_DOMAIN.startswith("https")
+
+
+def clear_marked_cookie(request: Request, response: Response) -> None:
+    """Delete the request's marked single-use cookie on an error response.
+    Path must match the set-cookie or browsers treat it as a different
+    cookie and keep the original."""
+    cookie_name = getattr(request.state, CLEANUP_COOKIE_STATE_ATTR, None)
+    if not cookie_name or request.cookies.get(cookie_name) is None:
+        return
+    response.delete_cookie(
+        key=cookie_name,
+        path="/",
+        secure=_COOKIE_SECURE,
+        httponly=True,
+        samesite="lax",
+    )
 
 
 class OnyxError(Exception):
@@ -94,8 +119,22 @@ def register_onyx_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(OnyxError)
     async def _handle_onyx_error(
-        request: Request,  # noqa: ARG001
+        request: Request,
         exc: OnyxError,
     ) -> JSONResponse:
         log_onyx_error(exc)
-        return onyx_error_to_json_response(exc)
+        response = onyx_error_to_json_response(exc)
+        clear_marked_cookie(request, response)
+        return response
+
+    # Starlette re-raises the exception after this response is sent, so
+    # logging and error tracking still see unhandled errors. The plain 500
+    # matches the default ServerErrorMiddleware body.
+    @app.exception_handler(Exception)
+    async def _handle_unhandled_error(
+        request: Request,
+        exc: Exception,  # noqa: ARG001
+    ) -> Response:
+        response = PlainTextResponse("Internal Server Error", status_code=500)
+        clear_marked_cookie(request, response)
+        return response
