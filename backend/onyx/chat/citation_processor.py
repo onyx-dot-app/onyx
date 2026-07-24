@@ -20,6 +20,7 @@ from onyx.context.search.models import SearchDoc
 from onyx.prompts.constants import TRIPLE_BACKTICK
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
+from onyx.utils.regex_engine import compile_linear
 
 logger = setup_logger()
 
@@ -192,23 +193,23 @@ class DynamicCitationProcessor:
         # Matches potential incomplete citations: '[', '[[', '[1', '[[1', '[1,', '[1, ', etc.
         # Also matches unicode bracket variants: 【, ［
         #
-        # NOTE: the inner group is written as `\d+(?:, ?\d+)*` (comma-separated runs of
-        # digits) rather than `(?:\d+,? ?)*`. The latter nests an unbounded quantifier
-        # (`\d+`) inside another unbounded quantifier (`(?:...)*`) with optional
-        # separators, which makes a solid run of digits ambiguous to parse. When the
-        # match ultimately fails the trailing `$` anchor, the engine backtracks through
-        # exponentially many ways of splitting the digits (O(2^n)), pinning a CPU core.
-        # The comma-separated form has exactly one way to parse a digit run, so it stays
-        # linear. This must mirror `citation_pattern` below, which already requires
-        # commas between numbers, so no real (closeable) citation is missed.
-        self.possible_citation_pattern = re.compile(
+        # These patterns run over LLM-generated text on every streamed token, so
+        # they are compiled with RE2 (compile_linear) — matching is linear-time and
+        # cannot catastrophically backtrack (ReDoS), regardless of model output.
+        #
+        # NOTE: the inner group is still written as `\d+(?:, ?\d+)*` (comma-separated
+        # runs of digits) rather than `(?:\d+,? ?)*`. With RE2 this is no longer
+        # required to avoid backtracking, but the comma-separated form is kept so the
+        # pattern stays linear under the stdlib `re` fallback too, and mirrors
+        # `citation_pattern` below so no real (closeable) citation is missed.
+        self.possible_citation_pattern = compile_linear(
             r"([\[【［]+(?:\d+(?:, ?\d+)*(?:, ?)?)?$)"
         )
 
         # Matches complete citations:
         # group 1: '[[1]]', [[2]], etc. (also matches 【【1】】, ［［1］］, 【1】, ［1］)
         # group 2: '[1]', '[1, 2]', '[1,2,16]', etc. (also matches unicode variants)
-        self.citation_pattern = re.compile(
+        self.citation_pattern = compile_linear(
             r"([\[【［]{2}\d+[\]】］]{2})|([\[【［]\d+(?:, ?\d+)*[\]】］])"
         )
 
@@ -324,7 +325,7 @@ class DynamicCitationProcessor:
         # Look for citations in current segment
         citation_matches = list(self.citation_pattern.finditer(self.curr_segment))
         possible_citation_found = bool(
-            re.search(self.possible_citation_pattern, self.curr_segment)
+            self.possible_citation_pattern.search(self.curr_segment)
         )
 
         result = ""
