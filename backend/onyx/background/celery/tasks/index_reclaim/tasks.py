@@ -40,7 +40,7 @@ from onyx.configs.constants import (
     OnyxRedisLocks,
 )
 from onyx.db.connector_credential_pair import (
-    get_connector_credential_pair_from_id,
+    filter_cc_pair_ids_still_wont_port,
     update_connector_credential_pair_from_id,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -65,8 +65,8 @@ from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
-_RECLAIM_BEAT_SOFT_TIME_LIMIT = 300  # 5 minutes
-_RECLAIM_TASK_SOFT_TIME_LIMIT = 300  # 5 minutes
+_RECLAIM_BEAT_SOFT_TIME_LIMIT = 60 * 5
+_RECLAIM_TASK_SOFT_TIME_LIMIT = 60 * 5
 
 # Per-DELETING-row wall-clock budget. On a whale (multi-tenant delete_by_query is
 # bounded per call), loop many bounded batches within one dispatch so it drains in
@@ -77,7 +77,7 @@ _DELETE_TIME_BUDGET_S = 60
 # Per-row lock TTL. Must exceed a single dispatch's max runtime (the delete budget +
 # overhead) so it isn't stolen mid-run; a dead worker's lock expires and the row is
 # retried next tick.
-_RECLAIM_TASK_LOCK_TTL = 300
+_RECLAIM_TASK_LOCK_TTL = 60 * 5
 
 _ACTIONABLE_RECLAIM_STATUSES = (
     IndexReclaimStatus.PENDING,
@@ -88,26 +88,6 @@ _ACTIONABLE_RECLAIM_STATUSES = (
 
 def _reclaim_row_lock_key(search_settings_id: int) -> str:
     return f"{OnyxRedisLocks.OLD_INDEX_RECLAIM_LOCK_PREFIX}:{search_settings_id}"
-
-
-# cc_pairs consented for deletion are only actually deleted if still in one of these
-# states at fire time (re-validation): a re-activated connector is spared.
-_WONT_PORT_STATUSES = {
-    ConnectorCredentialPairStatus.INVALID,
-    ConnectorCredentialPairStatus.PAUSED,
-}
-
-
-def _still_wont_port(db_session: Session, cc_pair_ids: list[int]) -> list[int]:
-    """Keep only cc_pairs still INVALID/PAUSED — i.e. still not recoverable in the new
-    index. A consented connector re-activated before the port completes is dropped, so
-    we delete less than consented, never more."""
-    kept: list[int] = []
-    for cc_pair_id in cc_pair_ids:
-        cc_pair = get_connector_credential_pair_from_id(db_session, cc_pair_id)
-        if cc_pair is not None and cc_pair.status in _WONT_PORT_STATUSES:
-            kept.append(cc_pair_id)
-    return kept
 
 
 def _new_index_can_serve(index_name: str) -> bool:
@@ -164,7 +144,7 @@ def _drive_pending(
         return
 
     consented = search_settings.pending_cc_pair_deletions or []
-    to_delete = _still_wont_port(db_session, consented)
+    to_delete = filter_cc_pair_ids_still_wont_port(db_session, consented)
     if to_delete:
         _fire_cc_pair_deletions(db_session, celery_app, tenant_id, to_delete)
 
@@ -227,8 +207,7 @@ def _drive_deleting(db_session: Session, search_settings: SearchSettings) -> Non
             )
             return
 
-        # A bounded batch was deleted (real progress); reset the failure counter so a
-        # long drain can't trip BLOCKED, then yield the tick if the budget is spent.
+        # a bounded batch was deleted (progress) — reset attempts so a long drain can't trip BLOCKED
         search_settings.reclaim_attempts = 0
         db_session.commit()
         if time.monotonic() >= deadline:
