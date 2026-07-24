@@ -3104,6 +3104,12 @@ class ChatMessage(Base):
     """
 
     __tablename__ = "chat_message"
+    __table_args__ = (
+        # Backs every session-scoped message lookup (history replay, the
+        # failed-session check, retention/GC deletes and the cascade delete of
+        # a session's messages), which otherwise seq-scan chat_message.
+        Index("ix_chat_message_chat_session_id", "chat_session_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
