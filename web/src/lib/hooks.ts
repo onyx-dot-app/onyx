@@ -411,6 +411,8 @@ export interface LlmManager {
   temperatureExplicitlySet: boolean;
   reasoningEffort: ReasoningEffortOverride | null;
   updateReasoningEffort: (effort: ReasoningEffortOverride | null) => void;
+  /** True when updates persist to a session row at selection time. */
+  hasBoundSession: boolean;
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
@@ -888,6 +890,7 @@ export function useLlmManager(
     temperatureExplicitlySet,
     reasoningEffort,
     updateReasoningEffort,
+    hasBoundSession: chatSession != null,
     imageFilesPresent,
     updateImageFilesPresent,
     liveAgent: liveAgent ?? null,

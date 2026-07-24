@@ -877,35 +877,37 @@ export default function useChatController({
       let streamSucceeded = false;
 
       try {
-        // Awaited so the send cannot race these writes (turn setup reads
-        // reasoning effort from the session row). Inside the try so a failure
-        // renders as a chat error in the already-adopted session.
-        const overrideWrites: Promise<Response>[] = [];
-        if (llmManager.reasoningEffort) {
-          overrideWrites.push(
-            updateReasoningEffortForChatSession(
-              currChatSessionId,
-              llmManager.reasoningEffort
-            )
-          );
-        }
-        if (llmManager.temperatureExplicitlySet) {
-          overrideWrites.push(
-            updateTemperatureOverrideForChatSession(
-              currChatSessionId,
-              llmManager.temperature
-            )
-          );
-        }
-        if (overrideWrites.length > 0) {
-          const overrideResponses = await Promise.all(overrideWrites);
-          const failedWrite = overrideResponses.find(
-            (response) => !response.ok
-          );
-          if (failedWrite) {
-            throw new Error(
-              `Failed to persist chat session overrides: ${failedWrite.status}`
+        // When the manager has no bound session row, this submit is the only
+        // write path for the overrides. Awaited so the send cannot race the
+        // session-row read. A failure renders as a chat error.
+        if (!llmManager.hasBoundSession) {
+          const overrideWrites: Promise<Response>[] = [];
+          if (llmManager.reasoningEffort) {
+            overrideWrites.push(
+              updateReasoningEffortForChatSession(
+                currChatSessionId,
+                llmManager.reasoningEffort
+              )
             );
+          }
+          if (llmManager.temperatureExplicitlySet) {
+            overrideWrites.push(
+              updateTemperatureOverrideForChatSession(
+                currChatSessionId,
+                llmManager.temperature
+              )
+            );
+          }
+          if (overrideWrites.length > 0) {
+            const overrideResponses = await Promise.all(overrideWrites);
+            const failedWrite = overrideResponses.find(
+              (response) => !response.ok
+            );
+            if (failedWrite) {
+              throw new Error(
+                `Failed to persist chat session overrides: ${failedWrite.status}`
+              );
+            }
           }
         }
 
