@@ -66,7 +66,8 @@ def test_bad_request_without_reasoning_params_raises() -> None:
         calls.append(kwargs)
         raise _bad_request("bad prompt")
 
-    # OFF sends no reasoning kwargs, so there is nothing to strip.
+    # OFF sends no reasoning kwargs and claude-sonnet-5 omits temperature,
+    # so nothing is strippable.
     with pytest.raises(BadRequestError):
         _run(_make_llm(), completion, ReasoningEffort.OFF)
     assert len(calls) == 1

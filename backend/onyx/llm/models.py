@@ -31,9 +31,8 @@ class ReasoningEffort(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
-    # Supported by OpenAI and by Anthropic adaptive-thinking models
-    # (Claude >= 4.7). Other provider mappings clamp it to their highest
-    # supported effort.
+    # Supported by OpenAI and Anthropic adaptive-thinking models (Claude >= 4.7).
+    # Other provider mappings clamp it to their highest supported effort.
     XHIGH = "xhigh"
 
 
@@ -50,14 +49,9 @@ USER_SELECTABLE_REASONING_EFFORTS: frozenset[ReasoningEffort] = frozenset(
 )
 
 
-def parse_reasoning_effort_override(value: str | None) -> ReasoningEffort:
-    """Resolve a stored per-session override string to a ReasoningEffort.
-
-    NULL means no override, which resolves to AUTO. Raises ValueError for an
-    unknown value or an explicit "auto", neither of which is user-selectable.
-    """
-    if value is None:
-        return ReasoningEffort.AUTO
+def parse_user_selectable_reasoning_effort(value: str) -> ReasoningEffort:
+    """Parse a user-supplied override value. Raises ValueError for an unknown
+    value or an explicit "auto", neither of which is user-selectable."""
     effort = ReasoningEffort(value)
     if effort not in USER_SELECTABLE_REASONING_EFFORTS:
         raise ValueError(f"{value!r} is not a selectable reasoning effort")

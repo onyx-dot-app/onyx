@@ -95,9 +95,8 @@ _REASONING_KWARG_KEYS = frozenset(
 )
 _BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset({"temperature"})
 
-# Substrings provider 400s use to name each strippable kwarg (legacy thinking
-# errors cite the inner budget_tokens field, effort errors may cite only the
-# inner effort field of reasoning or output_config).
+# Substrings provider 400s use to name each strippable kwarg (errors may
+# cite only inner fields like budget_tokens or effort).
 _KWARG_ERROR_ALIASES: dict[str, tuple[str, ...]] = {
     "thinking": ("thinking", "budget_tokens"),
     "output_config": ("output_config", "effort"),
@@ -731,7 +730,8 @@ class LitellmLLM(LLM):
                 ]:
                     optional_kwargs["reasoning_effort"] = reasoning_effort.value
                 elif reasoning_effort is ReasoningEffort.XHIGH:
-                    # litellm's generic reasoning_effort path has no xhigh, clamp to high.
+                    # Provider mappings behind litellm's reasoning_effort are
+                    # uneven (Gemini raises on xhigh), clamp to high.
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value

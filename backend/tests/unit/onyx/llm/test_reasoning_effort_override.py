@@ -1,16 +1,12 @@
-"""Guards parsing of stored chat-session reasoning-effort overrides."""
+"""Guards parsing of user-selectable reasoning-effort override values."""
 
 import pytest
 
-from onyx.llm.models import ReasoningEffort, parse_reasoning_effort_override
-
-
-def test_parse_reasoning_effort_override_none_defaults_to_auto() -> None:
-    assert parse_reasoning_effort_override(None) is ReasoningEffort.AUTO
+from onyx.llm.models import ReasoningEffort, parse_user_selectable_reasoning_effort
 
 
 @pytest.mark.parametrize(
-    ("stored_value", "expected_effort"),
+    ("value", "expected_effort"),
     [
         ("off", ReasoningEffort.OFF),
         ("low", ReasoningEffort.LOW),
@@ -19,21 +15,21 @@ def test_parse_reasoning_effort_override_none_defaults_to_auto() -> None:
         ("xhigh", ReasoningEffort.XHIGH),
     ],
 )
-def test_parse_reasoning_effort_override_accepts_user_selectable_values(
-    stored_value: str,
+def test_parse_user_selectable_reasoning_effort_accepts_user_selectable_values(
+    value: str,
     expected_effort: ReasoningEffort,
 ) -> None:
-    assert parse_reasoning_effort_override(stored_value) is expected_effort
+    assert parse_user_selectable_reasoning_effort(value) is expected_effort
 
 
-def test_parse_reasoning_effort_override_rejects_auto() -> None:
+def test_parse_user_selectable_reasoning_effort_rejects_auto() -> None:
     with pytest.raises(ValueError):
-        parse_reasoning_effort_override("auto")
+        parse_user_selectable_reasoning_effort("auto")
 
 
-@pytest.mark.parametrize("stored_value", ["ultra", ""])
-def test_parse_reasoning_effort_override_rejects_unknown_values(
-    stored_value: str,
+@pytest.mark.parametrize("value", ["ultra", ""])
+def test_parse_user_selectable_reasoning_effort_rejects_unknown_values(
+    value: str,
 ) -> None:
     with pytest.raises(ValueError):
-        parse_reasoning_effort_override(stored_value)
+        parse_user_selectable_reasoning_effort(value)

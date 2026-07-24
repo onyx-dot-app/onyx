@@ -74,7 +74,7 @@ from onyx.llm.factory import get_default_llm, get_llm_for_persona, get_llm_token
 from onyx.llm.models import (
     USER_SELECTABLE_REASONING_EFFORTS,
     ReasoningEffort,
-    parse_reasoning_effort_override,
+    parse_user_selectable_reasoning_effort,
 )
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
@@ -278,7 +278,7 @@ def update_chat_session_reasoning(
     reasoning_effort: ReasoningEffort | None = None
     if update_thread_req.reasoning_effort_override is not None:
         try:
-            reasoning_effort = parse_reasoning_effort_override(
+            reasoning_effort = parse_user_selectable_reasoning_effort(
                 update_thread_req.reasoning_effort_override
             )
         except ValueError:

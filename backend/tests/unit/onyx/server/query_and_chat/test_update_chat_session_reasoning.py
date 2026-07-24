@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock
@@ -12,56 +13,41 @@ from onyx.server.query_and_chat.chat_backend import update_chat_session_reasonin
 from onyx.server.query_and_chat.models import UpdateChatSessionReasoningRequest
 
 
-def test_update_chat_session_reasoning_rejects_auto(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    chat_session = SimpleNamespace(reasoning_effort_override="medium")
+def _setup(
+    monkeypatch: pytest.MonkeyPatch, chat_session: SimpleNamespace
+) -> tuple[MagicMock, Callable[[str | None], None]]:
+    """Patch the session lookup and return (mock db session, endpoint invoker)."""
     db_session = MagicMock()
-    user = cast(User, SimpleNamespace(id=uuid4()))
-
     monkeypatch.setattr(
         "onyx.server.query_and_chat.chat_backend.get_chat_session_by_id",
         lambda **_: chat_session,
     )
 
-    with pytest.raises(OnyxError) as exc:
+    def call(override: str | None) -> None:
         update_chat_session_reasoning(
             UpdateChatSessionReasoningRequest(
-                chat_session_id=uuid4(), reasoning_effort_override="auto"
+                chat_session_id=uuid4(), reasoning_effort_override=override
             ),
-            user=user,
+            user=cast(User, SimpleNamespace(id=uuid4())),
             db_session=db_session,
         )
+
+    return db_session, call
+
+
+@pytest.mark.parametrize("invalid_override", ["auto", "bogus"])
+def test_update_chat_session_reasoning_rejects_invalid_values(
+    monkeypatch: pytest.MonkeyPatch,
+    invalid_override: str,
+) -> None:
+    chat_session = SimpleNamespace(reasoning_effort_override="medium")
+    db_session, call = _setup(monkeypatch, chat_session)
+
+    with pytest.raises(OnyxError) as exc:
+        call(invalid_override)
 
     assert exc.value.error_code is OnyxErrorCode.INVALID_INPUT
     assert chat_session.reasoning_effort_override == "medium"
-    db_session.add.assert_not_called()
-    db_session.commit.assert_not_called()
-
-
-def test_update_chat_session_reasoning_rejects_unknown_value(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    chat_session = SimpleNamespace(reasoning_effort_override="low")
-    db_session = MagicMock()
-    user = cast(User, SimpleNamespace(id=uuid4()))
-
-    monkeypatch.setattr(
-        "onyx.server.query_and_chat.chat_backend.get_chat_session_by_id",
-        lambda **_: chat_session,
-    )
-
-    with pytest.raises(OnyxError) as exc:
-        update_chat_session_reasoning(
-            UpdateChatSessionReasoningRequest(
-                chat_session_id=uuid4(), reasoning_effort_override="bogus"
-            ),
-            user=user,
-            db_session=db_session,
-        )
-
-    assert exc.value.error_code is OnyxErrorCode.INVALID_INPUT
-    assert chat_session.reasoning_effort_override == "low"
     db_session.add.assert_not_called()
     db_session.commit.assert_not_called()
 
@@ -70,21 +56,9 @@ def test_update_chat_session_reasoning_writes_valid_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     chat_session = SimpleNamespace(reasoning_effort_override=None)
-    db_session = MagicMock()
-    user = cast(User, SimpleNamespace(id=uuid4()))
+    db_session, call = _setup(monkeypatch, chat_session)
 
-    monkeypatch.setattr(
-        "onyx.server.query_and_chat.chat_backend.get_chat_session_by_id",
-        lambda **_: chat_session,
-    )
-
-    update_chat_session_reasoning(
-        UpdateChatSessionReasoningRequest(
-            chat_session_id=uuid4(), reasoning_effort_override="high"
-        ),
-        user=user,
-        db_session=db_session,
-    )
+    call("high")
 
     assert chat_session.reasoning_effort_override == "high"
     db_session.add.assert_called_once_with(chat_session)
@@ -95,21 +69,9 @@ def test_update_chat_session_reasoning_clears_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     chat_session = SimpleNamespace(reasoning_effort_override="off")
-    db_session = MagicMock()
-    user = cast(User, SimpleNamespace(id=uuid4()))
+    db_session, call = _setup(monkeypatch, chat_session)
 
-    monkeypatch.setattr(
-        "onyx.server.query_and_chat.chat_backend.get_chat_session_by_id",
-        lambda **_: chat_session,
-    )
-
-    update_chat_session_reasoning(
-        UpdateChatSessionReasoningRequest(
-            chat_session_id=uuid4(), reasoning_effort_override=None
-        ),
-        user=user,
-        db_session=db_session,
-    )
+    call(None)
 
     assert chat_session.reasoning_effort_override is None
     db_session.add.assert_called_once_with(chat_session)
