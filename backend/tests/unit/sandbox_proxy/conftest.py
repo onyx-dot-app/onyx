@@ -64,6 +64,13 @@ class StaticLookup(SandboxIPLookup):
             return self._single
         return self._cache.get(src_ip)
 
+    def wait_for_identity(
+        self,
+        src_ip: str,
+        timeout_seconds: float,  # noqa: ARG002
+    ) -> SandboxIdentity | None:
+        return self.lookup(src_ip)
+
     def wait_for_initial_sync(
         self,
         timeout_seconds: float,  # noqa: ARG002
@@ -149,6 +156,8 @@ class StubResolver(_IdentityResolver):
     def resolve_sandbox(
         self,
         src_ip: str,  # noqa: ARG002
+        *,
+        wait_timeout_seconds: float = 0,  # noqa: ARG002
     ) -> ResolvedSandbox | None:
         self.resolve_sandbox_calls += 1
         if self._sandbox_exc is not None:

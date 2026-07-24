@@ -15,6 +15,7 @@ import asyncio
 import base64
 import json
 import logging
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -217,6 +218,38 @@ async def test_resolve_and_match_sandbox_resolution_fails_closed(
     assert result is None
     _assert_403(flow, SandboxProxyError.UNIDENTIFIED_SANDBOX)
     assert matcher.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_sandbox_identity_resolution_is_coalesced_by_source_ip() -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    class _BlockingResolver(StubResolver):
+        def resolve_sandbox(
+            self,
+            src_ip: str,  # noqa: ARG002
+            *,
+            wait_timeout_seconds: float = 0,
+        ) -> ResolvedSandbox | None:
+            self.resolve_sandbox_calls += 1
+            assert wait_timeout_seconds == gate.SANDBOX_IDENTITY_WAIT_TIMEOUT_SECONDS
+            started.set()
+            assert release.wait(timeout=1)
+            return self._sandbox
+
+    sandbox = make_resolved_sandbox()
+    resolver = _BlockingResolver(sandbox=sandbox)
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=None))
+
+    first = asyncio.create_task(addon._resolve_sandbox_identity("10.0.0.1"))
+    assert await asyncio.to_thread(started.wait, 1)
+    second = asyncio.create_task(addon._resolve_sandbox_identity("10.0.0.1"))
+    await asyncio.sleep(0)
+    release.set()
+
+    assert await asyncio.gather(first, second) == [sandbox, sandbox]
+    assert resolver.resolve_sandbox_calls == 1
 
 
 @pytest.mark.asyncio

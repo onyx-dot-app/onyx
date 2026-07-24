@@ -69,7 +69,12 @@ def _seed_action_approval(
 class _UnusedResolver(_IdentityResolver):
     """Obvious-fail stub for the arbiter tests; none of these are called."""
 
-    def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None:  # noqa: ARG002
+    def resolve_sandbox(
+        self,
+        src_ip: str,  # noqa: ARG002
+        *,
+        wait_timeout_seconds: float = 0,  # noqa: ARG002
+    ) -> ResolvedSandbox | None:
         raise AssertionError("identity.resolve_sandbox unexpectedly used")
 
     def resolve_session_by_id(

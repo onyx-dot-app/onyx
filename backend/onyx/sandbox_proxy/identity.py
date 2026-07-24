@@ -13,6 +13,9 @@ There is deliberately no most-recent-active fallback: a gated request with no
 verifiable session tag fails closed rather than routing to a guessed session.
 """
 
+import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
@@ -90,6 +93,12 @@ class SandboxIPLookup(Protocol):
 
     def lookup(self, src_ip: str) -> SandboxIdentity | None: ...
 
+    def wait_for_identity(
+        self, src_ip: str, timeout_seconds: float
+    ) -> SandboxIdentity | None:
+        """Resolve a cache miss while allowing the backend watcher to catch up."""
+        ...
+
     def wait_for_initial_sync(self, timeout_seconds: float) -> bool: ...
 
     def is_synced(self) -> bool: ...
@@ -97,11 +106,61 @@ class SandboxIPLookup(Protocol):
     def stop(self) -> None: ...
 
 
+def resolve_identity_with_watcher_grace(
+    *,
+    backend: str,
+    src_ip: str,
+    timeout_seconds: float,
+    lookup: Callable[[str], SandboxIdentity | None],
+    read_through: Callable[[str], SandboxIdentity | None],
+    cache_updated: threading.Condition,
+    stop_event: threading.Event,
+) -> SandboxIdentity | None:
+    """Resolve a cache miss via a backend query, then a bounded watcher wait."""
+    deadline = time.monotonic() + timeout_seconds
+
+    identity = lookup(src_ip) or read_through(src_ip)
+    if identity is not None:
+        return identity
+    if stop_event.is_set() or timeout_seconds <= 0:
+        return None
+
+    with cache_updated:
+        while not stop_event.is_set():
+            identity = lookup(src_ip)
+            if identity is not None:
+                logger.info(
+                    "identity_watcher_caught_up backend=%s src_ip=%s sandbox=%s",
+                    backend,
+                    src_ip,
+                    identity.sandbox_name,
+                )
+                return identity
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            cache_updated.wait(timeout=remaining)
+
+    if stop_event.is_set():
+        return None
+    identity = read_through(src_ip)
+    if identity is None:
+        logger.warning(
+            "identity_wait_timeout backend=%s src_ip=%s timeout_seconds=%s",
+            backend,
+            src_ip,
+            timeout_seconds,
+        )
+    return identity
+
+
 class IdentityResolver:
     def __init__(self, ip_lookup: SandboxIPLookup) -> None:
         self._ip_lookup = ip_lookup
 
-    def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None:
+    def resolve_sandbox(
+        self, src_ip: str, *, wait_timeout_seconds: float = 0
+    ) -> ResolvedSandbox | None:
         """
         Pod IP -> owning user + tenant; `None` if IP unknown or sandbox has no
         owner.
@@ -110,6 +169,10 @@ class IdentityResolver:
         instead.
         """
         identity = self._ip_lookup.lookup(src_ip)
+        if identity is None and wait_timeout_seconds > 0:
+            identity = self._ip_lookup.wait_for_identity(
+                src_ip, timeout_seconds=wait_timeout_seconds
+            )
         if identity is None:
             return None
 
