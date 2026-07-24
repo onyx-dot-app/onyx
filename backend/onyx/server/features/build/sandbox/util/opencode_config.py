@@ -37,10 +37,10 @@ def _uses_adaptive_thinking(model_name: str) -> bool:
     return match is not None and int(match.group(1)) >= 5
 
 
-# Model configurations don't track max output tokens, so gateway model entries
-# advertise this fixed budget to opencode. 128k matches the recommended Craft
-# models (Claude Fable/Opus 4.8, GPT-5.6) per models.dev; providers enforce
-# their own real caps on models with smaller limits.
+# Fallback output budget for gateway models the litellm map has no entry for
+# (build_onyx_gateway_config derives the real per-model value). 128k matches the
+# recommended Craft models (Claude Fable/Opus 4.8, GPT-5.6) per models.dev;
+# providers enforce their own real caps regardless.
 _GATEWAY_DEFAULT_MAX_OUTPUT_TOKENS = 128_000
 
 
@@ -217,7 +217,7 @@ def _build_custom_provider_block(
             # opencode's schema requires both keys when "limit" is present.
             entry["limit"] = {
                 "context": model.max_input_tokens,
-                "output": _GATEWAY_DEFAULT_MAX_OUTPUT_TOKENS,
+                "output": model.max_output_tokens or _GATEWAY_DEFAULT_MAX_OUTPUT_TOKENS,
             }
         models[model.id] = entry
     block["models"] = models

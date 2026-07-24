@@ -1,5 +1,7 @@
 from collections import Counter
+from dataclasses import dataclass
 
+from onyx.llm.model_capabilities import get_llm_max_output_tokens, get_model_map
 from onyx.llm.well_known_providers.llm_provider_options import (
     get_provider_display_name,
 )
@@ -38,18 +40,55 @@ def _visible_models_by_name(provider: LLMProviderView) -> list[str]:
     )
 
 
-def parse_gateway_model_id(model_id: str) -> tuple[int, str] | None:
-    """Split the "<provider_id>/<model_name>" composite id the gateway routes
-    on. Model names may themselves contain slashes, so split on the FIRST
-    separator only."""
-    provider_id, separator, model_name = model_id.partition("/")
-    if not separator or not model_name or not provider_id.isdigit():
+@dataclass(frozen=True)
+class GatewaySelection:
+    """A gateway model pick: a specific accessible provider row + model name.
+    Its ``wire_id`` is the id the gateway routes on."""
+
+    provider_id: int
+    model_name: str
+
+    @property
+    def wire_id(self) -> str:
+        return f"{self.provider_id}/{self.model_name}"
+
+    def to_columns(self) -> tuple[str, str]:
+        """The (agent_provider, agent_model) BuildSession columns."""
+        return ONYX_GATEWAY_PROVIDER_ID, self.wire_id
+
+
+@dataclass(frozen=True)
+class LegacySelection:
+    """A pre-gateway pick, keyed by provider type (no gateway routing)."""
+
+    provider_type: str
+    model_name: str
+
+
+# The persisted agent_provider/agent_model columns decode to one of these; the
+# selection is re-validated against currently-accessible providers on every use
+# (a stored pick may no longer be accessible or visible), so it is never trusted
+# as-is — see _select_gateway_default.
+AgentSelection = GatewaySelection | LegacySelection
+
+
+def parse_agent_selection(
+    agent_provider: str | None, agent_model: str | None
+) -> AgentSelection | None:
+    """Decode the persisted (agent_provider, agent_model) columns. Gateway rows
+    store ("onyx", "<provider_id>/<model_name>"); legacy rows store
+    (provider_type, model_name). Model names may contain slashes, so the gateway
+    id splits on the FIRST separator only."""
+    if not agent_model:
         return None
-    return int(provider_id), model_name
-
-
-def normalize_agent_selection(provider_id: int, model_name: str) -> tuple[str, str]:
-    return ONYX_GATEWAY_PROVIDER_ID, f"{provider_id}/{model_name}"
+    if agent_provider == ONYX_GATEWAY_PROVIDER_ID:
+        provider_id, separator, model_name = agent_model.partition("/")
+        if separator and model_name and provider_id.isdigit():
+            return GatewaySelection(int(provider_id), model_name)
+        return None
+    if agent_provider:
+        return LegacySelection(agent_provider, agent_model)
+    return None
 
 
 def _gateway_provider_order(
@@ -66,22 +105,20 @@ def _gateway_provider_order(
 
 def _select_gateway_default(
     providers: list[LLMProviderView],
-    requested_provider_id: int | None,
-    requested_provider_type: str | None,
-    requested_model_name: str | None,
+    selection: AgentSelection | None,
 ) -> tuple[int, str] | None:
-    if requested_model_name:
+    if selection is not None:
         for provider in providers:
             matches_request = (
-                provider.id == requested_provider_id
-                if requested_provider_id is not None
-                else provider.provider == requested_provider_type
+                provider.id == selection.provider_id
+                if isinstance(selection, GatewaySelection)
+                else provider.provider == selection.provider_type
             )
             if matches_request and any(
-                model.is_visible and model.name == requested_model_name
+                model.is_visible and model.name == selection.model_name
                 for model in provider.model_configurations
             ):
-                return provider.id, requested_model_name
+                return provider.id, selection.model_name
         logger.warning(
             "Requested Craft gateway provider/model is not accessible or visible; "
             "falling back"
@@ -101,9 +138,7 @@ def _select_gateway_default(
 
 def build_onyx_gateway_config(
     gateway_providers: list[LLMProviderView],
-    requested_provider_id: int | None = None,
-    requested_provider_type: str | None = None,
-    requested_model_name: str | None = None,
+    selection: AgentSelection | None = None,
 ) -> LLMProviderConfig | None:
     if not ONYX_SERVER_URL:
         return None
@@ -120,12 +155,7 @@ def build_onyx_gateway_config(
             key=lambda m: m.name,
         )
     ]
-    default_selection = _select_gateway_default(
-        gateway_providers,
-        requested_provider_id,
-        requested_provider_type,
-        requested_model_name,
-    )
+    default_selection = _select_gateway_default(gateway_providers, selection)
     if not visible_models or default_selection is None:
         return None
 
@@ -134,6 +164,9 @@ def build_onyx_gateway_config(
         for _, model in visible_models
     ]
     display_name_counts = Counter(clean_display_names)
+    # Model configs don't track max output tokens; derive it from the litellm
+    # map (as the main app does) so opencode's per-model limit is accurate.
+    model_map = get_model_map()
     models: list[GatewayModelConfig] = []
     for provider, model in visible_models:
         display_name = model.custom_display_name or model.display_name or model.name
@@ -148,6 +181,9 @@ def build_onyx_gateway_config(
                 display_name=display_name,
                 supports_reasoning=model.supports_reasoning,
                 max_input_tokens=model.max_input_tokens,
+                max_output_tokens=get_llm_max_output_tokens(
+                    model_map, model.name, provider.provider
+                ),
             )
         )
 

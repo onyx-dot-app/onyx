@@ -70,9 +70,7 @@ def test_gateway_config_qualifies_collisions_and_selects_exact_default() -> None
     with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test/api"):
         config = llm_config.build_onyx_gateway_config(
             [bedrock, direct],
-            requested_provider_id=7,
-            requested_provider_type="bedrock",
-            requested_model_name="anthropic/claude-sonnet",
+            llm_config.GatewaySelection(7, "anthropic/claude-sonnet"),
         )
 
     assert config is not None
@@ -121,8 +119,8 @@ def test_gateway_config_preserves_url_path_prefix() -> None:
     assert config.api_base == "https://onyx.example/api/gateway/v1"
 
 
-def test_normalize_agent_selection_uses_gateway_identity() -> None:
-    assert llm_config.normalize_agent_selection(17, "anthropic/claude-sonnet") == (
+def test_gateway_selection_renders_storage_columns() -> None:
+    assert llm_config.GatewaySelection(17, "anthropic/claude-sonnet").to_columns() == (
         "onyx",
         "17/anthropic/claude-sonnet",
     )
@@ -184,8 +182,7 @@ def test_gateway_config_falls_back_when_requested_selection_is_stale() -> None:
     with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
         config = llm_config.build_onyx_gateway_config(
             [provider],
-            requested_provider_id=99,
-            requested_model_name="deleted-model",
+            llm_config.GatewaySelection(99, "deleted-model"),
         )
 
     assert config is not None
@@ -317,11 +314,9 @@ def test_reconcile_parses_stored_gateway_selection() -> None:
             cast(Sandbox, MagicMock(id=1)), session, cast(User, MagicMock(spec=User))
         )
 
-    assert build_llm_configs.call_args.kwargs == {
-        "requested_provider_type": None,
-        "requested_model_name": "anthropic/claude-sonnet",
-        "requested_provider_id": 17,
-    }
+    assert build_llm_configs.call_args.args[1] == llm_config.GatewaySelection(
+        17, "anthropic/claude-sonnet"
+    )
 
 
 def test_reconcile_forwards_legacy_provider_selection() -> None:
@@ -350,11 +345,9 @@ def test_reconcile_forwards_legacy_provider_selection() -> None:
             cast(Sandbox, MagicMock(id=1)), session, cast(User, MagicMock(spec=User))
         )
 
-    assert build_llm_configs.call_args.kwargs == {
-        "requested_provider_type": "anthropic",
-        "requested_model_name": "claude-fable-5",
-        "requested_provider_id": None,
-    }
+    assert build_llm_configs.call_args.args[1] == llm_config.LegacySelection(
+        "anthropic", "claude-fable-5"
+    )
 
 
 def test_empty_gateway_session_restarts_instance_for_changed_catalog() -> None:

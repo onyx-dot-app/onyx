@@ -16,6 +16,7 @@ class GatewayModelConfig(BaseModel):
     display_name: str
     supports_reasoning: bool = False
     max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
 
 
 class LLMProviderConfig(BaseModel):

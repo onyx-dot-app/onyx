@@ -34,7 +34,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     MAX_TOTAL_UPLOAD_SIZE_BYTES,
     MAX_UPLOAD_FILES_PER_SESSION,
-    ONYX_GATEWAY_PROVIDER_ID,
     OPENCODE_DISABLED_TOOLS,
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
 )
@@ -82,8 +81,9 @@ from onyx.server.features.build.session.errors import (
 )
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
 from onyx.server.features.build.session.llm_config import (
+    AgentSelection,
     build_onyx_gateway_config,
-    parse_gateway_model_id,
+    parse_agent_selection,
 )
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.naming import generate_session_name
@@ -194,15 +194,11 @@ class SessionManager:
     def build_llm_configs(
         self,
         user: User,
-        requested_provider_type: str | None = None,
-        requested_model_name: str | None = None,
-        requested_provider_id: int | None = None,
+        selection: AgentSelection | None = None,
     ) -> LLMProviderConfig:
         gateway_config = build_onyx_gateway_config(
             fetch_all_accessible_llm_providers(self._db_session, user),
-            requested_provider_id=requested_provider_id,
-            requested_provider_type=requested_provider_type,
-            requested_model_name=requested_model_name,
+            selection,
         )
         if gateway_config is None:
             raise OnyxError(
@@ -263,24 +259,8 @@ class SessionManager:
         """Resolve the LLM config a session's opencode.json should carry from
         its persisted provider/model selection (falling back to the gateway
         default when the selection is unset or no longer accessible)."""
-        requested_provider_id: int | None = None
-        requested_provider_type: str | None = None
-        requested_model_name: str | None = None
-        if session.agent_model:
-            requested_model_name = session.agent_model
-            requested_provider_type = session.agent_provider
-            if session.agent_provider == ONYX_GATEWAY_PROVIDER_ID:
-                provider_id, separator, model_name = session.agent_model.partition("/")
-                if separator and provider_id.isdigit() and model_name:
-                    requested_provider_id = int(provider_id)
-                    requested_provider_type = None
-                    requested_model_name = model_name
-        return self.build_llm_configs(
-            user,
-            requested_provider_type=requested_provider_type,
-            requested_model_name=requested_model_name,
-            requested_provider_id=requested_provider_id,
-        )
+        selection = parse_agent_selection(session.agent_provider, session.agent_model)
+        return self.build_llm_configs(user, selection)
 
     def reconcile_session_llm_config(
         self,
@@ -288,23 +268,8 @@ class SessionManager:
         session: BuildSession,
         user: User,
     ) -> None:
-        requested_provider_id: int | None = None
-        requested_provider_type: str | None = None
-        requested_model_name: str | None = None
-        if session.agent_model:
-            if session.agent_provider == ONYX_GATEWAY_PROVIDER_ID:
-                parsed = parse_gateway_model_id(session.agent_model)
-                if parsed is not None:
-                    requested_provider_id, requested_model_name = parsed
-            else:
-                requested_provider_type = session.agent_provider
-                requested_model_name = session.agent_model
-        llm_config = self.build_llm_configs(
-            user,
-            requested_provider_type=requested_provider_type,
-            requested_model_name=requested_model_name,
-            requested_provider_id=requested_provider_id,
-        )
+        selection = parse_agent_selection(session.agent_provider, session.agent_model)
+        llm_config = self.build_llm_configs(user, selection)
         mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
         expected = build_session_opencode_config(
             llm_config, OPENCODE_DISABLED_TOOLS, mcp_servers, str(session.id)
