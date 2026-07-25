@@ -90,11 +90,13 @@ export function getDefaultLlmSelection(
   }
 
   // Must mirror the backend's _select_gateway_default fallback so the picker
-  // reflects the model a session would actually use.
+  // reflects the model a session would actually use: the first visible model
+  // by sorted name (backend's _visible_models_by_name), not DB order.
   for (const provider of candidates) {
-    const modelName = provider.model_configurations.find(
-      (model) => model.is_visible
-    )?.name;
+    const modelName = provider.model_configurations
+      .filter((model) => model.is_visible)
+      .map((model) => model.name)
+      .sort()[0];
     if (!modelName) continue;
     return {
       providerId: provider.id,

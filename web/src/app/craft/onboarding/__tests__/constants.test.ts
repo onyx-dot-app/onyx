@@ -95,17 +95,22 @@ describe("getDefaultLlmSelection", () => {
     });
   });
 
-  it("falls back to the first visible model when nothing is flagged recommended", () => {
+  it("falls back to the first visible model by sorted name (matching the backend)", () => {
     const result = getDefaultLlmSelection([
       {
         ...provider(
           "openai",
-          [model("hidden-model", { visible: false }), model("gpt-4o")],
+          [
+            model("gpt-5-turbo"),
+            model("hidden-model", { visible: false }),
+            model("gpt-4o"),
+          ],
           7
         ),
         name: "Self-hosted OpenAI",
       },
     ]);
+    // Sorted visible names are [gpt-4o, gpt-5-turbo] — picked over DB order.
     expect(result).toEqual({
       providerId: 7,
       providerName: "Self-hosted OpenAI",
