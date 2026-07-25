@@ -10,6 +10,7 @@ import {
   ActionStatus,
   MCPServerStatus,
   MCPServer,
+  MCPTransportType,
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
 import { toast } from "@opal/layouts";
@@ -257,10 +258,14 @@ export default function MCPPageContent() {
       const server = mcpServers.find((s) => s.id === serverId);
       if (server) {
         setActiveServer(server);
-        authModal.toggle(true);
+        if (server.transport === MCPTransportType.STDIO) {
+          manageServerModal.toggle(true);
+        } else {
+          authModal.toggle(true);
+        }
       }
     },
-    [mcpServers, authModal]
+    [mcpServers, authModal, manageServerModal]
   );
 
   const triggerFetchToolsInPlace = useCallback(
@@ -435,9 +440,13 @@ export default function MCPPageContent() {
   const onServerCreated = useCallback(
     (server: MCPServer) => {
       setActiveServer(server);
-      authModal.toggle(true);
+      if (server.transport === MCPTransportType.STDIO) {
+        void triggerFetchToolsInPlace(server.id);
+      } else {
+        authModal.toggle(true);
+      }
     },
-    [authModal]
+    [authModal, triggerFetchToolsInPlace]
   );
 
   const handleAddServer = useCallback(() => {
@@ -471,7 +480,8 @@ export default function MCPPageContent() {
       (server) =>
         server.name.toLowerCase().includes(query) ||
         server.description?.toLowerCase().includes(query) ||
-        server.server_url.toLowerCase().includes(query)
+        server.server_url.toLowerCase().includes(query) ||
+        server.stdio_command?.toLowerCase().includes(query)
     );
   }, [mcpServers, searchQuery]);
 
@@ -514,7 +524,12 @@ export default function MCPPageContent() {
                   serverId={server.id}
                   server={server}
                   title={server.name}
-                  description={server.description || server.server_url}
+                  description={
+                    server.description ||
+                    server.server_url ||
+                    server.stdio_command ||
+                    "Local stdio process"
+                  }
                   logo={getActionIcon(server.server_url, server.name)}
                   status={status}
                   toolCount={server.tool_count}

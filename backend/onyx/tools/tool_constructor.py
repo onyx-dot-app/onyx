@@ -11,10 +11,12 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
+from onyx.db.enums import MCPTransport
 from onyx.db.mcp import (
     MCPCredentialsError,
     get_all_mcp_tools_for_server,
     get_mcp_server_by_id,
+    get_mcp_stdio_config,
     resolve_mcp_credentials,
 )
 from onyx.db.models import Persona, User
@@ -415,6 +417,11 @@ def _construct_tools_impl(
                 continue
 
             mcp_server = get_mcp_server_by_id(db_tool_model.mcp_server_id, db_session)
+            stdio_config = (
+                get_mcp_stdio_config(mcp_server)
+                if mcp_server.transport == MCPTransport.STDIO
+                else None
+            )
 
             try:
                 mcp_credentials = resolve_mcp_credentials(mcp_server, user, db_session)
@@ -449,6 +456,7 @@ def _construct_tools_impl(
                     user_id=str(user.id),
                     user_oauth_token=mcp_credentials.user_oauth_token,
                     additional_headers=additional_mcp_headers,
+                    stdio_config=stdio_config,
                 )
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
 

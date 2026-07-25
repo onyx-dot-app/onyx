@@ -23,6 +23,10 @@ export interface MCPServer {
   name: string;
   description?: string;
   server_url: string;
+  stdio_command?: string | null;
+  stdio_args?: string[];
+  // Only returned, masked, from the owner/admin detail endpoint.
+  stdio_env?: Record<string, string> | null;
   owner: string;
   transport?: MCPTransportType;
   auth_type?: MCPAuthenticationType;
@@ -67,6 +71,10 @@ export interface MCPServerCreateRequest {
   name: string;
   description?: string;
   server_url: string;
+  transport: MCPTransportType;
+  stdio_command?: string;
+  stdio_args: string[];
+  stdio_env: Record<string, string>;
   is_public: boolean;
   groups: number[];
   users: string[];
@@ -76,6 +84,10 @@ export interface MCPServerUpdateRequest {
   name?: string;
   description?: string;
   server_url?: string;
+  transport?: MCPTransportType;
+  stdio_command?: string;
+  stdio_args?: string[];
+  stdio_env?: Record<string, string>;
   // Omit to leave the server's existing access unchanged.
   is_public?: boolean;
   groups?: number[];

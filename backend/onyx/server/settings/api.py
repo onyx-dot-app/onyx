@@ -11,6 +11,7 @@ from onyx.configs.app_configs import (
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_VECTOR_DB,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
+    MCP_STDIO_ENABLED,
     POSTHOG_API_KEY,
     POSTHOG_HOST,
 )
@@ -189,6 +190,7 @@ def fetch_settings(
         opencode_debugging_enabled=ENABLE_OPENCODE_DEBUGGING,
         vector_db_enabled=not DISABLE_VECTOR_DB,
         hooks_enabled=not MULTI_TENANT,
+        mcp_stdio_enabled=MCP_STDIO_ENABLED,
         version=onyx_version,
         max_allowed_upload_size_mb=MAX_ALLOWED_UPLOAD_SIZE_MB,
         default_user_file_max_upload_size_mb=min(

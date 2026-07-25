@@ -5,11 +5,15 @@ from typing import Any
 from mcp.client.auth import OAuthClientProvider
 
 from onyx.chat.emitter import Emitter
+from onyx.configs.app_configs import MCP_STDIO_ENABLED
 from onyx.db.enums import MCPAuthenticationType, MCPTransport
 from onyx.db.mcp import ResolvedMCPCredentials
 from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.server.features.mcp.client import call_mcp_tool
-from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS
+from onyx.server.features.mcp.models import (
+    DENYLISTED_MCP_HEADERS,
+    MCPStdioServerConfig,
+)
 from onyx.server.features.mcp.oauth import (
     UNUSED_RETURN_PATH,
     make_oauth_provider,
@@ -79,6 +83,7 @@ class MCPTool(Tool[None]):
         user_id: str = "",
         user_oauth_token: str | None = None,
         additional_headers: dict[str, str] | None = None,
+        stdio_config: MCPStdioServerConfig | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -89,6 +94,7 @@ class MCPTool(Tool[None]):
         self._user_id = user_id
         self._user_oauth_token = user_oauth_token
         self._additional_headers = additional_headers or {}
+        self._stdio_config = stdio_config
 
         self._mcp_tool_name = tool_name
         self._name = tool_name  # NOTE: this may change in _disambiguate_mcp_tool_names
@@ -272,14 +278,31 @@ class MCPTool(Tool[None]):
                         None,
                     )
 
-            tool_result = call_mcp_tool(
-                self.mcp_server.server_url,
-                self._mcp_tool_name,
-                llm_kwargs,
-                connection_headers=headers,
-                transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
-                auth=auth,
-            )
+            if (
+                self.mcp_server.transport == MCPTransport.STDIO
+                and not MCP_STDIO_ENABLED
+            ):
+                raise RuntimeError("Stdio MCP servers are disabled for this deployment")
+
+            if self._stdio_config is not None:
+                tool_result = call_mcp_tool(
+                    self.mcp_server.server_url,
+                    self._mcp_tool_name,
+                    llm_kwargs,
+                    connection_headers=headers,
+                    transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
+                    auth=auth,
+                    stdio_config=self._stdio_config,
+                )
+            else:
+                tool_result = call_mcp_tool(
+                    self.mcp_server.server_url,
+                    self._mcp_tool_name,
+                    llm_kwargs,
+                    connection_headers=headers,
+                    transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
+                    auth=auth,
+                )
 
             logger.info("MCP tool '%s' executed successfully", self._name)
 

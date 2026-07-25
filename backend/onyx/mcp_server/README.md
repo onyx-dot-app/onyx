@@ -14,7 +14,36 @@ All access controls are managed within the main Onyx application.
 Provide an Onyx Personal Access Token or API Key in the `Authorization` header as a Bearer token.
 The MCP server quickly validates and passes through the token on every request.
 
-Depending on usage, the MCP Server may support OAuth and stdio in the future.
+The MCP server exposed by Onyx currently uses HTTP transport. The outbound
+stdio connector support below is a separate MCP client capability.
+
+## Admin-managed stdio connectors
+
+This package documents the MCP server exposed *by* Onyx. Separately, Onyx can
+act as an MCP client and launch a locally installed MCP server over stdio for
+agent actions.
+
+Stdio connectors are disabled by default because the configured executable
+runs on the API host. A single-tenant operator can enable the admin-only
+configuration surface with:
+
+```bash
+MCP_STDIO_ENABLED=true
+```
+
+After restarting the API and web services, an Onyx admin can choose **Local
+process (stdio)** when adding an MCP server. The command and each argument are
+passed directly to the MCP SDK without a shell. Environment values are stored
+in the encrypted MCP connection config and are masked when read back.
+
+The executable and all required packages must already exist in the API
+server's runtime environment. Container deployments should install the MCP
+server in a custom API image; Onyx does not download or install commands from
+the admin form.
+
+Stdio tools use the same public/user/group access rules and agent assignment
+flow as HTTP MCP tools. They are not exposed to Craft sandboxes because the
+API host's executable is not present inside those sandboxes.
 
 ### Default Configuration
 - **Transport**: HTTP POST (MCP over HTTP)

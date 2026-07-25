@@ -5414,6 +5414,13 @@ class MCPServer(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     server_url: Mapped[str] = mapped_column(String, nullable=False)
+    # Stdio uses direct executable + argv fields; no shell command string is
+    # ever evaluated. Environment values live in the encrypted connection
+    # config rather than this table.
+    stdio_command: Mapped[str | None] = mapped_column(Text, nullable=True)
+    stdio_args: Mapped[list[str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     # Transport type for connecting to the MCP server
     transport: Mapped[MCPTransport | None] = mapped_column(
         Enum(MCPTransport, native_enum=False), nullable=True

@@ -5,7 +5,7 @@ from typing import Any, List, NotRequired, Optional, TypedDict
 from uuid import UUID
 
 from mcp.types import Tool as MCPLibTool
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.db.enums import (
     EndpointPolicy,
@@ -89,6 +89,9 @@ class MCPConnectionData(TypedDict):
     # serves as the template); empty/absent on regular per-user configs and on
     # admin-credential configs.
     required_fields: NotRequired[list[str]]
+    # Stdio environment values are shared by every allowed user and encrypted
+    # at rest with the rest of the MCP connection config.
+    stdio_env: NotRequired[dict[str, str]]
 
     # For OAuth only
     # Note: Update MCPOAuthKeys if necessary when modifying these
@@ -101,6 +104,52 @@ class MCPConnectionData(TypedDict):
 
     # the actual models are defined in mcp.shared.auth
     # from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
+
+
+_ENVIRONMENT_VARIABLE_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+class MCPStdioServerConfig(BaseModel):
+    """Validated process parameters for one stdio MCP server.
+
+    Command and arguments remain separate all the way to ``create_subprocess``;
+    Onyx never evaluates a shell command.
+    """
+
+    command: str = Field(min_length=1, max_length=4096)
+    args: list[str] = Field(default_factory=list, max_length=100)
+    env: dict[str, str] = Field(default_factory=dict, max_length=100)
+
+    @field_validator("command")
+    @classmethod
+    def validate_command(cls, value: str) -> str:
+        command = value.strip()
+        if not command:
+            raise ValueError("stdio command cannot be empty")
+        if "\x00" in command:
+            raise ValueError("stdio command cannot contain a null byte")
+        return command
+
+    @field_validator("args")
+    @classmethod
+    def validate_args(cls, value: list[str]) -> list[str]:
+        if any(len(arg) > 4096 or "\x00" in arg for arg in value):
+            raise ValueError(
+                "stdio arguments must be at most 4096 characters and cannot contain null bytes"
+            )
+        return value
+
+    @field_validator("env")
+    @classmethod
+    def validate_env(cls, value: dict[str, str]) -> dict[str, str]:
+        for key, env_value in value.items():
+            if _ENVIRONMENT_VARIABLE_RE.fullmatch(key) is None:
+                raise ValueError(f"invalid environment variable name: {key}")
+            if len(env_value) > 16384 or "\x00" in env_value:
+                raise ValueError(
+                    f"environment variable {key} is too long or contains a null byte"
+                )
+        return value
 
 
 class MCPAuthTemplate(BaseModel):
@@ -357,7 +406,16 @@ class MCPServerSimpleCreateRequest(BaseModel):
     description: Optional[str] = Field(
         None, description="Description of the MCP server"
     )
-    server_url: str = Field(..., description="URL of the MCP server")
+    server_url: str = Field(default="", description="URL of an HTTP MCP server")
+    transport: MCPTransport = Field(default=MCPTransport.STREAMABLE_HTTP)
+    stdio_command: Optional[str] = Field(
+        default=None, description="Executable for a stdio MCP server"
+    )
+    stdio_args: list[str] = Field(default_factory=list)
+    stdio_env: dict[str, str] = Field(
+        default_factory=dict,
+        description="Encrypted environment variables for a stdio MCP process",
+    )
     is_public: bool = Field(
         default=True,
         description=(
@@ -374,6 +432,18 @@ class MCPServerSimpleCreateRequest(BaseModel):
         description="User IDs allowed to use this server when not public",
     )
 
+    @model_validator(mode="after")
+    def validate_transport_configuration(self) -> "MCPServerSimpleCreateRequest":
+        if self.transport == MCPTransport.STDIO:
+            MCPStdioServerConfig(
+                command=self.stdio_command or "",
+                args=self.stdio_args,
+                env=self.stdio_env,
+            )
+        elif not self.server_url:
+            raise ValueError("server_url is required for HTTP MCP transports")
+        return self
+
 
 class MCPServerSimpleUpdateRequest(BaseModel):
     name: Optional[str] = Field(None, description="Name of the MCP server")
@@ -381,6 +451,10 @@ class MCPServerSimpleUpdateRequest(BaseModel):
         None, description="Description of the MCP server"
     )
     server_url: Optional[str] = Field(None, description="URL of the MCP server")
+    transport: Optional[MCPTransport] = None
+    stdio_command: Optional[str] = None
+    stdio_args: Optional[list[str]] = None
+    stdio_env: Optional[dict[str, str]] = None
     tool_policies: Optional[dict[str, EndpointPolicy]] = Field(
         default=None,
         description=(
@@ -557,6 +631,9 @@ class MCPServer(BaseModel):
     name: str
     description: Optional[str] = None
     server_url: str
+    stdio_command: Optional[str] = None
+    stdio_args: list[str] = Field(default_factory=list)
+    stdio_env: Optional[dict[str, str]] = None
     owner: str
     transport: Optional[MCPTransport] = None
     auth_type: Optional[MCPAuthenticationType] = None

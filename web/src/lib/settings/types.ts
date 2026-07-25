@@ -97,6 +97,10 @@ export interface Settings {
   // True when hooks are available: single-tenant deployment with HOOK_ENABLED=true.
   hooks_enabled?: boolean;
 
+  // Whether this single-tenant deployment allows admins to launch stdio MCP
+  // server processes on the API host.
+  mcp_stdio_enabled?: boolean;
+
   // Application version from the ONYX_VERSION env var on the server.
   version?: string | null;
   // Hard ceiling for user_file_max_upload_size_mb, derived from env var.

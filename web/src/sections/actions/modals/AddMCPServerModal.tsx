@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { Formik, Form } from "formik";
+import useSWR from "swr";
 import * as Yup from "yup";
-import { Modal } from "@opal/components";
+import { InputSelect, MessageCard, Modal } from "@opal/components";
 import { InputVertical, toast } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
@@ -12,6 +13,7 @@ import {
   MCPServerCreateRequest,
   MCPServerStatus,
   MCPServer,
+  MCPTransportType,
 } from "@/lib/tools/interfaces";
 import { useModal } from "@opal/components";
 import { Button, Divider } from "@opal/components";
@@ -20,6 +22,12 @@ import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
+import { FormField } from "@/refresh-components/form/FormField";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { useSettings } from "@/lib/settings/hooks";
+import { useCurrentUser } from "@/lib/users/hooks";
+import { UserRole } from "@/lib/types";
 
 interface AddMCPServerModalProps {
   skipOverlay?: boolean;
@@ -32,12 +40,56 @@ interface AddMCPServerModalProps {
   mutateMcpServers?: () => Promise<void>;
 }
 
+interface MCPServerFormValues {
+  name: string;
+  description?: string;
+  server_url: string;
+  transport: MCPTransportType;
+  stdio_command: string;
+  stdio_args: string;
+  stdio_env: string;
+  is_public: boolean;
+  groups: number[];
+  users: string[];
+}
+
 const validationSchema = Yup.object().shape({
   name: Yup.string().required("Server name is required"),
   description: Yup.string(),
-  server_url: Yup.string()
-    .url("Must be a valid URL")
-    .required("Server URL is required"),
+  server_url: Yup.string().when("transport", {
+    is: (transport: MCPTransportType) => transport !== MCPTransportType.STDIO,
+    then: (schema) =>
+      schema.url("Must be a valid URL").required("Server URL is required"),
+    otherwise: (schema) => schema.notRequired(),
+  }),
+  stdio_command: Yup.string().when("transport", {
+    is: MCPTransportType.STDIO,
+    then: (schema) => schema.required("Command is required"),
+    otherwise: (schema) => schema.notRequired(),
+  }),
+  stdio_env: Yup.string().test(
+    "stdio-env-json",
+    "Environment must be a JSON object containing string values",
+    (value, context) => {
+      if (
+        context.parent.transport !== MCPTransportType.STDIO ||
+        !value?.trim()
+      ) {
+        return true;
+      }
+      try {
+        const parsed = JSON.parse(value);
+        return (
+          parsed !== null &&
+          typeof parsed === "object" &&
+          !Array.isArray(parsed) &&
+          Object.values(parsed).every((entry) => typeof entry === "string")
+        );
+      } catch {
+        return false;
+      }
+    }
+  ),
 });
 
 export default function AddMCPServerModal({
@@ -51,9 +103,18 @@ export default function AddMCPServerModal({
 }: AddMCPServerModalProps) {
   const { isOpen, toggle } = useModal();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const settings = useSettings();
+  const { user } = useCurrentUser();
 
   // Use activeServer from props
   const server = activeServer;
+  const { data: detailedServer } = useSWR<MCPServer>(
+    server ? SWR_KEYS.adminMcpServer(server.id) : null,
+    errorHandlingFetcher
+  );
+  const editableServer = detailedServer ?? server;
+  const stdioEnabled =
+    settings.mcp_stdio_enabled === true && user?.role === UserRole.ADMIN;
 
   // Handler for disconnect button
   const handleDisconnectClick = () => {
@@ -67,21 +128,39 @@ export default function AddMCPServerModal({
   // Determine if we're in edit mode
   const isEditMode = !!server;
 
-  const initialValues: MCPServerCreateRequest = {
-    name: server?.name || "",
-    description: server?.description || "",
-    server_url: server?.server_url || "",
-    is_public: server?.is_public ?? true,
-    groups: server?.groups ?? [],
-    users: server?.users ?? [],
+  const initialValues: MCPServerFormValues = {
+    name: editableServer?.name || "",
+    description: editableServer?.description || "",
+    server_url: editableServer?.server_url || "",
+    transport: editableServer?.transport || MCPTransportType.STREAMABLE_HTTP,
+    stdio_command: editableServer?.stdio_command || "",
+    stdio_args: (editableServer?.stdio_args || []).join("\n"),
+    stdio_env: JSON.stringify(editableServer?.stdio_env || {}, null, 2),
+    is_public: editableServer?.is_public ?? true,
+    groups: editableServer?.groups ?? [],
+    users: editableServer?.users ?? [],
   };
 
-  const handleSubmit = async (values: MCPServerCreateRequest) => {
+  const handleSubmit = async (values: MCPServerFormValues) => {
     setIsSubmitting(true);
 
+    const isStdio = values.transport === MCPTransportType.STDIO;
     // A public server has no group restriction.
     const payload: MCPServerCreateRequest = {
-      ...values,
+      name: values.name,
+      description: values.description,
+      server_url: isStdio ? "" : values.server_url,
+      transport: values.transport,
+      stdio_command: isStdio ? values.stdio_command.trim() : undefined,
+      stdio_args: isStdio
+        ? values.stdio_args
+            .split("\n")
+            .map((arg) => arg.trim())
+            .filter(Boolean)
+        : [],
+      stdio_env:
+        isStdio && values.stdio_env.trim() ? JSON.parse(values.stdio_env) : {},
+      is_public: values.is_public,
       groups: values.is_public ? [] : values.groups,
       users: values.is_public ? [] : values.users,
     };
@@ -140,6 +219,7 @@ export default function AddMCPServerModal({
           initialValues={initialValues}
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
+          enableReinitialize
         >
           {(formikProps) => (
             <Form>
@@ -177,16 +257,93 @@ export default function AddMCPServerModal({
 
                 <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-                <InputVertical
-                  withLabel="server_url"
-                  title="MCP Server URL"
-                  subDescription="Only connect to servers you trust. You are responsible for actions taken with this connection and keeping your tools updated."
-                >
-                  <InputTypeInField
-                    name="server_url"
-                    placeholder="https://your-mcp-server.com/mcp"
-                  />
-                </InputVertical>
+                {(stdioEnabled ||
+                  editableServer?.transport === MCPTransportType.STDIO) && (
+                  <FormField name="transport">
+                    <FormField.Label>Transport</FormField.Label>
+                    <FormField.Control asChild>
+                      <InputSelect
+                        value={formikProps.values.transport}
+                        disabled={isEditMode}
+                        onValueChange={(value) =>
+                          formikProps.setFieldValue("transport", value)
+                        }
+                      >
+                        <InputSelect.Trigger />
+                        <InputSelect.Content>
+                          <InputSelect.Item
+                            value={MCPTransportType.STREAMABLE_HTTP}
+                          >
+                            Streamable HTTP
+                          </InputSelect.Item>
+                          {editableServer?.transport ===
+                            MCPTransportType.SSE && (
+                            <InputSelect.Item value={MCPTransportType.SSE}>
+                              Server-sent events
+                            </InputSelect.Item>
+                          )}
+                          <InputSelect.Item value={MCPTransportType.STDIO}>
+                            Local process (stdio)
+                          </InputSelect.Item>
+                        </InputSelect.Content>
+                      </InputSelect>
+                    </FormField.Control>
+                    {isEditMode && (
+                      <FormField.Description>
+                        Transport cannot be changed after creation.
+                      </FormField.Description>
+                    )}
+                  </FormField>
+                )}
+
+                {formikProps.values.transport === MCPTransportType.STDIO ? (
+                  <>
+                    <MessageCard
+                      title="Runs a process on the Onyx API host"
+                      description="Only configure software you trust. Onyx executes the command directly without a shell, and shares these tools with the users or groups selected below."
+                    />
+                    <InputVertical withLabel="stdio_command" title="Command">
+                      <InputTypeInField
+                        name="stdio_command"
+                        placeholder="/usr/local/bin/wordpress-mcp"
+                      />
+                    </InputVertical>
+                    <InputVertical
+                      withLabel="stdio_args"
+                      title="Arguments"
+                      suffix="optional, one per line"
+                    >
+                      <InputTextAreaField
+                        name="stdio_args"
+                        placeholder={"--site\nhttps://example.com"}
+                        rows={3}
+                      />
+                    </InputVertical>
+                    <InputVertical
+                      withLabel="stdio_env"
+                      title="Environment Variables"
+                      suffix="optional JSON"
+                      subDescription="Values are encrypted at rest. Existing values remain masked while editing."
+                    >
+                      <InputTextAreaField
+                        name="stdio_env"
+                        placeholder={'{\n  "WORDPRESS_TOKEN": "secret"\n}'}
+                        rows={5}
+                      />
+                    </InputVertical>
+                  </>
+                ) : (
+                  <InputVertical
+                    withLabel="server_url"
+                    title="MCP Server URL"
+                    subDescription="Only connect to servers you trust. You are responsible for actions taken with this connection and keeping your tools updated."
+                  >
+                    <InputTypeInField
+                      name="server_url"
+                      placeholder="https://your-mcp-server.com/mcp"
+                    />
+                  </InputVertical>
+                )}
 
                 <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
@@ -239,17 +396,19 @@ export default function AddMCPServerModal({
                           tooltip="Disconnect Server"
                           onClick={handleDisconnectClick}
                         />
-                        <Button
-                          prominence="secondary"
-                          type="button"
-                          onClick={() => {
-                            // Close this modal and open the auth modal for this server
-                            toggle(false);
-                            handleAuthenticate(server.id);
-                          }}
-                        >
-                          Edit Configs
-                        </Button>
+                        {server.transport !== MCPTransportType.STDIO && (
+                          <Button
+                            prominence="secondary"
+                            type="button"
+                            onClick={() => {
+                              // Close this modal and open the auth modal for this server
+                              toggle(false);
+                              handleAuthenticate(server.id);
+                            }}
+                          >
+                            Edit Configs
+                          </Button>
+                        )}
                       </Section>
                     </Section>
                   )}

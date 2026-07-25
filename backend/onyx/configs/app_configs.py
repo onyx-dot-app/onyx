@@ -1121,6 +1121,13 @@ MCP_SERVER_ALLOW_LOOPBACK = (
     os.environ.get("MCP_SERVER_ALLOW_LOOPBACK", "false").lower() == "true"
 )
 
+# Stdio MCP servers execute an operator-supplied binary on the API host. Keep
+# this disabled unless a single-tenant operator explicitly opts in; tenant
+# admins in Onyx Cloud must never gain a process-execution primitive.
+MCP_STDIO_ENABLED = (
+    not MULTI_TENANT and os.environ.get("MCP_STDIO_ENABLED", "false").lower() == "true"
+)
+
 HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY = os.environ.get(
     "HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY",
     HtmlBasedConnectorTransformLinksStrategy.STRIP,
