@@ -3,6 +3,11 @@
 Background thread watches sandbox pods and maintains a `{pod_ip:
 SandboxIdentity}` cache. On any error or EOF the watch loop reconnects with
 exponential backoff capped at `_RECONNECT_MAX_SECONDS`; on 410 Gone we relist.
+
+A cache miss falls back to a one-shot read-through query by pod IP. A pod's
+first requests (opencode's boot-time fetches) can beat the watch event for the
+pod by a second or two; without the read-through those requests 403 as
+unidentified and one-shot clients (npm's plugin-SDK install) never retry.
 """
 
 import threading
@@ -40,6 +45,8 @@ _SANDBOX_POD_SELECTOR = ",".join(
         f"{LABEL_K8S_MANAGED_BY}={LABEL_K8S_MANAGED_BY_ONYX}",
     ]
 )
+
+_READTHROUGH_REQUEST_TIMEOUT: tuple[float, float] = (1.0, 2.0)
 
 logger = setup_logger()
 
@@ -118,7 +125,63 @@ class K8sInformerLookup(SandboxIPLookup):
 
     def lookup(self, src_ip: str) -> SandboxIdentity | None:
         with self._cache_lock:
-            return self._cache.get(src_ip)
+            hit = self._cache.get(src_ip)
+        if hit is not None:
+            return hit
+        return self._read_through(src_ip)
+
+    def _read_through(self, src_ip: str) -> SandboxIdentity | None:
+        # Resolve straight from the API on a cache miss (a new pod's first egress
+        # can beat its watch event). Not cached — the watch stays the sole cache
+        # writer, so this can't linger past a DELETED and misattribute a reused IP.
+        try:
+            identities, _ = self._list_identities(
+                field_selector=f"status.podIP={src_ip}",
+                request_timeout=_READTHROUGH_REQUEST_TIMEOUT,
+            )
+        except Exception as e:
+            logger.warning("identity_readthrough_error src_ip=%s error=%s", src_ip, e)
+            return None
+
+        # Require exactly one validated pod: an IP resolving to more than one is
+        # ambiguous, and picking matches[0] would trust unspecified list ordering.
+        matches = [i for i in identities if i.sandbox_ip == src_ip]
+        if len(matches) != 1:
+            if matches:
+                logger.warning(
+                    "identity_readthrough_ambiguous src_ip=%s sandboxes=%s",
+                    src_ip,
+                    [str(i.sandbox_id) for i in matches],
+                )
+            return None
+
+        identity = matches[0]
+        logger.info(
+            "identity_readthrough_hit src_ip=%s sandbox=%s (watch had not caught up)",
+            src_ip,
+            identity.sandbox_name,
+        )
+        return identity
+
+    def _list_identities(
+        self,
+        *,
+        field_selector: str | None = None,
+        request_timeout: tuple[float, float] | None = None,
+    ) -> tuple[list[SandboxIdentity], client.V1ListMeta | None]:
+        """List sandbox pods (all, or one IP via ``field_selector``) as identities."""
+        listing = self._core.list_namespaced_pod(
+            namespace=self._namespace,
+            label_selector=_SANDBOX_POD_SELECTOR,
+            field_selector=field_selector,
+            _request_timeout=request_timeout,
+        )
+        identities = [
+            identity
+            for pod in listing.items
+            if (identity := _identity_from_pod(pod)) is not None
+        ]
+        return identities, listing.metadata
 
     def _run(self) -> None:
         backoff = _RECONNECT_INITIAL_SECONDS
@@ -165,15 +228,9 @@ class K8sInformerLookup(SandboxIPLookup):
             backoff = min(backoff * 2, _RECONNECT_MAX_SECONDS)
 
     def _initial_list(self) -> str:
-        listing = self._core.list_namespaced_pod(
-            namespace=self._namespace,
-            label_selector=_SANDBOX_POD_SELECTOR,
-        )
+        identities, list_metadata = self._list_identities()
         new_cache: dict[str, SandboxIdentity] = {}
-        for pod in listing.items:
-            identity = _identity_from_pod(pod)
-            if identity is None:
-                continue
+        for identity in identities:
             existing = new_cache.get(identity.sandbox_ip)
             if existing is not None and existing.sandbox_id != identity.sandbox_id:
                 # Duplicate IPs = deploy-time bug; fail loud rather than
@@ -190,7 +247,6 @@ class K8sInformerLookup(SandboxIPLookup):
         logger.info("Informer initial sync: %d sandbox pods cached.", len(new_cache))
 
         # Typed Optional by the client though K8s always sets it on a list.
-        list_metadata = listing.metadata
         if list_metadata is None or not list_metadata.resource_version:
             raise RuntimeError(
                 "K8s list response missing metadata.resource_version; cannot start incremental "
