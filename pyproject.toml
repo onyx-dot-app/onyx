@@ -11,6 +11,9 @@ dependencies = [
     "litellm[google]==1.93.0",
     "openai==2.38.0",
     "pydantic==2.11.7",
+    # Shared because shared_configs/settings_base.py (imported by both the
+    # backend and model_server) builds the TOML-backed config service on it.
+    "pydantic-settings==2.14.2",
     # Shared so structured JSON logging (LOG_FORMAT=json) works in the
     # model_server image too, not just the backend.
     "python-json-logger==4.1.0",

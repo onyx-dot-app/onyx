@@ -1466,6 +1466,7 @@ pydantic==2.11.7 \
     #   litellm
     #   onyx
     #   openai
+    #   pydantic-settings
 pydantic-core==2.33.2 \
     --hash=sha256:04a1a413977ab517154eebb2d326da71638271477d6ad87a769102f7c2488c56 \
     --hash=sha256:0a9f2c9dd19656823cb8250b0724ee9c60a82f3cdf68a080979d13092a3b0fef \
@@ -1488,6 +1489,10 @@ pydantic-core==2.33.2 \
     # via
     #   cohere
     #   pydantic
+pydantic-settings==2.14.2 \
+    --hash=sha256:a20c97b37910b6550d5ea50fbcc2d4187defe58cd57070b73863d069419c9440 \
+    --hash=sha256:c19dd64b19097f1de80184f0cc7b0272a13ae6e170cbf240a3e27e381ed14a5f
+    # via onyx
 pyee==13.0.0 \
     --hash=sha256:48195a3cddb3b1515ce0695ed76036b5ccc2ef3a9f963ff9f77aec0139845498 \
     --hash=sha256:b391e3c5a434d1f5118a25615001dbc8f669cf410ab67d04c4d4e07c55481c37
@@ -1554,6 +1559,7 @@ python-dotenv==1.2.2 \
     --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
     # via
     #   litellm
+    #   pydantic-settings
     #   pytest-dotenv
 python-json-logger==4.1.0 \
     --hash=sha256:132994765cf75bf44554be9aa49b06ef2345d23661a96720262716438141b6b2 \
@@ -2056,6 +2062,7 @@ typing-inspection==0.4.2 \
     # via
     #   fastapi
     #   pydantic
+    #   pydantic-settings
 tzdata==2025.2 ; sys_platform == 'win32' \
     --hash=sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8 \
     --hash=sha256:b60a638fcc0daffadf82fe0f57e53d06bdec2f36c4df66280ae79bce6bd6f2b9

@@ -2283,7 +2283,9 @@ pydantic-core==2.33.2 \
 pydantic-settings==2.14.2 \
     --hash=sha256:a20c97b37910b6550d5ea50fbcc2d4187defe58cd57070b73863d069419c9440 \
     --hash=sha256:c19dd64b19097f1de80184f0cc7b0272a13ae6e170cbf240a3e27e381ed14a5f
-    # via mcp
+    # via
+    #   mcp
+    #   onyx
 pydivert==2.1.0 ; sys_platform == 'win32' \
     --hash=sha256:382db488e3c37c03ec9ec94e061a0b24334d78dbaeebb7d4e4d32ce4355d9da1 \
     --hash=sha256:f0e150f4ff591b78e35f514e319561dadff7f24a82186a171dd4d465483de5b4
