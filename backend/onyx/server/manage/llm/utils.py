@@ -10,12 +10,14 @@ Utilities for dynamic LLM providers (Bedrock, Ollama, OpenRouter):
 import re
 from typing import TypedDict
 
-from onyx.llm.constants import BEDROCK_MODEL_NAME_MAPPINGS
-from onyx.llm.constants import LlmProviderNames
-from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR
-from onyx.llm.constants import OLLAMA_MODEL_NAME_MAPPINGS
-from onyx.llm.constants import OLLAMA_MODEL_TO_VENDOR
-from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
+from onyx.llm.constants import (
+    BEDROCK_MODEL_NAME_MAPPINGS,
+    MODEL_PREFIX_TO_VENDOR,
+    OLLAMA_MODEL_NAME_MAPPINGS,
+    OLLAMA_MODEL_TO_VENDOR,
+    PROVIDER_DISPLAY_NAMES,
+    LlmProviderNames,
+)
 
 
 class ModelMetadata(TypedDict):

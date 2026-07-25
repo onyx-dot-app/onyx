@@ -1,32 +1,38 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.lumapps.client import LumAppsClientError
-from onyx.connectors.lumapps.client import OnyxLumApps
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
+from onyx.connectors.lumapps.client import LumAppsClientError, OnyxLumApps
 from onyx.connectors.lumapps.models import LumAppsCheckpoint
-from onyx.connectors.lumapps.utils import extract_body_text
-from onyx.connectors.lumapps.utils import pick_lang
-from onyx.connectors.lumapps.utils import resolve_metadata_labels
-from onyx.connectors.lumapps.utils import slugify_family_key
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.lumapps.utils import (
+    extract_body_text,
+    pick_lang,
+    resolve_metadata_labels,
+    slugify_family_key,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger

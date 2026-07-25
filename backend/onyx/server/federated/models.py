@@ -1,8 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.configs.constants import FederatedConnectorSource
 

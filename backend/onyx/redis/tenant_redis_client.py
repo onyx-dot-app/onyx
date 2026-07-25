@@ -12,10 +12,8 @@ typing error, not a silent cross-tenant write.
 # annotations like ``-> set[bytes]``.
 from __future__ import annotations
 
-from collections.abc import Generator
-from collections.abc import Mapping
-from typing import Any
-from typing import cast
+from collections.abc import Generator, Mapping
+from typing import Any, cast
 
 import redis
 from redis.client import Pipeline

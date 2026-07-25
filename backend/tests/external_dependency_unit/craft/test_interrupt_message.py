@@ -15,9 +15,7 @@ from typing import Callable
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.models import BuildSession, Sandbox, User
 from onyx.server.features.build.session.manager import SessionManager
 from tests.common.craft.stubs import StubSandboxManager
 

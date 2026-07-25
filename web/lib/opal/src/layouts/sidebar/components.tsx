@@ -11,7 +11,7 @@ import {
   useRef,
 } from "react";
 import { usePathname } from "next/navigation";
-import { Button, Spacer, Text } from "@opal/components";
+import { Button, ShadowDiv, Spacer, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
@@ -231,18 +231,17 @@ function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
   }, [pathname, scrollKey]);
 
   return (
-    <div className="opal-sidebar-body">
-      <div ref={scrollRef} className="opal-sidebar-body__scroll">
-        <div
-          className="opal-sidebar-body__content"
-          data-folded={String(folded)}
-        >
-          {children}
-        </div>
-        <div className="opal-sidebar-body__spacer" />
+    <ShadowDiv
+      mask
+      scrollContainerRef={scrollRef}
+      containerClassName="opal-sidebar-body"
+      className="opal-sidebar-body__scroll"
+    >
+      <div className="opal-sidebar-body__content" data-folded={String(folded)}>
+        {children}
       </div>
-      <div className="opal-sidebar-body__fade" />
-    </div>
+      <div className="opal-sidebar-body__spacer" />
+    </ShadowDiv>
   );
 }
 

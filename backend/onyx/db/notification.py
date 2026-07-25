@@ -1,10 +1,7 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import cast
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import cast, select, update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -13,8 +10,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
-from onyx.db.models import Notification
-from onyx.db.models import User
+from onyx.db.models import Notification, User
 
 
 def _notification_filters(

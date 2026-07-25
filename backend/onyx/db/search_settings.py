@@ -1,17 +1,19 @@
-from sqlalchemy import and_
-from sqlalchemy import delete
+from sqlalchemy import and_, delete, select
 from sqlalchemy import inspect as sa_inspect
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.configs.model_configs import DEFAULT_DOCUMENT_ENCODER_MODEL
-from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
+from onyx.configs.model_configs import (
+    DEFAULT_DOCUMENT_ENCODER_MODEL,
+    DOCUMENT_ENCODER_MODEL,
+)
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.llm import fetch_embedding_provider
-from onyx.db.models import CloudEmbeddingProvider
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexModelStatus
-from onyx.db.models import SearchSettings
+from onyx.db.models import (
+    CloudEmbeddingProvider,
+    IndexAttempt,
+    IndexModelStatus,
+    SearchSettings,
+)
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider as ServerCloudEmbeddingProvider,
 )
@@ -177,6 +179,16 @@ def get_search_settings_by_id(
     db_session: Session, search_settings_id: int
 ) -> SearchSettings | None:
     return db_session.get(SearchSettings, search_settings_id)
+
+
+def active_secondary_port_target(db_session: Session) -> SearchSettings | None:
+    """The secondary index a reindex-port is populating (the dual-write target), or None.
+    Pure — never unpins a drained INSTANT source (unlike _resolve_port_target_settings).
+    None after an INSTANT swap: FUTURE was promoted to current, so the live pass covers it."""
+    secondary = get_secondary_search_settings(db_session)
+    if secondary is not None and secondary.use_port_flow:
+        return secondary
+    return None
 
 
 def get_active_search_settings(db_session: Session) -> ActiveSearchSettings:

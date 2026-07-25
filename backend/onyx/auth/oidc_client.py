@@ -4,11 +4,9 @@ verified, and the discovery document's issuer must own the configured
 discovery URL, so one provider's tokens cannot be replayed against another
 provider's callback (OIDC mix-up defense)."""
 
-from urllib.parse import unquote
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
-from httpx_oauth.clients.openid import BASE_SCOPES
-from httpx_oauth.clients.openid import OpenID
+from httpx_oauth.clients.openid import BASE_SCOPES, OpenID
 from httpx_oauth.exceptions import GetIdEmailError
 
 
@@ -71,11 +69,13 @@ def validate_issuer_owns_config_url(
 
 
 class VerifiedEmailOpenID(OpenID):
-    """OpenID client that refuses to hand back an email the IdP has not
-    verified. An absent email_verified claim counts as unverified, since a
-    mutable, unverified email claim is exactly the nOAuth account-takeover
-    vector. A response with no email at all is passed through unchanged and
-    rejected by the login flow's existing no-email handling."""
+    """OpenID client that guards the email claim. Any present email_verified
+    value other than true is rejected, since a mutable, unverified email
+    claim is exactly the nOAuth account-takeover vector. An absent claim
+    (optional per OIDC and omitted by some IdPs such as Microsoft Entra ID)
+    is tolerated unless require_verified_email opts this provider into
+    requiring it. A response with no email at all is passed through
+    unchanged and rejected by the login flow's existing no-email handling."""
 
     def __init__(
         self,
@@ -84,6 +84,7 @@ class VerifiedEmailOpenID(OpenID):
         openid_configuration_endpoint: str,
         name: str = "openid",
         base_scopes: list[str] | None = BASE_SCOPES,
+        require_verified_email: bool = False,
     ):
         super().__init__(
             client_id,
@@ -92,6 +93,7 @@ class VerifiedEmailOpenID(OpenID):
             name=name,
             base_scopes=base_scopes,
         )
+        self.require_verified_email = require_verified_email
         validate_issuer_owns_config_url(
             self.openid_configuration.get("issuer"), openid_configuration_endpoint
         )
@@ -136,10 +138,19 @@ class VerifiedEmailOpenID(OpenID):
                 raise GetIdEmailError(
                     "Userinfo 'email' was not a string", response=response
                 )
-            if email is not None and data.get("email_verified") is not True:
-                raise GetIdEmailError(
-                    "Identity provider did not mark the email as verified",
-                    response=response,
-                )
+            email_verified = data.get("email_verified")
+            if email is not None and email_verified is not True:
+                if email_verified is False:
+                    raise GetIdEmailError(
+                        "Identity provider marked the email as unverified",
+                        response=response,
+                    )
+                # Only a genuinely absent claim is tolerable. Any present
+                # value, including null or a stringly-typed one, rejects.
+                if "email_verified" in data or self.require_verified_email:
+                    raise GetIdEmailError(
+                        "Identity provider did not mark the email as verified",
+                        response=response,
+                    )
 
             return sub, email

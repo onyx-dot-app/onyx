@@ -1,21 +1,25 @@
 from collections.abc import Iterator
-from typing import Any
-from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 from googleapiclient.discovery import Resource
 
-from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
-from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
-from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
-from onyx.connectors.google_drive.doc_conversion import download_request
-from onyx.connectors.google_drive.file_retrieval import _get_files_in_parent
-from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files
-from onyx.connectors.google_drive.file_retrieval import DRIVE_RESOURCE_KEY_FIELD
-from onyx.connectors.google_drive.file_retrieval import DRIVE_RESOURCE_KEY_HEADER
-from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
+from onyx.connectors.google_drive.constants import (
+    DRIVE_FOLDER_TYPE,
+    DRIVE_SHORTCUT_TYPE,
+)
+from onyx.connectors.google_drive.doc_conversion import (
+    convert_drive_item_to_document,
+    download_request,
+)
+from onyx.connectors.google_drive.file_retrieval import (
+    DRIVE_RESOURCE_KEY_FIELD,
+    DRIVE_RESOURCE_KEY_HEADER,
+    DriveFileFieldType,
+    _get_files_in_parent,
+    crawl_folders_for_files,
+)
 from onyx.connectors.google_drive.models import DriveRetrievalStage
 
 _FILE_RETRIEVAL_MODULE = "onyx.connectors.google_drive.file_retrieval"

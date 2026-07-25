@@ -7,15 +7,17 @@ a future inlining of these types (or swap to a different upstream)
 touches only this file. See docs/craft/drop-acp-layer.md.
 """
 
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentPlanUpdate
-from acp.schema import AgentThoughtChunk
-from acp.schema import CurrentModeUpdate
-from acp.schema import Error
-from acp.schema import PromptResponse
-from acp.schema import RequestPermissionRequest
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
+from acp.schema import (
+    AgentMessageChunk,
+    AgentPlanUpdate,
+    AgentThoughtChunk,
+    CurrentModeUpdate,
+    Error,
+    PromptResponse,
+    RequestPermissionRequest,
+    ToolCallProgress,
+    ToolCallStart,
+)
 
 # Onyx-synthesized ``Error.code`` sentinels for turn-terminating failures.
 # Negative so they never collide with opencode / JSON-RPC error codes.

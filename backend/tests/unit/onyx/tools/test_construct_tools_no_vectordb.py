@@ -7,8 +7,7 @@ Verifies that:
 - FileReaderTool.is_available() returns True when vector DB is disabled
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 

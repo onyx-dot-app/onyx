@@ -4,20 +4,18 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import AccountType
-from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Skill
-from onyx.db.models import Skill__User
-from onyx.db.models import User
-from onyx.db.models import UserRole
+from onyx.db.enums import AccountType, SkillSharePermission
+from onyx.db.models import Skill, Skill__User, User, UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import transfer_current_user_skill_ownership
 from onyx.server.features.skill.models import TransferSkillOwnershipRequest
-from tests.external_dependency_unit.craft.db_helpers import make_sandbox
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
-from tests.external_dependency_unit.craft.db_helpers import share_skill_with_user
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_sandbox,
+    make_skill,
+    make_user,
+    share_skill_with_user,
+)
 
 
 def _owned_skill(db_session: Session, owner: User) -> Skill:

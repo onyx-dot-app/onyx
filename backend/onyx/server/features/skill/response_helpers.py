@@ -1,25 +1,46 @@
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
-from onyx.db.enums import SkillAccessLevel
-from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.persona_sharing import get_curated_user_group_ids_for_user
-from onyx.db.persona_sharing import get_user_group_ids_for_user
-from onyx.db.skill import skill_user_states
-from onyx.db.skill import SkillUserState
+from onyx.db.enums import SkillAccessLevel, SkillSharePermission
+from onyx.db.external_app import (
+    SkillExternalAppDependencyState,
+    get_skill_external_app_dependencies,
+)
+from onyx.db.models import Skill, User
+from onyx.db.persona_sharing import (
+    get_curated_user_group_ids_for_user,
+    get_user_group_ids_for_user,
+)
+from onyx.db.skill import SkillUserState, skill_user_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill.models import SkillPreviewResponse
-from onyx.server.features.skill.models import SkillResponse
-from onyx.server.features.skill.models import SkillsList
+from onyx.server.features.skill.models import (
+    SkillExternalAppDependencyResponse,
+    SkillPreviewResponse,
+    SkillResponse,
+    SkillsList,
+)
 from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.content import read_builtin_skill_instructions
-from onyx.skills.content import read_custom_skill_bundle_instructions
+from onyx.skills.content import (
+    read_builtin_skill_instructions,
+    read_custom_skill_bundle_instructions,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _dependency_response(
+    dependency: SkillExternalAppDependencyState | None,
+) -> SkillExternalAppDependencyResponse | None:
+    if dependency is None:
+        return None
+    return SkillExternalAppDependencyResponse(
+        external_app_id=dependency.external_app_id,
+        name=dependency.name,
+        enabled=dependency.enabled,
+        ready=dependency.ready,
+    )
 
 
 def user_permission_for_skill(
@@ -28,7 +49,7 @@ def user_permission_for_skill(
     user_group_ids: set[int],
     curated_user_group_ids: set[int] | None = None,
 ) -> SkillAccessLevel | None:
-    if skill.built_in_skill_id is not None:
+    if not skill.is_custom:
         return SkillAccessLevel.VIEWER
 
     if skill.author_user_id == user.id:
@@ -114,6 +135,7 @@ def skill_response_for_user(
             curated_user_group_ids,
         ),
         include_share_details=include_share_details,
+        external_app=_dependency_response(state.external_app_dependency),
     )
 
 
@@ -131,7 +153,6 @@ def skills_list_response_for_user(
         else set()
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)
-
     for skill in rows:
         if (
             skill.built_in_skill_id is not None
@@ -139,7 +160,7 @@ def skills_list_response_for_user(
         ):
             logger.warning(
                 "Skill row %s references unknown built-in %s; hiding from listing",
-                skill.slug,
+                skill.name,
                 skill.built_in_skill_id,
             )
             continue
@@ -152,12 +173,16 @@ def skills_list_response_for_user(
             user_group_ids=user_group_ids,
             curated_user_group_ids=curated_user_group_ids,
         )
-        (builtins if skill.built_in_skill_id is not None else customs).append(response)
+        (customs if skill.is_custom else builtins).append(response)
 
     return SkillsList(builtins=builtins, customs=customs)
 
 
-def skill_preview_response(skill: Skill) -> SkillPreviewResponse:
+def skill_preview_response(
+    skill: Skill,
+    user: User,
+    db_session: Session,
+) -> SkillPreviewResponse:
     if skill.built_in_skill_id is not None:
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
         if definition is None:
@@ -170,4 +195,11 @@ def skill_preview_response(skill: Skill) -> SkillPreviewResponse:
     return SkillPreviewResponse.from_custom(
         skill,
         instructions_markdown=read_custom_skill_bundle_instructions(skill),
+        external_app=_dependency_response(
+            get_skill_external_app_dependencies(
+                db_session,
+                user,
+                [skill.id],
+            ).get(skill.id)
+        ),
     )

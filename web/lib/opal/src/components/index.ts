@@ -88,6 +88,12 @@ export {
   type IconContainerSize,
   type IconContainerType,
 } from "@opal/components/icon-container/components";
+/* ProgressBar */
+export {
+  ProgressBar,
+  type ProgressBarProps,
+  type ProgressBarColor,
+} from "@opal/components/progress-bar/components";
 
 /* Card */
 export { Card, type CardProps } from "@opal/components/cards/card/components";
@@ -109,6 +115,15 @@ export {
   MessageCard,
   type MessageCardProps,
 } from "@opal/components/cards/message-card/components";
+
+/* Loader */
+export {
+  IconLoader,
+  type IconLoaderProps,
+  OnyxLoader,
+  type OnyxLoaderProps,
+  type LoaderColor,
+} from "@opal/components/loader/components";
 
 /* Pagination */
 export {

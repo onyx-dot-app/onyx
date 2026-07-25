@@ -1,26 +1,23 @@
 """Database operations for Personal Access Tokens."""
 
 import asyncio
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import NamedTuple
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import contains_eager
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 
-from onyx.auth.pat import build_displayable_pat
-from onyx.auth.pat import calculate_expiration
-from onyx.auth.pat import generate_pat
-from onyx.auth.pat import hash_pat
+from onyx.auth.pat import (
+    build_displayable_pat,
+    calculate_expiration,
+    generate_pat,
+    hash_pat,
+)
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.enums import PatType
-from onyx.db.enums import Permission
-from onyx.db.models import PersonalAccessToken
-from onyx.db.models import User
+from onyx.db.enums import PatType, Permission
+from onyx.db.models import PersonalAccessToken, User
 from onyx.db.permissions import parse_permission_values
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id

@@ -1,11 +1,13 @@
 """Tests for LLM provider utilities."""
 
-from onyx.server.manage.llm.utils import generate_bedrock_display_name
-from onyx.server.manage.llm.utils import generate_ollama_display_name
-from onyx.server.manage.llm.utils import is_embedding_model
-from onyx.server.manage.llm.utils import is_reasoning_model
-from onyx.server.manage.llm.utils import is_valid_bedrock_model
-from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
+from onyx.server.manage.llm.utils import (
+    generate_bedrock_display_name,
+    generate_ollama_display_name,
+    is_embedding_model,
+    is_reasoning_model,
+    is_valid_bedrock_model,
+    strip_openrouter_vendor_prefix,
+)
 
 
 class TestGenerateBedrockDisplayName:

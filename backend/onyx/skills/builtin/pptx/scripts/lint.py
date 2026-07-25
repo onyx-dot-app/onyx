@@ -36,8 +36,7 @@ from pathlib import Path
 
 from PIL import ImageFont
 from pptx import Presentation
-from pptx.enum.dml import MSO_COLOR_TYPE
-from pptx.enum.dml import MSO_FILL
+from pptx.enum.dml import MSO_COLOR_TYPE, MSO_FILL
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.shapes.base import BaseShape

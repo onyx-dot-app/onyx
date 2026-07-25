@@ -9,12 +9,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from onyx.server.manage.voice.websocket_api import ChunkedTranscriber
-from onyx.server.manage.voice.websocket_api import pcm16_rms
-from onyx.server.manage.voice.websocket_api import PCM_BYTES_PER_SECOND
-from onyx.server.manage.voice.websocket_api import PCM_SAMPLE_RATE
-from onyx.server.manage.voice.websocket_api import SILENCE_RMS_THRESHOLD
-from onyx.server.manage.voice.websocket_api import trim_pcm16_silence
+from onyx.server.manage.voice.websocket_api import (
+    PCM_BYTES_PER_SECOND,
+    PCM_SAMPLE_RATE,
+    SILENCE_RMS_THRESHOLD,
+    ChunkedTranscriber,
+    pcm16_rms,
+    trim_pcm16_silence,
+)
 
 
 def _silence(seconds: float) -> bytes:

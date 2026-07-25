@@ -2,8 +2,7 @@ import os
 import platform
 import re
 import socket
-from enum import auto
-from enum import Enum
+from enum import Enum, auto
 
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"
@@ -108,6 +107,11 @@ DANSWER_API_KEY_PREFIX = "API_KEY__"
 DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN = "onyxapikey.ai"
 UNNAMED_KEY_PLACEHOLDER = "Unnamed"
 DISCORD_SERVICE_API_KEY_NAME = "discord-bot-service"
+SLACK_SERVICE_ACCOUNT_NAME = "slack-bot-service"
+SLACK_SERVICE_ACCOUNT_EMAIL = (
+    f"{DANSWER_API_KEY_PREFIX}{SLACK_SERVICE_ACCOUNT_NAME}"
+    f"@{DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN}"
+).lower()
 
 # Key-Value store keys
 KV_REINDEX_KEY = "needs_reindexing"
@@ -244,6 +248,7 @@ class DocumentSource(str, Enum):
     GOOGLE_SITES = "google_sites"
     ZENDESK = "zendesk"
     LOOPIO = "loopio"
+    BOX = "box"
     DROPBOX = "dropbox"
     SHAREPOINT = "sharepoint"
     TEAMS = "teams"
@@ -379,6 +384,7 @@ class FileStoreType(str, Enum):
     S3 = "s3"
     POSTGRES = "postgres"
     GCS = "gcs"
+    AZURE = "azure"
 
 
 class FileOrigin(str, Enum):
@@ -451,6 +457,9 @@ class OnyxCeleryQueues:
     # Reindex port queue (heavy PRESENT -> FUTURE re-embed; kept off the
     # docprocessing queue so a migration doesn't starve live indexing)
     PORT = "port"
+    # User-file reindex port; runs on the user-file worker with its own budget, so it
+    # never competes with the connector port or docprocessing.
+    USER_FILE_PORT = "user_file_port"
 
     # Monitoring queue
     MONITORING = "monitoring"
@@ -526,6 +535,7 @@ class OnyxRedisLocks:
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES_BEAT_LOCK = "da_lock:cleanup_idle_sandboxes_beat"
+    SESSION_CREATE_LOCK_PREFIX = "session_create"
 
 
 class OnyxRedisSignals:
@@ -604,6 +614,7 @@ class OnyxCeleryTask:
 
     # Reindex port (PRESENT -> FUTURE chunk copy)
     RUN_PORT_ATTEMPT = "run_port_attempt"
+    RUN_USER_FILE_PORT_ATTEMPT = "run_user_file_port_attempt"
     CHECK_FOR_PORT = "check_for_port"
 
     # Connector checkpoint cleanup
@@ -618,6 +629,7 @@ class OnyxCeleryTask:
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
+    EMIT_VERSION_TELEMETRY = "emit_version_telemetry"
 
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"
@@ -732,6 +744,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.GOOGLE_SITES: "Website pages and content",
     DocumentSource.ZENDESK: "Support tickets and help articles",
     DocumentSource.LOOPIO: "RFP responses and content library",
+    DocumentSource.BOX: "Cloud-stored files and folders",
     DocumentSource.DROPBOX: "Cloud-stored files and folders",
     DocumentSource.SHAREPOINT: "Documents and team sites",
     DocumentSource.TEAMS: "Chat messages and channels",

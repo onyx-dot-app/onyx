@@ -28,8 +28,10 @@ from typing import Any
 import httpx
 import pytest
 
-from onyx.server.features.build.sandbox.opencode.serve_client import ClientTimeouts
-from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
+from onyx.server.features.build.sandbox.opencode.serve_client import (
+    ClientTimeouts,
+    OpencodeServeClient,
+)
 
 _STALE_ID = "ses_stale_old_id_001"
 _FRESH_ID = "ses_fresh_new_id_002"

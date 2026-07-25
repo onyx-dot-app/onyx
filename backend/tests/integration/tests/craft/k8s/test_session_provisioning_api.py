@@ -3,23 +3,26 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from kubernetes import client
 
 from onyx.db.enums import SandboxStatus
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import (
+    SANDBOX_BACKEND,
+    SANDBOX_NAMESPACE,
+    SandboxBackend,
+)
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.tests.craft.k8s.k8s_fixtures import cleanup_api_user_sandbox_rows
-from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
+from tests.integration.tests.craft.k8s.k8s_fixtures import (
+    cleanup_api_user_sandbox_rows,
+    wait_for_pod_deletion,
+)
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,

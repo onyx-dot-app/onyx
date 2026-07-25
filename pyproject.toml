@@ -8,7 +8,7 @@ dependencies = [
     "cohere==7.0.5",
     "fastapi==0.133.1",
     "google-genai==1.52.0",
-    "litellm[google]==1.89.4",
+    "litellm[google]==1.93.0",
     "openai==2.38.0",
     "pydantic==2.11.7",
     # Shared so structured JSON logging (LOG_FORMAT=json) works in the
@@ -31,8 +31,11 @@ backend = [
     "asyncpg==0.30.0",
     "atlassian-python-api==4.0.7",
     "azure-cognitiveservices-speech==1.50.0",
+    "azure-identity>=1.23.0,<2.0.0",
+    "azure-storage-blob>=12.24.0,<13.0.0",
     "beautifulsoup4==4.12.3",
     "boto3==1.39.11",
+    "boxsdk==10.12.0",
     "celery==5.5.1",
     "chardet==5.2.0",
     "chonkie==1.0.10",
@@ -88,7 +91,7 @@ backend = [
     "python-docx==1.1.2",
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
-    "pypdf==6.13.3",
+    "pypdf==6.14.2",
     "pypdfium2==5.9.0",
     "python-dotenv==1.2.2",
     "python-slugify==8.0.4",
@@ -129,14 +132,14 @@ backend = [
 # Dev tools
 dev = [
     "boto3-stubs[s3]==1.39.11",
-    "celery-types==0.19.0",
+    "celery-types==0.26.0",
     "faker==40.1.2",
     "hatchling==1.28.0",
     "ipykernel==6.29.5",
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "ty==0.0.31",
-    "onyx-devtools==0.10.0",
+    "onyx-devtools==0.10.1",
     "openapi-generator-cli==7.17.0",
     "pandas-stubs~=2.3.3",
     "pre-commit==3.2.2",
@@ -287,8 +290,6 @@ ignore = [
 select = ["ARG", "E", "F", "G004", "I", "S", "W"]
 
 [tool.ruff.lint.isort]
-force-single-line = true
-order-by-type = false
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 
 [tool.ruff.lint.per-file-ignores]

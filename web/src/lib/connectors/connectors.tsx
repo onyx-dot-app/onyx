@@ -142,6 +142,23 @@ export interface ConnectionConfiguration {
   ) => boolean;
 }
 
+// Shared "Include Attachments" checkbox. Pair with an `include_attachments`
+// kwarg on the backend connector; see backend/onyx/connectors/README.md for
+// the convention, including how to pick the default.
+export function buildIncludeAttachmentsOption(
+  defaultValue: boolean
+): BooleanOption {
+  return {
+    type: "checkbox",
+    query: "Include attachments?",
+    label: "Include Attachments",
+    name: "include_attachments",
+    description:
+      "Enable processing of page attachments including images and documents",
+    default: defaultValue,
+  };
+}
+
 export const connectorConfigs: Record<
   ConfigurableSources,
   ConnectionConfiguration
@@ -713,6 +730,7 @@ export const connectorConfigs: Record<
         ],
         defaultTab: "space",
       },
+      buildIncludeAttachmentsOption(true),
     ],
     advanced_values: [],
   },
@@ -1087,15 +1105,7 @@ export const connectorConfigs: Record<
           },
         ],
       },
-      {
-        type: "checkbox",
-        query: "Include attachments?",
-        label: "Include Attachments",
-        name: "include_attachments",
-        description:
-          "Enable processing of page attachments including images and documents",
-        default: false,
-      },
+      buildIncludeAttachmentsOption(false),
     ],
     advanced_values: [],
   },
@@ -1409,6 +1419,32 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     description: "Configure Linear connector",
     values: [],
     advanced_values: [],
+  },
+  box: {
+    description: "Configure Box connector",
+    values: [
+      {
+        type: "list",
+        query: "Enter folder IDs or URLs to index:",
+        label: "Folders",
+        name: "folder_ids",
+        description:
+          "Box folder IDs or folder URLs (e.g. https://app.box.com/folder/123456789) to index. " +
+          "Leave empty to index everything visible to the authenticated user.",
+        optional: true,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Include web links:",
+        label: "Include Web Links",
+        name: "include_web_links",
+        description:
+          "Also index Box web links (bookmarks) as lightweight documents.",
+        optional: true,
+      },
+    ],
   },
   dropbox: {
     description: "Configure Dropbox connector",
@@ -2092,6 +2128,7 @@ export interface ConfluenceConfig {
   is_cloud?: boolean;
   index_recursively?: boolean;
   cql_query?: string;
+  include_attachments?: boolean;
 }
 
 export interface JiraConfig {

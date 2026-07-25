@@ -1,37 +1,38 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Response
-from fastapi import status
-from fastapi import UploadFile
-from pydantic import BaseModel
-from pydantic import Field
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.scim import ScimDAL
-from ee.onyx.server.enterprise_settings.models import AnalyticsScriptUpload
-from ee.onyx.server.enterprise_settings.models import EnterpriseSettings
-from ee.onyx.server.enterprise_settings.store import get_logo_filename
-from ee.onyx.server.enterprise_settings.store import get_logotype_filename
-from ee.onyx.server.enterprise_settings.store import load_analytics_script
-from ee.onyx.server.enterprise_settings.store import load_settings
-from ee.onyx.server.enterprise_settings.store import store_analytics_script
-from ee.onyx.server.enterprise_settings.store import store_settings
-from ee.onyx.server.enterprise_settings.store import upload_logo
+from ee.onyx.server.enterprise_settings.models import (
+    AnalyticsScriptUpload,
+    EnterpriseSettings,
+)
+from ee.onyx.server.enterprise_settings.store import (
+    get_logo_filename,
+    get_logotype_filename,
+    load_analytics_script,
+    load_settings,
+    store_analytics_script,
+    store_settings,
+    upload_logo,
+)
 from ee.onyx.server.scim.auth import generate_scim_token
-from ee.onyx.server.scim.models import ScimTokenCreate
-from ee.onyx.server.scim.models import ScimTokenCreatedResponse
-from ee.onyx.server.scim.models import ScimTokenResponse
+from ee.onyx.server.scim.models import (
+    ScimTokenCreate,
+    ScimTokenCreatedResponse,
+    ScimTokenResponse,
+)
 from ee.onyx.utils.tier import get_tier
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_user_with_expired_token
-from onyx.auth.users import get_user_manager
-from onyx.auth.users import UserManager
+from onyx.auth.users import (
+    UserManager,
+    current_user_with_expired_token,
+    get_user_manager,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -42,8 +43,7 @@ from onyx.server.settings.models import Tier
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
 admin_router = APIRouter(prefix="/admin/enterprise-settings")

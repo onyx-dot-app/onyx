@@ -11,10 +11,12 @@ from onyx.db.models import Skill
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.bundle import normalize_custom_bundle
-from onyx.skills.bundle import NormalizedSkillBundle
-from onyx.skills.bundle import read_bundle_file
-from onyx.skills.bundle import SKILL_MD_NAME
+from onyx.skills.bundle import (
+    SKILL_MD_NAME,
+    NormalizedSkillBundle,
+    normalize_custom_bundle,
+    read_bundle_file,
+)
 from onyx.skills.metadata import parse_skill_document
 from onyx.skills.models import SKILL_NAME_PATTERN
 
@@ -59,13 +61,13 @@ def validate_stored_custom_skill(
     skill: Skill,
     file_store: FileStore,
 ) -> SkillValidationResult:
-    if len(skill.slug) > 64 or not SKILL_NAME_PATTERN.fullmatch(skill.slug):
+    if len(skill.name) > 64 or not SKILL_NAME_PATTERN.fullmatch(skill.name):
         return SkillValidationResult(
             is_valid=False,
             normalized_bundle=None,
             detail="persisted skill name does not match the canonical grammar",
         )
-    if skill.slug in BUILT_IN_SKILLS:
+    if skill.name in BUILT_IN_SKILLS:
         return SkillValidationResult(
             is_valid=False,
             normalized_bundle=None,
@@ -117,7 +119,7 @@ def validate_stored_custom_skill(
             detail=f"stored bundle is invalid: {detail}",
         )
 
-    if document.metadata.name != skill.slug:
+    if document.metadata.name != skill.name:
         return SkillValidationResult(
             is_valid=False,
             normalized_bundle=None,

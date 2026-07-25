@@ -3,9 +3,7 @@ from os import urandom
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives.ciphers import algorithms
-from cryptography.hazmat.primitives.ciphers import Cipher
-from cryptography.hazmat.primitives.ciphers import modes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
 from onyx.utils.logger import setup_logger

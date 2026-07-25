@@ -3,10 +3,11 @@ from uuid import uuid4
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.managers.persona import PersonaLabelManager
-from tests.integration.common_utils.managers.persona import PersonaManager
-from tests.integration.common_utils.test_models import DATestPersonaLabel
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.managers.persona import (
+    PersonaLabelManager,
+    PersonaManager,
+)
+from tests.integration.common_utils.test_models import DATestPersonaLabel, DATestUser
 
 
 def test_update_persona_with_null_label_ids_preserves_labels(

@@ -21,9 +21,7 @@ import threading
 import time
 
 from celery import Task
-from prometheus_client import Counter
-from prometheus_client import Gauge
-from prometheus_client import Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 from onyx.utils.logger import setup_logger
 

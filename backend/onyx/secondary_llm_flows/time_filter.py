@@ -1,25 +1,18 @@
 import re
-from datetime import datetime
-from datetime import time
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, time, timedelta, timezone
 from enum import StrEnum
 
 from dateutil.relativedelta import relativedelta
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import TimeRange
+from onyx.context.search.models import BaseFilters, TimeRange
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ChatCompletionMessage
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import UserMessage
+from onyx.llm.models import ChatCompletionMessage, ReasoningEffort, UserMessage
 from onyx.prompts.filter_extration import TIME_SCOPE_DECISION_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

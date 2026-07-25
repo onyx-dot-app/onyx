@@ -5,11 +5,9 @@ Older API clients send time_cutoff in request bodies
 it must keep filtering on document update time via updated_at_range.
 """
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import TimeRange
+from onyx.context.search.models import BaseFilters, TimeRange
 
 _START = datetime(2025, 11, 24, tzinfo=timezone.utc)
 

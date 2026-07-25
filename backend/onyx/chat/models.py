@@ -1,21 +1,22 @@
 from collections.abc import Iterator
-from typing import Any
-from typing import Callable
+from typing import Any, Callable
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
-from onyx.server.query_and_chat.models import MessageResponseIDInfo
-from onyx.server.query_and_chat.models import MultiModelMessageResponseIDInfo
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.models import SearchToolUsage
-from onyx.tools.models import ToolCallKickoff
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.server.query_and_chat.models import (
+    MessageResponseIDInfo,
+    MultiModelMessageResponseIDInfo,
+)
+from onyx.server.query_and_chat.streaming_models import (
+    CitationInfo,
+    GeneratedImage,
+    Packet,
+)
+from onyx.tools.models import SearchToolUsage, ToolCallKickoff
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
 

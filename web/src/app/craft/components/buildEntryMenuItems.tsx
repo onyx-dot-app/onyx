@@ -76,7 +76,7 @@ export function buildEntryMenuItems(
       flyoutItems:
         sections.apps.length > 0
           ? sections.apps.map((app) => ({
-              key: app.slug,
+              key: String(app.externalAppId),
               icon: getAppTypeLogo(app.appType),
               label: app.name,
               rightContent: app.authenticated ? undefined : (

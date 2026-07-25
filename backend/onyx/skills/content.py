@@ -3,13 +3,14 @@
 from onyx.db.models import Skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import FileStore
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.bundle import read_custom_bundle_instructions
-from onyx.skills.bundle import SKILL_MD_NAME
-from onyx.skills.bundle import strip_skill_md_frontmatter
-from onyx.skills.bundle import TEMPLATE_SUFFIX
+from onyx.skills.bundle import (
+    SKILL_MD_NAME,
+    TEMPLATE_SUFFIX,
+    read_custom_bundle_instructions,
+    strip_skill_md_frontmatter,
+)
 
 
 def read_builtin_skill_instructions(definition: BuiltInSkillDefinition) -> str:
@@ -45,7 +46,7 @@ def read_custom_skill_bundle_bytes(
     if skill.bundle_file_id is None:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
-            f"Custom skill '{skill.slug}' has no bundle.",
+            f"Custom skill '{skill.name}' has no bundle.",
         )
     store = file_store or get_default_file_store()
     try:
@@ -53,6 +54,6 @@ def read_custom_skill_bundle_bytes(
     except Exception as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
-            f"Failed to read bundle for skill '{skill.slug}'.",
+            f"Failed to read bundle for skill '{skill.name}'.",
         ) from exc
     return bundle_bytes

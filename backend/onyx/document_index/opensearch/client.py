@@ -3,51 +3,58 @@ import logging
 import time
 from collections import Counter
 from collections.abc import Iterator
-from contextlib import AbstractContextManager
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from http import HTTPStatus
-from typing import Any
-from typing import Generic
-from typing import TypeVar
+from typing import Any, Generic, TypeVar
 
 import boto3
-from opensearchpy import NotFoundError
-from opensearchpy import OpenSearch
-from opensearchpy import TransportError
-from opensearchpy import Urllib3AWSV4SignerAuth
+from opensearchpy import (
+    NotFoundError,
+    OpenSearch,
+    TransportError,
+    Urllib3AWSV4SignerAuth,
+)
 from opensearchpy.helpers import bulk
 from pydantic import BaseModel
 
-from onyx.configs.app_configs import DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S
-from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
-from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
-from onyx.configs.app_configs import OPENSEARCH_AUTH_METHOD
-from onyx.configs.app_configs import OPENSEARCH_AWS_REGION
-from onyx.configs.app_configs import OPENSEARCH_AWS_SERVICE
-from onyx.configs.app_configs import OPENSEARCH_CA_CERTS
-from onyx.configs.app_configs import OPENSEARCH_CLIENT_CERT
-from onyx.configs.app_configs import OPENSEARCH_CLIENT_KEY
-from onyx.configs.app_configs import OPENSEARCH_HOST
-from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
-from onyx.configs.app_configs import OPENSEARCH_USE_SSL
-from onyx.configs.app_configs import OPENSEARCH_VERIFY_CERTS
-from onyx.configs.app_configs import PIT_KEEP_ALIVE
+from onyx.configs.app_configs import (
+    DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
+    OPENSEARCH_ADMIN_PASSWORD,
+    OPENSEARCH_ADMIN_USERNAME,
+    OPENSEARCH_AUTH_METHOD,
+    OPENSEARCH_AWS_REGION,
+    OPENSEARCH_AWS_SERVICE,
+    OPENSEARCH_CA_CERTS,
+    OPENSEARCH_CLIENT_CERT,
+    OPENSEARCH_CLIENT_KEY,
+    OPENSEARCH_HOST,
+    OPENSEARCH_REST_API_PORT,
+    OPENSEARCH_USE_SSL,
+    OPENSEARCH_VERIFY_CERTS,
+    PIT_KEEP_ALIVE,
+)
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
-from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
-from onyx.document_index.opensearch.constants import OpenSearchSearchType
-from onyx.document_index.opensearch.schema import CHUNK_INDEX_FIELD_NAME
-from onyx.document_index.opensearch.schema import CONTENT_VECTOR_FIELD_NAME
-from onyx.document_index.opensearch.schema import DOCUMENT_ID_FIELD_NAME
-from onyx.document_index.opensearch.schema import DocumentChunk
-from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
-from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
-from onyx.document_index.opensearch.schema import MAX_CHUNK_SIZE_FIELD_NAME
-from onyx.document_index.opensearch.schema import TITLE_VECTOR_FIELD_NAME
+from onyx.document_index.opensearch.constants import (
+    DEFAULT_MAX_CHUNK_SIZE,
+    OpenSearchAuthMethod,
+    OpenSearchSearchType,
+)
+from onyx.document_index.opensearch.schema import (
+    CHUNK_INDEX_FIELD_NAME,
+    CONTENT_VECTOR_FIELD_NAME,
+    DOCUMENT_ID_FIELD_NAME,
+    MAX_CHUNK_SIZE_FIELD_NAME,
+    TITLE_VECTOR_FIELD_NAME,
+    DocumentChunk,
+    DocumentChunkWithoutVectors,
+    get_opensearch_doc_chunk_id,
+)
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
-from onyx.server.metrics.opensearch_search import observe_opensearch_search
-from onyx.server.metrics.opensearch_search import record_opensearch_search_error
-from onyx.server.metrics.opensearch_search import track_opensearch_search
+from onyx.server.metrics.opensearch_search import (
+    observe_opensearch_search,
+    record_opensearch_search_error,
+    track_opensearch_search,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 

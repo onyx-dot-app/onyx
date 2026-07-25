@@ -1,17 +1,19 @@
-"""The hardened OpenID client must reject unverified email claims (absent
-email_verified counts as unverified) and refuse discovery documents whose
-issuer does not own the configured endpoint."""
+"""The hardened OpenID client must reject any present email_verified value
+other than true, tolerate an absent claim unless the provider opts into
+require_verified_email, and refuse discovery documents whose issuer does
+not own the configured endpoint."""
 
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx_oauth.exceptions import GetIdEmailError
 
-from onyx.auth.oidc_client import OpenIDConfigurationIssuerMismatch
-from onyx.auth.oidc_client import validate_issuer_owns_config_url
-from onyx.auth.oidc_client import VerifiedEmailOpenID
+from onyx.auth.oidc_client import (
+    OpenIDConfigurationIssuerMismatch,
+    VerifiedEmailOpenID,
+    validate_issuer_owns_config_url,
+)
 
 _ISSUER = "https://idp.companyb.com"
 _CONFIG_URL = f"{_ISSUER}/.well-known/openid-configuration"
@@ -29,7 +31,9 @@ def _discovery(issuer: str = _ISSUER) -> dict[str, Any]:
 
 
 def _build_client(
-    discovery: dict[str, Any], config_url: str = _CONFIG_URL
+    discovery: dict[str, Any],
+    config_url: str = _CONFIG_URL,
+    require_verified_email: bool = False,
 ) -> VerifiedEmailOpenID:
     discovery_response = MagicMock()
     discovery_response.json.return_value = discovery
@@ -38,7 +42,12 @@ def _build_client(
     http_client.__exit__ = MagicMock(return_value=None)
     http_client.get.return_value = discovery_response
     with patch("httpx_oauth.clients.openid.httpx.Client", return_value=http_client):
-        return VerifiedEmailOpenID("cid", "csecret", config_url)
+        return VerifiedEmailOpenID(
+            "cid",
+            "csecret",
+            config_url,
+            require_verified_email=require_verified_email,
+        )
 
 
 class _FakeResponse:
@@ -101,9 +110,32 @@ async def test_explicitly_unverified_email_rejected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_absent_verified_claim_rejected() -> None:
+async def test_absent_verified_claim_accepted_by_default() -> None:
     client = _build_client(_discovery())
     _with_userinfo(client, {"sub": "s1", "email": "bob@companyb.com"})
+    assert await client.get_id_email("tok") == ("s1", "bob@companyb.com")
+
+
+@pytest.mark.asyncio
+async def test_absent_verified_claim_rejected_when_required() -> None:
+    client = _build_client(_discovery(), require_verified_email=True)
+    _with_userinfo(client, {"sub": "s1", "email": "bob@companyb.com"})
+    with pytest.raises(GetIdEmailError):
+        await client.get_id_email("tok")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("required", [False, True])
+@pytest.mark.parametrize("claim", [False, "true", "false", 1, None])
+async def test_present_non_true_claim_rejected_in_both_modes(
+    required: bool, claim: Any
+) -> None:
+    # Only a genuinely absent claim is tolerable. A present malformed value
+    # (explicit null included) rejects regardless of the strict flag.
+    client = _build_client(_discovery(), require_verified_email=required)
+    _with_userinfo(
+        client, {"sub": "s1", "email": "bob@companyb.com", "email_verified": claim}
+    )
     with pytest.raises(GetIdEmailError):
         await client.get_id_email("tok")
 

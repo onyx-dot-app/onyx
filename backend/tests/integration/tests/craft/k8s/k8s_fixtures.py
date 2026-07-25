@@ -6,18 +6,12 @@ import json
 import os
 import shlex
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Sequence
-from contextlib import contextmanager
-from contextlib import suppress
-from dataclasses import dataclass
-from dataclasses import field
+from collections.abc import Callable, Generator, Sequence
+from contextlib import contextmanager, suppress
+from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import NamedTuple
-from typing import TYPE_CHECKING
-from uuid import UUID
-from uuid import uuid4
+from typing import TYPE_CHECKING, NamedTuple
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -26,17 +20,16 @@ if TYPE_CHECKING:
 
     from tests.integration.common_utils.test_models import DATestUser
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import Sandbox
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
-from onyx.server.features.build.db.user_library import delete_user_file
-from onyx.server.features.build.db.user_library import list_user_files
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Credential,
+    Sandbox,
+    User,
+    User__UserGroup,
+)
+from onyx.server.features.build.configs import SANDBOX_NAMESPACE, SANDBOX_PROXY_PORT
+from onyx.server.features.build.db.user_library import delete_user_file, list_user_files
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -489,8 +482,7 @@ def _pool_pod(
     k8s_client: "k8s_client_module.CoreV1Api",
 ) -> Generator[_PoolPod, None, None]:
     """Module-scoped sandbox pod shared by all ``running_sandbox()`` calls."""
-    from onyx.server.features.build.configs import SANDBOX_BACKEND
-    from onyx.server.features.build.configs import SandboxBackend
+    from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 
     if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
         pytest.skip(
@@ -530,8 +522,7 @@ def running_sandbox(
     clean slate. Extra user-owned pods come from
     ``SandboxHandle.provision_api_user``.
     """
-    from onyx.server.features.build.configs import SANDBOX_BACKEND
-    from onyx.server.features.build.configs import SandboxBackend
+    from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 
     if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
         pytest.skip(

@@ -4,17 +4,18 @@ per-provider client construction, and OAuth state/CSRF validation. No DB, no
 network, no live IdP."""
 
 from types import SimpleNamespace
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import CSRF_TOKEN_COOKIE_NAME
-from onyx.auth.users import CSRF_TOKEN_KEY
-from onyx.auth.users import decode_and_validate_oauth_state
-from onyx.auth.users import generate_csrf_token
-from onyx.auth.users import generate_state_token
+from onyx.auth.users import (
+    CSRF_TOKEN_COOKIE_NAME,
+    CSRF_TOKEN_KEY,
+    decode_and_validate_oauth_state,
+    generate_csrf_token,
+    generate_state_token,
+)
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.error_handling.exceptions import OnyxError
@@ -49,7 +50,11 @@ def test_resolve_oidc_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     resolved, config = oidc_multi._resolve_oidc_provider(_DB, "okta")
     assert resolved is provider
-    assert config == {**_OIDC_CONFIG, "legacy_callback": False}
+    assert config == {
+        **_OIDC_CONFIG,
+        "legacy_callback": False,
+        "require_verified_email": False,
+    }
 
 
 def test_resolve_google_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -254,6 +259,53 @@ def test_validate_config_accepts_legacy_callback_for_oauth_types() -> None:
         validate_sso_config(SSOProviderType.OIDC, dict(_OIDC_CONFIG))["legacy_callback"]
         is False
     )
+
+
+def test_validate_config_require_verified_email_is_oidc_only() -> None:
+    from onyx.db.sso_provider import validate_sso_config
+
+    oidc = validate_sso_config(
+        SSOProviderType.OIDC, {**_OIDC_CONFIG, "require_verified_email": True}
+    )
+    assert oidc["require_verified_email"] is True
+    # Omitting the flag stays valid and defaults off.
+    assert (
+        validate_sso_config(SSOProviderType.OIDC, dict(_OIDC_CONFIG))[
+            "require_verified_email"
+        ]
+        is False
+    )
+    # The flag only parameterizes the OIDC client, and the Google config
+    # model forbids unknown keys.
+    with pytest.raises(ValueError):
+        validate_sso_config(
+            SSOProviderType.GOOGLE_OAUTH,
+            {**_GOOGLE_CONFIG, "require_verified_email": True},
+        )
+
+
+def test_build_client_passes_require_verified_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake_openid(
+        _client_id: str,
+        _client_secret: str,
+        _config_url: str,
+        *,
+        require_verified_email: bool = False,
+        **_kwargs: Any,
+    ) -> Any:
+        return SimpleNamespace(require_verified_email=require_verified_email)
+
+    monkeypatch.setattr(oidc_multi, "VerifiedEmailOpenID", _fake_openid)
+    client = cast(
+        Any,
+        oidc_multi._build_client(
+            _provider(name="entra"),
+            {**_OIDC_CONFIG, "require_verified_email": True},
+        ),
+    )
+    assert client.require_verified_email is True
 
 
 def test_validate_config_rejects_legacy_callback_for_saml() -> None:

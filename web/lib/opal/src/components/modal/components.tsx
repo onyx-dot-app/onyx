@@ -355,7 +355,13 @@ function ModalHeader({
       className="opal-modal-close-focus"
     >
       <DialogPrimitive.Close asChild>
-        <Button icon={SvgX} prominence="tertiary" size="sm" onClick={onClose} />
+        <Button
+          aria-label="Close"
+          icon={SvgX}
+          prominence="tertiary"
+          size="sm"
+          onClick={onClose}
+        />
       </DialogPrimitive.Close>
     </div>
   );

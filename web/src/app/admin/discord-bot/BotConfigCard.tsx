@@ -4,9 +4,8 @@ import { useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
-import { Button } from "@opal/components";
+import { Button, PasswordInputTypeIn } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
-import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { Tooltip } from "@opal/components";
 import {

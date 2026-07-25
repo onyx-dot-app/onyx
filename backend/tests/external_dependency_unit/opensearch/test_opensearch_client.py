@@ -7,51 +7,49 @@ using real schemas, pipelines, and search queries from the codebase.
 import re
 import uuid
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from opensearchpy import ConflictError
-from opensearchpy import NotFoundError
+from opensearchpy import ConflictError, NotFoundError
 from opensearchpy.helpers import BulkIndexError
 
 import onyx.document_index.opensearch.client as client_module
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import TimeRange
+from onyx.context.search.models import IndexFilters, TimeRange
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.client import OpenSearchDocumentMissingError
-from onyx.document_index.opensearch.client import OpenSearchIndexClient
-from onyx.document_index.opensearch.client import OpenSearchIndexError
-from onyx.document_index.opensearch.client import OpenSearchServerSideTimeout
-from onyx.document_index.opensearch.client import OpenSearchUpdateError
-from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
-from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
-from onyx.document_index.opensearch.constants import HybridSearchNormalizationPipeline
-from onyx.document_index.opensearch.constants import HybridSearchSubqueryConfiguration
-from onyx.document_index.opensearch.constants import OpenSearchSearchType
+from onyx.document_index.opensearch.client import (
+    OpenSearchDocumentMissingError,
+    OpenSearchIndexClient,
+    OpenSearchIndexError,
+    OpenSearchServerSideTimeout,
+    OpenSearchUpdateError,
+    wait_for_opensearch_with_timeout,
+)
+from onyx.document_index.opensearch.constants import (
+    DEFAULT_MAX_CHUNK_SIZE,
+    HybridSearchNormalizationPipeline,
+    HybridSearchSubqueryConfiguration,
+    OpenSearchSearchType,
+)
 from onyx.document_index.opensearch.opensearch_document_index import (
     generate_opensearch_filtered_access_control_list,
 )
-from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
-from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
-from onyx.document_index.opensearch.schema import DocumentChunk
-from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
-from onyx.document_index.opensearch.schema import DocumentSchema
-from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
-from onyx.document_index.opensearch.search import DocumentQuery
+from onyx.document_index.opensearch.schema import (
+    ACCESS_CONTROL_LIST_FIELD_NAME,
+    CONTENT_FIELD_NAME,
+    DocumentChunk,
+    DocumentChunkWithoutVectors,
+    DocumentSchema,
+    get_opensearch_doc_chunk_id,
+)
 from onyx.document_index.opensearch.search import (
+    DocumentQuery,
     get_min_max_normalization_pipeline_name_and_config,
-)
-from onyx.document_index.opensearch.search import (
     get_normalization_pipeline_name_and_config,
-)
-from onyx.document_index.opensearch.search import (
     get_zscore_normalization_pipeline_name_and_config,
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA

@@ -21,12 +21,14 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestCredential
-from tests.integration.common_utils.test_models import DATestDocumentSet
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestPersona
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import DATestUserGroup
+from tests.integration.common_utils.test_models import (
+    DATestCredential,
+    DATestDocumentSet,
+    DATestLLMProvider,
+    DATestPersona,
+    DATestUser,
+    DATestUserGroup,
+)
 from tests.integration.common_utils.vespa import vespa_fixture
 
 

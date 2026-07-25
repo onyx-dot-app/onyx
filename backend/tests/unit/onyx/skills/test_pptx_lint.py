@@ -17,8 +17,10 @@ pytest.importorskip("PIL")
 
 from pptx.dml.color import RGBColor  # noqa: E402
 from pptx.enum.text import MSO_AUTO_SIZE  # noqa: E402
-from pptx.util import Inches  # noqa: E402
-from pptx.util import Pt  # noqa: E402
+from pptx.util import (  # noqa: E402
+    Inches,
+    Pt,
+)
 
 LINT_PATH = (
     Path(__file__).parents[4]

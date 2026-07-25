@@ -4,41 +4,47 @@ constructed ``User`` and the test ``db_session`` (no ``TestClient``)."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from uuid import UUID
-from uuid import uuid4
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
 
 import pytest
 import redis
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    EndpointPolicy,
+    GatedAppKind,
+)
 from onyx.db.models import BuildSession
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import MatchedAction
 from onyx.sandbox_proxy import approval_cache
-from onyx.server.features.build.approvals.api import DecisionBody
-from onyx.server.features.build.approvals.api import list_live_approvals
-from onyx.server.features.build.approvals.api import submit_decision
-from onyx.server.features.build.approvals.api import submit_session_grant
+from onyx.server.features.build.approvals.api import (
+    DecisionBody,
+    list_live_approvals,
+    submit_decision,
+    submit_session_grant,
+)
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-from onyx.server.features.build.db.action_approval import get_action_approval
-from onyx.server.features.build.db.action_approval import get_action_approval_for_user
-from onyx.server.features.build.db.action_approval import insert_action_approval
-from onyx.server.features.build.db.action_approval import try_record_decision
+from onyx.server.features.build.db.action_approval import (
+    get_action_approval,
+    get_action_approval_for_user,
+    insert_action_approval,
+    try_record_decision,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import action_entry
 from tests.common.craft.payloads import default_action_entries as _default_actions
-from tests.external_dependency_unit.craft.db_helpers import force_approval_created_at
-from tests.external_dependency_unit.craft.db_helpers import make_external_app
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import (
+    force_approval_created_at,
+    make_external_app,
+    make_skill,
+    make_user,
+)
 
 
 def _stub_send_wake_noop(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -356,7 +362,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send, always_read],
         app_name="Slack",
         payload={"text": "current"},
-        external_app_id=app.id,
+        target=(GatedAppKind.EXTERNAL_APP, app.id),
     )
     matching = insert_action_approval(
         db_session,
@@ -364,7 +370,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send],
         app_name="Slack",
         payload={"text": "matching"},
-        external_app_id=app.id,
+        target=(GatedAppKind.EXTERNAL_APP, app.id),
     )
     broader = insert_action_approval(
         db_session,
@@ -372,7 +378,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send, ask_upload],
         app_name="Slack",
         payload={"text": "broader"},
-        external_app_id=app.id,
+        target=(GatedAppKind.EXTERNAL_APP, app.id),
     )
     other = insert_action_approval(
         db_session,
@@ -380,7 +386,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send],
         app_name="Other",
         payload={"text": "other"},
-        external_app_id=other_app.id,
+        target=(GatedAppKind.EXTERNAL_APP, other_app.id),
     )
     db_session.commit()
 
@@ -420,13 +426,15 @@ def test_submit_session_grant_approves_matching_pending_rows(
     cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert approval_cache.cached_session_grants_cover(
         session_id=session.id,
-        external_app_id=app.id,
+        kind=GatedAppKind.EXTERNAL_APP,
+        target_id=app.id,
         action_types=["slack.chat.post"],
         cache=cache,
     )
     assert not approval_cache.cached_session_grants_cover(
         session_id=session.id,
-        external_app_id=app.id,
+        kind=GatedAppKind.EXTERNAL_APP,
+        target_id=app.id,
         action_types=["slack.files.upload"],
         cache=cache,
     )

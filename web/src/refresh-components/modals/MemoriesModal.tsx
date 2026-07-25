@@ -3,8 +3,7 @@
 import { Fragment, useState, useRef, useEffect, useCallback } from "react";
 import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { InputTypeIn } from "@opal/components";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import { InputTextArea, InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
@@ -114,7 +113,6 @@ function MemoryItem({
             maxRows={3}
             maxLength={MAX_MEMORY_LENGTH}
             resizable={false}
-            className="bg-background-tint-01 hover:bg-background-tint-00 focus-within:bg-background-tint-00"
           />
           <Button
             disabled={!memory.content.trim() && memory.isNew}

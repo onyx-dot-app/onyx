@@ -4,6 +4,12 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+class LLMErrorInfo(BaseModel):
+    message: str
+    error_code: str
+    is_retryable: bool
+
+
 class ToolChoiceOptions(str, Enum):
     REQUIRED = "required"
     AUTO = "auto"
@@ -25,6 +31,31 @@ class ReasoningEffort(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+    # Supported by OpenAI and Anthropic adaptive-thinking models (Claude >= 4.7).
+    # Other provider mappings clamp it to their highest supported effort.
+    XHIGH = "xhigh"
+
+
+# Reasoning-effort values a user may pin per chat session. AUTO is excluded
+# because a cleared override (NULL) already resolves to AUTO.
+USER_SELECTABLE_REASONING_EFFORTS: frozenset[ReasoningEffort] = frozenset(
+    {
+        ReasoningEffort.OFF,
+        ReasoningEffort.LOW,
+        ReasoningEffort.MEDIUM,
+        ReasoningEffort.HIGH,
+        ReasoningEffort.XHIGH,
+    }
+)
+
+
+def parse_user_selectable_reasoning_effort(value: str) -> ReasoningEffort:
+    """Parse a user-supplied override value. Raises ValueError for an unknown
+    value or an explicit "auto", neither of which is user-selectable."""
+    effort = ReasoningEffort(value)
+    if effort not in USER_SELECTABLE_REASONING_EFFORTS:
+        raise ValueError(f"{value!r} is not a selectable reasoning effort")
+    return effort
 
 
 # OpenAI reasoning effort mapping
@@ -35,6 +66,7 @@ OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
     ReasoningEffort.HIGH: "high",
+    ReasoningEffort.XHIGH: "xhigh",
 }
 
 # Anthropic reasoning effort to budget tokens mapping
@@ -44,6 +76,7 @@ ANTHROPIC_REASONING_EFFORT_BUDGET: dict[ReasoningEffort, int] = {
     ReasoningEffort.LOW: 1024,
     ReasoningEffort.MEDIUM: 2048,
     ReasoningEffort.HIGH: 4096,
+    ReasoningEffort.XHIGH: 4096,
 }
 
 # Newer Anthropic models (Claude Opus 4.7+) use adaptive thinking with
@@ -53,6 +86,7 @@ ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
     ReasoningEffort.HIGH: "high",
+    ReasoningEffort.XHIGH: "xhigh",
 }
 
 

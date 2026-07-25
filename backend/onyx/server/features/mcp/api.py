@@ -12,105 +12,131 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 import requests
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from mcp.client.auth import OAuthClientProvider
-from mcp.shared.auth import OAuthClientInformationFull
-from mcp.shared.auth import OAuthToken
+from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from mcp.types import InitializeResult
 from mcp.types import Tool as MCPLibTool
-from pydantic import AnyUrl
-from pydantic import BaseModel
+from pydantic import AnyUrl, BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.oauth_token_manager import build_oauth_authorization_url
-from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
-from onyx.auth.oauth_token_manager import OAuthFlowParams
-from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
+from onyx.auth.oauth_token_manager import (
+    OAuthFlowParams,
+    build_oauth_authorization_url,
+    exchange_oauth_code_for_token,
+    validate_oauth_endpoint_url,
+)
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPOAuthProviderMode
-from onyx.db.enums import MCPServerStatus
-from onyx.db.enums import MCPTransport
-from onyx.db.enums import Permission
-from onyx.db.mcp import create_connection_config
-from onyx.db.mcp import create_mcp_server__no_commit
-from onyx.db.mcp import delete_all_user_connection_configs_for_server_no_commit
-from onyx.db.mcp import delete_connection_config
-from onyx.db.mcp import delete_mcp_server
-from onyx.db.mcp import extract_connection_data
-from onyx.db.mcp import get_all_mcp_servers
-from onyx.db.mcp import get_mcp_server_by_id
-from onyx.db.mcp import get_mcp_servers_accessible_to_user
-from onyx.db.mcp import get_mcp_servers_for_persona
-from onyx.db.mcp import get_server_auth_template
-from onyx.db.mcp import get_user_connection_config
-from onyx.db.mcp import update_connection_config
-from onyx.db.mcp import update_mcp_server__no_commit
-from onyx.db.mcp import upsert_user_connection_config
-from onyx.db.mcp import user_can_access_mcp_server
-from onyx.db.models import MCPConnectionConfig
+from onyx.db.enums import (
+    EndpointPolicy,
+    GatedAppKind,
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPOAuthProviderMode,
+    MCPServerStatus,
+    MCPTransport,
+    Permission,
+)
+from onyx.db.gated_app import (
+    get_action_policies,
+    get_or_create_gated_app_id,
+    replace_action_policies__no_commit,
+)
+from onyx.db.mcp import (
+    affected_user_ids_for_mcp_server,
+    create_connection_config,
+    create_mcp_server__no_commit,
+    delete_all_user_connection_configs_for_server_no_commit,
+    delete_connection_config,
+    delete_mcp_server,
+    delete_user_connection_configs_for_server,
+    extract_connection_data,
+    get_all_mcp_servers,
+    get_all_mcp_tools_for_server,
+    get_craft_enabled_mcp_servers,
+    get_mcp_server_by_id,
+    get_mcp_servers_accessible_to_user,
+    get_mcp_servers_for_persona,
+    get_server_auth_template,
+    get_user_connection_config,
+    update_connection_config,
+    update_mcp_server__no_commit,
+    upsert_user_connection_config,
+    user_can_access_mcp_server,
+)
+from onyx.db.models import MCPConnectionConfig, Tool, User
 from onyx.db.models import MCPServer as DbMCPServer
-from onyx.db.models import Tool
-from onyx.db.models import User
-from onyx.db.tools import create_tool__no_commit
-from onyx.db.tools import delete_tool__no_commit
-from onyx.db.tools import get_tools_by_mcp_server_id
+from onyx.db.tools import (
+    create_tool__no_commit,
+    delete_tool__no_commit,
+    get_tools_by_mcp_server_id,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.mcp.client import discover_mcp_tools
-from onyx.server.features.mcp.client import initialize_mcp_client
-from onyx.server.features.mcp.client import log_exception_group
-from onyx.server.features.mcp.models import apply_auto_substitutions
-from onyx.server.features.mcp.models import MCPApiKeyResponse
-from onyx.server.features.mcp.models import MCPAuthTemplate
-from onyx.server.features.mcp.models import MCPConnectionData
-from onyx.server.features.mcp.models import MCPOAuthCallbackResponse
-from onyx.server.features.mcp.models import MCPOAuthKeys
-from onyx.server.features.mcp.models import MCPServer
-from onyx.server.features.mcp.models import MCPServerCreateResponse
-from onyx.server.features.mcp.models import MCPServerSimpleCreateRequest
-from onyx.server.features.mcp.models import MCPServerSimpleUpdateRequest
-from onyx.server.features.mcp.models import MCPServersResponse
-from onyx.server.features.mcp.models import MCPServerUpdateResponse
-from onyx.server.features.mcp.models import MCPToolCreateRequest
-from onyx.server.features.mcp.models import MCPToolListResponse
-from onyx.server.features.mcp.models import MCPToolUpdateRequest
-from onyx.server.features.mcp.models import MCPUserCredentialsRequest
-from onyx.server.features.mcp.models import MCPUserOAuthConnectRequest
-from onyx.server.features.mcp.models import MCPUserOAuthConnectResponse
-from onyx.server.features.mcp.oauth import _absolute_token_expiry
-from onyx.server.features.mcp.oauth import key_auth_url
-from onyx.server.features.mcp.oauth import key_code
-from onyx.server.features.mcp.oauth import key_state
-from onyx.server.features.mcp.oauth import key_tokens
-from onyx.server.features.mcp.oauth import make_oauth_provider
-from onyx.server.features.mcp.oauth import MCPOauthState
-from onyx.server.features.mcp.oauth import OAUTH_WAIT_SECONDS
-from onyx.server.features.mcp.oauth import REQUESTED_SCOPE
-from onyx.server.features.mcp.oauth import STATE_TTL_SECONDS
-from onyx.server.features.mcp.oauth import UNUSED_RETURN_PATH
+from onyx.server.features.mcp.client import (
+    discover_mcp_tools,
+    initialize_mcp_client,
+    log_exception_group,
+)
+from onyx.server.features.mcp.models import (
+    MCPApiKeyResponse,
+    MCPAuthTemplate,
+    MCPConnectionData,
+    MCPOAuthCallbackResponse,
+    MCPOAuthKeys,
+    MCPServer,
+    MCPServerCreateResponse,
+    MCPServerSimpleCreateRequest,
+    MCPServerSimpleUpdateRequest,
+    MCPServersResponse,
+    MCPServerUpdateResponse,
+    MCPToolCreateRequest,
+    MCPToolListResponse,
+    MCPToolUpdateRequest,
+    MCPUserCredentialsRequest,
+    MCPUserOAuthConnectRequest,
+    MCPUserOAuthConnectResponse,
+    apply_auto_substitutions,
+)
+from onyx.server.features.mcp.oauth import (
+    OAUTH_WAIT_SECONDS,
+    REQUESTED_SCOPE,
+    STATE_TTL_SECONDS,
+    UNUSED_RETURN_PATH,
+    MCPOauthState,
+    _absolute_token_expiry,
+    key_auth_url,
+    key_code,
+    key_state,
+    key_tokens,
+    make_oauth_provider,
+)
 from onyx.server.features.mcp.ssrf import validate_mcp_outbound_url
 from onyx.server.features.tool.models import ToolSnapshot
-from onyx.utils.encryption import mask_string
-from onyx.utils.encryption import reject_masked_credentials
+from onyx.utils.encryption import (
+    is_masked_credential,
+    mask_string,
+    reject_masked_credentials,
+)
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import BLOCKED_HOSTNAMES
-from onyx.utils.url import SSRFException
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-from onyx.utils.variable_functionality import fetch_versioned_implementation
-from onyx.utils.variable_functionality import global_version
+from onyx.utils.url import BLOCKED_HOSTNAMES, SSRFException
+from onyx.utils.variable_functionality import (
+    fetch_ee_implementation_or_noop,
+    fetch_versioned_implementation,
+    global_version,
+)
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# A tool with no stored override is treated as ASK; stored policies stay sparse
+# by omitting this value (mirrors the gate evaluator's default).
+MCP_TOOL_DEFAULT_POLICY = EndpointPolicy.ASK
 
 
 _SSRF_HINT_NEVER_ALLOWED = (
@@ -257,6 +283,94 @@ def _resolve_admin_credentials(
     return resolved
 
 
+def _default_shared_api_token_template() -> MCPAuthTemplate:
+    """Return the legacy shared API-token template."""
+    return MCPAuthTemplate(
+        headers={"Authorization": "Bearer {api_key}"},
+        required_fields=["api_key"],
+    )
+
+
+def _extract_shared_api_token(config_data: MCPConnectionData) -> str:
+    """Read the encrypted shared token, with compatibility for old configs."""
+    if api_token := config_data.get("api_token"):
+        return api_token
+
+    authorization = config_data.get("headers", {}).get("Authorization", "")
+    if authorization:
+        return authorization.rsplit(" ", 1)[-1]
+
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        "Existing shared MCP API token could not be recovered; please re-enter it.",
+    )
+
+
+def _resolve_shared_api_token(
+    *,
+    request_api_token: str | None,
+    request_api_token_changed: bool,
+    existing_config: MCPConnectionData | None,
+) -> str | None:
+    """Preserve masked shared tokens when only configuration is edited."""
+    if request_api_token_changed:
+        if request_api_token:
+            reject_masked_credentials({"api_token": request_api_token})
+        return request_api_token
+
+    # A real token in the request takes precedence during auth-mode
+    # conversion, even when older clients omit the changed flag.
+    if request_api_token and not is_masked_credential(request_api_token):
+        return request_api_token
+
+    if existing_config and (
+        "api_token" in existing_config
+        or "Authorization" in existing_config.get("headers", {})
+    ):
+        return _extract_shared_api_token(existing_config)
+
+    if request_api_token:
+        reject_masked_credentials({"api_token": request_api_token})
+    return request_api_token
+
+
+def _resolve_shared_api_token_template(
+    *,
+    request_template: MCPAuthTemplate | None,
+    existing_config: MCPConnectionData | None,
+) -> MCPAuthTemplate | None:
+    """Preserve an existing shared header template when omitted on update."""
+    if request_template is not None:
+        return request_template
+
+    if existing_config:
+        stored_template: dict[str, str] | None = existing_config.get("header_template")
+        if stored_template:
+            return MCPAuthTemplate(
+                headers=stored_template,
+                required_fields=["api_key"],
+            )
+
+    return None
+
+
+def _build_shared_api_token_config_data(
+    *,
+    api_token: str,
+    auth_template: MCPAuthTemplate | None,
+    user_email: str,
+) -> MCPConnectionData:
+    """Render and persist a shared API-token header template."""
+    template = auth_template or _default_shared_api_token_template()
+    return MCPConnectionData(
+        headers=_build_headers_from_template(
+            template, {"api_key": api_token}, user_email
+        ),
+        header_template=template.headers,
+        api_token=api_token,
+    )
+
+
 def _build_oauth_admin_config_data(
     *,
     client_id: str | None,
@@ -284,6 +398,20 @@ def _build_oauth_admin_config_data(
     )
     config_data[MCPOAuthKeys.CLIENT_INFO.value] = client_info.model_dump(mode="json")
     return config_data
+
+
+def _oauth_user_config_has_tokens(
+    user_config: MCPConnectionConfig | None,
+) -> bool:
+    """Whether a per-user OAuth config holds tokens from a completed handshake.
+
+    The row is created when the connect flow starts, before token exchange, so
+    existence alone doesn't prove the user finished authenticating.
+    """
+    if user_config is None:
+        return False
+    config_data = extract_connection_data(user_config, apply_mask=False)
+    return bool(config_data.get(MCPOAuthKeys.TOKENS.value))
 
 
 def _build_oauth_admin_config_data_for_update(
@@ -343,6 +471,21 @@ router = APIRouter(prefix="/mcp")
 admin_router = APIRouter(prefix="/admin/mcp")
 
 HEADER_SUBSTITUTIONS: Literal["header_substitutions"] = "header_substitutions"
+
+
+def _hot_reload_craft_sessions(user_ids: set[UUID], db_session: Session) -> None:
+    """Restamp affected users' running sandboxes with the current craft MCP
+    fingerprint so a live Craft session picks up the change on its next turn
+    (via the session reload) without a pod re-provision. Updates only
+    ``mcp_config_hash`` — it does not re-push skill files. Best-effort; imported
+    lazily to avoid a build-layer import cycle at module load."""
+    if not user_ids:
+        return
+    from onyx.server.features.build.session.sandbox_lifecycle import (
+        refresh_mcp_config_hashes_for_users,
+    )
+
+    refresh_mcp_config_hashes_for_users(user_ids, db_session)
 
 
 def _build_headers_from_template(
@@ -849,6 +992,11 @@ async def process_oauth_callback(
         redis_client.delete(key_state(user_id))
 
         db_session.commit()
+
+        # OAuth connect unblocks tool discovery for this user's craft session;
+        # reload it (single sandbox — this user only).
+        _hot_reload_craft_sessions({user.id}, db_session)
+
         return MCPOAuthCallbackResponse(
             success=True,
             server_id=mcp_server.id,
@@ -886,6 +1034,11 @@ async def process_oauth_callback(
         raise HTTPException(status_code=400, detail="No access_token in OAuth response")
 
     db_session.commit()
+
+    # The background task committed the user's tokens before unblocking the
+    # blpop above, so the credential is persisted; reload this user's craft
+    # session (single sandbox — this user only) to retry tool discovery.
+    _hot_reload_craft_sessions({user.id}, db_session)
 
     logger.info(
         "server_id=%s server_name=%s return_path=%s",
@@ -1026,6 +1179,10 @@ def save_user_credentials(
         )
         db_session.commit()
 
+        # Connecting credentials unblocks tool discovery for this user's craft
+        # session (opencode's startup tools/list is credential-gated); reload it.
+        _hot_reload_craft_sessions({user.id}, db_session)
+
         return MCPApiKeyResponse(
             success=True,
             message=validation_message,
@@ -1038,6 +1195,35 @@ def save_user_credentials(
     except Exception as e:
         logger.error("Failed to save user credentials: %s", e)
         raise HTTPException(status_code=500, detail="Failed to save user credentials")
+
+
+@router.delete("/user-credentials/{server_id}")
+def delete_user_credentials(
+    server_id: int,
+    db_session: Session = Depends(get_session),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> MCPApiKeyResponse:
+    """Disconnect the caller from an MCP server: remove their own connection
+    configs (OAuth tokens / API keys). Admin template rows are untouched."""
+    try:
+        mcp_server = get_mcp_server_by_id(server_id, db_session)
+    except ValueError:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found")
+
+    # The helper commits internally.
+    delete_user_connection_configs_for_server(server_id, user.email, db_session)
+
+    # Disconnecting revokes tool discovery for this user; reload their craft
+    # session (single sandbox — this user only) so the next turn drops it.
+    _hot_reload_craft_sessions({user.id}, db_session)
+
+    return MCPApiKeyResponse(
+        success=True,
+        message="Disconnected",
+        server_id=server_id,
+        server_name=mcp_server.name,
+        authenticated=False,
+    )
 
 
 class MCPToolDescription(BaseModel):
@@ -1110,9 +1296,7 @@ def _db_mcp_server_to_api_mcp_server(
                 db_server.admin_connection_config, apply_mask=False
             )
             if db_server.auth_type == MCPAuthenticationType.API_TOKEN:
-                raw_api_key = admin_config_dict["headers"]["Authorization"].split(" ")[
-                    -1
-                ]
+                raw_api_key = _extract_shared_api_token(admin_config_dict)
                 admin_credentials = {
                     "api_key": mask_string(raw_api_key),
                 }
@@ -1141,7 +1325,12 @@ def _db_mcp_server_to_api_mcp_server(
                     )
     else:  # currently: per user auth using api key OR oauth
         user_config = get_user_connection_config(db_server.id, email, db)
-        user_authenticated = user_config is not None
+        # API-token rows exist only once credentials are submitted; OAuth rows
+        # are created before token exchange, so require tokens there.
+        if db_server.auth_type == MCPAuthenticationType.OAUTH:
+            user_authenticated = _oauth_user_config_has_tokens(user_config)
+        else:
+            user_authenticated = user_config is not None
 
         if user_authenticated and user_config:
             # Avoid hitting the MCP server when assembling response data.
@@ -1180,16 +1369,19 @@ def _db_mcp_server_to_api_mcp_server(
                 admin_credentials = {}
                 logger.warning("No client info found for server %s", db_server.name)
 
-    # The header template is only meaningful for per-user API_TOKEN
-    # servers, where it surfaces placeholder strings (e.g.
-    # `Bearer {API_KEY}`) for the user-side credential prompt. OAuth
-    # per-user servers do not get an `auth_template`: OAuth uses the
-    # handshake URL (`/oauth/connect`) rather than a header template,
-    # so the frontend never consumes one for OAuth flows.
+    # Surface the placeholder header template without exposing rendered
+    # credentials. OAuth servers do not get an auth_template because OAuth
+    # uses the handshake URL rather than a header template.
+    #
+    # Per-user templates are surfaced to any accessible user because they
+    # drive the per-user credential prompt. Shared/admin templates are only
+    # surfaced to the owner/admin auth-config response: basic users never
+    # supply shared credentials, and the template can legitimately carry
+    # literal header values that must not leak.
     auth_template = None
-    if (
+    if db_server.auth_type != MCPAuthenticationType.OAUTH and (
         auth_performer == MCPAuthenticationPerformer.PER_USER
-        and db_server.auth_type != MCPAuthenticationType.OAUTH
+        or can_view_admin_credentials
     ):
         try:
             template_config = db_server.admin_connection_config
@@ -1197,7 +1389,13 @@ def _db_mcp_server_to_api_mcp_server(
                 template_config_dict = extract_connection_data(
                     template_config, apply_mask=False
                 )
-                headers = template_config_dict.get("headers", {})
+                if auth_performer == MCPAuthenticationPerformer.ADMIN:
+                    headers = (
+                        template_config_dict.get("header_template")
+                        or _default_shared_api_token_template().headers
+                    )
+                else:
+                    headers = template_config_dict.get("headers", {})
                 # Prefer the explicitly persisted list; fall back to deriving
                 # from header placeholders for servers created before
                 # `required_fields` was persisted.
@@ -1250,6 +1448,12 @@ def _db_mcp_server_to_api_mcp_server(
         is_public=db_server.is_public,
         groups=[group.id for group in db_server.user_groups],
         users=[user.id for user in db_server.users],
+        available_in_craft=db_server.available_in_craft,
+        tool_policies=(
+            get_action_policies(db, GatedAppKind.MCP_SERVER, db_server.id)
+            if can_view_server_details
+            else None
+        ),
         last_refreshed_at=db_server.last_refreshed_at,
         tool_count=tool_count,
         auth_template=auth_template,
@@ -1297,6 +1501,24 @@ def get_mcp_servers_for_user(
     Chat uses ``/servers/persona/{id}`` for servers already on a persona.
     """
     db_mcp_servers = get_mcp_servers_accessible_to_user(user, db)
+    mcp_servers = [
+        _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
+        for db_server in db_mcp_servers
+    ]
+    return MCPServersResponse(mcp_servers=mcp_servers)
+
+
+@router.get("/servers/craft", response_model=MCPServersResponse)
+def get_craft_mcp_servers_for_user(
+    db: Session = Depends(get_session),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> MCPServersResponse:
+    """List MCP servers an admin has made available to the Craft agent, with
+    the current user's connection/auth state. Craft reads the same credential
+    rows as chat, so a server connected in either surface shows as
+    authenticated here.
+    """
+    db_mcp_servers = get_craft_enabled_mcp_servers(db, user)
     mcp_servers = [
         _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
         for db_server in db_mcp_servers
@@ -1709,10 +1931,44 @@ def _upsert_mcp_server(
         # against the admin's stored per-user row
         existing_admin_per_user_creds: dict[str, str] = {}
         existing_template_headers: dict[str, str] = {}
+        existing_shared_template_headers: dict[str, str] = {}
         if mcp_server.admin_connection_config:
             existing_template_headers = (
                 existing_admin_config_dict.get("headers", {}) or {}
             )
+            existing_shared_template_headers = (
+                existing_admin_config_dict.get("header_template")
+                or _default_shared_api_token_template().headers
+            )
+
+        if (
+            request.auth_type == MCPAuthenticationType.API_TOKEN
+            and request.auth_performer == MCPAuthenticationPerformer.ADMIN
+        ):
+            request.auth_template = _resolve_shared_api_token_template(
+                request_template=request.auth_template,
+                existing_config=(
+                    existing_admin_config_dict
+                    if mcp_server.admin_connection_config
+                    else None
+                ),
+            )
+            request.api_token = _resolve_shared_api_token(
+                request_api_token=request.api_token,
+                request_api_token_changed=request.api_token_changed,
+                existing_config=(
+                    existing_admin_config_dict
+                    if mcp_server.admin_connection_config
+                    else None
+                ),
+            )
+            # The validator allows an omitted token on update so the stored
+            # one can be reused; enforce that a token actually resolved.
+            if not request.api_token:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "A shared API token is required for admin-managed API-token servers.",
+                )
         if (
             request.auth_type == MCPAuthenticationType.API_TOKEN
             and request.auth_performer == MCPAuthenticationPerformer.PER_USER
@@ -1745,6 +2001,12 @@ def _upsert_mcp_server(
             and request.auth_performer == MCPAuthenticationPerformer.PER_USER
             and request.auth_template is not None
             and request.auth_template.headers != existing_template_headers
+        )
+        shared_api_token_template_changed = (
+            request.auth_type == MCPAuthenticationType.API_TOKEN
+            and request.auth_performer == MCPAuthenticationPerformer.ADMIN
+            and request.auth_template is not None
+            and request.auth_template.headers != existing_shared_template_headers
         )
         api_token_scheme_changed = (
             request.auth_type == MCPAuthenticationType.API_TOKEN
@@ -1786,6 +2048,11 @@ def _upsert_mcp_server(
                 and (
                     api_token_creds_changed
                     or api_token_template_changed
+                    or shared_api_token_template_changed
+                    or (
+                        request.auth_performer == MCPAuthenticationPerformer.ADMIN
+                        and request.api_token_changed
+                    )
                     or api_token_scheme_changed
                 )
             )
@@ -1891,8 +2158,10 @@ def _upsert_mcp_server(
     if request.auth_performer == MCPAuthenticationPerformer.ADMIN and request.api_token:
         # Admin-managed server: create admin config with API token
         admin_config = create_connection_config(
-            config_data=MCPConnectionData(
-                headers={"Authorization": f"Bearer {request.api_token}"},
+            config_data=_build_shared_api_token_config_data(
+                api_token=request.api_token,
+                auth_template=request.auth_template,
+                user_email=user.email,
             ),
             mcp_server_id=mcp_server.id,
             db_session=db_session,
@@ -2333,6 +2602,7 @@ def create_mcp_server_simple(
         is_public=mcp_server.is_public,
         groups=[group.id for group in mcp_server.user_groups],
         users=[user.id for user in mcp_server.users],
+        available_in_craft=mcp_server.available_in_craft,
         tool_count=0,  # New server, no tools yet
         auth_template=None,
         user_credentials=None,
@@ -2364,12 +2634,23 @@ def update_mcp_server_simple(
         name=request.name,
         description=request.description,
         server_url=request.server_url,
+        available_in_craft=request.available_in_craft,
     )
 
-    if any(
+    acl_changing = any(
         value is not None
         for value in (request.is_public, request.users, request.groups)
-    ):
+    )
+    # Only an ACL change can drop a user's access; snapshot the pre-change
+    # recipients in that case so they're reloaded to lose the server (the
+    # post-update query wouldn't include them).
+    reload_user_ids: set[UUID] = (
+        affected_user_ids_for_mcp_server(updated_server, db_session)
+        if acl_changing
+        else set()
+    )
+
+    if acl_changing:
         _apply_mcp_server_access(
             mcp_server=updated_server,
             acting_user=user,
@@ -2380,7 +2661,35 @@ def update_mcp_server_simple(
             db_session=db_session,
         )
 
+    if request.tool_policies is not None:
+        known = {t.name for t in get_all_mcp_tools_for_server(server_id, db_session)}
+        unknown = sorted(set(request.tool_policies) - known)
+        if unknown:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"unknown tool names for this server: {unknown}",
+            )
+        # Canonicalize at the input boundary so the stored set stays sparse
+        # regardless of which client wrote it: a default (ASK) choice is
+        # equivalent to leaving the tool unlisted.
+        sparse_policies = {
+            tool: policy
+            for tool, policy in request.tool_policies.items()
+            if policy != MCP_TOOL_DEFAULT_POLICY
+        }
+        gated_app_id = get_or_create_gated_app_id(
+            db_session, GatedAppKind.MCP_SERVER, server_id
+        )
+        replace_action_policies__no_commit(db_session, gated_app_id, sparse_policies)
+
     db_session.commit()
+
+    # Craft availability / URL live in each session's baked opencode.json;
+    # reload affected users so the change reaches running sandboxes. Union the
+    # pre-update recipients so newly-removed users are reloaded to drop the
+    # server. (Tool policies are enforced live by the proxy and need no reload.)
+    reload_user_ids |= affected_user_ids_for_mcp_server(updated_server, db_session)
+    _hot_reload_craft_sessions(reload_user_ids, db_session)
 
     # Return the updated server in API format
     return _db_mcp_server_to_api_mcp_server(
@@ -2400,6 +2709,11 @@ def delete_mcp_server_admin(
         server = get_mcp_server_by_id(server_id, db_session)
 
         _ensure_mcp_server_owner_or_admin(server, user)
+
+        # Snapshot recipients before deletion: once the server (and its ACL
+        # rows) are gone, the affected-user query returns nothing, so they'd
+        # never be reloaded to drop the now-deleted server from their config.
+        reload_user_ids = affected_user_ids_for_mcp_server(server, db_session)
 
         # Log tools that will be deleted for debugging
         tools_to_delete = get_tools_by_mcp_server_id(server_id, db_session)
@@ -2430,6 +2744,10 @@ def delete_mcp_server_admin(
                 )
                 delete_tool__no_commit(tool.id, db_session)
         db_session.commit()
+
+        # Restamp affected users so their running craft session drops the
+        # deleted server on its next turn.
+        _hot_reload_craft_sessions(reload_user_ids, db_session)
 
         return {"success": True}
     except ValueError:

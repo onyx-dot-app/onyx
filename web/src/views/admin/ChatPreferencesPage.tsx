@@ -11,8 +11,7 @@ import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import { InputTypeIn } from "@opal/components";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import { InputTextArea, InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   SvgAddLines,
@@ -927,7 +926,7 @@ export default function ChatPreferencesPage() {
                 withLabel
               >
                 <Switch
-                  checked={s.temperature_override_enabled ?? false}
+                  checked={s.temperature_override_enabled ?? true}
                   onCheckedChange={(checked) => {
                     void saveSettings({
                       temperature_override_enabled: checked,

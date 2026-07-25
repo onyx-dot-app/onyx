@@ -3,24 +3,22 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi import Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastmcp import FastMCP
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.base import RequestResponseEndpoint
-from starlette.types import Receive
-from starlette.types import Scope
-from starlette.types import Send
+from starlette.types import Receive, Scope, Send
 
 from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.mcp_server.auth import OnyxTokenVerifier
 from onyx.mcp_server.utils import shutdown_http_client
-from onyx.server.metrics.prometheus_setup import create_prometheus_instrumentator
-from onyx.server.metrics.prometheus_setup import expose_prometheus_metrics
+from onyx.server.metrics.prometheus_setup import (
+    create_prometheus_instrumentator,
+    expose_prometheus_metrics,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
 from shared_configs.configs import cors_allow_credentials

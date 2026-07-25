@@ -4,10 +4,12 @@ import zipfile
 import pytest
 
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.bundle import build_single_file_bundle
-from onyx.skills.bundle import build_skill_md
-from onyx.skills.bundle import inspect_custom_bundle
-from onyx.skills.bundle import update_custom_bundle_files
+from onyx.skills.bundle import (
+    build_single_file_bundle,
+    build_skill_md,
+    inspect_custom_bundle,
+    update_custom_bundle_files,
+)
 
 
 def _zip(entries: list[tuple[str, bytes]]) -> bytes:

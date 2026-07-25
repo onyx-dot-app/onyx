@@ -1,12 +1,10 @@
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from jira.resources import Issue
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.jira.connector import JiraConnector
-from onyx.connectors.jira.connector import JiraConnectorCheckpoint
+from onyx.connectors.jira.connector import JiraConnector, JiraConnectorCheckpoint
 from onyx.connectors.models import SlimDocument
 
 

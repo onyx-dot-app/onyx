@@ -13,12 +13,12 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import Document
-from onyx.db.models import Document__Tag
-from onyx.db.models import Tag
-from onyx.db.tag import _delete_orphan_tags_batch
-from onyx.db.tag import delete_orphan_tags__no_commit
-from onyx.db.tag import delete_orphan_tags_batched
+from onyx.db.models import Document, Document__Tag, Tag
+from onyx.db.tag import (
+    _delete_orphan_tags_batch,
+    delete_orphan_tags__no_commit,
+    delete_orphan_tags_batched,
+)
 
 
 def _seed_orphan_tags(db_session: Session, count: int) -> list[int]:

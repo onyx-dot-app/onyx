@@ -1,21 +1,27 @@
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator
+from datetime import datetime, timezone
 
-from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
-from ee.onyx.external_permissions.google_drive.models import PermissionType
+from google.auth.exceptions import RefreshError
+
+from ee.onyx.external_permissions.google_drive.models import (
+    GoogleDrivePermission,
+    PermissionType,
+)
 from ee.onyx.external_permissions.google_drive.permission_retrieval import (
     get_permissions_by_ids,
 )
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
+from ee.onyx.external_permissions.perm_sync_types import (
+    FetchAllDocumentsFunction,
+    FetchAllDocumentsIdsFunction,
+)
 from ee.onyx.external_permissions.utils import credential_json
-from onyx.access.models import DocExternalAccess
-from onyx.access.models import ElementExternalAccess
-from onyx.access.models import ExternalAccess
-from onyx.access.models import NodeExternalAccess
-from onyx.access.utils import build_domain_group_id
-from onyx.access.utils import build_ext_group_name_for_onyx
+from onyx.access.models import (
+    DocExternalAccess,
+    ElementExternalAccess,
+    ExternalAccess,
+    NodeExternalAccess,
+)
+from onyx.access.utils import build_domain_group_id, build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import GoogleDriveFileType
@@ -100,6 +106,9 @@ def get_external_access_for_raw_gdrive_file(
     admin_drive_service: GoogleDriveService,
     fallback_user_email: str,
     add_prefix: bool = False,
+    fallback_drive_service_factory: (
+        Callable[[], GoogleDriveService | None] | None
+    ) = None,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
@@ -140,17 +149,39 @@ def get_external_access_for_raw_gdrive_file(
                 permission_ids=permission_ids,
             )
 
-        permissions_list = _get_permissions(
-            retriever_drive_service or admin_drive_service
-        )
-        if len(permissions_list) != len(permission_ids) and retriever_drive_service:
-            logger.warning(
-                "Failed to get all permissions for file %s with retriever service, trying admin service",
-                doc_id,
+        def _get_non_admin_permissions(
+            drive_service_factory: Callable[[], GoogleDriveService | None],
+        ) -> list[GoogleDrivePermission]:
+            try:
+                drive_service = drive_service_factory()
+                return _get_permissions(drive_service) if drive_service else []
+            except RefreshError as error:
+                logger.warning(
+                    "Could not impersonate non-admin user for document %s: %s",
+                    doc_id,
+                    error,
+                )
+                return []
+
+        if retriever_drive_service:
+            permissions_list = _get_non_admin_permissions(
+                lambda: retriever_drive_service
             )
-            backup_permissions_list = _get_permissions(admin_drive_service)
+
+        if (
+            len(permissions_list) != len(permission_ids)
+            and fallback_drive_service_factory
+        ):
             permissions_list = _merge_permissions_lists(
-                [permissions_list, backup_permissions_list]
+                [
+                    permissions_list,
+                    _get_non_admin_permissions(fallback_drive_service_factory),
+                ]
+            )
+
+        if len(permissions_list) != len(permission_ids):
+            permissions_list = _merge_permissions_lists(
+                [permissions_list, _get_permissions(admin_drive_service)]
             )
 
     # For externally-owned files, the Drive API may return no permissions

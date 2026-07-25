@@ -11,18 +11,18 @@ import zipfile
 from contextlib import ExitStack
 from copy import copy
 from dataclasses import dataclass
-from typing import Final
-from typing import IO
+from typing import IO, Final
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.metadata import parse_skill_document
-from onyx.skills.metadata import parse_skill_md_frontmatter
-from onyx.skills.metadata import serialize_skill_md
-from onyx.skills.metadata import split_skill_md
-from onyx.skills.models import CustomSkillBundleContents
-from onyx.skills.models import SkillBundleFile
+from onyx.skills.metadata import (
+    parse_skill_document,
+    parse_skill_md_frontmatter,
+    serialize_skill_md,
+    split_skill_md,
+)
+from onyx.skills.models import CustomSkillBundleContents, SkillBundleFile
 
 DEFAULT_PER_FILE_MAX_BYTES: Final[int] = int(
     os.environ.get("SKILL_BUNDLE_PER_FILE_MAX_BYTES") or 25 * 1024 * 1024

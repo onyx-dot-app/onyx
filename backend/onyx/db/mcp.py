@@ -1,35 +1,35 @@
 import datetime
+from collections.abc import Mapping
 from typing import cast
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from sqlalchemy import and_
-from sqlalchemy import delete
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import Session
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import Select, and_, delete, select
+from sqlalchemy.orm import Session, aliased, selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
-from onyx.db.constants import UNSET
-from onyx.db.constants import UnsetType
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPOAuthProviderMode
-from onyx.db.enums import MCPServerStatus
-from onyx.db.enums import MCPTransport
-from onyx.db.models import MCPAuthenticationType
-from onyx.db.models import MCPConnectionConfig
-from onyx.db.models import MCPServer
-from onyx.db.models import MCPServer__User
-from onyx.db.models import MCPServer__UserGroup
-from onyx.db.models import Persona
-from onyx.db.models import Tool
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserRole
-from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS
-from onyx.server.features.mcp.models import MCPConnectionData
+from onyx.db.constants import UNSET, UnsetType
+from onyx.db.enums import (
+    MCPAuthenticationPerformer,
+    MCPOAuthProviderMode,
+    MCPServerStatus,
+    MCPTransport,
+    SandboxStatus,
+)
+from onyx.db.models import (
+    MCPAuthenticationType,
+    MCPConnectionConfig,
+    MCPServer,
+    MCPServer__User,
+    MCPServer__UserGroup,
+    Persona,
+    Sandbox,
+    Tool,
+    User,
+    User__UserGroup,
+    UserRole,
+)
+from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS, MCPConnectionData
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
 
@@ -59,6 +59,25 @@ def get_mcp_servers_by_owner(owner_email: str, db_session: Session) -> list[MCPS
             select(MCPServer).where(MCPServer.owner == owner_email)
         ).all()
     )
+
+
+def get_craft_enabled_mcp_servers(
+    db_session: Session, user: User | None
+) -> list[MCPServer]:
+    """MCP servers an admin has made available to the Craft agent, filtered to
+    those ``user`` may use (public / shared / owned). ``None`` skips the access
+    filter — only for host matching before a user is known (proxy claim path).
+
+    Eager-loads ``admin_connection_config`` so credential resolution across the
+    returned set doesn't lazy-load one row per admin-managed server."""
+    stmt = (
+        select(MCPServer)
+        .where(MCPServer.available_in_craft.is_(True))
+        .options(selectinload(MCPServer.admin_connection_config))
+    )
+    if user is not None:
+        stmt = _add_mcp_server_access_filter(stmt, user)
+    return list(db_session.scalars(stmt).all())
 
 
 def get_mcp_servers_for_persona(
@@ -136,6 +155,48 @@ def user_can_access_mcp_server(user: User, server_id: int, db_session: Session) 
     return db_session.scalar(stmt) is not None
 
 
+def affected_user_ids_for_mcp_server(
+    server: MCPServer, db_session: Session
+) -> set[UUID]:
+    """User IDs with a RUNNING sandbox whose Craft session should be reloaded
+    after this server changes (enabled/disabled for craft, tools toggled, URL
+    edited). Scoped to running sandboxes so the hot-reload push has somewhere to
+    land. Access must match what ``resolve_craft_mcp_servers`` bakes into a
+    session: public / group / direct / owner, plus admins (who bypass the access
+    filter in ``_add_mcp_server_access_filter`` and therefore see every
+    craft-enabled server)."""
+    stmt = select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
+    if server.is_public:
+        return set(db_session.scalars(stmt))
+
+    group_users = (
+        select(User__UserGroup.user_id)
+        .join(
+            MCPServer__UserGroup,
+            MCPServer__UserGroup.user_group_id == User__UserGroup.user_group_id,
+        )
+        .where(MCPServer__UserGroup.mcp_server_id == server.id)
+    )
+    direct_users = select(MCPServer__User.user_id).where(
+        MCPServer__User.mcp_server_id == server.id
+    )
+    owner_users = select(User.id).where(  # ty: ignore[no-matching-overload]
+        User.email == server.owner
+    )
+    # Admins see every craft-enabled server (ACL bypass), so any change to a
+    # private server can be baked into an admin's session and must reload it.
+    admin_users = select(User.id).where(  # ty: ignore[no-matching-overload]
+        User.role == UserRole.ADMIN
+    )
+    stmt = stmt.where(
+        Sandbox.user_id.in_(group_users)
+        | Sandbox.user_id.in_(direct_users)
+        | Sandbox.user_id.in_(owner_users)
+        | Sandbox.user_id.in_(admin_users)
+    )
+    return set(db_session.scalars(stmt))
+
+
 def make_mcp_server_private(
     server_id: int,  # noqa: ARG001
     user_ids: list[UUID] | None,
@@ -208,6 +269,7 @@ def update_mcp_server__no_commit(
     status: MCPServerStatus | None = None,
     last_refreshed_at: datetime.datetime | None = None,
     is_public: bool | None = None,
+    available_in_craft: bool | None = None,
 ) -> MCPServer:
     """Update an existing MCP server"""
     server = get_mcp_server_by_id(server_id, db_session)
@@ -242,6 +304,8 @@ def update_mcp_server__no_commit(
         server.status = status
     if last_refreshed_at is not None:
         server.last_refreshed_at = last_refreshed_at
+    if available_in_craft is not None:
+        server.available_in_craft = available_in_craft
 
     db_session.flush()  # Don't commit yet, let caller decide when to commit
     return server
@@ -267,6 +331,15 @@ def get_all_mcp_tools_for_server(server_id: int, db_session: Session) -> list[To
     """Get all MCP tools for a server"""
     return list(
         db_session.scalars(select(Tool).where(Tool.mcp_server_id == server_id)).all()
+    )
+
+
+def get_mcp_tools_for_servers(server_ids: list[int], db_session: Session) -> list[Tool]:
+    """All MCP tools across ``server_ids`` in a single query"""
+    if not server_ids:
+        return []
+    return list(
+        db_session.scalars(select(Tool).where(Tool.mcp_server_id.in_(server_ids))).all()
     )
 
 
@@ -387,6 +460,8 @@ def resolve_mcp_credentials(
     mcp_server: MCPServer,
     user: User,
     db_session: Session,
+    *,
+    user_configs: Mapping[int, MCPConnectionConfig] | None = None,
 ) -> ResolvedMCPCredentials:
     """Resolve which stored credentials authenticate `user` against `mcp_server`.
 
@@ -396,6 +471,11 @@ def resolve_mcp_credentials(
     - API_TOKEN / OAUTH: the user's own `mcp_connection_config` row for
       PER_USER servers, the admin config row otherwise.
     - NONE: no credentials.
+
+    `user_configs` lets a caller resolving many servers pre-load the per-user
+    rows in one query (see `get_user_connection_configs`) instead of one per
+    server. It must cover every server the caller resolves — a miss reads as no
+    stored credential, not as unknown.
 
     Raises MCPCredentialsError for PT_OAUTH with the anonymous user, who has no
     login OAuth token.
@@ -417,8 +497,10 @@ def resolve_mcp_credentials(
         MCPAuthenticationType.OAUTH,
     ):
         if mcp_server.auth_performer == MCPAuthenticationPerformer.PER_USER:
-            connection_config = get_user_connection_config(
-                mcp_server.id, user.email, db_session
+            connection_config = (
+                user_configs.get(mcp_server.id)
+                if user_configs is not None
+                else get_user_connection_config(mcp_server.id, user.email, db_session)
             )
         else:
             connection_config = mcp_server.admin_connection_config
@@ -427,6 +509,50 @@ def resolve_mcp_credentials(
         )
 
     return ResolvedMCPCredentials(connection_config=None, user_oauth_token=None)
+
+
+def can_resolve_mcp_credentials(
+    mcp_server: MCPServer,
+    user: User,
+    db_session: Session,
+    *,
+    user_configs: Mapping[int, MCPConnectionConfig] | None = None,
+) -> bool:
+    """Whether the sandbox proxy will be able to authenticate `user` against
+    `mcp_server`, mirroring `MCPServerResolver._resolve_for_server`'s block
+    condition so callers can't drift from what injection does.
+
+    Not the same as the user having their own connection config: admin-managed,
+    `PT_OAUTH`, and no-auth servers all authenticate without one. See
+    `resolve_mcp_credentials` for `user_configs`.
+    """
+    if mcp_server.auth_type in (None, MCPAuthenticationType.NONE):
+        return True
+    try:
+        credentials = resolve_mcp_credentials(
+            mcp_server, user, db_session, user_configs=user_configs
+        )
+    except MCPCredentialsError:
+        return False
+    return bool(credentials.build_headers())
+
+
+def get_user_connection_configs(
+    server_ids: list[int], user_email: str, db_session: Session
+) -> dict[int, MCPConnectionConfig]:
+    """`user_email`'s own connection configs for `server_ids`, keyed by server id.
+    One query, for callers resolving credentials across many servers."""
+    if not server_ids:
+        return {}
+    rows = db_session.scalars(
+        select(MCPConnectionConfig).where(
+            and_(
+                MCPConnectionConfig.mcp_server_id.in_(server_ids),
+                MCPConnectionConfig.user_email == user_email,
+            )
+        )
+    )
+    return {row.mcp_server_id: row for row in rows if row.mcp_server_id is not None}
 
 
 def get_user_connection_configs_for_server(

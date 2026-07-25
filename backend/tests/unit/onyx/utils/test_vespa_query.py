@@ -1,23 +1,20 @@
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import INDEX_SEPARATOR
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import Tag
-from onyx.context.search.models import TimeRange
+from onyx.configs.constants import INDEX_SEPARATOR, DocumentSource
+from onyx.context.search.models import IndexFilters, Tag, TimeRange
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
-from onyx.document_index.vespa_constants import DOC_UPDATED_AT
-from onyx.document_index.vespa_constants import DOCUMENT_SETS
-from onyx.document_index.vespa_constants import HIDDEN
-from onyx.document_index.vespa_constants import METADATA_LIST
-from onyx.document_index.vespa_constants import PERSONAS
-from onyx.document_index.vespa_constants import SOURCE_TYPE
-from onyx.document_index.vespa_constants import TENANT_ID
-from onyx.document_index.vespa_constants import USER_PROJECT
+from onyx.document_index.vespa_constants import (
+    DOC_UPDATED_AT,
+    DOCUMENT_SETS,
+    HIDDEN,
+    METADATA_LIST,
+    PERSONAS,
+    SOURCE_TYPE,
+    TENANT_ID,
+    USER_PROJECT,
+)
 from shared_configs.configs import MULTI_TENANT
 
 

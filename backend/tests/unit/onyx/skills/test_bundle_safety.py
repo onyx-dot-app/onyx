@@ -9,8 +9,7 @@ import zipfile
 import pytest
 
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM
-from onyx.skills.bundle import normalize_custom_bundle
+from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM, normalize_custom_bundle
 
 
 def _build_zip(

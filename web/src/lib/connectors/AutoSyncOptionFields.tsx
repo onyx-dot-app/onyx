@@ -12,6 +12,7 @@ export const autoSyncConfigBySource: Record<
     }
   >
 > = {
+  box: {},
   confluence: {},
   jira: {},
   google_drive: {},

@@ -7,28 +7,29 @@ import os
 import subprocess
 import time
 from collections.abc import Generator
-from dataclasses import dataclass
-from dataclasses import field
-from typing import Any
-from typing import NamedTuple
-from uuid import UUID
-from uuid import uuid4
+from dataclasses import dataclass, field
+from typing import Any, NamedTuple
+from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import (
+    OPENCODE_SERVER_PASSWORD,
+    SANDBOX_BACKEND,
+    SandboxBackend,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.craft.docker_e2e.conftest import DockerExec
-from tests.integration.tests.craft.docker_e2e.conftest import DockerSandbox
-from tests.integration.tests.craft.docker_e2e.conftest import ProvisionSandbox
+from tests.integration.tests.craft.docker_e2e.conftest import (
+    DockerExec,
+    DockerSandbox,
+    ProvisionSandbox,
+)
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.DOCKER,

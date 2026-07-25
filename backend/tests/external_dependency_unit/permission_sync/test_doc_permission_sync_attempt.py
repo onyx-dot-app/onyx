@@ -5,28 +5,27 @@ Tests the basic CRUD operations for document permission sync attempts,
 including creation, status updates, progress tracking, and querying.
 """
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import PermissionSyncStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.permission_sync_attempt import complete_doc_permission_sync_attempt
-from onyx.db.permission_sync_attempt import create_doc_permission_sync_attempt
-from onyx.db.permission_sync_attempt import get_doc_permission_sync_attempt
-from onyx.db.permission_sync_attempt import (
-    get_recent_doc_permission_sync_attempts_for_cc_pair,
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    PermissionSyncStatus,
 )
-from onyx.db.permission_sync_attempt import mark_doc_permission_sync_attempt_failed
-from onyx.db.permission_sync_attempt import mark_doc_permission_sync_attempt_in_progress
+from onyx.db.models import Connector, ConnectorCredentialPair, Credential
+from onyx.db.permission_sync_attempt import (
+    complete_doc_permission_sync_attempt,
+    create_doc_permission_sync_attempt,
+    get_doc_permission_sync_attempt,
+    get_recent_doc_permission_sync_attempts_for_cc_pair,
+    mark_doc_permission_sync_attempt_failed,
+    mark_doc_permission_sync_attempt_in_progress,
+)
 from tests.external_dependency_unit.conftest import create_test_user
 
 

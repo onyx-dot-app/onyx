@@ -1,22 +1,20 @@
 """Unit tests for the Redis-backed billing cache."""
 
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 from redis.exceptions import RedisError
 
 from ee.onyx.server.billing import billing_cache as bc
-from ee.onyx.server.billing.billing_cache import BILLING_CACHE_KEY
-from ee.onyx.server.billing.billing_cache import cached_fetch_billing_information
-from ee.onyx.server.billing.billing_cache import cached_is_tenant_on_trial
-from ee.onyx.server.billing.billing_cache import invalidate_billing_cache
-from ee.onyx.server.tenants.models import BillingInformation
-from ee.onyx.server.tenants.models import SubscriptionStatusResponse
+from ee.onyx.server.billing.billing_cache import (
+    BILLING_CACHE_KEY,
+    cached_fetch_billing_information,
+    cached_is_tenant_on_trial,
+    invalidate_billing_cache,
+)
+from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
 
 
 def _billing(status: str = "active") -> BillingInformation:

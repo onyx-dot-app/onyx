@@ -1,9 +1,7 @@
 import os
 import time
 import uuid
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import httpx
@@ -13,21 +11,20 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 import ee.onyx.background.celery.tasks.ttl_management.tasks as ttl_tasks
-from onyx.configs.constants import CELERY_CHAT_TTL_DELETE_TASK_EXPIRES
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.db.chat import delete_chat_session
-from onyx.db.chat import get_chat_sessions_older_than
+from onyx.configs.constants import CELERY_CHAT_TTL_DELETE_TASK_EXPIRES, OnyxRedisLocks
+from onyx.db.chat import delete_chat_session, get_chat_sessions_older_than
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
+from onyx.db.models import ChatMessage, ChatSession
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.contextvars import get_current_tenant_id
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.settings import SettingsManager
-from tests.integration.common_utils.test_models import DATestChatSession
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestSettings
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestChatSession,
+    DATestLLMProvider,
+    DATestSettings,
+    DATestUser,
+)
 
 RETENTION_SECONDS = 10
 

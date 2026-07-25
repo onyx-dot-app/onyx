@@ -13,14 +13,15 @@ from unittest.mock import MagicMock
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME
-from onyx.auth.constants import API_KEY_HEADER_NAME
+from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME, API_KEY_HEADER_NAME
 from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.resolvers import onyx_pat as onyx_pat_mod
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
-from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
-from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
+from onyx.server.features.build.db.sandbox import (
+    create_sandbox__no_commit,
+    ensure_sandbox_pat,
+)
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -48,7 +49,7 @@ def test_claims_then_resolve_round_trips_minted_pat(
         matched_actions=None,
     )
 
-    monkeypatch.setattr(onyx_pat_mod, "SANDBOX_API_SERVER_URL", f"https://{_API_HOST}")
+    monkeypatch.setattr(onyx_pat_mod, "ONYX_SERVER_URL", f"https://{_API_HOST}")
     resolver = OnyxPatResolver()
     assert resolver.claims(MagicMock(host=_API_HOST, port=443), ctx) is True
     assert resolver.claims(MagicMock(host="slack.com", port=443), ctx) is False

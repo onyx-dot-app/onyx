@@ -1,8 +1,7 @@
 """Utility functions for release notes parsing and caching."""
 
 import re
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy.orm import Session
@@ -12,12 +11,14 @@ from onyx.cache.factory import get_shared_cache_backend
 from onyx.configs.app_configs import INSTANCE_TYPE
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.release_notes import create_release_notifications_for_versions
-from onyx.server.features.release_notes.constants import AUTO_REFRESH_THRESHOLD_SECONDS
-from onyx.server.features.release_notes.constants import FETCH_TIMEOUT
-from onyx.server.features.release_notes.constants import GITHUB_CHANGELOG_RAW_URL
-from onyx.server.features.release_notes.constants import REDIS_CACHE_TTL
-from onyx.server.features.release_notes.constants import REDIS_KEY_ETAG
-from onyx.server.features.release_notes.constants import REDIS_KEY_FETCHED_AT
+from onyx.server.features.release_notes.constants import (
+    AUTO_REFRESH_THRESHOLD_SECONDS,
+    FETCH_TIMEOUT,
+    GITHUB_CHANGELOG_RAW_URL,
+    REDIS_CACHE_TTL,
+    REDIS_KEY_ETAG,
+    REDIS_KEY_FETCHED_AT,
+)
 from onyx.server.features.release_notes.models import ReleaseNoteEntry
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger

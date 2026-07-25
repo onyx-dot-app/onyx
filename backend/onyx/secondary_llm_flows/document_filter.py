@@ -2,19 +2,21 @@ import json
 import re
 
 from onyx.configs.chat_configs import SECONDARY_LLM_FLOW_TIMEOUT_S
-from onyx.context.search.models import ContextExpansionType
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
+from onyx.context.search.models import (
+    ContextExpansionType,
+    InferenceChunk,
+    InferenceSection,
+)
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import UserMessage
-from onyx.prompts.search_prompts import DOCUMENT_CONTEXT_SELECTION_PROMPT
-from onyx.prompts.search_prompts import DOCUMENT_SELECTION_PROMPT
-from onyx.prompts.search_prompts import TRY_TO_FILL_TO_MAX_INSTRUCTIONS
+from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.prompts.search_prompts import (
+    DOCUMENT_CONTEXT_SELECTION_PROMPT,
+    DOCUMENT_SELECTION_PROMPT,
+    TRY_TO_FILL_TO_MAX_INSTRUCTIONS,
+)
 from onyx.tools.tool_implementations.search.constants import MAX_CHUNKS_FOR_RELEVANCE
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 

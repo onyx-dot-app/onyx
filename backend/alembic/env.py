@@ -28,8 +28,8 @@ from shared_configs.configs import (
 )
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from onyx.db.models import Base
-from celery.backends.database.session import (  # ty: ignore[unresolved-import]
-    ResultModelBase,
+from celery.backends.database.session import (
+    ResultModelBase,  # ty: ignore[unresolved-import]
 )
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable

@@ -5,25 +5,26 @@ from unittest.mock import MagicMock
 import pytest
 
 from ee.onyx.connectors.perm_sync_valid import validate_canvas_perm_sync
-from ee.onyx.external_permissions.canvas.access import build_course_permission_context
-from ee.onyx.external_permissions.canvas.access import CanvasCoursePermissionContext
+from ee.onyx.external_permissions.canvas.access import (
+    CanvasCoursePermissionContext,
+    build_course_permission_context,
+)
 from ee.onyx.external_permissions.canvas.doc_sync import canvas_doc_sync
 from ee.onyx.external_permissions.canvas.group_sync import canvas_group_sync
-from onyx.access.models import DocExternalAccess
-from onyx.access.models import ExternalAccess
-from onyx.connectors.canvas.connector import canvas_all_users_group_id
-from onyx.connectors.canvas.connector import canvas_course_group_id
-from onyx.connectors.canvas.connector import canvas_group_group_id
-from onyx.connectors.canvas.connector import canvas_section_group_id
-from onyx.connectors.canvas.connector import CanvasAnnouncement
-from onyx.connectors.canvas.connector import CanvasAssignment
-from onyx.connectors.canvas.connector import CanvasConnector
+from onyx.access.models import DocExternalAccess, ExternalAccess
+from onyx.connectors.canvas.connector import (
+    CanvasAnnouncement,
+    CanvasAssignment,
+    CanvasConnector,
+    canvas_all_users_group_id,
+    canvas_course_group_id,
+    canvas_group_group_id,
+    canvas_section_group_id,
+)
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import HierarchyNode, SlimDocument
 from onyx.db.models import ConnectorCredentialPair
-from onyx.db.utils import DocumentRow
-from onyx.db.utils import SortOrder
+from onyx.db.utils import DocumentRow, SortOrder
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.secret_names import TestSecret
 

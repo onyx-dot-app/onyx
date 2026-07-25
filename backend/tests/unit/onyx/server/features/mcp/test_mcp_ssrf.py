@@ -11,14 +11,12 @@ import httpx
 import pytest
 
 from onyx.auth import oauth_token_manager
-from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
-from onyx.auth.oauth_token_manager import OAuthFlowParams
+from onyx.auth.oauth_token_manager import OAuthFlowParams, exchange_oauth_code_for_token
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp import api
 from onyx.server.features.mcp import ssrf as mcp_ssrf
-from onyx.server.security.models import SecuritySettings
-from onyx.server.security.models import SSRFProtectionLevel
+from onyx.server.security.models import SecuritySettings, SSRFProtectionLevel
 from onyx.server.security.store import _build_env_defaults
 from onyx.utils.url import SSRFException
 

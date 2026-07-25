@@ -17,8 +17,10 @@ import requests
 
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.providers import hubspot as hubspot_module
-from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.base import parse_granted_scopes
+from onyx.external_apps.providers.base import (
+    OAuthExternalAppProvider,
+    parse_granted_scopes,
+)
 from onyx.external_apps.providers.hubspot import HubspotProvider
 from onyx.external_apps.providers.registry import PROVIDERS
 

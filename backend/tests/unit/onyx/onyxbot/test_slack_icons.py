@@ -3,10 +3,12 @@ from pathlib import Path
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.onyxbot.slack.icons import _DEFAULT_SOURCE_IMAGE_FILENAME
-from onyx.onyxbot.slack.icons import _PUBLIC_SOURCE_IMAGE_BASE_URL
-from onyx.onyxbot.slack.icons import _SOURCE_IMAGE_FILENAMES
-from onyx.onyxbot.slack.icons import source_to_github_img_link
+from onyx.onyxbot.slack.icons import (
+    _DEFAULT_SOURCE_IMAGE_FILENAME,
+    _PUBLIC_SOURCE_IMAGE_BASE_URL,
+    _SOURCE_IMAGE_FILENAMES,
+    source_to_github_img_link,
+)
 
 SLACK_SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif"}
 SOURCE_ICON_DIR = (

@@ -9,18 +9,15 @@ don't re-validate against an allow-list in the tool itself.
 """
 
 from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.image_gen.interfaces import ImageShape
 from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.images.image_generation_tool import (
-    ImageGenerationTool,
-)
-from onyx.tools.tool_implementations.images.image_generation_tool import (
     REFERENCE_IMAGE_FILE_IDS_FIELD,
+    ImageGenerationTool,
 )
 
 

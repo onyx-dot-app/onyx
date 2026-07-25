@@ -9,45 +9,48 @@ structural information from the connector source.
 """
 
 import time
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from celery import Celery
-from celery import shared_task
-from celery import Task
+from celery import Celery, Task, shared_task
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.connectors.factory import ConnectorMissingException
-from onyx.connectors.factory import identify_connector_class
-from onyx.connectors.factory import instantiate_connector
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
+    DocumentSource,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisLocks,
+)
+from onyx.connectors.factory import (
+    ConnectorMissingException,
+    identify_connector_class,
+    instantiate_connector,
+)
 from onyx.connectors.interfaces import HierarchyConnector
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.db.connector import mark_cc_pair_as_hierarchy_fetched
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
+    get_connector_credential_pair_from_id,
 )
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.hierarchy import upsert_hierarchy_node_cc_pair_entries
-from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.hierarchy import (
+    upsert_hierarchy_node_cc_pair_entries,
+    upsert_hierarchy_nodes_batch,
+)
 from onyx.db.models import ConnectorCredentialPair
-from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
-from onyx.redis.redis_hierarchy import ensure_source_node_exists
-from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
+from onyx.redis.redis_hierarchy import (
+    HierarchyNodeCacheEntry,
+    cache_hierarchy_nodes_batch,
+    ensure_source_node_exists,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger

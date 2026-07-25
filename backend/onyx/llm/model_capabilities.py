@@ -14,14 +14,14 @@ import re
 import threading
 import time
 from functools import lru_cache
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
-from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
-from onyx.llm.constants import BEDROCK_MODEL_TOKEN_LIMITS
-from onyx.llm.constants import LlmProviderNames
+from onyx.configs.model_configs import (
+    GEN_AI_MAX_TOKENS,
+    GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+    GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
+)
+from onyx.llm.constants import BEDROCK_MODEL_TOKEN_LIMITS, LlmProviderNames
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -408,6 +408,25 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
             "Failed to get model object for %s/%s", model_provider, model_name
         )
         return False
+
+
+# OpenAI models that reject the reasoning-effort parameter on every API surface
+# (chat completions and responses alike) — only their default effort works.
+# Explicit list rather than a registry lookup: LiteLLM's Azure config wrongly
+# claims support for these, and its OpenAI answer is an accident of the models
+# missing from the registry.
+_OPENAI_MODELS_REJECTING_REASONING_EFFORT = ("o1-mini", "o1-preview")
+
+
+def openai_model_rejects_reasoning_effort(model_name: str) -> bool:
+    """Deliberately name-only — no provider guard. These names are OpenAI
+    models wherever they're hosted (Azure, LiteLLM proxy, OpenAI-compatible
+    gateways), and a provider guard would reintroduce the 400 behind
+    gateways. The asymmetry favors matching broadly: a false positive only
+    omits an optional parameter, a false negative is a hard request failure.
+    """
+    base_model_name = model_name.lower().split("/")[-1]
+    return base_model_name.startswith(_OPENAI_MODELS_REJECTING_REASONING_EFFORT)
 
 
 def is_true_openai_model(model_provider: str, model_name: str) -> bool:

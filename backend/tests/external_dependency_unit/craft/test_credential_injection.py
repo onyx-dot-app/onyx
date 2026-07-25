@@ -4,10 +4,12 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.credentials import resolve_injection_headers
-from tests.external_dependency_unit.craft.db_helpers import make_external_app
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
-from tests.external_dependency_unit.craft.db_helpers import make_user_credential
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_external_app,
+    make_skill,
+    make_user,
+    make_user_credential,
+)
 
 _BEARER = {"Authorization": "Bearer {access_token}"}
 
@@ -79,6 +81,22 @@ def test_missing_user_credential_omits_header(
     )
 
     # User hasn't connected -> placeholder unfilled -> header dropped.
+    assert resolve_injection_headers(db_session, app.id, user.id) == {}
+
+
+def test_disabled_app_does_not_inject_credentials(
+    db_session: Session,
+    test_user: object,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session)
+    app = make_external_app(
+        db_session,
+        skill=make_skill(db_session),
+        auth_template=_BEARER,
+        organization_credentials={"access_token": "org-token"},
+        enabled=False,
+    )
+
     assert resolve_injection_headers(db_session, app.id, user.id) == {}
 
 

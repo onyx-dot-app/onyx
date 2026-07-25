@@ -10,24 +10,17 @@ All external HTTP calls are mocked, but Postgres and Redis are running.
 
 import queue
 from typing import Any
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
-from onyx.db.models import OAuthAccount
-from onyx.db.models import OAuthConfig
-from onyx.db.models import Persona
-from onyx.db.models import Tool
-from onyx.db.models import User
-from onyx.db.oauth_config import create_oauth_config
-from onyx.db.oauth_config import upsert_user_oauth_token
+from onyx.db.models import OAuthAccount, OAuthConfig, Persona, Tool, User
+from onyx.db.oauth_config import create_oauth_config, upsert_user_oauth_token
 from onyx.llm.factory import get_default_llm
-from onyx.tools.tool_constructor import construct_tools
-from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.tool_constructor import SearchToolConfig, construct_tools
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.conftest import create_test_user

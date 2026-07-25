@@ -9,19 +9,19 @@ Validates that the pruning-side collection of a source creation time works:
 Uses a mock SlimConnector plus a real PostgreSQL database.
 """
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
+from onyx.connectors.interfaces import (
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
+from onyx.connectors.models import HierarchyNode, SlimDocument
 from onyx.db.document import backfill_docs_created_at__no_commit
 from onyx.db.models import Document as DbDocument
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface

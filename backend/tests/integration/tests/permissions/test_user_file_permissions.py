@@ -12,19 +12,15 @@ This file tests user file permissions in different scenarios:
 
 import io
 from typing import NamedTuple
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import InputType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import ChatSessionSharedStatus
-from onyx.db.models import ChatSession
-from onyx.db.models import Document
-from onyx.db.models import ToolCall
+from onyx.db.enums import AccessType, ChatSessionSharedStatus
+from onyx.db.models import ChatSession, Document, ToolCall
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
 from onyx.server.documents.models import DocumentSource
@@ -38,10 +34,12 @@ from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestCCPair
-from tests.integration.common_utils.test_models import DATestChatSession
-from tests.integration.common_utils.test_models import DATestPersona
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestCCPair,
+    DATestChatSession,
+    DATestPersona,
+    DATestUser,
+)
 
 
 class UserFileTestSetup(NamedTuple):

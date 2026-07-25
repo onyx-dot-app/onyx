@@ -633,3 +633,12 @@ export function useToast() { ... }
 // ❌ Bad — user/session hook dumped in the global hooks directory
 // web/src/hooks/useSessionWatcher.ts
 ```
+
+# Tests
+
+- Jest + React Testing Library guide for component tests: `web/tests/README.md`.
+- Playwright e2e specs live in `web/tests/e2e`; hard rules (Page Object Model, locator priority)
+  are in `web/tests/e2e/README.md`.
+- Run an e2e test with the repo-pinned Playwright: `cd web && bun run playwright <TEST_NAME>`
+  (the `playwright` script expands to `playwright test`; avoid `bunx`/`npx`, which can silently
+  fetch an unpinned version).

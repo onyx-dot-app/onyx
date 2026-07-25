@@ -10,9 +10,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NotificationType
-from onyx.db.admin_banner import clear_admin_banner
-from onyx.db.admin_banner import get_admin_banner
-from onyx.db.admin_banner import set_admin_banner
+from onyx.db.admin_banner import clear_admin_banner, get_admin_banner, set_admin_banner
 from onyx.db.models import UserRole
 from onyx.db.notification import get_notifications
 from onyx.server.features.admin_banner import api as admin_banner_api

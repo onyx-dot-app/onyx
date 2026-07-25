@@ -13,12 +13,10 @@ start values), blockquotes, fenced code blocks, GFM tables, hyperlinks
 dropped rather than shown as literal markup.
 """
 
-from dataclasses import dataclass
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from html import unescape
 from io import BytesIO
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import mistune
 from docx import Document
@@ -29,13 +27,9 @@ from docx.opc.constants import RELATIONSHIP_TYPE
 from docx.opc.package import OpcPackage
 from docx.opc.packuri import PackURI
 from docx.opc.part import XmlPart
-from docx.oxml import OxmlElement
-from docx.oxml import parse_xml
+from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn
-from docx.shared import Inches
-from docx.shared import Pt
-from docx.shared import RGBColor
-from docx.shared import Twips
+from docx.shared import Inches, Pt, RGBColor, Twips
 from docx.styles.style import ParagraphStyle
 from docx.table import _Cell
 from docx.text.paragraph import Paragraph

@@ -4,15 +4,13 @@ import re
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import SAML_CONF_DIR
-from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
+from onyx.configs.app_configs import SAML_CONF_DIR, VALID_EMAIL_DOMAINS
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.utils.logger import setup_logger
@@ -44,6 +42,10 @@ class OIDCProviderConfig(_ProviderConfig):
     client_secret: str
     openid_config_url: str
     legacy_callback: bool = False
+    # Strict opt-in: reject sign-ins when userinfo omits the optional
+    # email_verified claim (some IdPs, e.g. Microsoft Entra ID, omit it).
+    # Any present value other than true is rejected regardless.
+    require_verified_email: bool = False
 
 
 class SAMLProviderConfig(_ProviderConfig):
@@ -133,6 +135,15 @@ def fetch_sso_provider_by_name(
     if enabled_only:
         stmt = stmt.where(SSOProvider.enabled.is_(True))
     return db_session.scalars(stmt).first()
+
+
+async def fetch_sso_provider_by_name_async(
+    db_session: AsyncSession, name: str
+) -> SSOProvider | None:
+    """Async twin of fetch_sso_provider_by_name. Reads disabled rows too:
+    disabling a provider stops new logins, not existing sessions."""
+    stmt = select(SSOProvider).where(SSOProvider.name == name)
+    return (await db_session.scalars(stmt)).first()
 
 
 def create_sso_provider(

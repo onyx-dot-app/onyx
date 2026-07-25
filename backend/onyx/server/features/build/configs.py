@@ -29,6 +29,8 @@ OPENCODE_DISABLED_TOOLS: list[str] = [
 SANDBOX_IDLE_TIMEOUT_SECONDS = int(
     os.environ.get("SANDBOX_IDLE_TIMEOUT_SECONDS", "3600")
 )
+SESSION_CREATE_LOCK_LEASE_SECONDS = 300
+SESSION_CREATE_LOCK_WAIT_SECONDS = 60
 SANDBOX_MAX_CONCURRENT_PER_ORG = int(
     os.environ.get("SANDBOX_MAX_CONCURRENT_PER_ORG", "10")
 )
@@ -78,14 +80,7 @@ ENABLE_BROWSER = os.environ.get("ENABLE_BROWSER", "true").lower() == "true"
 SANDBOX_PUSH_PRIVATE_KEY = os.environ.get("ONYX_SANDBOX_PUSH_PRIVATE_KEY", "")
 
 
-# Provider types Craft supports. The recommended models per type come from the
-# shared recommended-models config (served via /build/recommended-models).
-BUILD_MODE_ALLOWED_PROVIDER_TYPES = ["anthropic", "openai", "openrouter"]
-
-# apiKey sentinel for a supported provider the org hasn't configured. We register
-# every supported provider so a cross-provider override never hits "model not
-# found"; an unconfigured one fails closed instead (proxy 403 / upstream 401).
-BUILD_MODE_NOT_CONFIGURED_API_KEY = "onyx-provider-not-configured"
+ONYX_GATEWAY_PROVIDER_ID = "onyx"
 
 # Dev/debug-only: exposes an SSE endpoint that tails the sandbox pod's
 # opencode-serve container logs. Never enable in prod — the logs include LLM I/O
@@ -95,9 +90,9 @@ ENABLE_OPENCODE_DEBUGGING = (
     os.environ.get("ENABLE_OPENCODE_DEBUGGING", "false").lower() == "true"
 )
 
-# Must be set when SANDBOX_BACKEND=kubernetes (no default — varies per
-# deployment).
-SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
+# Complete Onyx API base URL reachable from the sandbox, including any path
+# prefix. Must be set when SANDBOX_BACKEND=kubernetes.
+ONYX_SERVER_URL = os.environ.get("ONYX_SERVER_URL", "")
 
 # ==============================================================================
 # Sandbox egress proxy
@@ -134,6 +129,15 @@ SANDBOX_PROXY_CA_VOLUME_NAME = "sandbox_proxy_ca"
 # opencode apiKey); the proxy overwrites the real value on the wire. Sandboxes
 # never see the raw values.
 SANDBOX_PROXY_INJECTED_PLACEHOLDER = "replaced_by_egress_proxy"
+
+# Header carrying the originating BuildSession id on opencode's in-process MCP
+# client requests. opencode-serve is one process for many sessions and uses the
+# untagged base proxy env, so the shell-env proxy tag can't ride MCP egress;
+# instead the per-session opencode.json stamps this header on each MCP server.
+# The egress proxy reads it to attribute the tool call to a session for approval,
+# then strips it so it never reaches the MCP origin.
+MCP_SESSION_TAG_HEADER = "X-Onyx-Mcp-Session"
+
 
 # ==============================================================================
 # Docker sandbox (SANDBOX_BACKEND=docker, self-hosted docker-compose)

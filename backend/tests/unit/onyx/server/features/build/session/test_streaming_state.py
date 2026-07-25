@@ -5,16 +5,13 @@ Tests for chunk accumulation and finalize semantics — no DB required.
 
 from __future__ import annotations
 
-from typing import Any
-from typing import cast
-from uuid import UUID
-from uuid import uuid4
+from typing import Any, cast
+from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.db.models import BuildSession
-from onyx.server.features.build.packets import CompactionPacket
-from onyx.server.features.build.packets import ContextUsagePacket
+from onyx.server.features.build.packets import CompactionPacket, ContextUsagePacket
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.session import streaming
 from onyx.server.features.build.session.streaming import BuildStreamingState

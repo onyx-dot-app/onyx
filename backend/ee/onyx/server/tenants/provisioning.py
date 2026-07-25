@@ -4,63 +4,82 @@ import uuid
 import aiohttp  # Async HTTP client
 import httpx
 import requests
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
 from ee.onyx.server.tenants.access import generate_data_plane_token
-from ee.onyx.server.tenants.models import TenantByDomainResponse
-from ee.onyx.server.tenants.models import TenantCreationPayload
-from ee.onyx.server.tenants.models import TenantDeletionPayload
-from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
-from ee.onyx.server.tenants.schema_management import drop_schema
-from ee.onyx.server.tenants.schema_management import run_alembic_migrations
-from ee.onyx.server.tenants.user_mapping import add_users_to_tenant
-from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
-from ee.onyx.server.tenants.user_mapping import user_owns_a_tenant
+from ee.onyx.server.tenants.models import (
+    TenantByDomainResponse,
+    TenantCreationPayload,
+    TenantDeletionPayload,
+)
+from ee.onyx.server.tenants.schema_management import (
+    create_schema_if_not_exists,
+    drop_schema,
+    run_alembic_migrations,
+)
+from ee.onyx.server.tenants.user_mapping import (
+    add_users_to_tenant,
+    get_tenant_id_for_email,
+    user_owns_a_tenant,
+)
 from onyx.auth.users import exceptions
-from onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
-from onyx.configs.app_configs import AUTO_PROVISION_DEFAULT_LLM_PROVIDERS
-from onyx.configs.app_configs import COHERE_DEFAULT_API_KEY
-from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
-from onyx.configs.app_configs import DEV_MODE
-from onyx.configs.app_configs import OPENAI_DEFAULT_API_KEY
-from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
-from onyx.configs.app_configs import VERTEXAI_DEFAULT_CREDENTIALS
-from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
-from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.configs.app_configs import (
+    ANTHROPIC_DEFAULT_API_KEY,
+    AUTO_PROVISION_DEFAULT_LLM_PROVIDERS,
+    COHERE_DEFAULT_API_KEY,
+    CONTROL_PLANE_API_BASE_URL,
+    DEV_MODE,
+    OPENAI_DEFAULT_API_KEY,
+    OPENROUTER_DEFAULT_API_KEY,
+    VERTEXAI_DEFAULT_CREDENTIALS,
+    VERTEXAI_DEFAULT_LOCATION,
+)
+from onyx.db.engine.sql_engine import (
+    get_session_with_shared_schema,
+    get_session_with_tenant,
+)
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
-from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
-from onyx.db.llm import fetch_existing_llm_provider_by_type_nameless
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_cloud_embedding_provider
-from onyx.db.llm import upsert_llm_provider
-from onyx.db.models import AvailableTenant
-from onyx.db.models import IndexModelStatus
-from onyx.db.models import SearchSettings
-from onyx.db.models import UserTenantMapping
+from onyx.db.llm import (
+    fetch_existing_llm_provider_by_name_and_type,
+    fetch_existing_llm_provider_by_type_nameless,
+    update_default_provider,
+    upsert_cloud_embedding_provider,
+    upsert_llm_provider,
+)
+from onyx.db.models import (
+    AvailableTenant,
+    IndexModelStatus,
+    SearchSettings,
+    UserTenantMapping,
+)
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
-from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.llm_provider_options import get_recommendations
+from onyx.llm.well_known_providers.constants import (
+    ANTHROPIC_PROVIDER_NAME,
+    OPENAI_PROVIDER_NAME,
+    OPENROUTER_PROVIDER_NAME,
+    VERTEX_CREDENTIALS_FILE_KWARG,
+    VERTEX_LOCATION_KWARG,
+    VERTEXAI_PROVIDER_NAME,
+)
 from onyx.llm.well_known_providers.llm_provider_options import (
+    get_recommendations,
     model_configurations_for_provider,
 )
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 from onyx.setup import setup_onyx
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import TENANT_ID_PREFIX
+from shared_configs.configs import (
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    TENANT_ID_PREFIX,
+)
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.enums import EmbeddingProvider
 

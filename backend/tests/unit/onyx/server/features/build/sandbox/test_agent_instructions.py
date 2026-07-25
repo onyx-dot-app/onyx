@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from onyx.db.models import ExternalApp
 from onyx.server.features.build.sandbox.util import agent_instructions
 
 _TEMPLATE_PLACEHOLDER_RE = re.compile(r"{{[A-Z0-9_]+}}")
@@ -119,6 +120,17 @@ def test_build_connectable_apps_list_empty_renders_fallback() -> None:
     )
 
 
+def test_build_connectable_apps_list_uses_stable_ids_and_names() -> None:
+    apps = [
+        ExternalApp(id=12, name="Zeta"),
+        ExternalApp(id=3, name="Alpha"),
+    ]
+
+    assert agent_instructions.build_connectable_apps_list(apps) == (
+        "- External app ID `3`: **Alpha**\n- External app ID `12`: **Zeta**"
+    )
+
+
 def test_generate_agent_instructions_keeps_connectable_blurb_when_empty() -> None:
     """No connectable apps → the static blurb still renders, list placeholder
     resolves to empty, nothing leaks through."""
@@ -135,9 +147,11 @@ def test_generate_agent_instructions_fills_connectable_list_from_template() -> N
     """Connectable apps → template-owned blurb renders with the substituted list."""
     content = agent_instructions.generate_agent_instructions(
         template_path=_template_path(),
-        connectable_apps_section="- **slack**: SENTINEL_CONNECTABLE",
+        connectable_apps_section="- External app ID `42`: **SENTINEL_CONNECTABLE**",
     )
 
     assert "## Connectable apps" in content
-    assert "- **slack**: SENTINEL_CONNECTABLE" in content
+    assert "numeric external app ID from the list below" in content
+    assert "with its slug" not in content
+    assert "- External app ID `42`: **SENTINEL_CONNECTABLE**" in content
     assert _unresolved_placeholders(content) == set()

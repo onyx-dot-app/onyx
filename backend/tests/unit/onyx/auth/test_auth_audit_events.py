@@ -9,9 +9,7 @@ pattern). Emission itself is covered in tests/unit/onyx/utils/test_audit.py.
 import json
 import logging
 from typing import Any
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.security import OAuth2PasswordRequestForm

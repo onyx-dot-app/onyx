@@ -1,8 +1,7 @@
 """Unit tests for the Craft webapp proxy."""
 
 import re
-from collections.abc import AsyncGenerator
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -10,8 +9,7 @@ from uuid import UUID
 
 import httpx
 import pytest
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import HTTPException, Request
 from starlette.responses import StreamingResponse
 
 from onyx.db.enums import SharingScope

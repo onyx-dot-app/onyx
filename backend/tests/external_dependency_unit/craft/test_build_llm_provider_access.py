@@ -1,6 +1,6 @@
 """Permission scoping for Craft provider selection (real DB).
 
-``fetch_all_supported_build_llm_providers`` must respect LLM-provider access
+``fetch_all_accessible_llm_providers`` must respect LLM-provider access
 control (is_public / group membership) so a user never gets a sandbox keyed
 with a provider's API key they aren't entitled to use.
 """
@@ -12,22 +12,28 @@ from uuid import uuid4
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from onyx.db.llm import fetch_first_accessible_llm_provider_by_type
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import upsert_llm_provider
-from onyx.db.models import LLMProvider
-from onyx.db.models import LLMProvider__Persona
-from onyx.db.models import LLMProvider__UserGroup
-from onyx.db.models import User
-from onyx.db.models import UserRole
-from onyx.server.features.build.db.build_session import (
-    fetch_all_supported_build_llm_providers,
+from onyx.db.llm import (
+    fetch_all_accessible_llm_providers,
+    fetch_first_accessible_llm_provider_by_type,
+    remove_llm_provider,
+    upsert_llm_provider,
 )
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
-from tests.external_dependency_unit.craft.db_helpers import make_group
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from onyx.db.models import (
+    LLMProvider,
+    LLMProvider__Persona,
+    LLMProvider__UserGroup,
+    User,
+    UserRole,
+)
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
+from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
+    make_group,
+    make_user,
+)
 from tests.external_dependency_unit.db.agent_sharing_helpers import create_test_persona
 
 
@@ -55,7 +61,7 @@ def _make_group_restricted_anthropic_provider(
 def _has_provider(db_session: Session, user: User, provider_id: int) -> bool:
     return any(
         view.id == provider_id
-        for view in fetch_all_supported_build_llm_providers(db_session, user)
+        for view in fetch_all_accessible_llm_providers(db_session, user)
     )
 
 

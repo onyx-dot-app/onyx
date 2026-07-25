@@ -2,8 +2,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.models import MCPServer__User
-from onyx.db.models import MCPServer__UserGroup
+from onyx.db.models import MCPServer__User, MCPServer__UserGroup
 
 
 def make_mcp_server_private(

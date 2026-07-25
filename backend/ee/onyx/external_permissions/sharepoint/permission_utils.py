@@ -1,8 +1,7 @@
 import re
 import time
 from collections import deque
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator, Iterable
 from typing import Any
 from urllib.parse import urlparse
 
@@ -12,6 +11,7 @@ from office365.graph_client import GraphClient
 from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.runtime.client_request import ClientRequestException
 from office365.sharepoint.client_context import ClientContext
+from office365.sharepoint.permissions.roles.definitions.definition import RoleDefinition
 from office365.sharepoint.permissions.securable_object import RoleAssignmentCollection
 from office365.sharepoint.principal.users.collection import UserCollection
 from pydantic import BaseModel
@@ -21,10 +21,12 @@ from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.sharepoint.connector import GRAPH_API_MAX_RETRIES
-from onyx.connectors.sharepoint.connector import GRAPH_API_RETRYABLE_STATUSES
-from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP_REVERSE
-from onyx.connectors.sharepoint.connector import sleep_and_retry
+from onyx.connectors.sharepoint.connector import (
+    GRAPH_API_MAX_RETRIES,
+    GRAPH_API_RETRYABLE_STATUSES,
+    SHARED_DOCUMENTS_MAP_REVERSE,
+    sleep_and_retry,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 
@@ -38,9 +40,9 @@ AZURE_AD_GROUP_PRINCIPAL_TYPE = 4  # Azure Active Directory security groups
 SHAREPOINT_GROUP_PRINCIPAL_TYPE = 8  # SharePoint site groups (local to the site)
 MICROSOFT_DOMAIN = ".onmicrosoft"
 SHAREPOINT_GROUP_SCOPE_SEPARATOR = "::"
-# Limited Access role type, limited access is a travel through permission not a actual permission
-LIMITED_ACCESS_ROLE_TYPES = [1, 9]
-LIMITED_ACCESS_ROLE_NAMES = ["Limited Access", "Web-Only Limited Access"]
+# PnP RoleType defines Guest=1 and RestrictedGuest=9:
+# https://github.com/pnp/pnpcore/blob/4e4f58fcac797f2957bfcd14fedcecd690dfe7ee/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
+LIMITED_ACCESS_ROLE_TYPES = frozenset({1, 9})
 
 
 AD_GROUP_ENUMERATION_THRESHOLD = 100_000
@@ -54,6 +56,15 @@ AD_GROUP_ENUMERATION_THRESHOLD = 100_000
 # paged collections and keeps each page well under typical proxy buffer
 # limits while not making the round-trip count overwhelming.
 ROLE_ASSIGNMENTS_PAGE_SIZE = 100
+
+
+def _has_only_limited_access(
+    role_definition_bindings: Iterable[RoleDefinition],
+) -> bool:
+    return all(
+        binding.role_type_kind in LIMITED_ACCESS_ROLE_TYPES
+        for binding in role_definition_bindings
+    )
 
 
 def _graph_api_get(
@@ -527,23 +538,11 @@ def get_external_access_from_sharepoint(
         # callback and recurses until Python hits its max recursion depth.
         for assignment in role_assignments.current_page:
             logger.debug("Assignment: %s", assignment.to_json())
-            if assignment.role_definition_bindings:
-                is_limited_access = True
-                for role_definition_binding in assignment.role_definition_bindings:
-                    if (
-                        role_definition_binding.role_type_kind
-                        not in LIMITED_ACCESS_ROLE_TYPES
-                        or role_definition_binding.name not in LIMITED_ACCESS_ROLE_NAMES
-                    ):
-                        is_limited_access = False
-                        break
-
-                # Skip if the role is only Limited Access, because this is not a actual permission its a travel through permission
-                if is_limited_access:
-                    logger.info(
-                        "Skipping assignment because it has only Limited Access role"
-                    )
-                    continue
+            if assignment.role_definition_bindings and _has_only_limited_access(
+                assignment.role_definition_bindings
+            ):
+                logger.info("Skipping Limited Access-only assignment")
+                continue
             if assignment.member:
                 member = assignment.member
                 if member.principal_type == USER_PRINCIPAL_TYPE and hasattr(
@@ -723,24 +722,11 @@ def get_sharepoint_external_groups(
         # via `_get_next().execute_query()`, which re-fires this `page_loaded`
         # callback and recurses until Python hits its max recursion depth.
         for assignment in role_assignments.current_page:
-            if assignment.role_definition_bindings:
-                is_limited_access = True
-                for role_definition_binding in assignment.role_definition_bindings:
-                    if (
-                        role_definition_binding.role_type_kind
-                        not in LIMITED_ACCESS_ROLE_TYPES
-                        or role_definition_binding.name not in LIMITED_ACCESS_ROLE_NAMES
-                    ):
-                        is_limited_access = False
-                        break
-
-                # Skip if the role assignment is only Limited Access, because this is not a actual permission its
-                #  a travel through permission
-                if is_limited_access:
-                    logger.info(
-                        "Skipping assignment because it has only Limited Access role"
-                    )
-                    continue
+            if assignment.role_definition_bindings and _has_only_limited_access(
+                assignment.role_definition_bindings
+            ):
+                logger.info("Skipping Limited Access-only assignment")
+                continue
             if assignment.member:
                 member = assignment.member
                 if member.principal_type in [

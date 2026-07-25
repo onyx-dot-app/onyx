@@ -86,6 +86,7 @@ export const Default: Story = {
 export const Selected: Story = {
   args: {
     selection: {
+      providerId: 1,
       provider: "anthropic",
       providerName: "Anthropic",
       modelName: "claude-sonnet-4-6",
@@ -97,6 +98,7 @@ export const Selected: Story = {
 export const Disabled: Story = {
   args: {
     selection: {
+      providerId: 1,
       provider: "anthropic",
       providerName: "Anthropic",
       modelName: "claude-opus-4-8",

@@ -9,19 +9,13 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.models import BuildSession
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.server.features.build.db.build_session import skills_are_stale
+from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
+from onyx.db.models import BuildSession, Skill, User
+from onyx.server.features.build.db.build_session import session_runtime_stale
 from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.skills.push import compute_skills_hash
-from onyx.skills.push import push_skills_for_users
+from onyx.skills.push import compute_skill_runtime_hash, push_skills_for_users
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.craft.db_helpers import make_sandbox
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
 
 def test_one_failing_sandbox_does_not_abort_push_to_others(
@@ -73,7 +67,7 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
     )
 
     seeded_skill(
-        slug=f"partial-{uuid4().hex[:6]}",
+        name=f"partial-{uuid4().hex[:6]}",
         public=True,
         bundle_files={"SKILL.md": "p\n"},
     )
@@ -82,11 +76,11 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
         push_skills_for_users({user_a.id, user_b.id, user_c.id}, db_session)
 
     assert stub.write_files_to_sandbox_count == 3
-    assert skills_are_stale(sessions[user_a.id], sandbox_a)
-    assert not skills_are_stale(sessions[user_b.id], sandbox_b)
-    assert not skills_are_stale(sessions[user_c.id], sandbox_c)
-    assert not skills_are_stale(idle_session, sandbox_a)
-    assert not skills_are_stale(scheduled_session, sandbox_a)
+    assert session_runtime_stale(sessions[user_a.id], sandbox_a)
+    assert not session_runtime_stale(sessions[user_b.id], sandbox_b)
+    assert not session_runtime_stale(sessions[user_c.id], sandbox_c)
+    assert not session_runtime_stale(idle_session, sandbox_a)
+    assert not session_runtime_stale(scheduled_session, sandbox_a)
     assert sandbox_a.skills_hash is not None
     assert sandbox_b.skills_hash is None
     assert sandbox_c.skills_hash is not None
@@ -107,10 +101,10 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
         (sessions[user_b.id], sandbox_b),
         (sessions[user_c.id], sandbox_c),
     ):
-        assert not skills_are_stale(session, sandbox)
+        assert not session_runtime_stale(session, sandbox)
 
 
-def test_only_changed_skill_files_are_pushed_and_hashes_self_heal(
+def test_connectable_app_change_pushes_and_hashes_self_heal(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -133,19 +127,23 @@ def test_only_changed_skill_files_are_pushed_and_hashes_self_heal(
         opencode_session_id="changed-runtime",
     )
 
-    contents = {
-        unchanged_user.id: b"content",
-        changed_user.id: b"changed",
+    def files_for(user: User, _db_session: Session) -> dict[str, bytes]:
+        return {f"{user.id}/SKILL.md": b"content"}
+
+    connectable_apps_sections = {
+        unchanged_user.id: "",
+        changed_user.id: "new apps",
     }
 
-    def files_for(user: User, _db_session: Session) -> dict[str, bytes]:
-        return {f"{user.id}/SKILL.md": contents[user.id]}
-
-    unchanged_sandbox.skills_hash = compute_skills_hash(
-        files_for(unchanged_user, db_session)
+    # Seed the runtime hash exactly as push_skills_for_users computes it, so the
+    # "unchanged" sandbox is genuinely up to date.
+    unchanged_sandbox.skills_hash = compute_skill_runtime_hash(
+        files_for(unchanged_user, db_session),
+        "",
     )
-    changed_sandbox.skills_hash = compute_skills_hash(
-        {f"{changed_user.id}/SKILL.md": b"original"}
+    changed_sandbox.skills_hash = compute_skill_runtime_hash(
+        files_for(changed_user, db_session),
+        "old apps",
     )
     unchanged_session.skills_hash = unchanged_sandbox.skills_hash
     changed_session.skills_hash = changed_sandbox.skills_hash
@@ -155,7 +153,13 @@ def test_only_changed_skill_files_are_pushed_and_hashes_self_heal(
     stub = StubSandboxManager()
     stub.write_files_to_sandbox_silent = True
     monkeypatch.setattr("onyx.skills.push.get_sandbox_manager", lambda: stub)
-    monkeypatch.setattr("onyx.skills.push.build_skills_fileset_for_user", files_for)
+    monkeypatch.setattr(
+        "onyx.skills.push.build_user_skills_payload",
+        lambda user, session: (
+            connectable_apps_sections[user.id],
+            files_for(user, session),
+        ),
+    )
 
     push_skills_for_users({unchanged_user.id, changed_user.id}, db_session)
 
@@ -164,12 +168,12 @@ def test_only_changed_skill_files_are_pushed_and_hashes_self_heal(
     assert stub.write_files_to_sandbox_count == 1
     assert stub.last_write_files_to_sandbox_payload is not None
     assert stub.last_write_files_to_sandbox_payload["sandbox_id"] == changed_sandbox.id
-    assert not skills_are_stale(unchanged_session, unchanged_sandbox)
-    assert skills_are_stale(changed_session, changed_sandbox)
+    assert not session_runtime_stale(unchanged_session, unchanged_sandbox)
+    assert session_runtime_stale(changed_session, changed_sandbox)
 
-    contents[changed_user.id] = b"original"
+    connectable_apps_sections[changed_user.id] = "old apps"
     push_skills_for_users({changed_user.id}, db_session)
 
     db_session.refresh(changed_sandbox)
     assert stub.write_files_to_sandbox_count == 2
-    assert not skills_are_stale(changed_session, changed_sandbox)
+    assert not session_runtime_stale(changed_session, changed_sandbox)

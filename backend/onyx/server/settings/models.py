@@ -1,12 +1,13 @@
 from enum import Enum
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
-from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
-from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
+from onyx.configs.app_configs import (
+    DEFAULT_PRUNING_FREQ,
+    DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
+    DISABLE_VECTOR_DB,
+    MAX_ALLOWED_UPLOAD_SIZE_MB,
+)
 from onyx.configs.constants import QueryHistoryType
 from onyx.server.features.notifications.models import NotificationResponse
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -62,7 +63,7 @@ class Settings(BaseModel):
     # Resolved per-tenant tier for ENTERPRISE-only feature gating in the FE.
     tier: Tier = Tier.COMMUNITY
 
-    temperature_override_enabled: bool | None = False
+    temperature_override_enabled: bool | None = True
     auto_scroll: bool | None = False
     query_history_type: QueryHistoryType | None = None
 

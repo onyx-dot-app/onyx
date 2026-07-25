@@ -18,14 +18,11 @@ Cache failures are non-fatal: readers fall through to Postgres.
 import hashlib
 import uuid
 
-from pydantic import BaseModel
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
-from onyx.cache.interface import CacheBackend
-from onyx.server.manage.llm.models import LLMProviderDescriptor
-from onyx.server.manage.llm.models import LLMProviderResponse
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
+from onyx.server.manage.llm.models import LLMProviderDescriptor, LLMProviderResponse
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

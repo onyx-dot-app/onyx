@@ -8,14 +8,15 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
-from onyx.db.mcp import get_mcp_servers_accessible_to_user
-from onyx.db.mcp import user_can_access_mcp_server
-from onyx.db.models import MCPServer
-from onyx.db.models import MCPServer__User
-from onyx.db.models import MCPServer__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
+from onyx.db.mcp import get_mcp_servers_accessible_to_user, user_can_access_mcp_server
+from onyx.db.models import (
+    MCPServer,
+    MCPServer__User,
+    MCPServer__UserGroup,
+    User,
+    User__UserGroup,
+    UserGroup,
+)
 from tests.external_dependency_unit.conftest import create_test_user
 
 

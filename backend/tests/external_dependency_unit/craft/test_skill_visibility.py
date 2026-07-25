@@ -6,22 +6,25 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SkillSharePermission
-from onyx.db.models import User
-from onyx.db.models import UserRole
-from onyx.db.skill import fetch_skill
-from onyx.db.skill import list_skills
-from onyx.db.skill import set_skill_public_permission
-from onyx.db.skill import SkillAccessPolicy
-from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
-from tests.external_dependency_unit.craft.db_helpers import make_group
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
-from tests.external_dependency_unit.craft.db_helpers import share_skill_with_group
+from onyx.db.models import User, UserRole
+from onyx.db.skill import (
+    SkillManagementPolicy,
+    fetch_skill,
+    list_skills,
+    set_skill_public_permission,
+)
+from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
+    make_group,
+    make_skill,
+    make_user,
+    share_skill_with_group,
+)
 
 
 def _user_skills(user: User, db_session: Session):
     return list_skills(
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
     )
@@ -38,7 +41,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=admin,
             db_session=db_session,
         )
@@ -68,7 +71,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=user,
             db_session=db_session,
         )
@@ -85,7 +88,7 @@ class TestSkillVisibility:
         assert (
             fetch_skill(
                 skill.id,
-                policy=SkillAccessPolicy.VIEW,
+                policy=SkillManagementPolicy.VIEW,
                 user=user,
                 db_session=db_session,
             )
@@ -99,7 +102,7 @@ class TestSkillVisibility:
         )
         editor_result = fetch_skill(
             skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=user,
             db_session=db_session,
         )
@@ -114,7 +117,7 @@ class TestSkillVisibility:
         assert (
             fetch_skill(
                 skill.id,
-                policy=SkillAccessPolicy.VIEW,
+                policy=SkillManagementPolicy.VIEW,
                 user=user,
                 db_session=db_session,
             )
@@ -187,7 +190,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             private_skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )
@@ -208,7 +211,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             private_skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )
@@ -232,7 +235,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             private_skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )
@@ -252,7 +255,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             private_skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )
@@ -270,7 +273,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             public_skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )

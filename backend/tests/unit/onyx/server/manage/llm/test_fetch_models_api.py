@@ -7,26 +7,27 @@ sync-to-DB behavior when provider_id is specified.
 
 import os
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.manage.llm.models import BedrockModelsRequest
-from onyx.server.manage.llm.models import BifrostFinalModelResponse
-from onyx.server.manage.llm.models import BifrostModelsRequest
-from onyx.server.manage.llm.models import LitellmFinalModelResponse
-from onyx.server.manage.llm.models import LitellmModelsRequest
-from onyx.server.manage.llm.models import LMStudioFinalModelResponse
-from onyx.server.manage.llm.models import LMStudioModelsRequest
-from onyx.server.manage.llm.models import OllamaFinalModelResponse
-from onyx.server.manage.llm.models import OllamaModelsRequest
-from onyx.server.manage.llm.models import OpenAICompatibleModelsRequest
-from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
-from onyx.server.manage.llm.models import OpenRouterModelsRequest
+from onyx.server.manage.llm.models import (
+    BedrockModelsRequest,
+    BifrostFinalModelResponse,
+    BifrostModelsRequest,
+    LitellmFinalModelResponse,
+    LitellmModelsRequest,
+    LMStudioFinalModelResponse,
+    LMStudioModelsRequest,
+    OllamaFinalModelResponse,
+    OllamaModelsRequest,
+    OpenAICompatibleModelsRequest,
+    OpenRouterFinalModelResponse,
+    OpenRouterModelsRequest,
+)
 
 
 class TestGetOllamaAvailableModels:
@@ -1666,8 +1667,10 @@ class TestGetBedrockAvailableModels:
         """Editing an existing provider sends the masked bearer token. The
         endpoint must swap it back for the stored value so the per-session
         token provider carries real credentials, not the masked placeholder."""
-        from onyx.server.manage.llm.api import _mask_string
-        from onyx.server.manage.llm.api import get_bedrock_available_models
+        from onyx.server.manage.llm.api import (
+            _mask_string,
+            get_bedrock_available_models,
+        )
 
         real_token = "real-bearer-token-secret"
         masked_token = _mask_string(real_token)

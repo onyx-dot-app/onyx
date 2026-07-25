@@ -7,7 +7,7 @@ import { markdown } from "@opal/utils";
 import { Divider, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
-import type { EmbeddingProvider } from "@/lib/indexing/interfaces";
+import type { EmbeddingProvider } from "@/lib/indexing/types";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";

@@ -11,12 +11,14 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
-from onyx.db.sso_provider import create_sso_provider
-from onyx.db.sso_provider import fetch_sso_provider_by_name
-from onyx.db.sso_provider import fetch_sso_providers
-from onyx.db.sso_provider import set_sso_provider_enabled
-from onyx.db.sso_provider import update_sso_provider
-from onyx.db.sso_provider import validate_sso_provider_name
+from onyx.db.sso_provider import (
+    create_sso_provider,
+    fetch_sso_provider_by_name,
+    fetch_sso_providers,
+    set_sso_provider_enabled,
+    update_sso_provider,
+    validate_sso_provider_name,
+)
 
 _NAME_PREFIX = "testsso"
 _GOOGLE_CONFIG = {"client_id": "client-id", "client_secret": "super-secret"}

@@ -9,34 +9,42 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.external_app import get_connectable_apps_for_user
-from onyx.db.external_app import get_external_app_by_skill_id
-from onyx.db.models import Skill
-from onyx.db.models import User
-from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.skill import list_skills
-from onyx.db.skill import persist_skill_validity
-from onyx.db.skill import SkillAccessPolicy
-from onyx.db.skill import SkillValidityUpdate
+from onyx.db.external_app import (
+    get_connectable_apps_for_user,
+    get_external_app_by_skill_id,
+)
+from onyx.db.models import Skill, User
+from onyx.db.skill import (
+    SkillValidityUpdate,
+    affected_user_ids_for_skill,
+    list_runtime_skills_for_user,
+    persist_skill_validity,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.db.sandbox import get_sandbox_user_map
-from onyx.server.features.build.db.sandbox import lock_sandbox_skills_hashes
-from onyx.server.features.build.db.sandbox import set_sandbox_skills_hashes__no_commit
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_user_map,
+    lock_sandbox_skills_hashes,
+    set_sandbox_skills_hashes__no_commit,
+)
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import PushResult
+from onyx.server.features.build.sandbox.models import FileSet, PushResult
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
-from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.built_in import COMPANY_SEARCH
-from onyx.skills.built_in import EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
-from onyx.skills.rendering import render_company_search_skill
-from onyx.skills.rendering import render_external_app_skill
-from onyx.skills.validation import load_stored_custom_skill_bundle
-from onyx.skills.validation import validate_stored_custom_skill
+from onyx.skills.built_in import (
+    BUILT_IN_SKILLS,
+    COMPANY_SEARCH,
+    EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
+    BuiltInSkillDefinition,
+)
+from onyx.skills.rendering import render_company_search_skill, render_external_app_skill
+from onyx.skills.validation import (
+    load_stored_custom_skill_bundle,
+    validate_stored_custom_skill,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -46,9 +54,17 @@ SKILLS_MOUNT_PATH = "/workspace/managed/skills"
 _EXCLUDED_DIR_NAMES: frozenset[str] = frozenset({"__pycache__"})
 
 
-def compute_skills_hash(files: FileSet) -> str:
-    """Return a deterministic digest of the hydrated paths and contents."""
+def compute_skill_runtime_hash(
+    files: FileSet,
+    connectable_apps_section: str,
+) -> str:
+    """Digest the skill files and the app guidance rendered into ``AGENTS.md``.
+    A change makes a live session stale so it hot-reloads. The craft MCP set is
+    tracked separately via ``mcp_config_hash`` (see ``session_runtime_stale``)."""
     digest = hashlib.sha256()
+    connectable_apps_bytes = connectable_apps_section.encode()
+    digest.update(len(connectable_apps_bytes).to_bytes(8))
+    digest.update(connectable_apps_bytes)
     for path in sorted(files):
         path_bytes = path.encode()
         content = files[path]
@@ -78,7 +94,7 @@ def _add_static_builtin(
         if not path.is_file() or _is_excluded(path, source_dir):
             continue
         rel = path.relative_to(source_dir)
-        files[f"{skill.slug}/{rel.as_posix()}"] = path.read_bytes()
+        files[f"{skill.name}/{rel.as_posix()}"] = path.read_bytes()
 
 
 def _render_template(
@@ -88,14 +104,14 @@ def _render_template(
     db_session: Session,
     user: User,
 ) -> None:
-    """Overwrite ``{slug}/SKILL.md`` with a per-user rendering. company-search
+    """Overwrite ``{name}/SKILL.md`` with a per-user rendering. company-search
     and external-app built-ins have renderers; any other templated built-in logs
     a warning and ships the static siblings as-is."""
     if definition.built_in_skill_id == COMPANY_SEARCH.built_in_skill_id:
         rendered = render_company_search_skill(
             db_session, user, definition.source_dir.parent
         )
-        files[f"{skill.slug}/SKILL.md"] = rendered.encode("utf-8")
+        files[f"{skill.name}/SKILL.md"] = rendered.encode("utf-8")
         return
 
     app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
@@ -107,7 +123,7 @@ def _render_template(
             external_app,
             definition.source_dir,
         )
-        files[f"{skill.slug}/SKILL.md"] = rendered.encode("utf-8")
+        files[f"{skill.name}/SKILL.md"] = rendered.encode("utf-8")
         return
 
     logger.warning(
@@ -122,12 +138,12 @@ def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None
             for info in zf.infolist():
                 if info.is_dir():
                     continue
-                bundle_files[f"{skill.slug}/{info.filename}"] = zf.read(info)
+                bundle_files[f"{skill.name}/{info.filename}"] = zf.read(info)
         files.update(bundle_files)
     except Exception:
         logger.warning(
             "Failed to unpack bundle for skill %s (%s), skipping",
-            skill.slug,
+            skill.name,
             skill.bundle_file_id,
             exc_info=True,
         )
@@ -144,6 +160,16 @@ def _assemble_fileset(
     validation before their FileStore bundle is unpacked. Invalid,
     indeterminate, and unknown built-in rows are skipped.
     """
+    skills = list(skills)
+    seen_names: set[str] = set()
+    for skill in skills:
+        if skill.name in seen_names:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                f"Multiple enabled skills are named '{skill.name}'.",
+            )
+        seen_names.add(skill.name)
+
     files: FileSet = {}
     validity_updates: list[SkillValidityUpdate] = []
     file_store = get_default_file_store()
@@ -193,7 +219,7 @@ def _assemble_fileset(
         if definition is None:
             logger.warning(
                 "Skill row %s references unknown built-in %s; skipping",
-                skill.slug,
+                skill.name,
                 skill.built_in_skill_id,
             )
             continue
@@ -210,11 +236,7 @@ def _assemble_fileset(
 
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     """Return a flat ``{path: bytes}`` map of every skill the user can see."""
-    skills = list_skills(
-        policy=SkillAccessPolicy.USE,
-        user=user,
-        db_session=db_session,
-    )
+    skills = list_runtime_skills_for_user(user=user, db_session=db_session)
     return _assemble_fileset(skills, user, db_session)
 
 
@@ -224,11 +246,7 @@ def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, Fil
     The connectable-apps section lists org apps the user has not connected yet,
     so the agent can offer to set one up through the connect tool.
     """
-    skills = list_skills(
-        policy=SkillAccessPolicy.USE,
-        user=user,
-        db_session=db_session,
-    )
+    skills = list_runtime_skills_for_user(user=user, db_session=db_session)
     files = _assemble_fileset(skills, user, db_session)
     connectable_apps_section = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
@@ -261,23 +279,29 @@ def push_skill_to_affected_sandboxes(skill: Skill, db_session: Session) -> None:
 
 
 def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
-    """Rebuild and push the full skills fileset for each user's sandbox."""
+    """Push skill state changes and mark affected sessions for reload."""
     if not user_ids:
         return
     try:
         sandbox_map = get_sandbox_user_map(list(user_ids), db_session)
         current_hashes = lock_sandbox_skills_hashes(db_session, set(sandbox_map))
-        sandbox_files = {
-            sid: build_skills_fileset_for_user(user, db_session)
-            for sid, user in sandbox_map.items()
+        sandbox_payloads = {
+            sandbox_id: build_user_skills_payload(user, db_session)
+            for sandbox_id, user in sandbox_map.items()
         }
         desired_hashes = {
-            sandbox_id: compute_skills_hash(files)
-            for sandbox_id, files in sandbox_files.items()
+            sandbox_id: compute_skill_runtime_hash(files, connectable_apps_section)
+            for sandbox_id, (
+                connectable_apps_section,
+                files,
+            ) in sandbox_payloads.items()
         }
         changed_files = {
             sandbox_id: files
-            for sandbox_id, files in sandbox_files.items()
+            for sandbox_id, (
+                _connectable_apps_section,
+                files,
+            ) in sandbox_payloads.items()
             if current_hashes.get(sandbox_id) != desired_hashes[sandbox_id]
         }
         if not changed_files:

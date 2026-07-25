@@ -14,18 +14,17 @@ Two consumers:
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from playwright.sync_api import BrowserContext
-from playwright.sync_api import Playwright
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import BrowserContext, Playwright, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel
 
-from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_ID
-from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
-from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
+from onyx.configs.app_configs import (
+    WEB_CONNECTOR_OAUTH_CLIENT_ID,
+    WEB_CONNECTOR_OAUTH_CLIENT_SECRET,
+    WEB_CONNECTOR_OAUTH_TOKEN_URL,
+)
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException
-from onyx.utils.url import validate_outbound_http_url
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 

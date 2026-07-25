@@ -8,22 +8,15 @@ import random
 import re
 import time
 from collections import deque
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterable
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator, Iterable
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
-from typing import cast
-from urllib.parse import quote
-from urllib.parse import unquote
-from urllib.parse import urlsplit
+from typing import Any, cast
+from urllib.parse import quote, unquote, urlsplit
 
 import msal
 import requests
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from office365.graph_client import GraphClient
 from office365.onedrive.driveitems.driveItem import DriveItem
@@ -34,57 +27,60 @@ from office365.runtime.client_request import ClientRequestException
 from office365.runtime.paths.resource_path import ResourcePath
 from office365.runtime.queries.client_query import ClientQuery
 from office365.sharepoint.client_context import ClientContext
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 from requests.exceptions import HTTPError
 from typing_extensions import override
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
-from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    REQUEST_TIMEOUT_SECONDS,
+    SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
+)
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
+    is_tabular_file,
 )
-from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import IndexingHeartbeatInterface
-from onyx.connectors.interfaces import Resolver
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    IndexingHeartbeatInterface,
+    Resolver,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
 from onyx.connectors.microsoft_graph_env import resolve_microsoft_environment
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import ExternalAccess
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    EntityFailure,
+    ExternalAccess,
+    HierarchyNode,
+    ImageSection,
+    SlimDocument,
+    TabularSection,
+    TextSection,
+)
 from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
 from onyx.db.enums import HierarchyNodeType
-from onyx.file_processing.extract_file_text import extract_text_and_images
-from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
-from onyx.file_processing.file_types import OnyxMimeTypes
-from onyx.file_processing.image_utils import make_image_callback
-from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
+from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
+from onyx.file_processing.image_utils import (
+    make_image_callback,
+    store_image_and_create_section,
+)
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from onyx.utils.url import SSRFException
-from onyx.utils.url import validate_outbound_http_url
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
@@ -97,6 +93,17 @@ SHARED_DOCUMENTS_MAP = {
     "Documentos": "Documentos compartidos",
 }
 SHARED_DOCUMENTS_MAP_REVERSE = {v: k for k, v in SHARED_DOCUMENTS_MAP.items()}
+
+# On OneDrive personal sites the Graph API reports the primary library's name as
+# one of these, while the browser/SharePoint URL uses "Documents".
+ONEDRIVE_DRIVE_NAMES = frozenset(
+    {"onedrive", "onedrive for business", "documentlibrary"}
+)
+# `driveType` values that identify a user's primary OneDrive (as opposed to an
+# extra "documentLibrary" added to the personal site). OneDrive personal returns
+# "personal", OneDrive for Business returns "business".
+ONEDRIVE_PRIMARY_DRIVE_TYPES = frozenset({"personal", "business"})
+PERSONAL_SITE_URL_MARKER = "/personal/"
 
 ASPX_EXTENSION = ".aspx"
 
@@ -1262,10 +1269,12 @@ class SharepointConnector(
         # Ensure sites are sharepoint urls
         for site_url in self.sites:
             if not site_url.startswith("https://") or not (
-                "/sites/" in site_url or "/teams/" in site_url
+                "/sites/" in site_url
+                or "/teams/" in site_url
+                or "/personal/" in site_url
             ):
                 raise ConnectorValidationError(
-                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site or https://your-tenant.sharepoint.com/teams/your-team)"
+                    "Site URLs must be full Sharepoint/OneDrive URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site, https://your-tenant.sharepoint.com/teams/your-team or https://your-tenant-my.sharepoint.com/personal/your-user)"
                 )
             try:
                 validate_outbound_http_url(site_url, https_only=True)
@@ -1495,14 +1504,14 @@ class SharepointConnector(
 
             lower_parts = [part.lower() for part in parts]
             site_type_index = None
-            for site_token in ("sites", "teams"):
+            for site_token in ("sites", "teams", "personal"):
                 if site_token in lower_parts:
                     site_type_index = lower_parts.index(site_token)
                     break
 
             if site_type_index is None or len(parts) <= site_type_index + 1:
                 logger.warning(
-                    "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)",
+                    "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name>, /teams/<name>, or /personal/<name>)",
                     url,
                 )
                 continue
@@ -1555,6 +1564,41 @@ class SharepointConnector(
                 and SHARED_DOCUMENTS_MAP[d.name] == drive_name
             )
         ]
+        if not matched and drives:
+            # Fallback for OneDrive personal sites: Graph reports the primary
+            # library's name as "OneDrive"/"documentLibrary" while the
+            # browser/SharePoint URL uses "Documents". Identify the intended
+            # drive by its stable driveType (falling back to name), never by
+            # position in the /drives response, whose order is not guaranteed.
+            # Prefer driveType matches so a uniquely-typed primary drive is not
+            # made ambiguous by an unrelated library sharing a fallback name;
+            # only consult names when no drive has a primary type.
+            type_matches = [
+                d
+                for d in drives
+                if (d.drive_type or "").lower() in ONEDRIVE_PRIMARY_DRIVE_TYPES
+            ]
+            name_matches = [
+                d for d in drives if d.name and d.name.lower() in ONEDRIVE_DRIVE_NAMES
+            ]
+            onedrive_matches = type_matches or name_matches
+            if PERSONAL_SITE_URL_MARKER in site_descriptor.url.lower():
+                # A personal site has exactly one user OneDrive; refuse to guess
+                # when the lookup is ambiguous rather than index an arbitrary
+                # library.
+                if len(onedrive_matches) == 1:
+                    matched = onedrive_matches
+                elif len(onedrive_matches) > 1:
+                    logger.warning(
+                        "Could not unambiguously resolve the primary OneDrive "
+                        "for personal site '%s' (%d candidate drives: %s)",
+                        site_descriptor.url,
+                        len(onedrive_matches),
+                        [d.name for d in onedrive_matches],
+                    )
+            elif onedrive_matches:
+                matched = [onedrive_matches[0]]
+
         if not matched:
             logger.warning("Drive '%s' not found", drive_name)
             return None

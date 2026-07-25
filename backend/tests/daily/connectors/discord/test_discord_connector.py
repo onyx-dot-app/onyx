@@ -3,9 +3,7 @@ import time
 import pytest
 
 from onyx.connectors.discord.connector import DiscordConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import Document, DocumentSource, HierarchyNode
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.DISCORD_CONNECTOR_BOT_TOKEN)

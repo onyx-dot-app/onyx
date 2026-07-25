@@ -2,12 +2,10 @@
 
 from typing import Optional
 
-from fastmcp.server.auth.auth import AccessToken
-from fastmcp.server.auth.auth import TokenVerifier
+from fastmcp.server.auth.auth import AccessToken, TokenVerifier
 
 from onyx.mcp_server.utils import get_http_client
-from onyx.server.metrics.mcp_server import MCPAuthResult
-from onyx.server.metrics.mcp_server import record_mcp_auth_result
+from onyx.server.metrics.mcp_server import MCPAuthResult, record_mcp_auth_result
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import build_api_server_url_for_http_requests
 

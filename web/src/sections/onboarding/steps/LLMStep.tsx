@@ -148,7 +148,7 @@ const LLMStep = memo(
               }
             />
             <Divider />
-            <div className="@container/llmcards flex flex-wrap gap-1 w-full max-h-[40vh] overflow-y-auto [&>*:last-child:nth-child(odd)]:basis-full">
+            <div className="@container/llmcards flex flex-wrap gap-1 w-full [&>*:last-child:nth-child(odd)]:basis-full">
               {isLoading ? (
                 Array.from({ length: 8 }).map((_, idx) => (
                   <div

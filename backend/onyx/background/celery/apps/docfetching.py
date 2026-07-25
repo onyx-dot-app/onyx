@@ -1,15 +1,14 @@
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from celery import Celery
-from celery import signals
-from celery import Task
+from celery import Celery, Task, signals
 from celery.apps.worker import Worker
-from celery.signals import celeryd_init
-from celery.signals import worker_init
-from celery.signals import worker_ready
-from celery.signals import worker_shutdown
-from celery.signals import worker_shutting_down
+from celery.signals import (
+    celeryd_init,
+    worker_init,
+    worker_ready,
+    worker_shutdown,
+    worker_shutting_down,
+)
 
 import onyx.background.celery.apps.app_base as app_base
 from onyx.background.celery.tasks.docfetching.worker_shutdown import (
@@ -17,13 +16,17 @@ from onyx.background.celery.tasks.docfetching.worker_shutdown import (
 )
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_DOCFETCHING_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
-from onyx.server.metrics.celery_task_metrics import on_celery_task_prerun
-from onyx.server.metrics.celery_task_metrics import on_celery_task_rejected
-from onyx.server.metrics.celery_task_metrics import on_celery_task_retry
-from onyx.server.metrics.celery_task_metrics import on_celery_task_revoked
-from onyx.server.metrics.indexing_task_metrics import on_indexing_task_postrun
-from onyx.server.metrics.indexing_task_metrics import on_indexing_task_prerun
+from onyx.server.metrics.celery_task_metrics import (
+    on_celery_task_postrun,
+    on_celery_task_prerun,
+    on_celery_task_rejected,
+    on_celery_task_retry,
+    on_celery_task_revoked,
+)
+from onyx.server.metrics.indexing_task_metrics import (
+    on_indexing_task_postrun,
+    on_indexing_task_prerun,
+)
 from onyx.server.metrics.metrics_server import start_metrics_server
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT

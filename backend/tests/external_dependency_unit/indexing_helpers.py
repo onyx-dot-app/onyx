@@ -14,26 +14,22 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
-from onyx.connectors.models import Document
-from onyx.connectors.models import InputType
-from onyx.connectors.models import TextSection
+from onyx.configs.constants import DocumentSource, FileOrigin
+from onyx.connectors.models import Document, InputType, TextSection
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexModelStatus
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, IndexModelStatus
 from onyx.db.file_record import get_filerecord_by_file_id_optional
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    DocumentByConnectorCredentialPair,
+    FileRecord,
+    IndexAttempt,
+    SearchSettings,
+)
 from onyx.db.models import Document as DBDocument
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import FileRecord
-from onyx.db.models import IndexAttempt
-from onyx.db.models import SearchSettings
-from onyx.db.search_settings import create_search_settings
-from onyx.db.search_settings import get_current_search_settings
+from onyx.db.search_settings import create_search_settings, get_current_search_settings
 from onyx.file_store.file_store import get_default_file_store
 from onyx.kg.models import KGStage
 

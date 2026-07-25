@@ -15,8 +15,10 @@ replaces the dead bus on the next access. These tests pin both halves.
 
 from __future__ import annotations
 
-from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
-from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
+from onyx.server.features.build.sandbox.opencode.event_bus import (
+    BUS_CLOSED_SENTINEL,
+    PodEventBus,
+)
 
 
 def test_closed_property_starts_false() -> None:

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import {
   Button,
@@ -10,16 +10,21 @@ import {
   Popover,
   Text,
 } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
+import {
+  ConfirmationModalLayout,
+  IllustrationContent,
+  SettingsLayouts,
+  toast,
+} from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
+  SvgAlertTriangle,
   SvgBlocks,
   SvgEdit,
   SvgPlus,
   SvgSimpleLoader,
   SvgUploadCloud,
 } from "@opal/icons";
-import { SettingsLayouts, toast } from "@opal/layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -30,8 +35,9 @@ import SkillCard, {
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
+import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { setSkillEnabled } from "@/lib/skills/api";
+import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -39,6 +45,11 @@ import { setSkillEnabled } from "@/lib/skills/api";
 
 export default function SkillsPage() {
   const router = useRouter();
+  const externalAppIdParam = useSearchParams().get("externalAppId");
+  const focusedExternalAppId =
+    externalAppIdParam !== null && /^\d+$/.test(externalAppIdParam)
+      ? Number(externalAppIdParam)
+      : null;
   const { data, error, isLoading, refresh } = useUserSkills();
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -52,6 +63,8 @@ export default function SkillsPage() {
   const [optimisticEnabledById, setOptimisticEnabledById] = useState<
     Map<string, boolean>
   >(new Map());
+  const [pendingSwitchTarget, setPendingSwitchTarget] =
+    useState<SkillCardItem | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useOnMount(() => {
@@ -62,23 +75,86 @@ export default function SkillsPage() {
     router.push(`/craft/v1/skills/edit/${item.id}` as Route);
   }
 
-  async function handleEnabledChange(item: SkillCardItem, enabled: boolean) {
-    setPendingSkillIds((current) => new Set(current).add(item.id));
-    setOptimisticEnabledById((current) =>
-      new Map(current).set(item.id, enabled)
-    );
+  async function updateSkillEnabled(
+    item: SkillCardItem,
+    enabled: boolean,
+    replaceConflict = false
+  ) {
+    if (
+      enabled &&
+      !replaceConflict &&
+      items.some(
+        (candidate) =>
+          candidate.id !== item.id &&
+          candidate.name === item.name &&
+          candidate.enabled
+      )
+    ) {
+      setPendingSwitchTarget(item);
+      return;
+    }
+
+    const affectedItems =
+      enabled && replaceConflict
+        ? items.filter(
+            (candidate) =>
+              candidate.id === item.id ||
+              (candidate.name === item.name && candidate.enabled)
+          )
+        : [item];
+    const affectedIds = new Set(affectedItems.map(({ id }) => id));
+    setPendingSkillIds((current) => {
+      const next = new Set(current);
+      affectedIds.forEach((id) => next.add(id));
+      return next;
+    });
+    setOptimisticEnabledById((current) => {
+      const next = new Map(current);
+      if (enabled) {
+        affectedItems.forEach((candidate) =>
+          next.set(candidate.id, candidate.id === item.id)
+        );
+      } else {
+        next.set(item.id, false);
+      }
+      return next;
+    });
     try {
-      const updatedSkill = await setSkillEnabled(item.id, enabled);
+      const updatedSkill = await setSkillEnabled(
+        item.id,
+        enabled,
+        replaceConflict
+      );
+      if (replaceConflict) setPendingSwitchTarget(null);
       await refresh(
         (current) => {
           if (!current) return current;
-          const key =
-            updatedSkill.source === "builtin" ? "builtins" : "customs";
           return {
             ...current,
-            [key]: current[key].map((skill) =>
-              skill.id === updatedSkill.id ? updatedSkill : skill
-            ),
+            builtins: current.builtins.map((skill) => {
+              if (
+                updatedSkill.source === "builtin" &&
+                skill.id === updatedSkill.id
+              ) {
+                return updatedSkill;
+              }
+              if (enabled && skill.name === updatedSkill.name) {
+                return { ...skill, enabled: false };
+              }
+              return skill;
+            }),
+            customs: current.customs.map((skill) => {
+              if (
+                updatedSkill.source === "custom" &&
+                skill.id === updatedSkill.id
+              ) {
+                return updatedSkill;
+              }
+              if (enabled && skill.name === updatedSkill.name) {
+                return { ...skill, enabled: false };
+              }
+              return skill;
+            }),
           };
         },
         { revalidate: false }
@@ -89,6 +165,10 @@ export default function SkillsPage() {
         );
       });
     } catch (error) {
+      if (enabled && !replaceConflict && isSkillNameConflict(error)) {
+        setPendingSwitchTarget(item);
+        return;
+      }
       toast.error(
         error instanceof Error
           ? error.message
@@ -97,12 +177,12 @@ export default function SkillsPage() {
     } finally {
       setOptimisticEnabledById((current) => {
         const next = new Map(current);
-        next.delete(item.id);
+        affectedIds.forEach((id) => next.delete(id));
         return next;
       });
       setPendingSkillIds((current) => {
         const next = new Set(current);
-        next.delete(item.id);
+        affectedIds.forEach((id) => next.delete(id));
         return next;
       });
     }
@@ -154,15 +234,45 @@ export default function SkillsPage() {
     );
   }, [data, optimisticEnabledById]);
 
+  const focusedAppName = useMemo(() => {
+    if (focusedExternalAppId === null) return null;
+    for (const item of items) {
+      if (
+        item.source === "custom" &&
+        item.skill.external_app?.external_app_id === focusedExternalAppId
+      ) {
+        return item.skill.external_app.name;
+      }
+    }
+    return null;
+  }, [focusedExternalAppId, items]);
+
+  const enabledItemByName = useMemo(
+    () =>
+      new Map(
+        items
+          .filter((item) => item.enabled)
+          .map((item) => [item.name, item] as const)
+      ),
+    [items]
+  );
+
   const visibleItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return items;
     return items.filter(
       (item) =>
-        item.name.toLowerCase().includes(q) ||
-        item.description.toLowerCase().includes(q)
+        (focusedAppName === null ||
+          (item.source === "custom" &&
+            item.skill.external_app?.external_app_id ===
+              focusedExternalAppId)) &&
+        (!q ||
+          item.name.toLowerCase().includes(q) ||
+          item.description.toLowerCase().includes(q))
     );
-  }, [items, searchQuery]);
+  }, [focusedAppName, focusedExternalAppId, items, searchQuery]);
+
+  const switchPending =
+    pendingSwitchTarget !== null && pendingSkillIds.has(pendingSwitchTarget.id);
   const previewUnavailableReason =
     previewTarget?.source === "builtin" && !previewTarget.is_available
       ? (previewTarget.unavailable_reason ??
@@ -219,6 +329,19 @@ export default function SkillsPage() {
       </SettingsLayouts.Header>
 
       <SettingsLayouts.Body>
+        {focusedAppName && (
+          <MessageCard
+            variant="info"
+            title={`Skills for app “${focusedAppName}”`}
+            description={`Enable every skill associated with app “${focusedAppName}”. The app may not work correctly without them. If another skill with the same name is enabled, enabling the app-associated skill disables the other skill for you.`}
+            rightChildren={
+              <Button prominence="secondary" href="/craft/v1/skills">
+                Show all skills
+              </Button>
+            }
+          />
+        )}
+
         {isLoading && <SvgSimpleLoader />}
 
         {error && !isLoading && (
@@ -256,9 +379,14 @@ export default function SkillsPage() {
                       <SkillCard
                         key={item.id}
                         item={item}
+                        hasEnabledNameConflict={
+                          !item.enabled && enabledItemByName.has(item.name)
+                        }
                         onEdit={handleEdit}
                         onClick={setPreviewTarget}
-                        onEnabledChange={handleEnabledChange}
+                        onEnabledChange={(skill, enabled) =>
+                          void updateSkillEnabled(skill, enabled)
+                        }
                         enablementPending={pendingSkillIds.has(item.id)}
                       />
                     ))}
@@ -277,9 +405,10 @@ export default function SkillsPage() {
       <CreateSkillModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(created) => {
-          refresh();
-          router.push(`/craft/v1/skills/edit/${created.id}` as Route);
+        onContinue={(draft) => {
+          const draftId = stageSkillCreationDraft(draft);
+          setCreateOpen(false);
+          router.push(`/craft/v1/skills/new?draft=${draftId}` as Route);
         }}
       />
 
@@ -290,6 +419,31 @@ export default function SkillsPage() {
         unavailableReason={previewUnavailableReason}
         onClose={() => setPreviewTarget(null)}
       />
+
+      {pendingSwitchTarget && (
+        <ConfirmationModalLayout
+          icon={SvgAlertTriangle}
+          title={`Switch “${pendingSwitchTarget.name}” skill?`}
+          description={`Only one skill named “${pendingSwitchTarget.name}” can be enabled at a time.`}
+          onClose={
+            switchPending ? undefined : () => setPendingSwitchTarget(null)
+          }
+          submit={
+            <Button
+              disabled={switchPending}
+              onClick={() => {
+                const target = pendingSwitchTarget;
+                void updateSkillEnabled(target, true, true);
+              }}
+            >
+              {switchPending ? "Switching..." : "Switch skill"}
+            </Button>
+          }
+        >
+          Continuing will disable the currently enabled skill and enable this
+          one.
+        </ConfirmationModalLayout>
+      )}
     </SettingsLayouts.Root>
   );
 }

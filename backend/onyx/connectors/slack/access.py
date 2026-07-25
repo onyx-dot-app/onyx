@@ -6,8 +6,10 @@ from slack_sdk import WebClient
 from onyx.access.models import ExternalAccess
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.slack.models import ChannelType
-from onyx.utils.variable_functionality import fetch_versioned_implementation
-from onyx.utils.variable_functionality import global_version
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation,
+    global_version,
+)
 
 
 def get_channel_access(

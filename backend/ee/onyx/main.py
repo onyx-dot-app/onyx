@@ -17,6 +17,7 @@ from ee.onyx.server.enterprise_settings.api import (
 from ee.onyx.server.evals.api import router as evals_router
 from ee.onyx.server.features.hooks.api import router as hook_router
 from ee.onyx.server.license.api import router as license_router
+from ee.onyx.server.log_export.api import router as log_export_router
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
 from ee.onyx.server.middleware.license_enforcement import (
     add_license_enforcement_middleware,
@@ -30,8 +31,7 @@ from ee.onyx.server.query_and_chat.query_backend import basic_router as ee_query
 from ee.onyx.server.query_and_chat.search_backend import router as search_router
 from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
-from ee.onyx.server.scim.api import register_scim_exception_handlers
-from ee.onyx.server.scim.api import scim_router
+from ee.onyx.server.scim.api import register_scim_exception_handlers, scim_router
 from ee.onyx.server.seeding import seed_db
 from ee.onyx.server.tenants.api import router as tenants_router
 from ee.onyx.server.token_rate_limits.api import (
@@ -39,19 +39,22 @@ from ee.onyx.server.token_rate_limits.api import (
 )
 from ee.onyx.server.user_group.api import router as user_group_router
 from ee.onyx.utils.encryption import test_encryption
-from onyx.auth.users import auth_backend
-from onyx.auth.users import create_onyx_oauth_router
-from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
-from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
-from onyx.configs.app_configs import OAUTH_CLIENT_ID
-from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
-from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.auth.users import auth_backend, create_onyx_oauth_router
+from onyx.configs.app_configs import (
+    GOOGLE_LOGIN_BASE_SCOPES,
+    GOOGLE_OAUTH_SCOPE_OVERRIDE,
+    OAUTH_CLIENT_ID,
+    OAUTH_CLIENT_SECRET,
+    USER_AUTH_SECRET,
+    WEB_DOMAIN,
+)
 from onyx.main import get_application as get_application_base
-from onyx.main import include_auth_router_with_prefix
-from onyx.main import include_router_with_global_prefix_prepended
+from onyx.main import (
+    include_auth_router_with_prefix,
+    include_router_with_global_prefix_prepended,
+    use_route_function_names_as_operation_ids,
+)
 from onyx.main import lifespan as lifespan_base
-from onyx.main import use_route_function_names_as_operation_ids
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
@@ -150,6 +153,8 @@ def get_application() -> FastAPI:
     )
     include_router_with_global_prefix_prepended(application, enterprise_settings_router)
     include_router_with_global_prefix_prepended(application, usage_export_router)
+    # Admin log export
+    include_router_with_global_prefix_prepended(application, log_export_router)
     # License management
     include_router_with_global_prefix_prepended(application, license_router)
 

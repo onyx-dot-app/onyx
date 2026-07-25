@@ -22,10 +22,12 @@ import aiohttp
 
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
-from onyx.voice.interface import StreamingSynthesizerProtocol
-from onyx.voice.interface import StreamingTranscriberProtocol
-from onyx.voice.interface import TranscriptResult
-from onyx.voice.interface import VoiceProviderInterface
+from onyx.voice.interface import (
+    StreamingSynthesizerProtocol,
+    StreamingTranscriberProtocol,
+    TranscriptResult,
+    VoiceProviderInterface,
+)
 
 # Default ElevenLabs API base URL
 DEFAULT_ELEVENLABS_API_BASE = "https://api.elevenlabs.io"

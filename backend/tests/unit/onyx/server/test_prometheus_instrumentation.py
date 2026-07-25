@@ -2,13 +2,11 @@
 
 import threading
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from prometheus_client import CollectorRegistry
-from prometheus_client import Gauge
+from prometheus_client import CollectorRegistry, Gauge
 
 from onyx.server.metrics.per_tenant import per_tenant_request_callback
 from onyx.server.metrics.prometheus_setup import setup_prometheus_metrics

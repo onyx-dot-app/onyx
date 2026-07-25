@@ -32,7 +32,7 @@ function CreateGroupPage() {
   const [selectedDocSetIds, setSelectedDocSetIds] = useState<number[]>([]);
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
   const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
-    { tokenBudget: null, periodHours: null },
+    { tokenBudget: null, periodDays: null },
   ]);
 
   const { rows: allRows, isLoading, error } = useGroupMemberCandidates();

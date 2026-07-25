@@ -4,13 +4,13 @@ import { FormField } from "@/refresh-components/form/FormField";
 import {
   Button,
   Divider,
+  InputTextArea,
   InputTypeIn,
   Switch,
   Tabs,
   Tag,
 } from "@opal/components";
 import Preview from "@/app/ee/admin/theme/Preview";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import InputImage from "@/refresh-components/inputs/InputImage";
 import { Disabled } from "@opal/core";

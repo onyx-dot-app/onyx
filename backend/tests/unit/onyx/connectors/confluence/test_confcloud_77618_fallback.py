@@ -19,9 +19,11 @@ from onyx.connectors.confluence.access import (
     get_page_restrictions_with_per_ancestor_fetch as get_page_restrictions_with_per_ancestor_fetch_shim,
 )
 from onyx.connectors.confluence.connector import ConfluenceConnector
-from onyx.connectors.confluence.onyx_confluence import _is_confcloud_77618_response
-from onyx.connectors.confluence.onyx_confluence import Confcloud77618Error
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.onyx_confluence import (
+    Confcloud77618Error,
+    OnyxConfluence,
+    _is_confcloud_77618_response,
+)
 from onyx.connectors.interfaces import CredentialsProviderInterface
 
 _CONFCLOUD_77618_BODY = (

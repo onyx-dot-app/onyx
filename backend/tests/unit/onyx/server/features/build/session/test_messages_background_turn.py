@@ -3,13 +3,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.session import messages as messages_api
 from onyx.server.features.build.session.models import MessageRequest
@@ -55,7 +55,7 @@ def _patch_skill_state(
     stale: bool = False,
 ) -> None:
     monkeypatch.setattr(messages_api, "get_sandbox_by_user_id", lambda *_: object())
-    monkeypatch.setattr(messages_api, "skills_are_stale", lambda *_: stale)
+    monkeypatch.setattr(messages_api, "session_runtime_stale", lambda *_: stale)
 
 
 def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -83,6 +83,7 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(
         messages_api,
         "create_message",
@@ -99,7 +100,7 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
         request=MessageRequest(
             content="hello",
             client_request_id="req-1",
-            provider="openai",
+            provider_id=17,
             model="gpt-5-mini",
         ),
         user=cast(User, SimpleNamespace(id=user_id)),
@@ -110,11 +111,78 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
     assert response.status == "QUEUED"
     assert response.turn_index == 2
     assert persisted == [(2, "hello")]
-    assert session.agent_provider == "openai"
-    assert session.agent_model == "gpt-5-mini"
+    assert session.agent_provider == "onyx"
+    assert session.agent_model == "17/gpt-5-mini"
     assert db_session.commits == 1
     start_runner.assert_called_once()
     assert str(start_runner.call_args.args[0]) == response.turn_id
+
+
+def test_send_message_preserves_legacy_provider_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+    db_session = _FakeDbSession(user_message_count=0)
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
+    monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
+    monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
+
+    messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(
+            content="hello",
+            client_request_id="req-legacy",
+            provider="anthropic",
+            model="claude-fable-5",
+        ),
+        user=cast(User, SimpleNamespace(id=user_id)),
+        db_session=cast(Session, db_session),
+    )
+
+    assert session.agent_provider == "anthropic"
+    assert session.agent_model == "claude-fable-5"
+
+
+def test_send_message_prefers_provider_id_over_legacy_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+    db_session = _FakeDbSession(user_message_count=0)
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
+    monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
+    monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
+
+    messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(
+            content="hello",
+            client_request_id="req-new",
+            provider="anthropic",
+            provider_id=17,
+            model="claude-fable-5",
+        ),
+        user=cast(User, SimpleNamespace(id=user_id)),
+        db_session=cast(Session, db_session),
+    )
+
+    assert session.agent_provider == "onyx"
+    assert session.agent_model == "17/claude-fable-5"
 
 
 def test_send_message_rejects_second_active_turn(
@@ -132,6 +200,7 @@ def test_send_message_rejects_second_active_turn(
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
     monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
 
@@ -166,6 +235,7 @@ def test_send_message_reloads_stale_skills(
     monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
     monkeypatch.setattr(messages_api, "SessionManager", lambda _: session_manager)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
     monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
     user = cast(User, SimpleNamespace(id=user_id))
@@ -207,6 +277,7 @@ def test_send_message_is_idempotent_for_same_client_request(
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", rate_limit_check)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(
         messages_api,
         "create_message",
@@ -255,6 +326,7 @@ def test_send_message_leaves_turn_active_if_runner_cannot_start(
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
     monkeypatch.setattr(
         messages_api,
@@ -277,3 +349,39 @@ def test_send_message_leaves_turn_active_if_runner_cannot_start(
     assert response.status == "QUEUED"
     assert active is not None
     assert active.turn_id == UUID(response.turn_id)
+
+
+def test_send_message_blocked_when_over_token_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A user over their token/cost budget can't start a Craft turn: the gate
+    raises a structured 429 before any turn is created or scheduled."""
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+    start_runner = MagicMock()
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
+    monkeypatch.setattr(messages_api, "get_build_session", lambda *_, **__: session)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
+    monkeypatch.setattr(messages_api, "start_interactive_turn_runner", start_runner)
+
+    def _over_budget(_user: object) -> None:
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, "You've reached the usage budget.")
+
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", _over_budget)
+
+    with pytest.raises(OnyxError) as ei:
+        messages_api.send_message(
+            session_id=session_id,
+            request=MessageRequest(content="hello", client_request_id="req-1"),
+            user=cast(User, SimpleNamespace(id=user_id)),
+            db_session=cast(Session, _FakeDbSession(user_message_count=0)),
+        )
+
+    assert ei.value.error_code is OnyxErrorCode.RATE_LIMITED
+    start_runner.assert_not_called()  # no turn scheduled when over budget

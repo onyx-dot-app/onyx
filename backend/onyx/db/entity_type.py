@@ -5,8 +5,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.document import DocumentSource
-from onyx.db.models import Connector
-from onyx.db.models import KGEntityType
+from onyx.db.models import Connector, KGEntityType
 from onyx.kg.models import KGAttributeEntityOption
 from onyx.server.kg.models import EntityType
 

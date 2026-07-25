@@ -1,6 +1,6 @@
 # Onyx File Store
 
-The Onyx file store provides a unified interface for storing files and large binary objects. It supports three storage backends: S3-compatible storage (AWS S3, MinIO, Digital Ocean Spaces, etc.), Google Cloud Storage (GCS), and PostgreSQL Large Objects.
+The Onyx file store provides a unified interface for storing files and large binary objects. It supports four storage backends: S3-compatible storage (AWS S3, MinIO, Digital Ocean Spaces, etc.), Google Cloud Storage (GCS), Azure Blob Storage, and PostgreSQL Large Objects.
 
 ## Architecture
 
@@ -28,6 +28,7 @@ The backend is selected via the `FILE_STORE_BACKEND` environment variable:
 |---|---|---|
 | `s3` (default) | S3-compatible | AWS S3, MinIO, Digital Ocean Spaces, etc. |
 | `gcs` | Google Cloud Storage | Native GCS with ADC/Workload Identity support |
+| `azure` | Azure Blob Storage | Native Azure with Workload Identity / managed identity support |
 | `postgres` | PostgreSQL Large Objects | No external storage service required |
 
 ## Configuration
@@ -105,6 +106,39 @@ At the project level (only if `initialize()` should auto-create the bucket):
 
 The predefined role `roles/storage.objectAdmin` (granted on the bucket) covers all object operations. For initial bucket creation, `roles/storage.admin` at the project level is needed.
 
+### Azure Blob Storage
+
+```bash
+FILE_STORE_BACKEND=azure
+AZURE_FILE_STORE_CONTAINER_NAME=your-container-name  # Required
+AZURE_FILE_STORE_PREFIX=onyx-files                   # Optional, defaults to 'onyx-files'
+AZURE_STORAGE_ACCOUNT_NAME=yourstorageaccount        # Required unless using a connection string
+# Optional endpoint override — derived from the account name when unset.
+# Set explicitly for Azurite or sovereign clouds (e.g. *.blob.core.usgovcloudapi.net):
+AZURE_STORAGE_ACCOUNT_URL=https://yourstorageaccount.blob.core.windows.net
+
+# Authentication (use one of these methods, in priority order):
+
+# 1. Connection string
+AZURE_STORAGE_CONNECTION_STRING='DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net'
+
+# 2. Account key (requires AZURE_STORAGE_ACCOUNT_NAME)
+AZURE_STORAGE_ACCOUNT_KEY=your-account-key
+
+# 3. DefaultAzureCredential (recommended for AKS)
+#    No additional configuration needed. Credentials are resolved automatically
+#    from the environment: AKS Workload Identity, managed identity, environment
+#    credentials (AZURE_CLIENT_ID/AZURE_TENANT_ID/etc.), or local `az login`.
+```
+
+**Required RBAC role:** `Storage Blob Data Contributor` on the storage account (or container)
+covers all object operations. For `initialize()` to auto-create the container, the identity
+also needs container-create rights, which the account-scoped role includes.
+
+**Local development:** [Azurite](https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azurite)
+(`mcr.microsoft.com/azure-storage/azurite`) emulates Azure Blob Storage, playing the role MinIO
+plays for S3. Use its well-known development connection string.
+
 ### Other S3-Compatible Services
 
 The file store works with any S3-compatible service. Simply configure:
@@ -122,10 +156,11 @@ FILE_STORE_BACKEND=postgres
 
 ## Implementation
 
-The system provides three implementations of the abstract `FileStore` interface:
+The system provides four implementations of the abstract `FileStore` interface:
 
 - `S3BackedFileStore` (`file_store.py`): For S3-compatible storage (AWS S3, MinIO, etc.)
 - `GCSBackedFileStore` (`gcs_file_store.py`): For Google Cloud Storage with native ADC support
+- `AzureBlobBackedFileStore` (`azure_blob_file_store.py`): For Azure Blob Storage with DefaultAzureCredential support
 - `PostgresBackedFileStore` (`postgres_file_store.py`): For PostgreSQL Large Objects
 
 The factory function `get_default_file_store()` returns the appropriate implementation based on `FILE_STORE_BACKEND`. The database uses generic column names (`bucket_name`, `object_key`) to maintain compatibility across all backends.

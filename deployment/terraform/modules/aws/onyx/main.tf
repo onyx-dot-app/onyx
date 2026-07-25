@@ -13,6 +13,114 @@ locals {
   private_subnets = var.create_vpc ? module.vpc[0].private_subnets : var.private_subnets
   public_subnets  = var.create_vpc ? module.vpc[0].public_subnets : var.public_subnets
   vpc_cidr_block  = var.create_vpc ? module.vpc[0].vpc_cidr_block : var.vpc_cidr_block
+
+  # T-shirt size defaults. Calibrated against the Onyx-managed production
+  # fleet (Jul 2026): memory, not CPU, is the binding dimension on the EKS
+  # side; the burstable db.t4g.large sustains fleet load until ~1k users but
+  # peaks past 70% CPU on the largest deployments, and every production
+  # OpenSearch domain runs 1 data node + 3 m7g.medium masters. Each value can
+  # be overridden individually via the matching variable.
+  size_defaults = {
+    small = {
+      # Sized against chart >= 0.8.0 (see the chart's SIZING.md small
+      # snippets): the full stack fits one m7i.2xlarge with an external data
+      # plane; with plain chart defaults the autoscaler settles at two nodes.
+      main_node_instance_types                 = ["m7i.2xlarge"]
+      main_node_min_size                       = 1
+      main_node_max_size                       = 3
+      vespa_node_enabled                       = false
+      vespa_node_instance_types                = ["m6i.xlarge"]
+      vespa_node_disk_size_gb                  = 100
+      postgres_instance_type                   = "db.t4g.large"
+      postgres_storage_gb                      = 64
+      postgres_max_storage_gb                  = 256
+      redis_instance_type                      = "cache.m6g.large"
+      opensearch_instance_type                 = "r7g.large.search"
+      opensearch_instance_count                = 1
+      opensearch_dedicated_master_type         = "m7g.medium.search"
+      opensearch_multi_az_with_standby_enabled = false
+      opensearch_zone_awareness_enabled        = false
+      opensearch_ebs_volume_size               = 256
+      opensearch_ebs_iops                      = 3000
+      opensearch_ebs_throughput                = 256
+    }
+    medium = {
+      main_node_instance_types                 = ["m7i.4xlarge"]
+      vespa_node_enabled                       = true
+      main_node_min_size                       = 1
+      main_node_max_size                       = 5
+      vespa_node_instance_types                = ["m6i.2xlarge"]
+      vespa_node_disk_size_gb                  = 100
+      postgres_instance_type                   = "db.t4g.large"
+      postgres_storage_gb                      = 128
+      postgres_max_storage_gb                  = 512
+      redis_instance_type                      = "cache.m6g.xlarge"
+      opensearch_instance_type                 = "r8g.xlarge.search"
+      opensearch_instance_count                = 1
+      opensearch_dedicated_master_type         = "m7g.medium.search"
+      opensearch_multi_az_with_standby_enabled = false
+      opensearch_zone_awareness_enabled        = false
+      opensearch_ebs_volume_size               = 512
+      opensearch_ebs_iops                      = 3000
+      opensearch_ebs_throughput                = 256
+    }
+    large = {
+      main_node_instance_types                 = ["m7i.4xlarge"]
+      vespa_node_enabled                       = true
+      main_node_min_size                       = 2
+      main_node_max_size                       = 8
+      vespa_node_instance_types                = ["r6i.4xlarge"]
+      vespa_node_disk_size_gb                  = 512
+      postgres_instance_type                   = "db.m7g.xlarge"
+      postgres_storage_gb                      = 256
+      postgres_max_storage_gb                  = 1024
+      redis_instance_type                      = "cache.m6g.2xlarge"
+      opensearch_instance_type                 = "r8g.2xlarge.search"
+      opensearch_instance_count                = 1
+      opensearch_dedicated_master_type         = "m7g.medium.search"
+      opensearch_multi_az_with_standby_enabled = false
+      opensearch_zone_awareness_enabled        = false
+      opensearch_ebs_volume_size               = 1024
+      opensearch_ebs_iops                      = 12000
+      opensearch_ebs_throughput                = 1024
+    }
+  }
+  sizing = local.size_defaults[var.size]
+
+  # Explicit per-setting overrides win over the tier defaults.
+  main_node_instance_types  = var.main_node_instance_types != null ? var.main_node_instance_types : local.sizing.main_node_instance_types
+  main_node_min_size        = coalesce(var.main_node_min_size, local.sizing.main_node_min_size)
+  main_node_max_size        = coalesce(var.main_node_max_size, local.sizing.main_node_max_size)
+  vespa_node_enabled        = coalesce(var.vespa_node_enabled, local.sizing.vespa_node_enabled)
+  vespa_node_instance_types = var.vespa_node_instance_types != null ? var.vespa_node_instance_types : local.sizing.vespa_node_instance_types
+  vespa_node_disk_size_gb   = coalesce(var.vespa_node_disk_size_gb, local.sizing.vespa_node_disk_size_gb)
+  postgres_instance_type    = coalesce(var.postgres_instance_type, local.sizing.postgres_instance_type)
+  postgres_storage_gb       = coalesce(var.postgres_storage_gb, local.sizing.postgres_storage_gb)
+  # Keep the autoscaling ceiling above the initial size even when
+  # postgres_storage_gb alone is overridden past the tier ceiling.
+  postgres_max_storage_gb = coalesce(
+    var.postgres_max_storage_gb,
+    max(local.sizing.postgres_max_storage_gb, 2 * local.postgres_storage_gb),
+  )
+  redis_instance_type = coalesce(var.redis_instance_type, local.sizing.redis_instance_type)
+
+  opensearch_instance_type                 = coalesce(var.opensearch_instance_type, local.sizing.opensearch_instance_type)
+  opensearch_instance_count                = coalesce(var.opensearch_instance_count, local.sizing.opensearch_instance_count)
+  opensearch_dedicated_master_type         = coalesce(var.opensearch_dedicated_master_type, local.sizing.opensearch_dedicated_master_type)
+  opensearch_multi_az_with_standby_enabled = coalesce(var.opensearch_multi_az_with_standby_enabled, local.sizing.opensearch_multi_az_with_standby_enabled)
+  opensearch_zone_awareness_enabled        = coalesce(var.opensearch_zone_awareness_enabled, local.sizing.opensearch_zone_awareness_enabled)
+  opensearch_ebs_volume_size               = coalesce(var.opensearch_ebs_volume_size, local.sizing.opensearch_ebs_volume_size)
+  opensearch_ebs_iops                      = coalesce(var.opensearch_ebs_iops, local.sizing.opensearch_ebs_iops)
+  opensearch_ebs_throughput                = coalesce(var.opensearch_ebs_throughput, local.sizing.opensearch_ebs_throughput)
+
+  # A domain's subnet count must match its AZ spread: 1 subnet without zone
+  # awareness (single-data-node tiers), 3 with it. Changing the subnet set on
+  # an existing domain REPLACES it (vpc_options is ForceNew in the provider) —
+  # see the README migration note before toggling zone awareness or size tiers
+  # on a live domain.
+  opensearch_subnet_ids = length(var.opensearch_subnet_ids) > 0 ? var.opensearch_subnet_ids : (
+    local.opensearch_zone_awareness_enabled ? slice(local.private_subnets, 0, 3) : slice(local.private_subnets, 0, 1)
+  )
 }
 
 provider "aws" {
@@ -35,7 +143,7 @@ module "redis" {
   name          = local.redis_name
   vpc_id        = local.vpc_id
   subnet_ids    = local.private_subnets
-  instance_type = "cache.m6g.xlarge"
+  instance_type = local.redis_instance_type
   ingress_cidrs = [local.vpc_cidr_block]
   tags          = local.merged_tags
 
@@ -49,6 +157,10 @@ module "postgres" {
   vpc_id        = local.vpc_id
   subnet_ids    = local.private_subnets
   ingress_cidrs = [local.vpc_cidr_block]
+
+  instance_type  = local.postgres_instance_type
+  storage_gb     = local.postgres_storage_gb
+  max_storage_gb = local.postgres_max_storage_gb
 
   username            = var.postgres_username
   password            = var.postgres_password
@@ -73,6 +185,13 @@ module "eks" {
   subnet_ids      = concat(local.private_subnets, local.public_subnets)
   tags            = local.merged_tags
   s3_bucket_names = [local.bucket_name]
+
+  main_node_instance_types  = local.main_node_instance_types
+  main_node_min_size        = local.main_node_min_size
+  main_node_max_size        = local.main_node_max_size
+  vespa_node_enabled        = local.vespa_node_enabled
+  vespa_node_instance_types = local.vespa_node_instance_types
+  vespa_node_disk_size_gb   = local.vespa_node_disk_size_gb
 
   irsa_additional_service_account_names = var.irsa_additional_service_account_names
 
@@ -126,7 +245,7 @@ module "opensearch" {
   vpc_id = local.vpc_id
   # Prefer setting subnet_ids explicitly if the state of private_subnets is
   # unclear.
-  subnet_ids    = length(var.opensearch_subnet_ids) > 0 ? var.opensearch_subnet_ids : slice(local.private_subnets, 0, 3)
+  subnet_ids    = local.opensearch_subnet_ids
   ingress_cidrs = [local.vpc_cidr_block]
   tags          = local.merged_tags
 
@@ -135,13 +254,15 @@ module "opensearch" {
 
   # Configuration
   engine_version                = var.opensearch_engine_version
-  instance_type                 = var.opensearch_instance_type
-  instance_count                = var.opensearch_instance_count
+  instance_type                 = local.opensearch_instance_type
+  instance_count                = local.opensearch_instance_count
   dedicated_master_enabled      = var.opensearch_dedicated_master_enabled
-  dedicated_master_type         = var.opensearch_dedicated_master_type
-  multi_az_with_standby_enabled = var.opensearch_multi_az_with_standby_enabled
-  ebs_volume_size               = var.opensearch_ebs_volume_size
-  ebs_throughput                = var.opensearch_ebs_throughput
+  dedicated_master_type         = local.opensearch_dedicated_master_type
+  multi_az_with_standby_enabled = local.opensearch_multi_az_with_standby_enabled
+  zone_awareness_enabled        = local.opensearch_zone_awareness_enabled
+  ebs_volume_size               = local.opensearch_ebs_volume_size
+  ebs_iops                      = local.opensearch_ebs_iops
+  ebs_throughput                = local.opensearch_ebs_throughput
 
   # Authentication
   internal_user_database_enabled = var.opensearch_internal_user_database_enabled

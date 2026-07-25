@@ -1,5 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 
 from ee.onyx.auth.users import current_cloud_superuser
 from onyx.background.celery.apps.client import celery_app as client_app

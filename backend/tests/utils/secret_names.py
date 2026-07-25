@@ -86,6 +86,11 @@ class TestSecret(StrEnum):
     CANVAS_ADMIN_ACCESS_TOKEN = "canvas-admin-access-token"
     CANVAS_TEACHER_ACCESS_TOKEN = "canvas-teacher-access-token"
     CANVAS_STUDENT_ACCESS_TOKEN = "canvas-student-access-token"
+    BOX_CLIENT_ID = "box-client-id"
+    BOX_CLIENT_SECRET = "box-client-secret"
+    BOX_ENTERPRISE_ID = "box-enterprise-id"
+    BOX_USER_EMAIL = "box-user-email"
+    BOX_COLLABORATOR_EMAIL = "box-collaborator-email"
 
     @classmethod
     def aws_prefix(cls) -> str:

@@ -15,6 +15,7 @@ import {
   Card,
   CompactMarkdown,
   Divider,
+  InputTextArea,
   InputTypeIn,
   MessageCard,
   Tag,
@@ -35,30 +36,42 @@ import {
   toast,
 } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   createCustomSkillFromEditor,
   deleteUserSkill,
   inspectSkillBundle,
+  isSkillNameConflict,
   patchUserSkill,
   removeUserSkillFile,
   uploadUserSkillFiles,
 } from "@/lib/skills/api";
 import type { SkillEditableDetail } from "@/lib/skills/types";
 import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
+import {
+  discardSkillCreationDraft,
+  getSkillCreationDraft,
+} from "@/lib/skills/creationDraft";
+import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import SkillNameConflictModal from "@/sections/modals/skills/SkillNameConflictModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
+import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 import SkillFileTree from "@/sections/skills/SkillFileTree";
 import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
 import { ConfirmationModalLayout } from "@opal/layouts";
+import { useUser } from "@/providers/UserProvider";
+import { externalAppAdminUrl } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
 
 interface SkillEditorPageProps {
   skillId?: string;
+  draftId?: string;
+  externalAppId?: number;
+  externalAppName?: string;
 }
 
 function getSharingStatus(skill: SkillEditableDetail): {
@@ -66,6 +79,13 @@ function getSharingStatus(skill: SkillEditableDetail): {
   description: string;
   color: "blue" | "gray" | "purple";
 } {
+  if (skill.external_app) {
+    return {
+      title: "Organization",
+      description: `Organization-wide viewer access is required while this skill is associated with app “${skill.external_app.name}”.`,
+      color: "blue",
+    };
+  }
   if (skill.public_permission !== null) {
     return {
       title: "Organization",
@@ -95,9 +115,21 @@ function getSharingStatus(skill: SkillEditableDetail): {
   };
 }
 
-export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
+export default function SkillEditorPage({
+  skillId,
+  draftId,
+  externalAppId,
+  externalAppName,
+}: SkillEditorPageProps) {
   const isCreating = skillId === undefined;
+  const hasAppContext = externalAppId !== undefined;
+  const isCreatingForApp = isCreating && hasAppContext;
   const router = useRouter();
+  const { isAdmin } = useUser();
+  const creationDraft = useMemo(
+    () => (isCreating && draftId ? getSkillCreationDraft(draftId) : undefined),
+    [draftId, isCreating]
+  );
   const { mutate } = useSWRConfig();
   const {
     data: skill,
@@ -109,9 +141,13 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     errorHandlingFetcher
   );
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [instructionsMarkdown, setInstructionsMarkdown] = useState("");
+  const [name, setName] = useState(creationDraft?.contents.name ?? "");
+  const [description, setDescription] = useState(
+    creationDraft?.contents.description ?? ""
+  );
+  const [instructionsMarkdown, setInstructionsMarkdown] = useState(
+    creationDraft?.contents.instructions_markdown ?? ""
+  );
   const [instructionsDisplayMode, setInstructionsDisplayMode] =
     useState<InstructionsDisplayMode>("raw");
   const [hydratedSkillId, setHydratedSkillId] = useState<string | null>(null);
@@ -121,14 +157,20 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const [isPreparingFiles, setIsPreparingFiles] = useState(false);
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
   const [pendingFilesUpload, setPendingFilesUpload] =
-    useState<PreparedSkillFilesUpload | null>(null);
+    useState<PreparedSkillFilesUpload | null>(creationDraft?.upload ?? null);
   const [filesUploadToConfirm, setFilesUploadToConfirm] =
     useState<PreparedSkillFilesUpload | null>(null);
   const [removingFilePath, setRemovingFilePath] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [conflictingSkillName, setConflictingSkillName] = useState<
+    string | null
+  >(null);
+  const [appConflictingSkillName, setAppConflictingSkillName] = useState<
+    string | null
+  >(null);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
-    setName(nextSkill.slug);
+    setName(nextSkill.name);
     setDescription(nextSkill.description);
     setInstructionsMarkdown(nextSkill.instructions_markdown);
   }, []);
@@ -154,9 +196,15 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     description,
     instructionsMarkdown,
     isCreating,
+    name,
     pendingFilesUpload,
     skill,
   ]);
+
+  const unsavedChanges = useUnsavedChangesGuard({
+    isDirty,
+    onDiscard: draftId ? () => discardSkillCreationDraft(draftId) : undefined,
+  });
 
   const canManageSkill =
     isCreating ||
@@ -180,18 +228,31 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     !!instructionsMarkdown.trim() &&
     !isSaving;
 
-  function navigateBack() {
-    router.push("/craft/v1/skills" as Route);
+  function leaveEditor() {
+    router.push(
+      hasAppContext
+        ? externalAppAdminUrl(externalAppId)
+        : ("/craft/v1/skills" as Route)
+    );
+  }
+
+  function handleCancel() {
+    if (isSaving || isPreparingFiles || isUploadingFiles) return;
+    unsavedChanges.requestLeave(leaveEditor);
   }
 
   async function refreshSkillList() {
     await mutate(SWR_KEYS.userSkills);
   }
 
-  async function handleSave(event?: FormEvent<HTMLFormElement>) {
+  async function handleSave(
+    event?: FormEvent<HTMLFormElement>,
+    createDisabled = false
+  ) {
     event?.preventDefault();
     if (!canSave) return;
     setIsSaving(true);
+    setAppConflictingSkillName(null);
     try {
       if (isCreating) {
         const created = await createCustomSkillFromEditor(
@@ -199,12 +260,36 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
             name,
             description,
             instructions_markdown: instructionsMarkdown,
+            auto_enable: isCreatingForApp ? false : !createDisabled,
+            ...(externalAppId !== undefined
+              ? { external_app_id: externalAppId }
+              : {}),
           },
           pendingFilesUpload?.file
         );
-        await refreshSkillList();
+        setConflictingSkillName(null);
+        if (draftId) discardSkillCreationDraft(draftId);
+        if (isCreatingForApp) {
+          // The app editor reads this cache as soon as we return. Wait for its
+          // association to refresh so the newly created skill is visible.
+          try {
+            await mutate(SWR_KEYS.buildExternalAppsAdmin);
+          } catch (error) {
+            console.error(
+              "Failed to refresh external app after skill creation",
+              error
+            );
+          }
+        }
+        void mutate(SWR_KEYS.userSkills).catch((error: unknown) => {
+          console.error("Failed to refresh skill data after creation", error);
+        });
         toast.success(`Created "${created.name}"`);
-        router.replace(`/craft/v1/skills/edit/${created.id}` as Route);
+        router.replace(
+          isCreatingForApp
+            ? externalAppAdminUrl(externalAppId)
+            : ("/craft/v1/skills" as Route)
+        );
         return;
       }
 
@@ -223,6 +308,19 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
       await refreshSkillList();
       toast.success(`Saved "${updated.name}"`);
     } catch (err) {
+      if (isCreatingForApp && isSkillNameConflict(err)) {
+        setAppConflictingSkillName(name.trim());
+        return;
+      }
+      if (
+        isCreating &&
+        !isCreatingForApp &&
+        !createDisabled &&
+        isSkillNameConflict(err)
+      ) {
+        setConflictingSkillName(name.trim());
+        return;
+      }
       console.error("Failed to save skill", err);
       toast.error(err instanceof Error ? err.message : "Failed to save skill");
     } finally {
@@ -325,11 +423,21 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     setIsDeleting(true);
     try {
       await deleteUserSkill(skill.id);
+      if (hasAppContext) {
+        try {
+          await mutate(SWR_KEYS.buildExternalAppsAdmin);
+        } catch (error) {
+          console.error(
+            "Failed to refresh external app after skill deletion",
+            error
+          );
+        }
+      }
       // The skill is gone — a transient list-refresh failure must not mask
       // the successful delete or block navigation off the dead editor page.
       void refreshSkillList();
       toast.success(`Deleted "${skill.name}"`);
-      router.push("/craft/v1/skills" as Route);
+      leaveEditor();
     } catch (err) {
       console.error("Failed to delete skill", err);
       toast.error(
@@ -342,7 +450,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
   const saveTooltip = isSaving
     ? isCreating
-      ? "Creating skill..."
+      ? "Saving skill..."
       : "Saving changes..."
     : !isCreating && !skill
       ? undefined
@@ -389,7 +497,9 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
           title={isCreating ? "Create skill" : "Edit skill"}
           description={
             isCreating
-              ? "Build a personal skill"
+              ? isCreatingForApp
+                ? `Add an organization skill to app “${externalAppName ?? "External app"}”`
+                : "Build a personal skill"
               : "Update skill details and files"
           }
           rightChildren={
@@ -397,24 +507,19 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
               <Button
                 prominence="secondary"
                 type="button"
-                onClick={navigateBack}
+                disabled={isSaving || isPreparingFiles || isUploadingFiles}
+                onClick={handleCancel}
               >
                 Cancel
               </Button>
               <Tooltip tooltip={saveTooltip} side="bottom">
                 <Button disabled={!canSave} type="submit">
-                  {isSaving
-                    ? isCreating
-                      ? "Creating..."
-                      : "Saving..."
-                    : isCreating
-                      ? "Create"
-                      : "Save"}
+                  {isSaving ? "Saving..." : "Save"}
                 </Button>
               </Tooltip>
             </div>
           }
-          backButton
+          backButton={handleCancel}
           divider
         />
 
@@ -435,7 +540,15 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
           {(isCreating || skill) && !isLoading && !error && (
             <>
-              {isCreating && (
+              {appConflictingSkillName && (
+                <MessageCard
+                  variant="error"
+                  title="Choose a different skill name"
+                  description={`App “${externalAppName ?? "External app"}” already has an associated skill named “${appConflictingSkillName}”.`}
+                />
+              )}
+
+              {isCreating && !creationDraft && (
                 <>
                   <Section gap={0.5} alignItems="stretch" height="auto">
                     <Card border="solid" rounding="lg" padding="sm">
@@ -496,7 +609,10 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                         id="name"
                         name="name"
                         value={name}
-                        onChange={(event) => setName(event.target.value)}
+                        onChange={(event) => {
+                          setName(event.target.value);
+                          setAppConflictingSkillName(null);
+                        }}
                         placeholder="Name your skill"
                         variant={
                           fieldsLocked || !isCreating ? "disabled" : "primary"
@@ -551,7 +667,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                       onChange={(event) =>
                         setInstructionsMarkdown(event.target.value)
                       }
-                      className="border-0"
                       placeholder="Write the skill instructions."
                       variant={fieldsLocked ? "disabled" : "internal"}
                     />
@@ -623,6 +738,39 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                     />
                     <Card border="solid" rounding="lg">
                       <Section>
+                        {skill.external_app && (
+                          <InputHorizontal
+                            title="External app"
+                            description={
+                              skill.external_app.ready
+                                ? `This skill uses app “${skill.external_app.name}”.`
+                                : skill.external_app.enabled
+                                  ? `Connect app “${skill.external_app.name}” from the Apps page to use this skill.`
+                                  : `App “${skill.external_app.name}” is disabled by an administrator.`
+                            }
+                            center
+                          >
+                            <div className="flex items-center gap-2">
+                              <Tag
+                                title={skill.external_app.name}
+                                color={
+                                  skill.external_app.ready ? "blue" : "amber"
+                                }
+                              />
+                              {isAdmin && (
+                                <Button
+                                  type="button"
+                                  prominence="secondary"
+                                  href={externalAppAdminUrl(
+                                    skill.external_app.external_app_id
+                                  )}
+                                >
+                                  Manage in app settings
+                                </Button>
+                              )}
+                            </div>
+                          </InputHorizontal>
+                        )}
                         {sharingStatus && (
                           <InputHorizontal
                             title="Sharing"
@@ -717,6 +865,21 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
             : "This upload must use the same skill name. Continuing will replace the description, instructions, and files with the uploaded bundle."}
         </ConfirmationModalLayout>
       )}
+
+      {conflictingSkillName && (
+        <SkillNameConflictModal
+          skillName={conflictingSkillName}
+          onClose={() => setConflictingSkillName(null)}
+          onConfirm={() => void handleSave(undefined, true)}
+          pending={isSaving}
+        />
+      )}
+
+      <UnsavedChangesModal
+        open={unsavedChanges.confirmationOpen}
+        onCancel={unsavedChanges.cancelLeave}
+        onDiscard={unsavedChanges.discardAndLeave}
+      />
 
       {skill && deleteOpen && (
         <ConfirmEntityModal

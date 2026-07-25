@@ -1,5 +1,4 @@
-from collections.abc import Callable
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -8,29 +7,34 @@ from onyx.db.memory import UserMemoryContext
 from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
-from onyx.prompts.chat_prompts import CITATION_REMINDER
-from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
-from onyx.prompts.chat_prompts import FILE_REMINDER
-from onyx.prompts.chat_prompts import LAST_CYCLE_CITATION_REMINDER
-from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
-from onyx.prompts.prompt_utils import apply_prompt_placeholders
-from onyx.prompts.prompt_utils import get_company_context
-from onyx.prompts.tool_prompts import GENERATE_IMAGE_GUIDANCE
-from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
-from onyx.prompts.tool_prompts import MEMORY_GUIDANCE
-from onyx.prompts.tool_prompts import OPEN_URLS_GUIDANCE
-from onyx.prompts.tool_prompts import PYTHON_TOOL_GUIDANCE
-from onyx.prompts.tool_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
-from onyx.prompts.tool_prompts import TOOL_SECTION_HEADER
-from onyx.prompts.tool_prompts import WEB_SEARCH_GUIDANCE
-from onyx.prompts.tool_prompts import WEB_SEARCH_SITE_DISABLED_GUIDANCE
-from onyx.prompts.user_info import BASIC_INFORMATION_PROMPT
-from onyx.prompts.user_info import ORGANIZATION_PROFILE_PROMPT
-from onyx.prompts.user_info import TEAM_INFORMATION_PROMPT
-from onyx.prompts.user_info import USER_INFORMATION_HEADER
-from onyx.prompts.user_info import USER_MEMORIES_PROMPT
-from onyx.prompts.user_info import USER_PREFERENCES_PROMPT
-from onyx.prompts.user_info import USER_ROLE_PROMPT
+from onyx.prompts.chat_prompts import (
+    CITATION_REMINDER,
+    DEFAULT_SYSTEM_PROMPT,
+    FILE_REMINDER,
+    LAST_CYCLE_CITATION_REMINDER,
+    REQUIRE_CITATION_GUIDANCE,
+)
+from onyx.prompts.prompt_utils import apply_prompt_placeholders, get_company_context
+from onyx.prompts.tool_prompts import (
+    GENERATE_IMAGE_GUIDANCE,
+    INTERNAL_SEARCH_GUIDANCE,
+    MEMORY_GUIDANCE,
+    OPEN_URLS_GUIDANCE,
+    PYTHON_TOOL_GUIDANCE,
+    TOOL_DESCRIPTION_SEARCH_GUIDANCE,
+    TOOL_SECTION_HEADER,
+    WEB_SEARCH_GUIDANCE,
+    WEB_SEARCH_SITE_DISABLED_GUIDANCE,
+)
+from onyx.prompts.user_info import (
+    BASIC_INFORMATION_PROMPT,
+    ORGANIZATION_PROFILE_PROMPT,
+    TEAM_INFORMATION_PROMPT,
+    USER_INFORMATION_HEADER,
+    USER_MEMORIES_PROMPT,
+    USER_PREFERENCES_PROMPT,
+    USER_ROLE_PROMPT,
+)
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,

@@ -1,9 +1,8 @@
-"""Tests for Slack channel reference resolution and tag filtering
-in handle_regular_answer.py."""
+"""Slack answer handling: references, access checks, and usage attribution."""
 
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from slack_sdk.errors import SlackApiError
@@ -11,15 +10,18 @@ from slack_sdk.errors import SlackApiError
 from onyx.chat.models import ChatBasicResponse
 from onyx.context.search.models import Tag
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
-from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
-from onyx.onyxbot.slack.handlers.handle_regular_answer import resolve_channel_references
 from onyx.onyxbot.slack.handlers.handle_regular_answer import (
     SLACK_PERSONA_ACCESS_DENIED_MESSAGE,
+    handle_regular_answer,
+    resolve_channel_references,
 )
-from onyx.onyxbot.slack.models import ChannelType
-from onyx.onyxbot.slack.models import SlackContext
-from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.onyxbot.slack.models import ThreadMessage
+from onyx.onyxbot.slack.models import (
+    ChannelType,
+    SlackContext,
+    SlackMessageInfo,
+    ThreadMessage,
+)
+from shared_configs.contextvars import get_current_user_id
 
 _HANDLE_REGULAR_ANSWER = "onyx.onyxbot.slack.handlers.handle_regular_answer"
 
@@ -481,15 +483,39 @@ def test_persona_access_denied_cancels_feedback_reminder() -> None:
     )
 
 
-def test_private_channel_non_ephemeral_generates_after_persona_access_check() -> None:
-    user = MagicMock()
+@pytest.mark.parametrize("has_mapped_user", [True, False])
+def test_private_channel_non_ephemeral_attributes_usage(
+    has_mapped_user: bool,
+) -> None:
+    user = MagicMock() if has_mapped_user else None
+    if user is not None:
+        user.id = uuid4()
+    service_user = MagicMock()
+    service_user.id = uuid4()
+    usage_user = user or service_user
     anonymous_user = MagicMock()
     client = MagicMock()
     db_session = MagicMock()
     logger = _mock_logger()
+    observed_user_ids: list[str | None] = []
+
+    def _gather_stream(_: object) -> ChatBasicResponse:
+        observed_user_ids.append(get_current_user_id())
+        return ChatBasicResponse(
+            answer="answer",
+            answer_citationless="answer",
+            top_documents=[],
+            error_msg=None,
+            message_id=1,
+            citation_info=[],
+        )
 
     with (
         patch(f"{_HANDLE_REGULAR_ANSWER}.get_user_by_email", return_value=user),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.get_or_create_slack_service_account",
+            return_value=service_user,
+        ) as mock_get_service_account,
         patch(
             f"{_HANDLE_REGULAR_ANSWER}.get_anonymous_user", return_value=anonymous_user
         ),
@@ -507,14 +533,7 @@ def test_private_channel_non_ephemeral_generates_after_persona_access_check() ->
         ),
         patch(
             f"{_HANDLE_REGULAR_ANSWER}.gather_stream",
-            return_value=ChatBasicResponse(
-                answer="answer",
-                answer_citationless="answer",
-                top_documents=[],
-                error_msg=None,
-                message_id=1,
-                citation_info=[],
-            ),
+            side_effect=_gather_stream,
         ),
         patch(
             f"{_HANDLE_REGULAR_ANSWER}.build_slack_response_blocks",
@@ -541,14 +560,20 @@ def test_private_channel_non_ephemeral_generates_after_persona_access_check() ->
     assert result is False
     mock_get_persona_by_id.assert_called_once_with(
         persona_id=123,
-        user=user,
+        user=user or anonymous_user,
         db_session=db_session,
         is_for_edit=False,
     )
+    if has_mapped_user:
+        mock_get_service_account.assert_not_called()
+    else:
+        mock_get_service_account.assert_called_once_with(db_session)
 
     stream_call_kwargs = mock_handle_stream_message_objects.call_args.kwargs
     assert stream_call_kwargs["user"] is anonymous_user
     assert stream_call_kwargs["new_msg_req"].chat_session_info.persona_id == 123
+    assert observed_user_ids == [str(usage_user.id)]
+    assert get_current_user_id() is None
 
     mock_respond.assert_called_once()
     assert mock_respond.call_args.kwargs["receiver_ids"] is None

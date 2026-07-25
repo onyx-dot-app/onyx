@@ -105,6 +105,9 @@ class PortAttemptStatus(str, PyEnum):
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
     CANCELED = "CANCELED"
+    # Auto-parked failing unit; non-terminal + non-settled so it blocks the swap until
+    # the operator resumes or skips.
+    PAUSED = "PAUSED"
 
     def is_terminal(self) -> bool:
         return self in {
@@ -115,6 +118,11 @@ class PortAttemptStatus(str, PyEnum):
 
     def is_successful(self) -> bool:
         return self == PortAttemptStatus.SUCCESS
+
+    def is_resting(self) -> bool:
+        # terminal + PAUSED: the owning task must stop, else a stall-failed-then-paused
+        # worker could drive a paused attempt back to SUCCESS
+        return self.is_terminal() or self == PortAttemptStatus.PAUSED
 
 
 class IndexingMode(str, PyEnum):
@@ -469,6 +477,19 @@ POLICY_SEVERITY: dict[EndpointPolicy, int] = {
 }
 
 
+class GatedAppKind(str, PyEnum):
+    """Which catalog a gated egress action belongs to.
+
+    The approval pipeline (matched actions, approval rows, per-tool policy,
+    pre-approvals, session grants) is shared across surfaces; this discriminates
+    whether the target id refers to an ``external_app`` or an ``mcp_server`` row,
+    since the two live in separate tables under a single approval flow.
+    """
+
+    EXTERNAL_APP = "EXTERNAL_APP"
+    MCP_SERVER = "MCP_SERVER"
+
+
 class PatType(str, PyEnum):
     USER = "USER"
     CRAFT = "CRAFT"
@@ -565,6 +586,7 @@ class Permission(str, PyEnum):
     WRITE_CHAT = "write:chat"
     READ_ADMIN = "read:admin"
     GENERATE_IMAGE = "generate:image"
+    USE_LLM_GATEWAY = "use:llm_gateway"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
@@ -606,6 +628,7 @@ Permission.IMPLIED = frozenset(
         Permission.WRITE_CHAT,
         Permission.READ_ADMIN,
         Permission.GENERATE_IMAGE,
+        Permission.USE_LLM_GATEWAY,
     }
 )
 

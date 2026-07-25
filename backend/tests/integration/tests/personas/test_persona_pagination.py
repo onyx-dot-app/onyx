@@ -1,5 +1,7 @@
-from onyx.server.features.persona.constants import ADMIN_AGENTS_RESOURCE
-from onyx.server.features.persona.constants import AGENTS_RESOURCE
+from onyx.server.features.persona.constants import (
+    ADMIN_AGENTS_RESOURCE,
+    AGENTS_RESOURCE,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.persona import PersonaManager

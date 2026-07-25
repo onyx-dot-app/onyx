@@ -1,7 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -11,11 +9,9 @@ from onyx.db.enums import MCPAuthenticationType
 from onyx.mcp_server.api import create_mcp_fastapi_app
 from onyx.mcp_server.auth import OnyxTokenVerifier
 from onyx.mcp_server.tools import search
-from onyx.server.metrics import mcp_client
-from onyx.server.metrics import metrics_auth
+from onyx.server.metrics import mcp_client, metrics_auth
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
-from onyx.server.metrics.mcp_server import MCPAuthResult
-from onyx.server.metrics.mcp_server import MCPServerToolName
+from onyx.server.metrics.mcp_server import MCPAuthResult, MCPServerToolName
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 

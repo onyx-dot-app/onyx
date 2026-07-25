@@ -13,8 +13,7 @@ Contract under test (observed through the admin response's ``actions`` view):
 - clearing an override means sending that action explicitly as ``ASK``.
 """
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.external_apps.providers.slack import SlackAction
 from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
@@ -31,7 +30,6 @@ def _create_slack(
     return ExternalAppManager.create(
         user_performing_action=admin_user,
         name="Slack",
-        description="Slack",
         upstream_url_patterns=list(_SLACK_URLS),
         auth_template=dict(_SLACK_AUTH),
         organization_credentials={},
@@ -49,7 +47,6 @@ def _update_slack(
         user_performing_action=admin_user,
         app_id=app_id,
         name="Slack",
-        description="Slack",
         upstream_url_patterns=list(_SLACK_URLS),
         auth_template=dict(_SLACK_AUTH),
         organization_credentials={},

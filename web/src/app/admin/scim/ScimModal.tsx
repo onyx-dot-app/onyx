@@ -1,10 +1,9 @@
 import { SvgDownload, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { Interactive, Hoverable } from "@opal/core";
 import { Section } from "@/layouts/general-layouts";
-import { Button } from "@opal/components";
+import { Button, InputTextArea } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { CopyButton } from "@opal/components";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { BasicModalFooter, Modal } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { toast } from "@opal/layouts";
@@ -88,21 +87,25 @@ export default function ScimModal({
                 <Interactive.Stateless
                   onClick={() => copyToClipboard(view.rawToken)}
                 >
-                  <InputTextArea
-                    value={view.rawToken}
-                    readOnly
-                    autoResize
-                    resizable={false}
-                    rows={2}
-                    className="font-main-ui-mono break-all cursor-pointer [&_textarea]:cursor-pointer"
-                    rightSection={
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <Hoverable.Item group="token" variant="appear-on-hover">
-                          <CopyButton getCopyText={() => view.rawToken} />
-                        </Hoverable.Item>
-                      </div>
-                    }
-                  />
+                  <div className="font-main-ui-mono break-all cursor-pointer [&_textarea]:cursor-pointer">
+                    <InputTextArea
+                      value={view.rawToken}
+                      variant="readOnly"
+                      autoResize
+                      resizable={false}
+                      rows={2}
+                      rightSection={
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Hoverable.Item
+                            group="token"
+                            variant="appear-on-hover"
+                          >
+                            <CopyButton getCopyText={() => view.rawToken} />
+                          </Hoverable.Item>
+                        </div>
+                      }
+                    />
+                  </div>
                 </Interactive.Stateless>
               </Hoverable.Root>
             </Modal.Body>

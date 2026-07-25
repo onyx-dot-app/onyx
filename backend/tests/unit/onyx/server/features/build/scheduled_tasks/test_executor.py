@@ -1,5 +1,7 @@
-from onyx.server.features.build.scheduled_tasks.executor import _clip_summary
-from onyx.server.features.build.scheduled_tasks.executor import SUMMARY_MAX_CHARS
+from onyx.server.features.build.scheduled_tasks.executor import (
+    SUMMARY_MAX_CHARS,
+    _clip_summary,
+)
 
 
 def test_clip_summary_short_text_passthrough() -> None:

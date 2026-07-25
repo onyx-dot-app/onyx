@@ -4,8 +4,7 @@ Verifies that SearchTool is unavailable, OpenURLTool stays available
 (crawl-only), and FileReaderTool remains available.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import Session

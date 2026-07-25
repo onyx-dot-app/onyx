@@ -1,18 +1,19 @@
 import datetime
-from typing import Any
-from typing import Dict
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import braintrust
 from braintrust import NOOP_SPAN
 
-from onyx.llm.cost import calculate_llm_cost_cents
+from onyx.llm.cost import compute_cost_cents
+from onyx.tracing.flows import IMAGE_FLOWS
 
 from .framework.processor_interface import TracingProcessor
-from .framework.span_data import AgentSpanData
-from .framework.span_data import FunctionSpanData
-from .framework.span_data import GenerationSpanData
-from .framework.span_data import SpanData
+from .framework.span_data import (
+    AgentSpanData,
+    FunctionSpanData,
+    GenerationSpanData,
+    SpanData,
+)
 from .framework.spans import Span
 from .framework.traces import Trace
 
@@ -164,12 +165,28 @@ class BraintrustTracingProcessor(TracingProcessor):
             ]
 
         model_name = span.span_data.model
-        if model_name and prompt_tokens is not None and completion_tokens is not None:
-            cost_cents = calculate_llm_cost_cents(
-                model_name=model_name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
+        model_config = span.span_data.model_config or {}
+        provider = model_config.get("model_provider")
+        flow = model_config.get("flow")
+        if model_name and (
+            prompt_tokens is not None
+            or completion_tokens is not None
+            or flow in IMAGE_FLOWS
+        ):
+            cache_read = int(usage.get("cache_read_input_tokens") or 0)
+            input_tokens = int(prompt_tokens or 0)
+            output_tokens = int(completion_tokens or 0)
+            non_cached_input = max(input_tokens - cache_read, 0)
+            input_cents, output_cents = compute_cost_cents(
+                model_name,
+                provider,
+                non_cached_input,
+                output_tokens,
+                cache_read_tokens=cache_read,
+                flow=flow,
+                image_count=span.span_data.image_count or 1,
             )
+            cost_cents = input_cents + output_cents
             if cost_cents > 0:
                 metrics["cost_cents"] = cost_cents
 

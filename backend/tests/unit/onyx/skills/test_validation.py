@@ -12,12 +12,12 @@ from onyx.file_store.file_store import FileStore
 from onyx.skills.validation import validate_stored_custom_skill
 
 
-def _skill(slug: str = "canonical-name") -> Skill:
+def _skill(name: str = "canonical-name") -> Skill:
     return cast(
         Skill,
         SimpleNamespace(
             id=uuid4(),
-            slug=slug,
+            name=name,
             bundle_file_id="bundle-id",
         ),
     )

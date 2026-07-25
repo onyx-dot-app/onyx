@@ -7,8 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
-from onyx.connectors.lumapps.client import LumAppsClientError
-from onyx.connectors.lumapps.client import OnyxLumApps
+from onyx.connectors.lumapps.client import LumAppsClientError, OnyxLumApps
 
 
 def _client_with_token() -> tuple[OnyxLumApps, MagicMock]:

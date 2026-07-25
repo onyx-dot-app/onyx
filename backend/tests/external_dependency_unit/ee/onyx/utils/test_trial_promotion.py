@@ -8,19 +8,18 @@ real.
 
 import json
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
 
 from ee.onyx.server.license.models import CustomerTier
-from ee.onyx.server.tenants.models import BillingInformation
-from ee.onyx.server.tenants.models import SubscriptionStatusResponse
-from ee.onyx.server.tenants.tier_management import get_cached_tier
-from ee.onyx.server.tenants.tier_management import TENANT_TIER_KEY
-from ee.onyx.server.tenants.tier_management import update_tenant_tier
+from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
+from ee.onyx.server.tenants.tier_management import (
+    TENANT_TIER_KEY,
+    get_cached_tier,
+    update_tenant_tier,
+)
 from ee.onyx.utils import tier as tier_module
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.models import Tier

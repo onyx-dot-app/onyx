@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
-from onyx.secondary_llm_flows.time_filter import decide_time_filter
-from onyx.secondary_llm_flows.time_filter import DocumentTimeField
-from onyx.secondary_llm_flows.time_filter import TimeFilter
+from onyx.secondary_llm_flows.time_filter import (
+    DocumentTimeField,
+    TimeFilter,
+    decide_time_filter,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 

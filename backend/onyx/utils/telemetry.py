@@ -6,24 +6,22 @@ from typing import Any
 
 import requests
 
-from onyx.configs.app_configs import DISABLE_TELEMETRY
-from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
-from onyx.configs.constants import KV_CUSTOMER_UUID_KEY
-from onyx.configs.constants import KV_INSTANCE_DOMAIN_KEY
-from onyx.configs.constants import MilestoneRecordType
-from onyx.db.encrypted_kv_store import load_encrypted_kv
-from onyx.db.encrypted_kv_store import upsert_encrypted_kv
+from onyx.configs.app_configs import DISABLE_TELEMETRY, ENTERPRISE_EDITION_ENABLED
+from onyx.configs.constants import (
+    KV_CUSTOMER_UUID_KEY,
+    KV_INSTANCE_DOMAIN_KEY,
+    MilestoneRecordType,
+)
+from onyx.db.encrypted_kv_store import load_encrypted_kv, upsert_encrypted_kv
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
-from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.key_value_store.interface import unwrap_str
+from onyx.key_value_store.interface import KvKeyNotFoundError, unwrap_str
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
+    noop_fallback,
 )
-from onyx.utils.variable_functionality import noop_fallback
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -101,15 +99,18 @@ def optional_telemetry(
     data: dict,
     user_id: str | None = None,
     tenant_id: str | None = None,  # Allows for override of tenant_id
-) -> None:
+    blocking: bool = False,
+) -> bool | None:
+    """Fire-and-forget by default. With blocking=True, sends in the current
+    thread and returns whether the POST succeeded."""
     if DISABLE_TELEMETRY:
-        return
+        return False if blocking else None
 
     tenant_id = tenant_id or get_current_tenant_id()
 
     try:
 
-        def telemetry_logic() -> None:
+        def telemetry_logic() -> bool:
             try:
                 customer_uuid = (
                     _get_or_generate_customer_id_mt(tenant_id)
@@ -127,16 +128,20 @@ def optional_telemetry(
                 }
                 if ENTERPRISE_EDITION_ENABLED:
                     payload["instance_domain"] = _get_or_generate_instance_domain()
-                requests.post(
+                response = requests.post(
                     _DANSWER_TELEMETRY_ENDPOINT,
                     headers={"Content-Type": "application/json"},
                     json=payload,
                     timeout=_TELEMETRY_POST_TIMEOUT_SECONDS,
                 )
+                return response.ok
 
             except Exception:
                 # This way it silences all thread level logging as well
-                pass
+                return False
+
+        if blocking:
+            return telemetry_logic()
 
         # Run in separate thread with the same context as the current thread
         # This is to ensure that the thread gets the current tenant ID
@@ -148,6 +153,8 @@ def optional_telemetry(
     except Exception:
         # Should never interfere with normal functions of Onyx
         pass
+
+    return None
 
 
 def mt_cloud_telemetry(

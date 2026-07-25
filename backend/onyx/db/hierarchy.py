@@ -2,8 +2,7 @@
 
 from collections import defaultdict
 
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
@@ -12,9 +11,11 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.db.enums import HierarchyNodeType
-from onyx.db.models import Document
-from onyx.db.models import HierarchyNode
-from onyx.db.models import HierarchyNodeByConnectorCredentialPair
+from onyx.db.models import (
+    Document,
+    HierarchyNode,
+    HierarchyNodeByConnectorCredentialPair,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 

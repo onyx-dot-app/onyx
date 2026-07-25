@@ -4,29 +4,29 @@ permission paths. The user-side token comes from the synced domain group's real
 Workspace membership, not from the user's email string."""
 
 from types import SimpleNamespace
-from typing import Any
-from typing import cast
-from unittest.mock import patch
+from typing import Any, cast
+from unittest.mock import MagicMock, call, patch
 
+from google.auth.exceptions import RefreshError
 from sqlalchemy.orm import Session
 
 from ee.onyx.external_permissions.google_drive.doc_sync import (
     get_external_access_for_folder,
-)
-from ee.onyx.external_permissions.google_drive.doc_sync import (
     get_external_access_for_raw_gdrive_file,
 )
-from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
-from ee.onyx.external_permissions.google_drive.models import PermissionType
+from ee.onyx.external_permissions.google_drive.models import (
+    GoogleDrivePermission,
+    PermissionType,
+)
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.access.utils import prefix_external_group
+from onyx.access.utils import build_ext_group_name_for_onyx, prefix_external_group
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.db.models import User
 
 COMPANY_DOMAIN = "companya.com"
 OTHER_DOMAIN = "companyb.com"
+RETRIEVER_EMAIL = f"retriever@{COMPANY_DOMAIN}"
 
 # Never used: the file path takes inline permissions and the folder path's
 # permission fetch is patched.
@@ -100,6 +100,103 @@ def test_user_and_group_shares_unchanged() -> None:
     assert access.is_public is False
     assert access.external_user_emails == {"bob@companyb.com"}
     assert "eng@companya.com" in access.external_user_group_ids
+
+
+def _retriever_user_permission() -> GoogleDrivePermission:
+    return GoogleDrivePermission(
+        id="p1",
+        email_address=RETRIEVER_EMAIL,
+        type=PermissionType.USER,
+        domain=None,
+        permission_details=None,
+        allow_file_discovery=None,
+    )
+
+
+def test_retries_incomplete_owner_permissions_as_retriever() -> None:
+    owner_service = cast(GoogleDriveService, SimpleNamespace())
+    retriever_service = cast(GoogleDriveService, SimpleNamespace())
+    admin_service = cast(GoogleDriveService, SimpleNamespace())
+    retriever_service_factory = MagicMock(return_value=retriever_service)
+
+    with patch(
+        "ee.onyx.external_permissions.google_drive.doc_sync.get_permissions_by_ids",
+        side_effect=[[], [_retriever_user_permission()]],
+    ) as mock_get_permissions:
+        access = get_external_access_for_raw_gdrive_file(
+            file={"id": "doc-1", "permissionIds": ["p1"]},
+            company_domain=COMPANY_DOMAIN,
+            retriever_drive_service=owner_service,
+            admin_drive_service=admin_service,
+            fallback_user_email=RETRIEVER_EMAIL,
+            fallback_drive_service_factory=retriever_service_factory,
+        )
+
+    assert access.external_user_emails == {RETRIEVER_EMAIL}
+    assert mock_get_permissions.call_args_list == [
+        call(
+            drive_service=owner_service,
+            doc_id="doc-1",
+            permission_ids=["p1"],
+        ),
+        call(
+            drive_service=retriever_service,
+            doc_id="doc-1",
+            permission_ids=["p1"],
+        ),
+    ]
+    retriever_service_factory.assert_called_once_with()
+
+
+def test_retriever_impersonation_failure_falls_back_to_admin() -> None:
+    owner_service = cast(GoogleDriveService, SimpleNamespace())
+    retriever_service = cast(GoogleDriveService, SimpleNamespace())
+    admin_service = cast(GoogleDriveService, SimpleNamespace())
+    retriever_service_factory = MagicMock(return_value=retriever_service)
+    refresh_error = RefreshError("unauthorized")
+
+    with (
+        patch(
+            "ee.onyx.external_permissions.google_drive.doc_sync.get_permissions_by_ids",
+            side_effect=[[], refresh_error, [_retriever_user_permission()]],
+        ) as mock_get_permissions,
+        patch(
+            "ee.onyx.external_permissions.google_drive.doc_sync.logger.warning"
+        ) as mock_warning,
+    ):
+        access = get_external_access_for_raw_gdrive_file(
+            file={"id": "doc-1", "permissionIds": ["p1"]},
+            company_domain=COMPANY_DOMAIN,
+            retriever_drive_service=owner_service,
+            admin_drive_service=admin_service,
+            fallback_user_email=RETRIEVER_EMAIL,
+            fallback_drive_service_factory=retriever_service_factory,
+        )
+
+    assert access.external_user_emails == {RETRIEVER_EMAIL}
+    assert mock_get_permissions.call_args_list == [
+        call(
+            drive_service=owner_service,
+            doc_id="doc-1",
+            permission_ids=["p1"],
+        ),
+        call(
+            drive_service=retriever_service,
+            doc_id="doc-1",
+            permission_ids=["p1"],
+        ),
+        call(
+            drive_service=admin_service,
+            doc_id="doc-1",
+            permission_ids=["p1"],
+        ),
+    ]
+    retriever_service_factory.assert_called_once_with()
+    mock_warning.assert_called_once_with(
+        "Could not impersonate non-admin user for document %s: %s",
+        "doc-1",
+        refresh_error,
+    )
 
 
 def test_indexing_path_prefixes_domain_group() -> None:

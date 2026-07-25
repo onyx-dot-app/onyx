@@ -128,12 +128,17 @@
    SidebarBody
    --------------------------------------------------------------------------- */
 
+/* Applied to the ShadowDiv wrapper, which provides positioning and column flow */
 .opal-sidebar-body {
-  @apply relative flex-1 min-h-0 overflow-y-hidden flex flex-col;
+  @apply flex-1;
 }
 
+/* Applied to the ShadowDiv scroll container, which provides overflow-y-auto.
+   Thin themed scrollbar keeps position/drag affordance without the default bar. */
 .opal-sidebar-body__scroll {
-  @apply flex-1 min-h-0 overflow-y-auto flex flex-col;
+  @apply flex-1 min-h-0 flex flex-col;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-02) transparent;
 }
 
 .opal-sidebar-body__content {
@@ -145,15 +150,6 @@
 
 .opal-sidebar-body__spacer {
   min-height: 2rem;
-}
-
-.opal-sidebar-body__fade {
-  @apply absolute bottom-0 left-0 right-0 h-4 z-20 pointer-events-none;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    var(--background-tint-02)
-  );
 }
 
 /* ---------------------------------------------------------------------------

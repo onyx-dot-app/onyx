@@ -2,8 +2,13 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Divider, InputTypeIn, Text } from "@opal/components";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
+import {
+  Button,
+  Divider,
+  InputTextArea,
+  InputTypeIn,
+  Text,
+} from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SettingsLayouts, InputVertical, toast } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
@@ -19,6 +24,8 @@ import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import {
   detectSlashTrigger,
+  pickerEntryConnectionPath,
+  pickerEntryPromptPrefix,
   toPickerSections,
   type PickerEntry,
 } from "@/lib/skills/picker";
@@ -130,14 +137,15 @@ export default function ScheduleTaskForm({
 
   const handleSkillPickerSelect = useCallback(
     (entry: PickerEntry) => {
-      if (entry.kind === "app" && !entry.authenticated) {
+      const connectionPath = pickerEntryConnectionPath(entry);
+      if (connectionPath) {
         setSkillPicker((s) => ({ ...s, open: false }));
-        router.push(`/craft/v1/apps?connect=${entry.slug}`);
+        router.push(connectionPath);
         return;
       }
       setSkillPicker((prev) => {
         if (!prev.open) return prev;
-        const replacement = `/${entry.slug} `;
+        const replacement = `${pickerEntryPromptPrefix(entry)} `;
         const newPrompt =
           prompt.slice(0, prev.slashIndex) +
           replacement +

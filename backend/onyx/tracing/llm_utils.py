@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
-from collections.abc import Mapping
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import ModelResponse
@@ -59,6 +56,7 @@ def traced_llm_call(
     model: str,
     provider: str,
     extra_config: Mapping[str, str] | None = None,
+    image_count: int | None = None,
     input_messages: Sequence[Any] | Any | None = None,
     tools: Sequence[Mapping[str, Any]] | None = None,
     parent: Any | None = None,
@@ -79,6 +77,7 @@ def traced_llm_call(
     with generation_span(
         model=model,
         model_config=model_config,
+        image_count=image_count,
         tools=tools,
         parent=parent,
     ) as span:

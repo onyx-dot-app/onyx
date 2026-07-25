@@ -1,15 +1,16 @@
 """Unit tests for onyx.utils.github."""
 
 from collections.abc import Iterable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 
-from onyx.utils.github import download_github_repo
-from onyx.utils.github import GITHUB_TARBALL_URL
-from onyx.utils.github import parse_github_repo
+from onyx.utils.github import (
+    GITHUB_TARBALL_URL,
+    download_github_repo,
+    parse_github_repo,
+)
 
 
 class TestParseGithubRepo:

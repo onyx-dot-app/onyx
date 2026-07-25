@@ -1,14 +1,15 @@
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.canvas.client import CanvasApiClient
-from onyx.connectors.canvas.connector import canvas_all_users_group_id
-from onyx.connectors.canvas.connector import canvas_course_group_id
-from onyx.connectors.canvas.connector import canvas_group_group_id
-from onyx.connectors.canvas.connector import canvas_section_group_id
+from onyx.connectors.canvas.connector import (
+    canvas_all_users_group_id,
+    canvas_course_group_id,
+    canvas_group_group_id,
+    canvas_section_group_id,
+)
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 

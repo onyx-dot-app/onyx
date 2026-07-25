@@ -2,13 +2,11 @@ import os
 import threading
 import time
 from typing import Any
-from unittest.mock import ANY
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import litellm
 import pytest
-from litellm.types.utils import ChatCompletionDeltaToolCall
-from litellm.types.utils import Delta
+from litellm.types.utils import ChatCompletionDeltaToolCall, Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
 import onyx.llm.models
@@ -16,18 +14,21 @@ from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.model_response import ModelResponse
-from onyx.llm.model_response import ModelResponseStream
-from onyx.llm.models import AssistantMessage
-from onyx.llm.models import FunctionCall
-from onyx.llm.models import LanguageModelInput
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import ToolCall
-from onyx.llm.models import ToolChoiceOptions
-from onyx.llm.models import UserMessage
-from onyx.llm.multi_llm import _parse_anthropic_model_version
-from onyx.llm.multi_llm import LitellmLLM
-from onyx.llm.multi_llm import temporary_env_and_lock
+from onyx.llm.model_response import ModelResponse, ModelResponseStream
+from onyx.llm.models import (
+    AssistantMessage,
+    FunctionCall,
+    LanguageModelInput,
+    ReasoningEffort,
+    ToolCall,
+    ToolChoiceOptions,
+    UserMessage,
+)
+from onyx.llm.multi_llm import (
+    LitellmLLM,
+    _parse_anthropic_model_version,
+    temporary_env_and_lock,
+)
 
 VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG = [
     "claude-opus-4-5@20251101",
@@ -732,6 +733,141 @@ def test_openai_chat_omits_reasoning_params() -> None:
         assert mock_is_openai.called
 
 
+def _azure_llm(model_name: str, api_version: str | None) -> LitellmLLM:
+    return LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name=model_name,
+        api_base="https://my-resource.openai.azure.us",
+        api_version=api_version,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.AZURE,
+            model_name=model_name,
+        ),
+    )
+
+
+def _stream_and_get_completion_kwargs(
+    llm: LitellmLLM, is_openai: bool
+) -> dict[str, Any]:
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=is_openai),
+    ):
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages))
+        return dict(mock_completion.call_args.kwargs)
+
+
+@pytest.mark.parametrize(
+    "configured_api_version", ["2025-03-01-preview", "2024-08-01-preview"]
+)
+def test_azure_responses_bridge_drops_dated_api_version(
+    configured_api_version: str,
+) -> None:
+    """Responses-bridge calls must target the v1 surface: a dated api-version
+    makes LiteLLM build the legacy /openai/responses URL, which sovereign
+    clouds (e.g. Azure Government) do not serve (#11420). Dropping it defers
+    to LiteLLM's responses default (AZURE_DEFAULT_RESPONSES_API_VERSION)."""
+    llm = _azure_llm("gpt-5.1", api_version=configured_api_version)
+    kwargs = _stream_and_get_completion_kwargs(llm, is_openai=True)
+    assert kwargs["model"] == "azure/responses/gpt-5.1"
+    assert kwargs["api_version"] is None
+
+
+@pytest.mark.parametrize("configured_api_version", ["preview", "latest", "v1"])
+def test_azure_responses_bridge_keeps_v1_api_version(
+    configured_api_version: str,
+) -> None:
+    llm = _azure_llm("gpt-5.1", api_version=configured_api_version)
+    kwargs = _stream_and_get_completion_kwargs(llm, is_openai=True)
+    assert kwargs["api_version"] == configured_api_version
+
+
+def test_azure_responses_bridge_leaves_none_api_version() -> None:
+    """None must stay None so LiteLLM's AZURE_DEFAULT_RESPONSES_API_VERSION
+    env override keeps working."""
+    llm = _azure_llm("gpt-5.1", api_version=None)
+    kwargs = _stream_and_get_completion_kwargs(llm, is_openai=True)
+    assert kwargs["api_version"] is None
+
+
+def test_azure_chat_completions_keeps_dated_api_version() -> None:
+    """Non-bridge Azure calls keep the admin-configured dated api-version."""
+    llm = _azure_llm("mistral-large", api_version="2025-03-01-preview")
+    kwargs = _stream_and_get_completion_kwargs(llm, is_openai=False)
+    assert kwargs["model"] == "azure/mistral-large"
+    assert kwargs["api_version"] == "2025-03-01-preview"
+
+
+def test_non_azure_responses_bridge_keeps_api_version() -> None:
+    """The upgrade is Azure-only: a LiteLLM proxy fronting Azure manages its
+    own upstream routing, so its configured api-version passes through."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name="gpt-5.1",
+        api_base="https://my-proxy.internal",
+        api_version="2025-03-01-preview",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name="gpt-5.1",
+        ),
+    )
+    kwargs = _stream_and_get_completion_kwargs(llm, is_openai=True)
+    assert kwargs["model"] == "litellm_proxy/responses/gpt-5.1"
+    assert kwargs["api_version"] == "2025-03-01-preview"
+
+
+@pytest.mark.parametrize("model_name", ["o1-mini", "o1-preview", "o1-mini-2024-09-12"])
+@pytest.mark.parametrize("routed_via_responses", [True, False])
+def test_reasoning_effort_omitted_for_models_rejecting_it(
+    model_name: str, routed_via_responses: bool
+) -> None:
+    """o1-mini / o1-preview reject the reasoning-effort parameter on every API
+    surface; neither the nested responses param nor the root-level one may be
+    sent, regardless of routing."""
+    llm = _azure_llm(model_name, api_version="2025-03-01-preview")
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+        patch(
+            "onyx.llm.multi_llm.is_true_openai_model",
+            return_value=routed_via_responses,
+        ),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "reasoning" not in kwargs
+        assert "reasoning_effort" not in kwargs
+
+
+def test_reasoning_effort_sent_for_o1() -> None:
+    """The o1-mini/o1-preview deny-list must not catch the bare o1 model."""
+    llm = _azure_llm("o1", api_version="2025-03-01-preview")
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"]["effort"] == "medium"
+
+
 def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
     with (
         patch("litellm.completion") as mock_completion,
@@ -922,8 +1058,11 @@ def test_openai_model_stream_uses_httphandler_client(
         assert isinstance(kwargs["client"], HTTPHandler)
 
 
-def test_anthropic_model_passes_no_client() -> None:
-    """Test that non-OpenAI models (Anthropic) don't get a client passed."""
+def test_anthropic_model_passes_isolated_client() -> None:
+    """Anthropic gets a per-call HTTPHandler so abandoned streams can't deadlock
+    litellm's shared module_level_client pool (see _uses_isolated_client)."""
+    from litellm import HTTPHandler
+
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
@@ -953,7 +1092,7 @@ def test_anthropic_model_passes_no_client() -> None:
 
         mock_completion.assert_called_once()
         kwargs = mock_completion.call_args.kwargs
-        assert kwargs["client"] is None
+        assert isinstance(kwargs["client"], HTTPHandler)
 
 
 def test_bedrock_model_passes_no_client() -> None:
@@ -1490,9 +1629,9 @@ def test_keyless_reader_cannot_observe_writer_injected_secret(
 ) -> None:
     """Cross-tenant credential isolation in the shared process os.environ.
 
-    A "victim" Bedrock call injects AWS creds from custom_config into os.environ
-    for the duration of its litellm call (litellm's SDKs read more from the
-    environment than litellm accepts as kwargs). It does so under the env write
+    A "victim" Bedrock call injects an env-only custom_config secret into
+    os.environ for the duration of its litellm call (its AWS creds have kwarg
+    equivalents and never take the env path). It does so under the env write
     lock. A concurrent keyless "attacker" Bedrock call (no custom_config) takes
     the shared read lock, so it must block until the writer releases the lock and
     restores os.environ — it can therefore only ever read a clean environment.
@@ -1503,11 +1642,15 @@ def test_keyless_reader_cannot_observe_writer_injected_secret(
     """
     monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
     monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("VICTIM_ENV_ONLY_SECRET", raising=False)
 
     VICTIM_SECRET = "victim-aws-secret-DO-NOT-LEAK-0001"
     VICTIM_ACCESS_KEY_ID = "victim-akid-0002"
+    VICTIM_ENV_ONLY_VALUE = "victim-env-only-DO-NOT-LEAK-0003"
 
-    # Victim: Bedrock provider whose creds live in custom_config (env-var format).
+    # Victim: Bedrock provider whose creds live in custom_config (env-var
+    # format, mapped to kwargs) plus an env-only key that has no kwarg
+    # equivalent and is therefore injected under the write lock.
     victim_llm = LitellmLLM(
         api_key=None,
         timeout=30,
@@ -1518,6 +1661,7 @@ def test_keyless_reader_cannot_observe_writer_injected_secret(
             "AWS_SECRET_ACCESS_KEY": VICTIM_SECRET,
             "AWS_ACCESS_KEY_ID": VICTIM_ACCESS_KEY_ID,
             "AWS_REGION_NAME": "us-east-1",
+            "VICTIM_ENV_ONLY_SECRET": VICTIM_ENV_ONLY_VALUE,
         },
     )
     # Attacker: keyless Bedrock provider, NO custom_config -> shared read lock.
@@ -1547,22 +1691,31 @@ def test_keyless_reader_cannot_observe_writer_injected_secret(
     release_writer = threading.Event()
     reader_ran = threading.Event()
     reader_env_snapshot: dict[str, str | None] = {}
+    writer_env_snapshot: dict[str, str | None] = {}
 
     def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
         # The victim's custom_config is mapped into explicit kwargs, so its
         # presence distinguishes the victim (writer) from the keyless attacker.
         is_writer = "aws_secret_access_key" in kwargs
         if is_writer:
-            # Holding the env write lock here; the secret is live in os.environ.
-            # Keep it live until released (bounded so a broken lock can't hang).
+            # Holding the env write lock here; the env-only secret is live in
+            # os.environ, while the mapped AWS creds must NOT be (they travel
+            # as kwargs only). Keep the window open until released (bounded so
+            # a broken lock can't hang).
+            writer_env_snapshot["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
+                "AWS_SECRET_ACCESS_KEY"
+            )
+            writer_env_snapshot["VICTIM_ENV_ONLY_SECRET"] = os.environ.get(
+                "VICTIM_ENV_ONLY_SECRET"
+            )
             writer_inside.set()
             release_writer.wait(timeout=5)
         else:
+            reader_env_snapshot["VICTIM_ENV_ONLY_SECRET"] = os.environ.get(
+                "VICTIM_ENV_ONLY_SECRET"
+            )
             reader_env_snapshot["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
                 "AWS_SECRET_ACCESS_KEY"
-            )
-            reader_env_snapshot["AWS_ACCESS_KEY_ID"] = os.environ.get(
-                "AWS_ACCESS_KEY_ID"
             )
             reader_ran.set()
         return mock_stream_chunks
@@ -1597,16 +1750,22 @@ def test_keyless_reader_cannot_observe_writer_injected_secret(
     assert not errors, f"Thread errors: {errors}"
     assert reader_ran.is_set(), "attacker never completed"
 
+    # Inside the writer's window: the env-only key was injected, the mapped
+    # AWS creds never touched os.environ.
+    assert writer_env_snapshot["VICTIM_ENV_ONLY_SECRET"] == VICTIM_ENV_ONLY_VALUE
+    assert writer_env_snapshot["AWS_SECRET_ACCESS_KEY"] is None
+
     # The attacker was blocked during the writer's env window...
     assert not reader_ran_during_window, (
         "Cross-tenant leak: keyless reader ran concurrently with the victim's "
         "env injection"
     )
     # ...and when it finally ran, the environment was clean.
+    assert reader_env_snapshot["VICTIM_ENV_ONLY_SECRET"] is None
     assert reader_env_snapshot["AWS_SECRET_ACCESS_KEY"] is None
-    assert reader_env_snapshot["AWS_ACCESS_KEY_ID"] is None
 
     # Env fully restored after the writer finished.
+    assert os.environ.get("VICTIM_ENV_ONLY_SECRET") is None
     assert os.environ.get("AWS_SECRET_ACCESS_KEY") is None
     assert os.environ.get("AWS_ACCESS_KEY_ID") is None
 
@@ -2374,3 +2533,226 @@ def test_bifrost_claude_includes_allowed_openai_params() -> None:
         assert kwargs["base_url"] == "https://bifrost.example.com/v1"
         assert kwargs["custom_llm_provider"] == "openai"
         assert kwargs["allowed_openai_params"] == ["tool_choice"]
+
+
+# ---- Tests for env-injection gating (llm_custom_config_env_injection) ----
+
+
+def _simple_stream_chunks(model_name: str) -> list[litellm.ModelResponse]:
+    return [
+        litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Hi"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model=model_name,
+        ),
+    ]
+
+
+def test_injection_disabled_maps_kwargs_and_never_touches_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cloud posture: mapped keys become litellm kwargs, unmapped keys are
+    dropped, and os.environ is never mutated."""
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("ENV_ONLY_KEY", raising=False)
+
+    llm = LitellmLLM(
+        api_key=None,
+        timeout=30,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
+        max_input_tokens=200000,
+        custom_config={
+            "AWS_ACCESS_KEY_ID": "akid",
+            "AWS_SECRET_ACCESS_KEY": "secret",
+            "AWS_REGION_NAME": "us-east-1",
+            "ENV_ONLY_KEY": "env-only-value",
+        },
+    )
+
+    env_during_call: dict[str, str | None] = {}
+
+    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
+        env_during_call["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
+            "AWS_SECRET_ACCESS_KEY"
+        )
+        env_during_call["ENV_ONLY_KEY"] = os.environ.get("ENV_ONLY_KEY")
+        return _simple_stream_chunks("anthropic.claude-3-sonnet-20240229-v1:0")
+
+    from onyx.llm import multi_llm as multi_llm_module
+
+    env_before = dict(os.environ)
+    with (
+        patch("litellm.completion", side_effect=fake_completion) as mock_completion,
+        patch(
+            "onyx.llm.multi_llm._env_injection_enabled",
+            return_value=False,
+        ),
+        patch.object(
+            multi_llm_module,
+            "temporary_env_and_lock",
+            wraps=multi_llm_module.temporary_env_and_lock,
+        ) as mock_env_lock,
+    ):
+        llm.invoke([UserMessage(content="Hi")])
+
+    kwargs = mock_completion.call_args.kwargs
+    assert kwargs["aws_access_key_id"] == "akid"
+    assert kwargs["aws_secret_access_key"] == "secret"
+    assert kwargs["aws_region_name"] == "us-east-1"
+    # The env-only key is dropped: not a kwarg, not an env var.
+    assert "ENV_ONLY_KEY" not in kwargs
+    assert env_during_call["AWS_SECRET_ACCESS_KEY"] is None
+    assert env_during_call["ENV_ONLY_KEY"] is None
+    assert dict(os.environ) == env_before
+    # With injection disabled there can be no env writers, so the call must
+    # bypass the rwlock entirely.
+    mock_env_lock.assert_not_called()
+
+
+def test_injection_enabled_still_injects_env_only_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Self-hosted posture: env-only keys are injected during the call, while
+    mapped keys still travel as kwargs only."""
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("ENV_ONLY_KEY", raising=False)
+
+    llm = LitellmLLM(
+        api_key=None,
+        timeout=30,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
+        max_input_tokens=200000,
+        custom_config={
+            "AWS_SECRET_ACCESS_KEY": "secret",
+            "ENV_ONLY_KEY": "env-only-value",
+        },
+    )
+
+    env_during_call: dict[str, str | None] = {}
+
+    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
+        env_during_call["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
+            "AWS_SECRET_ACCESS_KEY"
+        )
+        env_during_call["ENV_ONLY_KEY"] = os.environ.get("ENV_ONLY_KEY")
+        return _simple_stream_chunks("anthropic.claude-3-sonnet-20240229-v1:0")
+
+    with (
+        patch("litellm.completion", side_effect=fake_completion) as mock_completion,
+        patch(
+            "onyx.llm.multi_llm._env_injection_enabled",
+            return_value=True,
+        ),
+    ):
+        llm.invoke([UserMessage(content="Hi")])
+
+    kwargs = mock_completion.call_args.kwargs
+    assert kwargs["aws_secret_access_key"] == "secret"
+    assert env_during_call["ENV_ONLY_KEY"] == "env-only-value"
+    # Mapped keys never take the env path regardless of the flag.
+    assert env_during_call["AWS_SECRET_ACCESS_KEY"] is None
+    # Cleaned up after the call.
+    assert os.environ.get("ENV_ONLY_KEY") is None
+
+
+def test_custom_config_bearer_token_clobbers_provider_api_key() -> None:
+    llm = LitellmLLM(
+        api_key="stored-key",
+        timeout=30,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
+        max_input_tokens=200000,
+        custom_config={"AWS_BEARER_TOKEN_BEDROCK": "bearer-token"},
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = _simple_stream_chunks(
+            "anthropic.claude-3-sonnet-20240229-v1:0"
+        )
+        llm.invoke([UserMessage(content="Hi")])
+
+    assert mock_completion.call_args.kwargs["api_key"] == "bearer-token"
+
+
+def test_generic_custom_provider_api_key_reaches_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A custom provider keeping its key in custom_config (legacy env-var
+    style) still authenticates via kwargs when injection is disabled."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    llm = LitellmLLM(
+        api_key=None,
+        timeout=30,
+        model_provider="groq",
+        model_name="llama-3.3-70b-versatile",
+        max_input_tokens=8192,
+        custom_config={"GROQ_API_KEY": "groq-key"},
+    )
+
+    env_during_call: dict[str, str | None] = {}
+
+    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
+        env_during_call["GROQ_API_KEY"] = os.environ.get("GROQ_API_KEY")
+        return _simple_stream_chunks("llama-3.3-70b-versatile")
+
+    with (
+        patch("litellm.completion", side_effect=fake_completion) as mock_completion,
+        patch(
+            "onyx.llm.multi_llm._env_injection_enabled",
+            return_value=False,
+        ),
+    ):
+        llm.invoke([UserMessage(content="Hi")])
+
+    assert mock_completion.call_args.kwargs["api_key"] == "groq-key"
+    assert env_during_call["GROQ_API_KEY"] is None
+
+
+def test_ui_only_keys_never_injected_or_warned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """UI form-state keys are excluded from the env-only bucket: no injection
+    when enabled, no drop warning when disabled."""
+    monkeypatch.delenv("BEDROCK_AUTH_METHOD", raising=False)
+
+    llm = LitellmLLM(
+        api_key=None,
+        timeout=30,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
+        max_input_tokens=200000,
+        custom_config={
+            "BEDROCK_AUTH_METHOD": "long_term_api_key",
+            "AWS_REGION_NAME": "us-east-1",
+            "AWS_BEARER_TOKEN_BEDROCK": "bearer",
+        },
+    )
+    assert llm._env_only_custom_config == {}
+
+    env_during_call: dict[str, str | None] = {}
+
+    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:  # noqa: ARG001
+        env_during_call["BEDROCK_AUTH_METHOD"] = os.environ.get("BEDROCK_AUTH_METHOD")
+        return _simple_stream_chunks("anthropic.claude-3-sonnet-20240229-v1:0")
+
+    for injection_enabled in (True, False):
+        with (
+            patch("litellm.completion", side_effect=fake_completion),
+            patch(
+                "onyx.llm.multi_llm._env_injection_enabled",
+                return_value=injection_enabled,
+            ),
+            patch("onyx.llm.multi_llm._warn_dropped_env_only_keys") as mock_warn,
+        ):
+            llm.invoke([UserMessage(content="Hi")])
+        assert env_during_call["BEDROCK_AUTH_METHOD"] is None
+        mock_warn.assert_not_called()

@@ -1,8 +1,7 @@
 import json
 import os
 import urllib.parse
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
@@ -10,8 +9,10 @@ from onyx.cache.interface import CacheBackendType
 from onyx.configs.constants import QueryHistoryType
 from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.prompts.image_analysis import (
+    DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+    DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -265,38 +266,49 @@ OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
 # an "Organization Profile" block in the system prompt plus `{{user.<key>}}`
 # placeholders in agent prompts. Off by default: it sends directory data to
 # the configured LLM, which deployments must consciously opt into.
-# Forced off under multi-tenancy: claims are captured in the unauthenticated
-# OAuth callback, where the tenant is not yet resolved, so the snapshot would be
-# written under the default tenant id and never read back. Single-tenant only
-# until per-tenant capture lands.
 IDP_PROFILE_ENRICHMENT_ENABLED = (
     os.environ.get("IDP_PROFILE_ENRICHMENT_ENABLED", "").lower() == "true"
-    and not MULTI_TENANT
 )
+
+
+def parse_idp_claim_map(raw: str | None) -> dict[str, list[str]]:
+    """Parse the IDP_PROFILE_CLAIM_MAP env value, warning on every ignored
+    shape. A silently dropped map is invisible misconfiguration (placeholders
+    just stay empty), so anything not a dict-of-lists gets a log line."""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("IDP_PROFILE_CLAIM_MAP is not valid JSON, ignoring it")
+        return {}
+    if not isinstance(parsed, dict):
+        logger.warning(
+            "IDP_PROFILE_CLAIM_MAP must be a JSON object, got %s, ignoring it",
+            type(parsed).__name__,
+        )
+        return {}
+    claim_map: dict[str, list[str]] = {}
+    for key, aliases in parsed.items():
+        if not isinstance(aliases, list):
+            logger.warning(
+                "IDP_PROFILE_CLAIM_MAP entry %r must map to a list of claim "
+                "names, got %s, dropping it",
+                key,
+                type(aliases).__name__,
+            )
+            continue
+        claim_map[str(key)] = [str(alias) for alias in aliases]
+    return claim_map
+
 
 # Optional per-deployment claim-alias overrides for the directory profile,
 # as JSON mapping placeholder key -> ordered claim-name list, e.g.
 # '{"department": ["dept", "division"], "country": ["c"]}'. Configured
 # aliases are checked before the built-in ones.
-IDP_PROFILE_CLAIM_MAP: dict[str, list[str]] = {}
-_IDP_PROFILE_CLAIM_MAP_RAW = os.environ.get("IDP_PROFILE_CLAIM_MAP")
-if _IDP_PROFILE_CLAIM_MAP_RAW:
-    try:
-        _parsed_claim_map = json.loads(_IDP_PROFILE_CLAIM_MAP_RAW)
-        if isinstance(_parsed_claim_map, dict):
-            IDP_PROFILE_CLAIM_MAP = {
-                str(key): [str(alias) for alias in aliases]
-                for key, aliases in _parsed_claim_map.items()
-                if isinstance(aliases, list)
-            }
-    except json.JSONDecodeError:
-        # Import-time, so plain logging: a silently ignored map would make the
-        # misconfiguration invisible (placeholders just stay empty).
-        import logging
-
-        logging.getLogger(__name__).warning(
-            "IDP_PROFILE_CLAIM_MAP is not valid JSON — ignoring it"
-        )
+IDP_PROFILE_CLAIM_MAP: dict[str, list[str]] = parse_idp_claim_map(
+    os.environ.get("IDP_PROFILE_CLAIM_MAP")
+)
 
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
@@ -975,6 +987,18 @@ MAX_CONCURRENT_PORT_ATTEMPTS = max(
     1, _non_negative_int_env("MAX_CONCURRENT_PORT_ATTEMPTS", 2)
 )
 
+# User-file ports run on the 2-thread user-file worker and a running port can't be
+# preempted, so default 1 leaves a thread for live uploads.
+MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS = max(
+    1, _non_negative_int_env("MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS", 1)
+)
+
+# Auto-pause a port unit after this many consecutive same-cursor failures. Any value works:
+# _MAX_TRACKED_FAILED_RETRIES (db/port_attempt.py) sizes its streak history to cover it.
+MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
+    1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
+)
+
 _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
 try:
     env_value = os.environ.get("CELERY_WORKER_DOCFETCHING_CONCURRENCY")
@@ -1225,6 +1249,10 @@ BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+BOX_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
     for ignored_tag in os.environ.get("JIRA_CONNECTOR_LABELS_TO_SKIP", "").split(",")
@@ -1460,6 +1488,20 @@ RECENCY_BIAS_MULTIPLIER = float(os.environ.get("RECENCY_BIAS_MULTIPLIER") or 1.0
 # backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
 RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
 
+# Flat per-image cost (cents) when litellm has no price for an image model.
+# Clamped to >= 0 so a misconfigured negative can't credit usage.
+DEFAULT_IMAGE_COST_CENTS = max(
+    0.0, float(os.environ.get("DEFAULT_IMAGE_COST_CENTS") or 4.0)
+)
+
+# Fallback USD/Mtok when litellm can't price (default 0 = free). Clamped >= 0.
+DEFAULT_LLM_INPUT_COST_PER_MTOK = max(
+    0.0, float(os.environ.get("DEFAULT_LLM_INPUT_COST_PER_MTOK") or 0.0)
+)
+DEFAULT_LLM_OUTPUT_COST_PER_MTOK = max(
+    0.0, float(os.environ.get("DEFAULT_LLM_OUTPUT_COST_PER_MTOK") or 0.0)
+)
+
 
 #####
 # Tool Configs
@@ -1581,6 +1623,15 @@ LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or ""  # For self-hosted Langfus
 # connect/disconnect takes effect (no restart needed).
 TRACING_CONFIG_CACHE_TTL_SECONDS = float(
     os.environ.get("TRACING_CONFIG_CACHE_TTL_SECONDS") or "30"
+)
+
+#####
+# Per-user usage/cost tracking
+#####
+# Records every priced generation span into the per-user usage ledger. On by
+# default; set to "false" to drop the recording processor entirely.
+USER_USAGE_TRACKING_ENABLED = (
+    os.environ.get("USER_USAGE_TRACKING_ENABLED", "true").lower() != "false"
 )
 
 # Defined custom query/answer conditions to validate the query and the LLM answer.
@@ -1885,6 +1936,24 @@ GCS_PROJECT_ID = os.environ.get("GCS_PROJECT_ID") or None
 GCS_SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GCS_SERVICE_ACCOUNT_KEY_PATH") or None
 # Service account key as inline JSON string (alternative to file path).
 GCS_SERVICE_ACCOUNT_KEY_JSON = os.environ.get("GCS_SERVICE_ACCOUNT_KEY_JSON") or None
+
+# Azure Blob Storage Configuration
+AZURE_FILE_STORE_CONTAINER_NAME = (
+    os.environ.get("AZURE_FILE_STORE_CONTAINER_NAME") or None
+)
+AZURE_FILE_STORE_PREFIX = os.environ.get("AZURE_FILE_STORE_PREFIX") or "onyx-files"
+AZURE_STORAGE_ACCOUNT_NAME = os.environ.get("AZURE_STORAGE_ACCOUNT_NAME") or None
+# Full blob endpoint URL. When unset, derived from the account name as
+# https://<account>.blob.core.windows.net. Set explicitly for Azurite or
+# sovereign clouds (e.g. *.blob.core.usgovcloudapi.net).
+AZURE_STORAGE_ACCOUNT_URL = os.environ.get("AZURE_STORAGE_ACCOUNT_URL") or None
+# Authentication (priority order): connection string, then account key, then
+# DefaultAzureCredential — supports AKS Workload Identity, managed identity,
+# and local `az login`.
+AZURE_STORAGE_CONNECTION_STRING = (
+    os.environ.get("AZURE_STORAGE_CONNECTION_STRING") or None
+)
+AZURE_STORAGE_ACCOUNT_KEY = os.environ.get("AZURE_STORAGE_ACCOUNT_KEY") or None
 
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html

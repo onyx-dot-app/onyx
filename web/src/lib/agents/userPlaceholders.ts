@@ -4,7 +4,7 @@
 // MUST stay in sync with the backend allow-list (enforced by
 // backend/tests/unit/onyx/prompts/test_prompt_utils.py):
 //   - onyx/prompts/prompt_utils.py `USER_PLACEHOLDER_KEYS`
-//   - onyx/auth/oauth_claims_capture.py `_PROFILE_FIELDS`
+//   - onyx/auth/login_claims_capture.py `_PROFILE_FIELDS`
 
 export interface UserPlaceholder {
   key: string;

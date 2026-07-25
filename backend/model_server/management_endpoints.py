@@ -1,5 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Response
+from fastapi import APIRouter, Response
 
 from model_server.constants import GPUStatus
 from model_server.utils import get_gpu_type

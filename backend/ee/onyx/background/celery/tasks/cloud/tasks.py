@@ -1,26 +1,28 @@
 import time
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from redis.lock import Lock as RedisLock
 
 from ee.onyx.server.tenants.product_gating import get_gated_tenants
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    ONYX_CLOUD_TENANT_ID,
+    OnyxCeleryPriority,
+    OnyxCeleryTask,
+    OnyxRedisLocks,
+)
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import redis_lock_dump
-from onyx.redis.redis_tenant_work_gating import cleanup_expired
-from onyx.redis.redis_tenant_work_gating import get_active_tenants
-from onyx.redis.redis_tenant_work_gating import observe_active_set_size
-from onyx.redis.redis_tenant_work_gating import record_full_fanout_cycle
-from onyx.redis.redis_tenant_work_gating import record_gate_decision
+from onyx.redis.redis_pool import get_redis_client, redis_lock_dump
+from onyx.redis.redis_tenant_work_gating import (
+    cleanup_expired,
+    get_active_tenants,
+    observe_active_set_size,
+    record_full_fanout_cycle,
+    record_gate_decision,
+)
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST

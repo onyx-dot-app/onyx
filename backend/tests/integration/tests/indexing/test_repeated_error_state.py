@@ -12,8 +12,10 @@ from onyx.connectors.models import InputType
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
+from tests.integration.common_utils.constants import (
+    MOCK_CONNECTOR_SERVER_HOST,
+    MOCK_CONNECTOR_SERVER_PORT,
+)
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager

@@ -16,18 +16,19 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 from typing import Any
 
-from ee.onyx.server.scim.models import SCIM_ENTERPRISE_USER_SCHEMA
-from ee.onyx.server.scim.models import ScimGroupMember
-from ee.onyx.server.scim.models import ScimGroupResource
-from ee.onyx.server.scim.models import ScimPatchOperation
-from ee.onyx.server.scim.models import ScimPatchOperationType
-from ee.onyx.server.scim.models import ScimPatchResourceValue
-from ee.onyx.server.scim.models import ScimPatchValue
-from ee.onyx.server.scim.models import ScimUserResource
+from ee.onyx.server.scim.models import (
+    SCIM_ENTERPRISE_USER_SCHEMA,
+    ScimGroupMember,
+    ScimGroupResource,
+    ScimPatchOperation,
+    ScimPatchOperationType,
+    ScimPatchResourceValue,
+    ScimPatchValue,
+    ScimUserResource,
+)
 
 logger = logging.getLogger(__name__)
 

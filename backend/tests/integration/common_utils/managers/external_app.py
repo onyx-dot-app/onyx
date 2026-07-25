@@ -1,37 +1,19 @@
-import io
-import json
-import zipfile
 from typing import Any
-from uuid import uuid4
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
+    CreateCustomExternalAppRequest,
+    ExternalAppAdminResponse,
+    ExternalAppUserResponse,
+    UpdateExternalAppRequest,
+    UpsertUserCredentialsRequest,
 )
-from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
-from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
-from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
-from onyx.server.features.build.external_apps.models import UpsertUserCredentialsRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 _BUILD_PREFIX = f"{API_SERVER_URL}/build"
-
-
-def _minimal_bundle_zip(skill_name: str) -> bytes:
-    """A valid skill bundle (SKILL.md + helper file) for creating bundle-backed
-    custom apps through the admin endpoint."""
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr(
-            "SKILL.md",
-            f"---\nname: {skill_name}\ndescription: Bundle description\n"
-            "---\n\nDo things.\n",
-        )
-        zf.writestr("helper.py", "print('hello')\n")
-    return buf.getvalue()
 
 
 class ExternalAppManager:
@@ -45,7 +27,6 @@ class ExternalAppManager:
     def create(
         user_performing_action: DATestUser,
         name: str,
-        description: str,
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
@@ -56,7 +37,6 @@ class ExternalAppManager:
             user_performing_action,
             None,
             name,
-            description,
             app_type,
             upstream_url_patterns,
             auth_template,
@@ -69,7 +49,6 @@ class ExternalAppManager:
         user_performing_action: DATestUser,
         app_id: int,
         name: str,
-        description: str,
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
@@ -80,7 +59,6 @@ class ExternalAppManager:
             user_performing_action,
             app_id,
             name,
-            description,
             app_type,
             upstream_url_patterns,
             auth_template,
@@ -93,7 +71,6 @@ class ExternalAppManager:
         user_performing_action: DATestUser,
         app_id: int | None,
         name: str,
-        description: str,
         app_type: ExternalAppType,
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
@@ -101,12 +78,10 @@ class ExternalAppManager:
         action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
         # Update (``app_id`` set) is type-agnostic — the JSON PATCH edits fields
-        # for built-in and custom apps alike. Create routes by type: custom apps
-        # need the multipart endpoint (bundle upload); built-ins use JSON.
+        # for built-in and custom apps alike. Create routes by app type.
         if app_id is not None:
             update_body = UpdateExternalAppRequest(
                 name=name,
-                description=description,
                 upstream_url_patterns=upstream_url_patterns,
                 auth_template=auth_template,
                 organization_credentials=organization_credentials,
@@ -122,7 +97,6 @@ class ExternalAppManager:
             response = ExternalAppManager._create_custom(
                 user_performing_action,
                 name,
-                description,
                 upstream_url_patterns,
                 auth_template,
                 organization_credentials,
@@ -130,7 +104,6 @@ class ExternalAppManager:
         else:
             create_body = CreateBuiltInExternalAppRequest(
                 name=name,
-                description=description,
                 app_type=app_type,
                 upstream_url_patterns=upstream_url_patterns,
                 auth_template=auth_template,
@@ -150,39 +123,20 @@ class ExternalAppManager:
     def _create_custom(
         user_performing_action: DATestUser,
         name: str,
-        description: str,
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
     ) -> Any:
-        """POST the multipart custom-app create endpoint (bundle required)."""
-        data: dict[str, str] = {
-            "name": name,
-            "description": description,
-            "upstream_url_patterns": json.dumps(upstream_url_patterns),
-            "auth_template": json.dumps(auth_template),
-            "organization_credentials": json.dumps(organization_credentials),
-        }
-        # Each bundle needs a unique canonical name while slug uniqueness is
-        # still enforced by the current persistence model.
-        skill_name = f"custom-{uuid4().hex[:8]}"
-        files: dict[str, tuple[str, bytes, str]] = {
-            "bundle": (
-                f"{skill_name}.zip",
-                _minimal_bundle_zip(skill_name),
-                "application/zip",
-            )
-        }
-        # Drop the default JSON Content-Type so httpx can set the multipart
-        # boundary itself; leaving "application/json" in place makes the server
-        # try to JSON-parse the form body and report every field as missing.
-        headers = user_performing_action.headers.copy()
-        headers.pop("Content-Type", None)
+        body = CreateCustomExternalAppRequest(
+            name=name,
+            upstream_url_patterns=upstream_url_patterns,
+            auth_template=auth_template,
+            organization_credentials=organization_credentials,
+        )
         return client.post(
             f"{_BUILD_PREFIX}/admin/apps/custom",
-            data=data,
-            files=files,
-            headers=headers,
+            json=body.model_dump(mode="json"),
+            headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
         )
 
@@ -197,6 +151,21 @@ class ExternalAppManager:
         )
         response.raise_for_status()
         return [ExternalAppAdminResponse.model_validate(row) for row in response.json()]
+
+    @staticmethod
+    def set_enabled(
+        user_performing_action: DATestUser,
+        app_id: int,
+        enabled: bool,
+    ) -> ExternalAppAdminResponse:
+        response = client.patch(
+            f"{_BUILD_PREFIX}/admin/apps/{app_id}",
+            json={"enabled": enabled},
+            headers=user_performing_action.headers,
+            cookies=user_performing_action.cookies,
+        )
+        response.raise_for_status()
+        return ExternalAppAdminResponse.model_validate(response.json())
 
     @staticmethod
     def delete(user_performing_action: DATestUser, app_id: int) -> None:

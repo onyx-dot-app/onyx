@@ -6,10 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
-from onyx.db.models import MCPServer
-from onyx.db.models import MCPServer__User
-from onyx.db.models import MCPServer__UserGroup
-from onyx.db.models import UserGroup
+from onyx.db.models import MCPServer, MCPServer__User, MCPServer__UserGroup, UserGroup
 from onyx.server.features.mcp.api import update_mcp_server_simple
 from onyx.server.features.mcp.models import MCPServerSimpleUpdateRequest
 from tests.external_dependency_unit.conftest import create_test_user

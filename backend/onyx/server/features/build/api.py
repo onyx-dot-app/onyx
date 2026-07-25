@@ -1,5 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -19,8 +18,10 @@ from onyx.server.features.build.external_apps.oauth import (
 )
 from onyx.server.features.build.interactive_turns.api import router as turns_router
 from onyx.server.features.build.models import BaseInstructionsResponse
-from onyx.server.features.build.rate_limit import get_user_rate_limit_status
-from onyx.server.features.build.rate_limit import RateLimitResponse
+from onyx.server.features.build.rate_limit import (
+    RateLimitResponse,
+    get_user_rate_limit_status,
+)
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     AGENT_INSTRUCTIONS_TEMPLATE_PATH,
 )

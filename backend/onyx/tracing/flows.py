@@ -30,6 +30,7 @@ class LLMFlow(StrEnum):
 
     # Build session (assistants)
     BUILD_SESSION_NAMING = "build_session_naming"
+    CRAFT_LLM_GENERATION = "craft_llm_generation"
 
     # Federated search helpers
     SLACK_DATE_EXTRACTION = "slack_date_extraction"
@@ -63,3 +64,8 @@ class LLMFlow(StrEnum):
     # ``llm_generation_span`` at the call site with the right tag.
     UNTAGGED_INVOKE = "untagged_invoke"
     UNTAGGED_STREAM = "untagged_stream"
+
+
+IMAGE_FLOWS: frozenset[LLMFlow] = frozenset(
+    {LLMFlow.IMAGE_GENERATION, LLMFlow.IMAGE_EDIT}
+)

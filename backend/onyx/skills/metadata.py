@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from typing import Any
-from typing import Final
+from typing import Any, Final
 
 import yaml
 from pydantic import ValidationError
@@ -14,8 +13,7 @@ from yaml.nodes import MappingNode
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.models import SkillDocument
-from onyx.skills.models import SkillMetadata
+from onyx.skills.models import SkillDocument, SkillMetadata
 
 _FRONTMATTER_REGEX: Final[re.Pattern[str]] = re.compile(
     r"\A---[ \t]*\r?\n(?P<frontmatter>.*?)(?:\r?\n)---[ \t]*(?:\r?\n|\Z)",

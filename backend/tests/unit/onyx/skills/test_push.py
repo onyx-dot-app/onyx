@@ -10,8 +10,9 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Skill
-from onyx.db.models import User
+from onyx.db.models import Skill, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills import push
 
@@ -33,15 +34,14 @@ def _bundle(name: str, *, wrapper: str | None = None) -> bytes:
 
 def _skill(
     *,
-    slug: str = "canonical-name",
+    name: str = "canonical-name",
     is_valid: bool | None = None,
 ) -> Skill:
     return cast(
         Skill,
         SimpleNamespace(
             id=uuid4(),
-            slug=slug,
-            name=slug,
+            name=name,
             bundle_file_id="bundle-id",
             built_in_skill_id=None,
             is_valid=is_valid,
@@ -49,15 +49,28 @@ def _skill(
     )
 
 
-def test_compute_skills_hash_is_order_independent_and_content_sensitive() -> None:
+def test_skill_runtime_hash_covers_files_and_connectable_apps() -> None:
     files = {"b/SKILL.md": b"second", "a/SKILL.md": b"first"}
 
-    assert push.compute_skills_hash(files) == push.compute_skills_hash(
-        dict(reversed(files.items()))
-    )
-    assert push.compute_skills_hash(files) != push.compute_skills_hash(
-        {**files, "a/SKILL.md": b"changed"}
-    )
+    assert push.compute_skill_runtime_hash(
+        files, "apps"
+    ) == push.compute_skill_runtime_hash(dict(reversed(files.items())), "apps")
+    assert push.compute_skill_runtime_hash(
+        files, "apps"
+    ) != push.compute_skill_runtime_hash({**files, "a/SKILL.md": b"changed"}, "apps")
+    assert push.compute_skill_runtime_hash(
+        files, "apps"
+    ) != push.compute_skill_runtime_hash(files, "different apps")
+
+
+def test_assemble_rejects_duplicate_names() -> None:
+    user = cast(User, SimpleNamespace())
+    skills = [_skill(is_valid=True), _skill(is_valid=True)]
+
+    with pytest.raises(OnyxError) as exc_info:
+        push._assemble_fileset(skills, user, MagicMock(spec=Session))
+
+    assert exc_info.value.error_code == OnyxErrorCode.INTERNAL_ERROR
 
 
 def test_assemble_classifies_and_hydrates_valid_unclassified_skill(
@@ -201,18 +214,20 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     valid_skill = _skill(is_valid=True)
-    invalid_skill = _skill(slug="invalid-skill", is_valid=False)
+    invalid_skill = _skill(name="invalid-skill", is_valid=False)
     user = cast(User, SimpleNamespace())
     db_session = MagicMock(spec=Session)
+    list_runtime_skills = MagicMock(return_value=[valid_skill, invalid_skill])
+    assemble_fileset = MagicMock(return_value={"canonical-name/SKILL.md": b"content"})
     monkeypatch.setattr(
         push,
-        "list_skills",
-        lambda **_kwargs: [valid_skill, invalid_skill],
+        "list_runtime_skills_for_user",
+        list_runtime_skills,
     )
     monkeypatch.setattr(
         push,
         "_assemble_fileset",
-        lambda *_args: {"canonical-name/SKILL.md": b"content"},
+        assemble_fileset,
     )
     monkeypatch.setattr(push, "get_connectable_apps_for_user", lambda *_args: [])
     monkeypatch.setattr(push, "build_connectable_apps_list", lambda _apps: "apps")
@@ -221,3 +236,12 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
 
     assert apps_section == "apps"
     assert files == {"canonical-name/SKILL.md": b"content"}
+    list_runtime_skills.assert_called_once_with(
+        user=user,
+        db_session=db_session,
+    )
+    assemble_fileset.assert_called_once_with(
+        [valid_skill, invalid_skill],
+        user,
+        db_session,
+    )

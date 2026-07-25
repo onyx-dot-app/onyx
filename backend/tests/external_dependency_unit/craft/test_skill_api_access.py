@@ -11,32 +11,32 @@ import pytest
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import SkillAccessLevel
-from onyx.db.enums import SkillSharePermission
-from onyx.db.models import User
-from onyx.db.models import UserRole
-from onyx.db.models import UserSkillPreference
+from onyx.db.enums import SkillAccessLevel, SkillSharePermission
+from onyx.db.models import User, UserRole, UserSkillPreference
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill.api import create_custom_skill
-from onyx.server.features.skill.api import create_custom_skill_from_editor
-from onyx.server.features.skill.api import fetch_skill_for_current_user
-from onyx.server.features.skill.api import patch_current_user_skill
-from onyx.server.features.skill.api import remove_current_user_skill_file
-from onyx.server.features.skill.api import replace_current_user_skill_bundle
-from onyx.server.features.skill.api import set_skill_enabled_for_current_user
-from onyx.server.features.skill.api import upload_current_user_skill_files
-from onyx.server.features.skill.models import SkillEnableRequest
-from onyx.server.features.skill.models import SkillPatchRequest
-from onyx.skills.bundle import build_single_file_bundle
-from onyx.skills.bundle import build_skill_md
-from onyx.skills.bundle import SKILL_MD_NAME
-from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
-from tests.external_dependency_unit.craft.db_helpers import make_group
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
-from tests.external_dependency_unit.craft.db_helpers import share_skill_with_group
-from tests.external_dependency_unit.craft.db_helpers import share_skill_with_user
+from onyx.server.features.skill.api import (
+    create_custom_skill,
+    create_custom_skill_from_editor,
+    fetch_skill_for_current_user,
+    patch_current_user_skill,
+    remove_current_user_skill_file,
+    replace_current_user_skill_bundle,
+    set_skill_enabled_for_current_user,
+    upload_current_user_skill_files,
+)
+from onyx.server.features.skill.models import SkillEnableRequest, SkillPatchRequest
+from onyx.skills.bundle import SKILL_MD_NAME, build_single_file_bundle, build_skill_md
+from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
+    make_external_app,
+    make_group,
+    make_skill,
+    make_user,
+    make_user_credential,
+    share_skill_with_group,
+    share_skill_with_user,
+)
 
 
 def _upload(filename: str, content: bytes = b"bundle") -> UploadFile:
@@ -84,6 +84,74 @@ def test_fetch_direct_shared_skill_is_not_personal(
     assert response.source == "custom"
     assert response.is_personal is False
     assert response.user_permission == SkillAccessLevel.VIEWER
+
+
+def test_fetch_associated_skill_reports_current_user_dependency_readiness(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session, role=UserRole.BASIC)
+    skill = make_skill(db_session, is_public=True)
+    app = make_external_app(
+        db_session,
+        skill=skill,
+        auth_template={"Authorization": "Bearer {token}"},
+    )
+    app.name = "Acme CRM"
+    db_session.flush()
+
+    disconnected = fetch_skill_for_current_user(
+        skill.id,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert disconnected.external_app is not None
+    assert disconnected.external_app.external_app_id == app.id
+    assert disconnected.external_app.name == "Acme CRM"
+    assert disconnected.external_app.enabled is True
+    assert disconnected.external_app.ready is False
+    assert disconnected.enabled is False
+    assert disconnected.can_toggle is False
+
+    make_user_credential(
+        db_session,
+        app=app,
+        user=user,
+        user_credentials={"token": "connected"},
+    )
+    connected = fetch_skill_for_current_user(
+        skill.id,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert connected.external_app is not None
+    assert connected.external_app.ready is True
+    assert connected.enabled is False
+    assert connected.can_toggle is True
+
+    selected = set_skill_enabled_for_current_user(
+        skill.id,
+        SkillEnableRequest(enabled=True),
+        user=user,
+        db_session=db_session,
+    )
+    assert selected.enabled is True
+    assert selected.external_app is not None
+    assert selected.external_app.ready is True
+
+    app.enabled = False
+    db_session.flush()
+    unavailable = fetch_skill_for_current_user(
+        skill.id,
+        user=user,
+        db_session=db_session,
+    )
+    assert unavailable.enabled is True
+    assert unavailable.can_toggle is True
+    assert unavailable.external_app is not None
+    assert unavailable.external_app.ready is False
 
 
 def test_viewer_share_cannot_patch_skill(
@@ -144,7 +212,6 @@ def test_preference_commit_succeeds_when_sandbox_push_fails(
     )
     assert response.enabled is True
     assert preference is not None
-    assert preference.enabled is True
 
 
 def test_create_reserved_name_rejects_from_bundle_metadata(

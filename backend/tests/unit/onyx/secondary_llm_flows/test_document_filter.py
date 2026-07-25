@@ -1,17 +1,20 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.configs.chat_configs import SECONDARY_LLM_FLOW_TIMEOUT_S
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import ContextExpansionType
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
+from onyx.context.search.models import (
+    ContextExpansionType,
+    InferenceChunk,
+    InferenceSection,
+)
 from onyx.llm.interfaces import LLM
 from onyx.llm.multi_llm import LLMTimeoutError
-from onyx.secondary_llm_flows.document_filter import classify_section_relevance
-from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
+from onyx.secondary_llm_flows.document_filter import (
+    classify_section_relevance,
+    select_sections_for_expansion,
+)
 
 
 @contextmanager

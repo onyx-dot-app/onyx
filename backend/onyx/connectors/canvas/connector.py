@@ -1,41 +1,46 @@
-from datetime import datetime
-from datetime import timezone
+import time
+from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any
-from typing import cast
-from typing import NoReturn
+from typing import Any, NoReturn, cast
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.canvas.access import build_course_permission_context
-from onyx.connectors.canvas.access import get_announcement_permissions
-from onyx.connectors.canvas.access import get_assignment_permissions
-from onyx.connectors.canvas.access import get_page_permissions
+from onyx.connectors.canvas.access import (
+    build_course_permission_context,
+    get_announcement_permissions,
+    get_assignment_permissions,
+    get_page_permissions,
+)
 from onyx.connectors.canvas.client import CanvasApiClient
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    EntityFailure,
+    HierarchyNode,
+    ImageSection,
+    SlimDocument,
+    TextSection,
+)
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -412,15 +417,25 @@ class CanvasConnector(
         return assignments
 
     @retry_builder(tries=3, delay=1, backoff=2)
-    def _list_announcements(self, course_id: int) -> list[CanvasAnnouncement]:
+    def _list_announcements(
+        self,
+        course_id: int,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> list[CanvasAnnouncement]:
         """Fetch all announcements for a given course."""
         logger.debug("Fetching announcements for course %s", course_id)
 
         announcements: list[CanvasAnnouncement] = []
         config = _STAGE_CONFIG[CanvasStage.ANNOUNCEMENTS]
+        params = _format_stage_params(config["params"], course_id)
+        params["start_date"] = _unix_to_canvas_time(start if start is not None else 0.0)
+        params["end_date"] = _unix_to_canvas_time(
+            end if end is not None else time.time()
+        )
         for page in self.canvas_client.paginate(
             config["endpoint"].format(course_id=course_id),
-            params=_format_stage_params(config["params"], course_id),
+            params=params,
         ):
             announcements.extend(
                 CanvasAnnouncement.from_api(a, course_id=course_id) for a in page
@@ -972,14 +987,18 @@ class CanvasConnector(
     @override
     def retrieve_all_slim_docs_perm_sync(
         self,
-        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
-        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         slim_doc_batch: list[SlimDocument | HierarchyNode] = []
 
         for course in self._list_courses():
-            for slim_doc in self._retrieve_course_slim_docs(course.id):
+            for slim_doc in self._retrieve_course_slim_docs(
+                course.id,
+                start,
+                end,
+            ):
                 slim_doc_batch.append(slim_doc)
                 if len(slim_doc_batch) < self.batch_size:
                     continue
@@ -999,6 +1018,8 @@ class CanvasConnector(
     def _retrieve_course_slim_docs(
         self,
         course_id: int,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
     ) -> list[SlimDocument]:
         slim_docs: list[SlimDocument] = []
 
@@ -1020,7 +1041,7 @@ class CanvasConnector(
                 )
             )
 
-        for announcement in self._list_announcements(course_id):
+        for announcement in self._list_announcements(course_id, start, end):
             slim_docs.append(
                 SlimDocument(
                     id=f"canvas-announcement-{announcement.course_id}-{announcement.id}",

@@ -13,8 +13,7 @@ best and crash-on-missing-config at worst.
 
 from onyx.sandbox_proxy.ca import CAStore
 from onyx.sandbox_proxy.identity import SandboxIPLookup
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 
 
 def build_ca_store() -> CAStore:

@@ -7,10 +7,8 @@ import requests
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.db.models import OAuthConfig
-from onyx.db.models import OAuthUserToken
-from onyx.db.oauth_config import get_user_oauth_token
-from onyx.db.oauth_config import upsert_user_oauth_token
+from onyx.db.models import OAuthConfig, OAuthUserToken
+from onyx.db.oauth_config import get_user_oauth_token, upsert_user_oauth_token
 from onyx.server.security.models import outbound_ssrf_params
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
