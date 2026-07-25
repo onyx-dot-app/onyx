@@ -7,7 +7,9 @@ error or EOF the loop reconnects with exponential backoff capped at
 
 Mirrors the K8s informer's posture (`identity_k8s.py`): fail loud on duplicate
 IPs at initial sync, clear ``_synced`` on disconnect so ``/healthz`` flips to
-503, evict by container id when the IP changes on restart.
+503, evict by container id when the IP changes on restart, and fall back to a
+one-shot read-through on a cache miss so a new container's first egress (which
+can beat its ``start`` event) isn't rejected as unidentified.
 """
 
 import threading
@@ -152,7 +154,64 @@ class DockerEventsLookup(SandboxIPLookup):
 
     def lookup(self, src_ip: str) -> SandboxIdentity | None:
         with self._cache_lock:
-            return self._cache.get(src_ip)
+            hit = self._cache.get(src_ip)
+        if hit is not None:
+            return hit
+        return self._read_through(src_ip)
+
+    def _read_through(self, src_ip: str) -> SandboxIdentity | None:
+        # Resolve straight from the daemon on a cache miss (a new container's
+        # first egress can beat its `start` event). Not cached — the events
+        # stream stays the sole cache writer, so this can't linger past a
+        # die/destroy and misattribute a reused IP.
+        try:
+            matches = [
+                identity
+                for _cid, identity in self._list_container_identities()
+                if identity.sandbox_ip == src_ip
+            ]
+        except Exception as e:
+            logger.warning("identity_readthrough_error src_ip=%s error=%s", src_ip, e)
+            return None
+
+        # Require exactly one validated container: an IP resolving to more than
+        # one is ambiguous, and picking matches[0] would trust list ordering.
+        if len(matches) != 1:
+            if matches:
+                logger.warning(
+                    "identity_readthrough_ambiguous src_ip=%s sandboxes=%s",
+                    src_ip,
+                    [str(i.sandbox_id) for i in matches],
+                )
+            return None
+
+        identity = matches[0]
+        logger.info(
+            "identity_readthrough_hit src_ip=%s sandbox=%s (events had not caught up)",
+            src_ip,
+            identity.sandbox_name,
+        )
+        return identity
+
+    def _list_container_identities(self) -> list[tuple[str, SandboxIdentity]]:
+        """List sandbox containers as ``(container_id, identity)`` pairs."""
+        containers = self._docker.containers.list(
+            filters={
+                "label": f"{LABEL_DOCKER_COMPONENT}={LABEL_DOCKER_COMPONENT_SANDBOX}"
+            },
+        )
+        pairs: list[tuple[str, SandboxIdentity]] = []
+        for container in containers:
+            # ``containers.list`` returns objects with attrs already populated;
+            # reload defensively in case the SDK ever changes that.
+            try:
+                container.reload()
+            except (APIError, NotFound):
+                continue
+            identity = _identity_from_container(container, self._network)
+            if identity is not None:
+                pairs.append((container.id, identity))
+        return pairs
 
     def _run(self) -> None:
         backoff = _RECONNECT_INITIAL_SECONDS
@@ -196,23 +255,9 @@ class DockerEventsLookup(SandboxIPLookup):
             backoff = min(backoff * 2, _RECONNECT_MAX_SECONDS)
 
     def _initial_sync(self) -> None:
-        containers = self._docker.containers.list(
-            filters={
-                "label": f"{LABEL_DOCKER_COMPONENT}={LABEL_DOCKER_COMPONENT_SANDBOX}"
-            },
-        )
         new_cache: dict[str, SandboxIdentity] = {}
         new_by_id: dict[str, str] = {}
-        for c in containers:
-            # ``containers.list`` returns objects with attrs already populated;
-            # reload defensively in case the SDK ever changes that.
-            try:
-                c.reload()
-            except (APIError, NotFound):
-                continue
-            identity = _identity_from_container(c, self._network)
-            if identity is None:
-                continue
+        for container_id, identity in self._list_container_identities():
             existing = new_cache.get(identity.sandbox_ip)
             if existing is not None and existing.sandbox_id != identity.sandbox_id:
                 raise RuntimeError(
@@ -221,7 +266,7 @@ class DockerEventsLookup(SandboxIPLookup):
                     "Refusing to serve traffic with ambiguous identity."
                 )
             new_cache[identity.sandbox_ip] = identity
-            new_by_id[c.id] = identity.sandbox_ip
+            new_by_id[container_id] = identity.sandbox_ip
 
         with self._cache_lock:
             self._cache = new_cache

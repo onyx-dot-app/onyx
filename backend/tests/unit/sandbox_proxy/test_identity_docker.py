@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from docker import DockerClient
+from requests.exceptions import ConnectionError as RequestsConnectionError
 
 from onyx.sandbox_proxy.identity_docker import (
     DockerEventsLookup,
@@ -303,6 +304,66 @@ def test_initial_sync_skips_unidentifiable_containers() -> None:
 
     assert lookup.lookup("172.18.0.5") is not None
     assert lookup.lookup("172.18.0.6") is None
+
+
+# ------------------------------------------------------------------------------
+# Read-through on cache miss
+# ------------------------------------------------------------------------------
+
+
+def test_lookup_miss_reads_through_without_caching() -> None:
+    lookup, client = _make_lookup()
+    client.containers.list.return_value = [
+        _make_container(container_id="cid-1", ip="172.18.0.5")
+    ]
+
+    identity = lookup.lookup("172.18.0.5")
+
+    assert identity is not None
+    assert identity.sandbox_name == "sandbox-aaaa1111"
+    # The events stream is the sole cache writer, so a read-through hit is not
+    # cached: it can't linger past a die/destroy and misattribute a reused IP.
+    assert lookup._cache == {}
+    client.containers.list.reset_mock()
+    assert lookup.lookup("172.18.0.5") is not None
+    assert client.containers.list.call_count == 1
+
+
+def test_lookup_readthrough_miss_returns_none() -> None:
+    lookup, client = _make_lookup()
+    client.containers.list.return_value = []
+
+    assert lookup.lookup("172.18.0.9") is None
+    assert lookup._cache == {}
+
+
+def test_lookup_readthrough_api_error_fails_closed() -> None:
+    lookup, client = _make_lookup()
+    client.containers.list.side_effect = RequestsConnectionError("daemon down")
+
+    assert lookup.lookup("172.18.0.9") is None
+
+
+def test_lookup_readthrough_ambiguous_ip_refused() -> None:
+    lookup, client = _make_lookup()
+    other_uuid = "22222222-2222-2222-2222-222222222222"
+    client.containers.list.return_value = [
+        _make_container(container_id="cid-1", ip="172.18.0.5"),
+        _make_container(container_id="cid-2", sandbox_id=other_uuid, ip="172.18.0.5"),
+    ]
+
+    assert lookup.lookup("172.18.0.5") is None
+
+
+def test_lookup_readthrough_skips_unidentifiable() -> None:
+    lookup, client = _make_lookup()
+    client.containers.list.return_value = [
+        _make_container(
+            container_id="cid-bad", component="sandbox-proxy", ip="172.18.0.5"
+        )
+    ]
+
+    assert lookup.lookup("172.18.0.5") is None
 
 
 # ------------------------------------------------------------------------------
