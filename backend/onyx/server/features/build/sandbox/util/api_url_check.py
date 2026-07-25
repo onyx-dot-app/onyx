@@ -59,6 +59,14 @@ def validate_sandbox_api_url(api_server_url: str) -> None:
     unreachable or ambiguous probe (egress quirks, hairpin NAT, WAF-guarded
     health) logs a warning and passes — this check must never block a working
     deployment.
+
+    Probes at most once per process regardless of outcome: the passing paths
+    (confirmed, or fail-open) latch ``_validated`` so we never re-probe on
+    later provisions — validation is of static config, and fail-open already
+    means "we tolerate not knowing," so re-probing buys nothing but latency
+    (up to the connect timeout per provision when the URL is unreachable). A
+    confirmed missing prefix still raises without latching, so provisioning
+    keeps failing until the operator fixes the value.
     """
     global _validated
     if _validated:
@@ -72,6 +80,8 @@ def validate_sandbox_api_url(api_server_url: str) -> None:
             "skipping the prefix check",
             base,
         )
+        with _validated_lock:
+            _validated = True
         return
     if _is_health_response(response):
         with _validated_lock:
@@ -107,3 +117,5 @@ def validate_sandbox_api_url(api_server_url: str) -> None:
         response.status_code,
         prefixed,
     )
+    with _validated_lock:
+        _validated = True
