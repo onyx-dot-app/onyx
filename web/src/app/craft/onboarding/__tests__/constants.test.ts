@@ -2,11 +2,10 @@
  * @jest-environment jsdom
  */
 import {
-  CRAFT_RECOMMENDED_MODEL_NAMES,
-  craftRecommendedModels,
   getCraftOnboardingSeen,
   getDefaultLlmSelection,
   hasSupportedCraftProvider,
+  isCraftRecommendedModel,
   isSupportedProviderType,
   resolveSessionLlmSelection,
   setCraftOnboardingSeen,
@@ -69,16 +68,16 @@ describe("hasSupportedCraftProvider", () => {
 });
 
 describe("getDefaultLlmSelection", () => {
-  it("picks the first recommended model from the first alphabetical provider", () => {
+  it("picks the recommended-default model, skipping earlier providers without one", () => {
     const result = getDefaultLlmSelection([
       {
-        ...provider("openai", [model("gpt-5.5")], 2),
+        ...provider("openai", [model("gpt-5.5", { craft: true })], 2),
         name: "Zulu OpenAI",
       },
       {
         ...provider(
           "bedrock",
-          [model("unrecommended"), model("claude-opus-4-8")],
+          [model("unrecommended"), model("claude-opus-5", { craft: true })],
           3
         ),
         name: "Alpha Bedrock",
@@ -92,11 +91,11 @@ describe("getDefaultLlmSelection", () => {
       providerId: 3,
       providerName: "Alpha Bedrock",
       provider: "bedrock",
-      modelName: "claude-opus-4-8",
+      modelName: "claude-opus-5",
     });
   });
 
-  it("falls back to the first visible model when nothing matches the curated list", () => {
+  it("falls back to the first visible model when nothing is flagged recommended", () => {
     const result = getDefaultLlmSelection([
       {
         ...provider(
@@ -138,35 +137,20 @@ describe("getDefaultLlmSelection", () => {
   });
 });
 
-describe("craftRecommendedModels", () => {
-  it("uses the explicit six-model Craft allowlist", () => {
-    const names = [
-      "gpt-5.6-sol",
-      "gpt-5.5",
-      "claude-fable-5",
-      "claude-opus-4-8",
-      "moonshotai/kimi-k3",
-      "z-ai/glm-5.2",
-    ];
-    const models = [
-      ...names.map((name) => model(name)),
-      model("gpt-5.6-terra"),
-      model("claude-haiku-4-5"),
-    ];
-
-    expect([...CRAFT_RECOMMENDED_MODEL_NAMES]).toEqual(names);
-    expect(craftRecommendedModels(models).map(({ name }) => name)).toEqual(
-      names
-    );
+describe("isCraftRecommendedModel", () => {
+  it("flags the provider's recommended-default model", () => {
+    expect(
+      isCraftRecommendedModel(model("claude-opus-5", { craft: true }))
+    ).toBe(true);
+    expect(isCraftRecommendedModel(model("claude-fable-5"))).toBe(false);
   });
 
-  it("omits hidden allowlisted models", () => {
+  it("does not flag a hidden model even when recommended", () => {
     expect(
-      craftRecommendedModels([
-        model("gpt-5.5", { visible: false }),
-        model("gpt-5.6-sol"),
-      ]).map(({ name }) => name)
-    ).toEqual(["gpt-5.6-sol"]);
+      isCraftRecommendedModel(
+        model("claude-opus-5", { craft: true, visible: false })
+      )
+    ).toBe(false);
   });
 });
 

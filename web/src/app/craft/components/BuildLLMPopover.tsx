@@ -10,9 +10,8 @@ import {
 } from "@/lib/languageModels/types";
 import {
   BuildLlmSelection,
-  CRAFT_RECOMMENDED_MODEL_NAMES,
   craftProviderDisplayName,
-  craftRecommendedModels,
+  isCraftRecommendedModel,
 } from "@/app/craft/onboarding/constants";
 import { getModelIcon } from "@/lib/languageModels";
 import { Section } from "@/layouts/general-layouts";
@@ -64,7 +63,7 @@ export function BuildLLMPopover({
 
     llmProviders?.forEach((provider) => {
       const models = showRecommendedOnly
-        ? craftRecommendedModels(provider.model_configurations)
+        ? provider.model_configurations.filter(isCraftRecommendedModel)
         : provider.model_configurations.filter((model) => model.is_visible);
       models.forEach((model) => {
         options.push({
@@ -75,7 +74,7 @@ export function BuildLLMPopover({
           providerDisplayName: craftProviderDisplayName(provider),
           modelName: model.name,
           displayName: modelDisplayName(model),
-          isRecommended: CRAFT_RECOMMENDED_MODEL_NAMES.has(model.name),
+          isRecommended: isCraftRecommendedModel(model),
         });
       });
     });

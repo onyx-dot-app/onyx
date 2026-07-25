@@ -11,12 +11,17 @@ jest.mock("@/lib/hooks/useLLMProviderOptions", () => ({
 
 Element.prototype.scrollIntoView = jest.fn();
 
-function model(name: string, displayName: string): ModelConfiguration {
+function model(
+  name: string,
+  displayName: string,
+  recommended = false
+): ModelConfiguration {
   return {
     name,
     display_name: displayName,
     effectiveDisplayName: displayName,
     is_visible: true,
+    is_recommended_default: recommended,
     max_input_tokens: null,
     supports_image_input: false,
     supports_reasoning: true,
@@ -30,8 +35,8 @@ const providers: LLMProviderDescriptor[] = [
     provider: "openai_compatible",
     provider_display_name: "OpenAI Compatible",
     model_configurations: [
-      model("gpt-5.6-sol", "GPT-5.6 Sol"),
-      model("gpt-5.5", "GPT-5.5"),
+      model("gpt-5.6-sol", "GPT-5.6 Sol", true),
+      model("gpt-5.5", "GPT-5.5", true),
       model("gpt-5-mini", "GPT-5 Mini"),
     ],
   },

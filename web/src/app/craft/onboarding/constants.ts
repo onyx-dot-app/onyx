@@ -15,21 +15,10 @@ export type ProviderKey = "anthropic" | "openai" | "openrouter";
 
 export const CRAFT_GATEWAY_PROVIDER = "onyx";
 
-export const CRAFT_RECOMMENDED_MODEL_NAMES = new Set([
-  "gpt-5.6-sol",
-  "gpt-5.5",
-  "claude-fable-5",
-  "claude-opus-4-8",
-  "moonshotai/kimi-k3",
-  "z-ai/glm-5.2",
-]);
-
-export function craftRecommendedModels(
-  models: ModelConfiguration[]
-): ModelConfiguration[] {
-  return models.filter(
-    (model) => model.is_visible && CRAFT_RECOMMENDED_MODEL_NAMES.has(model.name)
-  );
+// The recommended model is each provider's `is_recommended_default`, sourced
+// server-side from recommended-models.json — never a hardcoded list here.
+export function isCraftRecommendedModel(model: ModelConfiguration): boolean {
+  return model.is_visible && (model.is_recommended_default ?? false);
 }
 
 // Common providers sorted first in the onboarding catalog. Craft routes every
@@ -88,8 +77,9 @@ export function getDefaultLlmSelection(
   });
 
   for (const provider of candidates) {
-    const modelName = craftRecommendedModels(provider.model_configurations)[0]
-      ?.name;
+    const modelName = provider.model_configurations.find(
+      isCraftRecommendedModel
+    )?.name;
     if (!modelName) continue;
     return {
       providerId: provider.id,
