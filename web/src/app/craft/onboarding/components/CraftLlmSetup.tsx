@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { SvgCpu } from "@opal/icons";
-import { Divider, Switch, Text } from "@opal/components";
+import { Divider } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import LLMProviderCard from "@/sections/onboarding/components/LLMProviderCard";
 import { getProvider } from "@/lib/languageModels";
@@ -15,27 +15,23 @@ import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
 
 /**
  * Inline provider setup shown on the craft welcome page when an admin has no
- * supported provider configured. Mirrors the model picker's toggle: on shows
- * the recommended build-mode providers, off shows the full catalog. Clicking
- * a card opens the shared provider-specific modal (hosted by
+ * provider configured. Craft routes every provider through the Onyx gateway,
+ * so the whole catalog is offered; the common providers just sort first.
+ * Clicking a card opens the shared provider-specific modal (hosted by
  * BuildOnboardingProvider).
  */
-const craftKeys: string[] = CRAFT_PROVIDERS.map(({ key }) => key);
+const craftKeys: string[] = CRAFT_PROVIDERS;
 
 export default function CraftLlmSetup() {
   const { openProviderModal } = useOnboarding();
   const { llmProviderOptions } = useLLMProviderOptions();
-  const [recommendedOnly, setRecommendedOnly] = useState(true);
 
-  // Recommended = the build-mode providers; the full catalog keeps them
-  // first, then the remaining well-known providers.
   const providerKeys = useMemo(() => {
-    if (recommendedOnly) return craftKeys;
     const others = (llmProviderOptions ?? [])
       .map((option) => option.name)
       .filter((name) => !isSupportedProviderType(name));
     return [...craftKeys, ...others];
-  }, [recommendedOnly, llmProviderOptions]);
+  }, [llmProviderOptions]);
 
   return (
     <div
@@ -49,17 +45,6 @@ export default function CraftLlmSetup() {
         sizePreset="main-ui"
         variant="section"
         padding="lg"
-        rightChildren={
-          <div className="flex items-center gap-2">
-            <Text font="secondary-body" color="text-03" nowrap>
-              Recommended providers only
-            </Text>
-            <Switch
-              checked={recommendedOnly}
-              onCheckedChange={setRecommendedOnly}
-            />
-          </div>
-        }
       />
       <Divider />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 w-full max-h-56 overflow-y-auto [&>*:last-child:nth-child(odd)]:col-span-full">
