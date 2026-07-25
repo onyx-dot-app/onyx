@@ -37,11 +37,10 @@ export function useBuildSessionController({
 }: UseBuildSessionControllerProps) {
   const router = useRouter();
 
-  // Pre-provisioning gates only on having a supported Craft provider
-  // (anthropic/openai/openrouter). When one exists we start provisioning
+  // Pre-provisioning gates only on having a visible configured model. When one
+  // exists we start provisioning
   // immediately — even while the onboarding intro is still open — so the user
-  // exits onboarding to a ready sandbox. An unsupported-only setup can't craft,
-  // so we don't spin trying to provision against it.
+  // exits onboarding to a ready sandbox.
   const { llmProviders } = useLLMProviders();
   const hasAnyProvider = hasSupportedCraftProvider(llmProviders);
 
