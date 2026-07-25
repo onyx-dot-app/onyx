@@ -8,7 +8,10 @@ import { CardItemLayout } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
 import { useSettings } from "@/lib/settings/hooks";
-import type { CustomSkill } from "@/lib/skills/types";
+import type {
+  CustomSkill,
+  SkillExternalAppDependency,
+} from "@/lib/skills/types";
 import { cn } from "@opal/utils";
 
 export type SkillCardSource = "builtin" | "custom";
@@ -19,6 +22,10 @@ interface SkillCardItemBase {
   description: string;
   enabled: boolean;
   can_toggle: boolean;
+  /** External app this skill needs. Required for both sources: a built-in
+   * provider's associated skill is a built-in row, so reading this off the
+   * custom variant only would silently drop every built-in app. */
+  external_app: SkillExternalAppDependency | null;
 }
 
 export interface BuiltinSkillCardItem extends SkillCardItemBase {
@@ -62,7 +69,7 @@ export default function SkillCard({
 
   const authorTitle =
     item.source === "builtin" ? appName : item.author_email || appName;
-  const dependency = item.source === "custom" ? item.skill.external_app : null;
+  const dependency = item.external_app;
   const isDependencyUnavailable = dependency !== null && !dependency.ready;
   const isSelectedDependencyUnavailable =
     item.enabled && isDependencyUnavailable;
