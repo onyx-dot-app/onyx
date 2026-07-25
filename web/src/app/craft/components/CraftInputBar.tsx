@@ -30,7 +30,7 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
-import useCraftMcpServers from "@/hooks/useCraftMcpServers";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
 import {
   pickerEntryConnectionPath,
   pickerEntryKey,

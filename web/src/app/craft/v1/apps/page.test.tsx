@@ -39,9 +39,8 @@ jest.mock("@/hooks/useUserSkills", () => ({
   default: () => mockUseUserSkills(),
 }));
 
-jest.mock("@/hooks/useCraftMcpServers", () => ({
-  __esModule: true,
-  default: () => mockUseCraftMcpServers(),
+jest.mock("@/lib/tools/hooks", () => ({
+  useCraftMcpServers: () => mockUseCraftMcpServers(),
 }));
 
 jest.mock("@/app/craft/services/externalAppsService", () => ({

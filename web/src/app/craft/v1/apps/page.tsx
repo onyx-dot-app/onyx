@@ -35,7 +35,7 @@ import {
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { useUser } from "@/providers/UserProvider";
 import useUserSkills from "@/hooks/useUserSkills";
-import useCraftMcpServers from "@/hooks/useCraftMcpServers";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
 import { compareByName } from "@/lib/skills/picker";
 
 // Apps and MCP servers are connected, governed, and taught to the agent

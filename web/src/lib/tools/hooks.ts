@@ -8,7 +8,7 @@ import type { MCPServersResponse } from "@/lib/tools/interfaces";
 /** MCP servers an admin made available to Craft, with this user's connection
  * state (`craft_connected`). Distinct from `useMcpServers`, which reads the
  * admin-wide listing. */
-export default function useCraftMcpServers() {
+export function useCraftMcpServers() {
   const { data, error, isLoading } = useSWR<MCPServersResponse>(
     SWR_KEYS.mcpServersCraft,
     errorHandlingFetcher,

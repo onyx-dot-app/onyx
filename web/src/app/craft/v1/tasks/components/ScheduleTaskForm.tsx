@@ -22,7 +22,7 @@ import {
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
-import useCraftMcpServers from "@/hooks/useCraftMcpServers";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
 import {
   detectSlashTrigger,
   pickerEntryConnectionPath,
