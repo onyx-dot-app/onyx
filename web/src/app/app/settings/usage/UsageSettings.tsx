@@ -197,18 +197,16 @@ function ModelPriceSection({ prices, defaultModel }: ModelPriceSectionProps) {
                   onOpenChange={() => toggle(provider)}
                   className="flex flex-col"
                 >
-                  <CollapsibleTrigger asChild>
-                    <div className="flex flex-row items-center justify-between cursor-pointer select-none py-1.5">
-                      <Text font="main-ui-action" color="text-03">
-                        {provider}
-                      </Text>
-                      <SvgChevronRight
-                        className={cn(
-                          "w-4 h-4 text-text-03 transition-transform",
-                          open && "rotate-90"
-                        )}
-                      />
-                    </div>
+                  <CollapsibleTrigger className="flex flex-row items-center justify-between cursor-pointer select-none py-1.5">
+                    <Text font="main-ui-action" color="text-03">
+                      {provider}
+                    </Text>
+                    <SvgChevronRight
+                      className={cn(
+                        "w-4 h-4 text-text-03 transition-transform",
+                        open && "rotate-90"
+                      )}
+                    />
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <Section

@@ -226,53 +226,55 @@ export default function PerUserUsagePanel() {
           </Text>
         ) : (
           <>
-            <div className="flex flex-col divide-y divide-border-01">
-              <div className="flex flex-row items-center gap-4 py-2">
-                <SortHeader
-                  label="User"
-                  sortKey="email"
-                  activeKey={sortKey}
-                  dir={sortDir}
-                  onSort={handleSort}
-                  align="left"
-                />
-                <SortHeader
-                  label="Input"
-                  sortKey="input_tokens"
-                  activeKey={sortKey}
-                  dir={sortDir}
-                  onSort={handleSort}
-                  align="right"
-                />
-                <SortHeader
-                  label="Output"
-                  sortKey="output_tokens"
-                  activeKey={sortKey}
-                  dir={sortDir}
-                  onSort={handleSort}
-                  align="right"
-                />
-                <SortHeader
-                  label="Cache"
-                  sortKey="cache_read_tokens"
-                  activeKey={sortKey}
-                  dir={sortDir}
-                  onSort={handleSort}
-                  align="right"
-                />
-                <SortHeader
-                  label="Cost"
-                  sortKey="cost_cents"
-                  activeKey={sortKey}
-                  dir={sortDir}
-                  onSort={handleSort}
-                  align="right"
-                />
-                <div className="w-[68px]" />
+            <div className="overflow-x-auto">
+              <div className="min-w-[740px] flex flex-col divide-y divide-border-01">
+                <div className="flex flex-row items-center gap-4 py-2">
+                  <SortHeader
+                    label="User"
+                    sortKey="email"
+                    activeKey={sortKey}
+                    dir={sortDir}
+                    onSort={handleSort}
+                    align="left"
+                  />
+                  <SortHeader
+                    label="Input"
+                    sortKey="input_tokens"
+                    activeKey={sortKey}
+                    dir={sortDir}
+                    onSort={handleSort}
+                    align="right"
+                  />
+                  <SortHeader
+                    label="Output"
+                    sortKey="output_tokens"
+                    activeKey={sortKey}
+                    dir={sortDir}
+                    onSort={handleSort}
+                    align="right"
+                  />
+                  <SortHeader
+                    label="Cache"
+                    sortKey="cache_read_tokens"
+                    activeKey={sortKey}
+                    dir={sortDir}
+                    onSort={handleSort}
+                    align="right"
+                  />
+                  <SortHeader
+                    label="Cost"
+                    sortKey="cost_cents"
+                    activeKey={sortKey}
+                    dir={sortDir}
+                    onSort={handleSort}
+                    align="right"
+                  />
+                  <div className="w-[68px]" />
+                </div>
+                {pageUsers.map((user) => (
+                  <UsageRow key={user.email} user={user} onReset={refetch} />
+                ))}
               </div>
-              {pageUsers.map((user) => (
-                <UsageRow key={user.email} user={user} onReset={refetch} />
-              ))}
             </div>
 
             {pageCount > 1 && (
@@ -282,6 +284,8 @@ export default function PerUserUsagePanel() {
                   prominence="tertiary"
                   size="sm"
                   icon={SvgChevronLeft}
+                  tooltip="Previous page"
+                  aria-label="Previous page"
                   disabled={page === 0}
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
                 />
@@ -293,6 +297,8 @@ export default function PerUserUsagePanel() {
                   prominence="tertiary"
                   size="sm"
                   icon={SvgChevronRight}
+                  tooltip="Next page"
+                  aria-label="Next page"
                   disabled={page >= pageCount - 1}
                   onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
                 />
