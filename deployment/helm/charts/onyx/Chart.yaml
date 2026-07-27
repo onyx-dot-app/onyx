@@ -18,9 +18,10 @@ annotations:
   artifacthub.io/changes: |
     - kind: added
       description: celery_beat.schedulePath (default /tmp/celerybeat-schedule) — beat's
-        schedule file now defaults to /tmp so the pod runs under hardened
-        securityContexts (non-root or readOnlyRootFilesystem), where the previous
-        working-directory default (/app) is not writable.
+        schedule file now defaults to /tmp, and the beat pod mounts an emptyDir at
+        /tmp (skipped when celery_beat.volumeMounts already provides /tmp), so beat
+        runs under hardened securityContexts (non-root or readOnlyRootFilesystem),
+        where the previous working-directory default (/app) is not writable.
     - kind: added
       description: celery_beat.extraArgs — extra CLI arguments appended to the celery
         beat command.
