@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.3
+version: 0.8.4
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,9 +16,9 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: Made the Kubernetes CI profile coordinate API startup migrations
-        through deployment readiness before running tests.
+    - kind: added
+      description: Added GitHub repository imports for discovering and importing skill
+        bundles, including private repositories through a connected GitHub account.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
