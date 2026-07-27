@@ -13,6 +13,12 @@ class PlanType(str, Enum):
 
 
 class LicenseSource(str, Enum):
+    """Whether a license can be re-fetched from the control plane on its own.
+
+    Derived from the payload, never from how the blob happened to arrive, so
+    every writer agrees and the value cannot drift between cache rebuilds.
+    """
+
     AUTO_FETCH = "auto_fetch"
     MANUAL_UPLOAD = "manual_upload"
 
@@ -39,6 +45,16 @@ class LicensePayload(BaseModel):
     stripe_subscription_id: str | None = None
     stripe_customer_id: str | None = None
     customer_tier: CustomerTier | None = None
+
+    @property
+    def source(self) -> LicenseSource:
+        # Only a Stripe-billed license has a customer the control plane can
+        # re-issue against. Sales-issued ones are replaced by hand.
+        return (
+            LicenseSource.AUTO_FETCH
+            if self.stripe_customer_id
+            else LicenseSource.MANUAL_UPLOAD
+        )
 
 
 class LicenseData(BaseModel):

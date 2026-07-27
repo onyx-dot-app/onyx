@@ -63,10 +63,6 @@ jest.mock("./CheckoutView", () => ({
   __esModule: true,
   default: () => <div data-testid="checkout-view" />,
 }));
-jest.mock("./ActiveSubscriptionView", () => ({
-  __esModule: true,
-  default: () => <div data-testid="active-subscription-view" />,
-}));
 jest.mock("./BillingDetailsView", () => ({
   __esModule: true,
   default: () => <div data-testid="billing-details-view" />,

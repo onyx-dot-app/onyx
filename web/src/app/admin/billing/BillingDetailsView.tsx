@@ -168,6 +168,8 @@ function SubscriptionCard({
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isEndingTrial, setIsEndingTrial] = useState(false);
   const [endTrialError, setEndTrialError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const settings = useSettings();
   const tier = settings.tier;
@@ -219,6 +221,21 @@ function SubscriptionCard({
       console.error("Failed to reconnect to Stripe:", error);
     } finally {
       setIsReconnecting(false);
+    }
+  };
+
+  const handleSyncLicense = async () => {
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      await claimLicense();
+      await onRefresh?.();
+    } catch (error) {
+      setSyncError(
+        error instanceof Error ? error.message : "Failed to sync license"
+      );
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -323,6 +340,17 @@ function SubscriptionCard({
                   {isEndingTrial ? "Upgrading..." : "Upgrade now"}
                 </OpalButton>
               )}
+              {/* Renewals re-issue the license, which the instance otherwise
+                  only picks up on the next reclaim sweep. */}
+              {!NEXT_PUBLIC_CLOUD_ENABLED && (
+                <OpalButton
+                  disabled={isSyncing}
+                  prominence="secondary"
+                  onClick={handleSyncLicense}
+                >
+                  {isSyncing ? "Syncing..." : "Sync License"}
+                </OpalButton>
+              )}
               <OpalButton
                 prominence={isTrialing ? "secondary" : "primary"}
                 onClick={handleManagePlan}
@@ -331,6 +359,11 @@ function SubscriptionCard({
                 Manage Plan
               </OpalButton>
             </Section>
+          )}
+          {syncError && (
+            <Text secondaryBody className="text-status-error-04">
+              {syncError}
+            </Text>
           )}
           {endTrialError && (
             <Text secondaryBody className="text-status-error-04">

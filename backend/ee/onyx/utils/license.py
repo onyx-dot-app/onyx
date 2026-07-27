@@ -19,7 +19,6 @@ from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.server.license.models import (
     LicenseData,
     LicensePayload,
-    LicenseSource,
 )
 from ee.onyx.utils.license_expiry import is_license_due_for_reclaim
 from onyx.server.settings.models import ApplicationStatus
@@ -137,8 +136,6 @@ def verify_license_signature(license_data: str) -> LicensePayload:
 def verify_and_store_license(
     db_session: Session,
     license_data: str,
-    *,
-    source: LicenseSource,
 ) -> LicensePayload:
     """Persist a license blob only after its signature verifies.
 
@@ -155,7 +152,7 @@ def verify_and_store_license(
     # block is cleared alongside it: this license replaces whatever the control
     # plane rejected, so re-claims may resume immediately.
     try:
-        update_license_cache(payload, source=source)
+        update_license_cache(payload)
         _reclaim_redis(payload.tenant_id).delete(_LICENSE_RECLAIM_BLOCKED_KEY)
     except Exception as cache_error:
         logger.warning("Failed to update license cache: %s", cache_error)
@@ -191,9 +188,7 @@ def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | 
     response.raise_for_status()
 
     return verify_and_store_license(
-        db_session,
-        license_from_control_plane_response(response),
-        source=LicenseSource.AUTO_FETCH,
+        db_session, license_from_control_plane_response(response)
     )
 
 

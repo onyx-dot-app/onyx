@@ -19,7 +19,7 @@ from ee.onyx.utils.license_expiry import LICENSE_RECLAIM_WINDOW
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
 
 
-def _make_license_payload() -> LicensePayload:
+def _make_license_payload(stripe_customer_id: str | None = None) -> LicensePayload:
     now = datetime.now(timezone.utc)
     return LicensePayload(
         version="1.0",
@@ -29,14 +29,38 @@ def _make_license_payload() -> LicensePayload:
         expires_at=now + timedelta(days=30),
         seats=10,
         plan_type=PlanType.MONTHLY,
+        stripe_customer_id=stripe_customer_id,
     )
+
+
+class TestLicenseSourceDerivation:
+    """Source is a function of the payload, so every writer computes the same
+    value and a cache rebuild cannot disagree with the write that preceded it."""
+
+    @pytest.mark.parametrize(
+        ("stripe_customer_id", "expected"),
+        [
+            ("cus_123", LicenseSource.AUTO_FETCH),
+            (None, LicenseSource.MANUAL_UPLOAD),
+        ],
+    )
+    def test_source_follows_the_stripe_customer(
+        self, stripe_customer_id: str | None, expected: LicenseSource
+    ) -> None:
+        assert _make_license_payload(stripe_customer_id).source == expected
+
+    def test_manual_upload_of_a_stripe_license_stays_auto_fetch(self) -> None:
+        """A hand-uploaded Stripe license is still re-fetchable, so it must not
+        read as manual and strand the customer on the sales-managed card."""
+        payload = _make_license_payload("cus_123")
+        assert payload.source == LicenseSource.AUTO_FETCH
 
 
 class TestVerifyAndStoreLicense:
     @patch("ee.onyx.db.license.update_license_cache")
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.verify_license_signature")
-    def test_persists_and_caches_with_the_given_source(
+    def test_persists_and_caches_the_verified_payload(
         self,
         mock_verify: MagicMock,
         mock_upsert: MagicMock,
@@ -46,15 +70,11 @@ class TestVerifyAndStoreLicense:
         payload = _make_license_payload()
         mock_verify.return_value = payload
 
-        result = verify_and_store_license(
-            db_session, "signed-license", source=LicenseSource.MANUAL_UPLOAD
-        )
+        result = verify_and_store_license(db_session, "signed-license")
 
         assert result == payload
         mock_upsert.assert_called_once_with(db_session, "signed-license")
-        mock_update_cache.assert_called_once_with(
-            payload, source=LicenseSource.MANUAL_UPLOAD
-        )
+        mock_update_cache.assert_called_once_with(payload)
 
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.verify_license_signature")
@@ -66,9 +86,7 @@ class TestVerifyAndStoreLicense:
         mock_verify.side_effect = ValueError("Invalid license signature")
 
         with pytest.raises(ValueError, match="Invalid license signature"):
-            verify_and_store_license(
-                MagicMock(), "tampered-license", source=LicenseSource.MANUAL_UPLOAD
-            )
+            verify_and_store_license(MagicMock(), "tampered-license")
 
         mock_upsert.assert_not_called()
 
@@ -114,10 +132,7 @@ class TestReclaimLicenseFromControlPlane:
         )
         mock_verify.assert_called_once_with("signed-license")
         mock_upsert.assert_called_once_with(db_session, "signed-license")
-        mock_update_cache.assert_called_once_with(
-            payload,
-            source=LicenseSource.AUTO_FETCH,
-        )
+        mock_update_cache.assert_called_once_with(payload)
 
     @pytest.mark.parametrize(
         ("metadata", "license_row"),

@@ -26,7 +26,6 @@ import { LinkButton, MessageCard } from "@opal/components";
 
 import PlansView from "./PlansView";
 import CheckoutView from "./CheckoutView";
-import ActiveSubscriptionView from "./ActiveSubscriptionView";
 import BillingDetailsView from "./BillingDetailsView";
 import LicenseActivationCard from "./LicenseActivationCard";
 import "./billing.css";
@@ -364,9 +363,9 @@ export default function BillingPage() {
     switch (view) {
       case "checkout":
         return {
-          icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
-          title: hasSubscription ? "Your Plan" : "Upgrade Plan",
-          showBackButton: !!hasSubscription,
+          icon: SvgArrowUpCircle,
+          title: "Upgrade Plan",
+          showBackButton: false,
         };
       case "plans":
         return {
@@ -423,17 +422,7 @@ export default function BillingPage() {
           : "billing-view-enter";
 
     const views: Record<typeof view, React.ReactNode> = {
-      // A live subscription has nothing to buy, so route checkout to sync/details.
-      checkout: hasSubscription ? (
-        <ActiveSubscriptionView
-          billing={billing ?? undefined}
-          isSelfHosted={isSelfHosted}
-          onSynced={handleLicenseActivated}
-          onViewDetails={() => changeView("details")}
-        />
-      ) : (
-        <CheckoutView onAdjustPlan={() => changeView("plans")} />
-      ),
+      checkout: <CheckoutView onAdjustPlan={() => changeView("plans")} />,
       plans: (
         <PlansView
           hasSubscription={!!hasSubscription}

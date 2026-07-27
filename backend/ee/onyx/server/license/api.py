@@ -23,7 +23,6 @@ from ee.onyx.db.license import (
 )
 from ee.onyx.server.license.models import (
     LicenseResponse,
-    LicenseSource,
     LicenseStatusResponse,
     LicenseUploadResponse,
     SeatUsageResponse,
@@ -141,9 +140,7 @@ async def claim_license(
             except ValueError:
                 raise OnyxError(OnyxErrorCode.NOT_FOUND, "No license in response")
 
-            payload = verify_and_store_license(
-                db_session, license_data, source=LicenseSource.AUTO_FETCH
-            )
+            payload = verify_and_store_license(db_session, license_data)
         else:
             payload = reclaim_license_from_control_plane(db_session)
             if payload is None:
@@ -209,9 +206,7 @@ async def upload_license(
     # The signature is the only validation needed. The license's tenant_id identifies
     # the customer in the control plane, not locally.
     try:
-        payload = verify_and_store_license(
-            db_session, license_data, source=LicenseSource.MANUAL_UPLOAD
-        )
+        payload = verify_and_store_license(db_session, license_data)
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
 

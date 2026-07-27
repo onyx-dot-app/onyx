@@ -8,7 +8,7 @@ from typing import NamedTuple
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from ee.onyx.server.license.models import LicenseMetadata, LicensePayload, LicenseSource
+from ee.onyx.server.license.models import LicenseMetadata, LicensePayload
 from onyx.auth.schemas import UserRole
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
@@ -224,7 +224,6 @@ def invalidate_license_cache(tenant_id: str | None = None) -> None:
 
 def update_license_cache(
     payload: LicensePayload,
-    source: LicenseSource | None = None,
     grace_period_end: datetime | None = None,
     tenant_id: str | None = None,
 ) -> LicenseMetadata:
@@ -238,7 +237,6 @@ def update_license_cache(
 
     Args:
         payload: Verified license payload
-        source: How the license was obtained
         grace_period_end: Optional grace period end time
         tenant_id: Tenant ID (for multi-tenant deployments)
 
@@ -273,7 +271,7 @@ def update_license_cache(
         grace_period_end=effective_grace_end,
         status=status,
         expiry_warning_stage=warning_stage,
-        source=source,
+        source=payload.source,
         stripe_subscription_id=payload.stripe_subscription_id,
         customer_tier=payload.customer_tier,
     )
@@ -313,17 +311,7 @@ def refresh_license_cache(
 
     try:
         payload = verify_license_signature(license_record.license_data)
-        # Derive source from payload: manual licenses lack stripe_customer_id
-        source: LicenseSource = (
-            LicenseSource.AUTO_FETCH
-            if payload.stripe_customer_id
-            else LicenseSource.MANUAL_UPLOAD
-        )
-        return update_license_cache(
-            payload,
-            source=source,
-            tenant_id=tenant_id,
-        )
+        return update_license_cache(payload, tenant_id=tenant_id)
     except ValueError as e:
         logger.error("Failed to verify license during cache refresh: %s", e)
         invalidate_license_cache(tenant_id)
