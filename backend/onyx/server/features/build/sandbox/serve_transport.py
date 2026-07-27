@@ -47,6 +47,10 @@ from onyx.server.features.build.sandbox.opencode.serve_client import (
     translate_opencode_event,
 )
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.metrics.craft_sandbox import (
+    SandboxProvisionPhase,
+    time_provision_phase,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -338,6 +342,7 @@ class _ServeMixin:
                 return children
         return []
 
+    @time_provision_phase(SandboxProvisionPhase.OPENCODE_SERVE_WAIT)
     def _wait_for_opencode_serve_ready(
         self,
         sandbox_id: UUID,
