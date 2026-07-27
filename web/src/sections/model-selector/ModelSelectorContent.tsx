@@ -235,13 +235,25 @@ function SettingRow({
 }: SettingRowProps) {
   return (
     <Disabled disabled={disabled} tooltip={disabledTooltip} tooltipSide="top">
-      <div className="flex flex-col rounded-08 p-1.5">
-        <div className="flex flex-row items-center gap-2">
-          <div className="flex size-5 items-center justify-center text-text-04">
-            <Icon size={16} />
-          </div>
-          <Text font="main-ui-action">{title}</Text>
-          <div className="flex-1" />
+      <Section
+        alignItems="stretch"
+        height="auto"
+        gap={0}
+        padding={0.375}
+        className="rounded-08"
+      >
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          height="auto"
+          gap={0.5}
+        >
+          <Section flexDirection="row" width="fit" height="auto" gap={0.5}>
+            <Section width={1.25} height={1.25} className="text-text-04">
+              <Icon size={16} />
+            </Section>
+            <Text font="main-ui-action">{title}</Text>
+          </Section>
           {value !== undefined && (
             <Tooltip tooltip={valueTooltip} side="top">
               <Text font="secondary-mono" color="text-04">
@@ -249,12 +261,14 @@ function SettingRow({
               </Text>
             </Tooltip>
           )}
-        </div>
+        </Section>
         {children}
-        <Text font="secondary-body" color="text-03">
-          {caption}
-        </Text>
-      </div>
+        <Section alignItems="stretch" height="auto" className="mt-2">
+          <Text font="secondary-body" color="text-03">
+            {caption}
+          </Text>
+        </Section>
+      </Section>
     </Disabled>
   );
 }
