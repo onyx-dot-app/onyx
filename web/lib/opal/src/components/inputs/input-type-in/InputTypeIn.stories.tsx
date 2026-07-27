@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import InputTypeIn from "@opal/components/inputs/input-type-in/components";
 

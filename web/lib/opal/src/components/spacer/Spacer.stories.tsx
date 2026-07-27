@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Spacer } from "@opal/components/spacer/components";
 
 const meta: Meta<typeof Spacer> = {

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import Button from "./Button";
 import { SvgPlus, SvgArrowRight } from "@opal/icons";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
