@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import User, UserRole
 from onyx.db.skill import (
-    SkillAccessPolicy,
+    SkillManagementPolicy,
     fetch_skill,
     list_skills,
     set_skill_public_permission,
@@ -24,7 +24,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
 
 def _user_skills(user: User, db_session: Session):
     return list_skills(
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
     )
@@ -41,7 +41,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=admin,
             db_session=db_session,
         )
@@ -71,7 +71,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=user,
             db_session=db_session,
         )
@@ -88,7 +88,7 @@ class TestSkillVisibility:
         assert (
             fetch_skill(
                 skill.id,
-                policy=SkillAccessPolicy.VIEW,
+                policy=SkillManagementPolicy.VIEW,
                 user=user,
                 db_session=db_session,
             )
@@ -102,7 +102,7 @@ class TestSkillVisibility:
         )
         editor_result = fetch_skill(
             skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=user,
             db_session=db_session,
         )
@@ -117,7 +117,7 @@ class TestSkillVisibility:
         assert (
             fetch_skill(
                 skill.id,
-                policy=SkillAccessPolicy.VIEW,
+                policy=SkillManagementPolicy.VIEW,
                 user=user,
                 db_session=db_session,
             )
@@ -190,7 +190,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             private_skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )
@@ -211,7 +211,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             private_skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )
@@ -235,7 +235,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             private_skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )
@@ -255,7 +255,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             private_skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )
@@ -273,7 +273,7 @@ class TestSkillVisibility:
 
         result = fetch_skill(
             public_skill.id,
-            policy=SkillAccessPolicy.EDIT,
+            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )

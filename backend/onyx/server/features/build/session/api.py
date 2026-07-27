@@ -28,8 +28,8 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.db.build_session import (
     allocate_nextjs_port,
     get_build_session,
+    session_runtime_stale,
     set_build_session_sharing_scope,
-    skills_are_stale,
 )
 from onyx.server.features.build.db.sandbox import (
     get_latest_snapshot_for_session,
@@ -39,6 +39,9 @@ from onyx.server.features.build.db.sandbox import (
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
+from onyx.server.features.build.sandbox.util.mcp_config import (
+    resolve_craft_mcp_servers,
+)
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.locks import (
     SessionCreationLockAcquisitionError,
@@ -128,8 +131,6 @@ def create_session(
             session_manager = SessionManager(db_session)
             build_session = session_manager.get_or_create_empty_session(
                 user.id,
-                llm_provider_type=request.llm_provider_type,
-                llm_model_name=request.llm_model_name,
                 headless=request.headless,
             )
             sandbox = get_sandbox_by_user_id(db_session, user.id)
@@ -397,7 +398,7 @@ def restore_session(
                 sandbox.id, session_id
             ):
                 session.status = BuildSessionStatus.ACTIVE
-                if skills_are_stale(session, sandbox):
+                if session_runtime_stale(session, sandbox):
                     SessionManager(db_session).reload_session_skills(session_id, user)
                 else:
                     update_sandbox_heartbeat(db_session, sandbox.id)
@@ -418,7 +419,7 @@ def restore_session(
                 db_session.commit()
                 db_session.refresh(sandbox)
 
-        llm_config, all_llm_configs = SessionManager(db_session).build_llm_configs(user)
+        llm_config = SessionManager(db_session).build_llm_configs(user)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
             mark_sandbox_provisioning(db_session, sandbox)
@@ -432,7 +433,6 @@ def restore_session(
                 user,
                 user.id,
                 tenant_id,
-                all_llm_configs,
             )
             db_session.commit()
 
@@ -468,9 +468,11 @@ def restore_session(
                             nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
                             connectable_apps_section=connectable_apps_section,
+                            mcp_servers=resolve_craft_mcp_servers(db_session, user),
                         )
                         session.status = BuildSessionStatus.ACTIVE
                         session.skills_hash = sandbox.skills_hash
+                        session.mcp_config_hash = sandbox.mcp_config_hash
                         db_session.commit()
                     except Exception as e:
                         logger.error(
@@ -486,9 +488,11 @@ def restore_session(
                         llm_config=llm_config,
                         nextjs_port=session.nextjs_port,
                         connectable_apps_section=connectable_apps_section,
+                        mcp_servers=resolve_craft_mcp_servers(db_session, user),
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     session.skills_hash = sandbox.skills_hash
+                    session.mcp_config_hash = sandbox.mcp_config_hash
                     db_session.commit()
 
         else:

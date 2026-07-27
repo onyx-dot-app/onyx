@@ -1,8 +1,8 @@
 import json
 from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock
-from uuid import uuid4
+from unittest.mock import ANY, MagicMock
+from uuid import UUID, uuid4
 
 import pytest
 import requests
@@ -285,16 +285,27 @@ def _setup(
     )
     monkeypatch.setattr(tr, "_client_credentials", lambda _app: ("cid", "secret"))
     upsert = MagicMock()
-    delete = MagicMock()
+    disconnect = MagicMock()
+    push = MagicMock()
     refresh = MagicMock()
     monkeypatch.setattr(tr, "upsert_external_app_user_credential", upsert)
-    monkeypatch.setattr(tr, "delete_external_app_user_credential", delete)
+    monkeypatch.setattr(tr, "disconnect_external_app_for_user", disconnect)
+    monkeypatch.setattr(tr, "push_skills_for_users", push)
     monkeypatch.setattr(provider, "refresh_credentials", refresh)
-    return {"upsert": upsert, "delete": delete, "refresh": refresh}
+    return {
+        "upsert": upsert,
+        "disconnect": disconnect,
+        "push": push,
+        "refresh": refresh,
+    }
 
 
-def _run() -> None:
-    tr.ensure_fresh_credentials("public", 1, uuid4())
+def _run(*, external_app_id: int = 1, user_id: UUID | None = None) -> None:
+    tr.ensure_fresh_credentials(
+        "public",
+        external_app_id,
+        user_id or uuid4(),
+    )
 
 
 def test_ensure_fresh_noop_when_token_fresh(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -336,8 +347,14 @@ def test_ensure_fresh_terminal_clears_credential_without_raising(
 ) -> None:
     spies = _setup(monkeypatch, creds_sequence=[_stale_creds(), _stale_creds()])
     spies["refresh"].side_effect = TokenRefreshTerminalError("invalid_grant")
-    _run()  # does not raise — the app simply reads as disconnected afterwards
-    spies["delete"].assert_called_once()
+    user_id = uuid4()
+    _run(external_app_id=42, user_id=user_id)
+    spies["disconnect"].assert_called_once_with(
+        ANY,
+        external_app_id=42,
+        user_id=user_id,
+    )
+    spies["push"].assert_called_once_with({user_id}, ANY)
     spies["upsert"].assert_not_called()
 
 
@@ -348,7 +365,7 @@ def test_ensure_fresh_transient_keeps_existing_token(
     spies["refresh"].side_effect = TokenRefreshTransientError("503")
     _run()  # does not raise
     spies["upsert"].assert_not_called()
-    spies["delete"].assert_not_called()
+    spies["disconnect"].assert_not_called()
 
 
 def test_ensure_fresh_redis_unavailable_keeps_existing_token(
@@ -367,7 +384,7 @@ def test_ensure_fresh_redis_unavailable_keeps_existing_token(
     _run()  # must not raise
     spies["refresh"].assert_not_called()
     spies["upsert"].assert_not_called()
-    spies["delete"].assert_not_called()
+    spies["disconnect"].assert_not_called()
 
 
 def test_ensure_fresh_db_error_keeps_existing_token(
@@ -386,7 +403,7 @@ def test_ensure_fresh_db_error_keeps_existing_token(
     _run()  # must not raise
     spies["refresh"].assert_not_called()
     spies["upsert"].assert_not_called()
-    spies["delete"].assert_not_called()
+    spies["disconnect"].assert_not_called()
 
 
 def test_ensure_fresh_noop_for_non_oauth_app(monkeypatch: pytest.MonkeyPatch) -> None:

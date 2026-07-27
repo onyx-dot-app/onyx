@@ -44,26 +44,12 @@ async function handle<T>(res: Response): Promise<T> {
 // Mutations
 // ---------------------------------------------------------------------------
 
-export async function createCustomSkill(
-  bundle: File,
-  autoEnable = true
-): Promise<CustomSkill> {
-  const form = new FormData();
-  form.append("bundle", bundle);
-  form.append("auto_enable", String(autoEnable));
-
-  const res = await fetch("/api/skills/custom", {
-    method: "POST",
-    body: form,
-  });
-  return handle<CustomSkill>(res);
-}
-
 export interface CreateCustomSkillInput {
   name: string;
   description: string;
   instructions_markdown: string;
   auto_enable?: boolean;
+  external_app_id?: number;
 }
 
 export async function createCustomSkillFromEditor(
@@ -75,6 +61,9 @@ export async function createCustomSkillFromEditor(
   form.append("description", input.description);
   form.append("instructions_markdown", input.instructions_markdown);
   form.append("auto_enable", String(input.auto_enable ?? true));
+  if (input.external_app_id !== undefined) {
+    form.append("external_app_id", String(input.external_app_id));
+  }
   if (upload) form.append("upload", upload);
 
   const res = await fetch("/api/skills/custom/editor", {

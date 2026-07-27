@@ -677,6 +677,12 @@ export default function AgentEditorPage({
     return { server, tools: serverTools, isLoading: false };
   });
 
+  // Render-only filter. Form state registers every server through
+  // mcpServersWithTools.
+  const mcpServersWithVisibleTools = mcpServersWithTools.filter(
+    ({ tools }) => tools.length > 0
+  );
+
   const initialValues = {
     // General
     icon_name: existingAgent?.icon_name ?? null,
@@ -1674,8 +1680,8 @@ export default function AgentEditorPage({
 
                             {/* Tools */}
                             <>
-                              {/* render the divider if there is at least one mcp-server or open-api-tool */}
-                              {(mcpServers.length > 0 ||
+                              {/* render the divider if there is at least one mcp-server with tools or open-api-tool */}
+                              {(mcpServersWithVisibleTools.length > 0 ||
                                 openApiTools.length > 0) && (
                                 <Divider
                                   paddingPerpendicular="xs"
@@ -1684,9 +1690,12 @@ export default function AgentEditorPage({
                               )}
 
                               {/* MCP tools */}
-                              {mcpServersWithTools.length > 0 && (
-                                <GeneralLayouts.Section gap={0.5}>
-                                  {mcpServersWithTools.map(
+                              {mcpServersWithVisibleTools.length > 0 && (
+                                <GeneralLayouts.Section
+                                  gap={0.5}
+                                  alignItems="stretch"
+                                >
+                                  {mcpServersWithVisibleTools.map(
                                     ({ server, tools, isLoading }) => (
                                       <MCPServerCard
                                         key={server.id}

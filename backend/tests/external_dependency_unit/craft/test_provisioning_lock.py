@@ -26,7 +26,6 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 )
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.common.craft.payloads import default_llm_config
 
 
 class _FakeCluster:
@@ -133,7 +132,7 @@ def lock_env(
     preconditions (URL/proxy host) satisfied."""
     monkeypatch.setattr(factory, "CACHE_BACKEND", CacheBackendType.REDIS)
     monkeypatch.setattr(
-        kubernetes_sandbox_manager, "SANDBOX_API_SERVER_URL", "http://api-server"
+        kubernetes_sandbox_manager, "ONYX_SERVER_URL", "http://api-server"
     )
     monkeypatch.setattr(
         kubernetes_sandbox_manager, "SANDBOX_PROXY_HOST", "sandbox-proxy"
@@ -148,7 +147,6 @@ def _provision(
         sandbox_id=sandbox_id,
         user_id=uuid4(),
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-        llm_config=default_llm_config(),
         onyx_pat="test-pat",
     )
 

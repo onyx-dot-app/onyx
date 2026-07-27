@@ -79,13 +79,13 @@ class ConnectAppRequestPacket(BasePacket):
     """The agent's ``connect_app`` tool is asking the user to connect an org app.
 
     The FE renders the connect card from this packet (resolving the app from the
-    registry by ``app_slug``) and POSTs the decision to
+    registry by ``external_app_id``) and POSTs the decision to
     ``/build/apps/connect/{request_id}/decision`` to answer the agent's tool call.
     """
 
     type: Literal["connect_app_request"] = "connect_app_request"
     request_id: str
-    app_slug: str
+    external_app_id: int
     reason: str | None = None
 
 

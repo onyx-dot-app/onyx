@@ -223,13 +223,13 @@ def make_external_app(
     """Insert an ``ExternalApp`` row backing ``skill``, plus any per-action
     policy overrides in ``action_policies`` (``{action_id: policy}``)."""
     app = ExternalApp(
-        skill_id=skill.id,
         name=skill.name,
         app_type=app_type,
         enabled=enabled,
         upstream_url_patterns=upstream_url_patterns or [],
         auth_template=auth_template,
         organization_credentials=organization_credentials or {},
+        associated_skills=[skill],
     )
     db_session.add(app)
     db_session.flush()

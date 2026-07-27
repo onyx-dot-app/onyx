@@ -90,7 +90,6 @@ def _upsert_slack_external_app(
     )
     kwargs = {
         "name": "Slack",
-        "description": "Slack integration for gate-flow K8s tests.",
         "app_type": ExternalAppType.SLACK,
         "upstream_url_patterns": ["https://slack\\.com/api/.*"],
         "auth_template": {"Authorization": "Bearer {access_token}"},
@@ -130,7 +129,6 @@ def _seed_slack_external_app(
                 k8s_admin_user,
                 previous.id,
                 name=previous.name,
-                description=previous.description,
                 app_type=previous.app_type,
                 upstream_url_patterns=previous.upstream_url_patterns,
                 auth_template=previous.auth_template,

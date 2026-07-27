@@ -7,13 +7,17 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import require_permission
+from onyx.auth.permissions import get_effective_permissions, require_permission
 from onyx.auth.schemas import UserRole
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccountType, Permission, SkillSharePermission
+from onyx.db.external_app import (
+    associate_custom_skill_with_external_app__no_commit,
+    get_external_app_by_id,
+)
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
-    SkillAccessPolicy,
+    SkillManagementPolicy,
     add_new_skill__no_commit,
     affected_user_ids_for_skill,
     delete_skill,
@@ -137,7 +141,7 @@ def list_skills_for_current_user(
     db_session: Session = Depends(get_session),
 ) -> SkillsList:
     rows = list_skills(
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
     )
@@ -172,7 +176,7 @@ def fetch_skill_for_current_user(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
     )
@@ -189,13 +193,13 @@ def preview_skill_for_current_user(
 ) -> SkillPreviewResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    return skill_preview_response(skill)
+    return skill_preview_response(skill, user, db_session)
 
 
 @user_router.post("/custom")
@@ -250,9 +254,23 @@ def create_custom_skill_from_editor(
     instructions_markdown: Annotated[str, Form(min_length=1)],
     upload: Annotated[UploadFile | None, File()] = None,
     auto_enable: Annotated[bool, Form()] = True,
+    external_app_id: Annotated[int | None, Form(gt=0)] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
+    if external_app_id is not None:
+        if (
+            user.role != UserRole.ADMIN
+            and Permission.FULL_ADMIN_PANEL_ACCESS
+            not in get_effective_permissions(user)
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "Only administrators can create a skill for an external app.",
+            )
+        if get_external_app_by_id(db_session, external_app_id) is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "External app not found.")
+
     try:
         create_request = SkillCreateRequest(
             name=name,
@@ -286,6 +304,7 @@ def create_custom_skill_from_editor(
         instructions_markdown=create_request.instructions_markdown,
     )
     file_store = get_default_file_store()
+    should_auto_enable = auto_enable and external_app_id is None
     with ingested_skill_bundle(
         bundle_bytes,
         f"{canonical_name}.zip",
@@ -303,7 +322,13 @@ def create_custom_skill_from_editor(
             ),
             db_session,
         )
-        if auto_enable and not enable_new_skill_if_name_available__no_commit(
+        if external_app_id is not None:
+            associate_custom_skill_with_external_app__no_commit(
+                db_session,
+                external_app_id=external_app_id,
+                skill_id=skill.id,
+            )
+        if should_auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         ):
             raise OnyxError(
@@ -312,7 +337,7 @@ def create_custom_skill_from_editor(
             )
         db_session.commit()
 
-    if auto_enable:
+    if should_auto_enable:
         push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 
@@ -327,7 +352,7 @@ def fetch_custom_skill_for_edit(
 ) -> SkillEditableDetailResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
     )
@@ -378,7 +403,7 @@ def replace_current_user_skill_bundle(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -423,7 +448,7 @@ def upload_current_user_skill_files(
 ) -> SkillEditableDetailResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -451,7 +476,7 @@ def remove_current_user_skill_file(
 ) -> SkillEditableDetailResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -479,7 +504,7 @@ def patch_current_user_skill(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -578,7 +603,7 @@ def share_current_user_skill(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,
@@ -653,14 +678,14 @@ def transfer_current_user_skill_ownership(
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.VIEW,
+        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
         lock_for_update=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    if skill.built_in_skill_id is not None:
+    if not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"Skill '{skill.name}' is a built-in and cannot change ownership.",
@@ -731,7 +756,7 @@ def delete_current_user_skill(
 ) -> None:
     skill = fetch_skill(
         skill_id,
-        policy=SkillAccessPolicy.EDIT,
+        policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         lock_for_update=True,

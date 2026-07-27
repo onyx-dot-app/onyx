@@ -213,10 +213,6 @@ class NotionProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             },
         ),
         descriptor=AdminDescriptorSpec(
-            description=(
-                "Search, read, and write Notion pages, databases, blocks, and "
-                "comments on the user's behalf."
-            ),
             upstream_url_patterns=["https://api\\.notion\\.com/.*"],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[

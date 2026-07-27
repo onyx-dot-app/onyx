@@ -136,9 +136,6 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             scope_param="user_scope",
         ),
         descriptor=AdminDescriptorSpec(
-            description=(
-                "Read your Slack messages and channels as context inside Onyx Craft."
-            ),
             upstream_url_patterns=[
                 "https://slack\\.com/api/.*",
                 # files.getUploadURLExternal hands back a pre-signed upload URL

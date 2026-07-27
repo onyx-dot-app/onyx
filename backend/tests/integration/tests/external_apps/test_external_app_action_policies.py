@@ -30,7 +30,6 @@ def _create_slack(
     return ExternalAppManager.create(
         user_performing_action=admin_user,
         name="Slack",
-        description="Slack",
         upstream_url_patterns=list(_SLACK_URLS),
         auth_template=dict(_SLACK_AUTH),
         organization_credentials={},
@@ -48,7 +47,6 @@ def _update_slack(
         user_performing_action=admin_user,
         app_id=app_id,
         name="Slack",
-        description="Slack",
         upstream_url_patterns=list(_SLACK_URLS),
         auth_template=dict(_SLACK_AUTH),
         organization_credentials={},

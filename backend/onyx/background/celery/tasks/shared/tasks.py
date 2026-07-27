@@ -1,16 +1,19 @@
 import time
+from datetime import datetime
 from enum import Enum
 from http import HTTPStatus
 
 import httpx
 from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
+from sqlalchemy.orm import Session
 from tenacity import RetryError
 
 from onyx.access.access import get_access_for_document
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.configs.constants import ONYX_CELERY_BEAT_HEARTBEAT_KEY, OnyxCeleryTask
+from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import (
     delete_document_by_connector_credential_pair__no_commit,
     delete_documents_complete,
@@ -22,6 +25,11 @@ from onyx.db.document import (
 )
 from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.port_orphan_candidate import (
+    clear_port_orphan_candidates,
+    port_target_settings_id,
+    record_port_orphan_candidates_for_document,
+)
 from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_all_document_indices
@@ -63,6 +71,34 @@ class DocumentCleanupAction(str, Enum):
     SKIP = "skip"
     DELETE = "delete"
     UPDATE = "update"
+
+
+def _clear_port_orphan_candidate_for_live_doc(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    document_id: str,
+) -> None:
+    """Drop a doc's port orphan-candidate when a delete leaves it LIVE, so a later port sweep
+    doesn't delete the live doc's port-copied chunks. Scoped to (target, this cc_pair, doc)
+    and idempotent, so it's safe across Celery retries. NOT for the transient-retry path: the
+    candidate must survive an in-flight delete to still catch a mid-delete resurrection."""
+    active_search_settings = get_active_search_settings(db_session)
+    target_settings_id = port_target_settings_id(
+        active_search_settings.primary, active_search_settings.secondary
+    )
+    if target_settings_id is None:
+        return
+    # Keep the candidate if the doc lost its last link (being deleted): its port-copied
+    # chunks remain (the index delete failed), so the sweep still needs to clean them.
+    if get_document_connector_count(db_session, document_id) == 0:
+        return
+    cc_pair = get_connector_credential_pair(db_session, connector_id, credential_id)
+    if cc_pair is None:
+        return  # cc_pair deleted -> its FK cascade already dropped the candidate
+    clear_port_orphan_candidates(
+        db_session, target_settings_id, cc_pair.id, [document_id]
+    )
 
 
 @shared_task(
@@ -110,6 +146,7 @@ def document_by_cc_pair_cleanup_task(
         # bulk-deletion fan-out across the light worker fleet.
         chunk_count: int | None = None
         update_request: MetadataUpdateRequest | None = None
+        doc_last_modified: datetime | None = None
         with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
             primary_search_settings = active_search_settings.primary
@@ -119,12 +156,25 @@ def document_by_cc_pair_cleanup_task(
             if count == 1:
                 action = DocumentCleanupAction.DELETE
                 chunk_count = fetch_chunk_count_for_document(document_id, db_session)
+
+                # If a port is filling a target index, record this delete so the
+                # cc_pair's port attempt sweeps the doc back out if a racing
+                # create-only copy resurrects it. Commit before the index delete
+                # below so the candidate is durable before any resurrection.
+                if record_port_orphan_candidates_for_document(
+                    db_session,
+                    document_id,
+                    primary_search_settings,
+                    secondary_search_settings,
+                ):
+                    db_session.commit()
             elif count > 1:
                 doc = get_document(document_id, db_session)
                 if not doc:
                     return False
 
                 action = DocumentCleanupAction.UPDATE
+                doc_last_modified = doc.last_modified
 
                 # the below functions do not include cc_pairs being deleted.
                 # i.e. they will correctly omit access for the current cc_pair
@@ -202,7 +252,14 @@ def document_by_cc_pair_cleanup_task(
                     ),
                 )
 
-                mark_document_as_synced(document_id, db_session)
+                # the phase-1 watermark keeps a concurrently-modified doc stale
+                mark_document_as_synced(
+                    document_id, db_session, synced_as_of=doc_last_modified
+                )
+                # re-link -> doc stays live under another cc_pair; drop its stale candidate
+                _clear_port_orphan_candidate_for_live_doc(
+                    db_session, connector_id, credential_id, document_id
+                )
                 db_session.commit()
 
             completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
@@ -236,6 +293,12 @@ def document_by_cc_pair_cleanup_task(
                     task_logger.exception(
                         f"Non-retryable HTTPStatusError: doc={document_id} status={e.response.status_code}"
                     )
+                # non-retryable failure removed nothing -> doc stays live; drop its candidate
+                with get_session_with_current_tenant() as db_session:
+                    _clear_port_orphan_candidate_for_live_doc(
+                        db_session, connector_id, credential_id, document_id
+                    )
+                    db_session.commit()
                 completion_status = (
                     OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
                 )
@@ -267,6 +330,10 @@ def document_by_cc_pair_cleanup_task(
                         ),
                     )
                     mark_document_as_modified(document_id, db_session)
+                    # helper keeps the candidate if this removed the doc's last link
+                    _clear_port_orphan_candidate_for_live_doc(
+                        db_session, connector_id, credential_id, document_id
+                    )
                     db_session.commit()
                 completion_status = (
                     OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION

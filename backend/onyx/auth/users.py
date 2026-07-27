@@ -1291,9 +1291,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             valid_email_domains=get_security_settings().valid_email_domains,
         )
 
-        logger.notice(
-            "Verification requested for user %s. Verification token: %s", user.id, token
-        )
+        # Never log the verification token: it is a replayable credential that
+        # marks the account verified, and the log stream is a wider audience
+        # than the intended email channel.
+        logger.notice("Verification requested for user %s", user.id)
         user_count = await get_user_count()
         try:
             send_user_verification_email(
@@ -2122,12 +2123,16 @@ async def current_limited_user(
 
 async def current_chat_accessible_user(
     user: User | None = Depends(optional_user),
-) -> User:
+) -> AsyncGenerator[User, None]:
     tenant_id = get_current_tenant_id()
-
-    return await double_check_user(
+    user = await double_check_user(
         user, allow_anonymous_access=anonymous_user_enabled(tenant_id=tenant_id)
     )
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+    try:
+        yield user
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
 
 async def current_user(

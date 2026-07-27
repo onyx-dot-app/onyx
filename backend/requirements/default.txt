@@ -270,7 +270,16 @@ azure-cognitiveservices-speech==1.50.0 \
 azure-core==1.41.0 \
     --hash=sha256:522b4011e8180b1a3dcd2024396a4e7fe9ac37fb8597db47163d230b5efe892d \
     --hash=sha256:f46ff5dfcd230f25cf1c19e8a34b8dc08a337b2503e268bb600a16c00db8ad5a
-    # via azure-cognitiveservices-speech
+    # via
+    #   azure-cognitiveservices-speech
+    #   azure-identity
+    #   azure-storage-blob
+azure-identity==1.25.2 \
+    --hash=sha256:030dbaa720266c796221c6cdbd1999b408c079032c919fef725fcc348a540fe9 \
+    --hash=sha256:1b40060553d01a72ba0d708b9a46d0f61f56312e215d8896d836653ffdc6753d
+azure-storage-blob==12.30.0 \
+    --hash=sha256:2cd74d4d5731e5eb6b8d5c5056ee115a5e88f8fdf22517b739836fda685018be \
+    --hash=sha256:d415ac50b67a8da6b3ae7e9f1014b1b55cd7aafa0b8d4ca9b380568dc7360423
 babel==2.17.0 \
     --hash=sha256:0c54cffb19f690cdcc52a3b50bcbf71e07a808d1c80d549f2459b9d2cf0afb9d \
     --hash=sha256:4d0b53093fdfb4b21c92b5213dba5a1b23885afa8383709427046b21c366e5f2
@@ -644,6 +653,8 @@ cryptography==48.0.1 \
     # via
     #   aioquic
     #   authlib
+    #   azure-identity
+    #   azure-storage-blob
     #   google-auth
     #   mitmproxy
     #   msal
@@ -677,6 +688,7 @@ defusedxml==0.7.1 \
     # via
     #   jira
     #   markitdown
+    #   nltk
 deprecated==1.3.1 \
     --hash=sha256:597bfef186b6f60181535a29fbe44865ce137a5079f295b479886c82729d5f3f \
     --hash=sha256:b1b50e0ff0c1fddaa5708a2c6b0a6588bb09b892825ab2b214ac9ea9d92a5223
@@ -910,9 +922,9 @@ gitdb==4.0.12 \
     --hash=sha256:5ef71f855d191a3326fcfbc0d5da835f26b13fbcba60c32c21091c349ffdb571 \
     --hash=sha256:67073e15955400952c6565cc3e707c554a4eea2e428946f7a4c162fab9bd9bcf
     # via gitpython
-gitpython==3.1.52 \
-    --hash=sha256:79a36ee1f83523214a3f72d56cf1c4e490d577dc61af77e43dfe5862bd9da01a \
-    --hash=sha256:de0a8ad86274c6e75ae8b37dd055ba68f19818c813108642263227b20775b48e
+gitpython==3.1.54 \
+    --hash=sha256:53f2085e24a2cda300eed7c3fc5f1559ae289634b725e98acaf4791940247aa0 \
+    --hash=sha256:b90d7b3d9bc0238681d24369130826f0dcdb0ceaa45db67cf1d4ffa4c302dedf
     # via braintrust
 google-api-core==2.28.1 \
     --hash=sha256:2b405df02d68e68ce0fbc138559e6036559e685159d148ae5861013dc201baf8 \
@@ -1130,9 +1142,9 @@ httpcore==1.0.9 \
     # via
     #   httpx
     #   unstructured-client
-httplib2==0.31.0 \
-    --hash=sha256:ac7ab497c50975147d4f7b1ade44becc7df2f8954d42b38b3d69c515f531135c \
-    --hash=sha256:b9cd78abea9b4e43a7714c6e0f8b6b8561a6fc1e95d5dbd367f5bf0ef35f5d24
+httplib2==0.32.0 \
+    --hash=sha256:48a0ef30a42db65d8f3399045e1d09ab0ba66e3b9efc360d07f80ea55d286025 \
+    --hash=sha256:dc6705cacdf3fb0a2aba7629fa33c90fd93e30035db0c157325826be177e4816
     # via
     #   google-api-python-client
     #   google-auth-httplib2
@@ -1196,6 +1208,7 @@ isodate==0.7.2 \
     --hash=sha256:28009937d8031054830160fce6d409ed342816b543597cece116d966c6d99e15 \
     --hash=sha256:4cd1aa0f43ca76f4a6c6c0292a85f40b35ec2e43e315b59f06e6d32171a953e6
     # via
+    #   azure-storage-blob
     #   python3-saml
     #   zeep
 itsdangerous==2.2.0 \
@@ -1576,7 +1589,14 @@ mpmath==1.3.0 \
 msal==1.34.0 \
     --hash=sha256:76ba83b716ea5a6d75b0279c0ac353a0e05b820ca1f6682c0eb7f45190c43c2f \
     --hash=sha256:f669b1644e4950115da7a176441b0e13ec2975c29528d8b9e81316023676d6e1
-    # via office365-rest-python-client
+    # via
+    #   azure-identity
+    #   msal-extensions
+    #   office365-rest-python-client
+msal-extensions==1.3.1 \
+    --hash=sha256:96d3de4d034504e969ac5e85bae8106c8373b5c6568e4c8fa7af2eca9dbe6bca \
+    --hash=sha256:c5b0fd10f65ef62b5f1d62f4251d51cbcaf003fcedae8c91b040a488614be1a4
+    # via azure-identity
 msgpack==1.2.1 \
     --hash=sha256:04c721c2c7448767e9e3f2520a475663d8ee0f09c31890f6d2bd70fd636a9647 \
     --hash=sha256:05f340e47e7e47d2da8db9b53e1bb1d294369e9ef45a747441309f6650b8351d \
@@ -1715,9 +1735,9 @@ mypy-extensions==1.0.0 \
 nest-asyncio==1.6.0 \
     --hash=sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe \
     --hash=sha256:87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c
-nltk==3.9.4 \
-    --hash=sha256:ed03bc098a40481310320808b2db712d95d13ca65b27372f8a403949c8b523d0 \
-    --hash=sha256:f2fa301c3a12718ce4a0e9305c5675299da5ad9e26068218b69d692fda84828f
+nltk==3.10.0 \
+    --hash=sha256:4fbac1d98203cbcd1b5d94a2877fb822300072d80604a5e7fae49d2c5f84e8c1 \
+    --hash=sha256:54ff84d4916d3ef127e8953bee0023f6a6b320b75d634a19e06ef056d3d244bf
     # via unstructured
 numpy==2.4.1 \
     --hash=sha256:178de8f87948163d98a4c9ab5bee4ce6519ca918926ec8df195af582de28544d \
@@ -2341,9 +2361,9 @@ pyparsing==3.2.0 \
     # via
     #   httplib2
     #   mitmproxy
-pypdf==6.13.3 \
-    --hash=sha256:c6e3f86afb625791510b02ad5480e94b63970bb957df75d44657c282ecc52224 \
-    --hash=sha256:f3cb822769725f1bac658c406cfc9460399043f3750c2d3e4650e0a85eacabd7
+pypdf==6.14.2 \
+    --hash=sha256:3f07891af76dc002657e04993ab9b4de81de29f9013b9761d0b7968bff12e946 \
+    --hash=sha256:7873f502fe4385e79539b21d872392dc0c4e3714327c15881cbc7fbfd1f95b25
     # via unstructured-client
 pypdfium2==5.9.0 \
     --hash=sha256:040f5513b808db705d4878f57e2bf0b9dc6e6a0ad8d765c36cf62febf3933b28 \
@@ -3020,6 +3040,8 @@ typing-extensions==4.15.0 \
     #   alembic
     #   atlassian-python-api
     #   azure-core
+    #   azure-identity
+    #   azure-storage-blob
     #   braintrust
     #   cohere
     #   cron-descriptor

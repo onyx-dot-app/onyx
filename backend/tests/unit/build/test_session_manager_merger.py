@@ -139,7 +139,7 @@ def test_connect_app_announce_emitted_as_packet(
     the card crosses over via this announce)."""
     session_id = uuid4()
     request = ConnectAppRequest(
-        request_id="req-9", app_slug="slack", reason="post a message"
+        request_id="req-9", external_app_id=42, reason="post a message"
     )
     announce_enqueued = threading.Event()
     calls: list[int] = []
@@ -169,7 +169,7 @@ def test_connect_app_announce_emitted_as_packet(
     packets = [item for item in out if isinstance(item, ConnectAppRequestPacket)]
     assert len(packets) == 1
     assert packets[0].request_id == "req-9"
-    assert packets[0].app_slug == "slack"
+    assert packets[0].external_app_id == 42
     assert packets[0].reason == "post a message"
     assert packets[0].type == "connect_app_request"
 
@@ -179,7 +179,7 @@ def test_connect_app_announce_emitted_as_packet(
     parsed = json.loads(rendered.split("data: ", 1)[1])
     assert parsed["type"] == "connect_app_request"
     assert parsed["request_id"] == "req-9"
-    assert parsed["app_slug"] == "slack"
+    assert parsed["external_app_id"] == 42
 
 
 def test_interleaving_events_and_announce(

@@ -45,7 +45,6 @@ def _create_test_app(
     """
     defaults: dict[str, Any] = {
         "name": "Test App",
-        "description": "An app for testing",
         "upstream_url_patterns": ["https://api.example.com/*"],
         "auth_template": dict(_AUTH_TEMPLATE),
         "organization_credentials": dict(_ORG_CREDENTIALS),
@@ -68,8 +67,10 @@ def _assert_user_response_shape_is_safe(
     # `app_type` is intentionally NOT forbidden — it's the non-sensitive
     # provider discriminator the UI needs and is exposed to users.
     forbidden_fields = {
+        "description",
         "organization_credentials",
         "auth_template",
+        "slug",
         "upstream_url_patterns",
         "enabled",
     }
@@ -106,7 +107,6 @@ def test_admin_creates_app_user_configures_credentials(
     admin_app = admin_apps[0]
     assert admin_app.id == app_id
     assert admin_app.name == "Test App"
-    assert admin_app.description == "An app for testing"
     assert admin_app.upstream_url_patterns == ["https://api.example.com/*"]
     assert admin_app.auth_template == _AUTH_TEMPLATE
     assert admin_app.enabled is True
@@ -190,7 +190,7 @@ def test_external_app_is_excluded_from_skill_management_apis(
         SkillManager.list_all(admin_user),
     ):
         listed_names = {skill.name for skill in [*skills.builtins, *skills.customs]}
-        assert user_app.slug not in listed_names
+        assert "Test App" not in listed_names
 
 
 # =============================================================================
@@ -213,7 +213,6 @@ def test_basic_user_cannot_access_admin_routes(
         ExternalAppManager.create(
             user_performing_action=basic_user,
             name="Sneaky App",
-            description="should not be created",
             upstream_url_patterns=[],
             auth_template={},
             organization_credentials={},
@@ -229,7 +228,6 @@ def test_basic_user_cannot_access_admin_routes(
             user_performing_action=basic_user,
             app_id=created.id,
             name="Hijacked",
-            description="should not be updated",
             upstream_url_patterns=[],
             auth_template={},
             organization_credentials={},
@@ -379,7 +377,6 @@ def test_update_app_reshapes_user_credential_keys(
         user_performing_action=admin_user,
         app_id=created.id,
         name=created.name,
-        description=created.description,
         upstream_url_patterns=created.upstream_url_patterns,
         auth_template=created.auth_template,
         organization_credentials=new_org_creds,
@@ -418,7 +415,6 @@ def test_update_or_delete_nonexistent_app_returns_404(
             user_performing_action=admin_user,
             app_id=missing_id,
             name="x",
-            description="x",
             upstream_url_patterns=["https://api.example.com/*"],
             auth_template={},
             organization_credentials={},
@@ -524,7 +520,6 @@ def test_app_type_defaults_to_custom_and_is_immutable_on_update(
         user_performing_action=admin_user,
         app_id=slack_app.id,
         name="Slack App (renamed)",
-        description=slack_app.description,
         upstream_url_patterns=slack_app.upstream_url_patterns,
         auth_template=slack_app.auth_template,
         organization_credentials=slack_app.organization_credentials,

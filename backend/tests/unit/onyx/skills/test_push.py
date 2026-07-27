@@ -217,15 +217,17 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
     invalid_skill = _skill(name="invalid-skill", is_valid=False)
     user = cast(User, SimpleNamespace())
     db_session = MagicMock(spec=Session)
+    list_runtime_skills = MagicMock(return_value=[valid_skill, invalid_skill])
+    assemble_fileset = MagicMock(return_value={"canonical-name/SKILL.md": b"content"})
     monkeypatch.setattr(
         push,
-        "list_skills",
-        lambda **_kwargs: [valid_skill, invalid_skill],
+        "list_runtime_skills_for_user",
+        list_runtime_skills,
     )
     monkeypatch.setattr(
         push,
         "_assemble_fileset",
-        lambda *_args: {"canonical-name/SKILL.md": b"content"},
+        assemble_fileset,
     )
     monkeypatch.setattr(push, "get_connectable_apps_for_user", lambda *_args: [])
     monkeypatch.setattr(push, "build_connectable_apps_list", lambda _apps: "apps")
@@ -234,3 +236,12 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
 
     assert apps_section == "apps"
     assert files == {"canonical-name/SKILL.md": b"content"}
+    list_runtime_skills.assert_called_once_with(
+        user=user,
+        db_session=db_session,
+    )
+    assemble_fileset.assert_called_once_with(
+        [valid_skill, invalid_skill],
+        user,
+        db_session,
+    )

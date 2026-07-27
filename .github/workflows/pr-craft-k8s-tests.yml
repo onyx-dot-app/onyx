@@ -45,7 +45,7 @@ env:
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
   # Sandbox pod resource requests live in values-ci.yaml (configMap.SANDBOX_POD_*).
-  SANDBOX_API_SERVER_URL: "http://onyx-api-service.onyx.svc.cluster.local:8080"
+  ONYX_SERVER_URL: "http://onyx-api-service.onyx.svc.cluster.local:8080"
 
   # Proxy lives in release namespace `onyx`. SANDBOX_PROXY_HOST is set
   # later to the proxy Service ClusterIP — the runner has no cluster DNS,

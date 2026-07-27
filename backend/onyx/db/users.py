@@ -23,6 +23,7 @@ from onyx.db.enums import AccountType
 from onyx.db.models import (
     DocumentSet,
     DocumentSet__User,
+    OAuthAccount,
     Persona,
     Persona__User,
     SamlAccount,
@@ -137,10 +138,19 @@ def get_all_users(
     db_session: Session,
     email_filter_string: str | None = None,
     include_external: bool = False,
+    include_api_key_users: bool = True,
 ) -> Sequence[User]:
     """List all users. No pagination as of now, as the # of users
     is assumed to be relatively small (<< 1 million)"""
-    stmt = select(User)
+    # Override the default joined-eager load of oauth_accounts: a selectin load
+    # avoids multiplying user rows and fetching the (potentially large) OAuth
+    # token columns, while still populating the collection so that
+    # User.password_configured works.
+    stmt = select(User).options(
+        selectinload(User.oauth_accounts).load_only(
+            OAuthAccount.id  # ty: ignore[invalid-argument-type]
+        )
+    )
 
     # Exclude system users (anonymous user, no-auth placeholder)
     stmt = stmt.where(
@@ -152,6 +162,13 @@ def get_all_users(
 
     if not include_external:
         stmt = stmt.where(User.role != UserRole.EXT_PERM_USER)
+
+    if not include_api_key_users:
+        stmt = stmt.where(
+            expression.not_(
+                User.__table__.c.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)
+            )
+        )
 
     if email_filter_string is not None:
         stmt = stmt.where(

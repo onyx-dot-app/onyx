@@ -27,7 +27,7 @@ relevant env var or credential.
 Use when you need a real database or real API calls but want control over setup.
 
 ```bash
-python -m dotenv -f .vscode/.env run -- pytest backend/tests/external_dependency_unit
+uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit
 ```
 
 ### Integration Tests (`tests/integration/`)
@@ -47,7 +47,7 @@ contracts that do not have an HTTP API. Direct task/stub checks belong in
 `tests/external_dependency_unit/craft/`.
 
 ```bash
-python -m dotenv -f .vscode/.env run -- pytest backend/tests/integration
+uv run --env-file .vscode/.env pytest backend/tests/integration
 ```
 
 ### Playwright / E2E Tests (`web/tests/e2e/`)
@@ -55,7 +55,7 @@ python -m dotenv -f .vscode/.env run -- pytest backend/tests/integration
 Full stack including web server. Use for frontend-backend coordination.
 
 ```bash
-npx playwright test <TEST_NAME>
+cd web && bun run playwright <TEST_NAME>
 ```
 
 ## Shared Fixtures

@@ -70,6 +70,8 @@ export const SWR_KEYS = {
   // ── Search Settings ───────────────────────────────────────────────────────
   currentSearchSettings: "/api/search-settings/get-current-search-settings",
   secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
+  reindexProgress: "/api/search-settings/reindex-progress",
+  reindexErrors: "/api/search-settings/reindex-errors",
   embeddingProviders: "/api/admin/embedding/embedding-provider",
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
@@ -119,7 +121,10 @@ export const SWR_KEYS = {
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
   adminMcpServers: "/api/admin/mcp/servers",
+  adminMcpServerToolSnapshots: (serverId: number) =>
+    `/api/admin/mcp/server/${serverId}/tools/snapshots?source=db`,
   mcpServers: "/api/mcp/servers",
+  mcpServersCraft: "/api/mcp/servers/craft",
   personaMcpServers: (personaId: number) =>
     `/api/mcp/servers/persona/${personaId}`,
 

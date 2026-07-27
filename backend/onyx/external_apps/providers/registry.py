@@ -66,8 +66,7 @@ def get_provider_or_raise(app: ExternalApp) -> ExternalAppProvider:
     if provider is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"No provider configured for app '{app.skill.name}' "
-            f"(app_type={app.app_type}).",
+            f"No provider configured for app '{app.name}' (app_type={app.app_type}).",
         )
     return provider
 
@@ -80,7 +79,6 @@ def _descriptor_for(
     return BuiltInExternalAppDescriptor(
         app_type=spec.app_type,
         name=spec.app_name,
-        description=descriptor.description,
         upstream_url_patterns=list(descriptor.upstream_url_patterns),
         auth_template=dict(descriptor.auth_template),
         required_org_credential_fields=[

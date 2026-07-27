@@ -42,6 +42,7 @@ import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources"
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
 
+const HOURS_PER_DAY = 24;
 const addModeColumns = memberTableColumns;
 
 // ---------------------------------------------------------------------------
@@ -100,7 +101,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const [selectedDocSetIds, setSelectedDocSetIds] = useState<number[]>([]);
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
   const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
-    { tokenBudget: null, periodHours: null },
+    { tokenBudget: null, periodDays: null },
   ]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -141,7 +142,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       setTokenLimits(
         tokenRateLimits.map((trl) => ({
           tokenBudget: trl.token_budget,
-          periodHours: trl.period_hours,
+          periodDays: trl.period_hours / HOURS_PER_DAY,
         }))
       );
     }

@@ -171,10 +171,6 @@ class HubspotProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             optional_scope=" ".join(_OPTIONAL_WRITE_SCOPES),
         ),
         descriptor=AdminDescriptorSpec(
-            description=(
-                "Read and manage HubSpot CRM contacts, companies, and deals "
-                "on the user's behalf."
-            ),
             upstream_url_patterns=["https://api\\.hubapi\\.com/.*"],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[

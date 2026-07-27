@@ -1,0 +1,1 @@
+GATEWAY_PATH_PREFIX = "/gateway"

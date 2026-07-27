@@ -11,7 +11,7 @@ from onyx.db.enums import (
     SessionOrigin,
     SharingScope,
 )
-from onyx.server.features.build.db.build_session import skills_are_stale
+from onyx.server.features.build.db.build_session import session_runtime_stale
 
 if TYPE_CHECKING:
     from onyx.db.models import BuildSession, Sandbox
@@ -22,9 +22,6 @@ class SessionCreateRequest(BaseModel):
     """Request to create a new build session."""
 
     name: str | None = None  # Optional session name
-    # LLM selection from user's cookie
-    llm_provider_type: str | None = None  # Provider type (e.g., "anthropic", "openai")
-    llm_model_name: str | None = None  # Model name (e.g., "claude-opus-4-5")
     # Skip Next.js dev server startup. Used by integration tests that don't
     # exercise the webapp proxy and don't want to pay the ~20s startup wait.
     headless: bool = False
@@ -142,7 +139,7 @@ class SessionResponse(BaseModel):
             origin=session.origin,
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
-            skills_stale=skills_are_stale(session, sandbox),
+            skills_stale=session_runtime_stale(session, sandbox),
         )
 
 
@@ -198,6 +195,7 @@ class MessageRequest(BaseModel):
     client_request_id: str | None = None
     # Per-message model override from the composer; both set together.
     provider: str | None = None
+    provider_id: int | None = None
     model: str | None = None
 
 

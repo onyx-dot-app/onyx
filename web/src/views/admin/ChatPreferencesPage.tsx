@@ -926,7 +926,7 @@ export default function ChatPreferencesPage() {
                 withLabel
               >
                 <Switch
-                  checked={s.temperature_override_enabled ?? false}
+                  checked={s.temperature_override_enabled ?? true}
                   onCheckedChange={(checked) => {
                     void saveSettings({
                       temperature_override_enabled: checked,

@@ -99,15 +99,18 @@ def optional_telemetry(
     data: dict,
     user_id: str | None = None,
     tenant_id: str | None = None,  # Allows for override of tenant_id
-) -> None:
+    blocking: bool = False,
+) -> bool | None:
+    """Fire-and-forget by default. With blocking=True, sends in the current
+    thread and returns whether the POST succeeded."""
     if DISABLE_TELEMETRY:
-        return
+        return False if blocking else None
 
     tenant_id = tenant_id or get_current_tenant_id()
 
     try:
 
-        def telemetry_logic() -> None:
+        def telemetry_logic() -> bool:
             try:
                 customer_uuid = (
                     _get_or_generate_customer_id_mt(tenant_id)
@@ -125,16 +128,20 @@ def optional_telemetry(
                 }
                 if ENTERPRISE_EDITION_ENABLED:
                     payload["instance_domain"] = _get_or_generate_instance_domain()
-                requests.post(
+                response = requests.post(
                     _DANSWER_TELEMETRY_ENDPOINT,
                     headers={"Content-Type": "application/json"},
                     json=payload,
                     timeout=_TELEMETRY_POST_TIMEOUT_SECONDS,
                 )
+                return response.ok
 
             except Exception:
                 # This way it silences all thread level logging as well
-                pass
+                return False
+
+        if blocking:
+            return telemetry_logic()
 
         # Run in separate thread with the same context as the current thread
         # This is to ensure that the thread gets the current tenant ID
@@ -146,6 +153,8 @@ def optional_telemetry(
     except Exception:
         # Should never interfere with normal functions of Onyx
         pass
+
+    return None
 
 
 def mt_cloud_telemetry(

@@ -1,6 +1,12 @@
 from pydantic import BaseModel, Field, model_validator
 
 from onyx.db.models import TokenRateLimit
+from onyx.db.user_usage import (
+    COST_BUDGET_PERIOD_ERROR,
+    TOKEN_BUDGET_PERIOD_ERROR,
+    USER_USAGE_BUCKET_SECONDS,
+    normalize_token_period_hours,
+)
 
 
 class TokenRateLimitArgs(BaseModel):
@@ -14,6 +20,16 @@ class TokenRateLimitArgs(BaseModel):
     def validate_budget_set(self) -> "TokenRateLimitArgs":
         if self.token_budget is None and self.cost_budget_cents is None:
             raise ValueError("Either token_budget or cost_budget_cents must be set")
+        if (
+            self.token_budget is not None
+            and self.period_hours != normalize_token_period_hours(self.period_hours)
+        ):
+            raise ValueError(TOKEN_BUDGET_PERIOD_ERROR)
+        if (
+            self.cost_budget_cents is not None
+            and (self.period_hours * 60 * 60) % USER_USAGE_BUCKET_SECONDS != 0
+        ):
+            raise ValueError(COST_BUDGET_PERIOD_ERROR)
         return self
 
 
@@ -26,10 +42,13 @@ class TokenRateLimitDisplay(BaseModel):
 
     @classmethod
     def from_db(cls, token_rate_limit: TokenRateLimit) -> "TokenRateLimitDisplay":
+        period_hours = token_rate_limit.period_hours
+        if token_rate_limit.token_budget is not None:
+            period_hours = normalize_token_period_hours(period_hours)
         return cls(
             token_id=token_rate_limit.id,
             enabled=token_rate_limit.enabled,
             token_budget=token_rate_limit.token_budget,
-            period_hours=token_rate_limit.period_hours,
+            period_hours=period_hours,
             cost_budget_cents=token_rate_limit.cost_budget_cents,
         )

@@ -211,6 +211,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         filtered_documents: list[Document],
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
+        index_to_secondary: bool,  # noqa: ARG002
     ) -> None:
         """Finalize DB updates, store plaintext, and mark docs as indexed."""
         updatable_ids = [doc.id for doc in context.updatable_docs]

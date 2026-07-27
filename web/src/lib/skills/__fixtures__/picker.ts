@@ -26,6 +26,7 @@ export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
     group_shares: [],
     public_permission: null,
     user_permission: "VIEWER",
+    external_app: null,
     ...over,
   };
 }
@@ -52,6 +53,7 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
     group_shares: [],
     public_permission: "VIEWER",
     user_permission: "VIEWER",
+    external_app: null,
     ...over,
   };
 }
@@ -59,13 +61,11 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
 export function appFixture(
   over: Partial<ExternalAppUserResponse> & {
     app_type: ExternalAppType;
-    slug: string;
+    id: number;
   }
 ): ExternalAppUserResponse {
   return {
-    id: over.slug.length,
-    name: over.slug,
-    description: `${over.slug} integration`,
+    name: `App ${over.id}`,
     credential_keys: ["token"],
     credential_values: over.authenticated === false ? {} : { token: "***" },
     authenticated: true,

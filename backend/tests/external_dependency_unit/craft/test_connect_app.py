@@ -18,7 +18,7 @@ def test_announcement_lifecycle() -> None:
     cache.delete(connect_app._announce_key(session_id))  # type: ignore[attr-defined]
 
     request = connect_app.ConnectAppRequest(
-        request_id="req-1", app_slug="google_calendar", reason="to schedule events"
+        request_id="req-1", external_app_id=17, reason="to schedule events"
     )
     connect_app.announce_request(session_id, request, cache)
     popped = connect_app.pop_announcement(session_id, timeout_s=5, cache=cache)

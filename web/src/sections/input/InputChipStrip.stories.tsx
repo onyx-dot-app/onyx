@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { InputChipStrip } from "@/sections/input/InputChipStrip";
 import { UploadFileStatus } from "@/app/craft/contexts/UploadFilesContext";
-import type { PickerEntry } from "@/lib/skills/picker";
+import { pickerEntryKey, type PickerEntry } from "@/lib/skills/picker";
 
 const meta: Meta<typeof InputChipStrip> = {
   title: "Apps/Craft/Input Bar/Input Chip Strip",
@@ -16,8 +16,9 @@ const meta: Meta<typeof InputChipStrip> = {
   ],
   args: {
     onRemoveFile: (id) => console.log("remove file", id),
-    onRemoveEntry: (slug) => console.log("remove skill", slug),
-    onClickEntry: (entry, el) => console.log("click skill", entry.slug, el),
+    onRemoveEntry: (entryKey) => console.log("remove entry", entryKey),
+    onClickEntry: (entry, el) =>
+      console.log("click entry", pickerEntryKey(entry), el),
     files: [],
     entries: [],
   },
@@ -42,9 +43,8 @@ const SKILL_REPORT: PickerEntry = {
 
 const APP_SLACK: PickerEntry = {
   kind: "app",
-  slug: "slack",
+  externalAppId: 1,
   name: "Slack",
-  description: "Post messages to Slack.",
   appType: "SLACK",
   authenticated: true,
 };

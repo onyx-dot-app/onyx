@@ -199,9 +199,11 @@ async function updateDocSetGroupSharing(
 // Token rate limits — create / update / delete
 // ---------------------------------------------------------------------------
 
+const HOURS_PER_DAY = 24;
+
 interface TokenLimitPayload {
   tokenBudget: number | null;
-  periodHours: number | null;
+  periodDays: number | null;
 }
 
 interface ExistingTokenLimit {
@@ -218,8 +220,8 @@ async function saveTokenLimits(
 ): Promise<void> {
   // Filter to only valid (non-null) limits
   const validLimits = limits.filter(
-    (l): l is { tokenBudget: number; periodHours: number } =>
-      l.tokenBudget != null && l.periodHours != null
+    (l): l is { tokenBudget: number; periodDays: number } =>
+      l.tokenBudget != null && l.periodDays != null
   );
 
   // Update existing limits (match by index position)
@@ -235,7 +237,7 @@ async function saveTokenLimits(
         body: JSON.stringify({
           enabled: existingLimit.enabled,
           token_budget: limit.tokenBudget,
-          period_hours: limit.periodHours,
+          period_hours: limit.periodDays * HOURS_PER_DAY,
         }),
       }
     );
@@ -257,7 +259,7 @@ async function saveTokenLimits(
         body: JSON.stringify({
           enabled: true,
           token_budget: limit.tokenBudget,
-          period_hours: limit.periodHours,
+          period_hours: limit.periodDays * HOURS_PER_DAY,
         }),
       }
     );

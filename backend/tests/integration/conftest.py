@@ -169,7 +169,7 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     ("docprocessing", "docprocessing,port"),
     (
         "user_file_processing",
-        "user_file_processing,user_file_project_sync,user_file_delete",
+        "user_file_processing,user_file_project_sync,user_file_delete,user_file_port",
     ),
     ("scheduled_tasks", "scheduled_tasks"),
     ("docfetching", "connector_doc_fetching"),

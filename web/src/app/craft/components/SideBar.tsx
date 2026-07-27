@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useMemo, useCallback, useState, useEffect, useRef } from "react";
+import type { Route } from "next";
 import { useRouter, usePathname } from "next/navigation";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import {
@@ -53,6 +54,7 @@ import {
   CRAFT_APPS_PATH,
   CRAFT_TASKS_PATH,
 } from "@/app/craft/v1/constants";
+import { useUnsavedChangesNavigation } from "@/providers/UnsavedChangesNavigationProvider";
 
 // ============================================================================
 // Fun Deleting Messages
@@ -329,6 +331,7 @@ function BuildSessionButton({
 const MemoizedBuildSidebarInner = memo(() => {
   const { folded } = useSidebarState();
   const router = useRouter();
+  const { requestNavigation } = useUnsavedChangesNavigation();
   const pathname = usePathname();
   const session = useSession();
   const sessionHistory = useSessionHistory();
@@ -362,20 +365,25 @@ const MemoizedBuildSidebarInner = memo(() => {
   }, [isEnabled, limits]);
 
   // Navigate to new build - session controller handles setCurrentSession and pre-provisioning
-  const handleNewBuild = useCallback(() => {
-    router.push(CRAFT_PATH);
-  }, [router]);
+  const navigate = useCallback(
+    (destination: Route) => requestNavigation(() => router.push(destination)),
+    [requestNavigation, router]
+  );
+
+  const handleNewBuild = useCallback(() => navigate(CRAFT_PATH), [navigate]);
 
   const handleLoadSession = useCallback(
     (sessionId: string) => {
       // Clicking a session in the sidebar always lands on the main-agent view
       // (one click back from any subagent transcript you were viewing).
-      returnToMainAgent(sessionId);
-      router.push(
-        `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
-      );
+      requestNavigation(() => {
+        returnToMainAgent(sessionId);
+        router.push(
+          `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
+        );
+      });
     },
-    [router, returnToMainAgent]
+    [requestNavigation, router, returnToMainAgent]
   );
 
   const newBuildButton = useMemo(
@@ -392,13 +400,13 @@ const MemoizedBuildSidebarInner = memo(() => {
       <SidebarTab
         icon={SvgClock}
         folded={folded}
-        href={CRAFT_TASKS_PATH}
+        onClick={() => navigate(CRAFT_TASKS_PATH)}
         selected={pathname.startsWith(CRAFT_TASKS_PATH)}
       >
         Scheduled Tasks
       </SidebarTab>
     ),
-    [folded, pathname]
+    [folded, navigate, pathname]
   );
 
   const appsTab = useMemo(
@@ -406,13 +414,13 @@ const MemoizedBuildSidebarInner = memo(() => {
       <SidebarTab
         icon={SvgPlug}
         folded={folded}
-        href={CRAFT_APPS_PATH}
+        onClick={() => navigate(CRAFT_APPS_PATH)}
         selected={pathname.startsWith(CRAFT_APPS_PATH)}
       >
         Apps
       </SidebarTab>
     ),
-    [folded, pathname]
+    [folded, navigate, pathname]
   );
 
   const skillsPanel = useMemo(
@@ -420,22 +428,26 @@ const MemoizedBuildSidebarInner = memo(() => {
       <SidebarTab
         icon={SvgBlocks}
         folded={folded}
-        href={CRAFT_SKILLS_PATH}
+        onClick={() => navigate(CRAFT_SKILLS_PATH)}
         selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
       >
         Skills
       </SidebarTab>
     ),
-    [folded, pathname]
+    [folded, navigate, pathname]
   );
 
   const backToChatButton = useMemo(
     () => (
-      <SidebarTab icon={SvgArrowLeft} folded={folded} href="/app">
+      <SidebarTab
+        icon={SvgArrowLeft}
+        folded={folded}
+        onClick={() => navigate("/app")}
+      >
         Back to Chat
       </SidebarTab>
     ),
-    [folded]
+    [folded, navigate]
   );
 
   const footer = useMemo(
@@ -492,7 +504,7 @@ const MemoizedBuildSidebarInner = memo(() => {
                   onDelete={() => deleteBuildSession(historyItem.id)}
                   onDeleteActiveSession={
                     session?.id === historyItem.id
-                      ? () => router.push(CRAFT_PATH)
+                      ? () => navigate(CRAFT_PATH)
                       : undefined
                   }
                 />

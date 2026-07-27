@@ -9,11 +9,13 @@ from fastapi.testclient import TestClient
 
 from onyx.auth import users
 from onyx.auth.users import (
+    current_chat_accessible_user,
     current_user_from_websocket,
     get_user_manager,
     optional_fastapi_current_user,
     optional_user,
 )
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.db.engine.async_sql_engine import get_async_session
 from shared_configs.contextvars import CURRENT_USER_ID_CONTEXTVAR, get_current_user_id
 
@@ -37,12 +39,12 @@ def test_reset_restores_previous_value() -> None:
     assert get_current_user_id() is None
 
 
-def _authenticated_app(user_id: Any) -> FastAPI:
+def _authenticated_app(user_id: Any | None) -> FastAPI:
     class _FakeUser:
         id = user_id
 
-    async def fake_auth() -> _FakeUser:
-        return _FakeUser()
+    async def fake_auth() -> _FakeUser | None:
+        return _FakeUser() if user_id is not None else None
 
     async def skip_oauth_refresh(*_: Any) -> None:
         return None
@@ -112,6 +114,35 @@ def test_optional_user_context_is_set_for_endpoint_body(
 
     assert resp.status_code == 200
     assert resp.json() == {"user_id": str(user_id)}
+    assert get_current_user_id() is None
+
+
+def test_anonymous_chat_context_propagates_to_streamed_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _authenticated_app(None)
+    monkeypatch.setattr(users, "anonymous_user_enabled", lambda **_: True)
+    reads: list[str | None] = []
+
+    def chat_gate(
+        _user: Any = Depends(current_chat_accessible_user),
+    ) -> None:
+        return None
+
+    @app.post("/anonymous-stream")
+    def stream_ep(
+        _gate: None = Depends(chat_gate),
+    ) -> StreamingResponse:
+        def gen() -> Generator[str, None, None]:
+            reads.append(get_current_user_id())
+            yield "chunk\n"
+
+        return StreamingResponse(gen(), media_type="text/plain")
+
+    response = TestClient(app).post("/anonymous-stream")
+
+    assert response.status_code == 200
+    assert reads == [ANONYMOUS_USER_UUID]
     assert get_current_user_id() is None
 
 

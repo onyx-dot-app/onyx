@@ -125,8 +125,9 @@ export default function ShareSkillModal({
   const canEditShares =
     skill?.user_permission === "OWNER" || skill?.user_permission === "EDITOR";
   const canEditOrgVisibility =
-    skill?.user_permission === "OWNER" ||
-    (isAdmin && skill?.user_permission === "EDITOR");
+    !skill?.external_app &&
+    (skill?.user_permission === "OWNER" ||
+      (isAdmin && skill?.user_permission === "EDITOR"));
   const canTransfer =
     !!skill &&
     (skill.user_permission === "OWNER" || (isAdmin && skill.ownership_vacant));
@@ -396,6 +397,12 @@ export default function ShareSkillModal({
             />
           }
         />
+
+        {skill.external_app && (
+          <Text color="text-03" font="secondary-body">
+            {`Organization-wide viewer access is required while this skill is associated with app “${skill.external_app.name}”.`}
+          </Text>
+        )}
 
         <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 

@@ -19,6 +19,7 @@ import {
   fetchScheduledRunEventStream,
   RateLimitError,
 } from "@/app/craft/services/apiServices";
+import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 import {
@@ -736,7 +737,7 @@ export function useBuildStreaming() {
               type: "connect_app_request",
               id: parsed.requestId,
               requestId: parsed.requestId,
-              appSlug: parsed.appSlug,
+              externalAppId: parsed.externalAppId,
               reason: parsed.reason,
             });
             break;
@@ -951,7 +952,7 @@ export function useBuildStreaming() {
     async (
       sessionId: string,
       content: string,
-      model?: { provider: string; modelName: string } | null
+      model?: BuildLlmSelection | null
     ): Promise<void> => {
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);

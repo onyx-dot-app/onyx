@@ -114,10 +114,6 @@ class LinearProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             },
         ),
         descriptor=AdminDescriptorSpec(
-            description=(
-                "Read and create issues, projects, and comments in Linear "
-                "on the user's behalf."
-            ),
             upstream_url_patterns=["https://api\\.linear\\.app/.*"],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[

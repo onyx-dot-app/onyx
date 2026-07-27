@@ -13,6 +13,7 @@ the task body.
 from __future__ import annotations
 
 import datetime
+from collections.abc import Sequence
 from typing import Callable
 from uuid import UUID, uuid4
 
@@ -28,9 +29,10 @@ from onyx.server.features.build.db.sandbox import (
     get_running_sandboxes,
 )
 from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
+    CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
-    LLMProviderConfig,
     SandboxInfo,
 )
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
@@ -42,7 +44,6 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
 )
 from onyx.skills.push import SKILLS_MOUNT_PATH
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.common.craft.payloads import default_llm_config
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
@@ -77,7 +78,6 @@ class TestProvisionTransitions:
             user=test_user,
             user_id=test_user.id,
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            all_llm_configs=[default_llm_config()],
         )
         db_session.commit()
         db_session.refresh(sandbox)
@@ -111,7 +111,6 @@ class TestProvisionFailureRollback:
                 user=test_user,
                 user_id=test_user.id,
                 tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-                all_llm_configs=[default_llm_config()],
             )
 
         # The endpoint's exception handler rolls back. Simulate that here.
@@ -147,6 +146,7 @@ class TestIdempotentProvision:
         stub_sandbox_manager.health_check_returns = True
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         # First call: provisions a new sandbox row.
         session_manager_with_stub.create_session__no_commit(user_id=test_user.id)
@@ -248,6 +248,7 @@ class TestHealthCheckFailureRecovery:
         stub_sandbox_manager.session_workspace_exists_returns = False
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         # restore_session reads ``get_sandbox_manager`` from sessions_api.
         monkeypatch.setattr(
@@ -479,10 +480,11 @@ class _PushRecordingStub(StubSandboxManager):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         self.ops.append("render_workspace")
         super().setup_session_workspace(
@@ -492,6 +494,7 @@ class _PushRecordingStub(StubSandboxManager):
             nextjs_port,
             connectable_apps_section,
             user_name,
+            mcp_servers,
         )
 
     def restore_snapshot(
@@ -500,8 +503,9 @@ class _PushRecordingStub(StubSandboxManager):
         session_id: UUID,
         snapshot_storage_path: str,
         nextjs_port: int | None,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         connectable_apps_section: str,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         self.ops.append("render_workspace")
         super().restore_snapshot(
@@ -511,6 +515,7 @@ class _PushRecordingStub(StubSandboxManager):
             nextjs_port,
             llm_config,
             connectable_apps_section,
+            mcp_servers,
         )
 
 
@@ -544,7 +549,6 @@ class TestManagedContentPushOrdering:
             user=test_user,
             user_id=test_user.id,
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            all_llm_configs=[default_llm_config()],
         )
         db_session.commit()
         db_session.refresh(row)
@@ -600,6 +604,7 @@ class TestManagedContentPushOrdering:
             stub.restore_snapshot_silent = True
         else:
             stub.setup_session_workspace_silent = True
+        stub.write_sandbox_file_silent = True
 
         monkeypatch.setattr(
             "onyx.server.features.build.session.api.get_sandbox_manager",

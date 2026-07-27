@@ -564,6 +564,35 @@ def fetch_first_accessible_llm_provider_by_type(
     return provider
 
 
+def fetch_all_accessible_llm_providers(
+    db_session: Session, user: User
+) -> list[LLMProviderView]:
+    """Every provider the ``user`` can access (is_public / group rules).
+    persona=None below: Craft has no persona context, so a provider restricted
+    to specific personas is intentionally excluded even when otherwise
+    public."""
+    provider_models = db_session.scalars(
+        select(LLMProviderModel)
+        .order_by(LLMProviderModel.id.asc())
+        .options(
+            selectinload(LLMProviderModel.model_configurations),
+            selectinload(LLMProviderModel.groups),
+            selectinload(LLMProviderModel.personas),
+        )
+    )
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    is_admin = user.role == UserRole.ADMIN
+    # This per-turn catalog never uses the key (the gateway injects it per
+    # selected model), so skip the per-provider decrypt + audit.
+    return [
+        LLMProviderView.from_model(p, include_api_key=False)
+        for p in provider_models
+        if can_user_access_llm_provider(
+            p, user_group_ids, persona=None, is_admin=is_admin
+        )
+    ]
+
+
 def fetch_existing_llm_provider(
     name: str, db_session: Session
 ) -> LLMProviderModel | None:
@@ -594,6 +623,25 @@ def fetch_existing_llm_provider_by_id(
     )
 
     return provider_model
+
+
+def fetch_accessible_llm_provider_by_id(
+    db_session: Session, user: User, provider_id: int
+) -> LLMProviderView | None:
+    """``provider_id``'s view when ``user`` may access it (is_public / group
+    rules; persona-restricted providers are excluded — no persona context)."""
+    provider_model = fetch_existing_llm_provider_by_id(provider_id, db_session)
+    if provider_model is None:
+        return None
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    if not can_user_access_llm_provider(
+        provider_model,
+        user_group_ids,
+        persona=None,
+        is_admin=user.role == UserRole.ADMIN,
+    ):
+        return None
+    return LLMProviderView.from_model(provider_model)
 
 
 def fetch_existing_llm_provider_by_name_and_type(
