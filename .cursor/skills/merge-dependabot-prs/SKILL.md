@@ -126,13 +126,13 @@ mid-post-checkout hook (`uv sync`/`bun install`) even when it looks roomy.
 
 ## 7. Conflicts
 
-- **Bot-authored branch**: comment `@dependabot rebase` (or `recreate`) —
-  Dependabot owns the branch and will redo it properly.
-- **User-authored branch**: get explicit approval, then merge main in, resolve
-  keeping both sides' intent, regenerate any lockfile a manual edit could
-  desync (step 5 commands), and verify `git diff origin/main...HEAD --stat`
-  shows only the intended change. A noisy `git status` after merging
-  long-diverged main is expected. If a pre-push hook fails on a stale local
+- **Untouched Dependabot branch**: comment `@dependabot rebase` (or
+  `recreate`) — Dependabot owns the branch and will redo it properly.
+- **Branch we already pushed fixes to**: `@dependabot rebase` discards
+  non-Dependabot commits. Instead rebase onto `origin/main` yourself, rerun
+  the step 5 regeneration if lockfiles conflicted, push with
+  `--force-with-lease`, and verify `git diff origin/main...HEAD --stat` still
+  shows only the intended bump. If a pre-push hook trips on a stale local
   cache (e.g. dev type-gen referencing a file deleted upstream), clear the
   cache and retry — don't skip the hook.
 
