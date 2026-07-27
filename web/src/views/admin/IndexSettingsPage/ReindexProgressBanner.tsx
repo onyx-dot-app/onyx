@@ -18,7 +18,9 @@ import { useReindexProgress } from "@/lib/indexing/hooks";
 
 interface ReindexProgressBannerProps {
   secondaryModelName?: string;
-  onCancel: () => void;
+  // Omitted when the reindex can't be reverted (INSTANT backfill: the new model is
+  // already live) — the banner then shows progress only, no Cancel button.
+  onCancel?: () => void;
 }
 
 const ZERO = {
@@ -114,11 +116,13 @@ export default function ReindexProgressBanner({
                 aria-label={t("progressBanner.progress.ariaLabel")}
               />
             </div>
-            <div className="shrink-0">
-              <Button variant="danger" prominence="primary" onClick={onCancel}>
-                {t("progressBanner.cancelButton.label")}
-              </Button>
-            </div>
+            {onCancel && (
+              <div className="shrink-0">
+                <Button variant="danger" prominence="primary" onClick={onCancel}>
+                  {t("progressBanner.cancelButton.label")}
+                </Button>
+              </div>
+            )}
           </div>
         }
       />
