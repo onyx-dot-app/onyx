@@ -45,7 +45,10 @@ from onyx.db.connector_credential_pair import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexReclaimStatus
 from onyx.db.models import SearchSettings
-from onyx.db.port_attempt import is_active_port_backfill_source
+from onyx.db.port_attempt import (
+    has_active_port_attempts,
+    is_active_port_backfill_source,
+)
 from onyx.db.search_settings import (
     advance_to_deleting__no_commit,
     advance_to_reclaimed__no_commit,
@@ -178,6 +181,11 @@ def _drive_deleting(db_session: Session, search_settings: SearchSettings) -> Non
     budget so a whale drains fast. On COMPLETE (count-verified empty) mark the row
     RECLAIMED and KEEP it (we only delete the OpenSearch index, not the PAST row).
     INCOMPLETE leaves it DELETING for next tick."""
+    # Don't delete while a canceled port task may still be writing to this FUTURE's index;
+    # defer a tick (the stall watchdog frees a dead worker, so this can't wedge). No-op for a
+    # normal old-index reclaim — those attempts target the FUTURE, not this swapped-out PRESENT.
+    if has_active_port_attempts(db_session, search_settings.id):
+        return
     index_name = search_settings.index_name
     settings_id = search_settings.id
     tenant_state = TenantState(
@@ -280,6 +288,22 @@ def execute_old_index_reclaim(
             row_lock.release()
 
 
+def enqueue_index_reclaim(
+    celery_app: Celery, tenant_id: str, search_settings_id: int
+) -> None:
+    """Dispatch one reclaim run for a PAST row onto the index_reclaim queue. Used by the
+    beat fan-out and by the revert path (which enqueues immediately so an abandoned index
+    drains now, not on the next 30-min beat). The run task re-checks the row is actionable,
+    so a redundant dispatch is a safe no-op."""
+    celery_app.send_task(
+        OnyxCeleryTask.RUN_OLD_INDEX_RECLAIM,
+        kwargs={"tenant_id": tenant_id, "search_settings_id": search_settings_id},
+        queue=OnyxCeleryQueues.INDEX_RECLAIM,
+        priority=OnyxCeleryPriority.MEDIUM,
+        expires=BEAT_EXPIRES_DEFAULT,
+    )
+
+
 def run_check_for_old_index_reclaim(tenant_id: str, celery_app: Celery) -> int | None:
     """Beat body (testable): fan out one run-reclaim task per reclaimable PAST index
     onto the index_reclaim queue, so the deletion runs on the light worker, not
@@ -309,13 +333,7 @@ def run_check_for_old_index_reclaim(tenant_id: str, celery_app: Celery) -> int |
         for settings_id in settings_ids:
             if redis_client.lock(_reclaim_row_lock_key(settings_id)).locked():
                 continue  # a run task is already draining this row
-            celery_app.send_task(
-                OnyxCeleryTask.RUN_OLD_INDEX_RECLAIM,
-                kwargs={"tenant_id": tenant_id, "search_settings_id": settings_id},
-                queue=OnyxCeleryQueues.INDEX_RECLAIM,
-                priority=OnyxCeleryPriority.MEDIUM,
-                expires=BEAT_EXPIRES_DEFAULT,
-            )
+            enqueue_index_reclaim(celery_app, tenant_id, settings_id)
             enqueued += 1
     finally:
         if lock_beat.owned():

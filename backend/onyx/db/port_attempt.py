@@ -152,6 +152,24 @@ def count_active_port_attempts(
     ).scalar_one()
 
 
+def has_active_port_attempts(db_session: Session, search_settings_id: int) -> bool:
+    """True if any attempt for this settings is still active (NOT_STARTED / IN_PROGRESS),
+    either scope. Gates reclaiming a reverted/superseded FUTURE's index: cancel only FLAGS
+    in-progress attempts (they self-ack at their next batch boundary), so dropping the index
+    first could race a lagging write. A dead worker is terminalized by the stall watchdog, so
+    this can't wedge cleanup."""
+    return bool(
+        db_session.execute(
+            select(
+                exists().where(
+                    PortAttempt.search_settings_id == search_settings_id,
+                    PortAttempt.status.in_(_ACTIVE_STATUSES),
+                )
+            )
+        ).scalar()
+    )
+
+
 def _latest_port_status_by_user(
     db_session: Session,
     search_settings_id: int,
