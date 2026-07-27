@@ -65,6 +65,14 @@ same package, or a manual bump PR overlapping a bot one.
 - **Conflicting** — real merge conflict against main.
 - **Superseded** — a newer PR in the batch covers it.
 
+Independent of bucket, assess compatibility: note each PR's semver jump and
+whether the package is production or dev-only. Major bumps (and 0.x minors,
+which semver allows to break) are never covered by a blanket "enqueue the
+green ones" — green CI proves the build, not the behavior. Surface each one
+individually in the confirmation with a one-line breaking-changes summary
+from the release notes Dependabot embeds in the PR body, and let the user opt
+in per PR.
+
 Summarize buckets and proposed actions, confirm with `AskUserQuestion`, then act.
 
 ## 3. Green: approve and enqueue
