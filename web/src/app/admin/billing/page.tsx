@@ -26,6 +26,7 @@ import { LinkButton, MessageCard } from "@opal/components";
 
 import PlansView from "./PlansView";
 import CheckoutView from "./CheckoutView";
+import ActiveSubscriptionView from "./ActiveSubscriptionView";
 import BillingDetailsView from "./BillingDetailsView";
 import LicenseActivationCard from "./LicenseActivationCard";
 import "./billing.css";
@@ -362,11 +363,17 @@ export default function BillingPage() {
     }
     switch (view) {
       case "checkout":
-        return {
-          icon: SvgArrowUpCircle,
-          title: "Upgrade Plan",
-          showBackButton: false,
-        };
+        return hasSubscription
+          ? {
+              icon: SvgWallet,
+              title: "Your Plan",
+              showBackButton: true,
+            }
+          : {
+              icon: SvgArrowUpCircle,
+              title: "Upgrade Plan",
+              showBackButton: false,
+            };
       case "plans":
         return {
           icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
@@ -422,7 +429,19 @@ export default function BillingPage() {
           : "billing-view-enter";
 
     const views: Record<typeof view, React.ReactNode> = {
-      checkout: <CheckoutView onAdjustPlan={() => changeView("plans")} />,
+      // With a live subscription, checkout can only 409 on the control
+      // plane's duplicate-subscription guard. Renewal is automatic, so route
+      // to license sync / details instead of a payment CTA.
+      checkout: hasSubscription ? (
+        <ActiveSubscriptionView
+          billing={billing ?? undefined}
+          isSelfHosted={isSelfHosted}
+          onSynced={handleLicenseActivated}
+          onViewDetails={() => changeView("details")}
+        />
+      ) : (
+        <CheckoutView onAdjustPlan={() => changeView("plans")} />
+      ),
       plans: (
         <PlansView
           hasSubscription={!!hasSubscription}
