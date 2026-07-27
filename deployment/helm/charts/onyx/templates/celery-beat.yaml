@@ -69,6 +69,12 @@ spec:
               {{- with .Values.celery_beat.logLevel }}
               {{ printf "--loglevel=%s" . | quote }},
               {{- end }}
+              {{- with .Values.celery_beat.schedulePath }}
+              {{ printf "--schedule=%s" . | quote }},
+              {{- end }}
+              {{- range .Values.celery_beat.extraArgs }}
+              {{ . | quote }},
+              {{- end }}
             ]
           resources:
             {{- toYaml .Values.celery_beat.resources | nindent 12 }}
