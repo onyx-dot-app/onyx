@@ -38,6 +38,7 @@ from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.persona import user_can_access_persona
 from onyx.db.projects import check_project_ownership
+from onyx.db.user_file import get_user_file_by_id
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
@@ -466,10 +467,7 @@ def load_chat_file(
     user_file: UserFile | None = None
     if user_file_id_str:
         try:
-            user_file_id = UUID(user_file_id_str)
-            user_file = (
-                db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
-            )
+            user_file = get_user_file_by_id(UUID(user_file_id_str), db_session)
         except (ValueError, TypeError) as e:
             logger.warning("Failed to look up user file for %s: %s", file_id, e)
     token_count = user_file.token_count if user_file and user_file.token_count else 0

@@ -104,6 +104,10 @@ def update_last_accessed_at_for_user_files(
     db_session.commit()
 
 
+def get_user_file_by_id(user_file_id: UUID, db_session: Session) -> UserFile | None:
+    return db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
+
+
 def get_file_id_by_user_file_id(user_file_id: str, db_session: Session) -> str | None:
     """Resolve a `UserFile.id` to its underlying `FileRecord.file_id`.
 
