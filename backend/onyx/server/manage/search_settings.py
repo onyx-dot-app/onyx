@@ -11,7 +11,10 @@ from onyx.background.celery.tasks.port.tasks import (
 )
 from onyx.background.celery.tasks.index_reclaim.tasks import enqueue_index_reclaim
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
+from onyx.configs.app_configs import (
+    DISABLE_INDEX_UPDATE_ON_SWAP,
+    OLD_INDEX_RECLAIM_ENABLED,
+)
 from onyx.context.search.models import (
     SavedSearchSettings,
     SearchSettingsCreationRequest,
@@ -270,6 +273,14 @@ def _guard_index_name_reuse(db_session: Session, index_name: str) -> None:
     occupants = find_unreclaimed_past_by_index_name(db_session, index_name)
     if not occupants:
         return
+    if not OLD_INDEX_RECLAIM_ENABLED:
+        # Reclaim is off (the run task no-ops), so don't strand these as DELETING that will
+        # never drain — just refuse; an operator re-enables reclaim or removes the index.
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "An index of the same name from an earlier re-index still holds data, and "
+            "reclamation is disabled. Re-enable reclamation or remove that index first.",
+        )
     for occupant in occupants:
         mark_abandoned_future_for_reclaim__no_commit(occupant)
     db_session.commit()

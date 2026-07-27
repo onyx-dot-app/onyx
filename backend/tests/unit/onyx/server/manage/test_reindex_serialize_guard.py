@@ -86,6 +86,7 @@ def test_proceeds_when_no_reindex_in_progress(
         set_new_search_settings(_request(), _=MagicMock(), db_session=MagicMock())
 
 
+@patch(f"{_MODULE}.OLD_INDEX_RECLAIM_ENABLED", True)
 @patch(f"{_MODULE}.enqueue_index_reclaim")
 @patch(f"{_MODULE}.mark_abandoned_future_for_reclaim__no_commit")
 @patch(f"{_MODULE}.find_unreclaimed_past_by_index_name")
@@ -119,5 +120,26 @@ def test_name_reuse_guard_noop_when_name_free(
 ) -> None:
     # No occupant -> the guard is a no-op (nothing marked, nothing kicked, no raise).
     _guard_index_name_reuse(MagicMock(), "danswer_chunk_free")
+    mock_mark.assert_not_called()
+    mock_enqueue.assert_not_called()
+
+
+@patch(f"{_MODULE}.OLD_INDEX_RECLAIM_ENABLED", False)
+@patch(f"{_MODULE}.enqueue_index_reclaim")
+@patch(f"{_MODULE}.mark_abandoned_future_for_reclaim__no_commit")
+@patch(f"{_MODULE}.find_unreclaimed_past_by_index_name")
+def test_name_reuse_guard_refuses_without_marking_when_reclaim_disabled(
+    mock_find: MagicMock,
+    mock_mark: MagicMock,
+    mock_enqueue: MagicMock,
+) -> None:
+    # Reclaim off -> refuse without marking/kicking (the reclaim task would no-op, so
+    # marking DELETING would only strand the row).
+    mock_find.return_value = [MagicMock()]
+
+    with pytest.raises(OnyxError) as exc:
+        _guard_index_name_reuse(MagicMock(), "danswer_chunk_x")
+    assert exc.value.error_code == OnyxErrorCode.CONFLICT
+    assert "reclamation is disabled" in exc.value.detail.lower()
     mock_mark.assert_not_called()
     mock_enqueue.assert_not_called()
