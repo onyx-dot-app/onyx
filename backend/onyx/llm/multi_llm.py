@@ -18,6 +18,11 @@ from onyx.configs.chat_configs import (
     LLM_SOCKET_READ_TIMEOUT,
 )
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
+from onyx.llm.api_surfaces import (
+    OPENAI_COMPATIBLE_SURFACES,
+    LlmApiSurface,
+    resolve_api_surface,
+)
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.cost import compute_cost_cents
 from onyx.llm.custom_config_mapping import (
@@ -45,14 +50,7 @@ from onyx.llm.models import (
 )
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
-from onyx.llm.well_known_providers.constants import (
-    PORTKEY_API_MODE_CHAT_COMPLETIONS,
-    PORTKEY_API_MODE_CONFIG_KEY,
-    PORTKEY_API_MODE_MESSAGES,
-    PORTKEY_API_MODE_RESPONSES,
-    PORTKEY_DEFAULT_API_MODE,
-    VERTEX_LOCATION_KWARG,
-)
+from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.llm_utils import record_llm_request_params
 from onyx.utils.encryption import mask_env_value_for_logging, mask_string
 from onyx.utils.logger import setup_logger
@@ -420,14 +418,10 @@ class LitellmLLM(LLM):
         self._max_input_tokens = max_input_tokens
         self._custom_config = custom_config
 
-        # Portkey is a single provider that can target three API surfaces; the
-        # selected one is persisted in custom_config. The key is registered in
-        # UI_ONLY_CONFIG_KEYS, so it is never injected into the environment.
-        self._portkey_api_mode: str | None = None
-        if model_provider == LlmProviderNames.PORTKEY:
-            self._portkey_api_mode = (custom_config or {}).get(
-                PORTKEY_API_MODE_CONFIG_KEY, PORTKEY_DEFAULT_API_MODE
-            )
+        # The wire protocol this provider's endpoint speaks, when it is reached
+        # through a generic surface rather than LiteLLM's own integration. For
+        # gateways exposing several surfaces this reflects the admin's choice.
+        self._api_surface = resolve_api_surface(model_provider, custom_config)
 
         # Create a dictionary for model-specific arguments if it's None
         model_kwargs = model_kwargs or {}
@@ -471,26 +465,10 @@ class LitellmLLM(LLM):
         ):
             model_kwargs[VERTEX_LOCATION_KWARG] = "global"
 
-        # Bifrost and OpenAI-compatible: OpenAI-compatible proxies that send
-        # model names directly to the endpoint. We route through LiteLLM's
-        # openai provider with the server's base URL, and ensure /v1 is appended.
-        # Portkey's Chat Completions and Responses surfaces are OpenAI-compatible,
-        # so they take this same path (the responses/ model prefix is applied in
-        # _completion). Portkey's Messages surface is Anthropic-compatible and is
-        # handled in the branch below.
-        portkey_openai_compat = model_provider == LlmProviderNames.PORTKEY and (
-            self._portkey_api_mode
-            in (PORTKEY_API_MODE_CHAT_COMPLETIONS, PORTKEY_API_MODE_RESPONSES)
-        )
-        if (
-            model_provider
-            in (
-                LlmProviderNames.BIFROST,
-                LlmProviderNames.OPENAI_COMPATIBLE,
-                LlmProviderNames.NEBIUS_TOKENFACTORY,
-            )
-            or portkey_openai_compat
-        ):
+        # OpenAI-compatible surfaces (proxies, gateways, self-hosted servers)
+        # send model names directly to the endpoint, so we impersonate LiteLLM's
+        # openai provider against the server's base URL with /v1 appended.
+        if self._api_surface in OPENAI_COMPATIBLE_SURFACES:
             self._custom_llm_provider = "openai"
             # LiteLLM's OpenAI client requires an api_key to be set.
             # Many OpenAI-compatible servers don't need auth, so supply a
@@ -501,13 +479,9 @@ class LitellmLLM(LLM):
                 base = self._api_base.rstrip("/")
                 self._api_base = base if base.endswith("/v1") else f"{base}/v1"
                 model_kwargs["api_base"] = self._api_base
-        elif (
-            model_provider == LlmProviderNames.PORTKEY
-            and self._portkey_api_mode == PORTKEY_API_MODE_MESSAGES
-        ):
-            # Portkey Messages API is Anthropic-compatible. Route through
-            # LiteLLM's anthropic provider with the bare Portkey base — LiteLLM
-            # appends /v1/messages itself, so we must NOT coerce the base to /v1.
+        elif self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES:
+            # LiteLLM appends /v1/messages to the base itself, so it must stay
+            # bare — coercing it to /v1 here would produce /v1/v1/messages.
             self._custom_llm_provider = "anthropic"
             if self._api_base is not None:
                 self._api_base = self._api_base.rstrip("/")
@@ -646,23 +620,7 @@ class LitellmLLM(LLM):
         optional_kwargs: dict[str, Any] = {}
 
         # Model name
-        is_portkey = self._model_provider == LlmProviderNames.PORTKEY
-        # Portkey's Chat Completions and Responses surfaces route like the other
-        # OpenAI-compatible proxies (custom_llm_provider="openai"); its Messages
-        # surface routes through the anthropic provider instead.
-        portkey_openai_compat = is_portkey and self._portkey_api_mode in (
-            PORTKEY_API_MODE_CHAT_COMPLETIONS,
-            PORTKEY_API_MODE_RESPONSES,
-        )
-        is_openai_compatible_proxy = (
-            self._model_provider
-            in (
-                LlmProviderNames.BIFROST,
-                LlmProviderNames.OPENAI_COMPATIBLE,
-                LlmProviderNames.NEBIUS_TOKENFACTORY,
-            )
-            or portkey_openai_compat
-        )
+        is_openai_compatible_proxy = self._api_surface in OPENAI_COMPATIBLE_SURFACES
         model_provider = (
             f"{self.config.model_provider}/responses"
             if is_openai_model  # Uses litellm's completions -> responses bridge
@@ -689,19 +647,12 @@ class LitellmLLM(LLM):
             api_version = None
 
         model_bare = self.config.deployment_name or self.config.model_name
-        if is_portkey:
-            # custom_llm_provider is already set (openai for chat/responses,
-            # anthropic for messages), so the model is sent bare — with the
-            # responses/ bridge prefix only in Responses mode.
-            if self._portkey_api_mode == PORTKEY_API_MODE_RESPONSES:
-                model = f"responses/{model_bare}"
-            else:
-                model = model_bare
-        elif is_openai_compatible_proxy:
-            # OpenAI-compatible proxies (Bifrost, generic OpenAI-compatible
-            # servers) expect model names sent directly to their endpoint.
-            # We use custom_llm_provider="openai" so LiteLLM doesn't try
-            # to route based on the provider prefix.
+        if self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
+            # Drives LiteLLM's completions -> responses bridge.
+            model = f"responses/{model_bare}"
+        elif self._api_surface is not None:
+            # Generic surfaces set custom_llm_provider explicitly and expect the
+            # model name sent directly to the endpoint, with no provider prefix.
             model = model_bare
         else:
             model = f"{model_provider}/{model_bare}"

@@ -8,6 +8,7 @@ to end in /v1. These tests lock that mapping down.
 
 from unittest.mock import patch
 
+from onyx.llm.api_surfaces import LlmApiSurface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.custom_config_mapping import UI_ONLY_CONFIG_KEYS
 from onyx.llm.models import LanguageModelInput, UserMessage
@@ -60,7 +61,7 @@ def test_chat_completions_mode_coerces_bare_base_to_v1() -> None:
 def test_default_mode_is_chat_completions() -> None:
     # No portkey_api_mode in custom_config -> defaults to chat completions.
     llm = _make_portkey_llm(None, "https://api.portkey.ai/v1")
-    assert llm._portkey_api_mode == "chat_completions"
+    assert llm._api_surface is LlmApiSurface.OPENAI_CHAT_COMPLETIONS
     assert llm._custom_llm_provider == "openai"
 
 
@@ -102,6 +103,6 @@ def test_api_mode_is_never_injected_into_environment() -> None:
     # The mode is UI-only form state: it must be readable for routing but must
     # never reach os.environ via temporary_env_and_lock at call time.
     llm = _make_portkey_llm("messages", "https://api.portkey.ai")
-    assert llm._portkey_api_mode == "messages"
+    assert llm._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
     assert PORTKEY_API_MODE_CONFIG_KEY in UI_ONLY_CONFIG_KEYS
     assert PORTKEY_API_MODE_CONFIG_KEY not in llm._env_only_custom_config
