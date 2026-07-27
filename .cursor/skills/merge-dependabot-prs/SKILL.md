@@ -69,6 +69,11 @@ Summarize buckets and proposed actions, confirm with `AskUserQuestion`, then act
 
 ## 3. Green: approve and enqueue
 
+On `web/**` bumps, also wait for the advisory `storybook-build` check. It
+never gates the queue, but don't enqueue while it's red — post-merge breakage
+pages Slack ("Storybook Deploy"). If it fails, treat it like any other failure
+(mechanical fix per step 5, or diagnosis per step 6).
+
 ```bash
 gh pr review <pr> --approve
 gh pr merge <pr> --auto
@@ -93,11 +98,12 @@ per-PR confirmation. Known Onyx cases:
 - **bun bumps** (`dependabot:javascript`): stale `bun.lock` — run
   `bun install` in the bumped directory (repo root or `web/`).
 
-Do the work in a worktree so the active checkout stays untouched — the
-convention here is `~/code/worktrees-onyx/<branch-name>`. Keep worktrees on a
-real disk: a tmpfs `/tmp` can hit "Disk quota exceeded" mid-post-checkout hook
-(`uv sync`/`bun install`) even when it looks roomy. Commit, push to the PR
-branch, remove the worktree.
+Getting the branch: prefer the harness's isolated-worktree feature if it has
+one (Claude Code: `EnterWorktree`). Otherwise, if the current checkout is
+clean, work in place — `gh pr checkout <pr>`, fix, push, and return to the
+previous branch. Only create a manual `git worktree` when the checkout is
+dirty; keep it on a real disk — a tmpfs `/tmp` can hit "Disk quota exceeded"
+mid-post-checkout hook (`uv sync`/`bun install`) even when it looks roomy.
 
 ## 6. Needs diagnosis: read the failing job's log, then classify
 
