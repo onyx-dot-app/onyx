@@ -566,6 +566,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # Check for disposable emails FIRST so obvious throwaway domains are
         # rejected before hitting Google's siteverify API. Cheap local check.
         security_settings = get_security_settings()
+
+        if safe and not MULTI_TENANT and not security_settings.password_auth_enabled:
+            raise OnyxError(
+                OnyxErrorCode.REGISTRATION_DISABLED,
+                "Password signup is disabled. Sign in through your SSO provider.",
+            )
+
         try:
             verify_email_domain(
                 user_create.email,
@@ -1327,6 +1334,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 outcome,
                 actor=AuditActor(email=email),
             )
+
+        if not MULTI_TENANT and not get_security_settings().password_auth_enabled:
+            _audit_login_failure(AuditOutcome.DENIED)
+            raise BasicAuthenticationError(detail="PASSWORD_LOGIN_DISABLED")
 
         tenant_id: str | None = None
         try:
