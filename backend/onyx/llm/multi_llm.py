@@ -565,10 +565,26 @@ class LitellmLLM(LLM):
         #########################
         # Flags that modify the final arguments
         #########################
-        is_claude_model = "claude" in self.config.model_name.lower()
+        # Custom providers (e.g. Azure AI Foundry) may carry the model identity
+        # only in the deployment alias, which is also the string actually sent
+        # to LiteLLM — so model detection must consider both names.
+        model_identity_names = [
+            name
+            for name in (self.config.model_name, self.config.deployment_name)
+            if name
+        ]
+        is_claude_model = any("claude" in name.lower() for name in model_identity_names)
         is_qwen_model = "qwen" in self.config.model_name.lower()
-        is_reasoning = model_is_reasoning_model(
-            self.config.model_name, self.config.model_provider
+        # Claude >= 4.7 always reasons via the adaptive thinking API, so treat
+        # it as a reasoning model even when the litellm registry doesn't know
+        # the (possibly aliased) name — otherwise reasoning_effort is silently
+        # dropped for such models.
+        uses_adaptive_thinking = any(
+            _anthropic_uses_adaptive_thinking(name) for name in model_identity_names
+        )
+        is_reasoning = uses_adaptive_thinking or any(
+            model_is_reasoning_model(name, self.config.model_provider)
+            for name in model_identity_names
         )
         # All OpenAI models will use responses API for consistency
         # Responses API is needed to get reasoning packets from OpenAI models
@@ -655,7 +671,9 @@ class LitellmLLM(LLM):
         # https://github.com/BerriAI/litellm/issues/26444
         # TODO(litellm): Consider removing this once the above is resolved,
         # although this assumes users have upgraded their litellm if relevant.
-        omits_sampling_params = _anthropic_omits_sampling_params(self.config.model_name)
+        omits_sampling_params = any(
+            _anthropic_omits_sampling_params(name) for name in model_identity_names
+        )
         if not omits_sampling_params:
             optional_kwargs["temperature"] = 1 if is_reasoning else self._temperature
 
@@ -691,7 +709,7 @@ class LitellmLLM(LLM):
                 # (notably Bedrock).
                 has_tool_call_history = _prompt_contains_tool_call_history(prompt)
 
-                if _anthropic_uses_adaptive_thinking(self.config.model_name):
+                if uses_adaptive_thinking:
                     # Newer Anthropic models (Claude Opus 4.7+) reject
                     # thinking.type.enabled — they require the adaptive
                     # thinking config with output_config.effort.
