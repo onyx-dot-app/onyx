@@ -22,8 +22,9 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
-          fetch-depth: 0
           persist-credentials: false
+      # prek diffs --from-ref/--to-ref, so it needs both endpoints present.
+      - uses: ./.github/actions/fetch-full-history
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # ratchet:actions/setup-python@v6
         with:
           python-version: "3.13"

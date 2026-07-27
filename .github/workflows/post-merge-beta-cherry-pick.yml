@@ -149,10 +149,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          fetch-depth: 0
           persist-credentials: true
           ref: main
           token: ${{ steps.app-token.outputs.token }}
+      # ods cherry-pick needs main's history and the release branches.
+      - uses: ./.github/actions/fetch-full-history
+        with:
+          checkout-persisted-credentials: true
 
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39

@@ -1,0 +1,52 @@
+name: "Fetch Full Git History"
+description: "Deepens a shallow checkout to complete history, without the per-ref log spam that fetch-depth: 0 produces"
+inputs:
+  token:
+    description: "Token used for the fetch. Ignored when the preceding checkout persisted its credentials."
+    required: false
+    default: ${{ github.token }}
+  checkout-persisted-credentials:
+    description: "Set to true when the preceding actions/checkout ran with persist-credentials: true, so this step reuses those credentials instead of supplying its own."
+    required: false
+    default: "false"
+runs:
+  using: "composite"
+  steps:
+    - name: Fetch full history
+      shell: bash
+      env:
+        GIT_FETCH_TOKEN: ${{ inputs.token }}
+        CHECKOUT_PERSISTED_CREDENTIALS: ${{ inputs.checkout-persisted-credentials }}
+      run: |
+        set -euo pipefail
+
+        # Same flags and refspec actions/checkout uses for fetch-depth: 0, with
+        # --quiet added. Without it git prints one "* [new branch]" line per
+        # remote ref, which on this repo is ~4k lines per job. Note that
+        # show-progress has no effect here: checkout v6 never wires it into the
+        # fetch, and --progress would not suppress the ref summary anyway.
+        args=(fetch --quiet --no-tags --prune --no-recurse-submodules)
+
+        # The preceding checkout is shallow, so --unshallow is what actually
+        # restores complete history. It also deepens the checked-out ref itself,
+        # which matters for pull requests from forks: the merge commit's
+        # fork-side parent is not reachable from any refs/heads/* ref.
+        if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+          args+=(--unshallow)
+        fi
+
+        # checkout removes its auth header at the end of its own step unless
+        # persist-credentials is true, so supply credentials for this fetch.
+        # GIT_CONFIG_* keeps the token out of both argv and .git/config; adding
+        # a second header when checkout already left one would send two
+        # Authorization headers, hence the conditional.
+        if [ "$CHECKOUT_PERSISTED_CREDENTIALS" != "true" ]; then
+          basic=$(printf 'x-access-token:%s' "$GIT_FETCH_TOKEN" | base64 | tr -d '\n')
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0="http.${GITHUB_SERVER_URL}/.extraheader"
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${basic}"
+        fi
+
+        git "${args[@]}" origin \
+          '+refs/heads/*:refs/remotes/origin/*' \
+          '+refs/tags/*:refs/tags/*'
