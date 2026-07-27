@@ -1,4 +1,5 @@
 from collections import Counter
+from collections.abc import Sequence
 from typing import cast
 from uuid import UUID
 
@@ -18,6 +19,7 @@ from onyx.db.mcp import (
     resolve_mcp_credentials,
 )
 from onyx.db.models import Persona, User
+from onyx.db.models import Tool as ToolDBModel
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
@@ -117,6 +119,23 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     )
 
 
+def should_exclude_open_url_tool(
+    persona_tools: Sequence[ToolDBModel],
+    allowed_tool_ids: list[int] | None,
+) -> bool:
+    """OpenURLTool is hidden from the chat tool toggles (chat_selectable=False)
+    but reaches the internet on its own via the crawler fallback. Treat an
+    explicit exclusion of WebSearchTool as excluding OpenURLTool too, so that
+    disabling web search for a message actually cuts off web access."""
+    if allowed_tool_ids is None:
+        return False
+    return any(
+        tool.in_code_tool_id == WebSearchTool.__name__
+        and tool.id not in allowed_tool_ids
+        for tool in persona_tools
+    )
+
+
 def construct_tools(
     persona: Persona,
     emitter: Emitter,
@@ -208,6 +227,8 @@ def _construct_tools_impl(
             auto_detect_filters=config.auto_detect_filters,
         )
 
+    exclude_open_url = should_exclude_open_url_tool(persona.tools, allowed_tool_ids)
+
     added_search_tool = False
     for db_tool_model in persona.tools:
         # If allowed_tool_ids is specified, skip tools not in the allowed list
@@ -284,6 +305,12 @@ def _construct_tools_impl(
 
             # Handle Open URL Tool
             elif tool_cls.__name__ == OpenURLTool.__name__:
+                if exclude_open_url:
+                    logger.debug(
+                        "Skipping OpenURLTool because WebSearchTool is excluded "
+                        "for this message"
+                    )
+                    continue
                 try:
                     tool_dict[db_tool_model.id] = [
                         OpenURLTool(
