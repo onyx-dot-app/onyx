@@ -658,6 +658,14 @@ celery_beat:
   # this worker only — this becomes `--loglevel=<value>` on the celery worker
   # command and takes precedence over LOG_LEVEL inside the worker process.
   logLevel: ""
+  # Path of beat's schedule file. Kept under /tmp — where the chart mounts an
+  # emptyDir (unless volumeMounts below already provide /tmp) — so beat runs
+  # under hardened securityContexts (non-root or readOnlyRootFilesystem),
+  # which can't write celery's default location, the working directory /app.
+  # Set to "" to restore celery's default.
+  schedulePath: "/tmp/celerybeat-schedule"
+  # Extra CLI args appended to the celery beat command, after the flags above.
+  extraArgs: []
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
