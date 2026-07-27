@@ -428,6 +428,45 @@ def test_resumed_checkpoint_from_other_branch_relists(
     assert checkpoint.file_paths_branch == "gh-pages"
 
 
+def test_resumed_branch_change_bypasses_pushed_at_gate(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    """Re-listing after a branch change must ignore the pushed_at gate.
+
+    The new branch was never indexed, so an old pushed_at must not cause the
+    re-listing to be skipped with an empty path list.
+    """
+    connector = _build_connector(mock_github_client, branch="gh-pages")
+    mock_repo = create_mock_repo(
+        {"new-only.md": b"new content"},
+        pushed_at=datetime(2020, 1, 1),
+    )
+
+    checkpoint = connector.build_dummy_checkpoint()
+    checkpoint.stage = GithubConnectorStage.FILES
+    checkpoint.file_paths = ["old-only.md"]  # listed from the previous branch
+    checkpoint.file_paths_branch = "main"
+    checkpoint.curr_page = 1
+
+    # poll window starts well after the repo's last push
+    items = list(
+        connector._fetch_repo_files(
+            mock_repo,
+            checkpoint,
+            start=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            is_slim=False,
+            repo_external_access=None,
+        )
+    )
+
+    docs = [i for i in items if isinstance(i, Document)]
+    assert [d.id for d in docs] == [
+        "https://github.com/test-org/test-repo/blob/gh-pages/new-only.md"
+    ]
+    assert checkpoint.file_paths_branch == "gh-pages"
+
+
 def test_nonexistent_branch_raises_clear_error(
     mock_github_client: MagicMock,
     create_mock_repo: Callable[..., MagicMock],

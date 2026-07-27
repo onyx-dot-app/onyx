@@ -325,7 +325,7 @@ export const connectorConfigs: Record<
         name: "branch",
         optional: true,
         description:
-          "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled.",
+          "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately.",
       },
     ],
   },

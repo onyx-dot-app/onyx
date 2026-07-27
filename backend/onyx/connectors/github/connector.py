@@ -839,7 +839,10 @@ class GithubConnector(
         caller should return the checkpoint to resume), False once drained.
         """
         branch = self._resolve_branch(repo)
-        if checkpoint.file_paths is not None and checkpoint.file_paths_branch != branch:
+        branch_changed = (
+            checkpoint.file_paths is not None and checkpoint.file_paths_branch != branch
+        )
+        if branch_changed:
             # The cached listing came from a different branch (resumed
             # checkpoint after a connector edit or default-branch change) —
             # discard it so paths and content come from the same branch.
@@ -851,7 +854,14 @@ class GithubConnector(
             pushed_at = (
                 repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
             )
-            if start is not None and pushed_at is not None and pushed_at < start:
+            # After a branch change the new branch was never indexed, so the
+            # pushed_at freshness gate must not skip the re-listing.
+            if (
+                not branch_changed
+                and start is not None
+                and pushed_at is not None
+                and pushed_at < start
+            ):
                 # Nothing changed in this repo since the last poll — skip.
                 logger.info("Skipping files for repo %s (pushed_at < start)", repo.name)
                 checkpoint.file_paths = []
