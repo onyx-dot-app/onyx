@@ -11,16 +11,21 @@ from onyx.db.enums import SandboxStatus
 FileSet: TypeAlias = dict[str, bytes]
 
 
-class LLMProviderConfig(BaseModel):
-    """LLM provider configuration for sandbox provisioning.
+class GatewayModelConfig(BaseModel):
+    id: str
+    display_name: str
+    supports_reasoning: bool = False
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
 
-    Passed to SandboxManager.provision() to configure the LLM.
-    """
 
+class CraftLLMProviderConfig(BaseModel):
     provider: str
     model_name: str
     api_key: str | None
     api_base: str | None
+    display_name: str | None = None
+    models: list[GatewayModelConfig] | None = None
 
 
 class CraftMCPServerConfig(BaseModel):

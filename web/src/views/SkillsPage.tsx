@@ -204,6 +204,7 @@ export default function SkillsPage() {
         can_toggle: b.can_toggle,
         is_available: b.is_available,
         unavailable_reason: b.unavailable_reason,
+        external_app: b.external_app,
       }));
     const customItems: SkillCardItem[] = data.customs
       .filter((c): c is CustomSkill => c.source === "custom")
@@ -217,6 +218,7 @@ export default function SkillsPage() {
         is_personal: c.is_personal && c.user_permission === "OWNER",
         enabled: optimisticEnabledById.get(c.id) ?? c.enabled,
         can_toggle: c.can_toggle,
+        external_app: c.external_app,
       }));
     // Group order: built-in, then custom (org-wide), then personal; alphabetical within each group.
     const groupRank = (item: SkillCardItem): number => {
@@ -237,11 +239,8 @@ export default function SkillsPage() {
   const focusedAppName = useMemo(() => {
     if (focusedExternalAppId === null) return null;
     for (const item of items) {
-      if (
-        item.source === "custom" &&
-        item.skill.external_app?.external_app_id === focusedExternalAppId
-      ) {
-        return item.skill.external_app.name;
+      if (item.external_app?.external_app_id === focusedExternalAppId) {
+        return item.external_app.name;
       }
     }
     return null;
@@ -262,9 +261,7 @@ export default function SkillsPage() {
     return items.filter(
       (item) =>
         (focusedAppName === null ||
-          (item.source === "custom" &&
-            item.skill.external_app?.external_app_id ===
-              focusedExternalAppId)) &&
+          item.external_app?.external_app_id === focusedExternalAppId) &&
         (!q ||
           item.name.toLowerCase().includes(q) ||
           item.description.toLowerCase().includes(q))

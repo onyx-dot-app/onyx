@@ -30,6 +30,7 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
 import {
   pickerEntryConnectionPath,
   pickerEntryKey,
@@ -101,9 +102,10 @@ const CraftInputBar = memo(
 
       const { data: skillsData } = useUserSkills();
       const { data: appsData } = useUserExternalApps();
+      const { data: craftMcpData } = useCraftMcpServers();
       const pickerSections = useMemo(
-        () => toPickerSections(skillsData, appsData),
-        [skillsData, appsData]
+        () => toPickerSections(skillsData, appsData, craftMcpData?.mcp_servers),
+        [skillsData, appsData, craftMcpData]
       );
 
       const { data: libraryTree, mutate: mutateLibrary } = useSWR(

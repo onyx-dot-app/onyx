@@ -6,16 +6,16 @@ from typing import Any
 
 from onyx.db.enums import EndpointPolicy
 from onyx.external_apps.matching.engine import MatchedAction
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
 
 
 def default_llm_config(
     provider: str = "openai",
     model_name: str = "gpt-5-mini",
     api_key: str = "test-key",
-) -> LLMProviderConfig:
-    """Standard ``LLMProviderConfig`` for tests that don't care about specifics."""
-    return LLMProviderConfig(
+) -> CraftLLMProviderConfig:
+    """Standard ``CraftLLMProviderConfig`` for tests that don't care about specifics."""
+    return CraftLLMProviderConfig(
         provider=provider,
         model_name=model_name,
         api_key=api_key,

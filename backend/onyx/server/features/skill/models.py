@@ -65,6 +65,7 @@ class SkillResponse(BaseModel):
         db_session: Session,
         enabled: bool,
         can_toggle: bool,
+        external_app: SkillExternalAppDependencyResponse | None = None,
     ) -> "SkillResponse":
         return cls(
             source="builtin",
@@ -76,6 +77,7 @@ class SkillResponse(BaseModel):
             enabled=enabled,
             can_toggle=can_toggle,
             user_permission=SkillAccessLevel.VIEWER,
+            external_app=external_app,
         )
 
     @classmethod
@@ -159,6 +161,7 @@ class SkillPreviewResponse(BaseModel):
         skill: Skill,
         *,
         instructions_markdown: str,
+        external_app: SkillExternalAppDependencyResponse | None = None,
     ) -> "SkillPreviewResponse":
         return cls(
             source="builtin",
@@ -167,6 +170,7 @@ class SkillPreviewResponse(BaseModel):
             description=skill.description,
             author_email=None,
             instructions_markdown=instructions_markdown,
+            external_app=external_app,
         )
 
     @classmethod

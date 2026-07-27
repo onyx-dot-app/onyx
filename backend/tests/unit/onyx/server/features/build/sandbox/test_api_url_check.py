@@ -92,3 +92,26 @@ def test_spa_catch_all_on_both_paths_warns_without_raising() -> None:
         api_url_check.httpx, "get", return_value=_response(200, json_body=None)
     ):
         api_url_check.validate_sandbox_api_url("https://onyx.example")
+
+
+def test_unreachable_probe_latches_and_does_not_reprobe() -> None:
+    # Fail-open must probe at most once per process: an api-server that can't
+    # reach its own URL (hairpin NAT) would otherwise eat a connect timeout on
+    # every provision.
+    with patch.object(
+        api_url_check.httpx,
+        "get",
+        side_effect=httpx.ConnectError("egress blocked"),
+    ) as probe:
+        api_url_check.validate_sandbox_api_url("https://onyx.example/api")
+        api_url_check.validate_sandbox_api_url("https://onyx.example/api")
+
+    probe.assert_called_once()
+
+
+def test_double_404_latches_and_does_not_reprobe() -> None:
+    with patch.object(api_url_check.httpx, "get", return_value=_response(404)) as probe:
+        api_url_check.validate_sandbox_api_url("https://onyx.example")
+        api_url_check.validate_sandbox_api_url("https://onyx.example")
+
+    assert probe.call_count == 2

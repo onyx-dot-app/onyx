@@ -116,6 +116,7 @@ def skill_response_for_user(
             db_session,
             enabled=state.enabled,
             can_toggle=state.can_toggle,
+            external_app=_dependency_response(state.external_app_dependency),
         )
 
     if user_group_ids is None:
@@ -183,6 +184,15 @@ def skill_preview_response(
     user: User,
     db_session: Session,
 ) -> SkillPreviewResponse:
+    # Both sources can be gated on an external app — a built-in provider's
+    # associated skill is a built-in row.
+    external_app = _dependency_response(
+        get_skill_external_app_dependencies(
+            db_session,
+            user,
+            [skill.id],
+        ).get(skill.id)
+    )
     if skill.built_in_skill_id is not None:
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
         if definition is None:
@@ -190,16 +200,11 @@ def skill_preview_response(
         return SkillPreviewResponse.from_builtin(
             skill,
             instructions_markdown=read_builtin_skill_instructions(definition),
+            external_app=external_app,
         )
 
     return SkillPreviewResponse.from_custom(
         skill,
         instructions_markdown=read_custom_skill_bundle_instructions(skill),
-        external_app=_dependency_response(
-            get_skill_external_app_dependencies(
-                db_session,
-                user,
-                [skill.id],
-            ).get(skill.id)
-        ),
+        external_app=external_app,
     )

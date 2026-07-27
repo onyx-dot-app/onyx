@@ -94,6 +94,32 @@ async def test_enterprise_passes_enterprise_path(
 
 
 @pytest.mark.asyncio
+@patch("ee.onyx.server.middleware.tier_gate.get_tier")
+async def test_business_blocked_from_log_export(
+    mock_get_tier: MagicMock, middleware_harness: MiddlewareHarness
+) -> None:
+    mock_get_tier.return_value = Tier.BUSINESS
+    middleware, call_next = middleware_harness
+    response = await middleware(
+        _make_request("/api/admin/log-export/download"), call_next
+    )
+    assert response.status_code == 402
+
+
+@pytest.mark.asyncio
+@patch("ee.onyx.server.middleware.tier_gate.get_tier")
+async def test_enterprise_passes_log_export(
+    mock_get_tier: MagicMock, middleware_harness: MiddlewareHarness
+) -> None:
+    mock_get_tier.return_value = Tier.ENTERPRISE
+    middleware, call_next = middleware_harness
+    response = await middleware(
+        _make_request("/api/admin/log-export/download"), call_next
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_unmapped_path_passes_through(
     middleware_harness: MiddlewareHarness,
 ) -> None:

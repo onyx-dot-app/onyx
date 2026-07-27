@@ -35,6 +35,8 @@ payload snapshots so tests assert observable manager outcomes:
   ``last_cleanup_session_workspace_payload``,
   ``last_restore_snapshot_payload``, ``last_send_message_payload``,
   ``last_write_sandbox_file_payload``, ``last_write_files_to_sandbox_payload``.
+- ``session_runtime_call_order`` records config regeneration, instance disposal,
+  and session prewarming in invocation order.
 
 Usage
 -----
@@ -50,15 +52,16 @@ Usage
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import Any, cast
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
 from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
+    CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
-    LLMProviderConfig,
     SandboxInfo,
     SnapshotResult,
 )
@@ -205,6 +208,7 @@ class StubSandboxManager(SandboxManager):
         self.health_check_count: int = 0
         self.ensure_opencode_session_count: int = 0
         self.last_ensure_opencode_session_payload: dict[str, Any] | None = None
+        self.session_runtime_call_order: list[str] = []
         self.send_message_count: int = 0
         self.subscribe_to_opencode_session_count: int = 0
         self.list_directory_count: int = 0
@@ -280,19 +284,14 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
-        *,
-        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         self.provision_count += 1
         self.last_provision_payload = {
             "sandbox_id": sandbox_id,
             "user_id": user_id,
             "tenant_id": tenant_id,
-            "llm_config": llm_config,
             "onyx_pat": onyx_pat,
-            "all_llm_configs": all_llm_configs,
         }
         if self.provision_returns is None:
             raise _not_configured("provision")
@@ -309,10 +308,11 @@ class StubSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         self.setup_session_workspace_count += 1
         self.last_setup_session_workspace_payload = {
@@ -322,6 +322,7 @@ class StubSandboxManager(SandboxManager):
             "nextjs_port": nextjs_port,
             "connectable_apps_section": connectable_apps_section,
             "user_name": user_name,
+            "mcp_servers": mcp_servers,
         }
         if not self.setup_session_workspace_silent:
             raise _not_configured("setup_session_workspace")
@@ -349,7 +350,10 @@ class StubSandboxManager(SandboxManager):
         nextjs_port: int | None,
         connectable_apps_section: str,
         user_name: str | None = None,
+        llm_config: CraftLLMProviderConfig | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
+        self.session_runtime_call_order.append("regenerate_session_config")
         self.regenerate_session_config_count += 1
         self.last_regenerate_session_config_payload = {
             "sandbox_id": sandbox_id,
@@ -359,6 +363,8 @@ class StubSandboxManager(SandboxManager):
             "nextjs_port": nextjs_port,
             "connectable_apps_section": connectable_apps_section,
             "user_name": user_name,
+            "llm_config": llm_config,
+            "mcp_servers": mcp_servers,
         }
         if not self.regenerate_session_config_silent:
             raise _not_configured("regenerate_session_config")
@@ -410,8 +416,9 @@ class StubSandboxManager(SandboxManager):
         session_id: UUID,
         snapshot_storage_path: str,
         nextjs_port: int | None,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         connectable_apps_section: str,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         self.restore_snapshot_count += 1
         self.last_restore_snapshot_payload = {
@@ -421,6 +428,7 @@ class StubSandboxManager(SandboxManager):
             "nextjs_port": nextjs_port,
             "llm_config": llm_config,
             "connectable_apps_section": connectable_apps_section,
+            "mcp_servers": mcp_servers,
         }
         if not self.restore_snapshot_silent:
             raise _not_configured("restore_snapshot")
@@ -484,6 +492,7 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
     ) -> None:
+        self.session_runtime_call_order.append("dispose_opencode_instance")
         self.dispose_opencode_instance_count += 1
         self.last_dispose_opencode_instance_payload = {
             "sandbox_id": sandbox_id,
@@ -502,6 +511,7 @@ class StubSandboxManager(SandboxManager):
     ) -> str | None:
         # Override the real _ServeMixin preflight (which POSTs /session over
         # HTTP to a pod) so send_message tests run fully in-memory.
+        self.session_runtime_call_order.append("ensure_opencode_session")
         self.ensure_opencode_session_count += 1
         self.last_ensure_opencode_session_payload = {
             "sandbox_id": sandbox_id,

@@ -1,51 +1,32 @@
 """opencode.json builders.
 
 opencode-serve loads config once at startup and does not hot-reload
-(sst/opencode#22213), so both the K8s and docker paths pre-load every
-supported provider — real key (or proxy placeholder) when configured, dummy
-key otherwise — letting per-prompt model overrides cross providers without a
-restart.
+(sst/opencode#22213). The pod-wide base config carries permissions and
+plugins; the per-session ``opencode.json`` layers on the gateway provider
+catalog + default model AND the craft MCP servers, both of which opencode
+deep-merges over the pod-global config and re-reads when the session's
+instance is disposed — so a model change or an MCP-set change hot-reloads
+without a pod re-provision.
 """
 
-import re
 from collections.abc import Sequence
 from typing import Any
 
 from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
 from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
     CraftMCPServerConfig,
-    LLMProviderConfig,
 )
 
-_ADAPTIVE_THINKING_MODELS = frozenset(
-    {"claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6"}
-)
-_CLAUDE_MAJOR_VERSION = re.compile(r"claude[.-](?:[a-z]+[.-])?(\d+)")
+# Fallback output budget for gateway models the litellm map has no entry for
+# (build_onyx_gateway_config derives the real per-model value). 128k matches the
+# recommended Craft models (Claude Fable/Opus 4.8, GPT-5.6) per models.dev;
+# providers enforce their own real caps regardless.
+_GATEWAY_DEFAULT_MAX_OUTPUT_TOKENS = 128_000
 
-
-def _uses_adaptive_thinking(model_name: str) -> bool:
-    normalized_name = model_name.lower()
-    if normalized_name in _ADAPTIVE_THINKING_MODELS or normalized_name.startswith(
-        tuple(f"{model}-" for model in _ADAPTIVE_THINKING_MODELS)
-    ):
-        return True
-
-    match = _CLAUDE_MAJOR_VERSION.search(normalized_name)
-    return match is not None and int(match.group(1)) >= 5
-
-
-def _model_options(provider: str, model_name: str) -> dict[str, Any]:
-    if provider == "openai":
-        return {"reasoningEffort": "high"}
-    if provider in ("anthropic", "bedrock"):
-        if _uses_adaptive_thinking(model_name):
-            return {"thinking": {"type": "adaptive", "display": "summarized"}}
-        return {"thinking": {"type": "enabled", "budgetTokens": 16000}}
-    if provider == "google":
-        return {"thinking_budget": 16000, "thinking_level": "high"}
-    if provider == "azure":
-        return {"reasoningEffort": "high"}
-    return {}
+# The gateway is an OpenAI-compatible endpoint, wired via opencode's
+# openai-compatible SDK package.
+_OPENAI_COMPATIBLE_NPM = "@ai-sdk/openai-compatible"
 
 
 _PERMISSIONS_TEMPLATE: dict[str, Any] = {
@@ -119,6 +100,7 @@ _TMP_EXTERNAL_DIRECTORY_RULES: dict[str, str] = {
 def _build_permissions(
     disabled_tools: list[str] | None,
     dev_mode: bool,
+    mcp_servers: Sequence[CraftMCPServerConfig] = (),
 ) -> dict[str, Any]:
     permissions: dict[str, Any] = {
         k: (v.copy() if isinstance(v, dict) else v)
@@ -130,121 +112,127 @@ def _build_permissions(
     if disabled_tools:
         for tool in disabled_tools:
             permissions[tool] = "deny"
+    # MCP tool ids are ``<serverKey>_<toolName>``. The wildcard allow defers
+    # gating to the sandbox proxy and covers tools discovered at runtime.
+    for server in mcp_servers:
+        permissions[f"{server.key}_*"] = "allow"
+        for tool_name in server.disabled_tools:
+            permissions[f"{server.key}_{tool_name}"] = "deny"
     return permissions
 
 
-def build_session_mcp_config(
+def _build_session_mcp_block(
     mcp_servers: Sequence[CraftMCPServerConfig],
     session_id: str,
-) -> dict[str, Any]:
-    """Per-session ``opencode.json`` fragment carrying the craft MCP servers and
-    their per-tool permission gates. opencode deep-merges this project-level
-    config with the pod-global config (providers/base permissions) — combining
-    keys, not replacing — and re-reads it when the session's instance is disposed,
-    so the server set hot-reloads without a pod re-provision. The MCP-gate
-    ``permission`` keys (``<serverKey>_*``) don't collide with the pod-global base
-    permissions, so both survive the merge.
+) -> dict[str, dict[str, Any]]:
+    """opencode remote ``mcp`` entries for a session.
 
     Each server carries the ``MCP_SESSION_TAG_HEADER`` header stamped with
-    ``session_id``: opencode's in-process MCP client uses the untagged base proxy
-    env, so this header is how the egress proxy attributes a tool call to its
-    session for approval (the proxy strips it before the origin sees it). The tag
-    is a same-user attribution hint, not a security boundary — a sandbox is one
-    trust domain per user, so the value is not tamper-proof against a compromised
-    process in it (see the note in the gate).
-
-    MCP tool ids are ``<serverKey>_<toolName>``. The wildcard allow defers gating
-    to the sandbox proxy and covers tools discovered at runtime.
+    ``session_id``: opencode's in-process MCP client uses the untagged base
+    proxy env, so this header is how the egress proxy attributes a tool call to
+    its session for approval (the proxy strips it before the origin sees it).
+    The tag is a same-user attribution hint, not a security boundary — a sandbox
+    is one trust domain per user, so the value is not tamper-proof against a
+    compromised process in it (see the note in the gate). Credentials are
+    injected by the proxy; the only header we set is the session tag.
     """
-    permission: dict[str, str] = {}
-    for server in mcp_servers:
-        permission[f"{server.key}_*"] = "allow"
-        for tool_name in server.disabled_tools:
-            permission[f"{server.key}_{tool_name}"] = "deny"
-    config: dict[str, Any] = {"$schema": "https://opencode.ai/config.json"}
-    if permission:
-        config["permission"] = permission
-    if mcp_servers:
-        # Credentials are injected by the proxy; the only header we set is the
-        # session tag the proxy consumes and strips. ``oauth: false`` keeps
-        # opencode from running its own discovery against paths the proxy
-        # blocks, which reports `needs_auth` for servers that work.
-        config["mcp"] = {
-            server.key: {
-                "type": "remote",
-                "url": server.url,
-                "enabled": True,
-                "oauth": False,
-                "headers": {MCP_SESSION_TAG_HEADER: session_id},
-            }
-            for server in mcp_servers
+    # ``oauth: false`` keeps opencode from running its own discovery against
+    # paths the proxy blocks, which reports `needs_auth` for servers that work.
+    return {
+        server.key: {
+            "type": "remote",
+            "url": server.url,
+            "enabled": True,
+            "oauth": False,
+            "headers": {MCP_SESSION_TAG_HEADER: session_id},
         }
-    return config
+        for server in mcp_servers
+    }
 
 
 def _build_provider_block(
-    provider_config: LLMProviderConfig,
+    llm_provider_config: CraftLLMProviderConfig,
 ) -> dict[str, Any]:
-    block: dict[str, Any] = {}
-    if provider_config.api_key:
-        block["options"] = {"apiKey": provider_config.api_key}
-    if provider_config.api_base:
-        block["api"] = provider_config.api_base
-    options = _model_options(provider_config.provider, provider_config.model_name)
-    if options:
-        block["models"] = {provider_config.model_name: {"options": options}}
+    """The gateway is an openai-compatible provider with no models.dev entry, so
+    its baseURL goes in ``options`` and its model list must be explicit."""
+    options: dict[str, Any] = {}
+    if llm_provider_config.api_key:
+        options["apiKey"] = llm_provider_config.api_key
+    if llm_provider_config.api_base:
+        options["baseURL"] = llm_provider_config.api_base
+    block: dict[str, Any] = {"npm": _OPENAI_COMPATIBLE_NPM, "options": options}
+    if llm_provider_config.display_name:
+        block["name"] = llm_provider_config.display_name
+    models: dict[str, Any] = {}
+    for model in llm_provider_config.models or []:
+        entry: dict[str, Any] = {"name": model.display_name}
+        if model.supports_reasoning:
+            entry["options"] = {"reasoningEffort": "high"}
+        if model.max_input_tokens:
+            # opencode's schema requires both keys when "limit" is present.
+            entry["limit"] = {
+                "context": model.max_input_tokens,
+                "output": model.max_output_tokens or _GATEWAY_DEFAULT_MAX_OUTPUT_TOKENS,
+            }
+        models[model.id] = entry
+    block["models"] = models
     return block
 
 
-def build_multi_provider_opencode_config(
-    providers: list[LLMProviderConfig],
-    default_provider: str,
-    default_model: str,
+def build_opencode_base_config(
     disabled_tools: list[str] | None = None,
     dev_mode: bool = False,
     plugins: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Pod-global opencode.json with every provider pre-registered so per-prompt
-    ``body["model"]`` overrides can target any of them.
+    """Pod-wide base config: permissions and plugins only.
 
-    ``plugins`` is an optional list of opencode plugin specs (npm names or
-    absolute file paths) loaded once per session Instance.
-
-    Craft MCP servers are NOT emitted here — they live in per-session config
-    (``build_session_mcp_config``) so they can hot-reload without a pod restart.
-
-    Raises:
-        ValueError: If ``providers`` is empty or ``default_provider`` is
-            not in ``providers``.
+    Providers and craft MCP servers are NOT emitted here — they live in the
+    per-session ``opencode.json`` (see ``build_provider_opencode_config``) so
+    a model change or MCP-set change hot-reloads without a pod re-provision.
     """
-    if not providers:
-        raise ValueError("providers must contain at least one entry")
-
-    seen: set[str] = set()
-    duplicates = [
-        p.provider for p in providers if p.provider in seen or seen.add(p.provider)
-    ]  # type: ignore[func-returns-value]
-    if duplicates:
-        raise ValueError(
-            f"duplicate provider entries: {duplicates!r} — opencode.json "
-            "uses one block per providerID; merge them at the call site"
-        )
-
-    provider_names = {p.provider for p in providers}
-    if default_provider not in provider_names:
-        raise ValueError(
-            f"default_provider={default_provider!r} not in providers"
-            f" {sorted(provider_names)}"
-        )
-
-    permissions = _build_permissions(disabled_tools, dev_mode)
     config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
-        "model": f"{default_provider}/{default_model}",
-        "provider": {p.provider: _build_provider_block(p) for p in providers},
-        "enabled_providers": sorted(provider_names),
-        "permission": permissions,
+        "permission": _build_permissions(disabled_tools, dev_mode),
     }
     if plugins:
         config["plugin"] = list(plugins)
+    return config
+
+
+def build_provider_opencode_config(
+    llm_provider_config: CraftLLMProviderConfig,
+    disabled_tools: list[str] | None = None,
+    dev_mode: bool = False,
+    plugins: list[str] | None = None,
+    mcp_servers: Sequence[CraftMCPServerConfig] = (),
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    """Per-session ``opencode.json``: the gateway provider catalog + default
+    model, plus the craft MCP servers (session-tagged) and their per-tool
+    permission gates. opencode deep-merges this over the pod-global base.
+    """
+    if (
+        llm_provider_config.models is not None
+        and llm_provider_config.model_name
+        not in {model.id for model in llm_provider_config.models}
+    ):
+        raise ValueError(
+            f"default model {llm_provider_config.model_name!r} is not in the provider catalog"
+        )
+
+    config: dict[str, Any] = {
+        "$schema": "https://opencode.ai/config.json",
+        "model": f"{llm_provider_config.provider}/{llm_provider_config.model_name}",
+        "provider": {
+            llm_provider_config.provider: _build_provider_block(llm_provider_config)
+        },
+        "enabled_providers": [llm_provider_config.provider],
+        "permission": _build_permissions(disabled_tools, dev_mode, mcp_servers),
+    }
+    if plugins:
+        config["plugin"] = list(plugins)
+    if mcp_servers:
+        if session_id is None:
+            raise ValueError("session_id is required when mcp_servers are provided")
+        config["mcp"] = _build_session_mcp_block(mcp_servers, session_id)
     return config

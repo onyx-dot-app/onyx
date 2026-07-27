@@ -152,10 +152,14 @@ jobs:
             # on (ENABLE_BROWSER defaults true) — chromium is lighter than the
             # skill bundle and keeps the CI image consistent with prod.
             extra_build_args: "ENABLE_SKILLS=false"
+            target: ""
           - image: backend
             context: ./backend
             file: ./backend/Dockerfile
             extra_build_args: ""
+            # The production image; the backend Dockerfile's default (last) stage is the
+            # dev variant.
+            target: runtime
     runs-on:
       - runs-on
       - runner=8cpu-linux-x64
@@ -187,6 +191,8 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
+          # Empty target means the Dockerfile's default (last) stage.
+          target: ${{ matrix.target }}
           platforms: linux/amd64
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}

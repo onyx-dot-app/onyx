@@ -1,12 +1,19 @@
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import ExternalAppsPage from "@/app/craft/v1/apps/page";
 import type { SkillsList } from "@/lib/skills/types";
-import { SWR_KEYS } from "@/lib/swr-keys";
+import {
+  MCPAuthenticationPerformer,
+  MCPAuthenticationType,
+  type MCPServer,
+} from "@/lib/tools/interfaces";
+import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
+import { appFixture, mcpServerFixture } from "@/lib/skills/__fixtures__/picker";
 
 const mockUseSWR = jest.fn();
 const mockUseUserSkills = jest.fn();
+const mockUseCraftMcpServers = jest.fn();
 const mockMutateApps = jest.fn();
-const mockMutateMcp = jest.fn();
+const mockRefreshMcp = jest.fn();
 const mockRefreshSkills = jest.fn();
 const mockDisconnectUserFromApp = jest.fn();
 
@@ -30,6 +37,10 @@ jest.mock("@/providers/UserProvider", () => ({
 jest.mock("@/hooks/useUserSkills", () => ({
   __esModule: true,
   default: () => mockUseUserSkills(),
+}));
+
+jest.mock("@/lib/tools/hooks", () => ({
+  useCraftMcpServers: () => mockUseCraftMcpServers(),
 }));
 
 jest.mock("@/app/craft/services/externalAppsService", () => ({
@@ -94,32 +105,49 @@ function skills(
   };
 }
 
+const ACME_CRM_APP = appFixture({
+  id: 42,
+  name: "Acme CRM",
+  app_type: "CUSTOM",
+  credential_keys: [],
+  credential_values: {},
+  authenticated: true,
+});
+
+/** Pass-through OAuth, admin-performed — nothing for the user to connect. */
+function mcpServer(overrides: Partial<MCPServer> = {}): MCPServer {
+  return mcpServerFixture({
+    id: 7,
+    name: "Asana MCP",
+    description: "Asana over MCP",
+    auth_type: MCPAuthenticationType.PT_OAUTH,
+    auth_performer: MCPAuthenticationPerformer.ADMIN,
+    ...overrides,
+  });
+}
+
+function mockEndpoints(
+  apps: ExternalAppUserResponse[] = [ACME_CRM_APP],
+  mcpServers: MCPServer[] = []
+): void {
+  mockUseSWR.mockImplementation(() => ({
+    data: apps,
+    mutate: mockMutateApps,
+  }));
+  mockUseCraftMcpServers.mockReturnValue({
+    data: { mcp_servers: mcpServers },
+    refresh: mockRefreshMcp,
+  });
+}
+
 describe("Apps associated-skill setup notice", () => {
   beforeEach(() => {
     mockMutateApps.mockReset();
-    mockMutateMcp.mockReset();
+    mockRefreshMcp.mockReset();
     mockRefreshSkills.mockReset();
     mockDisconnectUserFromApp.mockReset();
     mockDisconnectUserFromApp.mockResolvedValue(undefined);
-    mockUseSWR.mockImplementation((key: string) => {
-      if (key === SWR_KEYS.buildExternalApps) {
-        return {
-          data: [
-            {
-              id: 42,
-              name: "Acme CRM",
-              app_type: "CUSTOM",
-              credential_keys: [],
-              credential_values: {},
-              authenticated: true,
-              supports_oauth: false,
-            },
-          ],
-          mutate: mockMutateApps,
-        };
-      }
-      return { data: { mcp_servers: [] }, mutate: mockMutateMcp };
-    });
+    mockEndpoints();
   });
 
   it("guides a connected user when no associated skill is selected", () => {
@@ -212,7 +240,95 @@ describe("Apps associated-skill setup notice", () => {
       expect(mockDisconnectUserFromApp).toHaveBeenCalledWith(42)
     );
     expect(mockMutateApps).toHaveBeenCalledTimes(1);
-    expect(mockMutateMcp).toHaveBeenCalledTimes(1);
+    expect(mockRefreshMcp).toHaveBeenCalledTimes(1);
     expect(mockRefreshSkills).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Apps vs MCP servers", () => {
+  beforeEach(() => {
+    mockMutateApps.mockReset();
+    mockRefreshMcp.mockReset();
+    mockRefreshSkills.mockReset();
+    mockUseUserSkills.mockReturnValue({
+      data: skills(true),
+      refresh: mockRefreshSkills,
+    });
+  });
+
+  it("separates apps from MCP servers so a row is never ambiguous", async () => {
+    const user = setupUser();
+    mockEndpoints([ACME_CRM_APP], [mcpServer()]);
+
+    render(<ExternalAppsPage />);
+
+    expect(screen.getByText("Acme CRM")).toBeInTheDocument();
+    expect(screen.queryByText("Asana MCP")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /MCP servers/ }));
+
+    expect(screen.getByText("Asana MCP")).toBeInTheDocument();
+    expect(screen.queryByText("Acme CRM")).not.toBeInTheDocument();
+  });
+
+  it("does not claim a connected MCP server is skill-ready", async () => {
+    const user = setupUser();
+    mockEndpoints([ACME_CRM_APP], [mcpServer()]);
+
+    render(<ExternalAppsPage />);
+    await user.click(screen.getByRole("tab", { name: /MCP servers/ }));
+
+    // MCP servers expose MCP tools, not skills, so neither skill glyph applies —
+    // the green check used to render here purely because no skill data existed.
+    expect(screen.queryByLabelText("App ready")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Skill setup required")
+    ).not.toBeInTheDocument();
+    // Still listed as connected — the row's presence is the status.
+    expect(screen.getAllByText("Connected").length).toBeGreaterThan(0);
+    expect(
+      screen.queryByText(/Not available for your account/)
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show a pass-through OAuth server as connected when Craft cannot authenticate the user", async () => {
+    const user = setupUser();
+    // A password-login user has no login OAuth token, so the sandbox proxy
+    // cannot authenticate them and Craft drops the server from the session.
+    mockEndpoints([ACME_CRM_APP], [mcpServer({ craft_connected: false })]);
+
+    render(<ExternalAppsPage />);
+    await user.click(screen.getByRole("tab", { name: /MCP servers/ }));
+
+    expect(screen.getByText("Asana MCP")).toBeInTheDocument();
+    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Not available for your account/)
+    ).toBeInTheDocument();
+  });
+
+  it("reads built-in skills when deciding whether an app needs setup", () => {
+    // Built-in providers' associated skills are built-in rows, so a map built
+    // only from `customs` never sees them. (Built-ins are force-enabled in
+    // practice; the disabled fixture is what makes the wiring observable.)
+    const builtinSkill: SkillsList["builtins"][number] = {
+      ...skills(false).customs[0]!,
+      source: "builtin",
+      id: "builtin-slack-skill",
+      name: "slack",
+      is_available: true,
+      is_valid: null,
+      enabled: false,
+    };
+    mockUseUserSkills.mockReturnValue({
+      data: { builtins: [builtinSkill], customs: [] },
+      refresh: mockRefreshSkills,
+    });
+    mockEndpoints([{ ...ACME_CRM_APP, app_type: "SLACK", name: "Slack" }], []);
+
+    render(<ExternalAppsPage />);
+
+    expect(screen.getByLabelText("Skill setup required")).toBeInTheDocument();
+    expect(screen.queryByLabelText("App ready")).not.toBeInTheDocument();
   });
 });
