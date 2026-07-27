@@ -1180,7 +1180,6 @@ numpy==2.4.1 \
     # via
     #   contourpy
     #   matplotlib
-    #   pandas-stubs
     #   voyageai
 onyx-devtools==0.10.1 \
     --hash=sha256:0ed20681a68a8ccab6f6340b667cefd5d3c285e3d5a5da17a921bcd7cfde3fe1 \
@@ -1210,9 +1209,6 @@ packaging==25.0 \
     #   ipykernel
     #   matplotlib
     #   pytest
-pandas-stubs==2.3.3.251201 \
-    --hash=sha256:7a980f4f08cff2a6d7e4c6d6d26f4c5fcdb82a6f6531489b2f75c81567fe4536 \
-    --hash=sha256:eb5c9b6138bd8492fd74a47b09c9497341a278fcfbc8633ea4b35b230ebf4be5
 parso==0.8.5 \
     --hash=sha256:034d7354a9a018bdce352f48b2a8a450f05e9d6ee85db84764e9b6bd96dafe5a \
     --hash=sha256:646204b5ee239c396d040b90f9e272e9a8017c630092bf59980beb62fd033887
@@ -2015,7 +2011,6 @@ types-python-dateutil==2.8.19.13 \
 types-pytz==2023.3.1.1 \
     --hash=sha256:1999a123a3dc0e39a2ef6d19f3f8584211de9e6a77fe7a0259f04a524e90a5cf \
     --hash=sha256:cc23d0192cd49c8f6bba44ee0c81e4586a8f30204970fc0894d209a6b08dab9a
-    # via pandas-stubs
 types-pyyaml==6.0.12.11 \
     --hash=sha256:7d340b19ca28cddfdba438ee638cd4084bde213e501a3978738543e27094775b \
     --hash=sha256:a461508f3096d1d5810ec5ab95d7eeecb651f3a15b71959999988942063bf01d
