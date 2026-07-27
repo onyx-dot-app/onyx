@@ -177,6 +177,12 @@ def _copy_batch_with_retry(
                 _PORT_BATCH_MAX_RETRIES,
                 e,
             )
+            # A revert/supersede/deletion landed mid-batch: bail instead of burning the
+            # remaining retries (each stacked on the embed/model-server timeouts). Return
+            # aborted so the caller acks the cancel rather than failing the attempt.
+            if should_abort is not None and should_abort():
+                log.info("Port batch aborted between retries; stopping")
+                return 0, True
             if attempt_num < _PORT_BATCH_MAX_RETRIES:
                 time.sleep(_PORT_BATCH_RETRY_SLEEP_S)
     assert last_error is not None

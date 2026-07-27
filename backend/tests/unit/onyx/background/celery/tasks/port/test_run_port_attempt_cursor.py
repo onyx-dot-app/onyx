@@ -101,6 +101,27 @@ def test_cursor_advanced_when_batch_completes() -> None:
     patches["mark_port_succeeded"].assert_called_once()
 
 
+def test_copy_batch_bails_between_retries_on_abort() -> None:
+    # A cancel landing mid-batch stops retries: _copy_batch_with_retry returns aborted
+    # instead of exhausting all 5 attempts (each stacked on the embed/model-server timeout).
+    calls = {"n": 0}
+    aborted = {"v": False}
+
+    def copy(*_: Any, **__: Any) -> tuple[int, bool]:
+        calls["n"] += 1
+        aborted["v"] = True  # a cancel arrives during this attempt
+        raise RuntimeError("boom")
+
+    copier = MagicMock()
+    copier.copy_doc_batch.side_effect = copy
+
+    result = port_tasks._copy_batch_with_retry(
+        copier, ["d1"], MagicMock(), should_abort=lambda: aborted["v"]
+    )
+    assert result == (0, True)
+    assert calls["n"] == 1  # bailed after the first failure; did not retry
+
+
 def test_cancels_when_no_longer_port_target() -> None:
     # A revert/supersede (or stale enqueue) left this attempt pointing at a FUTURE that is
     # no longer the port target: the startup guard cancels it before any copy work.
