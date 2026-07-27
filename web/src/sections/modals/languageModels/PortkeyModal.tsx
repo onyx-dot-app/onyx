@@ -6,6 +6,7 @@ import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider } from "@opal/layouts";
 import { Tabs, Text, Button } from "@opal/components";
+import { SvgHistory } from "@opal/icons";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -165,21 +166,24 @@ function PortkeyModalInternals({
 
       <APIBaseField
         subDescription="Use Portkey's base URL or paste your self-hosted gateway base URL."
-        placeholder={modeDefaultBase}
+        placeholder="Your Portkey gateway base URL"
+        rightChildren={
+          isBaseDefault ? undefined : (
+            <Button
+              icon={SvgHistory}
+              prominence="tertiary"
+              size="xs"
+              tooltip="Restore Default"
+              aria-label="Restore default API base URL"
+              onClick={() => setFieldValue("api_base", modeDefaultBase)}
+            />
+          )
+        }
       />
-      {!isBaseDefault && (
-        <Button
-          prominence="tertiary"
-          size="xs"
-          onClick={() => setFieldValue("api_base", modeDefaultBase)}
-        >
-          Restore default
-        </Button>
-      )}
 
       <APIKeyField
         subDescription={markdown(
-          "Paste your API key from [Portkey](https://portkey.ai/) to load the available models."
+          "Paste your API key from [Portkey](https://portkey.ai/) to access your models."
         )}
       />
 
@@ -194,6 +198,7 @@ function PortkeyModalInternals({
       <ModelSelectionField
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
+        emptyMessage="No models available. Provide a valid base URL and key."
       />
 
       {!isOnboarding && (
@@ -251,6 +256,7 @@ export default function PortkeyModal({
       providerName={LLMProviderName.PORTKEY}
       llmProvider={existingLlmProvider}
       onClose={onClose}
+      description="Connect to your Portkey gateway and set up compatible models."
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
