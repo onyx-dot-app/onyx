@@ -99,6 +99,9 @@ class ChatFullResponse(BaseModel):
 class ChatLoadedFile(InMemoryChatFile):
     content_text: str | None
     token_count: int
+    # True while the user-file worker is still processing the file — its
+    # canonical plaintext (e.g. including image captions) doesn't exist yet.
+    content_pending: bool = False
 
     # Named distinctly from the base ``lazy_from_descriptor`` so the subclass
     # can require ``content_text`` / ``token_count`` without violating LSP on
@@ -113,6 +116,7 @@ class ChatLoadedFile(InMemoryChatFile):
         content_text: str | None,
         token_count: int,
         loader: Callable[[], bytes],
+        content_pending: bool = False,
     ) -> "ChatLoadedFile":
         """Construct a ``ChatLoadedFile`` whose ``content`` bytes are loaded
         only on first access. ``content_text`` and ``token_count`` are passed
@@ -127,6 +131,7 @@ class ChatLoadedFile(InMemoryChatFile):
             filename=filename,
             content_text=content_text,
             token_count=token_count,
+            content_pending=content_pending,
         )
         install_lazy_content_loader(inst, loader)
         return inst

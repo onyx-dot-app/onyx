@@ -1,4 +1,4 @@
-"""External-dependency-unit tests for `resolve_craft_mcp_servers`.
+"""External-dependency-unit tests for ``resolve_craft_mcp_servers``.
 
 Verifies the DB → opencode-config-input step: only craft-enabled servers the
 user may access *and the proxy can authenticate them against* are emitted, tools
