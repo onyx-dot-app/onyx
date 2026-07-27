@@ -1,3 +1,4 @@
+import gc
 import time
 from collections.abc import Generator, Iterator, Sequence
 from datetime import datetime, timezone
@@ -39,10 +40,14 @@ from onyx.server.metrics.pruning_metrics import (
     observe_pruning_enumeration_duration,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.native_memory import release_freed_native_memory
 
 logger = setup_logger()
 
 CT = TypeVar("CT", bound=ConnectorCheckpoint)
+
+# how often the enumeration loop releases freed memory back to the OS
+_MEMORY_RELEASE_INTERVAL = 30  # seconds
 
 
 class SlimConnectorExtractionResult(BaseModel):
@@ -209,6 +214,7 @@ def extract_ids_from_runnable_connector(
 
     # process raw batches to extract both IDs and hierarchy nodes
     enumeration_start = time.monotonic()
+    last_memory_release = time.monotonic()
     try:
         for doc_list in raw_batch_generator:
             if callback and callback.should_stop():
@@ -226,6 +232,13 @@ def extract_ids_from_runnable_connector(
 
             if callback:
                 callback.progress("extract_ids_from_runnable_connector", len(batch_ids))
+
+            # long enumerations ratchet the worker's RSS via glibc retention
+            # of freed crawl allocations — periodically return them to the OS
+            if time.monotonic() - last_memory_release >= _MEMORY_RELEASE_INTERVAL:
+                gc.collect()
+                release_freed_native_memory()
+                last_memory_release = time.monotonic()
     except Exception as e:
         # Best-effort rate limit detection via string matching.
         # Connectors surface rate limits inconsistently — some raise HTTP 429,
