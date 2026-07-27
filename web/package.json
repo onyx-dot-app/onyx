@@ -64,7 +64,7 @@
     "copy-to-clipboard": "^3.3.3",
     "date-fns": "^4.1.0",
     "docx-preview": "^0.3.7",
-    "dompurify": "3.4.11",
+    "dompurify": "3.4.12",
     "favicon-fetch": "^1.0.0",
     "formik": "^2.2.9",
     "highlight.js": "^11.11.1",
