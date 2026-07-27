@@ -57,21 +57,15 @@ def fetch_github_skill_bundles(
         max_size_bytes=_ARCHIVE_MAX_BYTES,
     )
 
-    try:
-        archive = tarfile.open(
-            fileobj=io.BytesIO(archive_bytes),
-            mode="r:gz",
-        )
-    except (tarfile.TarError, EOFError, OSError) as exc:
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            "GitHub returned an unreadable repository download. Try again.",
-        ) from exc
-
     files: dict[str, bytes] = {}
     total_size = 0
     try:
-        with archive:
+        # typeshed does not yet expose Python 3.13's stream parameter.
+        with tarfile.open(  # ty: ignore[no-matching-overload]
+            fileobj=io.BytesIO(archive_bytes),
+            mode="r:gz",
+            stream=True,
+        ) as archive:
             for member_index, member in enumerate(archive, start=1):
                 if member_index > _ARCHIVE_MAX_MEMBERS:
                     raise OnyxError(

@@ -1,5 +1,6 @@
 import re
-from typing import Final, NamedTuple
+from dataclasses import dataclass
+from typing import Final
 from urllib.parse import quote, unquote, urlparse
 
 import requests
@@ -11,15 +12,26 @@ from onyx.utils.url import SSRFException, ssrf_safe_get
 GITHUB_COMMIT_SHA_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{40}$")
 
 _GITHUB_FETCH_TIMEOUT_SECONDS: Final[int] = 30
+_GITHUB_CODELOAD_ARCHIVE_URL_TEMPLATE: Final[str] = (
+    "https://codeload.github.com/{owner}/{repo}/tar.gz/{revision}"
+)
+_GITHUB_REPOSITORY_COMPONENT_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"[A-Za-z0-9_.-]+"
+)
+_GITHUB_SSH_SOURCE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"git@github\.com:([^/]+)/([^/\s]+?)(?:\.git)?$"
+)
 
 
-class GitHubSource(NamedTuple):
+@dataclass(frozen=True, slots=True)
+class GitHubSource:
     owner: str
     repo: str
     tree_tail: tuple[str, ...] = ()
 
 
-class GitHubRevision(NamedTuple):
+@dataclass(frozen=True, slots=True)
+class GitHubRevision:
     revision: str
     subpath: str | None
 
@@ -39,11 +51,7 @@ def parse_github_source(
         )
 
     tree_tail: tuple[str, ...] = ()
-    ssh_match = (
-        re.fullmatch(r"git@github\.com:([^/]+)/([^/\s]+?)(?:\.git)?$", value)
-        if allow_ssh
-        else None
-    )
+    ssh_match = _GITHUB_SSH_SOURCE_PATTERN.fullmatch(value) if allow_ssh else None
     if ssh_match:
         owner, repo = ssh_match.groups()
     elif "://" not in value:
@@ -84,7 +92,9 @@ def parse_github_source(
                     ),
                 )
 
-    if not all(re.fullmatch(r"[A-Za-z0-9_.-]+", part) for part in (owner, repo)):
+    if not all(
+        _GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(part) for part in (owner, repo)
+    ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Invalid GitHub repository URL.",
@@ -249,9 +259,10 @@ def download_github_archive(
     encoded_owner = quote(source.owner, safe="")
     encoded_repo = quote(source.repo, safe="")
     encoded_revision = quote(revision, safe="")
-    archive_url = (
-        f"https://codeload.github.com/{encoded_owner}/{encoded_repo}/"
-        f"tar.gz/{encoded_revision}"
+    archive_url = _GITHUB_CODELOAD_ARCHIVE_URL_TEMPLATE.format(
+        owner=encoded_owner,
+        repo=encoded_repo,
+        revision=encoded_revision,
     )
     response = _github_get(archive_url, stream=True, timeout=timeout)
     if response.status_code != 200 and authorization_header is not None:
