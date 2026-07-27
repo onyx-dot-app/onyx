@@ -109,9 +109,10 @@ per-PR confirmation. Known Onyx cases:
 Getting the branch: prefer the harness's isolated-worktree feature if it has
 one (Claude Code: `EnterWorktree`). Otherwise, if the current checkout is
 clean, work in place — `gh pr checkout <pr>`, fix, push, and return to the
-previous branch. Only create a manual `git worktree` when the checkout is
-dirty; keep it on a real disk — a tmpfs `/tmp` can hit "Disk quota exceeded"
-mid-post-checkout hook (`uv sync`/`bun install`) even when it looks roomy.
+previous branch. If neither applies (e.g. dirty checkout), ask the user where
+to resolve (`AskUserQuestion`) rather than picking a spot — and steer away
+from tmpfs paths like `/tmp`, which can hit "Disk quota exceeded"
+mid-post-checkout hook (`uv sync`/`bun install`) even when they look roomy.
 
 ## 6. Needs diagnosis: read the failing job's log, then classify
 
