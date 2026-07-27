@@ -478,10 +478,13 @@ def test_omits_temperature_for_no_sampling_params_models(model_name: str) -> Non
         assert "temperature" not in kwargs
 
 
-def test_omits_temperature_when_claude_only_in_deployment_name() -> None:
+def test_claude_only_in_deployment_name_omits_temperature_and_reasons() -> None:
     # Custom providers (e.g. Azure AI Foundry) may carry the model identity only
     # in the deployment alias — the string actually sent to LiteLLM — while
-    # model_name is an opaque label. Detection must consider both.
+    # model_name is an opaque label. Detection must consider both, including for
+    # the reasoning path: model_is_reasoning_model is deliberately NOT patched
+    # here, since the litellm registry can't know the opaque alias — adaptive
+    # thinking must be inferred from the Claude version alone.
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
@@ -498,10 +501,12 @@ def test_omits_temperature_when_claude_only_in_deployment_name() -> None:
         mock_completion.return_value = []
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
-        list(llm.stream(messages))
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
 
         kwargs = mock_completion.call_args.kwargs
         assert "temperature" not in kwargs
+        assert kwargs["thinking"] == {"type": "adaptive"}
+        assert kwargs["output_config"] == {"effort": "high"}
 
 
 @pytest.mark.parametrize(
