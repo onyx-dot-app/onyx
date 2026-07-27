@@ -119,14 +119,16 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     )
 
 
-def should_exclude_open_url_tool(
+def should_disable_open_url_web_fetch(
     persona_tools: Sequence[ToolDBModel],
     allowed_tool_ids: list[int] | None,
 ) -> bool:
     """OpenURLTool is hidden from the chat tool toggles (chat_selectable=False)
-    but reaches the internet on its own via the crawler fallback. Treat an
-    explicit exclusion of WebSearchTool as excluding OpenURLTool too, so that
-    disabling web search for a message actually cuts off web access."""
+    but reaches the live internet on its own via the crawler fallback. Treat an
+    explicit exclusion of WebSearchTool as disabling OpenURLTool's web
+    fetching, so that turning off web search for a message actually cuts off
+    web access — while pasted links can still be served from indexed
+    documents."""
     if allowed_tool_ids is None:
         return False
     return any(
@@ -227,7 +229,9 @@ def _construct_tools_impl(
             auto_detect_filters=config.auto_detect_filters,
         )
 
-    exclude_open_url = should_exclude_open_url_tool(persona.tools, allowed_tool_ids)
+    open_url_web_fetch_disabled = should_disable_open_url_web_fetch(
+        persona.tools, allowed_tool_ids
+    )
 
     added_search_tool = False
     for db_tool_model in persona.tools:
@@ -305,10 +309,12 @@ def _construct_tools_impl(
 
             # Handle Open URL Tool
             elif tool_cls.__name__ == OpenURLTool.__name__:
-                if exclude_open_url:
+                if open_url_web_fetch_disabled and DISABLE_VECTOR_DB:
+                    # Without an index, open_url can serve nothing once web
+                    # fetching is off (crawl-only deployments).
                     logger.debug(
-                        "Skipping OpenURLTool because WebSearchTool is excluded "
-                        "for this message"
+                        "Skipping OpenURLTool: WebSearchTool is excluded for "
+                        "this message and no document index is available"
                     )
                     continue
                 try:
@@ -318,6 +324,7 @@ def _construct_tools_impl(
                             emitter=emitter,
                             document_index=document_index,
                             user=user,
+                            web_fetch_disabled=open_url_web_fetch_disabled,
                         )
                     ]
                 except RuntimeError as e:
