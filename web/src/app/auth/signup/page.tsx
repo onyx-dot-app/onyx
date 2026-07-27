@@ -50,6 +50,11 @@ const Page = async (props: {
     return redirect("/app");
   }
 
+  // Kill switch off: signup is refused by the backend, bounce to login.
+  if (!cloud && authTypeMetadata?.passwordAuthEnabled === false) {
+    return redirect("/auth/login");
+  }
+
   let authUrl: string | null = null;
   if (cloud && authTypeMetadata) {
     authUrl = await getAuthUrlSS(authTypeMetadata.multiTenant, null);
