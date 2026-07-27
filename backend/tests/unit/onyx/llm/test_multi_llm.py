@@ -448,6 +448,9 @@ ANTHROPIC_MODELS_OMITTING_SAMPLING_PARAMS = [
     "claude-sonnet-5",
     "claude-sonnet-5@20260203",
     "claude-5-sonnet",
+    "claude-opus-5",
+    "claude-opus-5@20260101",
+    "claude-5-opus",
 ]
 
 
@@ -485,6 +488,8 @@ def test_omits_temperature_for_no_sampling_params_models(model_name: str) -> Non
         "claude-5-mythos",
         "claude-sonnet-5",
         "claude-5-sonnet",
+        "claude-opus-5",
+        "claude-5-opus",
     ],
 )
 @pytest.mark.parametrize(
