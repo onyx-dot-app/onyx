@@ -21,7 +21,7 @@ from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError
 from sqlalchemy.orm import Session
 
 from onyx.auth.oidc_client import VerifiedEmailOpenID
-from onyx.auth.sso_web_error import redirect_sso_errors_to_web
+from onyx.auth.sso_web_error import delete_pkce_cookie, redirect_sso_errors_to_web
 from onyx.auth.users import (
     CSRF_TOKEN_COOKIE_NAME,
     CSRF_TOKEN_KEY,
@@ -54,7 +54,7 @@ from onyx.db.sso_provider import (
     validate_sso_config,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import CLEANUP_COOKIE_STATE_ATTR, OnyxError
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.url import sanitize_next_url
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -178,16 +178,6 @@ def _set_oauth_cookie(
     )
 
 
-def _delete_pkce_cookie(response: Response, state: str) -> None:
-    response.delete_cookie(
-        key=get_pkce_cookie_name(state),
-        path="/",
-        secure=_COOKIE_SECURE,
-        httponly=True,
-        samesite="lax",
-    )
-
-
 def _callback_uri(provider: SSOProvider, config: dict[str, Any]) -> str:
     # Legacy-callback rows land on the web wrappers at the legacy paths, which
     # forward to this router. The fixed /callback below resolves the row from
@@ -261,6 +251,7 @@ async def oidc_login_for_provider(
 
 
 @router.get("/callback")
+@redirect_sso_errors_to_web
 async def oidc_login_callback(
     request: Request,
     code: str | None = None,
@@ -278,9 +269,6 @@ async def oidc_login_callback(
             OnyxErrorCode.VALIDATION_ERROR,
             "Missing state parameter in OAuth callback",
         )
-    # Marked before decode so even a state-validation failure deletes the
-    # flow's single-use PKCE verifier cookie.
-    setattr(request.state, CLEANUP_COOKIE_STATE_ATTR, get_pkce_cookie_name(state))
     state_data = decode_and_validate_oauth_state(
         request=request,
         state_value=state,
@@ -316,11 +304,6 @@ async def oidc_login_callback_for_provider(
     strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
     user_manager: UserManager = Depends(get_user_manager),
 ) -> Response:
-    # Marked first so any failure below deletes the flow's single-use PKCE
-    # verifier cookie, whichever error handler builds the response.
-    if state is not None:
-        setattr(request.state, CLEANUP_COOKIE_STATE_ATTR, get_pkce_cookie_name(state))
-
     provider, config = _resolve_oidc_provider(db_session, provider_name)
     client = await _get_oauth_client(provider, config)
     redirect_uri = _callback_uri(provider, config)
@@ -384,6 +367,6 @@ async def oidc_login_callback_for_provider(
     )
 
     if use_pkce:
-        _delete_pkce_cookie(redirect_response, state)
+        delete_pkce_cookie(redirect_response, state)
 
     return redirect_response

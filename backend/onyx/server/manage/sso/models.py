@@ -39,8 +39,8 @@ class SSOProviderResponse(BaseModel):
 
     @classmethod
     def from_model(cls, provider: SSOProvider, web_domain: str) -> SSOProviderResponse:
-        # Only secret fields are masked, so client IDs and IdP URLs read back
-        # real and the displayed URI always matches what the flow sends.
+        # Only secrets are masked, so the URI computed below matches what the
+        # flow sends.
         config = (
             mask_secret_config_values(
                 provider.provider_type, provider.config.get_value(apply_mask=False)

@@ -1,26 +1,40 @@
 """The SSO web-error decorator turns OnyxError into a readable /auth/error
-redirect for browser navigations, while non-browser callers still receive the
-JSON error they can parse."""
+redirect for browser navigations, serves the standard JSON error to other
+callers, and deletes the flow's single-use PKCE cookie either way."""
 
 import enum
-from typing import Any, cast
+import json
+from typing import Any
 
 import pytest
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 
 from onyx.auth.sso_web_error import redirect_sso_errors_to_web
+from onyx.auth.users import get_pkce_cookie_name
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
 
-def _request_with_accept(accept: str) -> Request:
+def _request(
+    accept: str, query_string: bytes = b"", cookie: str | None = None
+) -> Request:
+    headers = [(b"accept", accept.encode())]
+    if cookie:
+        headers.append((b"cookie", cookie.encode()))
     # query_string is always present on real ASGI scopes.
+    return Request({"type": "http", "headers": headers, "query_string": query_string})
+
+
+def _request_with_pkce_cookie(accept: str, state: str) -> Request:
     return Request(
         {
             "type": "http",
-            "headers": [(b"accept", accept.encode())],
-            "query_string": b"",
+            "headers": [
+                (b"accept", accept.encode()),
+                (b"cookie", f"{get_pkce_cookie_name(state)}=verifier".encode()),
+            ],
+            "query_string": f"state={state}".encode(),
         }
     )
 
@@ -35,7 +49,7 @@ async def _handler(*, request: Request, raise_error: bool) -> RedirectResponse: 
 @pytest.mark.asyncio
 async def test_browser_gets_redirect_to_auth_error() -> None:
     resp = await _handler(
-        request=_request_with_accept("text/html,application/xhtml+xml"),
+        request=_request("text/html,application/xhtml+xml"),
         raise_error=True,
     )
     assert isinstance(resp, RedirectResponse)
@@ -45,20 +59,27 @@ async def test_browser_gets_redirect_to_auth_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_non_browser_still_raises_for_json() -> None:
+async def test_non_browser_gets_standard_json_error() -> None:
+    resp = await _handler(request=_request("application/json"), raise_error=True)
+    assert resp.status_code == OnyxErrorCode.UNAUTHORIZED.status_code
+    body = json.loads(bytes(resp.body))
+    assert body["error_code"] == OnyxErrorCode.UNAUTHORIZED.code
+    assert body["detail"] == "invite only"
+
+
+@pytest.mark.asyncio
+async def test_no_request_kwarg_reraises() -> None:
+    @redirect_sso_errors_to_web
+    async def _no_request_handler(**_: Any) -> RedirectResponse:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "nope")
+
     with pytest.raises(OnyxError):
-        await _handler(
-            request=_request_with_accept("application/json"),
-            raise_error=True,
-        )
+        await _no_request_handler()
 
 
 @pytest.mark.asyncio
 async def test_success_passes_through_untouched() -> None:
-    resp = await _handler(
-        request=_request_with_accept("text/html"),
-        raise_error=False,
-    )
+    resp = await _handler(request=_request("text/html"), raise_error=False)
     assert resp.headers["location"] == "/ok"
 
 
@@ -71,78 +92,42 @@ async def test_enum_detail_uses_value_in_url() -> None:
     async def _enum_handler(*, request: Request) -> RedirectResponse:  # noqa: ARG001
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, _Code.SAMPLE)
 
-    resp = await _enum_handler(request=_request_with_accept("text/html"))
+    resp = await _enum_handler(request=_request("text/html"))
     assert isinstance(resp, RedirectResponse)
     assert "error=SAMPLE_CODE" in resp.headers["location"]
 
 
-def _browser_request_with_marked_cookie(cookie_name: str) -> Request:
-    from onyx.error_handling.exceptions import CLEANUP_COOKIE_STATE_ATTR
-
-    request = Request(
-        {
-            "type": "http",
-            "headers": [
-                (b"accept", b"text/html"),
-                (b"cookie", f"{cookie_name}=verifier".encode()),
-            ],
-            "query_string": b"",
-        }
-    )
-    setattr(request.state, CLEANUP_COOKIE_STATE_ATTR, cookie_name)
-    return request
-
-
 @pytest.mark.asyncio
-async def test_error_redirect_clears_marked_cookie() -> None:
+async def test_error_redirect_deletes_flow_pkce_cookie() -> None:
     resp = await _handler(
-        request=_browser_request_with_marked_cookie("onyx_pkce_abc123"),
+        request=_request_with_pkce_cookie("text/html", "abc123"),
         raise_error=True,
     )
     set_cookie = resp.headers.get("set-cookie", "")
-    assert "onyx_pkce_abc123" in set_cookie
+    assert get_pkce_cookie_name("abc123") in set_cookie
     assert "Max-Age=0" in set_cookie or "expires" in set_cookie.lower()
 
 
 @pytest.mark.asyncio
-async def test_error_redirect_without_pkce_cookie_sets_nothing() -> None:
+async def test_json_error_deletes_flow_pkce_cookie() -> None:
     resp = await _handler(
-        request=_request_with_accept("text/html"),
+        request=_request_with_pkce_cookie("application/json", "xyz789"),
         raise_error=True,
     )
+    set_cookie = resp.headers.get("set-cookie", "")
+    assert get_pkce_cookie_name("xyz789") in set_cookie
+
+
+@pytest.mark.asyncio
+async def test_error_without_state_sets_no_cookie() -> None:
+    resp = await _handler(request=_request("text/html"), raise_error=True)
     assert "set-cookie" not in resp.headers
 
 
 @pytest.mark.asyncio
-async def test_onyx_error_json_handler_clears_marked_cookie() -> None:
-    # JSON clients get the cleanup from the global handler, not the decorator.
-    from fastapi import FastAPI
-
-    from onyx.error_handling.error_codes import OnyxErrorCode
-    from onyx.error_handling.exceptions import register_onyx_exception_handlers
-
-    app = FastAPI()
-    register_onyx_exception_handlers(app)
-    handler = cast(Any, app.exception_handlers[OnyxError])
-
-    request = _browser_request_with_marked_cookie("onyx_pkce_json")
-    resp = await handler(request, OnyxError(OnyxErrorCode.UNAUTHORIZED, "nope"))
-    set_cookie = resp.headers.get("set-cookie", "")
-    assert "onyx_pkce_json" in set_cookie
-
-
-@pytest.mark.asyncio
-async def test_unhandled_error_handler_clears_marked_cookie() -> None:
-    from fastapi import FastAPI
-
-    from onyx.error_handling.exceptions import register_onyx_exception_handlers
-
-    app = FastAPI()
-    register_onyx_exception_handlers(app)
-    handler = cast(Any, app.exception_handlers[Exception])
-
-    request = _browser_request_with_marked_cookie("onyx_pkce_boom")
-    resp = await handler(request, RuntimeError("boom"))
-    assert resp.status_code == 500
-    set_cookie = resp.headers.get("set-cookie", "")
-    assert "onyx_pkce_boom" in set_cookie
+async def test_error_with_state_but_no_cookie_sets_nothing() -> None:
+    resp = await _handler(
+        request=_request("text/html", query_string=b"state=lonely"),
+        raise_error=True,
+    )
+    assert "set-cookie" not in resp.headers
