@@ -94,13 +94,13 @@ repos:
         # of uv's project handling, so config still applies. Keep the pinned
         # version in sync with `ruff` in the dev dependency group in
         # pyproject.toml.
-        args: ["--no-project", "--with=ruff==0.15.21", "ruff", "check", "--fix"]
+        args: ["--no-project", "--with=ruff==0.16.0", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
         alias: ruff-format
         name: ruff format
-        args: ["--no-project", "--with=ruff==0.15.21", "ruff", "format"]
+        args: ["--no-project", "--with=ruff==0.16.0", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
