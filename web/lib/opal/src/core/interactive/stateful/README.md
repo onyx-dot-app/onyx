@@ -6,15 +6,15 @@ Stateful interactive surface primitive for elements that maintain a value state 
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `variant` | `"select-light" \| "select-heavy" \| "select-card" \| "select-tinted" \| "select-filter" \| "sidebar-heavy" \| "sidebar-light"` | `"select-heavy"` | Color variant |
-| `state` | `"empty" \| "filled" \| "selected"` | `"empty"` | Current value state |
-| `interaction` | `"rest" \| "hover" \| "active"` | `"rest"` | JS-controlled interaction override |
-| `group` | `string` | — | Tailwind group class for `group-hover:*` |
-| `disabled` | `boolean` | `false` | Disables the element |
-| `href` | `string` | — | URL for link behavior |
-| `target` | `string` | — | Link target (e.g. `"_blank"`) |
+| Prop          | Type                                                                                                                            | Default          | Description                              |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------- |
+| `variant`     | `"select-light" \| "select-heavy" \| "select-card" \| "select-tinted" \| "select-filter" \| "sidebar-heavy" \| "sidebar-light"` | `"select-heavy"` | Color variant                            |
+| `state`       | `"empty" \| "filled" \| "selected"`                                                                                             | `"empty"`        | Current value state                      |
+| `interaction` | `"rest" \| "hover" \| "active"`                                                                                                 | `"rest"`         | JS-controlled interaction override       |
+| `group`       | `string`                                                                                                                        | —                | Tailwind group class for `group-hover:*` |
+| `disabled`    | `boolean`                                                                                                                       | `false`          | Disables the element                     |
+| `href`        | `string`                                                                                                                        | —                | URL for link behavior                    |
+| `target`      | `string`                                                                                                                        | —                | Link target (e.g. `"_blank"`)            |
 
 ## Variants
 

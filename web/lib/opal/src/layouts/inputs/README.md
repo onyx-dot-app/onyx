@@ -13,50 +13,50 @@ messages in vertical or horizontal orientations with optional `<label>` wrapping
 Low-level `<label>` wrapper with cursor styling. Most consumers should use `InputVertical` or
 `InputHorizontal` with `withLabel` instead of using `Label` directly.
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `label` | `string` | — | Sets `htmlFor` to associate with a form element by id |
-| `disabled` | `boolean` | `false` | Switches cursor to `not-allowed` |
+| Prop       | Type      | Default | Description                                           |
+| ---------- | --------- | ------- | ----------------------------------------------------- |
+| `label`    | `string`  | —       | Sets `htmlFor` to associate with a form element by id |
+| `disabled` | `boolean` | `false` | Switches cursor to `not-allowed`                      |
 
 ### Vertical
 
 Stacks title, description, input, error, and sub-description vertically.
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `withLabel` | `boolean \| string` | `false` | `false`: no label. `true`: implicit label (click-forwarding). `string`: label with `htmlFor` + Formik error display. |
-| `disabled` | `boolean` | `false` | Passes through to the label wrapper |
-| `title` | `string \| RichStr` | — | Section title |
-| `tag` | `TagProps` | — | Tag rendered beside the title |
-| `description` | `string \| RichStr` | — | Section description |
-| `subDescription` | `string \| RichStr` | — | Text below the input |
-| `suffix` | `"optional" \| string` | — | Suffix after the title |
+| Prop             | Type                   | Default | Description                                                                                                          |
+| ---------------- | ---------------------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
+| `withLabel`      | `boolean \| string`    | `false` | `false`: no label. `true`: implicit label (click-forwarding). `string`: label with `htmlFor` + Formik error display. |
+| `disabled`       | `boolean`              | `false` | Passes through to the label wrapper                                                                                  |
+| `title`          | `string \| RichStr`    | —       | Section title                                                                                                        |
+| `tag`            | `TagProps`             | —       | Tag rendered beside the title                                                                                        |
+| `description`    | `string \| RichStr`    | —       | Section description                                                                                                  |
+| `subDescription` | `string \| RichStr`    | —       | Text below the input                                                                                                 |
+| `suffix`         | `"optional" \| string` | —       | Suffix after the title                                                                                               |
 
 ### Horizontal
 
 Places title/description on the left, input control on the right.
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `withLabel` | `boolean \| string` | `false` | Same as Vertical |
-| `disabled` | `boolean` | `false` | Passes through to the label wrapper |
-| `center` | `boolean` | `false` | Vertically center the input with the label |
-| `icon` | `IconFunctionComponent` | — | Optional icon rendered beside the title |
-| `responsive` | `boolean` | `false` | Stack the control between title and description on narrow viewports (floats back to the right at `sm`). Best for text inputs; avoid for compact controls like toggles. |
-| `fillInput` | `boolean` | `false` | Grow the control to fill the row (capped at the form input-column max, 240px) instead of hugging its content. Use for full-width inputs like selects/text fields; avoid for compact controls like toggles/switches. Forwarded to `ContentAction` as `fillRight`. |
-| `title` | `string \| RichStr` | — | Section title |
-| `tag` | `TagProps` | — | Tag rendered beside the title |
-| `description` | `string \| RichStr` | — | Section description |
-| `suffix` | `"optional" \| string` | — | Suffix after the title |
+| Prop          | Type                    | Default | Description                                                                                                                                                                                                                                                      |
+| ------------- | ----------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `withLabel`   | `boolean \| string`     | `false` | Same as Vertical                                                                                                                                                                                                                                                 |
+| `disabled`    | `boolean`               | `false` | Passes through to the label wrapper                                                                                                                                                                                                                              |
+| `center`      | `boolean`               | `false` | Vertically center the input with the label                                                                                                                                                                                                                       |
+| `icon`        | `IconFunctionComponent` | —       | Optional icon rendered beside the title                                                                                                                                                                                                                          |
+| `responsive`  | `boolean`               | `false` | Stack the control between title and description on narrow viewports (floats back to the right at `sm`). Best for text inputs; avoid for compact controls like toggles.                                                                                           |
+| `fillInput`   | `boolean`               | `false` | Grow the control to fill the row (capped at the form input-column max, 240px) instead of hugging its content. Use for full-width inputs like selects/text fields; avoid for compact controls like toggles/switches. Forwarded to `ContentAction` as `fillRight`. |
+| `title`       | `string \| RichStr`     | —       | Section title                                                                                                                                                                                                                                                    |
+| `tag`         | `TagProps`              | —       | Tag rendered beside the title                                                                                                                                                                                                                                    |
+| `description` | `string \| RichStr`     | —       | Section description                                                                                                                                                                                                                                              |
+| `suffix`      | `"optional" \| string`  | —       | Suffix after the title                                                                                                                                                                                                                                           |
 
 ### InputErrorText
 
 Renders an error or warning message with an icon.
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `children` | `ReactNode` | — | Error/warning message |
-| `type` | `"error" \| "warning"` | `"error"` | Controls icon and color |
+| Prop       | Type                   | Default   | Description             |
+| ---------- | ---------------------- | --------- | ----------------------- |
+| `children` | `ReactNode`            | —         | Error/warning message   |
+| `type`     | `"error" \| "warning"` | `"error"` | Controls icon and color |
 
 ### InputDivider
 

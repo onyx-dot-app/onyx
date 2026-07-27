@@ -39,13 +39,13 @@ For filterable lists, render `Search` as the first child of `Content`. It is a s
 
 ## Parts
 
-| Part | Key props | Notes |
-|---|---|---|
-| `InputSelect` | Radix Root props + `error`, `disabled` | `error`/`disabled` drive the trigger chrome variant |
-| `.Trigger` | `placeholder`, `rightSection` | Custom `children` replace the selected-item display |
-| `.Content` | Radix Content props | Popper, trigger-width, 18rem max height with scroll |
-| `.Item` | `value`, `children`, `icon`, `description`, `wrapDescription` | The selected item's icon and label mirror into the trigger |
-| `.Group` / `.Label` | Radix props | Uppercase group label |
-| `.Separator` | `paddingParallel`, `paddingPerpendicular` | Opal `Divider` |
+| Part                | Key props                                                     | Notes                                                      |
+| ------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
+| `InputSelect`       | Radix Root props + `error`, `disabled`                        | `error`/`disabled` drive the trigger chrome variant        |
+| `.Trigger`          | `placeholder`, `rightSection`                                 | Custom `children` replace the selected-item display        |
+| `.Content`          | Radix Content props                                           | Popper, trigger-width, 18rem max height with scroll        |
+| `.Item`             | `value`, `children`, `icon`, `description`, `wrapDescription` | The selected item's icon and label mirror into the trigger |
+| `.Group` / `.Label` | Radix props                                                   | Uppercase group label                                      |
+| `.Separator`        | `paddingParallel`, `paddingPerpendicular`                     | Opal `Divider`                                             |
 
 Requires the `@radix-ui/react-select` peer dependency. The selected row uses the `select-heavy` selected tokens (`action-link-01` background with the interactive foreground vars), and keyboard/hover highlight comes from Radix's `data-highlighted`.

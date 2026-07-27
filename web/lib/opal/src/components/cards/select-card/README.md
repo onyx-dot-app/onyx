@@ -36,18 +36,18 @@ The `Interactive.Stateful` Slot merges onto the div, producing a single DOM elem
 
 Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which is hardcoded to `select-card`) plus:
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `padding` | `PaddingVariants` | `"md"` | Padding preset |
-| `rounding` | `RoundingVariants` | `"md"` | Border-radius preset |
-| `border` | `BorderVariants` | `"solid"` | Border style (`"none"` \| `"dashed"` \| `"solid"`) |
-| `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
-| `children` | `React.ReactNode` | — | Card content |
+| Prop       | Type                        | Default   | Description                                        |
+| ---------- | --------------------------- | --------- | -------------------------------------------------- |
+| `padding`  | `PaddingVariants`           | `"md"`    | Padding preset                                     |
+| `rounding` | `RoundingVariants`          | `"md"`    | Border-radius preset                               |
+| `border`   | `BorderVariants`            | `"solid"` | Border style (`"none"` \| `"dashed"` \| `"solid"`) |
+| `ref`      | `React.Ref<HTMLDivElement>` | —         | Ref forwarded to the root div                      |
+| `children` | `React.ReactNode`           | —         | Card content                                       |
 
 ### Padding scale
 
 | `padding` | Class   |
-|-----------|---------|
+| --------- | ------- |
 | `"lg"`    | `p-6`   |
 | `"md"`    | `p-4`   |
 | `"sm"`    | `p-2`   |
@@ -58,7 +58,7 @@ Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which 
 ### Rounding scale
 
 | `rounding` | Class        |
-|------------|--------------|
+| ---------- | ------------ |
 | `"xs"`     | `rounded-04` |
 | `"sm"`     | `rounded-08` |
 | `"md"`     | `rounded-12` |
@@ -66,11 +66,11 @@ Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which 
 
 ### State colors (`select-card` variant)
 
-| State | Rest background | Rest foreground |
-|---|---|---|
-| `empty` | transparent | `text-04` / icon `text-03` |
-| `filled` | `background-tint-00` | `text-04` / icon `text-03` |
-| `selected` | `action-link-01` | `action-link-05` |
+| State      | Rest background      | Rest foreground            |
+| ---------- | -------------------- | -------------------------- |
+| `empty`    | transparent          | `text-04` / icon `text-03` |
+| `filled`   | `background-tint-00` | `text-04` / icon `text-03` |
+| `selected` | `action-link-01`     | `action-link-05`           |
 
 ## CSS
 
@@ -97,12 +97,16 @@ import { CardHeaderLayout } from "@opal/layouts";
     description="Search engine"
     sizePreset="main-ui"
     variant="section"
-    rightChildren={<Button icon={SvgCheckSquare} variant="action" prominence="tertiary">Current Default</Button>}
+    rightChildren={
+      <Button icon={SvgCheckSquare} variant="action" prominence="tertiary">
+        Current Default
+      </Button>
+    }
     bottomRightChildren={
       <Button icon={SvgSettings} size="sm" prominence="tertiary" />
     }
   />
-</SelectCard>
+</SelectCard>;
 ```
 
 ### Disconnected state (clickable)
@@ -115,7 +119,11 @@ import { CardHeaderLayout } from "@opal/layouts";
     description="Not configured"
     sizePreset="main-ui"
     variant="section"
-    rightChildren={<Button rightIcon={SvgArrowExchange} prominence="tertiary">Connect</Button>}
+    rightChildren={
+      <Button rightIcon={SvgArrowExchange} prominence="tertiary">
+        Connect
+      </Button>
+    }
   />
 </SelectCard>
 ```

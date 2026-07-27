@@ -16,25 +16,25 @@ import { Card } from "@opal/components";
 
 <Card padding="md" border="solid">
   <p>Hello</p>
-</Card>
+</Card>;
 ```
 
 ### Plain mode props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `padding` | `PaddingVariants` | `"md"` | Padding preset |
-| `rounding` | `RoundingVariants` | `"md"` | Border-radius preset |
-| `background` | `"none" \| "light" \| "heavy"` | `"light"` | Background fill intensity |
-| `border` | `"none" \| "dashed" \| "solid"` | `"none"` | Border style |
-| `borderColor` | `StatusVariants` | `"default"` | Status-palette border color (needs `border` ≠ `"none"`) |
-| `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
-| `children` | `React.ReactNode` | — | Card content |
+| Prop          | Type                            | Default     | Description                                             |
+| ------------- | ------------------------------- | ----------- | ------------------------------------------------------- |
+| `padding`     | `PaddingVariants`               | `"md"`      | Padding preset                                          |
+| `rounding`    | `RoundingVariants`              | `"md"`      | Border-radius preset                                    |
+| `background`  | `"none" \| "light" \| "heavy"`  | `"light"`   | Background fill intensity                               |
+| `border`      | `"none" \| "dashed" \| "solid"` | `"none"`    | Border style                                            |
+| `borderColor` | `StatusVariants`                | `"default"` | Status-palette border color (needs `border` ≠ `"none"`) |
+| `ref`         | `React.Ref<HTMLDivElement>`     | —           | Ref forwarded to the root div                           |
+| `children`    | `React.ReactNode`               | —           | Card content                                            |
 
 ### Padding scale
 
 | `padding` | Class   |
-|-----------|---------|
+| --------- | ------- |
 | `"lg"`    | `p-6`   |
 | `"md"`    | `p-4`   |
 | `"sm"`    | `p-2`   |
@@ -45,7 +45,7 @@ import { Card } from "@opal/components";
 ### Rounding scale
 
 | `rounding` | Class        |
-|------------|--------------|
+| ---------- | ------------ |
 | `"xs"`     | `rounded-04` |
 | `"sm"`     | `rounded-08` |
 | `"md"`     | `rounded-12` |
@@ -89,11 +89,11 @@ function ProviderCard() {
 
 Everything from plain mode, **plus**:
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `expandable` | `true` | — | Required to enable the expandable variant |
-| `expanded` | `boolean` | `false` | Controlled expanded state. Card never mutates this. |
-| `expandedContent` | `React.ReactNode` | — | The body that animates open/closed below the header |
+| Prop              | Type              | Default | Description                                         |
+| ----------------- | ----------------- | ------- | --------------------------------------------------- |
+| `expandable`      | `true`            | —       | Required to enable the expandable variant           |
+| `expanded`        | `boolean`         | `false` | Controlled expanded state. Card never mutates this. |
+| `expandedContent` | `React.ReactNode` | —       | The body that animates open/closed below the header |
 
 ### Behavior
 

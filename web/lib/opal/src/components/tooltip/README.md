@@ -10,15 +10,15 @@ modes.
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `tooltip` | `ReactNode \| RichStr` | — | Tooltip content. `string`/`RichStr` rendered via `Text`; `ReactNode` rendered as-is. `undefined` = no tooltip. |
-| `side` | `"top" \| "bottom" \| "left" \| "right"` | `"right"` | Which side the tooltip appears on |
-| `align` | `"start" \| "center" \| "end"` | `"center"` | Alignment along the tooltip's side axis |
-| `open` | `boolean` | — | Controlled open state. When omitted, uses default hover behavior. |
-| `onOpenChange` | `(open: boolean) => void` | — | Callback when open state changes. Use with `open` for controlled mode. |
-| `delayDuration` | `number` | — | Delay in ms before the tooltip appears on hover |
-| `sideOffset` | `number` | `4` | Distance in pixels between the trigger and the tooltip |
+| Prop            | Type                                     | Default    | Description                                                                                                    |
+| --------------- | ---------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------- |
+| `tooltip`       | `ReactNode \| RichStr`                   | —          | Tooltip content. `string`/`RichStr` rendered via `Text`; `ReactNode` rendered as-is. `undefined` = no tooltip. |
+| `side`          | `"top" \| "bottom" \| "left" \| "right"` | `"right"`  | Which side the tooltip appears on                                                                              |
+| `align`         | `"start" \| "center" \| "end"`           | `"center"` | Alignment along the tooltip's side axis                                                                        |
+| `open`          | `boolean`                                | —          | Controlled open state. When omitted, uses default hover behavior.                                              |
+| `onOpenChange`  | `(open: boolean) => void`                | —          | Callback when open state changes. Use with `open` for controlled mode.                                         |
+| `delayDuration` | `number`                                 | —          | Delay in ms before the tooltip appears on hover                                                                |
+| `sideOffset`    | `number`                                 | `4`        | Distance in pixels between the trigger and the tooltip                                                         |
 
 ## Usage
 

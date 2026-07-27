@@ -6,11 +6,11 @@ Layout primitives for composing content blocks. These components handle sizing, 
 
 ## Components
 
-| Component | Description | Docs |
-|---|---|---|
-| [`Content`](./content/README.md) | Icon + title + description row. Routes to an internal layout (`ContentXl`, `ContentLg`, `ContentMd`, or `ContentSm`) based on `sizePreset` and `variant`. | [Content README](./content/README.md) |
-| [`ContentAction`](./content-action/README.md) | Wraps `Content` in a flex-row with an optional `rightChildren` slot for action buttons. Adds padding alignment via the shared `SizeVariant` scale. | [ContentAction README](./content-action/README.md) |
-| [`IllustrationContent`](./illustration-content/README.md) | Center-aligned illustration + title + description stack for empty states, error pages, and placeholders. | [IllustrationContent README](./illustration-content/README.md) |
+| Component                                                 | Description                                                                                                                                               | Docs                                                           |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| [`Content`](./content/README.md)                          | Icon + title + description row. Routes to an internal layout (`ContentXl`, `ContentLg`, `ContentMd`, or `ContentSm`) based on `sizePreset` and `variant`. | [Content README](./content/README.md)                          |
+| [`ContentAction`](./content-action/README.md)             | Wraps `Content` in a flex-row with an optional `rightChildren` slot for action buttons. Adds padding alignment via the shared `SizeVariant` scale.        | [ContentAction README](./content-action/README.md)             |
+| [`IllustrationContent`](./illustration-content/README.md) | Center-aligned illustration + title + description stack for empty states, error pages, and placeholders.                                                  | [IllustrationContent README](./illustration-content/README.md) |
 
 ## Quick Start
 
@@ -81,25 +81,25 @@ From `@opal/layouts`:
 
 ```ts
 // Components
-Content
-ContentAction
-IllustrationContent
+Content;
+ContentAction;
+IllustrationContent;
 
 // Types
-ContentProps
-ContentActionProps
-IllustrationContentProps
-SizePreset
-ContentVariant
+ContentProps;
+ContentActionProps;
+IllustrationContentProps;
+SizePreset;
+ContentVariant;
 ```
 
 ## Internal Layout Components
 
 These are not exported — `Content` routes to them automatically:
 
-| Layout | Used when | File |
-|---|---|---|
-| `ContentXl` | `sizePreset` is `headline` or `section` with `variant="heading"` | `content/ContentXl.tsx` |
-| `ContentLg` | `sizePreset` is `headline` or `section` with `variant="section"` | `content/ContentLg.tsx` |
+| Layout      | Used when                                                                          | File                    |
+| ----------- | ---------------------------------------------------------------------------------- | ----------------------- |
+| `ContentXl` | `sizePreset` is `headline` or `section` with `variant="heading"`                   | `content/ContentXl.tsx` |
+| `ContentLg` | `sizePreset` is `headline` or `section` with `variant="section"`                   | `content/ContentLg.tsx` |
 | `ContentMd` | `sizePreset` is `main-content`, `main-ui`, or `secondary` with `variant="section"` | `content/ContentMd.tsx` |
-| `ContentSm` | `variant="body"` | `content/ContentSm.tsx` |
+| `ContentSm` | `variant="body"`                                                                   | `content/ContentSm.tsx` |

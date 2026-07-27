@@ -24,19 +24,20 @@ web/lib/opal/
 
 ## Icons vs Logos vs Illustrations
 
-| | Icons | Logos | Illustrations |
-|---|---|---|---|
-| **Import path** | `@opal/icons` | `@opal/logos` | `@opal/illustrations` |
-| **Location** | `src/icons/` | `src/logos/` | `src/illustrations/` |
-| **Colour** | Overridable via `currentColor` | Fixed — original brand colours preserved | Fixed — original SVG colours preserved |
-| **Script flag** | (none) | `--logo` | `--illustration` |
-| **Use case** | UI elements, actions, navigation | Provider logos, platform logos, brand marks | Empty states, error pages, placeholders |
+|                 | Icons                            | Logos                                       | Illustrations                           |
+| --------------- | -------------------------------- | ------------------------------------------- | --------------------------------------- |
+| **Import path** | `@opal/icons`                    | `@opal/logos`                               | `@opal/illustrations`                   |
+| **Location**    | `src/icons/`                     | `src/logos/`                                | `src/illustrations/`                    |
+| **Colour**      | Overridable via `currentColor`   | Fixed — original brand colours preserved    | Fixed — original SVG colours preserved  |
+| **Script flag** | (none)                           | `--logo`                                    | `--illustration`                        |
+| **Use case**    | UI elements, actions, navigation | Provider logos, platform logos, brand marks | Empty states, error pages, placeholders |
 
 ## Files in This Directory
 
 ### `icon-template.js`
 
 A custom SVGR template that generates components with the following features:
+
 - Imports `IconProps` from `@opal/types` for consistent typing
 - Supports the `size` prop for controlling icon dimensions
 - Includes `width` and `height` attributes bound to the `size` prop
@@ -47,16 +48,19 @@ A custom SVGR template that generates components with the following features:
 Converts an SVG into a React component. Behaviour depends on the mode:
 
 **Icon mode** (default):
+
 - Strips `stroke`, `stroke-opacity`, `width`, and `height` attributes
 - Adds `width={size}`, `height={size}`, and `stroke="currentColor"`
 - Result is colour-overridable via CSS `color` property
 
 **Logo mode** (`--logo`):
+
 - Strips only `width` and `height` attributes (all colours preserved)
 - Adds `width={size}` and `height={size}`
 - Does **not** add `stroke="currentColor"` — logos keep their original brand colours
 
 **Illustration mode** (`--illustration`):
+
 - Strips only `width` and `height` attributes (all colours preserved)
 - Adds `width={size}` and `height={size}`
 - Does **not** add `stroke="currentColor"` — illustrations keep their original colours
@@ -75,6 +79,7 @@ All modes automatically delete the source SVG file after successful conversion.
 ```
 
 Then add the export to `src/icons/index.ts`:
+
 ```ts
 export { default as SvgMyIcon } from "@opal/icons/my-icon";
 ```
@@ -87,6 +92,7 @@ export { default as SvgMyIcon } from "@opal/icons/my-icon";
 ```
 
 Then add the export to `src/logos/index.ts`:
+
 ```ts
 export { default as SvgMyLogo } from "@opal/logos/my-logo";
 ```
@@ -99,6 +105,7 @@ export { default as SvgMyLogo } from "@opal/logos/my-logo";
 ```
 
 Then add the export to `src/illustrations/index.ts`:
+
 ```ts
 export { default as SvgMyIllustration } from "@opal/illustrations/my-illustration";
 ```
@@ -108,11 +115,13 @@ export { default as SvgMyIllustration } from "@opal/illustrations/my-illustratio
 If you prefer to run the SVGR command directly:
 
 **For icons** (strips colours):
+
 ```sh
 bunx @svgr/cli <file>.svg --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity","width","height"]}}]}' --template scripts/icon-template.js > <file>.tsx
 ```
 
 **For logos and illustrations** (preserves colours):
+
 ```sh
 bunx @svgr/cli <file>.svg --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["width","height"]}}]}' --template scripts/icon-template.js > <file>.tsx
 ```

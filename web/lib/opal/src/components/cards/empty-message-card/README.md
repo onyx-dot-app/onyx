@@ -8,18 +8,18 @@ A pre-configured Card for empty states. Renders a transparent card with a dashed
 
 ### Base props (all presets)
 
-| Prop         | Type                          | Default       | Description                        |
-| ------------ | ----------------------------- | ------------- | ---------------------------------- |
-| `sizePreset` | `"secondary" \| "main-ui"`   | `"secondary"` | Controls layout and text sizing    |
-| `icon`       | `IconFunctionComponent`       | `SvgEmpty`    | Icon displayed alongside the title |
-| `title`      | `string \| RichStr`           | —             | Primary message text (required)    |
-| `padding`    | `PaddingVariants`             | `"md"`        | Padding preset for the card        |
-| `ref`        | `React.Ref<HTMLDivElement>`   | —             | Ref forwarded to the root div      |
+| Prop         | Type                        | Default       | Description                        |
+| ------------ | --------------------------- | ------------- | ---------------------------------- |
+| `sizePreset` | `"secondary" \| "main-ui"`  | `"secondary"` | Controls layout and text sizing    |
+| `icon`       | `IconFunctionComponent`     | `SvgEmpty`    | Icon displayed alongside the title |
+| `title`      | `string \| RichStr`         | —             | Primary message text (required)    |
+| `padding`    | `PaddingVariants`           | `"md"`        | Padding preset for the card        |
+| `ref`        | `React.Ref<HTMLDivElement>` | —             | Ref forwarded to the root div      |
 
 ### `sizePreset="main-ui"` only
 
-| Prop          | Type                | Default | Description              |
-| ------------- | ------------------- | ------- | ------------------------ |
+| Prop          | Type                | Default | Description               |
+| ------------- | ------------------- | ------- | ------------------------- |
 | `description` | `string \| RichStr` | —       | Optional description text |
 
 > `description` is **not accepted** when `sizePreset` is `"secondary"` (the default).

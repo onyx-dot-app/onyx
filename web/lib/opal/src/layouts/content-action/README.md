@@ -12,22 +12,22 @@ A row layout that pairs a [`Content`](../content/README.md) block with optional 
 
 Inherits **all** props from [`Content`](../content/README.md) (same discriminated-union API) plus:
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `rightChildren` | `ReactNode` | `undefined` | Content rendered on the right side. Wrapper stretches to the full height of the row. |
-| `padding` | `SizeVariant` | `"lg"` | Padding preset applied around the `Content` area. Uses the shared size scale from `@opal/shared`. |
-| `fillRight` | `boolean` | `false` | When `true`, the `rightChildren` column grows to fill the row (capped at `--block-width-form-input-column-max`, 240px) instead of hugging its content. Use for full-width form inputs; leave off for compact controls like toggles/buttons. Ignored in the `responsive` branch. |
+| Prop            | Type          | Default     | Description                                                                                                                                                                                                                                                                     |
+| --------------- | ------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rightChildren` | `ReactNode`   | `undefined` | Content rendered on the right side. Wrapper stretches to the full height of the row.                                                                                                                                                                                            |
+| `padding`       | `SizeVariant` | `"lg"`      | Padding preset applied around the `Content` area. Uses the shared size scale from `@opal/shared`.                                                                                                                                                                               |
+| `fillRight`     | `boolean`     | `false`     | When `true`, the `rightChildren` column grows to fill the row (capped at `--block-width-form-input-column-max`, 240px) instead of hugging its content. Use for full-width form inputs; leave off for compact controls like toggles/buttons. Ignored in the `responsive` branch. |
 
 ### `padding` reference
 
 | Value | Padding class | Effective padding |
-|---|---|---|
-| `lg` | `p-2` | 0.5rem (8px) |
-| `md` | `p-1` | 0.25rem (4px) |
-| `sm` | `p-1` | 0.25rem (4px) |
-| `xs` | `p-0.5` | 0.125rem (2px) |
-| `2xs` | `p-0.5` | 0.125rem (2px) |
-| `fit` | `p-0` | 0 |
+| ----- | ------------- | ----------------- |
+| `lg`  | `p-2`         | 0.5rem (8px)      |
+| `md`  | `p-1`         | 0.25rem (4px)     |
+| `sm`  | `p-1`         | 0.25rem (4px)     |
+| `xs`  | `p-0.5`       | 0.125rem (2px)    |
+| `2xs` | `p-0.5`       | 0.125rem (2px)    |
+| `fit` | `p-0`         | 0                 |
 
 These values are identical to the padding applied by `Interactive.Container` at each size, so `ContentAction` labels naturally align with adjacent buttons of the same size.
 
@@ -65,7 +65,7 @@ import SvgSettings from "@opal/icons/settings";
   rightChildren={
     <Button icon={SvgSettings} prominence="tertiary" onClick={handleEdit} />
   }
-/>
+/>;
 ```
 
 ### Card header with connect action
@@ -87,7 +87,7 @@ import { SvgArrowExchange, SvgCloud } from "@opal/icons";
       Connect
     </Button>
   }
-/>
+/>;
 ```
 
 ### Full-width form input (`fillRight`)

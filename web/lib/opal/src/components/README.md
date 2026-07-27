@@ -14,12 +14,12 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 
 ## Components
 
-| Component | Description | Docs |
-|-----------|-------------|------|
-| [Button](./buttons/button/) | Label and/or icon-only stateless button | [README](./buttons/button/README.md) |
+| Component                                | Description                                           | Docs                                        |
+| ---------------------------------------- | ----------------------------------------------------- | ------------------------------------------- |
+| [Button](./buttons/button/)              | Label and/or icon-only stateless button               | [README](./buttons/button/README.md)        |
 | [SelectButton](./buttons/select-button/) | Stateful toggle button with optional foldable content | [README](./buttons/select-button/README.md) |
-| [OpenButton](./buttons/open-button/) | Trigger button with rotating chevron for popovers | [README](./buttons/open-button/README.md) |
-| [Tag](./tag/) | Small colored label for status/category metadata | [README](./tag/README.md) |
+| [OpenButton](./buttons/open-button/)     | Trigger button with rotating chevron for popovers     | [README](./buttons/open-button/README.md)   |
+| [Tag](./tag/)                            | Small colored label for status/category metadata      | [README](./tag/README.md)                   |
 
 ## Adding new components
 
@@ -30,5 +30,8 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 5. Add a `README.md` inside the component directory with architecture, props, and usage examples
 6. In `components/index.ts`, re-export the component:
    ```ts
-   export { TextInput, type TextInputProps } from "@opal/components/inputs/text-input/components";
+   export {
+     TextInput,
+     type TextInputProps,
+   } from "@opal/components/inputs/text-input/components";
    ```

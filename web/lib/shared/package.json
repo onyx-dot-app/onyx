@@ -1,12 +1,14 @@
 {
   "name": "@onyx-ai/shared",
   "version": "0.1.0",
+  "private": true,
   "description": "Platform-agnostic shared design tokens, types, contracts, and utilities for Onyx web + mobile.",
   "license": "MIT",
-  "private": true,
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "sideEffects": false,
-  "files": ["dist"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

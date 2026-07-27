@@ -13,9 +13,9 @@ footer.
 
 Full-viewport flex row that wraps all other `RootLayout` primitives.
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `children` | `ReactNode` | — | `Sidebar`, `LeftPanel`, `App`, `RightPanel` |
+| Prop       | Type        | Default | Description                                 |
+| ---------- | ----------- | ------- | ------------------------------------------- |
+| `children` | `ReactNode` | —       | `Sidebar`, `LeftPanel`, `App`, `RightPanel` |
 
 ### Sidebar
 
@@ -28,11 +28,11 @@ Controlled sidebar that handles three viewport sizes:
   backdrop that closes on click. `useSidebarFolded()` always returns `false`
   here (content is always expanded; the overlay handles visibility).
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `folded` | `boolean` | — | Current fold state — controlled by the consumer |
-| `onFoldToggle` | `() => void` | — | Called when the sidebar should toggle |
-| `children` | `ReactNode` | — | Sidebar shell and body content |
+| Prop           | Type         | Default | Description                                     |
+| -------------- | ------------ | ------- | ----------------------------------------------- |
+| `folded`       | `boolean`    | —       | Current fold state — controlled by the consumer |
+| `onFoldToggle` | `() => void` | —       | Called when the sidebar should toggle           |
+| `children`     | `ReactNode`  | —       | Sidebar shell and body content                  |
 
 ### App
 
@@ -51,10 +51,10 @@ Accepts all standard `div` props.
 Permanent `shrink-0` columns that push `App` rather than overlaying it.
 Width is caller-supplied via `className` (e.g. `className="w-80"`).
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `className` | `string` | — | Width and any other overrides (twMerge applied) |
-| `children` | `ReactNode` | — | Panel content |
+| Prop        | Type        | Default | Description                                     |
+| ----------- | ----------- | ------- | ----------------------------------------------- |
+| `className` | `string`    | —       | Width and any other overrides (twMerge applied) |
+| `children`  | `ReactNode` | —       | Panel content                                   |
 
 ### Header
 
@@ -64,10 +64,10 @@ Pinned `shrink-0` top bar inside `App`.
 
 Pinned `shrink-0` bottom bar inside `App`.
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `extraPadding` | `boolean` | `false` | Adds `14 px` top padding for shadow breathing room above the input bar |
-| `children` | `ReactNode` | — | Footer content |
+| Prop           | Type        | Default | Description                                                            |
+| -------------- | ----------- | ------- | ---------------------------------------------------------------------- |
+| `extraPadding` | `boolean`   | `false` | Adds `14 px` top padding for shadow breathing room above the input bar |
+| `children`     | `ReactNode` | —       | Footer content                                                         |
 
 ## Hooks
 
@@ -101,14 +101,12 @@ import { RootLayout } from "@opal/layouts";
     <RootLayout.Header>
       <AppHeader />
     </RootLayout.Header>
-    <RootLayout.MainContent>
-      {children}
-    </RootLayout.MainContent>
+    <RootLayout.MainContent>{children}</RootLayout.MainContent>
     <RootLayout.Footer>
       <AppFooter />
     </RootLayout.Footer>
   </RootLayout.App>
-</RootLayout.Root>
+</RootLayout.Root>;
 ```
 
 ### With panels
@@ -122,9 +120,7 @@ import { RootLayout } from "@opal/layouts";
     <FilterPanel />
   </RootLayout.LeftPanel>
   <RootLayout.App>
-    <RootLayout.MainContent>
-      {children}
-    </RootLayout.MainContent>
+    <RootLayout.MainContent>{children}</RootLayout.MainContent>
   </RootLayout.App>
   <RootLayout.RightPanel className="w-80">
     <DetailPanel />
@@ -141,8 +137,12 @@ import { RootLayout } from "@opal/layouts";
   onMouseDown={handleMouseDown}
   onMouseUp={handleMouseUp}
 >
-  <RootLayout.Header><AppHeader /></RootLayout.Header>
+  <RootLayout.Header>
+    <AppHeader />
+  </RootLayout.Header>
   <RootLayout.MainContent>{children}</RootLayout.MainContent>
-  <RootLayout.Footer><AppFooter /></RootLayout.Footer>
+  <RootLayout.Footer>
+    <AppFooter />
+  </RootLayout.Footer>
 </RootLayout.App>
 ```

@@ -18,13 +18,13 @@ No props — accepts `children` only.
 The main auth card. Renders an icon above a heading, optional description, card content, and
 an optional bottom prompt rendered outside/below the card border.
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `icon` | `IconFunctionComponent` | **(required)** | Logo/icon rendered above the card heading |
-| `title` | `string \| RichStr` | **(required)** | Card heading |
-| `description` | `string \| RichStr` | — | Subtitle below the heading |
-| `children` | `ReactNode` | — | Card body (form, buttons, separators) |
-| `bottomPrompt` | `string \| RichStr` | — | Text/link below the card (e.g. "Already have an account?") |
+| Prop           | Type                    | Default        | Description                                                |
+| -------------- | ----------------------- | -------------- | ---------------------------------------------------------- |
+| `icon`         | `IconFunctionComponent` | **(required)** | Logo/icon rendered above the card heading                  |
+| `title`        | `string \| RichStr`     | **(required)** | Card heading                                               |
+| `description`  | `string \| RichStr`     | —              | Subtitle below the heading                                 |
+| `children`     | `ReactNode`             | —              | Card body (form, buttons, separators)                      |
+| `bottomPrompt` | `string \| RichStr`     | —              | Text/link below the card (e.g. "Already have an account?") |
 
 ### OrSeparator
 
@@ -37,20 +37,20 @@ No props.
 
 Flex-column container for form inputs with a consistent `0.75rem` gap between fields.
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `children` | `ReactNode` | — | Input field components |
+| Prop       | Type        | Default | Description            |
+| ---------- | ----------- | ------- | ---------------------- |
+| `children` | `ReactNode` | —       | Input field components |
 
 ### Submit
 
 Full-width submit button. Thin wrapper around `Button` with `type="submit"` and `width="full"`.
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `label` | `SubmitLabel` | **(required)** | Button label key (`"sign-in"`, `"sign-up"`, etc.) |
-| `isSubmitting` | `boolean` | — | Disables + shows spinner while submitting |
-| `isValid` | `boolean` | — | When provided, disables if `false` |
-| `dirty` | `boolean` | — | When provided, disables if `false` |
+| Prop           | Type          | Default        | Description                                       |
+| -------------- | ------------- | -------------- | ------------------------------------------------- |
+| `label`        | `SubmitLabel` | **(required)** | Button label key (`"sign-in"`, `"sign-up"`, etc.) |
+| `isSubmitting` | `boolean`     | —              | Disables + shows spinner while submitting         |
+| `isValid`      | `boolean`     | —              | When provided, disables if `false`                |
+| `dirty`        | `boolean`     | —              | When provided, disables if `false`                |
 
 ## Usage Example
 

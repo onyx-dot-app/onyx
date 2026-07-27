@@ -13,18 +13,18 @@ Interaction model:
 
 ## Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `tags` | `TagItem[]` | **(required)** | Tags rendered before the input |
-| `onRemoveTag` | `(id: string) => void` | **(required)** | Remove handler |
-| `onAdd` | `(value: string) => void` | **(required)** | Called with trimmed text on Enter (no-op when empty) |
-| `value` | `string` | **(required)** | Controlled input text |
-| `onChange` | `(value: string) => void` | **(required)** | Input change handler |
-| `placeholder` | `string` | — | Input placeholder |
-| `variant` | `"primary" \| "internal" \| "error"` | `"primary"` | Wrapper chrome. `"internal"` is the borderless Figma `Style=Subtle` look |
-| `disabled` | `boolean` | `false` | Dims the field, disables input, hides remove and clear buttons |
-| `icon` | `IconFunctionComponent` | — | Leading icon (24px container) |
-| `onClear` | `() => void` | — | Renders the clear action button |
+| Prop          | Type                                 | Default        | Description                                                              |
+| ------------- | ------------------------------------ | -------------- | ------------------------------------------------------------------------ |
+| `tags`        | `TagItem[]`                          | **(required)** | Tags rendered before the input                                           |
+| `onRemoveTag` | `(id: string) => void`               | **(required)** | Remove handler                                                           |
+| `onAdd`       | `(value: string) => void`            | **(required)** | Called with trimmed text on Enter (no-op when empty)                     |
+| `value`       | `string`                             | **(required)** | Controlled input text                                                    |
+| `onChange`    | `(value: string) => void`            | **(required)** | Input change handler                                                     |
+| `placeholder` | `string`                             | —              | Input placeholder                                                        |
+| `variant`     | `"primary" \| "internal" \| "error"` | `"primary"`    | Wrapper chrome. `"internal"` is the borderless Figma `Style=Subtle` look |
+| `disabled`    | `boolean`                            | `false`        | Dims the field, disables input, hides remove and clear buttons           |
+| `icon`        | `IconFunctionComponent`              | —              | Leading icon (24px container)                                            |
+| `onClear`     | `() => void`                         | —              | Renders the clear action button                                          |
 
 ### `TagItem`
 
@@ -48,7 +48,7 @@ const [draft, setDraft] = useState("");
   value={draft}
   onChange={setDraft}
   placeholder="Add a tag…"
-/>
+/>;
 ```
 
 Deferred from the Figma spec: the `resizable` corner handle and the extra `action` button slot.

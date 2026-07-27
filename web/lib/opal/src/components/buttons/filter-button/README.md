@@ -41,15 +41,15 @@ div.relative                               <- bounding wrapper
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `icon` | `IconFunctionComponent` | **required** | Left icon component |
-| `children` | `string` | **required** | Label text between icon and trailing indicator |
-| `active` | `boolean` | `false` | Whether the filter has an active selection |
-| `onClear` | `() => void` | **required** | Called when the clear (X) button is clicked |
-| `interaction` | `"rest" \| "hover" \| "active"` | auto | JS-controlled interaction override. Falls back to Radix `data-state="open"`. |
-| `tooltip` | `string` | — | Tooltip text shown on hover |
-| `tooltipSide` | `TooltipSide` | `"top"` | Which side the tooltip appears on |
+| Prop          | Type                            | Default      | Description                                                                  |
+| ------------- | ------------------------------- | ------------ | ---------------------------------------------------------------------------- |
+| `icon`        | `IconFunctionComponent`         | **required** | Left icon component                                                          |
+| `children`    | `string`                        | **required** | Label text between icon and trailing indicator                               |
+| `active`      | `boolean`                       | `false`      | Whether the filter has an active selection                                   |
+| `onClear`     | `() => void`                    | **required** | Called when the clear (X) button is clicked                                  |
+| `interaction` | `"rest" \| "hover" \| "active"` | auto         | JS-controlled interaction override. Falls back to Radix `data-state="open"`. |
+| `tooltip`     | `string`                        | —            | Tooltip text shown on hover                                                  |
+| `tooltipSide` | `TooltipSide`                   | `"top"`      | Which side the tooltip appears on                                            |
 
 ## Usage
 
@@ -66,5 +66,5 @@ import { SvgUser } from "@opal/icons";
   >
     {hasSelection ? selectionLabel : "Everyone"}
   </FilterButton>
-</Popover.Trigger>
+</Popover.Trigger>;
 ```

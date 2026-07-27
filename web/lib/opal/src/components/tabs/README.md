@@ -14,12 +14,13 @@ import { Tabs } from "@opal/components";
   </Tabs.List>
   <Tabs.Content value="overview">Overview content</Tabs.Content>
   <Tabs.Content value="details">Details content</Tabs.Content>
-</Tabs>
+</Tabs>;
 ```
 
 ## Variants
 
 ### Contained (default)
+
 Equal-width tabs laid out in a grid on a tinted background. Active tab gets a white card with a subtle shadow. Best for primary page-level navigation.
 
 ```tsx
@@ -32,6 +33,7 @@ Equal-width tabs laid out in a grid on a tinted background. Active tab gets a wh
 ```
 
 ### Pill
+
 Content-width tabs with a sliding underline indicator that animates between active tabs. Good for secondary navigation or filter-style tabs.
 
 ```tsx
@@ -44,6 +46,7 @@ Content-width tabs with a sliding underline indicator that animates between acti
 ```
 
 ### Underline
+
 Like pill but without the filled active background on the trigger — only the underline indicator is shown.
 
 ```tsx
@@ -92,7 +95,9 @@ When tabs overflow the available width, show navigation arrows:
 <Tabs variant="pill">
   <Tabs.List enableScrollArrows>
     {manyTabs.map((t) => (
-      <Tabs.Trigger key={t.value} value={t.value}>{t.label}</Tabs.Trigger>
+      <Tabs.Trigger key={t.value} value={t.value}>
+        {t.label}
+      </Tabs.Trigger>
     ))}
   </Tabs.List>
 </Tabs>
@@ -120,34 +125,34 @@ When tabs overflow the available width, show navigation arrows:
 
 Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/components/tabs) props except `className` / `style`.
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `variant` | `"contained" \| "pill" \| "underline"` | `"contained"` | Visual variant for the whole tab group |
-| `defaultValue` | `string` | — | Initially active tab (uncontrolled) |
-| `value` | `string` | — | Controlled active tab |
-| `onValueChange` | `(value: string) => void` | — | Called when active tab changes |
+| Prop            | Type                                   | Default       | Description                            |
+| --------------- | -------------------------------------- | ------------- | -------------------------------------- |
+| `variant`       | `"contained" \| "pill" \| "underline"` | `"contained"` | Visual variant for the whole tab group |
+| `defaultValue`  | `string`                               | —             | Initially active tab (uncontrolled)    |
+| `value`         | `string`                               | —             | Controlled active tab                  |
+| `onValueChange` | `(value: string) => void`              | —             | Called when active tab changes         |
 
 ### `Tabs.List`
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `rightChildren` | `ReactNode` | — | Content pinned to the right (pill/underline only) |
-| `enableScrollArrows` | `boolean` | `false` | Show scroll arrows on overflow (pill/underline only) |
+| Prop                 | Type        | Default | Description                                          |
+| -------------------- | ----------- | ------- | ---------------------------------------------------- |
+| `rightChildren`      | `ReactNode` | —       | Content pinned to the right (pill/underline only)    |
+| `enableScrollArrows` | `boolean`   | `false` | Show scroll arrows on overflow (pill/underline only) |
 
 ### `Tabs.Trigger`
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `value` | `string` | **required** | Tab value |
-| `icon` | `FunctionComponent<IconProps>` | — | Icon before the label |
-| `tooltip` | `string` | — | Tooltip on hover |
-| `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"top"` | Tooltip placement |
-| `disabled` | `boolean` | — | Disables the tab (tooltip still shows) |
-| `isLoading` | `boolean` | — | Shows a spinner after the label |
+| Prop          | Type                                     | Default      | Description                            |
+| ------------- | ---------------------------------------- | ------------ | -------------------------------------- |
+| `value`       | `string`                                 | **required** | Tab value                              |
+| `icon`        | `FunctionComponent<IconProps>`           | —            | Icon before the label                  |
+| `tooltip`     | `string`                                 | —            | Tooltip on hover                       |
+| `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"top"`      | Tooltip placement                      |
+| `disabled`    | `boolean`                                | —            | Disables the tab (tooltip still shows) |
+| `isLoading`   | `boolean`                                | —            | Shows a spinner after the label        |
 
 ### `Tabs.Content`
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `value` | `string` | **required** | Must match a `Tabs.Trigger` value |
-| `padding` | `number` | `0` | Additional inner padding in rem units |
+| Prop      | Type     | Default      | Description                           |
+| --------- | -------- | ------------ | ------------------------------------- |
+| `value`   | `string` | **required** | Must match a `Tabs.Trigger` value     |
+| `padding` | `number` | `0`          | Additional inner padding in rem units |
