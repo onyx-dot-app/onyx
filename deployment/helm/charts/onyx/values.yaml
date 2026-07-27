@@ -9,6 +9,10 @@
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)
+  # Every Onyx image publishes a -dev twin for each of its tags (e.g. "latest-dev",
+  # "v1.2.3-dev"), so this single value can select the dev variant of the whole
+  # deployment. Today only the backend image actually differs: its -dev twin adds
+  # debugging tools (vim, nano, curl, ps, psql) that the default image leaves out.
   version: "latest"
   # Global pull policy for all Onyx component images
   pullPolicy: "IfNotPresent"
@@ -308,8 +312,8 @@ config:
 tooling:
   pgInto:
     # -- Mounts a small helper script into app pods that opens psql using the pod's POSTGRES_* env vars.
-    # NOTE: the default backend images do not ship psql; use a -dev suffixed image tag
-    # (e.g. v1.2.3-dev) or an image that provides the client binary.
+    # NOTE: the default backend images do not ship psql; set a -dev suffixed global.version
+    # (e.g. v1.2.3-dev) or use an image that provides the client binary.
     enabled: false
     # -- Where to place the helper inside the container.
     mountPath: /usr/local/bin/pginto
