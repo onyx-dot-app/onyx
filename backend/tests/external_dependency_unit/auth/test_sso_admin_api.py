@@ -150,6 +150,13 @@ def test_sso_provider_crud_masks_and_restores_secrets(
     assert masked_secret != original_secret
     assert is_masked_credential(masked_secret) is True
 
+    # Non-secret fields read back real so an admin can verify the setup.
+    assert created_provider["config"]["client_id"] == "client-id"
+    assert (
+        created_provider["config"]["openid_config_url"]
+        == "https://idp.example.com/.well-known/openid-configuration"
+    )
+
     provider_id = created_provider["id"]
     provider_names.append(name)
 
@@ -286,6 +293,8 @@ def test_create_saml_provider(
     # AuthnRequest advertises this exact URL).
     assert body["redirect_uri"] == f"{WEB_DOMAIN}/auth/saml/callback"
     assert is_masked_credential(body["config"]["sp_private_key"]) is True
+    assert body["config"]["idp_sso_url"] == "https://idp.example.com/sso"
+    assert body["config"]["idp_x509_cert"] == "MIIDsamplecertvalue"
 
     raw = _stored_config(db_session, body["id"])
     assert raw["idp_entity_id"] == "https://idp.example.com/entity"

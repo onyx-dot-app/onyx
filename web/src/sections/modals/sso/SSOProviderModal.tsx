@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Form, Formik } from "formik";
+import { Form, Formik, useField } from "formik";
 import * as Yup from "yup";
-import { Button, Text } from "@opal/components";
+import { Button, InputTags, type TagItem, Text } from "@opal/components";
 import { SvgCopy, SvgSimpleLoader } from "@opal/icons";
 import { InputVertical, toast } from "@opal/layouts";
 import { cn } from "@opal/utils";
@@ -25,9 +25,6 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import InputChipField, {
-  type ChipItem,
-} from "@/refresh-components/inputs/InputChipField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Modal } from "@opal/components";
 import { useModalClose } from "@opal/components";
@@ -43,7 +40,7 @@ interface SSOProviderFormValues {
   provider_type: SSOProviderType;
   name: string;
   display_name: string;
-  config: Record<string, string | boolean>;
+  config: Record<string, string | boolean | string[]>;
   allowed_email_domains: string[];
 }
 
@@ -59,10 +56,14 @@ const ALL_CONFIG_FIELDS: SSOConfigField[] = Array.from(
 );
 
 function configSchemaForType(fields: SSOConfigField[]) {
-  const shape: Record<string, Yup.StringSchema | Yup.BooleanSchema> = {};
+  const shape: Record<string, Yup.AnySchema> = {};
   for (const field of fields) {
     if (field.kind === "switch") {
       shape[field.name] = Yup.boolean();
+      continue;
+    }
+    if (field.kind === "chips") {
+      shape[field.name] = Yup.array().of(Yup.string().required());
       continue;
     }
     shape[field.name] = field.optional
@@ -109,11 +110,16 @@ const SSO_VALIDATION_SCHEMA = Yup.object({
 function buildConfig(
   providerType: SSOProviderType,
   values: SSOProviderFormValues
-): Record<string, string | boolean> {
-  const config: Record<string, string | boolean> = {};
+): Record<string, string | boolean | string[]> {
+  const config: Record<string, string | boolean | string[]> = {};
   for (const field of CONFIG_FIELDS_BY_TYPE[providerType]) {
     if (field.kind === "switch") {
       config[field.name] = Boolean(values.config[field.name]);
+      continue;
+    }
+    if (field.kind === "chips") {
+      const raw = values.config[field.name];
+      config[field.name] = Array.isArray(raw) ? raw : [];
       continue;
     }
     const raw = values.config[field.name];
@@ -128,16 +134,56 @@ function buildConfig(
 }
 
 function initialConfig(
-  config: Record<string, string | boolean>
-): Record<string, string | boolean> {
-  const initial: Record<string, string | boolean> = {};
+  config: Record<string, string | boolean | string[]>
+): Record<string, string | boolean | string[]> {
+  const initial: Record<string, string | boolean | string[]> = {};
   for (const field of ALL_CONFIG_FIELDS) {
-    initial[field.name] =
-      field.kind === "switch"
-        ? config[field.name] === true
-        : (config[field.name] ?? "");
+    if (field.kind === "switch") {
+      initial[field.name] = config[field.name] === true;
+      continue;
+    }
+    if (field.kind === "chips") {
+      const raw = config[field.name];
+      initial[field.name] = Array.isArray(raw) ? raw : [];
+      continue;
+    }
+    initial[field.name] = config[field.name] ?? "";
   }
   return initial;
+}
+
+interface TagListFieldProps {
+  name: string;
+  placeholder?: string;
+  // Applied to each entry before dedupe/store (trim always runs first).
+  transform?: (value: string) => string;
+}
+
+// Formik-bound Opal InputTags for string[] values. Always writes an array, so
+// clearing every tag stores [] rather than leaving the previous value.
+function TagListField({ name, placeholder, transform }: TagListFieldProps) {
+  const [field, , helpers] = useField<string[]>(name);
+  const [input, setInput] = useState("");
+  const values = field.value ?? [];
+  const tags: TagItem[] = values.map((value) => ({ id: value, label: value }));
+  return (
+    <InputTags
+      tags={tags}
+      onRemoveTag={(id) => {
+        void helpers.setValue(values.filter((value) => value !== id));
+      }}
+      onAdd={(value) => {
+        const entry = transform ? transform(value.trim()) : value.trim();
+        if (entry && !values.includes(entry)) {
+          void helpers.setValue([...values, entry]);
+        }
+        setInput("");
+      }}
+      value={input}
+      onChange={setInput}
+      placeholder={placeholder}
+    />
+  );
 }
 
 function ConfigInput({
@@ -150,6 +196,9 @@ function ConfigInput({
   const name = `config.${field.name}`;
   if (field.kind === "switch") {
     return <SwitchField name={name} />;
+  }
+  if (field.kind === "chips") {
+    return <TagListField name={name} placeholder={field.placeholder} />;
   }
   if (field.kind === "textarea") {
     return <InputTextAreaField name={name} placeholder={field.placeholder} />;
@@ -169,7 +218,6 @@ function ConfigInput({
 export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
   const onClose = useModalClose();
   const isEditing = provider !== null;
-  const [domainInput, setDomainInput] = useState("");
 
   const initialValues: SSOProviderFormValues = {
     provider_type: provider?.provider_type ?? "GOOGLE_OAUTH",
@@ -239,9 +287,6 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
           }) => {
             const providerType = values.provider_type;
             const providerTypeIcon = SSO_PROVIDER_DETAILS[providerType].icon;
-            const domainChips: ChipItem[] = values.allowed_email_domains.map(
-              (domain) => ({ id: domain, label: domain })
-            );
 
             return (
               // flex-col fills the fixed-height Content so Modal.Body scrolls
@@ -341,32 +386,10 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                     description="Only emails in these domains may sign in through this provider. Empty allows any."
                     withLabel
                   >
-                    <InputChipField
-                      chips={domainChips}
-                      onRemoveChip={(id) => {
-                        void setFieldValue(
-                          "allowed_email_domains",
-                          values.allowed_email_domains.filter(
-                            (domain) => domain !== id
-                          )
-                        );
-                      }}
-                      onAdd={(value) => {
-                        const trimmed = value.trim().toLowerCase();
-                        if (
-                          trimmed &&
-                          !values.allowed_email_domains.includes(trimmed)
-                        ) {
-                          void setFieldValue("allowed_email_domains", [
-                            ...values.allowed_email_domains,
-                            trimmed,
-                          ]);
-                        }
-                        setDomainInput("");
-                      }}
-                      value={domainInput}
-                      onChange={setDomainInput}
+                    <TagListField
+                      name="allowed_email_domains"
                       placeholder="Add a domain (e.g. onyx.app)"
+                      transform={(value) => value.toLowerCase()}
                     />
                   </InputVertical>
 
