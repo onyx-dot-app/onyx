@@ -28,8 +28,8 @@ export interface PickerSections {
 
 const EMPTY_SECTIONS: PickerSections = { skills: [], apps: [] };
 
-// Skill rows provide per-user enablement; app metadata and credential state
-// come from `/api/build/apps`.
+// Associated custom skills remain normal per-user selections, with app
+// readiness as an additional runtime requirement.
 export function toPickerSections(
   skillsData: SkillsList | undefined,
   externalApps: ExternalAppUserResponse[] | undefined
@@ -49,7 +49,13 @@ export function toPickerSections(
   }
 
   for (const c of skillsData?.customs ?? []) {
-    if (!c.enabled || c.is_valid === false) continue;
+    if (
+      !c.enabled ||
+      c.is_valid === false ||
+      (c.external_app !== null && !c.external_app.ready)
+    ) {
+      continue;
+    }
     skills.push({
       kind: "skill",
       slug: c.name,

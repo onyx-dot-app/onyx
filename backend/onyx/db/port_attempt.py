@@ -13,8 +13,10 @@ from uuid import UUID
 
 from pydantic import BaseModel
 from sqlalchemy import ColumnElement, and_, exists, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
 )
@@ -45,9 +47,11 @@ def _scope_where(
 # (none / active / FAILED) is still pending work.
 _SETTLED_STATUSES = frozenset({PortAttemptStatus.SUCCESS, PortAttemptStatus.CANCELED})
 
-# Reads enough recent attempts to reach the streak where retry backoff caps (9 at
-# the current 30s base / 1h cap); 10 = small margin. Raise if that cap is raised.
-_MAX_TRACKED_FAILED_RETRIES = 10
+# How many recent attempts the same-cursor streak query reads. Must cover BOTH consumers
+# of that streak: retry backoff (caps ~9 at the 30s base / 1h cap) and the auto-pause gate
+# (fires at MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE). Taking the max means a pause
+# threshold above the backoff window still fires -- a fixed 10 would silently never pause.
+_MAX_TRACKED_FAILED_RETRIES = max(10, MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE)
 
 
 def _get_locked(db_session: Session, port_attempt_id: int) -> PortAttempt:
@@ -229,13 +233,15 @@ class ReindexProgressCounts(BaseModel):
     in_progress: int
     completed: int
     failed: int
+    paused: int
 
 
 def get_reindex_progress_counts(
     db_session: Session, search_settings_id: int
 ) -> ReindexProgressCounts:
     """Bucket each in-scope entity (both scopes) by its latest PortAttempt. No attempt /
-    NOT_STARTED / CANCELED → waiting, so the bar never stalls above real remaining work."""
+    NOT_STARTED / CANCELED → waiting; an auto-paused unit is its own `paused` bucket.
+    Buckets partition `total`."""
     cc_pair_ids, user_ids = _reindex_port_scope(db_session, search_settings_id)
     total = len(cc_pair_ids) + len(user_ids)
 
@@ -248,32 +254,36 @@ def get_reindex_progress_counts(
     in_progress = sum(1 for s in statuses if s == PortAttemptStatus.IN_PROGRESS)
     completed = sum(1 for s in statuses if s == PortAttemptStatus.SUCCESS)
     failed = sum(1 for s in statuses if s == PortAttemptStatus.FAILED)
+    paused = sum(1 for s in statuses if s == PortAttemptStatus.PAUSED)
 
     return ReindexProgressCounts(
         total=total,
-        waiting=max(0, total - in_progress - completed - failed),
+        waiting=max(0, total - in_progress - completed - failed - paused),
         in_progress=in_progress,
         completed=completed,
         failed=failed,
+        paused=paused,
     )
 
 
 class ReindexErrorRow(BaseModel):
-    """A failed port unit for the error modal; exactly one of cc_pair_id / user_id set,
-    name = connector name or user email."""
+    """A port unit needing attention (FAILED or PAUSED) for the modal; exactly one of
+    cc_pair_id / user_id set, name = connector name or user email. `paused` = Resume-able."""
 
     scope: PortScope
     cc_pair_id: int | None
     user_id: UUID | None
     name: str
     error_msg: str | None
+    paused: bool
 
 
 def get_reindex_error_rows(
     db_session: Session, search_settings_id: int
 ) -> list[ReindexErrorRow]:
-    """In-scope entities (both scopes) whose latest port attempt is FAILED, with name +
-    error_msg. Same scope/latest-per-entity as get_reindex_progress_counts's `failed`."""
+    """In-scope entities (both scopes) whose latest port attempt is FAILED (auto-retrying)
+    or PAUSED (awaiting operator Resume), with name + error_msg. Same scope/latest-per-entity
+    as get_reindex_progress_counts's `failed` + `paused` buckets."""
     cc_pair_ids, user_ids = _reindex_port_scope(db_session, search_settings_id)
 
     rows: list[ReindexErrorRow] = []
@@ -301,7 +311,7 @@ def get_reindex_error_rows(
                 PortAttempt.id.desc(),
             )
         ):
-            if status == PortAttemptStatus.FAILED:
+            if status in (PortAttemptStatus.FAILED, PortAttemptStatus.PAUSED):
                 rows.append(
                     ReindexErrorRow(
                         scope="connector",
@@ -309,6 +319,7 @@ def get_reindex_error_rows(
                         user_id=None,
                         name=name,
                         error_msg=error_msg,
+                        paused=status == PortAttemptStatus.PAUSED,
                     )
                 )
 
@@ -333,7 +344,7 @@ def get_reindex_error_rows(
                 PortAttempt.id.desc(),
             )
         ):
-            if status == PortAttemptStatus.FAILED:
+            if status in (PortAttemptStatus.FAILED, PortAttemptStatus.PAUSED):
                 rows.append(
                     ReindexErrorRow(
                         scope="user_file",
@@ -341,6 +352,7 @@ def get_reindex_error_rows(
                         user_id=user_id,
                         name=email,
                         error_msg=error_msg,
+                        paused=status == PortAttemptStatus.PAUSED,
                     )
                 )
 
@@ -586,13 +598,13 @@ def commit_port_cursor(
     last_processed_doc_id: str,
     docs_ported: int,
 ) -> bool:
-    """Per-batch durability point: advance the resume cursor + progress clock.
-    `docs_ported` is the cumulative count so far. Returns False without writing if
-    the attempt already terminalized under the lock (a cancel/stall-FAIL that landed
-    mid-batch) so the caller stops rather than writing behind cleanup's back."""
+    """Per-batch durability point: advance the resume cursor + progress clock. Returns
+    False without writing if the attempt is at rest under the lock (terminal, or a
+    paused row a wedged worker still holds) so it can't write behind cleanup or revive
+    a paused row."""
     try:
         attempt = _get_locked(db_session, port_attempt_id)
-        if attempt.status.is_terminal():
+        if attempt.status.is_resting():
             db_session.rollback()
             return False
         attempt.last_processed_doc_id = last_processed_doc_id
@@ -635,6 +647,101 @@ def mark_port_canceled(db_session: Session, port_attempt_id: int) -> None:
     _mark_terminal(db_session, port_attempt_id, PortAttemptStatus.CANCELED)
 
 
+def pause_port_attempt(db_session: Session, port_attempt_id: int) -> bool:
+    """Flip a FAILED attempt to PAUSED (auto-pause); returns True if it flipped.
+
+    Acts only while the status is still FAILED, so a resume or cancel that already moved
+    the row wins (no-op). Can't reuse mark_port_* here: those go through _mark_terminal,
+    which refuses to change an already-terminal row -- and FAILED is terminal, so it would
+    silently do nothing. Leaves last_processed_doc_id (resume cursor) and error_msg (shown
+    to the operator) untouched."""
+    try:
+        attempt = _get_locked(db_session, port_attempt_id)
+        if attempt.status != PortAttemptStatus.FAILED:
+            db_session.rollback()
+            return False
+        attempt.status = PortAttemptStatus.PAUSED
+        attempt.time_completed = func.now()
+        db_session.commit()
+        return True
+    except Exception:
+        db_session.rollback()
+        raise
+
+
+def resume_paused_port_attempt(
+    db_session: Session,
+    *,
+    cc_pair_id: int | None,
+    port_user_id: UUID | None,
+    search_settings_id: int,
+) -> PortAttempt | None:
+    """Operator Resume: if the scope's latest attempt is still PAUSED, mint a fresh
+    NOT_STARTED resuming from its cursor. The PAUSED row stays as history — it's a streak
+    barrier, so the resumed unit gets a fresh failure budget before it can re-pause.
+
+    Returns the new attempt, or None when there is nothing to resume: the latest isn't
+    PAUSED (a racing resume/supersede moved it), the FUTURE is no longer the port target, or
+    a concurrent resume already created the active attempt (active-unique IntegrityError).
+    Holds the row lock on the PAUSED row across the insert so concurrent resumes serialize
+    — whichever locks first wins; the other sees a newer latest under the lock and no-ops."""
+    # Local imports break the port_attempt <-> search_settings cycle (search_settings
+    # lazily imports this module).
+    from onyx.db.port_orphan_candidate import port_target_settings_id
+    from onyx.db.search_settings import (
+        get_current_search_settings,
+        get_secondary_search_settings,
+    )
+
+    _scope_where(cc_pair_id, port_user_id)
+    latest = get_latest_port_attempt(
+        db_session, cc_pair_id, search_settings_id, port_user_id=port_user_id
+    )
+    if latest is None or latest.status != PortAttemptStatus.PAUSED:
+        return None
+    try:
+        locked = _get_locked(db_session, latest.id)
+        # Re-read latest under the lock: a resume that raced in already minted a newer
+        # attempt (the active-unique index alone wouldn't catch it once that sibling was
+        # canceled, e.g. by connector deletion, in the commit->insert window).
+        current_latest = get_latest_port_attempt(
+            db_session, cc_pair_id, search_settings_id, port_user_id=port_user_id
+        )
+        if (
+            locked.status != PortAttemptStatus.PAUSED
+            or current_latest is None
+            or current_latest.id != locked.id
+        ):
+            db_session.rollback()
+            return None
+        # Refuse if this FUTURE is no longer the port target (superseded/promoted).
+        target_id = port_target_settings_id(
+            get_current_search_settings(db_session),
+            get_secondary_search_settings(db_session),
+        )
+        if target_id != search_settings_id:
+            db_session.rollback()
+            return None
+        fresh = PortAttempt(
+            cc_pair_id=cc_pair_id,
+            port_user_id=port_user_id,
+            search_settings_id=search_settings_id,
+            status=PortAttemptStatus.NOT_STARTED,
+            last_processed_doc_id=locked.last_processed_doc_id,
+            up_to_doc_id=locked.up_to_doc_id,
+        )
+        db_session.add(fresh)
+        db_session.commit()
+        return fresh
+    except IntegrityError:
+        # concurrent resume already minted the active attempt
+        db_session.rollback()
+        return None
+    except Exception:
+        db_session.rollback()
+        raise
+
+
 def request_port_cancel(db_session: Session, port_attempt_id: int) -> None:
     """Ask a port to stop so a waiter (connector deletion) can be the last writer.
     Under the row lock (serializes vs mark_port_in_progress):
@@ -668,11 +775,14 @@ def _mark_terminal(
 ) -> None:
     try:
         attempt = _get_locked(db_session, port_attempt_id)
-        if attempt.status.is_terminal():
-            # First terminal write wins: the row lock makes the watchdog-vs-task
-            # race deterministic, so a late SUCCESS can't clobber a watchdog FAILED.
+        if attempt.status.is_resting():
+            # First terminal write wins (the row lock makes the watchdog-vs-task race
+            # deterministic, so a late SUCCESS can't clobber a watchdog FAILED). PAUSED is
+            # resting too: a wedged worker that un-wedges after its attempt was auto-paused
+            # must NOT drive it back to SUCCESS/FAILED and silently unblock the swap — only
+            # an operator Resume may move a PAUSED row (by minting a fresh attempt).
             logger.debug(
-                "PortAttempt %s already terminal (%s); ignoring %s",
+                "PortAttempt %s already resting (%s); ignoring %s",
                 port_attempt_id,
                 attempt.status.value,
                 status.value,

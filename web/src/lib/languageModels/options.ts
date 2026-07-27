@@ -164,9 +164,8 @@ export function groupLlmOptions(
     if (!groups.has(groupKey)) {
       let displayName: string;
       if (isAggregator && option.vendor) {
-        const vendorDisplayName =
-          option.vendor.charAt(0).toUpperCase() + option.vendor.slice(1);
-        displayName = `${option.providerDisplayName}/${vendorDisplayName}`;
+        // vendor arrives display-cased from the backend (e.g. "OpenAI", "xAI")
+        displayName = `${option.providerDisplayName}/${option.vendor}`;
       } else {
         displayName = option.providerDisplayName;
       }

@@ -203,6 +203,7 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
 
   amazon: SvgAws,
+  gpt: SvgOpenai,
   phi: SvgMicrosoft,
   mistral: SvgMistral,
   ministral: SvgMistral,

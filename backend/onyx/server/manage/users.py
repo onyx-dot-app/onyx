@@ -1,6 +1,5 @@
 import csv
 import io
-import re
 from datetime import datetime, timedelta, timezone
 from typing import cast
 from uuid import UUID
@@ -402,32 +401,35 @@ def list_all_users(
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> AllUsersResponse:
-    users = [
-        user
-        for user in get_all_users(db_session, email_filter_string=q)
-        if (include_api_keys or not is_api_key_email_address(user.email))
-    ]
+    users = get_all_users(
+        db_session,
+        email_filter_string=q,
+        include_api_key_users=include_api_keys,
+    )
 
-    slack_users = [user for user in users if user.account_type == AccountType.BOT]
-    accepted_users = [user for user in users if user.account_type != AccountType.BOT]
-
-    accepted_emails = {user.email for user in accepted_users}
-    slack_users_emails = {user.email for user in slack_users}
-    invited_emails = get_invited_users()
+    slack_users: list[User] = []
+    accepted_users: list[User] = []
+    for user in users:
+        if user.account_type == AccountType.BOT:
+            slack_users.append(user)
+        else:
+            accepted_users.append(user)
 
     # Filter out users who are already active (either accepted or slack users)
-    all_active_emails = accepted_emails | slack_users_emails
+    all_active_emails = {user.email for user in users}
     invited_emails = [
-        email for email in invited_emails if email not in all_active_emails
+        email for email in get_invited_users() if email not in all_active_emails
     ]
 
     if q:
-        invited_emails = [
-            email for email in invited_emails if re.search(r"{}".format(q), email, re.I)
-        ]
+        # Plain case-insensitive substring match (mirrors the ilike used for
+        # accepted users). Never compile q as a regex: it is attacker-controlled
+        # and a crafted pattern can cause catastrophic backtracking (ReDoS).
+        q_lower = q.lower()
+        invited_emails = [email for email in invited_emails if q_lower in email.lower()]
 
-    accepted_count = len(accepted_emails)
-    slack_users_count = len(slack_users_emails)
+    accepted_count = len(accepted_users)
+    slack_users_count = len(slack_users)
     invited_count = len(invited_emails)
 
     # If any of q, accepted_page, or invited_page is None, return all users
@@ -445,17 +447,27 @@ def list_all_users(
             slack_users_pages=1,
         )
 
-    # Otherwise, return paginated results
+    # Otherwise, return paginated results. Slice before building snapshots so
+    # only the requested page is serialized.
     return AllUsersResponse(
-        accepted=[FullUserSnapshot.from_user_model(user) for user in accepted_users][
-            accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
+        accepted=[
+            FullUserSnapshot.from_user_model(user)
+            for user in accepted_users[
+                accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
+            ]
         ],
-        slack_users=[FullUserSnapshot.from_user_model(user) for user in slack_users][
-            slack_users_page * USERS_PAGE_SIZE : (slack_users_page + 1)
-            * USERS_PAGE_SIZE
+        slack_users=[
+            FullUserSnapshot.from_user_model(user)
+            for user in slack_users[
+                slack_users_page * USERS_PAGE_SIZE : (slack_users_page + 1)
+                * USERS_PAGE_SIZE
+            ]
         ],
-        invited=[InvitedUserSnapshot(email=email) for email in invited_emails][
-            invited_page * USERS_PAGE_SIZE : (invited_page + 1) * USERS_PAGE_SIZE
+        invited=[
+            InvitedUserSnapshot(email=email)
+            for email in invited_emails[
+                invited_page * USERS_PAGE_SIZE : (invited_page + 1) * USERS_PAGE_SIZE
+            ]
         ],
         accepted_pages=(accepted_count + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE,
         invited_pages=(invited_count + USERS_PAGE_SIZE - 1) // USERS_PAGE_SIZE,

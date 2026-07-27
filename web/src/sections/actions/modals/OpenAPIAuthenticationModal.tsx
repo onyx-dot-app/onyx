@@ -4,10 +4,14 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import { Modal } from "@opal/components";
-import { Button, Divider, MessageCard } from "@opal/components";
+import {
+  Button,
+  Divider,
+  MessageCard,
+  PasswordInputTypeIn,
+} from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { InputTypeIn } from "@opal/components";
-import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { FormField } from "@/refresh-components/form/FormField";
 import Text from "@/refresh-components/texts/Text";
 import { CopyButton } from "@opal/components";

@@ -29,9 +29,11 @@ from onyx.server.features.skill.models import SkillEnableRequest, SkillPatchRequ
 from onyx.skills.bundle import SKILL_MD_NAME, build_single_file_bundle, build_skill_md
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
+    make_external_app,
     make_group,
     make_skill,
     make_user,
+    make_user_credential,
     share_skill_with_group,
     share_skill_with_user,
 )
@@ -82,6 +84,74 @@ def test_fetch_direct_shared_skill_is_not_personal(
     assert response.source == "custom"
     assert response.is_personal is False
     assert response.user_permission == SkillAccessLevel.VIEWER
+
+
+def test_fetch_associated_skill_reports_current_user_dependency_readiness(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session, role=UserRole.BASIC)
+    skill = make_skill(db_session, is_public=True)
+    app = make_external_app(
+        db_session,
+        skill=skill,
+        auth_template={"Authorization": "Bearer {token}"},
+    )
+    app.name = "Acme CRM"
+    db_session.flush()
+
+    disconnected = fetch_skill_for_current_user(
+        skill.id,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert disconnected.external_app is not None
+    assert disconnected.external_app.external_app_id == app.id
+    assert disconnected.external_app.name == "Acme CRM"
+    assert disconnected.external_app.enabled is True
+    assert disconnected.external_app.ready is False
+    assert disconnected.enabled is False
+    assert disconnected.can_toggle is False
+
+    make_user_credential(
+        db_session,
+        app=app,
+        user=user,
+        user_credentials={"token": "connected"},
+    )
+    connected = fetch_skill_for_current_user(
+        skill.id,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert connected.external_app is not None
+    assert connected.external_app.ready is True
+    assert connected.enabled is False
+    assert connected.can_toggle is True
+
+    selected = set_skill_enabled_for_current_user(
+        skill.id,
+        SkillEnableRequest(enabled=True),
+        user=user,
+        db_session=db_session,
+    )
+    assert selected.enabled is True
+    assert selected.external_app is not None
+    assert selected.external_app.ready is True
+
+    app.enabled = False
+    db_session.flush()
+    unavailable = fetch_skill_for_current_user(
+        skill.id,
+        user=user,
+        db_session=db_session,
+    )
+    assert unavailable.enabled is True
+    assert unavailable.can_toggle is True
+    assert unavailable.external_app is not None
+    assert unavailable.external_app.ready is False
 
 
 def test_viewer_share_cannot_patch_skill(

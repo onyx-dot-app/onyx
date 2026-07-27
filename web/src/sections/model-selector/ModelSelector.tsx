@@ -1,28 +1,18 @@
 "use client";
 
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useRef,
-} from "react";
-import { Popover, OpenButton, Text } from "@opal/components";
-import { Slider } from "@/components/ui/slider";
+import React, { useState, useCallback, useMemo, useRef } from "react";
+import { Popover, OpenButton } from "@opal/components";
 import { getModelIcon } from "@/lib/languageModels";
 import {
   GLOBAL_DEFAULT_LLM_OPTION,
   LLMOption,
 } from "@/lib/languageModels/options";
-import { useUser } from "@/providers/UserProvider";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
-import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
-
-interface TemperatureManager {
-  temperature: number;
-  updateTemperature: (value: number) => void;
-  maxTemperature: number;
-}
+import ModelSelectorContent, {
+  ReasoningManager,
+  TemperatureManager,
+  useModelDetailManagers,
+} from "@/sections/model-selector/ModelSelectorContent";
 
 export interface ModelSelectorProps {
   /** The currently selected model, identified by model_configuration_id. */
@@ -37,10 +27,16 @@ export interface ModelSelectorProps {
   renderTrigger?: () => React.ReactNode;
 
   /**
-   * When provided, a temperature slider is shown at the bottom of the
-   * popover (gated on user.preferences.temperature_override_enabled).
+   * When provided, a temperature slider is shown in the per-model detail
+   * pane (gated on user.preferences.temperature_override_enabled).
    */
   temperatureManager?: TemperatureManager;
+
+  /**
+   * When provided, the reasoning-level slider in the per-model detail pane is
+   * enabled for models that report supports_reasoning, disabled otherwise.
+   */
+  reasoningManager?: ReasoningManager;
 
   disabled?: boolean;
   /**
@@ -59,13 +55,13 @@ export default function ModelSelector({
   requiresImageInput,
   renderTrigger,
   temperatureManager,
+  reasoningManager,
   disabled = false,
   includeGlobalDefault = false,
   side = "top",
 }: ModelSelectorProps) {
   const { llmProviders, defaultText } = useCurrentAgentLLMProviders();
   const [open, setOpen] = useState(false);
-  const { user } = useUser();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Resolve the currently selected option from the ID
@@ -121,53 +117,10 @@ export default function ModelSelector({
     [onChange]
   );
 
-  // Temperature state — only used when temperatureManager is provided
-  const [localTemperature, setLocalTemperature] = useState(
-    temperatureManager?.temperature ?? 0.5
+  const modelDetail = useModelDetailManagers(
+    temperatureManager,
+    reasoningManager
   );
-
-  useEffect(() => {
-    if (temperatureManager) {
-      setLocalTemperature(temperatureManager.temperature ?? 0.5);
-    }
-  }, [temperatureManager?.temperature]);
-
-  const handleTemperatureChange = useCallback((vals: number[]) => {
-    if (vals[0] !== undefined) setLocalTemperature(vals[0]);
-  }, []);
-
-  const handleTemperatureCommit = useCallback(
-    (vals: number[]) => {
-      if (vals[0] !== undefined) temperatureManager?.updateTemperature(vals[0]);
-    },
-    [temperatureManager]
-  );
-
-  const temperatureFooter =
-    temperatureManager && user?.preferences?.temperature_override_enabled ? (
-      <>
-        <div className="border-t border-border-02 mx-2" />
-        <div className="flex flex-col w-full py-2 gap-2">
-          <Slider
-            value={[localTemperature]}
-            max={temperatureManager.maxTemperature}
-            min={0}
-            step={0.01}
-            onValueChange={handleTemperatureChange}
-            onValueCommit={handleTemperatureCommit}
-            className="w-full"
-          />
-          <div className="flex flex-row items-center justify-between">
-            <Text font="secondary-body" color="text-03">
-              Temperature (creativity)
-            </Text>
-            <Text font="secondary-body" color="text-03">
-              {localTemperature.toFixed(1)}
-            </Text>
-          </div>
-        </div>
-      </>
-    ) : undefined;
 
   const triggerIcon = effectiveOption
     ? getModelIcon(effectiveOption.provider, effectiveOption.modelName)
@@ -195,7 +148,7 @@ export default function ModelSelector({
           isSelected={isSelected}
           includeGlobalDefault={includeGlobalDefault}
           scrollContainerRef={scrollContainerRef}
-          footer={temperatureFooter}
+          modelDetail={modelDetail}
         />
       </Popover.Content>
     </Popover>

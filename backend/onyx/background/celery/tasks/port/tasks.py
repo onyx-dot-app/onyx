@@ -14,6 +14,7 @@ import logging
 import time
 from collections.abc import Callable, MutableMapping
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -27,6 +28,7 @@ from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
     MAX_CONCURRENT_PORT_ATTEMPTS,
     MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS,
+    MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE,
 )
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
@@ -65,7 +67,9 @@ from onyx.db.port_attempt import (
     mark_port_failed,
     mark_port_in_progress,
     mark_port_succeeded,
+    pause_port_attempt,
     port_backfill_has_pending_work,
+    resume_paused_port_attempt,
     touch_port_progress,
 )
 from onyx.db.port_orphan_candidate import (
@@ -240,9 +244,9 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         if attempt is None:
             log.warning("PortAttempt not found, dropping task")
             return
-        if attempt.status.is_terminal():
+        if attempt.status.is_resting():
             log.info(
-                "PortAttempt already terminal (%s), dropping task",
+                "PortAttempt already resting (%s), dropping task",
                 attempt.status.value,
             )
             return
@@ -314,7 +318,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             attempt = get_port_attempt(db_session, port_attempt_id)
             if (
                 attempt is None
-                or attempt.status.is_terminal()
+                or attempt.status.is_resting()
                 or attempt.cancel_requested
             ):
                 return True
@@ -326,8 +330,8 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         # and re-reads the row so a CANCEL or stall-FAIL committed elsewhere is seen.
         with get_session_with_current_tenant() as db_session:
             attempt = get_port_attempt(db_session, port_attempt_id)
-            if attempt is None or attempt.status.is_terminal():
-                log.info("PortAttempt gone/terminal, stopping")
+            if attempt is None or attempt.status.is_resting():
+                log.info("PortAttempt gone/resting, stopping")
                 return
             if attempt.cancel_requested:
                 # ack between batches, after our last write: this unblocks the waiting
@@ -642,16 +646,47 @@ def _schedule_scope_attempts(
                         active.id,
                     )
             continue
+        latest = get_latest_port_attempt(
+            db_session, cc_pair_id, search_settings_id, port_user_id=port_user_id
+        )
+        # Auto-pause a unit stuck failing at the same cursor: after N consecutive
+        # same-cursor failures, park it PAUSED for the operator instead of retrying it
+        # forever. Evaluated before the cap gate so a cap-starved stuck unit still pauses
+        # (else the operator banner is late to surface the very units it most needs to).
+        if (
+            latest is not None
+            and latest.status == PortAttemptStatus.FAILED
+            and count_consecutive_failed_port_attempts_no_progress(
+                db_session, cc_pair_id, search_settings_id, port_user_id=port_user_id
+            )
+            >= MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE
+        ):
+            try:
+                if pause_port_attempt(db_session, latest.id):
+                    task_logger.warning(
+                        "check_for_port: auto-paused after %d consecutive failures "
+                        "(scope=%s cc_pair=%s user=%s)",
+                        MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE,
+                        scope,
+                        cc_pair_id,
+                        port_user_id,
+                    )
+            except Exception:
+                # One unit's pause failing (DB blip) must not abort the whole tick.
+                task_logger.exception(
+                    "check_for_port: auto-pause failed (scope=%s cc_pair=%s user=%s)",
+                    scope,
+                    cc_pair_id,
+                    port_user_id,
+                )
+            continue
         # At the concurrency cap: don't start new attempts (the remaining entities still
         # get recovery re-enqueues above next pass).
         if active_attempts >= cap:
             at_cap += 1
             continue
-        latest = get_latest_port_attempt(
-            db_session, cc_pair_id, search_settings_id, port_user_id=port_user_id
-        )
-        # SUCCESS -> backlog already ported; CANCELED -> operator stopped it. Only a
-        # FAILED (or no) attempt warrants a fresh run.
+        # SUCCESS -> already ported; CANCELED/PAUSED -> stopped. Only a FAILED (or no)
+        # attempt warrants a fresh run.
         if latest is not None and latest.status != PortAttemptStatus.FAILED:
             continue
         # Back off a port stuck failing at the same cursor (durable error) so it doesn't
@@ -782,6 +817,47 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
             lock_beat.release()
 
     return tasks_created
+
+
+class PortResumeResult(Enum):
+    NOT_PAUSED = "not_paused"  # nothing to resume (not paused / superseded / raced)
+    RESUMED = "resumed"  # fresh attempt minted AND dispatched now
+    DISPATCH_FAILED = "dispatch_failed"  # minted, but the immediate enqueue failed
+
+
+def resume_paused_port_unit(
+    celery_app: Celery,
+    tenant_id: str,
+    cc_pair_id: int | None,
+    port_user_id: UUID | None,
+    search_settings_id: int,
+) -> PortResumeResult:
+    """Operator Resume: mint a fresh attempt from the paused cursor and enqueue it now,
+    rather than waiting a TTL for the scheduler to notice the NOT_STARTED.
+
+    NOT_PAUSED if there was nothing to resume. DISPATCH_FAILED if the fresh attempt was
+    committed but the immediate enqueue failed (broker down) — the caller must NOT report
+    an immediate resume; the row is a committed NOT_STARTED that the scheduler re-enqueues
+    once its TTL lapses, so the resume isn't lost, just delayed. RESUMED otherwise."""
+    scope: PortScope = "user_file" if port_user_id is not None else "connector"
+    with get_session_with_current_tenant() as db_session:
+        attempt = resume_paused_port_attempt(
+            db_session,
+            cc_pair_id=cc_pair_id,
+            port_user_id=port_user_id,
+            search_settings_id=search_settings_id,
+        )
+        if attempt is None:
+            return PortResumeResult.NOT_PAUSED
+        attempt_id = attempt.id
+    try:
+        _enqueue_run_port_attempt(celery_app, attempt_id, tenant_id, scope)
+    except Exception:
+        task_logger.exception(
+            "resume_paused_port_unit: enqueue failed for PortAttempt %s", attempt_id
+        )
+        return PortResumeResult.DISPATCH_FAILED
+    return PortResumeResult.RESUMED
 
 
 @shared_task(

@@ -49,6 +49,7 @@ export interface CreateCustomSkillInput {
   description: string;
   instructions_markdown: string;
   auto_enable?: boolean;
+  external_app_id?: number;
 }
 
 export async function createCustomSkillFromEditor(
@@ -60,6 +61,9 @@ export async function createCustomSkillFromEditor(
   form.append("description", input.description);
   form.append("instructions_markdown", input.instructions_markdown);
   form.append("auto_enable", String(input.auto_enable ?? true));
+  if (input.external_app_id !== undefined) {
+    form.append("external_app_id", String(input.external_app_id));
+  }
   if (upload) form.append("upload", upload);
 
   const res = await fetch("/api/skills/custom/editor", {

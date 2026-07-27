@@ -38,7 +38,7 @@ from onyx.deep_research.utils import (
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import model_is_reasoning_model
-from onyx.llm.models import ToolChoiceOptions
+from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
 from onyx.prompts.deep_research.orchestration_layer import (
     CLARIFICATION_PROMPT,
     FINAL_REPORT_PROMPT,
@@ -111,6 +111,7 @@ def generate_final_report(
     turn_index: int,
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
     saved_reasoning: str | None = None,
     pre_answer_processing_time: float | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
@@ -159,6 +160,7 @@ def generate_final_report(
             tool_definitions=[],
             tool_choice=ToolChoiceOptions.NONE,
             llm=llm,
+            reasoning_effort=reasoning_effort,
             placement=Placement(turn_index=turn_index),
             citation_processor=citation_processor,
             state_container=state_container,
@@ -204,6 +206,7 @@ def run_deep_research_llm_loop(
     custom_agent_prompt: str | None,  # noqa: ARG001
     llm: LLM,
     token_counter: Callable[[str], int],
+    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
     skip_clarification: bool = False,
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
@@ -283,6 +286,7 @@ def run_deep_research_llm_loop(
                     tool_definitions=get_clarification_tool_definitions(),
                     tool_choice=ToolChoiceOptions.AUTO,
                     llm=llm,
+                    reasoning_effort=reasoning_effort,
                     placement=Placement(turn_index=0),
                     # No citations in this step, it should just pass through all
                     # tokens directly so initialized as an empty citation processor
@@ -343,6 +347,7 @@ def run_deep_research_llm_loop(
                 tool_definitions=[],
                 tool_choice=ToolChoiceOptions.NONE,
                 llm=llm,
+                reasoning_effort=reasoning_effort,
                 placement=Placement(turn_index=0),
                 citation_processor=None,
                 state_container=state_container,
@@ -459,6 +464,7 @@ def run_deep_research_llm_loop(
                         turn_index=report_turn_index,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
+                        reasoning_effort=reasoning_effort,
                         pre_answer_processing_time=elapsed_seconds,
                         all_injected_file_metadata=all_injected_file_metadata,
                     )
@@ -517,6 +523,7 @@ def run_deep_research_llm_loop(
                     ),
                     tool_choice=ToolChoiceOptions.REQUIRED,
                     llm=llm,
+                    reasoning_effort=reasoning_effort,
                     placement=Placement(
                         turn_index=orchestrator_start_turn_index
                         + cycle
@@ -562,6 +569,7 @@ def run_deep_research_llm_loop(
                         turn_index=report_turn_index,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
+                        reasoning_effort=reasoning_effort,
                         pre_answer_processing_time=time.monotonic()
                         - processing_start_time,
                         all_injected_file_metadata=all_injected_file_metadata,
@@ -583,6 +591,7 @@ def run_deep_research_llm_loop(
                         turn_index=report_turn_index,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
+                        reasoning_effort=reasoning_effort,
                         saved_reasoning=most_recent_reasoning,
                         pre_answer_processing_time=time.monotonic()
                         - processing_start_time,
@@ -657,6 +666,7 @@ def run_deep_research_llm_loop(
                             turn_index=report_turn_index,
                             citation_mapping=citation_mapping,
                             user_identity=user_identity,
+                            reasoning_effort=reasoning_effort,
                             pre_answer_processing_time=time.monotonic()
                             - processing_start_time,
                             all_injected_file_metadata=all_injected_file_metadata,
@@ -694,6 +704,12 @@ def run_deep_research_llm_loop(
                         token_counter=token_counter,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
+                        # Session override wins in sub-agents. AUTO keeps the tuned LOW default.
+                        reasoning_effort=(
+                            reasoning_effort
+                            if reasoning_effort is not ReasoningEffort.AUTO
+                            else ReasoningEffort.LOW
+                        ),
                     )
 
                     citation_mapping = research_results.citation_mapping

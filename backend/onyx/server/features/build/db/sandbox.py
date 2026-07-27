@@ -110,6 +110,22 @@ def set_sandbox_skills_hashes__no_commit(
     db_session.flush()
 
 
+def set_sandbox_mcp_config_hashes__no_commit(
+    db_session: Session,
+    mcp_config_hashes: dict[UUID, str],
+) -> None:
+    """Record each sandbox's current craft MCP fingerprint. Tracked separately
+    from ``skills_hash`` so an MCP change doesn't ride the skill-file push."""
+    if not mcp_config_hashes:
+        return
+    sandboxes = db_session.scalars(
+        select(Sandbox).where(Sandbox.id.in_(mcp_config_hashes))
+    ).all()
+    for sandbox in sandboxes:
+        sandbox.mcp_config_hash = mcp_config_hashes[sandbox.id]
+    db_session.flush()
+
+
 def lock_sandbox_skills_hashes(
     db_session: Session,
     sandbox_ids: set[UUID],

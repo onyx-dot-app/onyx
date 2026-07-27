@@ -3,12 +3,13 @@
 import { useCallback, type MouseEvent } from "react";
 import { Button, Switch, Tag, Tooltip } from "@opal/components";
 import { Content } from "@opal/layouts";
-import { SvgBlocks, SvgEdit, SvgUser } from "@opal/icons";
+import { SvgBlocks, SvgEdit, SvgPlug, SvgUser } from "@opal/icons";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
 import { useSettings } from "@/lib/settings/hooks";
 import type { CustomSkill } from "@/lib/skills/types";
+import { cn } from "@opal/utils";
 
 export type SkillCardSource = "builtin" | "custom";
 
@@ -38,6 +39,7 @@ export type SkillCardItem = BuiltinSkillCardItem | CustomSkillCardItem;
 
 export interface SkillCardProps {
   item: SkillCardItem;
+  hasEnabledNameConflict?: boolean;
   onClick?: (item: SkillCardItem) => void;
   onEdit?: (item: CustomSkillCardItem) => void;
   onEnabledChange?: (item: SkillCardItem, enabled: boolean) => void;
@@ -46,6 +48,7 @@ export interface SkillCardProps {
 
 export default function SkillCard({
   item,
+  hasEnabledNameConflict = false,
   onClick,
   onEdit,
   onEnabledChange,
@@ -59,14 +62,37 @@ export default function SkillCard({
 
   const authorTitle =
     item.source === "builtin" ? appName : item.author_email || appName;
-  const isDisabled = !item.enabled;
+  const dependency = item.source === "custom" ? item.skill.external_app : null;
+  const isDependencyUnavailable = dependency !== null && !dependency.ready;
+  const isSelectedDependencyUnavailable =
+    item.enabled && isDependencyUnavailable;
+  const isInactive = !item.enabled || isDependencyUnavailable;
   const isInvalid = item.source === "custom" && item.skill.is_valid === false;
   const isBuiltinUnavailable = item.source === "builtin" && !item.is_available;
-  const tooltip = isInvalid
-    ? "This skill is invalid. Delete it and create a new skill."
-    : isBuiltinUnavailable
-      ? "Skill is currently unavailable. Click to view details."
-      : undefined;
+  let dependencyStatus: string | null = null;
+  if (dependency) {
+    if (!dependency.ready) {
+      dependencyStatus = dependency.enabled
+        ? `Connect app “${dependency.name}” to ${item.enabled ? "use" : "enable"}`
+        : `App “${dependency.name}” is disabled`;
+    } else {
+      dependencyStatus =
+        !item.enabled && hasEnabledNameConflict
+          ? "Another skill with this name is enabled"
+          : `Uses app “${dependency.name}”`;
+    }
+  }
+
+  let tooltip: string | undefined;
+  if (isInvalid) {
+    tooltip = "This skill is invalid. Delete it and create a new skill.";
+  } else if (isBuiltinUnavailable) {
+    tooltip = "Skill is currently unavailable. Click to view details.";
+  } else if (isDependencyUnavailable && dependency) {
+    tooltip = dependency.enabled
+      ? `Connect app “${dependency.name}” from the Apps page to use this skill.`
+      : `App “${dependency.name}” is disabled by an administrator.`;
+  }
   const canEdit =
     item.source === "custom" &&
     (item.skill.user_permission === "OWNER" ||
@@ -88,15 +114,24 @@ export default function SkillCard({
       <Interactive.Simple onClick={handleClick} group="group/SkillCard">
         <Card
           variant={
-            isDisabled || isInvalid || isBuiltinUnavailable
+            isInvalid ||
+            isBuiltinUnavailable ||
+            (isDependencyUnavailable && !item.enabled)
               ? "disabled"
-              : "primary"
+              : isInactive
+                ? "secondary"
+                : "primary"
           }
           padding={0}
           gap={0}
           height="full"
         >
-          <div className="flex self-stretch h-24">
+          <div
+            className={cn(
+              "flex self-stretch h-24",
+              isSelectedDependencyUnavailable && "opacity-50"
+            )}
+          >
             <CardItemLayout
               icon={SvgBlocks}
               title={item.name}
@@ -124,8 +159,8 @@ export default function SkillCard({
           <div className="bg-background-tint-01 p-1 flex flex-row items-center justify-between w-full">
             <div className="py-1 px-2 min-w-0 flex-1">
               <Content
-                icon={SvgUser}
-                title={authorTitle}
+                icon={dependency ? SvgPlug : SvgUser}
+                title={dependencyStatus ?? authorTitle}
                 sizePreset="secondary"
                 variant="body"
                 color="muted"
@@ -138,7 +173,9 @@ export default function SkillCard({
                     checked={item.enabled}
                     onCheckedChange={handleEnabledChange}
                     disabled={enablementPending || isInvalid}
-                    aria-label={`${item.enabled ? "Disable" : "Enable"} ${item.name}`}
+                    aria-label={`${item.enabled ? "Disable" : "Enable"} ${item.name}${
+                      dependency ? ` for ${dependency.name}` : ""
+                    }`}
                   />
                 </div>
               )}
@@ -153,6 +190,8 @@ export default function SkillCard({
                 )
               ) : isInvalid ? (
                 <Tag title="Invalid" color="amber" />
+              ) : dependency ? (
+                <Tag title="App skill" color="blue" />
               ) : item.is_personal ? (
                 <Tag title="Personal" color="purple" />
               ) : (

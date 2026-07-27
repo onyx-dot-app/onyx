@@ -26,7 +26,7 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.enums import BuildSessionStatus, SandboxStatus
 from onyx.db.models import BuildSession, Sandbox, Snapshot, User
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.db.build_session import skills_are_stale
+from onyx.server.features.build.db.build_session import session_runtime_stale
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.session import (
     sandbox_lifecycle as sandbox_lifecycle_module,
@@ -636,8 +636,8 @@ def test_sessions_marked_idle_and_nextjs_ports_cleared(
     assert refreshed_b.status == BuildSessionStatus.IDLE
     assert refreshed_a.nextjs_port is None
     assert refreshed_b.nextjs_port is None
-    assert not skills_are_stale(refreshed_a, sandbox)
-    assert not skills_are_stale(refreshed_b, sandbox)
+    assert not session_runtime_stale(refreshed_a, sandbox)
+    assert not session_runtime_stale(refreshed_b, sandbox)
 
 
 def test_idle_reaped_before_non_idle_background_snapshot(

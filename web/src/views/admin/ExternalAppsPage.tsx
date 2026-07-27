@@ -1,13 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { IconFunctionComponent } from "@opal/types";
 import { Button, Divider, Text } from "@opal/components";
-import { SettingsLayouts, toast } from "@opal/layouts";
+import { ConfirmationModalLayout, SettingsLayouts, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
-import { SvgArrowLeft, SvgPlug, SvgPlus, SvgTrash } from "@opal/icons";
+import {
+  SvgArrowLeft,
+  SvgPlug,
+  SvgPlus,
+  SvgSettings,
+  SvgTrash,
+} from "@opal/icons";
+import { MCPServer, MCPServersResponse } from "@/lib/tools/interfaces";
+import { updateMCPServer } from "@/lib/tools/mcpService";
+import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   availableBuiltInDescriptors,
@@ -17,6 +29,7 @@ import {
 } from "@/app/craft/v1/apps/registry";
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
 import CreateCustomAppModal from "@/app/craft/v1/apps/admin/CreateCustomAppModal";
+import McpServerPolicyModal from "@/app/craft/v1/apps/admin/McpServerPolicyModal";
 import {
   deleteExternalApp,
   updateExternalApp,
@@ -53,6 +66,8 @@ export default function ExternalAppsPage() {
 }
 
 function AppsAdminContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: descriptors } = useSWR<BuiltInExternalAppDescriptor[]>(
     SWR_KEYS.buildExternalAppsBuiltInOptions,
     errorHandlingFetcher,
@@ -69,14 +84,24 @@ function AppsAdminContent() {
   const [customModal, setCustomModal] = useState<{
     existingApp: ExternalAppAdminResponse | null;
   } | null>(null);
+  const [dismissedDeepLink, setDismissedDeepLink] = useState<string | null>(
+    null
+  );
 
   const isReady = descriptors !== undefined && apps !== undefined;
   const hasConfigured = isReady && apps.length > 0;
 
   // Edit only works for apps whose app_type still has a descriptor. Apps with
   // an orphan app_type still render but can only be disabled/deleted.
-  const descriptorByAppType = new Map<string, BuiltInExternalAppDescriptor>(
-    (descriptors ?? []).map((d) => [d.app_type, d])
+  const descriptorByAppType = useMemo(
+    () =>
+      new Map<string, BuiltInExternalAppDescriptor>(
+        (descriptors ?? []).map((descriptor) => [
+          descriptor.app_type,
+          descriptor,
+        ])
+      ),
+    [descriptors]
   );
 
   // Already-configured providers drop off the available list (one per provider).
@@ -84,6 +109,34 @@ function AppsAdminContent() {
     descriptors ?? [],
     apps ?? []
   );
+
+  const deepLinkedAppId = searchParams.get("editAppId");
+  const deepLinkedApp =
+    deepLinkedAppId !== null && deepLinkedAppId !== dismissedDeepLink
+      ? apps?.find((app) => app.id === Number(deepLinkedAppId))
+      : undefined;
+  const deepLinkedDescriptor = deepLinkedApp
+    ? descriptorByAppType.get(deepLinkedApp.app_type)
+    : undefined;
+  const activeCustomModal =
+    customModal ??
+    (deepLinkedApp?.app_type === "CUSTOM"
+      ? { existingApp: deepLinkedApp }
+      : null);
+  const activeProviderModal =
+    modalState ??
+    (deepLinkedApp && deepLinkedDescriptor
+      ? { descriptor: deepLinkedDescriptor, existingApp: deepLinkedApp }
+      : null);
+
+  function closeAppModal() {
+    setCustomModal(null);
+    setModalState(null);
+    if (deepLinkedAppId) {
+      setDismissedDeepLink(deepLinkedAppId);
+      router.replace("/admin/craft/apps" as Route);
+    }
+  }
 
   if (!isReady) {
     return (
@@ -103,17 +156,19 @@ function AppsAdminContent() {
             </Text>
             <div className="flex flex-col gap-2">
               {apps.map((app) => (
-                <ConfiguredAppCard
+                <IntegrationCard
                   key={app.id}
-                  app={app}
-                  descriptor={descriptorByAppType.get(app.app_type) ?? null}
-                  onEdit={(descriptor) =>
-                    setModalState({ descriptor, existingApp: app })
-                  }
-                  onEditCustom={(customApp) =>
-                    setCustomModal({ existingApp: customApp })
-                  }
-                  onChange={() => mutateApps()}
+                  integration={externalAppToIntegration(
+                    app,
+                    descriptorByAppType.get(app.app_type) ?? null,
+                    {
+                      onEdit: (descriptor) =>
+                        setModalState({ descriptor, existingApp: app }),
+                      onEditCustom: (customApp) =>
+                        setCustomModal({ existingApp: customApp }),
+                      onChange: () => mutateApps(),
+                    }
+                  )}
                 />
               ))}
             </div>
@@ -122,6 +177,8 @@ function AppsAdminContent() {
           <Divider />
         </>
       )}
+
+      <McpServersSection />
 
       <section className="flex flex-col gap-2">
         <Text font="main-content-emphasis" color="text-04">
@@ -146,34 +203,113 @@ function AppsAdminContent() {
         </div>
       </section>
 
-      {modalState && (
+      {activeProviderModal && (
         <ConfigureProviderModal
-          open={modalState !== null}
-          onClose={() => setModalState(null)}
+          key={
+            activeProviderModal.existingApp?.id ??
+            activeProviderModal.descriptor.app_type
+          }
+          onClose={closeAppModal}
           onSaved={() => mutateApps()}
-          descriptor={modalState.descriptor}
-          existingApp={modalState.existingApp}
+          descriptor={activeProviderModal.descriptor}
+          existingApp={activeProviderModal.existingApp}
         />
       )}
 
-      {customModal && (
+      {activeCustomModal && (
         <CreateCustomAppModal
-          open={customModal !== null}
-          onClose={() => setCustomModal(null)}
+          key={activeCustomModal.existingApp?.id ?? "new"}
+          onClose={closeAppModal}
           onSaved={() => mutateApps()}
-          existingApp={customModal.existingApp}
+          existingApp={activeCustomModal.existingApp}
         />
       )}
     </div>
   );
 }
 
-// ── Configured app card ───────────────────────────────────────────────
+// ── MCP servers ────────────────────────────────────────────────────────
+//
+// Every configured MCP server, rendered through the same card as the
+// external apps above. Enable/Disable controls Craft availability; Edit
+// opens the per-tool policy dialog. New servers are added on the MCP
+// actions page.
+function McpServersSection() {
+  const { data, mutate } = useSWR<MCPServersResponse>(
+    SWR_KEYS.adminMcpServers,
+    errorHandlingFetcher,
+    { keepPreviousData: true }
+  );
+  const [editServer, setEditServer] = useState<MCPServer | null>(null);
+  const servers = data?.mcp_servers ?? [];
+  if (servers.length === 0) return null;
 
-interface ConfiguredAppCardProps {
-  app: ExternalAppAdminResponse;
-  /** Null when the app's app_type no longer has a backend descriptor. */
-  descriptor: BuiltInExternalAppDescriptor | null;
+  return (
+    <>
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <Text font="main-content-emphasis" color="text-04">
+            MCP servers
+          </Text>
+          <Button
+            href="/admin/actions/mcp"
+            prominence="tertiary"
+            icon={SvgSettings}
+          >
+            Manage in Actions
+          </Button>
+        </div>
+        <Text font="secondary-body" color="text-03">
+          Enable an MCP server to let the Craft agent use its tools; enabled
+          servers appear alongside apps on the Apps page. Edit a server to set
+          each tool&apos;s approval policy.
+        </Text>
+        <div className="flex flex-col gap-2">
+          {servers.map((server) => (
+            <IntegrationCard
+              key={server.id}
+              integration={mcpServerToIntegration(server, {
+                onEdit: () => setEditServer(server),
+                onChange: () => mutate(),
+              })}
+            />
+          ))}
+        </div>
+      </section>
+
+      {editServer && (
+        <McpServerPolicyModal
+          key={editServer.id}
+          onClose={() => setEditServer(null)}
+          onSaved={() => mutate()}
+          server={editServer}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Configured integrations ────────────────────────────────────────────
+//
+// Normalized admin view of anything already granted to the Craft agent.
+// External apps and MCP servers map into this shape upstream, so both render
+// and behave through the same card — only where the data comes from differs.
+interface ConfiguredIntegration {
+  logo: IconFunctionComponent;
+  name: string;
+  statusText: string;
+  enabled: boolean;
+  toggleEnabled: () => Promise<void>;
+  /** Null → no Edit button (e.g. orphaned app types). */
+  edit: (() => void) | null;
+  /** Null → not deletable (MCP servers, Onyx-managed apps). */
+  remove: {
+    run: () => Promise<void>;
+    retainedCustomSkillCount: number;
+  } | null;
+}
+
+interface ExternalAppHandlers {
   /** Edit a built-in provider instance (driven by its descriptor). */
   onEdit: (descriptor: BuiltInExternalAppDescriptor) => void;
   /** Edit a custom app (no descriptor — config is on the row itself). */
@@ -181,41 +317,100 @@ interface ConfiguredAppCardProps {
   onChange: () => Promise<unknown>;
 }
 
-function ConfiguredAppCard({
-  app,
-  descriptor,
-  onEdit,
-  onEditCustom,
-  onChange,
-}: ConfiguredAppCardProps) {
-  const [isMutating, setIsMutating] = useState(false);
-  const Logo = getAppTypeLogo(app.app_type);
-
-  async function toggleEnabled() {
-    setIsMutating(true);
-    try {
+function externalAppToIntegration(
+  app: ExternalAppAdminResponse,
+  /** Null when the app's app_type no longer has a backend descriptor. */
+  descriptor: BuiltInExternalAppDescriptor | null,
+  { onEdit, onEditCustom, onChange }: ExternalAppHandlers
+): ConfiguredIntegration {
+  return {
+    logo: getAppTypeLogo(app.app_type),
+    name: app.name,
+    statusText: app.enabled
+      ? "Users connect this app from the Apps page"
+      : "Disabled — unavailable to users",
+    enabled: app.enabled,
+    toggleEnabled: async () => {
       await updateExternalApp(app.id, { enabled: !app.enabled });
       await onChange();
-    } catch (e) {
-      toast.error(
-        e instanceof Error
-          ? e.message
-          : `Failed to ${app.enabled ? "disable" : "enable"} "${app.name}"`
-      );
-    } finally {
-      setIsMutating(false);
-    }
-  }
+    },
+    // Edit only works for custom apps and built-ins whose descriptor still
+    // exists; orphan app_types can only be disabled/deleted.
+    edit:
+      app.app_type === "CUSTOM"
+        ? () => onEditCustom(app)
+        : descriptor
+          ? () => onEdit(descriptor)
+          : null,
+    // Onyx-managed built-ins are provisioned by Onyx.
+    remove: app.is_onyx_managed
+      ? null
+      : {
+          retainedCustomSkillCount: app.associated_skills.length,
+          run: async () => {
+            await deleteExternalApp(app.id);
+            await onChange();
+          },
+        },
+  };
+}
 
-  async function remove() {
+interface McpServerHandlers {
+  onEdit: () => void;
+  onChange: () => Promise<unknown>;
+}
+
+function mcpServerToIntegration(
+  server: MCPServer,
+  { onEdit, onChange }: McpServerHandlers
+): ConfiguredIntegration {
+  const enabled = server.available_in_craft ?? false;
+  return {
+    logo: getActionIcon(server.server_url, server.name),
+    name: server.name,
+    statusText: enabled
+      ? "Available to the Craft agent — tool calls follow their approval policies"
+      : "Disabled — unavailable to the Craft agent",
+    enabled,
+    toggleEnabled: async () => {
+      await updateMCPServer(server.id, { available_in_craft: !enabled });
+      await onChange();
+    },
+    edit: onEdit,
+    remove: null,
+  };
+}
+
+// ── Configured-integration card ────────────────────────────────────────
+
+interface IntegrationCardProps {
+  integration: ConfiguredIntegration;
+}
+
+function IntegrationCard({ integration }: IntegrationCardProps) {
+  const {
+    logo: Logo,
+    name,
+    statusText,
+    enabled,
+    toggleEnabled,
+    edit,
+    remove,
+  } = integration;
+  const [isMutating, setIsMutating] = useState(false);
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
+
+  async function run(
+    action: () => Promise<void>,
+    failureMessage: string
+  ): Promise<boolean> {
     setIsMutating(true);
     try {
-      await deleteExternalApp(app.id);
-      await onChange();
+      await action();
+      return true;
     } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : `Failed to delete "${app.name}"`
-      );
+      toast.error(e instanceof Error ? e.message : failureMessage);
+      return false;
     } finally {
       setIsMutating(false);
     }
@@ -226,53 +421,68 @@ function ConfiguredAppCard({
       <div className="flex items-center gap-3 w-full">
         <Logo className="w-8 h-8" />
         <div className="flex-1 flex flex-col gap-0.5">
-          <Text font="main-ui-action">{app.name}</Text>
+          <Text font="main-ui-action">{name}</Text>
           <Text font="secondary-body" color="text-03">
-            {app.enabled
-              ? "Users connect this app on the Apps page to make its skill available"
-              : "Disabled — unavailable to users"}
+            {statusText}
           </Text>
         </div>
         <div className="flex items-center gap-2">
-          {app.app_type === "CUSTOM" ? (
-            <Button
-              prominence="secondary"
-              onClick={() => onEditCustom(app)}
-              disabled={isMutating}
-            >
+          {edit && (
+            <Button prominence="secondary" onClick={edit} disabled={isMutating}>
               Edit
             </Button>
-          ) : (
-            descriptor && (
-              <Button
-                prominence="secondary"
-                onClick={() => onEdit(descriptor)}
-                disabled={isMutating}
-              >
-                Edit
-              </Button>
-            )
           )}
           <Button
             prominence="secondary"
-            onClick={toggleEnabled}
+            onClick={() =>
+              run(
+                toggleEnabled,
+                `Failed to ${enabled ? "disable" : "enable"} "${name}"`
+              )
+            }
             disabled={isMutating}
           >
-            {app.enabled ? "Disable" : "Enable"}
+            {enabled ? "Disable" : "Enable"}
           </Button>
-          {/* Onyx-managed built-ins are provisioned by Onyx. */}
-          {!app.is_onyx_managed && (
+          {remove && (
             <Button
               prominence="tertiary"
               variant="danger"
               icon={SvgTrash}
-              onClick={remove}
+              onClick={() => setConfirmingRemoval(true)}
               disabled={isMutating}
-              aria-label={`Delete ${app.name}`}
+              aria-label={`Delete ${name}`}
             />
           )}
         </div>
       </div>
+      {confirmingRemoval && remove && (
+        <ConfirmationModalLayout
+          icon={SvgTrash}
+          title={`Delete “${name}”?`}
+          description="This deletes the app configuration, connection data, and any provider-managed skills."
+          onClose={isMutating ? undefined : () => setConfirmingRemoval(false)}
+          submit={
+            <Button
+              variant="danger"
+              disabled={isMutating}
+              onClick={async () => {
+                if (await run(remove.run, `Failed to delete "${name}"`)) {
+                  setConfirmingRemoval(false);
+                }
+              }}
+            >
+              {isMutating ? "Deleting…" : "Delete app"}
+            </Button>
+          }
+        >
+          {remove.retainedCustomSkillCount === 0
+            ? "No associated custom skills will be deleted."
+            : `${remove.retainedCustomSkillCount} associated custom ${
+                remove.retainedCustomSkillCount === 1 ? "skill" : "skills"
+              } will be kept, unlinked from this app, and disabled for everyone.`}
+        </ConfirmationModalLayout>
+      )}
     </Card>
   );
 }
@@ -315,8 +525,7 @@ function CreateCustomAppCard({ onClick }: CreateCustomAppCardProps) {
         <div className="flex-1 flex flex-col gap-0.5">
           <Text font="main-ui-action">Custom app</Text>
           <Text font="secondary-body" color="text-03">
-            Bring your own integration: upload a skill bundle and configure its
-            credentials.
+            Configure credentials and network access for your own integration.
           </Text>
         </div>
         <Button icon={SvgPlus} onClick={onClick}>

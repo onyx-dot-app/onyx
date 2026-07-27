@@ -51,7 +51,7 @@ env:
   SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:ci"
   # Read by api_server on boot; Sandbox containers call back via this URL on the
   # compose bridge.
-  SANDBOX_API_SERVER_URL: "http://api_server:8080"
+  ONYX_SERVER_URL: "http://api_server:8080"
 
 jobs:
   changes:

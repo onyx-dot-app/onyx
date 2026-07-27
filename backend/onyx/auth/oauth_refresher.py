@@ -2,6 +2,7 @@ import asyncio
 import os
 import time
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
@@ -14,24 +15,25 @@ from onyx.configs.app_configs import (
     OAUTH_CLIENT_SECRET,
     OPENID_CONFIG_URL,
 )
+from onyx.db.enums import SSOProviderType
 from onyx.db.models import OAuthAccount, User
+from onyx.db.sso_provider import fetch_sso_provider_by_name_async
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Standard OAuth refresh token endpoints, keyed by `oauth_account.oauth_name`.
+GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+
+# Legacy env-credential refresh endpoints, keyed by oauth_account.oauth_name.
 REFRESH_ENDPOINTS: Dict[str, str] = {
-    "google": "https://oauth2.googleapis.com/token",
+    "google": GOOGLE_TOKEN_ENDPOINT,
 }
 
-# Token endpoint resolved from the configured OIDC discovery document.
-# Populated lazily on first successful fetch and re-used until the entry's
-# `fetched_at` exceeds OIDC_DISCOVERY_CACHE_TTL_SECONDS, at which point it is
-# re-fetched. The TTL guards against the IdP rotating its `token_endpoint`
-# without us noticing (rare for major IdPs but possible across tenant moves
-# or app-reg migrations).
-_OIDC_TOKEN_ENDPOINT_CACHE: Dict[str, str | float] = {}
+# Token endpoints from OIDC discovery, keyed by discovery URL. A None entry
+# negative-caches a failed fetch (short TTL) so a hard-down IdP is not re-tried
+# per request. Positive entries re-fetch after the long TTL (endpoint rotation).
+_OIDC_TOKEN_ENDPOINT_CACHE: Dict[str, tuple[Optional[str], float]] = {}
 
 # Default 1 hour: matches Microsoft Entra's default access-token lifetime, so
 # at worst one refresh fails after an endpoint rotation before we self-heal.
@@ -39,18 +41,31 @@ OIDC_DISCOVERY_CACHE_TTL_SECONDS: int = int(
     os.environ.get("OIDC_DISCOVERY_CACHE_TTL_SECONDS") or 3600
 )
 
-# Lazily-initialized lock guarding concurrent first-time fetches of the OIDC
-# discovery document. Created on first use so it binds to the running event
-# loop rather than at import time.
-_OIDC_TOKEN_ENDPOINT_LOCK: Optional[asyncio.Lock] = None
+# Negative entries retry quickly so a transient IdP outage self-heals fast.
+OIDC_DISCOVERY_NEGATIVE_TTL_SECONDS: int = 45
+
+# Per-discovery-URL locks so one IdP's hanging fetch never blocks another's.
+# Created on first use so they bind to the running event loop.
+_OIDC_DISCOVERY_LOCKS: Dict[str, asyncio.Lock] = {}
+_OIDC_DISCOVERY_LOCKS_GUARD: Optional[asyncio.Lock] = None
 
 
-def _get_oidc_lock() -> asyncio.Lock:
-    """Return the module-level OIDC discovery lock, creating it on first call."""
-    global _OIDC_TOKEN_ENDPOINT_LOCK
-    if _OIDC_TOKEN_ENDPOINT_LOCK is None:
-        _OIDC_TOKEN_ENDPOINT_LOCK = asyncio.Lock()
-    return _OIDC_TOKEN_ENDPOINT_LOCK
+def _get_discovery_locks_guard() -> asyncio.Lock:
+    """Lazy-init the meta-lock that protects the per-URL lock dict itself."""
+    global _OIDC_DISCOVERY_LOCKS_GUARD
+    if _OIDC_DISCOVERY_LOCKS_GUARD is None:
+        _OIDC_DISCOVERY_LOCKS_GUARD = asyncio.Lock()
+    return _OIDC_DISCOVERY_LOCKS_GUARD
+
+
+async def _get_discovery_lock(config_url: str) -> asyncio.Lock:
+    """Get-or-create the discovery lock for one discovery URL."""
+    async with _get_discovery_locks_guard():
+        lock = _OIDC_DISCOVERY_LOCKS.get(config_url)
+        if lock is None:
+            lock = asyncio.Lock()
+            _OIDC_DISCOVERY_LOCKS[config_url] = lock
+        return lock
 
 
 # Per-user locks coalescing concurrent token-refresh attempts. Without this,
@@ -81,69 +96,135 @@ async def _get_user_refresh_lock(user_id: uuid.UUID) -> asyncio.Lock:
         return lock
 
 
-def _cached_token_endpoint() -> Optional[str]:
-    """Return the cached endpoint if still within its TTL, else None."""
-    cached_url = _OIDC_TOKEN_ENDPOINT_CACHE.get("url")
-    fetched_at = _OIDC_TOKEN_ENDPOINT_CACHE.get("fetched_at")
-    if not isinstance(cached_url, str) or not isinstance(fetched_at, float):
+def _cached_token_endpoint(config_url: str) -> tuple[bool, Optional[str]]:
+    """(hit, endpoint) for a URL. A hit with None is a live negative entry."""
+    entry = _OIDC_TOKEN_ENDPOINT_CACHE.get(config_url)
+    if entry is None:
+        return False, None
+    endpoint, fetched_at = entry
+    ttl = (
+        OIDC_DISCOVERY_CACHE_TTL_SECONDS
+        if endpoint
+        else OIDC_DISCOVERY_NEGATIVE_TTL_SECONDS
+    )
+    if (time.monotonic() - fetched_at) >= ttl:
+        return False, None
+    return True, endpoint
+
+
+async def _get_oidc_token_endpoint(config_url: str) -> Optional[str]:
+    """Resolve token_endpoint from an OIDC discovery document. The per-URL
+    lock + double check coalesce concurrent fetches into one request."""
+    if not config_url:
         return None
-    if (time.monotonic() - fetched_at) >= OIDC_DISCOVERY_CACHE_TTL_SECONDS:
-        return None
-    return cached_url
-
-
-async def _get_oidc_token_endpoint() -> Optional[str]:
-    """Resolve the OAuth2 token endpoint for the configured OIDC provider.
-
-    Reads `token_endpoint` from the OPENID_CONFIG_URL discovery document so
-    refresh works for any OIDC provider (Microsoft Entra, Okta, Keycloak,
-    Auth0, ...) without hardcoding provider-specific URLs. The lock + double
-    check ensures concurrent callers (e.g. multiple tokens expiring at once
-    after a server restart) coalesce into a single discovery request, and the
-    TTL ensures we re-fetch periodically in case the IdP rotates the endpoint.
-    """
-    cached = _cached_token_endpoint()
-    if cached:
+    hit, cached = _cached_token_endpoint(config_url)
+    if hit:
         return cached
-    if not OPENID_CONFIG_URL:
-        return None
-    async with _get_oidc_lock():
+    async with await _get_discovery_lock(config_url):
         # Re-check inside the lock — another coroutine may have populated
         # the cache while we were waiting to acquire it.
-        cached = _cached_token_endpoint()
-        if cached:
+        hit, cached = _cached_token_endpoint(config_url)
+        if hit:
             return cached
+        token_endpoint: Optional[str] = None
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(OPENID_CONFIG_URL, timeout=10.0)
+                response = await client.get(config_url, timeout=10.0)
                 response.raise_for_status()
                 config: Dict[str, Any] = response.json()
+            raw_endpoint = config.get("token_endpoint")
+            if isinstance(raw_endpoint, str) and raw_endpoint:
+                token_endpoint = raw_endpoint
         except (httpx.HTTPError, ValueError) as e:
             # ValueError covers json.JSONDecodeError when the IdP returns a
             # non-JSON body (e.g. an HTML error page from a misconfigured URL).
             logger.warning("Failed to fetch OIDC discovery document: %s", e)
-            return None
-        token_endpoint = config.get("token_endpoint")
-        if isinstance(token_endpoint, str) and token_endpoint:
-            _OIDC_TOKEN_ENDPOINT_CACHE["url"] = token_endpoint
-            _OIDC_TOKEN_ENDPOINT_CACHE["fetched_at"] = time.monotonic()
-            return token_endpoint
-        return None
+        _OIDC_TOKEN_ENDPOINT_CACHE[config_url] = (token_endpoint, time.monotonic())
+        return token_endpoint
 
 
 async def _resolve_token_endpoint(provider: str) -> Optional[str]:
-    """Return the OAuth2 token endpoint URL for a given provider.
-
-    Falls back to the OIDC discovery document when the provider is "openid"
-    (the default name used by httpx_oauth's generic OIDC client) so any
-    OIDC-compliant identity provider supports token refresh, not just Google.
-    """
+    """Legacy env-credential resolution for accounts with no provider row:
+    "openid" resolves via the env discovery URL, other names are static."""
     static = REFRESH_ENDPOINTS.get(provider)
     if static:
         return static
     if provider == "openid":
-        return await _get_oidc_token_endpoint()
+        return await _get_oidc_token_endpoint(OPENID_CONFIG_URL)
     return None
+
+
+@dataclass(frozen=True)
+class _RefreshContext:
+    token_endpoint: str
+    client_id: str
+    # repr=False keeps the secret out of any future log/repr of the context.
+    client_secret: str = field(repr=False)
+
+
+async def _resolve_refresh_context(
+    db_session: AsyncSession, oauth_name: str
+) -> Optional[_RefreshContext]:
+    """Endpoint + client credentials for an account: the provider row matching
+    oauth_name wins, rowless accounts fall back to the legacy env config."""
+    try:
+        provider = await fetch_sso_provider_by_name_async(db_session, oauth_name)
+    except Exception:
+        # A failed lookup may have aborted the shared transaction that later
+        # persists the token: roll back and skip, or a rotating IdP's fresh
+        # refresh token would be minted and then lost.
+        logger.exception(
+            "SSO provider lookup failed for %s; skipping token refresh", oauth_name
+        )
+        try:
+            await db_session.rollback()
+        except Exception:
+            logger.exception("Session rollback failed after provider lookup error")
+        return None
+
+    if provider is not None and provider.provider_type is not SSOProviderType.SAML:
+        try:
+            raw_config = (
+                provider.config.get_value(apply_mask=False) if provider.config else None
+            )
+            config: Dict[str, Any] = raw_config or {}
+        except Exception:
+            # Never fall back to env creds (a different app registration).
+            logger.exception(
+                "Could not read SSO provider %s config (re-encryption needed after "
+                "a key rotation?); token refresh disabled for its accounts",
+                oauth_name,
+            )
+            return None
+        client_id = config.get("client_id") or ""
+        client_secret = config.get("client_secret") or ""
+        endpoint = (
+            GOOGLE_TOKEN_ENDPOINT
+            if provider.provider_type is SSOProviderType.GOOGLE_OAUTH
+            else await _get_oidc_token_endpoint(config.get("openid_config_url") or "")
+        )
+        if endpoint and client_id and client_secret:
+            return _RefreshContext(endpoint, client_id, client_secret)
+        logger.error(
+            "SSO provider %s cannot refresh tokens: has_endpoint=%s "
+            "has_client_id=%s has_client_secret=%s",
+            oauth_name,
+            bool(endpoint),
+            bool(client_id),
+            bool(client_secret),
+        )
+        return None
+
+    endpoint = await _resolve_token_endpoint(oauth_name)
+    if not endpoint:
+        logger.warning("Refresh endpoint not configured for provider: %s", oauth_name)
+        return None
+    if not OAUTH_CLIENT_ID or not OAUTH_CLIENT_SECRET:
+        logger.error(
+            "No OAuth credentials configured to refresh provider: %s", oauth_name
+        )
+        return None
+    return _RefreshContext(endpoint, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET)
 
 
 # NOTE: Keeping this as a utility function for potential future debugging,
@@ -182,7 +263,7 @@ async def _test_expire_oauth_token(
 async def refresh_oauth_token(
     user: User,
     oauth_account: OAuthAccount,
-    db_session: AsyncSession,  # noqa: ARG001
+    db_session: AsyncSession,
     user_manager: BaseUserManager[User, Any],
 ) -> bool:
     """
@@ -198,9 +279,8 @@ async def refresh_oauth_token(
         return False
 
     provider = oauth_account.oauth_name
-    token_endpoint = await _resolve_token_endpoint(provider)
-    if not token_endpoint:
-        logger.warning("Refresh endpoint not configured for provider: %s", provider)
+    context = await _resolve_refresh_context(db_session, provider)
+    if context is None:
         return False
 
     try:
@@ -208,10 +288,10 @@ async def refresh_oauth_token(
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                token_endpoint,
+                context.token_endpoint,
                 data={
-                    "client_id": OAUTH_CLIENT_ID,
-                    "client_secret": OAUTH_CLIENT_SECRET,
+                    "client_id": context.client_id,
+                    "client_secret": context.client_secret,
                     "refresh_token": oauth_account.refresh_token,
                     "grant_type": "refresh_token",
                 },

@@ -59,6 +59,7 @@ function makeSession(messages: BackendMessage[]): BackendChatSession {
     time_updated: "2026-01-01T00:00:00Z",
     shared_status: ChatSessionSharedStatus.Private,
     current_temperature_override: null,
+    current_reasoning_effort_override: null,
     owner_name: null,
     packets: [],
   };

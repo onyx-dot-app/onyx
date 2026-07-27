@@ -121,7 +121,10 @@ export const SWR_KEYS = {
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
   adminMcpServers: "/api/admin/mcp/servers",
+  adminMcpServerToolSnapshots: (serverId: number) =>
+    `/api/admin/mcp/server/${serverId}/tools/snapshots?source=db`,
   mcpServers: "/api/mcp/servers",
+  mcpServersCraft: "/api/mcp/servers/craft",
   personaMcpServers: (personaId: number) =>
     `/api/mcp/servers/persona/${personaId}`,
 

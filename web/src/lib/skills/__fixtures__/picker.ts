@@ -26,6 +26,7 @@ export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
     group_shares: [],
     public_permission: null,
     user_permission: "VIEWER",
+    external_app: null,
     ...over,
   };
 }
@@ -52,6 +53,7 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
     group_shares: [],
     public_permission: "VIEWER",
     user_permission: "VIEWER",
+    external_app: null,
     ...over,
   };
 }

@@ -1,11 +1,11 @@
 "use client";
 
 import React from "react";
+import { PasswordInputTypeIn } from "@opal/components";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
-import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,

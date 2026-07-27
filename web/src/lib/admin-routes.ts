@@ -230,6 +230,12 @@ export const ADMIN_ROUTES = {
     title: "Custom Analytics",
     sidebarLabel: "Custom Analytics",
   },
+  EXPORT_LOGS: {
+    path: "/admin/export-logs",
+    icon: SvgDownload,
+    title: "Export Logs",
+    sidebarLabel: "Export Logs",
+  },
   THEME: {
     path: "/admin/theme",
     icon: SvgPaintBrush,
@@ -259,12 +265,6 @@ export const ADMIN_ROUTES = {
     icon: SvgUserKey,
     title: "OAuth Test",
     sidebarLabel: "OAuth Test",
-  },
-  DEBUG: {
-    path: "/admin/debug",
-    icon: SvgDownload,
-    title: "Debug Logs",
-    sidebarLabel: "Debug Logs",
   },
   SECURITY_HARDENING: {
     path: "/admin/security",

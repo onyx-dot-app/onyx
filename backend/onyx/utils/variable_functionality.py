@@ -63,7 +63,12 @@ def set_is_ee_based_on_env_variable() -> None:
         )
         global_version.set_ee()
     elif _LICENSE_ENFORCEMENT_ENABLED:
-        logger.notice("Enterprise Edition enabled via LICENSE_ENFORCEMENT_ENABLED")
+        logger.notice(
+            "License enforcement is enabled (LICENSE_ENFORCEMENT_ENABLED). "
+            "Enterprise Edition code is loaded, but paid features stay locked "
+            "until a valid license is applied. Without a license this "
+            "deployment behaves as Community Edition."
+        )
         global_version.set_ee()
 
 

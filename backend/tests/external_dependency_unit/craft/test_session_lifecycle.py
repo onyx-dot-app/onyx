@@ -26,11 +26,15 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.db.build_session import (
     allocate_nextjs_port,
     get_user_build_sessions,
-    skills_are_stale,
+    session_runtime_stale,
 )
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
+from onyx.server.features.build.sandbox.util.mcp_config import (
+    craft_mcp_fingerprint,
+    resolve_craft_mcp_servers,
+)
 from onyx.server.features.build.session import locks as session_locks
 from onyx.server.features.build.session.api import (
     reload_session_skills,
@@ -42,7 +46,10 @@ from onyx.server.features.build.session.locks import (
     session_creation_lock,
 )
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.features.build.session.sandbox_lifecycle import hydrate_managed_content
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    hydrate_managed_content,
+    refresh_mcp_config_hashes_for_users,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.stubs import StubSandboxManager
 
@@ -102,8 +109,65 @@ def test_warm_content_hash_change_marks_only_live_session_stale(
     )
     db_session.commit()
     db_session.refresh(sandbox_row)
-    assert skills_are_stale(existing_session, sandbox_row)
-    assert not skills_are_stale(new_session, sandbox_row)
+    assert session_runtime_stale(existing_session, sandbox_row)
+    assert not session_runtime_stale(new_session, sandbox_row)
+
+
+def test_mcp_config_hash_change_marks_session_stale_independent_of_skills(
+    db_session: Session,
+    test_user: User,
+    sandbox: Callable[..., Sandbox],
+    stub_sandbox_manager: StubSandboxManager,
+) -> None:
+    sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+
+    assert hydrate_managed_content(
+        stub_sandbox_manager,
+        sandbox_row.id,
+        test_user,
+        db_session,
+        connectable_apps_section="apps",
+        skills_files={"a/SKILL.md": b"x"},
+    )
+    db_session.commit()
+    db_session.refresh(sandbox_row)
+    # Provisioning stamps the MCP fingerprint alongside the skills hash.
+    assert sandbox_row.mcp_config_hash is not None
+
+    session = BuildSession(
+        user_id=test_user.id,
+        status=BuildSessionStatus.ACTIVE,
+        opencode_session_id="oc",
+        skills_hash=sandbox_row.skills_hash,
+        mcp_config_hash=sandbox_row.mcp_config_hash,
+    )
+    db_session.add(session)
+    db_session.commit()
+    assert not session_runtime_stale(session, sandbox_row)
+
+    # An MCP-config change bumps only mcp_config_hash — the session goes stale
+    # while its skill payload (skills_hash) is untouched.
+    sandbox_row.mcp_config_hash = "different-mcp-fingerprint"
+    db_session.flush()
+    assert session.skills_hash == sandbox_row.skills_hash
+    assert session_runtime_stale(session, sandbox_row)
+
+
+def test_refresh_mcp_config_hashes_stamps_current_fingerprint(
+    db_session: Session,
+    test_user: User,
+    sandbox: Callable[..., Sandbox],
+) -> None:
+    sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    sandbox_row.mcp_config_hash = "stale"
+    db_session.commit()
+
+    refresh_mcp_config_hashes_for_users({test_user.id}, db_session)
+
+    db_session.refresh(sandbox_row)
+    expected = craft_mcp_fingerprint(resolve_craft_mcp_servers(db_session, test_user))
+    assert sandbox_row.mcp_config_hash == expected
 
 
 class TestCreateSession:
@@ -128,6 +192,7 @@ class TestCreateSession:
         )
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         sm = session_manager_with_stub
         build_session = sm.create_session__no_commit(user_id=test_user.id)
@@ -172,6 +237,7 @@ class TestCreateSession:
         stub_sandbox_manager.health_check_returns = True
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
         # provision_returns NOT configured — any provision() call would raise.
 
         sm = session_manager_with_stub
@@ -284,6 +350,7 @@ class TestEmptySessionReuse:
         stub_sandbox_manager.cleanup_session_workspace_silent = True
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         sm = session_manager_with_stub
         new_session = sm.get_or_create_empty_session(user_id=test_user.id)
@@ -411,6 +478,7 @@ class TestReloadSessionSkills:
         )
         stub_sandbox_manager.regenerate_session_config_silent = True
         stub_sandbox_manager.dispose_opencode_instance_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         response = reload_session_skills(session_row.id, test_user, db_session)
 
@@ -458,7 +526,7 @@ class TestReloadSessionSkills:
 
         assert exc_info.value.error_code == OnyxErrorCode.CONFLICT
         db_session.refresh(session_row)
-        assert skills_are_stale(session_row, sandbox_row)
+        assert session_runtime_stale(session_row, sandbox_row)
         assert stub_sandbox_manager.dispose_opencode_instance_count == 0
 
 
@@ -1022,6 +1090,7 @@ class TestRestoreSession:
         stub_sandbox_manager.session_workspace_exists_returns = True
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
         stub_sandbox_manager.regenerate_session_config_silent = True
         stub_sandbox_manager.dispose_opencode_instance_silent = True
 
@@ -1081,6 +1150,7 @@ class TestRestoreSession:
         stub_sandbox_manager.session_workspace_exists_returns = False
         stub_sandbox_manager.restore_snapshot_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.write_sandbox_file_silent = True
 
         monkeypatch.setattr(
             "onyx.server.features.build.session.api.get_sandbox_manager",

@@ -919,6 +919,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             onAdd={multiModel.addModel}
                             onRemove={multiModel.removeModel}
                             onReplace={multiModel.replaceModel}
+                            temperatureManager={llmManager}
+                            reasoningManager={llmManager}
                           />
                         )}
                     </Section>
@@ -999,6 +1001,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             onAdd={multiModel.addModel}
                             onRemove={multiModel.removeModel}
                             onReplace={multiModel.replaceModel}
+                            temperatureManager={llmManager}
+                            reasoningManager={llmManager}
                           />
                         </div>
                       )}

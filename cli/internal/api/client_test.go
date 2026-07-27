@@ -29,7 +29,7 @@ func TestSearch_Success(t *testing.T) {
 		if r.Method != "POST" {
 			t.Errorf("method = %s, want POST", r.Method)
 		}
-		if !strings.HasSuffix(r.URL.Path, "/search") {
+		if r.URL.Path != "/api/search" {
 			t.Errorf("path = %s, want /api/search", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")

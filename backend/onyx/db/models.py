@@ -117,6 +117,7 @@ from onyx.db.pydantic_type import PydanticListType, PydanticType
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.security.models import SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
@@ -3004,6 +3005,16 @@ Messages Tables
 
 class ChatSession(Base):
     __tablename__ = "chat_session"
+    __table_args__ = (
+        # Backs the chat-history sidebar query: filter on (user_id,
+        # onyxbot_flow), order by time_updated DESC.
+        Index(
+            "ix_chat_session_user_id_onyxbot_flow_time_updated",
+            "user_id",
+            "onyxbot_flow",
+            desc("time_updated"),
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -3051,6 +3062,15 @@ class ChatSession(Base):
 
     # The latest temperature override specified by the user
     temperature_override: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # User-pinned reasoning level. NULL means no override, AUTO is never stored.
+    reasoning_effort_override: Mapped[ReasoningEffort | None] = mapped_column(
+        Enum(
+            ReasoningEffort,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
 
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
@@ -3084,6 +3104,12 @@ class ChatMessage(Base):
     """
 
     __tablename__ = "chat_message"
+    __table_args__ = (
+        # Backs every session-scoped message lookup (history replay, the
+        # failed-session check, retention/GC deletes and the cascade delete of
+        # a session's messages), which otherwise seq-scan chat_message.
+        Index("ix_chat_message_chat_session_id", "chat_session_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
@@ -4583,7 +4609,7 @@ class FileContent(Base):
 
 
 class Skill(Base):
-    """A custom (admin-uploaded) skill.
+    """A built-in or custom skill.
 
     Skill metadata is shared schema state. Group-based grants use user_group,
     which is available in the base migration chain even though its ORM model
@@ -4668,6 +4694,10 @@ class Skill(Base):
             name="ck_skill_definition_source",
         ),
     )
+
+    @property
+    def is_custom(self) -> bool:
+        return self.built_in_skill_id is None
 
 
 """
@@ -5510,6 +5540,8 @@ class MCPConnectionConfig(Base):
     #   "refresh_token": "<token>",  # OAuth only
     #   "access_token": "<token>",   # OAuth only
     #   "headers": {"key": "value", "key2": "value2"},
+    #   "header_template": {"Authorization": "Bearer {api_key}"}, # shared API-token config
+    #   "api_token": "<token>",  # shared API-token config
     #   "header_substitutions": {"<key>": "<value>"}, # stored header template substitutions
     #   "request_body": ["path/in/body:value", "path2/in2/body2:value2"] # TBD
     #   "client_id": "<id>",  # For dynamically registered OAuth clients
@@ -5911,6 +5943,7 @@ class BuildSession(Base):
     agent_provider: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_model: Mapped[str | None] = mapped_column(String, nullable=True)
     skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mcp_config_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
@@ -5965,6 +5998,7 @@ class Sandbox(Base):
         DateTime(timezone=True), nullable=True
     )
     skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mcp_config_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True

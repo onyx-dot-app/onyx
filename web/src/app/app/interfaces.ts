@@ -5,6 +5,7 @@ import {
   StreamStopReason,
 } from "@/lib/search/interfaces";
 import { Packet } from "./services/streamingModels";
+import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 
 export type FeedbackType = "like" | "dislike";
 
@@ -59,6 +60,7 @@ export interface ChatSessionSummary {
   shared_status: ChatSessionSharedStatus;
   current_alternate_model: string | null;
   current_temperature_override: number | null;
+  current_reasoning_effort_override: ReasoningEffortOverride | null;
   highlights?: string[];
 }
 
@@ -142,6 +144,7 @@ export interface ChatSession {
   project_id: number | null;
   current_alternate_model: string;
   current_temperature_override: number | null;
+  current_reasoning_effort_override: ReasoningEffortOverride | null;
 }
 
 export interface SearchSession {
@@ -203,6 +206,7 @@ export interface BackendChatSession {
   time_updated: string;
   shared_status: ChatSessionSharedStatus;
   current_temperature_override: number | null;
+  current_reasoning_effort_override: ReasoningEffortOverride | null;
   current_alternate_model?: string;
 
   owner_name: string | null;
@@ -222,6 +226,8 @@ export function toChatSession(backend: BackendChatSession): ChatSession {
     project_id: null,
     current_alternate_model: backend.current_alternate_model ?? "",
     current_temperature_override: backend.current_temperature_override,
+    current_reasoning_effort_override:
+      backend.current_reasoning_effort_override,
   };
 }
 
