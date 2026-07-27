@@ -9,8 +9,8 @@ to end in /v1. These tests lock that mapping down.
 from unittest.mock import patch
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import LanguageModelInput
-from onyx.llm.models import UserMessage
+from onyx.llm.custom_config_mapping import UI_ONLY_CONFIG_KEYS
+from onyx.llm.models import LanguageModelInput, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import PORTKEY_API_MODE_CONFIG_KEY
 
@@ -98,10 +98,10 @@ def test_messages_mode_strips_trailing_slash_but_keeps_bare_host() -> None:
     assert llm._api_base == "https://api.portkey.ai"
 
 
-def test_api_mode_is_popped_from_custom_config() -> None:
-    # The mode must not leak into os.environ via temporary_env_and_lock, so it is
-    # stripped from _custom_config after being read.
+def test_api_mode_is_never_injected_into_environment() -> None:
+    # The mode is UI-only form state: it must be readable for routing but must
+    # never reach os.environ via temporary_env_and_lock at call time.
     llm = _make_portkey_llm("messages", "https://api.portkey.ai")
-    assert llm._custom_config is not None
-    assert PORTKEY_API_MODE_CONFIG_KEY not in llm._custom_config
     assert llm._portkey_api_mode == "messages"
+    assert PORTKEY_API_MODE_CONFIG_KEY in UI_ONLY_CONFIG_KEYS
+    assert PORTKEY_API_MODE_CONFIG_KEY not in llm._env_only_custom_config

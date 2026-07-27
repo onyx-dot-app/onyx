@@ -51,8 +51,8 @@ from onyx.llm.well_known_providers.constants import (
     PORTKEY_API_MODE_MESSAGES,
     PORTKEY_API_MODE_RESPONSES,
     PORTKEY_DEFAULT_API_MODE,
+    VERTEX_LOCATION_KWARG,
 )
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.llm_utils import record_llm_request_params
 from onyx.utils.encryption import mask_env_value_for_logging, mask_string
 from onyx.utils.logger import setup_logger

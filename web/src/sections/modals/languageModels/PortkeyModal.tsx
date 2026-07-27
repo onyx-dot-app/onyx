@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider } from "@opal/layouts";
+import { InputDivider, toast } from "@opal/layouts";
 import { Tabs, Text, Button } from "@opal/components";
 import { SvgHistory } from "@opal/icons";
 import {
@@ -30,7 +30,6 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 // The two OpenAI-compatible surfaces (Chat Completions, Responses) hit /v1; the
@@ -67,7 +66,11 @@ const API_MODE_TABS: {
     subtitle: "OpenAI-compatible",
   },
   { value: "responses", title: "Responses API", subtitle: "OpenAI-compatible" },
-  { value: "messages", title: "Messages API", subtitle: "Anthropic-compatible" },
+  {
+    value: "messages",
+    title: "Messages API",
+    subtitle: "Anthropic-compatible",
+  },
 ];
 
 interface PortkeyModalValues extends BaseLLMFormValues {
@@ -88,8 +91,9 @@ function PortkeyModalInternals({
   const { setFieldValue, values } = formikProps;
 
   const mode =
-    (values.custom_config?.[PORTKEY_API_MODE_KEY] as PortkeyApiMode | undefined) ??
-    DEFAULT_API_MODE;
+    (values.custom_config?.[PORTKEY_API_MODE_KEY] as
+      | PortkeyApiMode
+      | undefined) ?? DEFAULT_API_MODE;
   const modeDefaultBase = defaultBaseForMode(mode);
   const isFetchDisabled = !values.api_base;
   const isBaseDefault = values.api_base === modeDefaultBase;
