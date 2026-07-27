@@ -5,11 +5,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.background.celery.tasks.index_reclaim.tasks import enqueue_index_reclaim
 from onyx.background.celery.tasks.port.tasks import (
     PortResumeResult,
     resume_paused_port_unit,
 )
-from onyx.background.celery.tasks.index_reclaim.tasks import enqueue_index_reclaim
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import (
     DISABLE_INDEX_UPDATE_ON_SWAP,
