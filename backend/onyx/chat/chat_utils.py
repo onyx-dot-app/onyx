@@ -463,7 +463,7 @@ def load_chat_file(
 
     # Look up the UserFile row first (when one exists) — it supplies the token
     # count and tells us whether the user-file worker is still processing.
-    user_file_id_str = file_descriptor.get("user_file_id")
+    user_file_id_str = file_descriptor.get("user_file_id", "")
     user_file: UserFile | None = None
     if user_file_id_str:
         try:
