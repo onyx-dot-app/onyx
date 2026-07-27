@@ -118,7 +118,11 @@ export default function ReindexProgressBanner({
             </div>
             {onCancel && (
               <div className="shrink-0">
-                <Button variant="danger" prominence="primary" onClick={onCancel}>
+                <Button
+                  variant="danger"
+                  prominence="primary"
+                  onClick={onCancel}
+                >
                   {t("progressBanner.cancelButton.label")}
                 </Button>
               </div>
