@@ -5,6 +5,7 @@ import hashlib
 import ipaddress
 import json
 import time
+from collections.abc import Mapping
 from enum import Enum
 from secrets import token_urlsafe
 from typing import Literal
@@ -48,6 +49,7 @@ from onyx.db.gated_app import (
 )
 from onyx.db.mcp import (
     affected_user_ids_for_mcp_server,
+    can_resolve_mcp_credentials,
     create_connection_config,
     create_mcp_server__no_commit,
     delete_all_user_connection_configs_for_server_no_commit,
@@ -63,6 +65,7 @@ from onyx.db.mcp import (
     get_mcp_servers_for_persona,
     get_server_auth_template,
     get_user_connection_config,
+    get_user_connection_configs,
     update_connection_config,
     update_mcp_server__no_commit,
     upsert_user_connection_config,
@@ -1264,8 +1267,16 @@ def _db_mcp_server_to_api_mcp_server(
     db: Session,
     request_user: User | None,
     include_auth_config: bool = False,
+    craft_connected: bool | None = None,
+    user_configs: Mapping[int, MCPConnectionConfig] | None = None,
 ) -> MCPServer:
-    """Convert database MCP server to API model"""
+    """Convert database MCP server to API model.
+
+    `user_configs` lets a caller converting many servers pre-load the per-user
+    credential rows in one query (see `get_user_connection_configs`) instead of
+    one per server. It must cover every server the caller converts — a miss reads
+    as no stored credential, not as unknown.
+    """
 
     email = request_user.email if request_user else ""
 
@@ -1324,7 +1335,11 @@ def _db_mcp_server_to_api_mcp_server(
                         "No admin client info found for server %s", db_server.name
                     )
     else:  # currently: per user auth using api key OR oauth
-        user_config = get_user_connection_config(db_server.id, email, db)
+        user_config = (
+            user_configs.get(db_server.id)
+            if user_configs is not None
+            else get_user_connection_config(db_server.id, email, db)
+        )
         # API-token rows exist only once credentials are submitted; OAuth rows
         # are created before token exchange, so require tokens there.
         if db_server.auth_type == MCPAuthenticationType.OAUTH:
@@ -1444,6 +1459,7 @@ def _db_mcp_server_to_api_mcp_server(
         oauth_additional_auth_params=db_server.oauth_additional_auth_params,
         is_authenticated=is_authenticated,
         user_authenticated=user_authenticated,
+        craft_connected=craft_connected,
         status=db_server.status,
         is_public=db_server.is_public,
         groups=[group.id for group in db_server.user_groups],
@@ -1517,10 +1533,25 @@ def get_craft_mcp_servers_for_user(
     the current user's connection/auth state. Craft reads the same credential
     rows as chat, so a server connected in either surface shows as
     authenticated here.
+
+    `craft_connected` is the only field here that answers "will this server
+    actually reach the user's sessions" — see `resolve_craft_mcp_servers`, which
+    filters emission on the same predicate.
     """
     db_mcp_servers = get_craft_enabled_mcp_servers(db, user)
+    user_configs = get_user_connection_configs(
+        [s.id for s in db_mcp_servers], user.email, db
+    )
     mcp_servers = [
-        _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
+        _db_mcp_server_to_api_mcp_server(
+            db_server,
+            db,
+            request_user=user,
+            craft_connected=can_resolve_mcp_credentials(
+                db_server, user, db, user_configs=user_configs
+            ),
+            user_configs=user_configs,
+        )
         for db_server in db_mcp_servers
     ]
     return MCPServersResponse(mcp_servers=mcp_servers)

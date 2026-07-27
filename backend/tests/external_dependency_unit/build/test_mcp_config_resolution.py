@@ -30,6 +30,8 @@ from onyx.server.features.build.sandbox.util.mcp_config import (
     craft_mcp_fingerprint,
     resolve_craft_mcp_servers,
 )
+from onyx.server.features.mcp.api import get_craft_mcp_servers_for_user
+from onyx.server.features.mcp.models import MCPConnectionData
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -160,6 +162,145 @@ def test_no_auth_server_emitted_with_no_credentials_stored(
     assert craft.id in {
         c.server_id for c in resolve_craft_mcp_servers(db_session, user)
     }
+
+
+_ADMIN_HEADERS: MCPConnectionData = {"headers": {"Authorization": "Bearer admin-token"}}
+# What an admin-performed OAuth setup actually stores: the registered client, no
+# tokens. Tokens from the exchange land in the *user's* config, which the ADMIN
+# performer branch never reads — so the client alone authenticates nobody.
+_ADMIN_OAUTH_CLIENT: MCPConnectionData = {
+    "headers": {},
+    "client_info": {"client_id": "abc123"},
+}
+
+# label, auth type, performer, admin config contents, per-user credential, connected
+_LISTING_CASES: list[
+    tuple[
+        str,
+        MCPAuthenticationType,
+        MCPAuthenticationPerformer,
+        MCPConnectionData | None,
+        bool,
+        bool,
+    ]
+] = [
+    (
+        "no auth",
+        MCPAuthenticationType.NONE,
+        MCPAuthenticationPerformer.ADMIN,
+        None,
+        False,
+        True,
+    ),
+    (
+        "admin api token",
+        MCPAuthenticationType.API_TOKEN,
+        MCPAuthenticationPerformer.ADMIN,
+        _ADMIN_HEADERS,
+        False,
+        True,
+    ),
+    (
+        "admin api token, nothing configured",
+        MCPAuthenticationType.API_TOKEN,
+        MCPAuthenticationPerformer.ADMIN,
+        None,
+        False,
+        False,
+    ),
+    (
+        "admin oauth, client registered but no token exchanged",
+        MCPAuthenticationType.OAUTH,
+        MCPAuthenticationPerformer.ADMIN,
+        _ADMIN_OAUTH_CLIENT,
+        False,
+        False,
+    ),
+    (
+        "per-user api token, connected",
+        MCPAuthenticationType.API_TOKEN,
+        MCPAuthenticationPerformer.PER_USER,
+        None,
+        True,
+        True,
+    ),
+    (
+        "per-user api token, disconnected",
+        MCPAuthenticationType.API_TOKEN,
+        MCPAuthenticationPerformer.PER_USER,
+        None,
+        False,
+        False,
+    ),
+    # No login OAuth token to pass through, so the proxy cannot authenticate this
+    # user even though there is nothing for them to connect.
+    (
+        "pass-through oauth, password-login user",
+        MCPAuthenticationType.PT_OAUTH,
+        MCPAuthenticationPerformer.ADMIN,
+        None,
+        False,
+        False,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "label,auth_type,performer,admin_config_data,with_user_config,expected_connected",
+    _LISTING_CASES,
+    ids=[case[0] for case in _LISTING_CASES],
+)
+def test_craft_listing_agrees_with_session_emission(
+    db_session: Session,
+    craft_server: tuple[MCPServer, MCPServer],
+    label: str,
+    auth_type: MCPAuthenticationType,
+    performer: MCPAuthenticationPerformer,
+    admin_config_data: MCPConnectionData | None,
+    with_user_config: bool,
+    expected_connected: bool,
+) -> None:
+    """The Apps page reads `craft_connected`; the sandbox config reads
+    `resolve_craft_mcp_servers`. A disagreement means a green "Connected" check on
+    a server the session never gets, so pin the two together across the auth
+    matrix rather than trusting them to stay in sync by hand.
+
+    `is_authenticated` / `user_authenticated` cannot serve this purpose: they
+    report whether a config row exists, not whether it yields auth headers.
+    """
+    craft, _ = craft_server
+    user = create_test_user(db_session, "mcp_listing")
+    craft.auth_type = auth_type
+    craft.auth_performer = performer
+    if admin_config_data is not None:
+        craft.admin_connection_config = create_connection_config(
+            admin_config_data,
+            db_session,
+            mcp_server_id=craft.id,
+            user_email="",
+        )
+    if with_user_config:
+        create_connection_config(
+            {"headers": {"Authorization": "Bearer user-token"}},
+            db_session,
+            mcp_server_id=craft.id,
+            user_email=user.email,
+        )
+    db_session.commit()
+
+    emitted = craft.id in {
+        c.server_id for c in resolve_craft_mcp_servers(db_session, user)
+    }
+    listed = {
+        server.id: server.craft_connected
+        for server in get_craft_mcp_servers_for_user(
+            db=db_session, user=user
+        ).mcp_servers
+    }
+
+    assert craft.id in listed, f"{label}: server missing from the craft listing"
+    assert emitted is expected_connected, f"{label}: emission"
+    assert listed[craft.id] is expected_connected, f"{label}: listing"
 
 
 def test_query_count_flat_in_number_of_servers(

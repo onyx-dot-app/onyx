@@ -140,6 +140,8 @@ def test_craft_mcp_server_listing(
     ]
     assert len(listed) == 1
     assert listed[0]["available_in_craft"] is False
+    # Craft-resolvability is only computed for the craft listing.
+    assert listed[0]["craft_connected"] is None
 
     # Admin toggles the flag on
     toggle_response = client.patch(
@@ -158,6 +160,8 @@ def test_craft_mcp_server_listing(
     assert entry["available_in_craft"] is True
     assert entry["user_authenticated"] is False
     assert entry["is_authenticated"] is False
+    # Nothing for the proxy to authenticate with, so Craft would not emit it.
+    assert entry["craft_connected"] is False
 
     # User connects through the chat-side credential endpoint...
     credentials_response = client.post(
@@ -176,6 +180,7 @@ def test_craft_mcp_server_listing(
     entry = _get_craft_servers(basic_user)[0]
     assert entry["user_authenticated"] is True
     assert entry["is_authenticated"] is True
+    assert entry["craft_connected"] is True
 
     # Toggling the flag off removes the server from the craft listing
     toggle_off_response = client.patch(
