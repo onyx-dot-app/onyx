@@ -317,38 +317,49 @@ def cancel_new_embedding(
 ) -> None:
     secondary_search_settings = get_secondary_search_settings(db_session)
 
-    if secondary_search_settings:
-        expire_index_attempts(
-            search_settings_id=secondary_search_settings.id, db_session=db_session
-        )
+    if secondary_search_settings is None:
+        # No secondary FUTURE to cancel. An INSTANT switchover already promoted the new
+        # model to PRESENT and backfills it in place, so there is nothing to revert to —
+        # surface that instead of silently succeeding (the UI would show a false "canceled").
+        if _active_port_settings(db_session) is not None:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "The new embedding model is already live (INSTANT switchover); an "
+                "in-progress reindex-port backfill can no longer be reverted.",
+            )
+        return
 
-        update_search_settings_status(
-            search_settings=secondary_search_settings,
-            new_status=IndexModelStatus.PAST,
-            db_session=db_session,
-        )
+    expire_index_attempts(
+        search_settings_id=secondary_search_settings.id, db_session=db_session
+    )
 
-        # Stop any in-flight reindex port for the canceled FUTURE; the running
-        # task stops at its next batch boundary once it sees CANCELED.
-        cancel_active_port_attempts(
-            db_session, search_settings_id=secondary_search_settings.id
-        )
+    update_search_settings_status(
+        search_settings=secondary_search_settings,
+        new_status=IndexModelStatus.PAST,
+        db_session=db_session,
+    )
 
-        # remove the old index from the vector db
-        primary_search_settings = get_current_search_settings(db_session)
+    # Stop any in-flight reindex port for the canceled FUTURE; the running
+    # task stops at its next batch boundary once it sees CANCELED.
+    cancel_active_port_attempts(
+        db_session, search_settings_id=secondary_search_settings.id
+    )
 
-        # The canceled reindex stamped reclaim intent on this PRESENT (the would-be PAST);
-        # clear it so a later swap can't act on a stale consent set. No-op if unset.
-        clear_reclaim_intent__no_commit(db_session, primary_search_settings.id)
-        db_session.commit()
+    # remove the old index from the vector db
+    primary_search_settings = get_current_search_settings(db_session)
 
-        document_index = get_default_document_index(
-            primary_search_settings, None, db_session
-        )
-        document_index.verify_and_create_index_if_necessary(
-            embedding_dim=primary_search_settings.final_embedding_dim,
-            embedding_precision=primary_search_settings.embedding_precision,
-        )
+    # The canceled reindex stamped reclaim intent on this PRESENT (the would-be PAST);
+    # clear it so a later swap can't act on a stale consent set. No-op if unset.
+    clear_reclaim_intent__no_commit(db_session, primary_search_settings.id)
+    db_session.commit()
+
+    document_index = get_default_document_index(
+        primary_search_settings, None, db_session
+    )
+    document_index.verify_and_create_index_if_necessary(
+        embedding_dim=primary_search_settings.final_embedding_dim,
+        embedding_precision=primary_search_settings.embedding_precision,
+    )
 
 
 @router.delete("/delete-search-settings")
