@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { InputChipStrip } from "@/sections/input/InputChipStrip";
 import { UploadFileStatus } from "@/app/craft/contexts/UploadFilesContext";
 import { pickerEntryKey, type PickerEntry } from "@/lib/skills/picker";

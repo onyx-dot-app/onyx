@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { BasicModalFooter, Button, Modal } from "@opal/components";
 import { SvgSettings, SvgTrash } from "@opal/icons";
 

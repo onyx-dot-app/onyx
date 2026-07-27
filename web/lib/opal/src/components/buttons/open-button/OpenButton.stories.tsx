@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { OpenButton } from "@opal/components";
 import { Disabled as DisabledProvider } from "@opal/core";
 import { SvgSettings } from "@opal/icons";

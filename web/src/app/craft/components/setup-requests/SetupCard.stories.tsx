@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import SetupCard from "@/app/craft/components/setup-requests/SetupCard";
 import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Button, useCreateModal } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { SvgTrash } from "@opal/icons";

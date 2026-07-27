@@ -34,13 +34,13 @@ src/refresh-components/buttons/
 ### Minimal Template
 
 ```tsx
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { MyComponent } from "./MyComponent";
 
 const meta: Meta<typeof MyComponent> = {
-  title: "Category/MyComponent",   // sidebar path
+  title: "Category/MyComponent", // sidebar path
   component: MyComponent,
-  tags: ["autodocs"],               // generates a docs page from props
+  tags: ["autodocs"], // generates a docs page from props
 };
 
 export default meta;
@@ -72,19 +72,20 @@ Deploys are triggered on merges to `main` when files in `web/lib/opal/`, `web/sr
 
 The sidebar organizes components by their layer in the design system:
 
-| Layer | Path | Examples |
-|-------|------|----------|
-| **Core** | `lib/opal/src/core/` | Interactive, Hoverable |
-| **Components** | `lib/opal/src/components/` | Button, OpenButton, Tag |
-| **Layouts** | `lib/opal/src/layouts/` | Content, ContentAction, IllustrationContent |
-| **refresh-components** | `src/refresh-components/` | Inputs, tables, modals, text, cards, tiles, etc. |
-| **Apps** | `src/app/<app>/...` | Per-app feature components |
+| Layer                  | Path                       | Examples                                         |
+| ---------------------- | -------------------------- | ------------------------------------------------ |
+| **Core**               | `lib/opal/src/core/`       | Interactive, Hoverable                           |
+| **Components**         | `lib/opal/src/components/` | Button, OpenButton, Tag                          |
+| **Layouts**            | `lib/opal/src/layouts/`    | Content, ContentAction, IllustrationContent      |
+| **refresh-components** | `src/refresh-components/`  | Inputs, tables, modals, text, cards, tiles, etc. |
+| **Apps**               | `src/app/<app>/...`        | Per-app feature components                       |
 
 ### Apps layer
 
 The `Apps/` layer is a deliberately bounded extension of the catalog: feature components that have **multi-state visual contracts** (statuses, variants, kinds) and are **data-driven** (take props, don't fetch) earn a story. Components that orchestrate state — fetch data, manage SWR, own context — stay out of Storybook; they belong in the running app.
 
 Current coverage:
+
 - `Apps/Craft/` - components built specifically for Craft's UI
 
 Title format: `Apps/<App>/<Category>/<Name>`, e.g. `Apps/Craft/Tool Cards/Bash Body`.

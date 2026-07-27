@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import React from "react";
 import InputFile from "./InputFile";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
