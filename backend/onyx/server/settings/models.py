@@ -127,6 +127,8 @@ class UserSettings(Settings):
     vector_db_enabled: bool = True
     # True when hooks are available: single-tenant EE deployments only.
     hooks_enabled: bool = False
+    # Deployment-level gate for admin-managed stdio MCP processes.
+    mcp_stdio_enabled: bool = False
     # Application version, read from the ONYX_VERSION env var at startup.
     version: str | None = None
     # Hard ceiling for user_file_max_upload_size_mb, derived from env var.

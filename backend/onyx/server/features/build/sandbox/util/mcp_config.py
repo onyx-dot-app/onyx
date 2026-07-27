@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import MCPTransport
 from onyx.db.mcp import (
     can_resolve_mcp_credentials,
     get_craft_enabled_mcp_servers,
@@ -50,6 +51,13 @@ def resolve_craft_mcp_servers(
     )
     servers: list[MCPServer] = []
     for server in accessible:
+        if server.transport == MCPTransport.STDIO:
+            logger.info(
+                "craft_mcp_skip_stdio server_id=%s name=%r",
+                server.id,
+                server.name,
+            )
+            continue
         if can_resolve_mcp_credentials(
             server, user, db_session, user_configs=user_configs
         ):

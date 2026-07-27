@@ -29,7 +29,8 @@ from onyx.auth.oauth_token_manager import (
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.app_configs import MCP_STDIO_ENABLED, WEB_DOMAIN
+from onyx.db.constants import UNSET
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     EndpointPolicy,
@@ -61,8 +62,10 @@ from onyx.db.mcp import (
     get_mcp_server_by_id,
     get_mcp_servers_accessible_to_user,
     get_mcp_servers_for_persona,
+    get_mcp_stdio_config,
     get_server_auth_template,
     get_user_connection_config,
+    set_mcp_stdio_config__no_commit,
     update_connection_config,
     update_mcp_server__no_commit,
     upsert_user_connection_config,
@@ -95,6 +98,7 @@ from onyx.server.features.mcp.models import (
     MCPServerSimpleUpdateRequest,
     MCPServersResponse,
     MCPServerUpdateResponse,
+    MCPStdioServerConfig,
     MCPToolCreateRequest,
     MCPToolListResponse,
     MCPToolUpdateRequest,
@@ -152,6 +156,39 @@ _SSRF_HINT_SET_DISABLED = (
     " To reach a loopback MCP server, set SSRF Protection to Disabled in the admin "
     "Security settings (cloud-metadata stays blocked)."
 )
+
+
+def _ensure_stdio_admin(user: User) -> None:
+    if not MCP_STDIO_ENABLED:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Stdio MCP servers are disabled for this deployment. A single-tenant "
+            "operator must set MCP_STDIO_ENABLED=true.",
+        )
+    if user.role != UserRole.ADMIN:
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only Onyx admins may configure stdio MCP servers.",
+        )
+
+
+def _resolve_stdio_env(
+    requested: dict[str, str],
+    existing: dict[str, str],
+) -> dict[str, str]:
+    """Replace masked edit-form values with the encrypted originals."""
+    resolved: dict[str, str] = {}
+    for key, value in requested.items():
+        if is_masked_credential(value):
+            if key not in existing:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Masked stdio environment value has no stored value for {key}.",
+                )
+            resolved[key] = existing[key]
+        else:
+            resolved[key] = value
+    return resolved
 
 
 def _ssrf_error_hint(url: str, error: Exception) -> str:
@@ -1274,6 +1311,7 @@ def _db_mcp_server_to_api_mcp_server(
     user_authenticated: bool | None = None
     user_credentials = None
     admin_credentials = None
+    stdio_env = None
     is_owner_or_admin = request_user is not None and (
         request_user.role == UserRole.ADMIN
         or (request_user.email and request_user.email == db_server.owner)
@@ -1285,6 +1323,18 @@ def _db_mcp_server_to_api_mcp_server(
     can_view_server_details = is_owner_or_admin
     if db_server.auth_type == MCPAuthenticationType.NONE:
         user_authenticated = True  # No auth required
+        if (
+            db_server.transport == MCPTransport.STDIO
+            and can_view_admin_credentials
+            and db_server.admin_connection_config is not None
+        ):
+            stdio_config_data = extract_connection_data(
+                db_server.admin_connection_config, apply_mask=False
+            )
+            stdio_env = {
+                key: mask_string(value)
+                for key, value in stdio_config_data.get("stdio_env", {}).items()
+            }
     elif auth_performer == MCPAuthenticationPerformer.ADMIN:
         user_authenticated = db_server.admin_connection_config is not None
         if (
@@ -1379,9 +1429,13 @@ def _db_mcp_server_to_api_mcp_server(
     # supply shared credentials, and the template can legitimately carry
     # literal header values that must not leak.
     auth_template = None
-    if db_server.auth_type != MCPAuthenticationType.OAUTH and (
-        auth_performer == MCPAuthenticationPerformer.PER_USER
-        or can_view_admin_credentials
+    if (
+        db_server.transport != MCPTransport.STDIO
+        and db_server.auth_type != MCPAuthenticationType.OAUTH
+        and (
+            auth_performer == MCPAuthenticationPerformer.PER_USER
+            or can_view_admin_credentials
+        )
     ):
         try:
             template_config = db_server.admin_connection_config
@@ -1433,6 +1487,17 @@ def _db_mcp_server_to_api_mcp_server(
         name=db_server.name,
         description=db_server.description,
         server_url=db_server.server_url if can_view_server_details else "",
+        stdio_command=(
+            db_server.stdio_command
+            if can_view_server_details and db_server.transport == MCPTransport.STDIO
+            else None
+        ),
+        stdio_args=(
+            (db_server.stdio_args or [])
+            if can_view_server_details and db_server.transport == MCPTransport.STDIO
+            else []
+        ),
+        stdio_env=stdio_env,
         owner=db_server.owner if can_view_server_details else "",
         transport=db_server.transport,
         auth_type=db_server.auth_type,
@@ -1775,12 +1840,30 @@ def _list_mcp_tools_by_id(
             detail="MCP server transport is not configured",
         )
 
-    discovered_tools = discover_mcp_tools(
-        server_url,
-        headers,
-        transport=mcp_server.transport,
-        auth=auth,
-    )
+    stdio_config = None
+    if mcp_server.transport == MCPTransport.STDIO:
+        if not MCP_STDIO_ENABLED:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Stdio MCP servers are disabled for this deployment.",
+            )
+        stdio_config = get_mcp_stdio_config(mcp_server)
+
+    if stdio_config is not None:
+        discovered_tools = discover_mcp_tools(
+            server_url,
+            headers,
+            transport=mcp_server.transport,
+            auth=auth,
+            stdio_config=stdio_config,
+        )
+    else:
+        discovered_tools = discover_mcp_tools(
+            server_url,
+            headers,
+            transport=mcp_server.transport,
+            auth=auth,
+        )
     logger.info(
         "Discovered %s tools for MCP server: %s: %s",
         len(discovered_tools),
@@ -2435,6 +2518,12 @@ def upsert_mcp_server(
 ) -> MCPServerCreateResponse:
     """Create or update an MCP server (no tools yet)"""
 
+    if request.transport == MCPTransport.STDIO:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Configure stdio MCP servers from the basic server form.",
+        )
+
     # Validate auth_performer for non-none auth types
     if request.auth_type != MCPAuthenticationType.NONE and not request.auth_performer:
         raise HTTPException(
@@ -2558,16 +2647,36 @@ def create_mcp_server_simple(
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
-    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
+    admin_config_id = None
+    if request.transport == MCPTransport.STDIO:
+        _ensure_stdio_admin(user)
+        stdio_config = MCPStdioServerConfig(
+            command=request.stdio_command or "",
+            args=request.stdio_args,
+            env=request.stdio_env,
+        )
+        admin_config = create_connection_config(
+            MCPConnectionData(headers={}, stdio_env=stdio_config.env),
+            db_session,
+        )
+        admin_config_id = admin_config.id
+    else:
+        _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
+        stdio_config = None
 
     mcp_server = create_mcp_server__no_commit(
         owner_email=user.email,
         name=request.name,
         description=request.description,
-        server_url=request.server_url,
-        auth_type=None,  # To be configured later
-        transport=None,  # To be configured later
-        auth_performer=None,  # To be configured later
+        server_url=request.server_url if stdio_config is None else "",
+        stdio_command=stdio_config.command if stdio_config else None,
+        stdio_args=stdio_config.args if stdio_config else None,
+        auth_type=(
+            MCPAuthenticationType.NONE if stdio_config else None
+        ),  # HTTP auth is configured later
+        transport=request.transport if stdio_config else None,
+        auth_performer=(MCPAuthenticationPerformer.ADMIN if stdio_config else None),
+        admin_connection_config_id=admin_config_id,
         db_session=db_session,
     )
 
@@ -2583,30 +2692,11 @@ def create_mcp_server_simple(
 
     db_session.commit()
 
-    return MCPServer(
-        id=mcp_server.id,
-        name=mcp_server.name,
-        description=mcp_server.description,
-        server_url=mcp_server.server_url,
-        owner=mcp_server.owner,
-        transport=mcp_server.transport,
-        auth_type=mcp_server.auth_type,
-        auth_performer=mcp_server.auth_performer,
-        oauth_provider_mode=mcp_server.oauth_provider_mode,
-        oauth_authorization_endpoint=mcp_server.oauth_authorization_endpoint,
-        oauth_token_endpoint=mcp_server.oauth_token_endpoint,
-        oauth_scopes_override=mcp_server.oauth_scopes_override,
-        oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
-        is_authenticated=False,  # Not authenticated yet
-        status=mcp_server.status,
-        is_public=mcp_server.is_public,
-        groups=[group.id for group in mcp_server.user_groups],
-        users=[user.id for user in mcp_server.users],
-        available_in_craft=mcp_server.available_in_craft,
-        tool_count=0,  # New server, no tools yet
-        auth_template=None,
-        user_credentials=None,
-        admin_credentials=None,
+    return _db_mcp_server_to_api_mcp_server(
+        mcp_server,
+        db_session,
+        request_user=user,
+        include_auth_config=True,
     )
 
 
@@ -2625,7 +2715,42 @@ def update_mcp_server_simple(
 
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
-    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
+    if (
+        request.transport is not None
+        and mcp_server.transport is not None
+        and request.transport != mcp_server.transport
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "MCP transport cannot be changed after the server is created.",
+        )
+
+    if mcp_server.transport == MCPTransport.STDIO:
+        _ensure_stdio_admin(user)
+        existing_stdio = get_mcp_stdio_config(mcp_server)
+        resolved_env = _resolve_stdio_env(
+            request.stdio_env if request.stdio_env is not None else existing_stdio.env,
+            existing_stdio.env,
+        )
+        stdio_config = MCPStdioServerConfig(
+            command=request.stdio_command or existing_stdio.command,
+            args=(
+                request.stdio_args
+                if request.stdio_args is not None
+                else existing_stdio.args
+            ),
+            env=resolved_env,
+        )
+        set_mcp_stdio_config__no_commit(mcp_server, stdio_config.env, db_session)
+    else:
+        _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
+        stdio_config = None
+
+    if request.available_in_craft and mcp_server.transport == MCPTransport.STDIO:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Stdio MCP servers run on the API host and are not available inside Craft sandboxes.",
+        )
 
     # Update only provided fields
     updated_server = update_mcp_server__no_commit(
@@ -2634,6 +2759,8 @@ def update_mcp_server_simple(
         name=request.name,
         description=request.description,
         server_url=request.server_url,
+        stdio_command=stdio_config.command if stdio_config else UNSET,
+        stdio_args=stdio_config.args if stdio_config else UNSET,
         available_in_craft=request.available_in_craft,
     )
 

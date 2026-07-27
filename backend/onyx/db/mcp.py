@@ -29,7 +29,11 @@ from onyx.db.models import (
     User__UserGroup,
     UserRole,
 )
-from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS, MCPConnectionData
+from onyx.server.features.mcp.models import (
+    DENYLISTED_MCP_HEADERS,
+    MCPConnectionData,
+    MCPStdioServerConfig,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
 
@@ -221,6 +225,8 @@ def create_mcp_server__no_commit(
     transport: MCPTransport | None,
     auth_performer: MCPAuthenticationPerformer | None,
     db_session: Session,
+    stdio_command: str | None = None,
+    stdio_args: list[str] | None = None,
     oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY,
     oauth_authorization_endpoint: str | None = None,
     oauth_token_endpoint: str | None = None,
@@ -235,6 +241,8 @@ def create_mcp_server__no_commit(
         name=name,
         description=description,
         server_url=server_url,
+        stdio_command=stdio_command,
+        stdio_args=stdio_args,
         transport=transport,
         auth_type=auth_type,
         auth_performer=auth_performer,
@@ -257,6 +265,8 @@ def update_mcp_server__no_commit(
     name: str | None = None,
     description: str | None = None,
     server_url: str | None = None,
+    stdio_command: str | None | UnsetType = UNSET,
+    stdio_args: list[str] | None | UnsetType = UNSET,
     auth_type: MCPAuthenticationType | None = None,
     admin_connection_config_id: int | None = None,
     auth_performer: MCPAuthenticationPerformer | None = None,
@@ -282,6 +292,10 @@ def update_mcp_server__no_commit(
         server.description = description
     if server_url is not None:
         server.server_url = server_url
+    if not isinstance(stdio_command, UnsetType):
+        server.stdio_command = stdio_command
+    if not isinstance(stdio_args, UnsetType):
+        server.stdio_args = stdio_args
     if auth_type is not None:
         server.auth_type = auth_type
     if admin_connection_config_id is not None:
@@ -387,6 +401,41 @@ def extract_connection_data(
     if isinstance(config.config, SensitiveValue):
         return cast(MCPConnectionData, config.config.get_value(apply_mask=apply_mask))
     return cast(MCPConnectionData, config.config)
+
+
+def get_mcp_stdio_config(mcp_server: MCPServer) -> MCPStdioServerConfig:
+    """Return validated stdio process parameters without exposing secrets to
+    API callers. Environment values are read from the encrypted admin config."""
+    if mcp_server.transport != MCPTransport.STDIO:
+        raise ValueError("MCP server does not use stdio transport")
+    config_data = extract_connection_data(
+        mcp_server.admin_connection_config, apply_mask=False
+    )
+    return MCPStdioServerConfig(
+        command=mcp_server.stdio_command or "",
+        args=mcp_server.stdio_args or [],
+        env=config_data.get("stdio_env", {}),
+    )
+
+
+def set_mcp_stdio_config__no_commit(
+    mcp_server: MCPServer,
+    stdio_env: dict[str, str],
+    db_session: Session,
+) -> MCPConnectionConfig:
+    """Create or replace the encrypted environment for a stdio server."""
+    config_data = MCPConnectionData(headers={}, stdio_env=stdio_env)
+    config = mcp_server.admin_connection_config
+    if config is None:
+        config = create_connection_config(
+            config_data=config_data, db_session=db_session
+        )
+        mcp_server.admin_connection_config_id = config.id
+    else:
+        config.config = config_data  # ty: ignore[invalid-assignment]
+        flag_modified(config, "config")
+    db_session.flush()
+    return config
 
 
 def get_connection_config_by_id(

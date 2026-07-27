@@ -9,10 +9,11 @@ from collections.abc import Callable, Coroutine
 from enum import Enum
 from typing import Any, Dict, TypeVar
 
-from mcp import ClientSession
+from mcp import ClientSession, StdioServerParameters
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.sse import sse_client
-from mcp.client.streamable_http import streamablehttp_client  # or use stdio_client
+from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import (
     CallToolResult,
     InitializeResult,
@@ -24,6 +25,7 @@ from pydantic import BaseModel
 
 from onyx.configs.app_configs import MCP_TOOL_CALL_TIMEOUT_SECONDS
 from onyx.db.enums import MCPTransport
+from onyx.server.features.mcp.models import MCPStdioServerConfig
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
@@ -126,6 +128,7 @@ def _create_mcp_client_function_runner(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,  # TODO: maybe used this for all auth types
+    stdio_config: MCPStdioServerConfig | None = None,
     **kwargs: Any,
 ) -> Callable[[], Coroutine[Any, Any, T]]:
     auth_headers = connection_headers or {}
@@ -134,25 +137,13 @@ def _create_mcp_client_function_runner(
     # with SSE (infinite stream). Avoid passing auth for SSE; rely on headers.
     auth_for_request = auth if transport == MCPTransport.STREAMABLE_HTTP else None
 
-    # doing this here for type-checking
-    client_func = (
-        streamablehttp_client
-        if transport == MCPTransport.STREAMABLE_HTTP
-        else sse_client
-    )
-
     async def run_client_function() -> T:
-        async with client_func(
-            server_url,
-            headers=auth_headers,
-            auth=auth_for_request,
-            httpx_client_factory=mcp_ssrf_httpx_client_factory,
-        ) as client_tuple:
+        async def run_session(client_tuple: tuple[Any, ...]) -> T:
             if len(client_tuple) == 3:
                 read, write, _ = client_tuple
             elif len(client_tuple) == 2:
                 assert isinstance(client_tuple, tuple)  # for type-checking
-                read, write = client_tuple  # ty: ignore[invalid-assignment]
+                read, write = client_tuple
             else:
                 raise ValueError(
                     f"Unexpected number of client tuple elements: {len(client_tuple)}"
@@ -165,6 +156,32 @@ def _create_mcp_client_function_runner(
                 read_timeout_seconds=timedelta(seconds=MCP_TOOL_CALL_TIMEOUT_SECONDS),
             ) as session:
                 return await function(session, **kwargs)
+
+        if transport == MCPTransport.STDIO:
+            if stdio_config is None:
+                raise ValueError("stdio transport requires process configuration")
+            server_params = StdioServerParameters(
+                command=stdio_config.command,
+                args=stdio_config.args,
+                # Do not merge the API server's environment: that would leak
+                # unrelated deployment secrets into a third-party process.
+                env=stdio_config.env or None,
+            )
+            async with stdio_client(server_params) as client_tuple:
+                return await run_session(client_tuple)
+
+        client_func = (
+            streamablehttp_client
+            if transport == MCPTransport.STREAMABLE_HTTP
+            else sse_client
+        )
+        async with client_func(
+            server_url,
+            headers=auth_headers,
+            auth=auth_for_request,
+            httpx_client_factory=mcp_ssrf_httpx_client_factory,
+        ) as client_tuple:
+            return await run_session(client_tuple)
 
     return run_client_function
 
@@ -188,10 +205,17 @@ def _call_mcp_client_function_sync(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    stdio_config: MCPStdioServerConfig | None = None,
     **kwargs: Any,
 ) -> T:
     run_client_function = _create_mcp_client_function_runner(
-        function, server_url, connection_headers, transport, auth, **kwargs
+        function,
+        server_url,
+        connection_headers,
+        transport,
+        auth,
+        stdio_config,
+        **kwargs,
     )
     try:
         return run_async_sync_no_cancel(run_client_function())
@@ -212,10 +236,17 @@ async def _call_mcp_client_function_async(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    stdio_config: MCPStdioServerConfig | None = None,
     **kwargs: Any,
 ) -> T:
     run_client_function = _create_mcp_client_function_runner(
-        function, server_url, connection_headers, transport, auth, **kwargs
+        function,
+        server_url,
+        connection_headers,
+        transport,
+        auth,
+        stdio_config,
+        **kwargs,
     )
     return await run_client_function()
 
@@ -262,6 +293,7 @@ def call_mcp_tool(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    stdio_config: MCPStdioServerConfig | None = None,
 ) -> str:
     """Call a specific tool on the MCP server"""
     return _call_mcp_client_function_sync(
@@ -270,6 +302,7 @@ def call_mcp_tool(
         connection_headers,
         transport,
         auth,
+        stdio_config,
     )
 
 
@@ -278,6 +311,7 @@ async def initialize_mcp_client(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    stdio_config: MCPStdioServerConfig | None = None,
 ) -> InitializeResult:
     return await _call_mcp_client_function_async(
         lambda session: session.initialize(),
@@ -285,6 +319,7 @@ async def initialize_mcp_client(
         connection_headers,
         transport,
         auth,
+        stdio_config,
     )
 
 
@@ -308,6 +343,7 @@ def discover_mcp_tools(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    stdio_config: MCPStdioServerConfig | None = None,
 ) -> list[MCPLibTool]:
     """
     Synchronous wrapper for discovering MCP tools.
@@ -318,6 +354,7 @@ def discover_mcp_tools(
         connection_headers,
         transport,
         auth,
+        stdio_config,
     )
 
 
