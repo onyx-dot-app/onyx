@@ -29,7 +29,7 @@ import { PageSelector } from "@/components/PageSelector";
 import { Divider } from "@opal/components";
 import { DateRangePickerValue } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
 import { Popover } from "@opal/components";
-import Calendar from "@/refresh-components/Calendar";
+import { Calendar } from "@opal/components";
 import { cn } from "@opal/utils";
 import { Spinner } from "@/components/Spinner";
 import { SvgCalendar, SvgDownloadCloud } from "@opal/icons";

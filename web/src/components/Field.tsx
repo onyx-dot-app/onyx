@@ -31,7 +31,7 @@ import { Section } from "@/layouts/general-layouts";
 import { transformLinkUri } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
-import InputDatePicker from "@/refresh-components/inputs/InputDatePicker";
+import { InputDatePicker } from "@opal/components";
 import { RichTextSubtext } from "./RichTextSubtext";
 import {
   TypedFile,
@@ -1052,7 +1052,6 @@ export interface DatePickerFieldProps {
   label: string;
   name: string;
   subtext?: string;
-  startYear?: number;
   disabled?: boolean;
 }
 
@@ -1060,7 +1059,6 @@ export function DatePickerField({
   label,
   name,
   subtext,
-  startYear = 1970,
   disabled = false,
 }: DatePickerFieldProps) {
   const [field, _, helper] = useField<Date | null>(name);
@@ -1069,9 +1067,8 @@ export function DatePickerField({
     <div>
       <FieldLabel label={label} name={name} subtext={subtext} />
       <InputDatePicker
-        selectedDate={field.value}
-        setSelectedDate={helper.setValue}
-        startYear={startYear}
+        value={field.value}
+        onChange={helper.setValue}
         disabled={disabled}
       />
     </div>
