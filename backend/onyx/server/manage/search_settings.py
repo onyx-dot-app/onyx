@@ -137,6 +137,14 @@ def set_new_search_settings(
             "finish before starting another reindex.",
         )
 
+    # One re-index at a time: refuse a new one while a secondary FUTURE is still in flight
+    # (no supersede). Reuse of a retired index's name is handled by _guard_index_name_reuse.
+    if get_secondary_search_settings(db_session) is not None:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "A re-index is already in progress. Cancel it before starting a new one.",
+        )
+
     if search_settings_new.index_name is None:
         # We define index name here.
         index_name = f"danswer_chunk_{clean_model_name(search_settings_new.model_name)}"
@@ -180,29 +188,6 @@ def set_new_search_settings(
         )
     else:
         set_reclaim_intent_on_current__no_commit(db_session, consented_deletions)
-
-    secondary_search_settings = get_secondary_search_settings(db_session)
-
-    if secondary_search_settings:
-        # Cancel any background indexing jobs.
-        expire_index_attempts(
-            search_settings_id=secondary_search_settings.id, db_session=db_session
-        )
-
-        # Mark previous model as a past model directly.
-        update_search_settings_status(
-            search_settings=secondary_search_settings,
-            new_status=IndexModelStatus.PAST,
-            db_session=db_session,
-        )
-
-        # Cancel in-flight reindex ports for the superseded FUTURE. After the PAST
-        # flip so check_for_port (which only targets the current secondary) won't
-        # enqueue a replacement; the running port task stops at its next batch
-        # boundary once it sees CANCELED.
-        cancel_active_port_attempts(
-            db_session, search_settings_id=secondary_search_settings.id
-        )
 
     # Every new FUTURE reindexes via the port flow (re-embed PRESENT -> FUTURE in
     # place, no connector re-fetch). commit=False here and below so the FUTURE and
@@ -275,17 +260,25 @@ def set_new_search_settings(
 
 
 def _guard_index_name_reuse(db_session: Session, index_name: str) -> None:
-    """Refuse a reindex whose new index_name collides with a PAST index whose data is
-    still present — reusing it would adopt that old generation's data. Covers reclaim-
-    tracked rows (cleared automatically by the background reclaim) and legacy pre-feature
-    rows (reclaim_status NULL, no auto-reclaim — an admin removes them)."""
-    if find_unreclaimed_past_by_index_name(db_session, index_name):
-        raise OnyxError(
-            OnyxErrorCode.CONFLICT,
-            "An index of the same name from an earlier reindex still holds data and "
-            "hasn't been reclaimed. Wait for reclamation to finish, or remove that index, "
-            "before starting the reindex.",
-        )
+    """Refuse a reindex whose new index_name still holds a PAST generation's data (reusing
+    it would adopt that data), and pull the occupant into the reclaim cycle so it drains
+    without a manual delete — this is what reclaims legacy NULL / stalled / BLOCKED rows on
+    demand. Mark each skip-soak DELETING, kick its reclaim, then raise so the caller retries
+    once the name is free."""
+    occupants = find_unreclaimed_past_by_index_name(db_session, index_name)
+    if not occupants:
+        return
+    for occupant in occupants:
+        mark_abandoned_future_for_reclaim__no_commit(occupant)
+    db_session.commit()
+    tenant_id = get_current_tenant_id()
+    for occupant in occupants:
+        enqueue_index_reclaim(client_app, tenant_id, occupant.id)
+    raise OnyxError(
+        OnyxErrorCode.CONFLICT,
+        "An index of the same name from an earlier re-index still holds data; it's being "
+        "cleaned up now. Start the re-index again in a moment.",
+    )
 
 
 def _resolve_consented_deletions(

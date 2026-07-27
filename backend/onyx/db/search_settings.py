@@ -329,13 +329,11 @@ def clear_reclaim_intent__no_commit(
 def mark_abandoned_future_for_reclaim__no_commit(
     abandoned_future: SearchSettings,
 ) -> None:
-    """Mark a reverted/superseded FUTURE (already flipped to PAST) for reclamation so its
-    abandoned partial-port index is deleted and the name-reuse guard clears, letting the
-    same reindex be retried.
-
-    Jumps straight to DELETING: an abandoned FUTURE was never read for queries, so the soak
-    window and `_new_index_can_serve` gate (both for swapping out a *live* index) don't
-    apply. Caller commits."""
+    """Mark a PAST index for immediate reclamation — a reverted/superseded FUTURE, or an
+    unreclaimed occupant whose index name a new reindex now needs. Jumps straight to
+    DELETING: the soak window + `_new_index_can_serve` gate exist for swapping out a *live*
+    index, which doesn't apply here (the data was never the live read path, or its name is
+    being reclaimed on demand). Caller commits."""
     abandoned_future.reclaim_status = IndexReclaimStatus.DELETING
     abandoned_future.reclaim_stopped_reading_at = None
     abandoned_future.reclaim_attempts = 0

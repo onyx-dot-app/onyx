@@ -307,10 +307,18 @@ def test_guard_reclaimed_past_same_name_is_noop(
 def test_guard_conflicts_while_index_unreclaimed(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
     reclaim_status: IndexReclaimStatus | None,
 ) -> None:
-    """Any collision whose index data is still present is refused — reclaim-tracked rows
-    AND legacy NULL rows. The guard doesn't touch the row (no synchronous reclaim)."""
+    """Any collision whose index data is still present is refused — reclaim-tracked rows,
+    legacy NULL rows, and BLOCKED rows alike. The occupant is pulled into the reclaim cycle
+    (marked skip-soak DELETING + reclaim kicked) so it drains without a manual delete."""
+    enqueued: list[int] = []
+    monkeypatch.setattr(
+        search_settings_api,
+        "enqueue_index_reclaim",
+        lambda _app, _tenant, settings_id: enqueued.append(settings_id),
+    )
     name = f"test_collide_{uuid4().hex[:8]}"
     ss = _make_past_settings(db_session, reclaim_status, index_name=name)
     try:
@@ -318,7 +326,9 @@ def test_guard_conflicts_while_index_unreclaimed(
             search_settings_api._guard_index_name_reuse(db_session, name)
         assert exc.value.error_code == OnyxErrorCode.CONFLICT
         db_session.refresh(ss)
-        assert ss.reclaim_status == reclaim_status  # untouched
+        assert ss.reclaim_status == IndexReclaimStatus.DELETING  # pulled into reclaim
+        assert ss.reclaim_stopped_reading_at is None  # skip-soak
+        assert enqueued == [ss.id]  # reclaim kicked
     finally:
         db_session.delete(ss)
         db_session.commit()
