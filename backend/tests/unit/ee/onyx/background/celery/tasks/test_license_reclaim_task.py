@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
+from ee.onyx.background.celery.tasks.beat_schedule import ee_tasks_to_schedule
 from ee.onyx.background.celery.tasks.license_reclaim.tasks import reclaim_license_task
 from onyx.configs.constants import OnyxCeleryTask
 
@@ -96,8 +97,6 @@ class TestReclaimLicenseTask:
 
 
 def test_reclaim_license_task_is_scheduled_every_six_hours() -> None:
-    from ee.onyx.background.celery.tasks.beat_schedule import ee_tasks_to_schedule
-
     reclaim_schedule = next(
         task
         for task in ee_tasks_to_schedule

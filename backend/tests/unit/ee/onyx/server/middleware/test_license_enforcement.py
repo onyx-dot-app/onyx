@@ -148,7 +148,9 @@ class TestLicenseEnforcementMiddleware:
         response = await middleware(mock_request, call_next)
 
         assert response.status_code == 402
-        mock_schedule_reclaim.assert_called_once_with(mock_metadata, "default")
+        mock_schedule_reclaim.assert_called_once_with(
+            mock_metadata.expires_at, "default"
+        )
 
     @pytest.mark.asyncio
     @patch(

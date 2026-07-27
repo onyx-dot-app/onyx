@@ -615,7 +615,7 @@ class TestProxyLicenseFetch:
 
     def test_route_authenticates_with_expired_licenses_allowed(self) -> None:
         # Direct handler calls bypass Depends, so guard the wiring itself:
-        # renewal delivery breaks if this route ever reverts to strict expiry.
+        # renewal delivery breaks if this route requires an unexpired license.
         dep = (
             inspect.signature(proxy_license_fetch).parameters["license_payload"].default
         )

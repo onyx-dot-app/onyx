@@ -363,17 +363,11 @@ export default function BillingPage() {
     }
     switch (view) {
       case "checkout":
-        return hasSubscription
-          ? {
-              icon: SvgWallet,
-              title: "Your Plan",
-              showBackButton: true,
-            }
-          : {
-              icon: SvgArrowUpCircle,
-              title: "Upgrade Plan",
-              showBackButton: false,
-            };
+        return {
+          icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
+          title: hasSubscription ? "Your Plan" : "Upgrade Plan",
+          showBackButton: !!hasSubscription,
+        };
       case "plans":
         return {
           icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
@@ -429,9 +423,7 @@ export default function BillingPage() {
           : "billing-view-enter";
 
     const views: Record<typeof view, React.ReactNode> = {
-      // With a live subscription, checkout can only 409 on the control
-      // plane's duplicate-subscription guard. Renewal is automatic, so route
-      // to license sync / details instead of a payment CTA.
+      // A live subscription has nothing to buy, so route checkout to sync/details.
       checkout: hasSubscription ? (
         <ActiveSubscriptionView
           billing={billing ?? undefined}

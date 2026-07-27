@@ -14,7 +14,7 @@ Auth levels by endpoint:
 - /create-checkout-session: No auth (new customer) or expired license OK (renewal)
 - /claim-license: Session ID based (one-time after Stripe payment)
 - /create-customer-portal-session: Expired license OK (need portal to fix payment)
-- /billing-information: Valid license required
+- /billing-information: Valid signature required, expired OK (read subscription state after lapse)
 - /license/{tenant_id}: Valid signature required, expired OK (renewal), path tenant_id must match license tenant_id
 - /seats/update: Valid license required
 """
@@ -137,7 +137,7 @@ async def get_license_payload_allow_expired(
 ) -> LicensePayload:
     """Dependency: Require license with valid signature, expired OK.
 
-    Used for endpoints needed to fix payment issues (portal, renewal checkout).
+    Used by renewal-path endpoints, where the stored license may already have lapsed.
     """
     license_data = _extract_license_from_header(authorization, required=True)
     # license_data is guaranteed non-None when required=True
@@ -359,14 +359,12 @@ class BillingInformationResponse(BaseModel):
 
 @router.get("/billing-information")
 async def proxy_billing_information(
-    # Expired licenses may read billing state: an instance whose license just
-    # lapsed needs the subscription status to tell its admin whether a renewal
-    # already happened (and to gate the buy flow) rather than a 401.
     license_payload: LicensePayload = Depends(get_license_payload_allow_expired),
 ) -> BillingInformationResponse:
     """Proxy billing information request to control plane.
 
-    Auth: Valid (non-expired) license required.
+    Auth: Valid signature required, expired OK. A lapsed instance still needs
+    subscription state to know whether a renewal already happened.
 
     Caches the response in Redis per tenant for BILLING_INFO_CACHE_TTL_SEC.
     The frontend polls this endpoint on a tight loop, but Stripe-backed

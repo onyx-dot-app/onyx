@@ -128,7 +128,7 @@ def add_license_enforcement_middleware(
                 # Point-of-use renewal: a request observing an expired or
                 # expiring license triggers a debounced async re-claim. Runs
                 # before any gating decision so a gated instance heals itself.
-                maybe_schedule_license_reclaim(metadata, tenant_id)
+                maybe_schedule_license_reclaim(metadata.expires_at, tenant_id)
 
                 # User HAS a license (current or expired)
                 if metadata.status == ApplicationStatus.GATED_ACCESS:

@@ -8,9 +8,9 @@ import { markdown } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
 import { SvgCheckCircle } from "@opal/icons";
-import { claimLicense } from "@/lib/billing";
+import { claimLicense } from "@/lib/billing/svc";
 import { formatDateShort } from "@/lib/dateUtils";
-import type { BillingInformation } from "@/lib/billing";
+import type { BillingInformation } from "@/lib/billing/interfaces";
 
 interface ActiveSubscriptionViewProps {
   billing?: BillingInformation;
@@ -87,7 +87,8 @@ export default function ActiveSubscriptionView({
             {error}
           </Text>
         ) : (
-          <div></div>
+          // Empty div to maintain space-between alignment
+          <div />
         )}
         <Section
           flexDirection="row"

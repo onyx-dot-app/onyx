@@ -16,6 +16,15 @@ from enum import Enum
 
 LICENSE_GRACE_PERIOD_DAYS = 14
 
+# A license inside this window (or already expired) is due for re-claim from
+# the control plane.
+LICENSE_RECLAIM_WINDOW = timedelta(days=7)
+
+
+def is_license_due_for_reclaim(expires_at: datetime) -> bool:
+    """True once the license is inside the reclaim window, or already past expiry."""
+    return expires_at - datetime.now(timezone.utc) <= LICENSE_RECLAIM_WINDOW
+
 
 class ExpiryWarningStage(str, Enum):
     NONE = "none"

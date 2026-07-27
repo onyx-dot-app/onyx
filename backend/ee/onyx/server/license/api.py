@@ -12,7 +12,6 @@ Cloud licensing is managed via the control plane and gated_tenants Redis key.
 
 import requests
 from fastapi import APIRouter, Depends, File, UploadFile
-from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
@@ -30,7 +29,7 @@ from ee.onyx.server.license.models import (
     SeatUsageResponse,
 )
 from ee.onyx.utils.license import (
-    ControlPlaneLicenseResponse,
+    license_from_control_plane_response,
     reclaim_license_from_control_plane,
     verify_and_store_license,
 )
@@ -138,10 +137,8 @@ async def claim_license(
             response.raise_for_status()
 
             try:
-                license_data = ControlPlaneLicenseResponse.model_validate(
-                    response.json()
-                ).license
-            except ValidationError:
+                license_data = license_from_control_plane_response(response)
+            except ValueError:
                 raise OnyxError(OnyxErrorCode.NOT_FOUND, "No license in response")
 
             payload = verify_and_store_license(

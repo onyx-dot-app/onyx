@@ -11,11 +11,11 @@ import pytest
 
 from ee.onyx.server.license.models import LicensePayload, LicenseSource, PlanType
 from ee.onyx.utils.license import (
-    LICENSE_RECLAIM_WINDOW,
     maybe_schedule_license_reclaim,
     reclaim_license_from_control_plane,
     verify_and_store_license,
 )
+from ee.onyx.utils.license_expiry import LICENSE_RECLAIM_WINDOW
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
 
 
@@ -240,8 +240,8 @@ class TestReclaimLicenseFromControlPlane:
         mock_upsert.assert_not_called()
 
 
-def _metadata_expiring_in(delta: timedelta) -> MagicMock:
-    return MagicMock(expires_at=datetime.now(timezone.utc) + delta)
+def _expiring_in(delta: timedelta) -> datetime:
+    return datetime.now(timezone.utc) + delta
 
 
 class TestMaybeScheduleLicenseReclaim:
@@ -252,9 +252,9 @@ class TestMaybeScheduleLicenseReclaim:
         mock_get_redis: MagicMock,
         mock_client_app: MagicMock,
     ) -> None:
-        metadata = _metadata_expiring_in(LICENSE_RECLAIM_WINDOW + timedelta(days=1))
-
-        maybe_schedule_license_reclaim(metadata, "tenant_123")
+        maybe_schedule_license_reclaim(
+            _expiring_in(LICENSE_RECLAIM_WINDOW + timedelta(days=1)), "tenant_123"
+        )
 
         mock_get_redis.assert_not_called()
         mock_client_app.send_task.assert_not_called()
@@ -274,7 +274,7 @@ class TestMaybeScheduleLicenseReclaim:
     ) -> None:
         mock_get_redis.return_value.set.return_value = True
 
-        maybe_schedule_license_reclaim(_metadata_expiring_in(expires_in), "tenant_123")
+        maybe_schedule_license_reclaim(_expiring_in(expires_in), "tenant_123")
 
         mock_client_app.send_task.assert_called_once_with(
             OnyxCeleryTask.RECLAIM_LICENSE,
@@ -292,9 +292,7 @@ class TestMaybeScheduleLicenseReclaim:
     ) -> None:
         mock_get_redis.return_value.set.return_value = None
 
-        maybe_schedule_license_reclaim(
-            _metadata_expiring_in(timedelta(days=1)), "tenant_123"
-        )
+        maybe_schedule_license_reclaim(_expiring_in(timedelta(days=1)), "tenant_123")
 
         mock_client_app.send_task.assert_not_called()
 
@@ -309,9 +307,7 @@ class TestMaybeScheduleLicenseReclaim:
     ) -> None:
         mock_get_redis.side_effect = RuntimeError("redis down")
 
-        maybe_schedule_license_reclaim(
-            _metadata_expiring_in(timedelta(days=1)), "tenant_123"
-        )
+        maybe_schedule_license_reclaim(_expiring_in(timedelta(days=1)), "tenant_123")
 
         mock_client_app.send_task.assert_not_called()
         mock_logger.warning.assert_called_once()

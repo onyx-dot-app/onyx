@@ -3,7 +3,7 @@
 import base64
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -17,18 +17,14 @@ from sqlalchemy.orm import Session
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.server.license.models import (
     LicenseData,
-    LicenseMetadata,
     LicensePayload,
     LicenseSource,
 )
+from ee.onyx.utils.license_expiry import is_license_due_for_reclaim
 from onyx.server.settings.models import ApplicationStatus
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-# A license inside this window (or already expired) is due for re-claim from
-# the control plane. Shared by the beat backstop and the point-of-use trigger.
-LICENSE_RECLAIM_WINDOW = timedelta(days=7)
 
 # One reclaim attempt per debounce period, no matter how many requests see a
 # stale license. Redis key TTL is the debounce.
@@ -41,8 +37,16 @@ _LICENSE_PUBLIC_KEY_PATH = (
 )
 
 
-class ControlPlaneLicenseResponse(BaseModel):
+class _ControlPlaneLicenseResponse(BaseModel):
     license: str
+
+
+def license_from_control_plane_response(response: requests.Response) -> str:
+    """Pull the signed blob out of a control-plane license response."""
+    try:
+        return _ControlPlaneLicenseResponse.model_validate(response.json()).license
+    except ValidationError as e:
+        raise ValueError("No license in response") from e
 
 
 def _get_public_key() -> RSAPublicKey:
@@ -132,8 +136,7 @@ def verify_and_store_license(
 
     Raises ValueError on an unverifiable blob, leaving the stored license untouched.
     """
-    # Keep the utils -> db dependency call-time only so db/license.py can
-    # import this module at top level.
+    # Call-time import: breaks the import cycle with ee.onyx.db.license.
     from ee.onyx.db.license import update_license_cache, upsert_license
 
     payload = verify_license_signature(license_data)
@@ -155,8 +158,7 @@ def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | 
     Returns None when no usable stored license exists to authenticate with.
     Raises ValueError when the control plane response has no valid license.
     """
-    # Keep the utils -> db dependency call-time only so db/license.py can
-    # import this module at top level.
+    # Call-time import: breaks the import cycle with ee.onyx.db.license.
     from ee.onyx.db.license import get_license, get_license_metadata
 
     metadata = get_license_metadata(db_session)
@@ -177,17 +179,14 @@ def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | 
     )
     response.raise_for_status()
 
-    try:
-        response_data = ControlPlaneLicenseResponse.model_validate(response.json())
-    except ValidationError as e:
-        raise ValueError("No license in response") from e
-
     return verify_and_store_license(
-        db_session, response_data.license, source=LicenseSource.AUTO_FETCH
+        db_session,
+        license_from_control_plane_response(response),
+        source=LicenseSource.AUTO_FETCH,
     )
 
 
-def maybe_schedule_license_reclaim(metadata: LicenseMetadata, tenant_id: str) -> None:
+def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None:
     """Enqueue an immediate license re-claim when the stored license is due.
 
     Point-of-use companion to the beat backstop: any request that observes a
@@ -195,15 +194,15 @@ def maybe_schedule_license_reclaim(metadata: LicenseMetadata, tenant_id: str) ->
     reclaim attempt per debounce period. Never raises, since a scheduling
     failure must not affect the request that tripped it.
     """
-    # Call-time imports: this runs inside request middleware, and the celery
-    # client / redis pool must not become import-time dependencies of every
-    # consumer of this module.
-    from onyx.background.celery.versioned_apps.client import app as client_app
-    from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
-    from onyx.redis.redis_pool import get_redis_client
-
     try:
-        if metadata.expires_at - datetime.now(timezone.utc) > LICENSE_RECLAIM_WINDOW:
+        # Call-time imports: this runs inside request middleware, and the
+        # celery client / redis pool must not become import-time dependencies
+        # of every consumer of this module.
+        from onyx.background.celery.versioned_apps.client import app as client_app
+        from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
+        from onyx.redis.redis_pool import get_redis_client
+
+        if not is_license_due_for_reclaim(expires_at):
             return
 
         redis_client = get_redis_client(tenant_id=tenant_id)
@@ -223,10 +222,7 @@ def maybe_schedule_license_reclaim(metadata: LicenseMetadata, tenant_id: str) ->
             priority=OnyxCeleryPriority.HIGH,
             expires=_LICENSE_RECLAIM_DEBOUNCE_TTL_SEC,
         )
-        logger.info(
-            "Scheduled license reclaim (license expires %s)",
-            metadata.expires_at.date(),
-        )
+        logger.info("Scheduled license reclaim (license expires %s)", expires_at.date())
     except Exception as e:
         logger.warning("Failed to schedule license reclaim: %s", e)
 
