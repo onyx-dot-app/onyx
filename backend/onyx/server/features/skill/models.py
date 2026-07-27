@@ -12,6 +12,7 @@ from onyx.db.models import Skill
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
+from onyx.utils.github import GITHUB_COMMIT_SHA_PATTERN
 
 
 class SkillUserShare(BaseModel):
@@ -225,7 +226,7 @@ class GitHubSkillsPreviewResponse(BaseModel):
 
 
 class GitHubSkillsImportRequest(GitHubSkillsPreviewRequest):
-    revision: str = Field(pattern=r"^[0-9a-fA-F]{40}$")
+    revision: str = Field(pattern=GITHUB_COMMIT_SHA_PATTERN)
     subpath: str | None = None
     paths: list[str] = Field(min_length=1, max_length=GITHUB_SKILL_MAX_COUNT)
 

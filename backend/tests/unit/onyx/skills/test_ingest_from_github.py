@@ -81,7 +81,7 @@ def _mock_repository(
             return _Response(json_data={"sha": _REVISION})
         return _Response(archive)
 
-    monkeypatch.setattr("onyx.skills.ingest_from_github.ssrf_safe_get", get)
+    monkeypatch.setattr("onyx.utils.github.ssrf_safe_get", get)
 
 
 def test_discovers_independent_skill_bundles(
@@ -179,7 +179,7 @@ def test_tree_url_resolves_longest_matching_slash_ref(
             return _Response(json_data={"sha": _REVISION})
         return _Response(status_code=404)
 
-    monkeypatch.setattr("onyx.skills.ingest_from_github.ssrf_safe_get", get)
+    monkeypatch.setattr("onyx.utils.github.ssrf_safe_get", get)
 
     repository, skills = fetch_github_skill_bundles(
         "https://github.com/owner/repository/tree/feature/foo/skills/example"
@@ -209,7 +209,7 @@ def test_import_uses_previewed_revision_without_resolving_head(
         urls_seen.append(url)
         return _Response(archive)
 
-    monkeypatch.setattr("onyx.skills.ingest_from_github.ssrf_safe_get", get)
+    monkeypatch.setattr("onyx.utils.github.ssrf_safe_get", get)
 
     repository, skills = fetch_github_skill_bundles(
         "owner/repository",
@@ -297,7 +297,7 @@ def test_private_token_is_not_forwarded_to_archive_host(
             )
         return _Response(archive)
 
-    monkeypatch.setattr("onyx.skills.ingest_from_github.ssrf_safe_get", get)
+    monkeypatch.setattr("onyx.utils.github.ssrf_safe_get", get)
 
     _, skills = fetch_github_skill_bundles(
         "owner/repository",
@@ -322,7 +322,7 @@ def test_public_repository_stays_anonymous_when_github_is_connected(
             return _Response(json_data={"sha": _REVISION})
         return _Response(archive)
 
-    monkeypatch.setattr("onyx.skills.ingest_from_github.ssrf_safe_get", get)
+    monkeypatch.setattr("onyx.utils.github.ssrf_safe_get", get)
 
     _, skills = fetch_github_skill_bundles(
         "owner/repository",
@@ -348,7 +348,7 @@ def test_truncated_archive_returns_retryable_error(
             return _Response(json_data={"sha": _REVISION})
         return _Response(archive[:-32])
 
-    monkeypatch.setattr("onyx.skills.ingest_from_github.ssrf_safe_get", get)
+    monkeypatch.setattr("onyx.utils.github.ssrf_safe_get", get)
 
     with pytest.raises(OnyxError, match="unreadable repository download") as exc_info:
         fetch_github_skill_bundles("owner/repository")
@@ -373,7 +373,7 @@ def test_rejects_repository_symlinks(monkeypatch: pytest.MonkeyPatch) -> None:
             return _Response(json_data={"sha": _REVISION})
         return _Response(output.getvalue())
 
-    monkeypatch.setattr("onyx.skills.ingest_from_github.ssrf_safe_get", get)
+    monkeypatch.setattr("onyx.utils.github.ssrf_safe_get", get)
 
     with pytest.raises(OnyxError, match="symbolic link"):
         fetch_github_skill_bundles("owner/repository")

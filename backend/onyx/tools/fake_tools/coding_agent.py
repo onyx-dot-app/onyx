@@ -53,7 +53,7 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
 from onyx.tracing.framework.create import function_span
-from onyx.utils.github import download_github_repo
+from onyx.utils.github import download_github_archive, parse_github_source
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -76,6 +76,8 @@ REPO_TARBALL_PATH = "repo.tar.gz"
 # calls are not persisted to the DB through this loop, so the id is unused.
 BASH_TOOL_SENTINEL_ID = 0
 MAX_FINAL_ANSWER_TOKENS = 4000
+CODING_AGENT_GITHUB_MAX_REPO_BYTES = 500 * 1024 * 1024
+CODING_AGENT_GITHUB_DOWNLOAD_TIMEOUT = (30, 300)
 
 
 @contextmanager
@@ -89,7 +91,17 @@ def _setup_session(
     Creates its own :class:`CodeInterpreterClient` internally and tears it
     down on exit, so callers only deal with the ``session_id``.
     """
-    repo_bytes = download_github_repo(repo, github_token=github_token)
+    github_source = parse_github_source(
+        repo,
+        allow_ssh=True,
+    )
+    repo_bytes = download_github_archive(
+        github_source,
+        "HEAD",
+        f"Bearer {github_token}" if github_token else None,
+        max_size_bytes=CODING_AGENT_GITHUB_MAX_REPO_BYTES,
+        timeout=CODING_AGENT_GITHUB_DOWNLOAD_TIMEOUT,
+    )
 
     with CodeInterpreterClient() as client:
         ci_file_id = client.upload_file(repo_bytes, REPO_TARBALL_PATH)
