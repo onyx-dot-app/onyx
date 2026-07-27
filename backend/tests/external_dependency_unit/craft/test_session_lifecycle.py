@@ -295,6 +295,8 @@ class TestEmptySessionReuse:
             "refreshed-opencode-session"
         )
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.regenerate_session_config_silent = True
+        stub_sandbox_manager.dispose_opencode_instance_silent = True
 
         sm = session_manager_with_stub
         result = sm.get_or_create_empty_session(user_id=test_user.id)
@@ -303,6 +305,11 @@ class TestEmptySessionReuse:
 
         assert result.id == existing_empty.id
         assert result.opencode_session_id == "refreshed-opencode-session"
+        assert stub_sandbox_manager.regenerate_session_config_count == 1
+        assert stub_sandbox_manager.last_dispose_opencode_instance_payload == {
+            "sandbox_id": sandbox_row.id,
+            "session_id": existing_empty.id,
+        }
         assert stub_sandbox_manager.last_ensure_opencode_session_payload == {
             "sandbox_id": sandbox_row.id,
             "session_id": existing_empty.id,
