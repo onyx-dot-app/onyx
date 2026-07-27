@@ -6,8 +6,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-      # The shipped image; the Dockerfile's default (last) stage is the dev variant with
-      # debugging tools (published as the -dev tag suffix, e.g. IMAGE_TAG=latest-dev).
+      # The shipped image; the Dockerfile's default (last) stage is the dev variant
+      # with debugging tools (published with a -dev tag suffix).
       target: runtime
     command: >
       /bin/sh -c "
@@ -143,8 +143,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-      # The shipped image; the Dockerfile's default (last) stage is the dev variant with
-      # debugging tools (published as the -dev tag suffix, e.g. IMAGE_TAG=latest-dev).
+      # The shipped image; the Dockerfile's default (last) stage is the dev variant
+      # with debugging tools (published with a -dev tag suffix).
       target: runtime
     command: >
       /bin/sh -c "
