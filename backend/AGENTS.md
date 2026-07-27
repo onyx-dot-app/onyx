@@ -209,7 +209,9 @@ category is needed, add it there first — do not invent ad-hoc codes.
 status code is dynamic (comes from the upstream response), use `status_code_override`:
 
 ```python
-raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=e.response.status_code)
+raise OnyxError(
+    OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=e.response.status_code
+)
 ```
 
 ## AI/LLM Integration

@@ -199,14 +199,12 @@ with open("example.pdf", "rb") as f:
         display_name="Important Document.pdf",
         file_origin=FileOrigin.OTHER,
         file_type="application/pdf",
-        file_metadata={"department": "engineering", "version": "1.0"}
+        file_metadata={"department": "engineering", "version": "1.0"},
     )
 
 # Check if a file exists
 exists = file_store.has_file(
-    file_id=file_id,
-    file_origin=FileOrigin.OTHER,
-    file_type="application/pdf"
+    file_id=file_id, file_origin=FileOrigin.OTHER, file_type="application/pdf"
 )
 
 # Read a file
