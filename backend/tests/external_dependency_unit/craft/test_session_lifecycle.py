@@ -295,6 +295,10 @@ class TestEmptySessionReuse:
             "refreshed-opencode-session"
         )
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        # Session reuse regenerates the sandbox config and disposes the stale
+        # opencode instance (gateway routing, #13249).
+        stub_sandbox_manager.regenerate_session_config_silent = True
+        stub_sandbox_manager.dispose_opencode_instance_silent = True
 
         sm = session_manager_with_stub
         result = sm.get_or_create_empty_session(user_id=test_user.id)
