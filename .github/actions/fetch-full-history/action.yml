@@ -1,0 +1,22 @@
+name: "Fetch Full Git History"
+description: "Deepens a shallow checkout to complete history, without the per-ref log spam that fetch-depth: 0 produces"
+inputs:
+  token:
+    description: "Token used for the fetch. Ignored when the preceding checkout persisted its credentials."
+    required: false
+    default: ${{ github.token }}
+  checkout-persisted-credentials:
+    description: "Set to true when the preceding actions/checkout ran with persist-credentials: true, so this step reuses those credentials instead of supplying its own."
+    required: false
+    default: "false"
+runs:
+  using: "composite"
+  steps:
+    - name: Fetch full history
+      shell: bash
+      env:
+        GIT_FETCH_TOKEN: ${{ inputs.token }}
+        CHECKOUT_PERSISTED_CREDENTIALS: ${{ inputs.checkout-persisted-credentials }}
+      # Kept in a script rather than inline so the runner echoes one line instead
+      # of the whole body, and so the shellcheck hook covers it.
+      run: bash "${GITHUB_ACTION_PATH}/fetch-full-history.sh"

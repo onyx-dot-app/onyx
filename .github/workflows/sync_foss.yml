@@ -17,8 +17,9 @@ jobs:
       - name: Checkout main Onyx repo
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
-          fetch-depth: 0
           persist-credentials: false
+      # git-filter-repo rewrites the whole history, so it must all be local.
+      - uses: ./.github/actions/fetch-full-history
 
       - name: Install git-filter-repo
         run: |
