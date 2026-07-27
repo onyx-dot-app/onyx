@@ -44,8 +44,8 @@
 }
 
 .opal-checkbox-surface[data-state="unchecked"]:focus-visible:not(
-    [data-disabled]
-  ) {
+  [data-disabled]
+) {
   @apply border-border-05;
 }
 
@@ -65,8 +65,8 @@
 
 .opal-checkbox-surface[data-state="checked"]:focus-visible:not([data-disabled]),
 .opal-checkbox-surface[data-state="indeterminate"]:focus-visible:not(
-    [data-disabled]
-  ) {
+  [data-disabled]
+) {
   @apply border-border-05;
 }
 
