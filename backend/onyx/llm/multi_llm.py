@@ -18,6 +18,11 @@ from onyx.configs.chat_configs import (
     LLM_SOCKET_READ_TIMEOUT,
 )
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
+from onyx.llm.api_surfaces import (
+    OPENAI_COMPATIBLE_SURFACES,
+    LlmApiSurface,
+    resolve_api_surface,
+)
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.cost import compute_cost_cents
 from onyx.llm.custom_config_mapping import (
@@ -413,6 +418,8 @@ class LitellmLLM(LLM):
         self._max_input_tokens = max_input_tokens
         self._custom_config = custom_config
 
+        self._api_surface = resolve_api_surface(model_provider, custom_config)
+
         # Create a dictionary for model-specific arguments if it's None
         model_kwargs = model_kwargs or {}
 
@@ -455,14 +462,7 @@ class LitellmLLM(LLM):
         ):
             model_kwargs[VERTEX_LOCATION_KWARG] = "global"
 
-        # Bifrost and OpenAI-compatible: OpenAI-compatible proxies that send
-        # model names directly to the endpoint. We route through LiteLLM's
-        # openai provider with the server's base URL, and ensure /v1 is appended.
-        if model_provider in (
-            LlmProviderNames.BIFROST,
-            LlmProviderNames.OPENAI_COMPATIBLE,
-            LlmProviderNames.NEBIUS_TOKENFACTORY,
-        ):
+        if self._api_surface in OPENAI_COMPATIBLE_SURFACES:
             self._custom_llm_provider = "openai"
             # LiteLLM's OpenAI client requires an api_key to be set.
             # Many OpenAI-compatible servers don't need auth, so supply a
@@ -473,6 +473,11 @@ class LitellmLLM(LLM):
                 base = self._api_base.rstrip("/")
                 self._api_base = base if base.endswith("/v1") else f"{base}/v1"
                 model_kwargs["api_base"] = self._api_base
+        elif self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES:
+            # Base stays bare; LiteLLM appends /v1/messages itself.
+            self._custom_llm_provider = "anthropic"
+            if self._api_base is not None:
+                self._api_base = self._api_base.rstrip("/")
 
         # This is needed for Ollama to do proper function calling
         if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:
@@ -608,11 +613,7 @@ class LitellmLLM(LLM):
         optional_kwargs: dict[str, Any] = {}
 
         # Model name
-        is_openai_compatible_proxy = self._model_provider in (
-            LlmProviderNames.BIFROST,
-            LlmProviderNames.OPENAI_COMPATIBLE,
-            LlmProviderNames.NEBIUS_TOKENFACTORY,
-        )
+        is_openai_compatible_proxy = self._api_surface in OPENAI_COMPATIBLE_SURFACES
         model_provider = (
             f"{self.config.model_provider}/responses"
             if is_openai_model  # Uses litellm's completions -> responses bridge
@@ -637,14 +638,15 @@ class LitellmLLM(LLM):
         ):
             _log_azure_responses_api_version_override(self._api_base, api_version)
             api_version = None
-        if is_openai_compatible_proxy:
-            # OpenAI-compatible proxies (Bifrost, generic OpenAI-compatible
-            # servers) expect model names sent directly to their endpoint.
-            # We use custom_llm_provider="openai" so LiteLLM doesn't try
-            # to route based on the provider prefix.
-            model = self.config.deployment_name or self.config.model_name
+
+        model_bare = self.config.deployment_name or self.config.model_name
+        if self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
+            # Drives LiteLLM's completions -> responses bridge.
+            model = f"responses/{model_bare}"
+        elif self._api_surface is not None:
+            model = model_bare
         else:
-            model = f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
+            model = f"{model_provider}/{model_bare}"
 
         # Tool choice
         # Downgrade tool_choice=required to AUTO for models that mishandle it:

@@ -130,11 +130,14 @@ export interface APIBaseFieldProps {
   optional?: boolean;
   subDescription?: string | RichStr;
   placeholder?: string;
+  /** Rendered inside the input on the right (e.g. a restore-default control). */
+  rightChildren?: React.ReactNode;
 }
 export function APIBaseField({
   optional = false,
   subDescription,
   placeholder = "https://",
+  rightChildren,
 }: APIBaseFieldProps) {
   return (
     <InputPadder>
@@ -144,7 +147,11 @@ export function APIBaseField({
         subDescription={subDescription}
         suffix={optional ? "optional" : undefined}
       >
-        <InputTypeInField name="api_base" placeholder={placeholder} />
+        <InputTypeInField
+          name="api_base"
+          placeholder={placeholder}
+          rightChildren={rightChildren}
+        />
       </InputVertical>
     </InputPadder>
   );
@@ -570,11 +577,14 @@ export interface ModelSelectionFieldProps {
   onRefetch?: (signal: AbortSignal) => Promise<void> | void;
   /** Called when the user adds a custom model by name. Enables the "Add Model" input. */
   onAddModel?: (modelName: string) => void;
+  /** Overrides the empty-state copy shown when no models are loaded. */
+  emptyMessage?: string;
 }
 export function ModelSelectionField({
   shouldShowAutoUpdateToggle,
   onRefetch,
   onAddModel,
+  emptyMessage,
 }: ModelSelectionFieldProps) {
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const [newModelName, setNewModelName] = useState("");
@@ -664,7 +674,10 @@ export function ModelSelectionField({
         </InputHorizontal>
 
         {models.length === 0 ? (
-          <EmptyMessageCard title="No models available." padding="sm" />
+          <EmptyMessageCard
+            title={emptyMessage ?? "No models available."}
+            padding="sm"
+          />
         ) : (
           <Section gap={0.25} alignItems="stretch">
             {(() => {
