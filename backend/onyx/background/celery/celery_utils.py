@@ -35,10 +35,6 @@ from onyx.file_store.staging import (
 )
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.server.metrics.pruning_metrics import (
-    inc_pruning_rate_limit_error,
-    observe_pruning_enumeration_duration,
-)
 from onyx.utils.logger import setup_logger
 from onyx.utils.native_memory import release_freed_native_memory
 
@@ -212,8 +208,10 @@ def extract_ids_from_runnable_connector(
         else lambda x: x
     )
 
-    # process raw batches to extract both IDs and hierarchy nodes
-    enumeration_start = time.monotonic()
+    # process raw batches to extract both IDs and hierarchy nodes.
+    # NOTE: Prometheus metrics (enumeration duration, rate limit errors) are
+    # emitted by the pruning parent task — this function runs in a spawned
+    # child whose metric registry is never scraped.
     last_memory_release = time.monotonic()
     try:
         for doc_list in raw_batch_generator:
@@ -239,24 +237,10 @@ def extract_ids_from_runnable_connector(
                 gc.collect()
                 release_freed_native_memory()
                 last_memory_release = time.monotonic()
-    except Exception as e:
-        # Best-effort rate limit detection via string matching.
-        # Connectors surface rate limits inconsistently — some raise HTTP 429,
-        # some use SDK-specific exceptions (e.g. google.api_core.exceptions.ResourceExhausted)
-        # that may or may not include "rate limit" or "429" in the message.
-        # TODO(Bo): replace with a standard ConnectorRateLimitError exception that all
-        # connectors raise when rate limited, making this check precise.
-        error_str = str(e)
-        if "rate limit" in error_str.lower() or "429" in error_str:
-            inc_pruning_rate_limit_error(connector_type)
-        raise
     finally:
         delete_files_best_effort(
             staged_csv_ids,
             context=f"pruning-id-enumeration cleanup ({connector_type})",
-        )
-        observe_pruning_enumeration_duration(
-            time.monotonic() - enumeration_start, connector_type
         )
 
     return SlimConnectorExtractionResult(
