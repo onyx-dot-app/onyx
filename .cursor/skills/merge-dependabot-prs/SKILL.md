@@ -57,7 +57,12 @@ same package, or a manual bump PR overlapping a bot one.
 
 ## 2. Triage into buckets, confirm the plan
 
-- **Green & ready** — all required checks passing.
+These PRs aren't in a rush. Wait for every check to complete — required and
+advisory alike (e.g. `storybook-build` on `web/**` changes, which never gates
+the queue but pages Slack if broken post-merge) — and treat any red check as
+a failure to classify, never as noise to skip.
+
+- **Green & ready** — every check completed and passing, advisory included.
 - **Failing — mechanical** — only a generated/lock file wasn't regenerated
   after the bump (see step 5 for the Onyx cases).
 - **Failing — needs diagnosis** — anything else; requires reading the failing
@@ -76,11 +81,6 @@ in per PR.
 Summarize buckets and proposed actions, confirm with `AskUserQuestion`, then act.
 
 ## 3. Green: approve and enqueue
-
-On `web/**` bumps, also wait for the advisory `storybook-build` check. It
-never gates the queue, but don't enqueue while it's red — post-merge breakage
-pages Slack ("Storybook Deploy"). If it fails, treat it like any other failure
-(mechanical fix per step 5, or diagnosis per step 6).
 
 ```bash
 gh pr review <pr> --approve
