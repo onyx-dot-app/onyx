@@ -49,3 +49,17 @@ The backend image also publishes a `-dev` twin for every tag (e.g. `latest-dev`,
 debugging tools (vim, nano, curl, ps, psql); the default images ship without them to stay minimal. Only the backend has
 `-dev` tags, so select it with `ONYX_BACKEND_IMAGE=onyxdotapp/onyx-backend:latest-dev` rather than `IMAGE_TAG`, which
 the web-server and model-server images share.
+
+## Maintaining the compose files (contributors)
+
+`docker-compose.yml`, `docker-compose.prod.yml` and `docker-compose.prod-no-letsencrypt.yml` are
+generated from the single source of truth `docker-compose.template.yml` — do not hand-edit them.
+To change any of the three, edit the template (per-variant differences are expressed with `#!for` /
+`#!only` / `#!value` directives, documented in `generate_compose.py`) and regenerate:
+
+```
+python3 deployment/docker_compose/generate_compose.py --write
+```
+
+The `docker-compose-sync` pre-commit hook runs this automatically for commits touching the template
+or the generated files, so a stray edit to a generated file gets reverted on the next commit.

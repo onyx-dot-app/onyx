@@ -17,6 +17,7 @@
 .venv
 .mypy_cache
 .idea
+__pycache__/
 
 # testing
 /web/test-results/

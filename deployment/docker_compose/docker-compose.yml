@@ -1,4 +1,9 @@
 # =============================================================================
+# THIS FILE IS GENERATED - DO NOT EDIT DIRECTLY
+# Source of truth: deployment/docker_compose/docker-compose.template.yml
+# Regenerate:      python3 deployment/docker_compose/generate_compose.py --write
+# =============================================================================
+# =============================================================================
 # ONYX DOCKER COMPOSE
 # =============================================================================
 # This is the default configuration for Onyx. This file is fairly configurable,
@@ -213,6 +218,11 @@ services:
     restart: unless-stopped
     environment:
       - INTERNAL_URL=${INTERNAL_URL:-http://api_server:8080}
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
     healthcheck:
       test:
         [
@@ -379,6 +389,11 @@ services:
       retries: 5
     volumes:
       - db_volume:/var/lib/postgresql/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
 
   opensearch:
     image: ${BASE_IMAGE_REGISTRY:-docker.io}/opensearchproject/opensearch:3.6.0
