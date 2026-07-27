@@ -9,7 +9,8 @@ import {
   Tag,
   Text,
 } from "@opal/components";
-import { SvgCheck, SvgPlus, SvgX } from "@opal/icons";
+import { SvgCheck, SvgEdit, SvgPlus, SvgUploadCloud, SvgX } from "@opal/icons";
+import { SvgGithub } from "@opal/logos";
 import useUserSkills from "@/hooks/useUserSkills";
 import type { Skill } from "@/lib/skills/types";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
@@ -210,9 +211,10 @@ export default function AssociatedSkillsEditor({
             <Popover.Trigger asChild>
               <Button icon={SvgPlus}>Create skill</Button>
             </Popover.Trigger>
-            <Popover.Content align="end" sideOffset={4} width="md">
+            <Popover.Content align="end" sideOffset={4} width="lg">
               <Popover.Menu>
                 <LineItem
+                  icon={SvgEdit}
                   onClick={() => {
                     setCreateOpen(false);
                     onCreateSkill();
@@ -223,6 +225,7 @@ export default function AssociatedSkillsEditor({
                   Start from scratch
                 </LineItem>
                 <LineItem
+                  icon={SvgUploadCloud}
                   onClick={() => {
                     setCreateOpen(false);
                     onUploadSkill();
@@ -231,6 +234,14 @@ export default function AssociatedSkillsEditor({
                   wrapDescription
                 >
                   Upload a skill
+                </LineItem>
+                <LineItem
+                  icon={SvgGithub}
+                  disabled
+                  description="If your skills are in GitHub, import them on the Skills page first, then associate them with this app."
+                  wrapDescription
+                >
+                  Import from GitHub
                 </LineItem>
               </Popover.Menu>
             </Popover.Content>
