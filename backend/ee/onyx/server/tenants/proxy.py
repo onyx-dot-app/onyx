@@ -359,7 +359,10 @@ class BillingInformationResponse(BaseModel):
 
 @router.get("/billing-information")
 async def proxy_billing_information(
-    license_payload: LicensePayload = Depends(get_license_payload),
+    # Expired licenses may read billing state: an instance whose license just
+    # lapsed needs the subscription status to tell its admin whether a renewal
+    # already happened (and to gate the buy flow) rather than a 401.
+    license_payload: LicensePayload = Depends(get_license_payload_allow_expired),
 ) -> BillingInformationResponse:
     """Proxy billing information request to control plane.
 

@@ -66,6 +66,7 @@ from ee.onyx.configs.license_enforcement_config import (
     LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
 )
 from ee.onyx.db.license import get_cached_license_metadata, refresh_license_cache
+from ee.onyx.utils.license import maybe_schedule_license_reclaim
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.settings.models import ApplicationStatus
@@ -124,6 +125,11 @@ def add_license_enforcement_middleware(
                     )
 
             if metadata:
+                # Point-of-use renewal: a request observing an expired or
+                # expiring license triggers a debounced async re-claim. Runs
+                # before any gating decision so a gated instance heals itself.
+                maybe_schedule_license_reclaim(metadata, tenant_id)
+
                 # User HAS a license (current or expired)
                 if metadata.status == ApplicationStatus.GATED_ACCESS:
                     # License fully expired - gate the user

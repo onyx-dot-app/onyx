@@ -1,10 +1,13 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import requests
 from celery import shared_task
 
 from ee.onyx.db.license import get_license_metadata
-from ee.onyx.utils.license import reclaim_license_from_control_plane
+from ee.onyx.utils.license import (
+    LICENSE_RECLAIM_WINDOW,
+    reclaim_license_from_control_plane,
+)
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -12,8 +15,6 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
-
-LICENSE_RECLAIM_WINDOW = timedelta(days=7)
 
 
 @shared_task(

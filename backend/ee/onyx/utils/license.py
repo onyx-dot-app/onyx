@@ -3,7 +3,7 @@
 import base64
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -15,11 +15,25 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
-from ee.onyx.server.license.models import LicenseData, LicensePayload, LicenseSource
+from ee.onyx.server.license.models import (
+    LicenseData,
+    LicenseMetadata,
+    LicensePayload,
+    LicenseSource,
+)
 from onyx.server.settings.models import ApplicationStatus
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# A license inside this window (or already expired) is due for re-claim from
+# the control plane. Shared by the beat backstop and the point-of-use trigger.
+LICENSE_RECLAIM_WINDOW = timedelta(days=7)
+
+# One reclaim attempt per debounce period, no matter how many requests see a
+# stale license. Redis key TTL is the debounce.
+_LICENSE_RECLAIM_DEBOUNCE_KEY = "license_reclaim_debounce"
+_LICENSE_RECLAIM_DEBOUNCE_TTL_SEC = 15 * 60
 
 # Path to the license public key file
 _LICENSE_PUBLIC_KEY_PATH = (
@@ -171,6 +185,50 @@ def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | 
     return verify_and_store_license(
         db_session, response_data.license, source=LicenseSource.AUTO_FETCH
     )
+
+
+def maybe_schedule_license_reclaim(metadata: LicenseMetadata, tenant_id: str) -> None:
+    """Enqueue an immediate license re-claim when the stored license is due.
+
+    Point-of-use companion to the beat backstop: any request that observes a
+    license expired or expiring within LICENSE_RECLAIM_WINDOW triggers one
+    reclaim attempt per debounce period. Never raises, since a scheduling
+    failure must not affect the request that tripped it.
+    """
+    # Call-time imports: this runs inside request middleware, and the celery
+    # client / redis pool must not become import-time dependencies of every
+    # consumer of this module.
+    from onyx.background.celery.versioned_apps.client import app as client_app
+    from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
+    from onyx.redis.redis_pool import get_redis_client
+
+    try:
+        if metadata.expires_at - datetime.now(timezone.utc) > LICENSE_RECLAIM_WINDOW:
+            return
+
+        redis_client = get_redis_client(tenant_id=tenant_id)
+        # SET NX doubles as the debounce and a cross-process lock: only the
+        # first request in the window enqueues.
+        if not redis_client.set(
+            _LICENSE_RECLAIM_DEBOUNCE_KEY,
+            "1",
+            nx=True,
+            ex=_LICENSE_RECLAIM_DEBOUNCE_TTL_SEC,
+        ):
+            return
+
+        client_app.send_task(
+            OnyxCeleryTask.RECLAIM_LICENSE,
+            kwargs={"tenant_id": tenant_id},
+            priority=OnyxCeleryPriority.HIGH,
+            expires=_LICENSE_RECLAIM_DEBOUNCE_TTL_SEC,
+        )
+        logger.info(
+            "Scheduled license reclaim (license expires %s)",
+            metadata.expires_at.date(),
+        )
+    except Exception as e:
+        logger.warning("Failed to schedule license reclaim: %s", e)
 
 
 def get_license_status(
