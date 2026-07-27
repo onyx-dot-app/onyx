@@ -272,6 +272,7 @@ class TestMaybeScheduleLicenseReclaim:
         mock_client_app: MagicMock,
         expires_in: timedelta,
     ) -> None:
+        mock_get_redis.return_value.exists.return_value = 0
         mock_get_redis.return_value.set.return_value = True
 
         maybe_schedule_license_reclaim(_expiring_in(expires_in), "tenant_123")
@@ -290,10 +291,27 @@ class TestMaybeScheduleLicenseReclaim:
         mock_get_redis: MagicMock,
         mock_client_app: MagicMock,
     ) -> None:
+        mock_get_redis.return_value.exists.return_value = 0
         mock_get_redis.return_value.set.return_value = None
 
         maybe_schedule_license_reclaim(_expiring_in(timedelta(days=1)), "tenant_123")
 
+        mock_client_app.send_task.assert_not_called()
+
+    @patch("onyx.background.celery.versioned_apps.client.app")
+    @patch("onyx.redis.redis_pool.get_redis_client")
+    def test_no_op_when_reclaim_is_blocked(
+        self,
+        mock_get_redis: MagicMock,
+        mock_client_app: MagicMock,
+    ) -> None:
+        # A license the control plane already rejected must not spend another
+        # attempt, no matter how many requests observe it as stale.
+        mock_get_redis.return_value.exists.return_value = 1
+
+        maybe_schedule_license_reclaim(_expiring_in(timedelta(days=-3)), "tenant_123")
+
+        mock_get_redis.return_value.set.assert_not_called()
         mock_client_app.send_task.assert_not_called()
 
     @patch("ee.onyx.utils.license.logger")

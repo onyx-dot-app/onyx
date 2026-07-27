@@ -106,3 +106,62 @@ def test_reclaim_license_task_is_scheduled_every_six_hours() -> None:
     assert reclaim_schedule["name"] == "reclaim-license"
     assert reclaim_schedule["schedule"] == timedelta(hours=6)
     assert reclaim_schedule["options"]["expires"] is not None
+
+
+class TestTerminalAuthRejection:
+    """A rejected license is the credential itself, so retrying cannot help."""
+
+    def _run_with_error(self, error: Exception) -> tuple[MagicMock, MagicMock]:
+        with (
+            patch(f"{TASKS_MODULE}.get_session_with_current_tenant") as mock_session,
+            patch(f"{TASKS_MODULE}.get_license_metadata") as mock_metadata,
+            patch(f"{TASKS_MODULE}.reclaim_license_from_control_plane") as mock_reclaim,
+            patch(f"{TASKS_MODULE}.license_reclaim_is_blocked", return_value=False),
+            patch(f"{TASKS_MODULE}.block_license_reclaim") as mock_block,
+            patch(f"{TASKS_MODULE}.logger") as mock_logger,
+        ):
+            mock_session.return_value.__enter__.return_value = MagicMock()
+            mock_metadata.return_value = _make_metadata(expires_delta=timedelta(days=1))
+            mock_reclaim.side_effect = error
+            reclaim_license_task(tenant_id="tenant_123")
+        return mock_block, mock_logger
+
+    def _http_error(self, status_code: int) -> requests.HTTPError:
+        response = MagicMock()
+        response.status_code = status_code
+        return requests.HTTPError(response=response)
+
+    @pytest.mark.parametrize("status_code", [401, 403])
+    def test_auth_rejection_blocks_further_reclaims(self, status_code: int) -> None:
+        mock_block, mock_logger = self._run_with_error(self._http_error(status_code))
+
+        mock_block.assert_called_once_with("tenant_123")
+        mock_logger.error.assert_called_once()
+
+    @pytest.mark.parametrize("status_code", [500, 502, 429])
+    def test_transient_http_failure_keeps_retrying(self, status_code: int) -> None:
+        mock_block, mock_logger = self._run_with_error(self._http_error(status_code))
+
+        mock_block.assert_not_called()
+        mock_logger.warning.assert_called_once()
+
+    def test_connection_error_keeps_retrying(self) -> None:
+        mock_block, mock_logger = self._run_with_error(
+            requests.ConnectionError("control plane down")
+        )
+
+        mock_block.assert_not_called()
+        mock_logger.warning.assert_called_once()
+
+    def test_blocked_tenant_never_calls_control_plane(self) -> None:
+        with (
+            patch(f"{TASKS_MODULE}.get_session_with_current_tenant") as mock_session,
+            patch(f"{TASKS_MODULE}.get_license_metadata") as mock_metadata,
+            patch(f"{TASKS_MODULE}.reclaim_license_from_control_plane") as mock_reclaim,
+            patch(f"{TASKS_MODULE}.license_reclaim_is_blocked", return_value=True),
+        ):
+            mock_session.return_value.__enter__.return_value = MagicMock()
+            mock_metadata.return_value = _make_metadata(expires_delta=timedelta(days=1))
+            reclaim_license_task(tenant_id="tenant_123")
+
+        mock_reclaim.assert_not_called()

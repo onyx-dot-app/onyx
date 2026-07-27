@@ -5,6 +5,7 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import requests
 from cryptography.exceptions import InvalidSignature
@@ -30,6 +31,13 @@ logger = setup_logger()
 # stale license. Redis key TTL is the debounce.
 _LICENSE_RECLAIM_DEBOUNCE_KEY = "license_reclaim_debounce"
 _LICENSE_RECLAIM_DEBOUNCE_TTL_SEC = 15 * 60
+
+# The control plane authenticates a re-claim with the stored license itself, so
+# a rejected license cannot be fixed by retrying it. Back off hard until a new
+# license arrives (any successful store clears this) rather than re-attempting
+# every debounce period forever.
+_LICENSE_RECLAIM_BLOCKED_KEY = "license_reclaim_blocked"
+_LICENSE_RECLAIM_BLOCKED_TTL_SEC = 24 * 60 * 60
 
 # Path to the license public key file
 _LICENSE_PUBLIC_KEY_PATH = (
@@ -143,9 +151,12 @@ def verify_and_store_license(
     upsert_license(db_session, license_data)
 
     # The cache is derived state that self-heals on the next read, so a cache
-    # outage must not discard a license that is already persisted.
+    # outage must not discard a license that is already persisted. The reclaim
+    # block is cleared alongside it: this license replaces whatever the control
+    # plane rejected, so re-claims may resume immediately.
     try:
         update_license_cache(payload, source=source)
+        _reclaim_redis(payload.tenant_id).delete(_LICENSE_RECLAIM_BLOCKED_KEY)
     except Exception as cache_error:
         logger.warning("Failed to update license cache: %s", cache_error)
 
@@ -186,6 +197,34 @@ def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | 
     )
 
 
+def _reclaim_redis(tenant_id: str) -> Any:
+    from onyx.redis.redis_pool import get_redis_client
+
+    return get_redis_client(tenant_id=tenant_id)
+
+
+def block_license_reclaim(tenant_id: str) -> None:
+    """Stop re-claiming until a new license lands. Never raises."""
+    try:
+        _reclaim_redis(tenant_id).set(
+            _LICENSE_RECLAIM_BLOCKED_KEY, "1", ex=_LICENSE_RECLAIM_BLOCKED_TTL_SEC
+        )
+    except Exception as e:
+        logger.warning("Failed to set license reclaim block: %s", e)
+
+
+def license_reclaim_is_blocked(tenant_id: str) -> bool:
+    """True when the stored license was already rejected as auth.
+
+    Fails open: an unreachable cache must not stop a legitimate reclaim.
+    """
+    try:
+        return _reclaim_redis(tenant_id).exists(_LICENSE_RECLAIM_BLOCKED_KEY) > 0
+    except Exception as e:
+        logger.warning("Failed to read license reclaim block: %s", e)
+        return False
+
+
 def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None:
     """Enqueue an immediate license re-claim when the stored license is due.
 
@@ -206,6 +245,11 @@ def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None
             return
 
         redis_client = get_redis_client(tenant_id=tenant_id)
+        # A license the control plane already rejected as auth cannot be fixed
+        # by another attempt, so do not spend one.
+        if redis_client.exists(_LICENSE_RECLAIM_BLOCKED_KEY):
+            return
+
         # SET NX doubles as the debounce and a cross-process lock: only the
         # first request in the window enqueues.
         if not redis_client.set(
