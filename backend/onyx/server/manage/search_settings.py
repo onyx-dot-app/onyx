@@ -182,23 +182,8 @@ def set_new_search_settings(
         set_reclaim_intent_on_current__no_commit(db_session, consented_deletions)
 
     secondary_search_settings = get_secondary_search_settings(db_session)
-    superseded_settings_id: int | None = None
 
     if secondary_search_settings:
-        # Refuse to supersede INTO the same physical index as the in-flight reindex: the new
-        # port is create-only, so it would inherit the superseded generation's stale chunks
-        # (e.g. a same-model reindex that only flips contextual RAG).
-        if (
-            new_search_settings_request.index_name is not None
-            and new_search_settings_request.index_name
-            == secondary_search_settings.index_name
-        ):
-            raise OnyxError(
-                OnyxErrorCode.CONFLICT,
-                "A reindex to this embedding model is already in progress. Cancel it "
-                "before starting a new one.",
-            )
-
         # Cancel any background indexing jobs.
         expire_index_attempts(
             search_settings_id=secondary_search_settings.id, db_session=db_session
@@ -217,13 +202,6 @@ def set_new_search_settings(
         # boundary once it sees CANCELED.
         cancel_active_port_attempts(
             db_session, search_settings_id=secondary_search_settings.id
-        )
-
-        # Reclaim the superseded FUTURE's now-orphaned index (a distinct physical index —
-        # same-name supersede is refused above) so it can't block a later reindex.
-        superseded_settings_id = secondary_search_settings.id
-        _reclaim_abandoned_future(
-            db_session, secondary_search_settings, search_settings
         )
 
     # Every new FUTURE reindexes via the port flow (re-embed PRESENT -> FUTURE in
@@ -293,11 +271,6 @@ def set_new_search_settings(
 
     # Atomic: FUTURE row, its seeds, and the reclaim intent become visible together.
     db_session.commit()
-
-    # Start reclaiming the superseded FUTURE's index now rather than waiting for the beat.
-    if superseded_settings_id is not None:
-        enqueue_index_reclaim(client_app, get_current_tenant_id(), superseded_settings_id)
-
     return IdReturn(id=new_search_settings.id)
 
 
