@@ -418,9 +418,6 @@ class LitellmLLM(LLM):
         self._max_input_tokens = max_input_tokens
         self._custom_config = custom_config
 
-        # The wire protocol this provider's endpoint speaks, when it is reached
-        # through a generic surface rather than LiteLLM's own integration. For
-        # gateways exposing several surfaces this reflects the admin's choice.
         self._api_surface = resolve_api_surface(model_provider, custom_config)
 
         # Create a dictionary for model-specific arguments if it's None
@@ -465,9 +462,6 @@ class LitellmLLM(LLM):
         ):
             model_kwargs[VERTEX_LOCATION_KWARG] = "global"
 
-        # OpenAI-compatible surfaces (proxies, gateways, self-hosted servers)
-        # send model names directly to the endpoint, so we impersonate LiteLLM's
-        # openai provider against the server's base URL with /v1 appended.
         if self._api_surface in OPENAI_COMPATIBLE_SURFACES:
             self._custom_llm_provider = "openai"
             # LiteLLM's OpenAI client requires an api_key to be set.
@@ -480,8 +474,7 @@ class LitellmLLM(LLM):
                 self._api_base = base if base.endswith("/v1") else f"{base}/v1"
                 model_kwargs["api_base"] = self._api_base
         elif self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES:
-            # LiteLLM appends /v1/messages to the base itself, so it must stay
-            # bare — coercing it to /v1 here would produce /v1/v1/messages.
+            # Base stays bare; LiteLLM appends /v1/messages itself.
             self._custom_llm_provider = "anthropic"
             if self._api_base is not None:
                 self._api_base = self._api_base.rstrip("/")
@@ -651,8 +644,6 @@ class LitellmLLM(LLM):
             # Drives LiteLLM's completions -> responses bridge.
             model = f"responses/{model_bare}"
         elif self._api_surface is not None:
-            # Generic surfaces set custom_llm_provider explicitly and expect the
-            # model name sent directly to the endpoint, with no provider prefix.
             model = model_bare
         else:
             model = f"{model_provider}/{model_bare}"

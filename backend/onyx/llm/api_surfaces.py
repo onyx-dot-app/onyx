@@ -1,11 +1,8 @@
 """Wire protocols ("API surfaces") that provider endpoints speak.
 
-Routing a call depends on the surface rather than the provider: which LiteLLM
-provider to impersonate, whether the base URL is coerced to end in `/v1`, and
-how the model name is addressed. Gateways make this explicit — one gateway can
-expose several surfaces, and the admin picks one. Keeping the mapping here lets
-`multi_llm` branch on the surface alone, so a new provider is a table entry
-rather than another conditional in the call path.
+Routing depends on the surface rather than the provider: which LiteLLM provider
+to impersonate, whether to coerce the base URL to `/v1`, and how to address the
+model. A gateway can expose several surfaces, with the admin picking one.
 """
 
 from enum import Enum
@@ -21,32 +18,25 @@ from onyx.llm.well_known_providers.constants import (
 
 
 class LlmApiSurface(str, Enum):
-    """The wire protocol a provider's endpoint speaks."""
-
-    # POST {base}/v1/chat/completions, model sent bare.
     OPENAI_CHAT_COMPLETIONS = "openai_chat_completions"
-    # POST {base}/v1/responses, via LiteLLM's completions->responses bridge
-    # (a `responses/` model-name prefix).
+    # Reached via LiteLLM's completions->responses bridge (a `responses/` prefix).
     OPENAI_RESPONSES = "openai_responses"
-    # POST {base}/v1/messages. LiteLLM appends the path, so the base stays bare.
+    # LiteLLM appends /v1/messages to the base, so the base must stay bare.
     ANTHROPIC_MESSAGES = "anthropic_messages"
 
 
-# Surfaces reached by impersonating LiteLLM's `openai` provider. These share the
-# `/v1` base coercion and the placeholder-api-key workaround.
+# Share the `/v1` base coercion and the placeholder-api-key workaround.
 OPENAI_COMPATIBLE_SURFACES = frozenset(
     {LlmApiSurface.OPENAI_CHAT_COMPLETIONS, LlmApiSurface.OPENAI_RESPONSES}
 )
 
-# Providers that always speak a single surface.
 _STATIC_SURFACES: dict[str, LlmApiSurface] = {
     LlmProviderNames.BIFROST: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
     LlmProviderNames.OPENAI_COMPATIBLE: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
     LlmProviderNames.NEBIUS_TOKENFACTORY: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
 }
 
-# Providers whose surface the admin selects, keyed by the custom_config entry
-# holding the choice: {provider: (config_key, {stored value: surface}, default)}.
+# Admin-selected surfaces: {provider: (config_key, {stored value: surface}, default)}
 _SELECTABLE_SURFACES: dict[str, tuple[str, dict[str, LlmApiSurface], str]] = {
     LlmProviderNames.PORTKEY: (
         PORTKEY_API_MODE_CONFIG_KEY,
@@ -59,8 +49,7 @@ _SELECTABLE_SURFACES: dict[str, tuple[str, dict[str, LlmApiSurface], str]] = {
     ),
 }
 
-# custom_config keys that only select a surface. They drive routing but are UI
-# form state, never credentials, so they are exempt from environment injection.
+# UI form state, not credentials — exempt from environment injection.
 SURFACE_SELECTION_CONFIG_KEYS: frozenset[str] = frozenset(
     config_key for config_key, _, _ in _SELECTABLE_SURFACES.values()
 )
@@ -69,8 +58,8 @@ SURFACE_SELECTION_CONFIG_KEYS: frozenset[str] = frozenset(
 def resolve_api_surface(
     model_provider: str, custom_config: dict[str, str] | None
 ) -> LlmApiSurface | None:
-    """The surface this provider speaks, or None when it is reached through
-    LiteLLM's own provider integration (Bedrock, Vertex, native Anthropic, ...)."""
+    """None when the provider is reached through LiteLLM's own integration
+    (Bedrock, Vertex, native Anthropic, ...)."""
     selectable = _SELECTABLE_SURFACES.get(model_provider)
     if selectable is not None:
         config_key, by_value, default = selectable

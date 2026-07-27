@@ -1,9 +1,7 @@
 import React from "react";
 import type { IconProps } from "@opal/types";
 
-// Portkey brand mark — the hexagon-with-chevron glyph in the brand's blue→red
-// gradient. The gradient id is generated per-instance so multiple renders on a
-// page don't collide.
+// Gradient id is per-instance so repeated renders don't collide.
 const SvgPortkey = ({ size, ...props }: IconProps) => {
   const gradientId = React.useId();
   return (

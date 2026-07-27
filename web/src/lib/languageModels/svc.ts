@@ -685,10 +685,7 @@ export const fetchNebiusTokenfactoryModels = async (
   }
 };
 
-/**
- * Fetches models from a Portkey gateway (/v1/models). The listing endpoint is
- * the same across Portkey's Chat Completions, Responses, and Messages surfaces.
- */
+/** Fetches models from a Portkey gateway; same endpoint for every API surface. */
 export const fetchPortkeyModels = async (
   params: PortkeyFetchParams
 ): Promise<{ models: ModelConfiguration[]; error?: string }> => {

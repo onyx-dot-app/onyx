@@ -32,17 +32,13 @@ import {
 } from "@/sections/modals/languageModels/shared";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
-// The two OpenAI-compatible surfaces (Chat Completions, Responses) hit /v1; the
-// Anthropic-compatible Messages surface uses the bare host (LiteLLM appends
-// /v1/messages).
 const DEFAULT_API_BASE_OPENAI = "https://api.portkey.ai/v1";
 const DEFAULT_API_BASE_ANTHROPIC = "https://api.portkey.ai";
 const DEFAULT_API_MODE: PortkeyApiMode = "chat_completions";
 const PORTKEY_API_MODE_KEY = "portkey_api_mode";
 const DEFAULT_DISPLAY_NAME = "Portkey Gateway";
 
-// Bases we consider "not customized" — switching modes replaces one of these
-// with the new mode's default, but leaves a user-entered self-hosted base alone.
+// Switching modes replaces these, but leaves a self-hosted base alone.
 const KNOWN_DEFAULT_BASES = new Set<string>([
   DEFAULT_API_BASE_OPENAI,
   DEFAULT_API_BASE_ANTHROPIC,
@@ -100,7 +96,6 @@ function PortkeyModalInternals({
 
   const handleModeChange = (next: PortkeyApiMode) => {
     setFieldValue("custom_config", { [PORTKEY_API_MODE_KEY]: next });
-    // Only swap the base URL if the user hasn't entered a custom (self-hosted) one.
     if (KNOWN_DEFAULT_BASES.has(values.api_base)) {
       setFieldValue("api_base", defaultBaseForMode(next));
     }
@@ -121,9 +116,7 @@ function PortkeyModalInternals({
     );
   };
 
-  // When editing a saved provider the models load from the DB; refetch once on
-  // open so the picker matches the "add" view. Best-effort — ignore errors so
-  // the modal still works if the gateway is unreachable.
+  // Refetch once on open so an edit's picker matches the "add" view.
   const autoRefetched = useRef(false);
   useEffect(() => {
     if (autoRefetched.current || !existingLlmProvider?.id) return;
@@ -234,9 +227,8 @@ export default function PortkeyModal({
     existingLlmProvider
   ) as PortkeyModalValues;
 
-  // The selected API mode round-trips through custom_config. useInitialValues
-  // does not populate custom_config, so seed it here (mirroring CustomModal) so
-  // submitProvider's custom_config_changed diff is accurate.
+  // useInitialValues drops custom_config, so seed it for submitProvider's
+  // custom_config_changed diff (mirrors CustomModal).
   const initialMode =
     (existingLlmProvider?.custom_config?.[PORTKEY_API_MODE_KEY] as
       | PortkeyApiMode

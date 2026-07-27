@@ -667,9 +667,6 @@ class PortkeyModelsRequest(BaseModel):
     api_key: str | None = None
     # Existing provider id; resolves the stored key and syncs fetched models on edit
     provider_id: int | None = None
-    # Selected Portkey API surface (chat_completions | responses | messages).
-    # The model-listing endpoint is the same across surfaces; carried for clarity.
-    api_mode: str | None = None
 
 
 class PortkeyFinalModelResponse(BaseModel):

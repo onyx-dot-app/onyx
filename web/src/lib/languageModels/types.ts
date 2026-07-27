@@ -60,8 +60,6 @@ export enum LLMProviderName {
   CUSTOM = "custom",
 }
 
-// Which Portkey API surface a provider targets. Persisted in custom_config
-// under `portkey_api_mode`.
 export type PortkeyApiMode = "chat_completions" | "responses" | "messages";
 
 export interface SimpleKnownModel {
