@@ -244,6 +244,8 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          # The production image; the Dockerfile's default (last) stage is the dev variant.
+          target: runtime
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
           push: true
