@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.2
+version: 0.8.3
 appVersion: latest
 annotations:
   category: Productivity
@@ -17,10 +17,8 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: changed
-      description: Documented that the default backend images no longer ship psql (it
-        moved to the -dev suffixed image variants); the opt-in tooling.pgInto helper
-        now needs a -dev backend image tag or a custom image providing the client
-        binary.
+      description: Made the Kubernetes CI profile coordinate API startup migrations
+        through deployment readiness before running tests.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
