@@ -120,7 +120,9 @@ def set_new_search_settings(
         enable_contextual_rag=search_settings_new.enable_contextual_rag,
     )
 
-    search_settings = get_current_search_settings(db_session)
+    # Lock PRESENT so concurrent reindex submissions serialize: without it two racers both
+    # pass the no-FUTURE guard below and the loser trips the FUTURE unique index (raw 500).
+    search_settings = get_current_search_settings(db_session, for_update=True)
 
     # An INSTANT backfill targets the PRESENT (not a secondary), so a new reindex would
     # abandon it — live index left short its un-ported docs, PAST source stuck
