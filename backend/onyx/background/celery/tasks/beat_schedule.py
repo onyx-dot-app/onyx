@@ -90,6 +90,21 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-failed-chat-cleanup",
+        "task": OnyxCeleryTask.CHECK_FAILED_CHAT_CLEANUP_TASK,
+        "schedule": timedelta(hours=6),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            # Both the dispatcher and the batch tasks it chains run on the
+            # light worker's chat-deletion queue.
+            "queue": OnyxCeleryQueues.CHAT_TTL_DELETION,
+            # Run on gated tenants too — they may still accumulate husks.
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
         "name": "check-for-checkpoint-cleanup",
         "task": OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
         "schedule": timedelta(hours=1),

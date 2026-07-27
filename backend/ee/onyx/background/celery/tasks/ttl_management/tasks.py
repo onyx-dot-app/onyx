@@ -14,41 +14,16 @@ from onyx.configs.constants import (
 )
 from onyx.db.chat import delete_chat_session, get_chat_sessions_older_than
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.redis.chain_fence import (
+    claim_chain,
+    refresh_chain_if_owned,
+    release_chain_if_owned,
+)
 from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-# Extend the chain lease only if we still own it (marker value == our token).
-# Returns 1 when owned+extended, 0 otherwise. Prevents a task whose lease lapsed
-# (and whose chain a later beat has replaced) from extending someone else's lease.
-_REFRESH_IF_OWNED = """
-if redis.call('get', KEYS[1]) == ARGV[1] then
-    return redis.call('expire', KEYS[1], ARGV[2])
-else
-    return 0
-end
-"""
-
-# Release the chain marker only if we still own it.
-_RELEASE_IF_OWNED = """
-if redis.call('get', KEYS[1]) == ARGV[1] then
-    return redis.call('del', KEYS[1])
-else
-    return 0
-end
-"""
-
-
-def _release_chain_if_owned(redis_client: TenantRedisClient, chain_token: str) -> None:
-    """Delete the chain marker only if ``chain_token`` still owns it."""
-    redis_client.eval(
-        _RELEASE_IF_OWNED,
-        [OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE],
-        [chain_token],
-    )
 
 
 @shared_task(
@@ -92,12 +67,12 @@ def perform_ttl_management_task(
     redis_client = get_redis_client(tenant_id=tenant_id)
     # Extend our lease only if we still own the chain; if a replacement chain has
     # taken over, stop — we're a superseded task and must not touch its marker.
-    owns_chain = redis_client.eval(
-        _REFRESH_IF_OWNED,
-        [OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE],
-        [chain_token, str(CELERY_CHAT_TTL_DELETE_TASK_EXPIRES)],
-    )
-    if not owns_chain:
+    if not refresh_chain_if_owned(
+        redis_client,
+        OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE,
+        chain_token,
+        CELERY_CHAT_TTL_DELETE_TASK_EXPIRES,
+    ):
         return
 
     with get_session_with_current_tenant() as db_session:
@@ -138,10 +113,14 @@ def perform_ttl_management_task(
                 expires=CELERY_CHAT_TTL_DELETE_TASK_EXPIRES,
             )
         except Exception:
-            _release_chain_if_owned(redis_client, chain_token)
+            release_chain_if_owned(
+                redis_client, OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE, chain_token
+            )
             raise
     else:
-        _release_chain_if_owned(redis_client, chain_token)
+        release_chain_if_owned(
+            redis_client, OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE, chain_token
+        )
 
 
 @shared_task(
@@ -171,11 +150,11 @@ def check_ttl_management_task(self: Task, *, tenant_id: str) -> None:
     chain_token = uuid.uuid4().hex
     # Claim the chain. If the marker is already set, a chain is in flight (its
     # active task may not be sitting in the queue), so don't start another.
-    if not redis_client.set(
+    if not claim_chain(
+        redis_client,
         OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE,
         chain_token,
-        nx=True,
-        ex=CELERY_CHAT_TTL_DELETE_TASK_EXPIRES,
+        CELERY_CHAT_TTL_DELETE_TASK_EXPIRES,
     ):
         return
 
@@ -193,5 +172,7 @@ def check_ttl_management_task(self: Task, *, tenant_id: str) -> None:
         )
     except Exception:
         # Roll back the claim so the next beat can start the chain.
-        _release_chain_if_owned(redis_client, chain_token)
+        release_chain_if_owned(
+            redis_client, OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE, chain_token
+        )
         raise

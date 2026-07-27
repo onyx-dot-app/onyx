@@ -83,6 +83,15 @@ STOP_STREAM_PAT = os.environ.get("STOP_STREAM_PAT") or None
 # As opposed to soft deleting them, which just hides them from non-admin users
 HARD_DELETE_CHATS = os.environ.get("HARD_DELETE_CHATS", "").lower() == "true"
 
+# Days after which a "failed" chat session — one that has never contained a
+# non-SYSTEM message, i.e. no user-visible content — is garbage-collected by
+# the background cleanup task. Generous by default because create-chat-session
+# is a public API: an external consumer may pre-create a session and send its
+# first message much later. Set to 0 to disable the cleanup entirely.
+FAILED_CHAT_CLEANUP_AFTER_DAYS = float(
+    os.environ.get("FAILED_CHAT_CLEANUP_AFTER_DAYS") or 7
+)
+
 # Internet Search
 NUM_INTERNET_SEARCH_RESULTS = int(os.environ.get("NUM_INTERNET_SEARCH_RESULTS") or 10)
 NUM_INTERNET_SEARCH_CHUNKS = int(os.environ.get("NUM_INTERNET_SEARCH_CHUNKS") or 50)
