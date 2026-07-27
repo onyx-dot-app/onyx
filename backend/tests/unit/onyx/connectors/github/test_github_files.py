@@ -10,7 +10,11 @@ from github.RateLimit import RateLimit
 from github.Requester import Requester
 
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.github.connector import GithubConnector, _is_indexable_path
+from onyx.connectors.github.connector import (
+    GithubConnector,
+    GithubConnectorStage,
+    _is_indexable_path,
+)
 from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.models import ConnectorFailure, Document
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
@@ -385,6 +389,43 @@ def test_blank_branch_normalized_to_none() -> None:
     assert GithubConnector(repo_owner="o", branch="   ").branch is None
     assert GithubConnector(repo_owner="o", branch=None).branch is None
     assert GithubConnector(repo_owner="o", branch=" gh-pages ").branch == "gh-pages"
+
+
+def test_resumed_checkpoint_from_other_branch_relists(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    """A checkpoint resumed after the branch setting changed must re-list.
+
+    Otherwise paths listed from the old branch pair with content fetches from
+    the new branch — deleted paths fail and new-branch-only files are skipped.
+    """
+    connector = _build_connector(mock_github_client, branch="gh-pages")
+    mock_repo = create_mock_repo({"new-only.md": b"new content"})
+
+    checkpoint = connector.build_dummy_checkpoint()
+    checkpoint.stage = GithubConnectorStage.FILES
+    checkpoint.file_paths = ["old-only.md"]  # listed from the previous branch
+    checkpoint.file_paths_branch = "main"
+    checkpoint.curr_page = 1
+
+    items = list(
+        connector._fetch_repo_files(
+            mock_repo,
+            checkpoint,
+            start=None,
+            is_slim=False,
+            repo_external_access=None,
+        )
+    )
+
+    docs = [i for i in items if isinstance(i, Document)]
+    assert [d.id for d in docs] == [
+        "https://github.com/test-org/test-repo/blob/gh-pages/new-only.md"
+    ]
+    mock_repo.get_git_tree.assert_called_once_with("gh-pages", recursive=True)
+    assert checkpoint.file_paths == ["new-only.md"]
+    assert checkpoint.file_paths_branch == "gh-pages"
 
 
 def test_nonexistent_branch_raises_clear_error(

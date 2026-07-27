@@ -568,6 +568,9 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     # Resolved + filtered file paths for the current repo's FILES stage.
     # Populated once when the stage begins, then paginated via curr_page.
     file_paths: list[str] | None = None
+    # Branch file_paths was listed from; a resumed checkpoint whose branch no
+    # longer matches (connector edited, default branch changed) is re-listed.
+    file_paths_branch: str | None = None
 
     # Used for the fallback cursor-based pagination strategy
     num_retrieved: int
@@ -575,13 +578,14 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
 
     def reset(self) -> None:
         """
-        Resets curr_page, num_retrieved, cursor_url, and file_paths to their
-        initial values (0, 0, None, None)
+        Resets curr_page, num_retrieved, cursor_url, file_paths, and
+        file_paths_branch to their initial values (0, 0, None, None, None)
         """
         self.curr_page = 0
         self.num_retrieved = 0
         self.cursor_url = None
         self.file_paths = None
+        self.file_paths_branch = None
 
 
 def make_cursor_url_callback(
@@ -834,6 +838,15 @@ class GithubConnector(
         truncation as a failure. Returns True if more file batches remain (the
         caller should return the checkpoint to resume), False once drained.
         """
+        branch = self._resolve_branch(repo)
+        if checkpoint.file_paths is not None and checkpoint.file_paths_branch != branch:
+            # The cached listing came from a different branch (resumed
+            # checkpoint after a connector edit or default-branch change) —
+            # discard it so paths and content come from the same branch.
+            checkpoint.file_paths = None
+            checkpoint.file_paths_branch = None
+            checkpoint.curr_page = 0
+
         if checkpoint.file_paths is None:
             pushed_at = (
                 repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
@@ -842,10 +855,12 @@ class GithubConnector(
                 # Nothing changed in this repo since the last poll — skip.
                 logger.info("Skipping files for repo %s (pushed_at < start)", repo.name)
                 checkpoint.file_paths = []
+                checkpoint.file_paths_branch = branch
             else:
                 logger.info("Listing files for repo: %s", repo.name)
                 paths, truncated = self._list_indexable_files(repo)
                 checkpoint.file_paths = paths
+                checkpoint.file_paths_branch = branch
                 logger.info(
                     "Found %s indexable files for repo: %s", len(paths), repo.name
                 )
@@ -868,7 +883,6 @@ class GithubConnector(
         batch = file_paths[page * FILE_BATCH_SIZE : (page + 1) * FILE_BATCH_SIZE]
         checkpoint.curr_page += 1
 
-        branch = self._resolve_branch(repo)
         for path in batch:
             html_url = f"{repo.html_url}/blob/{branch}/{path}"
             if is_slim:
