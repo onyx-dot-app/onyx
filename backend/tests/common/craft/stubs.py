@@ -35,6 +35,8 @@ payload snapshots so tests assert observable manager outcomes:
   ``last_cleanup_session_workspace_payload``,
   ``last_restore_snapshot_payload``, ``last_send_message_payload``,
   ``last_write_sandbox_file_payload``, ``last_write_files_to_sandbox_payload``.
+- ``session_runtime_call_order`` records config regeneration, instance disposal,
+  and session prewarming in invocation order.
 
 Usage
 -----
@@ -206,6 +208,7 @@ class StubSandboxManager(SandboxManager):
         self.health_check_count: int = 0
         self.ensure_opencode_session_count: int = 0
         self.last_ensure_opencode_session_payload: dict[str, Any] | None = None
+        self.session_runtime_call_order: list[str] = []
         self.send_message_count: int = 0
         self.subscribe_to_opencode_session_count: int = 0
         self.list_directory_count: int = 0
@@ -350,6 +353,7 @@ class StubSandboxManager(SandboxManager):
         llm_config: CraftLLMProviderConfig | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
+        self.session_runtime_call_order.append("regenerate_session_config")
         self.regenerate_session_config_count += 1
         self.last_regenerate_session_config_payload = {
             "sandbox_id": sandbox_id,
@@ -488,6 +492,7 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
     ) -> None:
+        self.session_runtime_call_order.append("dispose_opencode_instance")
         self.dispose_opencode_instance_count += 1
         self.last_dispose_opencode_instance_payload = {
             "sandbox_id": sandbox_id,
@@ -506,6 +511,7 @@ class StubSandboxManager(SandboxManager):
     ) -> str | None:
         # Override the real _ServeMixin preflight (which POSTs /session over
         # HTTP to a pod) so send_message tests run fully in-memory.
+        self.session_runtime_call_order.append("ensure_opencode_session")
         self.ensure_opencode_session_count += 1
         self.last_ensure_opencode_session_payload = {
             "sandbox_id": sandbox_id,
