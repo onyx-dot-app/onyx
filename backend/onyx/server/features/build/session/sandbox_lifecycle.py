@@ -48,6 +48,13 @@ from onyx.server.features.build.sandbox.util.mcp_config import (
     resolve_craft_mcp_servers,
 )
 from onyx.server.features.build.session.errors import SandboxProvisioningError
+from onyx.server.metrics.craft_sandbox import (
+    SandboxProvisionPhase,
+    SandboxReadyOutcome,
+    observe_sandbox_ready,
+    time_provision_phase,
+    track_sandbox_provision_in_progress,
+)
 from onyx.skills.push import (
     build_user_skills_payload,
     compute_skill_runtime_hash,
@@ -260,7 +267,8 @@ def provision_sandbox(
     Updates the sandbox row's status to whatever the manager returns.
     Caller is responsible for committing.
     """
-    onyx_pat = ensure_sandbox_pat(db_session, sandbox, user)
+    with time_provision_phase(SandboxProvisionPhase.ENSURE_PAT):
+        onyx_pat = ensure_sandbox_pat(db_session, sandbox, user)
     sandbox_info = sandbox_manager.provision(
         sandbox_id=sandbox.id,
         user_id=user_id,
@@ -268,10 +276,12 @@ def provision_sandbox(
         onyx_pat=onyx_pat,
     )
     if sandbox_info.status == SandboxStatus.RUNNING:
-        hydrate_managed_content(sandbox_manager, sandbox.id, user, db_session)
+        with time_provision_phase(SandboxProvisionPhase.HYDRATE_MANAGED_CONTENT):
+            hydrate_managed_content(sandbox_manager, sandbox.id, user, db_session)
     update_sandbox_status__no_commit(db_session, sandbox.id, sandbox_info.status)
 
 
+@time_provision_phase(SandboxProvisionPhase.PROVISIONING_WAIT)
 def _wait_for_provisioning_to_complete(
     db_session: DBSession,
     sandbox: Sandbox,
@@ -362,8 +372,35 @@ def ensure_sandbox_ready(
         RuntimeError: Pod provisioning failed, or sandbox is mid-provision
             under FAIL policy.
     """
+    started_at = time.monotonic()
+    outcome = SandboxReadyOutcome.FAILED
+    try:
+        sandbox, outcome = _resolve_ready_sandbox(
+            db_session,
+            sandbox_manager,
+            user_id,
+            policy=policy,
+            provisioning_wait_seconds=provisioning_wait_seconds,
+            user=user,
+        )
+        return sandbox
+    finally:
+        observe_sandbox_ready(outcome, time.monotonic() - started_at)
+
+
+def _resolve_ready_sandbox(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    user_id: UUID,
+    *,
+    policy: ProvisioningPolicy,
+    provisioning_wait_seconds: float,
+    user: User | None,
+) -> tuple[Sandbox, SandboxReadyOutcome]:
+    """State machine behind ``ensure_sandbox_ready``, plus the path it took."""
     sandbox = get_sandbox_by_user_id(db_session, user_id)
     tenant_id = get_current_tenant_id()
+    recovered = False
 
     # Resolve PROVISIONING upfront so the rest of the state machine sees a
     # stable status (or knows there isn't one).
@@ -379,16 +416,20 @@ def ensure_sandbox_ready(
 
     # Hot path: pod is up; nothing else to do.
     if sandbox is not None and sandbox.status == SandboxStatus.RUNNING:
-        if sandbox_manager.health_check(
-            sandbox.id, timeout=_HEALTHCHECK_TIMEOUT_SECONDS
-        ):
-            return sandbox
+        with time_provision_phase(SandboxProvisionPhase.HEALTH_CHECK):
+            healthy = sandbox_manager.health_check(
+                sandbox.id, timeout=_HEALTHCHECK_TIMEOUT_SECONDS
+            )
+        if healthy:
+            return sandbox, SandboxReadyOutcome.ALREADY_RUNNING
         logger.warning(
             "Sandbox %s marked RUNNING but pod is unhealthy/missing; recovering.",
             sandbox.id,
         )
         recover_unhealthy_sandbox(db_session, sandbox_manager, sandbox, tenant_id)
-        # Fall through into the re-provision path below.
+        # Falls through to re-provision, which cannot otherwise be told apart
+        # from an ordinary revive.
+        recovered = True
 
     if sandbox is not None and sandbox.status not in _REPROVISIONABLE_STATUSES:
         raise RuntimeError(
@@ -407,6 +448,7 @@ def ensure_sandbox_ready(
     if sandbox is None:
         sandbox = create_sandbox__no_commit(db_session=db_session, user_id=user_id)
         logger.info("Created sandbox %s for user %s", sandbox.id, user_id)
+        outcome = SandboxReadyOutcome.CREATED
     else:
         logger.info(
             "Reviving sandbox %s (status=%s) for user %s",
@@ -414,16 +456,20 @@ def ensure_sandbox_ready(
             sandbox.status.value,
             user_id,
         )
+        outcome = (
+            SandboxReadyOutcome.RECOVERED if recovered else SandboxReadyOutcome.REVIVED
+        )
 
-    provision_sandbox(
-        db_session,
-        sandbox_manager,
-        sandbox,
-        user,
-        user_id,
-        tenant_id,
-    )
-    return sandbox
+    with track_sandbox_provision_in_progress():
+        provision_sandbox(
+            db_session,
+            sandbox_manager,
+            sandbox,
+            user,
+            user_id,
+            tenant_id,
+        )
+    return sandbox, outcome
 
 
 def is_sandbox_idle(sandbox: Sandbox, now: datetime) -> bool:

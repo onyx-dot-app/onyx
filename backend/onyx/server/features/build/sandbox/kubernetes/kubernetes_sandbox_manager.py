@@ -133,6 +133,10 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_base_config,
     build_provider_opencode_config,
 )
+from onyx.server.metrics.craft_sandbox import (
+    SandboxProvisionPhase,
+    time_provision_phase,
+)
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -337,6 +341,7 @@ class KubernetesSandboxManager(SandboxManager):
     _OPENCODE_PASSWORD_SECRET_KEY = "password"
     _OPENCODE_CONFIG_SECRET_KEY = "config"
 
+    @time_provision_phase(SandboxProvisionPhase.OPENCODE_SECRET)
     def _provision_opencode_secret(self, sandbox_id: str, config_json: str) -> None:
         """Per-pod Secret with ``password`` (HTTP Basic) + ``config``
         (full opencode.json, surfaced as ``OPENCODE_CONFIG_CONTENT``).
@@ -634,6 +639,7 @@ class KubernetesSandboxManager(SandboxManager):
             ),
         )
 
+    @time_provision_phase(SandboxProvisionPhase.SERVICE_ENSURE)
     def _ensure_service_exists(
         self,
         sandbox_id: UUID,
@@ -845,6 +851,7 @@ class KubernetesSandboxManager(SandboxManager):
             )
         return False
 
+    @time_provision_phase(SandboxProvisionPhase.POD_READY_WAIT)
     def _wait_for_pod_ready(
         self,
         pod_name: str,
@@ -930,6 +937,7 @@ class KubernetesSandboxManager(SandboxManager):
         logger.warning("Timeout waiting for pod %s to become ready", pod_name)
         return False
 
+    @time_provision_phase(SandboxProvisionPhase.POD_IP_WAIT)
     def _wait_for_pod_ip(self, pod_name: str, deadline: float) -> bool:
         """Poll until the pod is assigned an IP, or the monotonic deadline.
 
@@ -1111,10 +1119,11 @@ class KubernetesSandboxManager(SandboxManager):
                     tenant_id=tenant_id,
                 )
                 try:
-                    self._core_api.create_namespaced_pod(
-                        namespace=self._namespace,
-                        body=pod,
-                    )
+                    with time_provision_phase(SandboxProvisionPhase.POD_CREATE):
+                        self._core_api.create_namespaced_pod(
+                            namespace=self._namespace,
+                            body=pod,
+                        )
                     created_pod = True
                 except ApiException as e:
                     if e.status == 409:
@@ -1661,6 +1670,7 @@ echo "Session cleanup complete"
         )
         return True
 
+    @time_provision_phase(SandboxProvisionPhase.HISTORY_RESTORE)
     def restore_opencode_history_snapshot(
         self,
         sandbox_id: UUID,
