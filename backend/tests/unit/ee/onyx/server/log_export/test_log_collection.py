@@ -72,6 +72,35 @@ def test_overlapping_directories_deduplicate(tmp_path: Path) -> None:
             _entry_ending_with(zip_file, "worker.log")
 
 
+def test_symlink_escaping_log_directory_is_skipped(tmp_path: Path) -> None:
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "real.log").write_text("real line\n")
+    secret = tmp_path / "secret.txt"
+    secret.write_text("not a log\n")
+    (log_dir / "evil.log").symlink_to(secret)
+
+    with build_log_zip([log_dir], SCOPE_NOTE) as zip_buffer:
+        with zipfile.ZipFile(zip_buffer) as zip_file:
+            names = _zip_names(zip_file)
+            # README plus ``real.log``; the escaping symlink is dropped.
+            assert len(names) == 2
+            _entry_ending_with(zip_file, "real.log")
+            assert not any("evil" in name or "secret" in name for name in names)
+
+
+def test_symlink_within_log_directory_is_included(tmp_path: Path) -> None:
+    target = tmp_path / "target.txt"
+    target.write_text("aliased content\n")
+    (tmp_path / "alias.log").symlink_to(target)
+
+    with build_log_zip([tmp_path], SCOPE_NOTE) as zip_buffer:
+        with zipfile.ZipFile(zip_buffer) as zip_file:
+            # The entry is stored under its resolved path, hence ``target.txt``.
+            entry = _entry_ending_with(zip_file, "target.txt")
+            assert zip_file.read(entry) == b"aliased content\n"
+
+
 @pytest.mark.skipif(os.geteuid() == 0, reason="Root can read mode-000 files")
 def test_unreadable_file_is_skipped_and_noted(tmp_path: Path) -> None:
     readable = tmp_path / "readable.log"
