@@ -186,6 +186,23 @@ repos:
             |deployment/docker_compose/env\.(template|prod\.template)
             |deployment/helm/charts/onyx/(values\.yaml|templates/configmap\.yaml)
           )$
+      - id: docker-compose-sync
+        name: sync docker compose files from template
+        description: >-
+          Regenerate docker-compose.yml / docker-compose.prod.yml /
+          docker-compose.prod-no-letsencrypt.yml from docker-compose.template.yml
+        language: system
+        entry: python3 deployment/docker_compose/generate_compose.py --write
+        pass_filenames: false
+        stages: [pre-commit]
+        files: >-
+          (?x)^deployment/docker_compose/(
+            docker-compose\.template\.yml
+            |generate_compose\.py
+            |docker-compose\.yml
+            |docker-compose\.prod\.yml
+            |docker-compose\.prod-no-letsencrypt\.yml
+          )$
       - id: bun-install
         name: bun install
         description: "Automatically run 'bun install' after a checkout, pull or rebase"
