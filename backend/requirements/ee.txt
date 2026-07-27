@@ -886,9 +886,9 @@ prometheus-client==0.23.1 \
     # via
     #   onyx
     #   prometheus-fastapi-instrumentator
-prometheus-fastapi-instrumentator==8.0.0 \
-    --hash=sha256:c31ed192db077e75467b28b2fe5055362517f53369b798cb8dac9ff85f3f1c38 \
-    --hash=sha256:e3c967c402124dfe81cf5aad35208d9f96db5452c6cb752350d9358ca0a96198
+prometheus-fastapi-instrumentator==8.0.2 \
+    --hash=sha256:3c252e748151768a7aefd66824a04a870144f71de48a67aed211749a9ca2a548 \
+    --hash=sha256:746002ec1e2c58b93f61444e1d104de959a9463a6a3f1c8909ac3757e16c3866
     # via onyx
 propcache==0.4.1 \
     --hash=sha256:005f08e6a0529984491e37d8dbc3dd86f84bd78a8ceb5fa9a021f4c48d4984be \
