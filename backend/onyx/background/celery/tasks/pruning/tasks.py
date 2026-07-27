@@ -18,9 +18,11 @@ from onyx.background.celery.celery_redis import (
     celery_get_queued_task_ids,
     celery_get_unacked_task_ids,
 )
-from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
-from onyx.background.celery.tasks.docprocessing.utils import IndexingCallbackBase
+from onyx.background.celery.tasks.pruning.enumeration_spawn import (
+    PruneEnumerationError,
+    run_enumeration_in_subprocess,
+)
 from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING, JOB_TIMEOUT
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
@@ -35,9 +37,6 @@ from onyx.configs.constants import (
     OnyxRedisLocks,
     OnyxRedisSignals,
 )
-from onyx.connectors.factory import instantiate_connector
-from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.models import InputType
 from onyx.db.connector import mark_ccpair_as_pruned
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair,
@@ -83,7 +82,11 @@ from onyx.redis.redis_hierarchy import (
 from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
+from onyx.server.metrics.pruning_metrics import (
+    inc_pruning_rate_limit_error,
+    observe_pruning_diff_duration,
+    observe_pruning_enumeration_duration,
+)
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import (
@@ -131,12 +134,6 @@ def _get_fence_validation_block_expiration() -> int:
         beat_multiplier = CLOUD_BEAT_MULTIPLIER_DEFAULT
 
     return int(base_expiration * beat_multiplier)
-
-
-class PruneCallback(IndexingCallbackBase):
-    def progress(self, tag: str, amount: int) -> None:
-        self.redis_connector.prune.set_active()
-        super().progress(tag, amount)
 
 
 def _resolve_and_update_document_parents(
@@ -562,13 +559,12 @@ def connector_pruning_generator_task(
         return None
 
     try:
-        # Session 1: pre-enumeration — load cc_pair and instantiate the connector.
+        # Session 1: pre-enumeration — load cc_pair metadata and update the fence.
         # The session is closed before enumeration so the DB connection is not held
-        # open during the 10–30+ minute connector crawl.
+        # open during the multi-hour connector crawl.
         connector_source: DocumentSource | None = None
         connector_type: str = ""
         is_connector_public: bool = False
-        runnable_connector: BaseConnector | None = None
 
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair(
@@ -602,28 +598,35 @@ def connector_pruning_generator_task(
             task_logger.info(
                 f"Pruning generator running connector: cc_pair={cc_pair_id} connector_source={connector_source}"
             )
-
-            runnable_connector = instantiate_connector(
-                db_session,
-                connector_source,
-                InputType.SLIM_RETRIEVAL,
-                cc_pair.connector.connector_specific_config,
-                cc_pair.credential,
-            )
         # Session 1 closed here — connection released before enumeration.
 
-        callback = PruneCallback(
-            0,
-            redis_connector,
-            lock,
-            r,
-            timeout_seconds=JOB_TIMEOUT,
-        )
-
-        # Extract docs and hierarchy nodes from the source (no DB session held).
-        extraction_result = extract_ids_from_runnable_connector(
-            runnable_connector, callback, connector_type=connector_type
-        )
+        # Enumerate source doc IDs in a spawned child process so the crawl's
+        # memory churn is reclaimed by the OS instead of ratcheting up this
+        # long-lived worker's RSS (see enumeration_spawn.py). This task
+        # babysits the child: it keeps the redis lock alive and kills the
+        # child on stop signals or timeout.
+        enumeration_start = time.monotonic()
+        try:
+            extraction_result = run_enumeration_in_subprocess(
+                cc_pair_id=cc_pair_id,
+                connector_id=connector_id,
+                credential_id=credential_id,
+                tenant_id=tenant_id,
+                redis_connector=redis_connector,
+                reacquire_lock=lock.reacquire,
+            )
+        except PruneEnumerationError as e:
+            # Best-effort rate limit detection via string matching on the
+            # child's exception text (the child's own Prometheus registry
+            # dies with it, so the metric must be emitted here).
+            error_str = str(e)
+            if "rate limit" in error_str.lower() or "429" in error_str:
+                inc_pruning_rate_limit_error(connector_type)
+            raise
+        finally:
+            observe_pruning_enumeration_duration(
+                time.monotonic() - enumeration_start, connector_type
+            )
         all_connector_doc_ids = extraction_result.raw_id_to_parent
 
         # Session 2: post-enumeration — hierarchy upserts, diff computation, task dispatch.
