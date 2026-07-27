@@ -2558,7 +2558,7 @@ wheels = [
 
 [[package]]
 name = "hubspot-api-client"
-version = "11.1.0"
+version = "12.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2567,9 +2567,9 @@ dependencies = [
     { name = "six" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/08/52/11b0ecd4fd6e175813a0017ab4bc4697bfde058cac9b98938fa28460028a/hubspot_api_client-11.1.0.tar.gz", hash = "sha256:93ed914f1cd4dad67bacf26b8a1ec8506847483fa801cb2bddd4b2d887d0f825", size = 1732887, upload-time = "2024-12-13T08:20:44.38Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/b4/8bfa11b523586108eb526abeca6a214eed3b3534ab10c8a3314fa7e488d5/hubspot_api_client-12.0.0.tar.gz", hash = "sha256:ddfc60f3a80565dd5bf7fc7554d0d2dabad37926f547436158258772f1a04e69", size = 1882105, upload-time = "2025-05-07T12:56:15.686Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a1/d3/a2dbdea1f491d5bf362d74d4b7342ece6c043a43c8ee997f8fb8b776239d/hubspot_api_client-11.1.0-py3-none-any.whl", hash = "sha256:0c49e2c2f511a56d249c6890d2dfdd62afd04f66edc69a591e8348e28804634b", size = 3945382, upload-time = "2024-12-13T08:20:42.129Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/bf/b417bcf30d6fc4f473f3c1ab13cbffc3a809caa464d5aa2ae43de96416d9/hubspot_api_client-12.0.0-py3-none-any.whl", hash = "sha256:5426627ff808fdf259d5b5e4791667a323a2a82d36a834e7e43ec8e8f021aa08", size = 4295367, upload-time = "2025-05-07T12:56:12.203Z" },
 ]
 
 [[package]]
@@ -4489,7 +4489,7 @@ backend = [
     { name = "graphql-core", specifier = "==3.2.8" },
     { name = "httpx", extras = ["http2"], specifier = "==0.28.1" },
     { name = "httpx-oauth", specifier = "==0.15.1" },
-    { name = "hubspot-api-client", specifier = "==11.1.0" },
+    { name = "hubspot-api-client", specifier = "==12.0.0" },
     { name = "jira", specifier = "==3.10.5" },
     { name = "kubernetes", specifier = "==31.0.0" },
     { name = "langchain-core", specifier = "==1.3.3" },
