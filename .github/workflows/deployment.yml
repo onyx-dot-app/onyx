@@ -978,6 +978,7 @@ jobs:
     environment: release
     outputs:
       digest: ${{ steps.build.outputs.digest }}
+      digest-dev: ${{ steps.build-dev.outputs.digest }}
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
@@ -1025,11 +1026,34 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          target: runtime
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=inline
+          outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+      # Dev variant: runtime + interactive debugging tools, published with a -dev tag suffix by
+      # merge-backend. Reuses the runtime stage from the build above via the local BuildKit
+      # cache, so this only builds and pushes the extra apt layer.
+      - name: Build and push AMD64 dev
+        id: build-dev
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: dev
+          platforms: linux/amd64
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ONYX_VERSION=${{ github.ref_name }}
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge-dev
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: type=inline
@@ -1050,6 +1074,7 @@ jobs:
     environment: release
     outputs:
       digest: ${{ steps.build.outputs.digest }}
+      digest-dev: ${{ steps.build-dev.outputs.digest }}
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
@@ -1097,11 +1122,34 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          target: runtime
           platforms: linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=inline
+          outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+      # Dev variant: runtime + interactive debugging tools, published with a -dev tag suffix by
+      # merge-backend. Reuses the runtime stage from the build above via the local BuildKit
+      # cache, so this only builds and pushes the extra apt layer.
+      - name: Build and push ARM64 dev
+        id: build-dev
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: dev
+          platforms: linux/arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ONYX_VERSION=${{ github.ref_name }}
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge-dev
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
           cache-to: type=inline
@@ -1166,12 +1214,43 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
             type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
 
+      # Same tag set with a -dev suffix, for the dev image variant (runtime + debugging tools).
+      # The suffix is spelled out per tag rather than via flavor `suffix=` so that disabled
+      # (empty) raw tags stay empty instead of degenerating to a bare "-dev" tag.
+      - name: Docker meta (dev)
+        id: meta-dev
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('backend-{0}-dev', needs.determine-builds.outputs.sanitized-tag) || format('{0}-dev', github.ref_name) }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest-dev' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge-dev' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta-dev' || '' }}
+            type=semver,pattern={{version}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+
       - name: Create and push manifest
         env:
           IMAGE_REPO: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
           AMD64_DIGEST: ${{ needs.build-backend-amd64.outputs.digest }}
           ARM64_DIGEST: ${{ needs.build-backend-arm64.outputs.digest }}
           META_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
+          docker buildx imagetools create \
+            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
+            $IMAGES
+
+      - name: Create and push dev manifest
+        env:
+          IMAGE_REPO: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          AMD64_DIGEST: ${{ needs.build-backend-amd64.outputs.digest-dev }}
+          ARM64_DIGEST: ${{ needs.build-backend-arm64.outputs.digest-dev }}
+          META_TAGS: ${{ steps.meta-dev.outputs.tags }}
         run: |
           IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
           docker buildx imagetools create \
