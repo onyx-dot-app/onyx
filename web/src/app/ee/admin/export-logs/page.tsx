@@ -34,7 +34,9 @@ export default function ExportLogsPage() {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       downloadFile(extractFilename(response), { url });
-      URL.revokeObjectURL(url);
+      // Deferred like downloadFile's content mode: the click's download
+      // dereferences the blob URL asynchronously.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (error) {
       console.error("Error exporting logs:", error);
       toast.error("Failed to export logs.");
