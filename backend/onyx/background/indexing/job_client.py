@@ -16,6 +16,7 @@ from typing import Any, Literal, Optional
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.utils.logger import setup_logger
+from onyx.utils.os_reaper import become_child_subreaper, reap_exited_children
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA, TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -55,6 +56,11 @@ def _initializer(
         kwargs = {}
 
     logger.info("Initializing spawned worker child process.")
+
+    # collect orphans (e.g. Chromium helpers) here instead of leaking zombies
+    # to PID 1 — see onyx/utils/os_reaper.py
+    become_child_subreaper()
+
     # 1. Get tenant_id from args or fallback to default
     tenant_id = POSTGRES_DEFAULT_SCHEMA
     for arg in reversed(args):
@@ -93,6 +99,11 @@ def _initializer(
         sys.exit(255)  # use 255 to indicate a generic exception
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+        # os._exit entrypoints skip this finally and drain themselves
+        reaped = reap_exited_children()
+        if reaped:
+            logger.info("Spawned worker child reaped %s orphaned processes.", reaped)
 
 
 def _run_in_process(
