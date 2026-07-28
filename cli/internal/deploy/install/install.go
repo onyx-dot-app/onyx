@@ -95,8 +95,18 @@ func (in *installer) runInstall(ctx context.Context) error {
 	preCh := make(chan preflight, 1)
 	go func() { preCh <- in.gatherPreflight(ctx) }()
 
+	// tagCh delivers exactly one value; latestTag memoizes it so every
+	// consumer (question defaults, initialTag) can read it safely.
+	var latestTag string
+	getLatestTag := func() string {
+		if latestTag == "" {
+			latestTag = <-tagCh
+		}
+		return latestTag
+	}
+
 	if in.opts.DryRun {
-		in.printPlan(<-tagCh)
+		in.printPlan(getLatestTag())
 		return nil
 	}
 
@@ -148,17 +158,18 @@ func (in *installer) runInstall(ctx context.Context) error {
 				return err
 			}
 			if choice == 1 {
-				updateTag, err = in.askString("Version to deploy", <-tagCh)
+				updateTag, err = in.askString("Version to deploy", getLatestTag())
 				if err != nil {
 					return err
 				}
 			}
 			if in.wiz != nil {
-				action := "Restart"
 				if updateTag != "" {
-					action = "Upgrade → " + updateTag
+					in.wiz.Answer("Action", "Upgrade")
+					in.wiz.Answer("Version", updateTag)
+				} else {
+					in.wiz.Answer("Action", "Restart")
 				}
-				in.wiz.Answer("Action", action)
 			}
 		}
 	} else {
@@ -166,7 +177,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 			return err
 		}
 		if in.opts.Tag == "" {
-			tag, err := in.askString("Version to deploy", <-tagCh)
+			tag, err := in.askString("Version to deploy", getLatestTag())
 			if err != nil {
 				return err
 			}
@@ -217,7 +228,11 @@ func (in *installer) runInstall(ctx context.Context) error {
 
 	initialTag := in.opts.Tag
 	if initialTag == "" {
-		initialTag = <-tagCh
+		if updateTag != "" {
+			initialTag = updateTag
+		} else {
+			initialTag = getLatestTag()
+		}
 	}
 	initialRef := ""
 	if !in.opts.Local {
