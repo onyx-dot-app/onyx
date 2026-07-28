@@ -148,8 +148,8 @@ func TestUpgradeRefusesWhileRunning(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected refusal while services run")
 	}
-	if !strings.Contains(outBuf(deps).String(), "onyx-cli deploy stop") {
-		t.Errorf("output:\n%s", outBuf(deps).String())
+	if !strings.Contains(err.Error(), "onyx-cli deploy stop") {
+		t.Errorf("guard error must carry the remedy: %v", err)
 	}
 }
 

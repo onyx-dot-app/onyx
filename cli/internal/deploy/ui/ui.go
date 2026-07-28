@@ -229,7 +229,22 @@ func (m wizModel) View() tea.View {
 		return tea.NewView(cardBox.Render(strings.Join(m.card, "\n")) + "\n")
 	}
 	if m.aborted {
-		return tea.NewView("")
+		// Leave the guidance in scrollback instead of wiping the screen —
+		// the notes are exactly what the user needs after a failure.
+		var b strings.Builder
+		for _, n := range m.notes {
+			switch n.level {
+			case "ok":
+				b.WriteString(okStyle.Render("✓ ") + n.text + "\n")
+			case "warn":
+				b.WriteString(warnSt.Render("⚠ ") + n.text + "\n")
+			case "err":
+				b.WriteString(errSt.Render("✗ ") + n.text + "\n")
+			default:
+				b.WriteString("  " + n.text + "\n")
+			}
+		}
+		return tea.NewView(b.String())
 	}
 
 	// Left rail: stages + recorded answers.

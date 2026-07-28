@@ -585,9 +585,10 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 	return effectiveTag, nil
 }
 
-// guardServicesStopped refuses to reconfigure while containers are up. The
-// replacement message points at a command that actually exists after a
-// curl|bash install — unlike install.sh's "./install.sh --shutdown".
+// guardServicesStopped handles reconfiguring while containers are up:
+// interactive runs offer to stop them right here; non-interactive runs
+// refuse with the remedy in the error itself (install.sh printed
+// "./install.sh --shutdown", which doesn't exist after curl|bash).
 func (in *installer) guardServicesStopped(ctx context.Context) error {
 	files := in.composeFileNames(true)
 	cmd := in.compose.Command(in.deploymentDir(), stopFallbackEnv(), files, "ps", "-q")
@@ -595,10 +596,35 @@ func (in *installer) guardServicesStopped(ctx context.Context) error {
 	if err != nil || strings.TrimSpace(res.Stdout) == "" {
 		return nil
 	}
-	in.errorf("Onyx services are currently running!")
-	in.infof("To make configuration changes, first shut them down:")
-	in.plainf("   onyx-cli deploy stop")
-	return exitcodes.New(exitcodes.General, "services are running")
+
+	if in.prompt.AssumeDefaults {
+		return exitcodes.New(exitcodes.General,
+			"Onyx services are running — stop them first with `onyx-cli deploy stop`, then re-run")
+	}
+
+	choice, err := in.selectOne("Onyx is already running. Reconfiguring needs the services stopped.",
+		[]ui.Option{
+			{Label: "Stop and continue", Hint: "pause the containers (no data loss), then proceed"},
+			{Label: "Cancel", Hint: "leave everything running"},
+		}, 0)
+	if err != nil {
+		return err
+	}
+	if choice != 0 {
+		return exitcodes.New(exitcodes.General,
+			"cancelled — services left running (stop them with `onyx-cli deploy stop`)")
+	}
+
+	in.infof("Stopping Onyx services...")
+	stop := in.compose.Command(in.deploymentDir(), stopFallbackEnv(), files, "stop")
+	if in.wiz == nil {
+		stop.Stdout, stop.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
+	}
+	if _, err := in.deps.Runner.Run(ctx, stop); err != nil {
+		return exitcodes.Newf(exitcodes.General, "failed to stop the running services: %v", err)
+	}
+	in.successf("Services stopped")
+	return nil
 }
 
 func (in *installer) ensureCraftResources(ctx context.Context) {
