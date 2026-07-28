@@ -148,6 +148,40 @@ def test_shortcut_to_file_yields_target_with_true_parent() -> None:
     assert len(service.files_resource.get_calls) == 1
 
 
+def test_shortcut_resolution_uses_shortcut_modified_time() -> None:
+    target = _target_file("target_file", "true_parent")
+    target["modifiedTime"] = "2024-01-15T00:00:00Z"
+    service = _FakeDriveService(
+        {
+            "shortcut_file": _shortcut("shortcut_file", "target_file", _PDF_MIME_TYPE),
+            "target_file": target,
+        }
+    )
+
+    def _fake_paginated_retrieval(**_kwargs: object) -> Iterator[dict[str, Any]]:
+        shortcut = _shortcut("shortcut_file", "target_file", _PDF_MIME_TYPE)
+        shortcut["modifiedTime"] = "2026-06-02T00:00:00Z"
+        yield shortcut
+
+    with patch(
+        f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
+        side_effect=_fake_paginated_retrieval,
+    ):
+        files = list(
+            _get_files_in_parent(
+                service=cast(Resource, service),
+                parent_id="shortcut_parent",
+                field_type=DriveFileFieldType.STANDARD,
+            )
+        )
+
+    assert len(files) == 1
+    # the retrieved item keeps the shortcut's modifiedTime — the value the
+    # listing was filtered/ordered by — so it stays within the requested range
+    assert files[0]["modifiedTime"] == "2026-06-02T00:00:00Z"
+    assert files[0]["id"] == "target_file"
+
+
 def test_shortcut_to_resource_key_file_uses_header() -> None:
     target = _target_file("target_file", "true_parent")
     service = _FakeDriveService(
