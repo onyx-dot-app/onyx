@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/composegen"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/deployfilessync"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
 // NewGenerateComposeCommand creates the generate-compose command.
@@ -28,10 +30,17 @@ docker-compose.template.yml instead, then regenerate with:
 
   ods generate-compose --write
 
+The command also syncs the deployment files that onyx-cli embeds via
+go:embed (the generated docker-compose.yml, the lite/craft overlays,
+env.template, the nginx config, and the install-root README) into
+byte-identical copies under cli/internal/deploy/deployfiles/embedded/ —
+go:embed cannot reference files outside the cli module, and the copies must
+always be refreshed together with the generated compose files.
+
 Without --write the command runs in check mode: it prints a diff and exits
-non-zero if any generated file is out of date. The docker-compose-sync
-pre-commit hook runs --write automatically for commits touching the template
-or the generated files.
+non-zero if any generated file or embedded copy is out of date. The
+docker-compose-sync pre-commit hook runs --write automatically for commits
+touching any of the source or output files.
 
 Template directives are line comments starting with the sentinel "#!". They
 are always stripped from the output. <variants> is a comma-separated subset
@@ -95,8 +104,35 @@ func runGenerateCompose(write bool) {
 			}
 			fmt.Printf("regenerated %s\n", filename)
 		} else {
-			fmt.Fprint(os.Stderr, lineDiff(filename, string(current), content))
+			fmt.Fprint(os.Stderr, lineDiff(filename, composegen.TemplateName, string(current), content))
 			stale = append(stale, filename)
+		}
+	}
+
+	// Sync the embedded copies for onyx-cli after the variants, so the copy
+	// of docker-compose.yml reflects the freshly rendered output.
+	repoRoot, err := paths.GitRoot()
+	if err != nil {
+		log.Fatalf("Failed to find git root: %v", err)
+	}
+	var results []deployfilessync.Result
+	if write {
+		results, err = deployfilessync.Write(repoRoot)
+	} else {
+		results, err = deployfilessync.Check(repoRoot)
+	}
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	for _, r := range results {
+		if !r.Stale {
+			continue
+		}
+		if write {
+			fmt.Printf("synced embedded copy of %s\n", r.RelPath)
+		} else {
+			fmt.Fprint(os.Stderr, lineDiff("embedded/"+r.RelPath, "deployment/"+r.RelPath, r.Dest, r.Source))
+			stale = append(stale, "embedded copy of "+r.RelPath)
 		}
 	}
 
@@ -110,13 +146,13 @@ func runGenerateCompose(write bool) {
 
 // lineDiff returns a compact line-based diff (changed lines only) between the
 // on-disk file and the freshly rendered content.
-func lineDiff(filename, current, generated string) string {
+func lineDiff(filename, source, current, generated string) string {
 	dmp := diffmatchpatch.New()
 	a, b, lineArray := dmp.DiffLinesToChars(current, generated)
 	diffs := dmp.DiffCharsToLines(dmp.DiffMain(a, b, false), lineArray)
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "--- %s\n+++ %s (from %s)\n", filename, filename, composegen.TemplateName)
+	fmt.Fprintf(&sb, "--- %s\n+++ %s (from %s)\n", filename, filename, source)
 	for _, d := range diffs {
 		var prefix string
 		switch d.Type {
