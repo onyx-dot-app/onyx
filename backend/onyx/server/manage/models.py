@@ -10,6 +10,7 @@ from pydantic import Field
 from pydantic import field_validator
 from pydantic import model_validator
 
+from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
 from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import AccountType
@@ -128,6 +129,18 @@ class TenantInfo(BaseModel):
     new_tenant: TenantSnapshot | None = None
 
 
+def _admin_capabilities(
+    effective_permissions: list[str], is_group_manager: bool
+) -> list[str]:
+    """Admin-area reach = effective tokens plus the scoped manager bundle when the user
+    manages any group. ``effective_permissions`` itself stays global-only, so org-wide
+    gates that read it still exclude managers. Affordance hint, never an authz input."""
+    caps = set(effective_permissions)
+    if is_group_manager:
+        caps |= SCOPED_MANAGER_PERMISSIONS_EXPANDED
+    return sorted(caps)
+
+
 class UserInfo(BaseModel):
     id: str
     email: str
@@ -149,6 +162,8 @@ class UserInfo(BaseModel):
     # True if the user manages any group — lets the client reveal manager nav.
     # Not a security boundary (backend GATE 2 enforces scope).
     is_group_manager: bool = False
+    # effective tokens plus the scoped bundle for a manager; drives admin-nav reveal
+    admin_capabilities: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_model(
@@ -207,6 +222,9 @@ class UserInfo(BaseModel):
             tenant_info=tenant_info,
             effective_permissions=effective_permissions or [],
             is_group_manager=user.is_group_manager,
+            admin_capabilities=_admin_capabilities(
+                effective_permissions or [], user.is_group_manager
+            ),
             personalization=UserPersonalization(
                 name=user.personal_name or "",
                 role=user.personal_role or "",

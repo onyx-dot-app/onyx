@@ -355,3 +355,26 @@ def test_plain_member_cannot_create_doc_set(env: _ScopedEnv) -> None:
         member.cookies,
     )
     assert_response(resp, "POST", _DOC_SET_PATH, "member", "denied")
+
+
+# --- cc_pair permissions map on the DTO -------------------------------------
+
+
+def test_admin_cc_pair_detail_carries_permissions_map(env: _ScopedEnv) -> None:
+    # The connector read route is GLOBAL-only (no allow_scope), so a scoped manager
+    # can't reach it; this covers the admin wire format (the manager distinction is
+    # proven in the projection contract test).
+    cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin,
+        access_type=AccessType.PRIVATE,
+        groups=[env.managed_group.id],
+    )
+    path = f"/manage/admin/cc-pair/{cc_pair.id}"
+    resp = call_endpoint("GET", path, None, env.admin.headers, env.admin.cookies)
+    assert resp.status_code == 200
+
+    body = resp.json()
+    # admin holds global MANAGE_CONNECTORS, so every action is allowed
+    assert body["permissions"] == {"edit": True, "delete": True, "publish": True}
+    # edit is stamped from is_editable_for_current_user, so the two must agree
+    assert body["permissions"]["edit"] == body["is_editable_for_current_user"]

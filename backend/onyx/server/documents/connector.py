@@ -22,7 +22,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.email_utils import send_email
+from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.auth.users import current_chat_accessible_user
@@ -1114,6 +1116,8 @@ def get_connector_indexing_status(
 
         with open(MOCK_CONNECTOR_FILE_PATH, "r") as f:
             raw_data = json.load(f)
+            for status in raw_data:
+                status.setdefault("permissions", {})  # fail-closed for mock rows
             connector_indexing_statuses = [
                 ConnectorIndexingStatusLite(**status) for status in raw_data
             ]
@@ -1226,6 +1230,8 @@ def get_connector_indexing_status(
         latest_successful_index_attempts
     )
 
+    is_connectors_admin = has_global_permission(user, Permission.MANAGE_CONNECTORS)
+
     def build_connector_indexing_status(
         cc_pair: ConnectorCredentialPair,
         is_editable: bool,
@@ -1255,6 +1261,7 @@ def get_connector_indexing_status(
             ),
             is_editable,
             doc_count,
+            is_connectors_admin=is_connectors_admin,
         )
 
     # Process editable cc_pairs
@@ -1418,6 +1425,8 @@ def _get_connector_indexing_status_lite(
     last_successful_index_time: datetime | None,
     is_editable: bool,
     document_cnt: int,
+    *,
+    is_connectors_admin: bool,
 ) -> ConnectorIndexingStatusLite | None:
     # TODO remove this to enable ingestion API
     if cc_pair.name == "DefaultCCPair":
@@ -1441,6 +1450,9 @@ def _get_connector_indexing_status_lite(
         access_type=cc_pair.access_type,
         cc_pair_status=cc_pair.status,
         is_editable=is_editable,
+        permissions=cc_pair_permissions(
+            is_editable=is_editable, is_connectors_admin=is_connectors_admin
+        ),
         in_progress=in_progress,
         in_repeated_error_state=cc_pair.in_repeated_error_state,
         last_finished_status=(

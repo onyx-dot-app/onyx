@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
+from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
@@ -385,6 +386,9 @@ class CCPairFullInfo(BaseModel):
     latest_deletion_attempt: DeletionAttemptSnapshot | None
     access_type: AccessType
     is_editable_for_current_user: bool
+    # per-action affordance map for the requesting user, from the same editable-scope
+    # decision the write guard enforces
+    permissions: dict[str, bool]
     deletion_failure_message: str | None
     indexing: bool
     creator: UUID | None
@@ -458,6 +462,7 @@ class CCPairFullInfo(BaseModel):
         indexing: bool,
         *,
         mask_credential_prefix: bool,
+        is_connectors_admin: bool = False,
         last_successful_index_time: datetime | None = None,
         last_permission_sync_attempt_status: PermissionSyncStatus | None = None,
         permission_syncing: bool = False,
@@ -507,6 +512,10 @@ class CCPairFullInfo(BaseModel):
             latest_deletion_attempt=latest_deletion_attempt,
             access_type=cc_pair_model.access_type,
             is_editable_for_current_user=is_editable_for_current_user,
+            permissions=cc_pair_permissions(
+                is_editable=is_editable_for_current_user,
+                is_connectors_admin=is_connectors_admin,
+            ),
             deletion_failure_message=cc_pair_model.deletion_failure_message,
             indexing=indexing,
             creator=cc_pair_model.creator_id,
@@ -593,6 +602,9 @@ class ConnectorIndexingStatusLite(BaseModel):
     last_status: IndexingStatus | None
     last_success: datetime | None
     is_editable: bool
+    # per-action affordance map for the requesting user, from the same editable-scope
+    # decision the write guard enforces
+    permissions: dict[str, bool]
     docs_indexed: int
     latest_index_attempt_docs_indexed: int | None
 

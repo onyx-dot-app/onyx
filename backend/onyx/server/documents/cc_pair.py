@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
@@ -365,6 +366,7 @@ def get_cc_pair_full_info(
     return CCPairFullInfo.from_models(
         cc_pair_model=cc_pair,
         mask_credential_prefix=get_security_settings().mask_credential_prefix,
+        is_connectors_admin=has_global_permission(user, Permission.MANAGE_CONNECTORS),
         number_of_index_attempts=count_index_attempts_for_cc_pair(
             db_session=db_session,
             cc_pair_id=cc_pair_id,

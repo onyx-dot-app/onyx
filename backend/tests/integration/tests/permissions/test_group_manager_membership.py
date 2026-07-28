@@ -21,6 +21,7 @@ from typing import NamedTuple
 import pytest
 from sqlalchemy import update
 
+from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.models import User__UserGroup
@@ -362,11 +363,24 @@ def test_manager_me_permissions_flags(env: _ScopedEnv) -> None:
     assert env.managed_group.id in perms["managed_group_ids"]
     assert env.other_group.id not in perms["managed_group_ids"]
 
+    info = UserManager.get_user_info(env.manager)
+    effective = set(info.effective_permissions)
+    assert info.is_group_manager is True
+    # admin_capabilities unions the scoped bundle so the client can reveal manager nav
+    assert (
+        set(info.admin_capabilities) == effective | SCOPED_MANAGER_PERMISSIONS_EXPANDED
+    )
+    assert set(info.admin_capabilities) > effective
+
 
 def test_member_me_permissions_not_manager(env: _ScopedEnv) -> None:
     perms = _me_permissions(env.member)
     assert perms["is_manager"] is False
     assert perms["managed_group_ids"] == []
+
+    info = UserManager.get_user_info(env.member)
+    assert info.is_group_manager is False
+    assert set(info.admin_capabilities) == set(info.effective_permissions)
 
 
 # --- group create / delete / permissions stay admin-only --------------------
