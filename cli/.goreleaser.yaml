@@ -20,11 +20,12 @@ builds:
   - binary: onyx-cli
     env:
       - CGO_ENABLED=0
-    # Match the ldflags contract of hatch_build.py: `main.version` carries the
-    # `v` prefix (e.g. `v1.2.3`), `main.commit` the full SHA, and `-w` without
-    # `-s` keeps the symbol table so govulncheck can scan released binaries.
+    # Match the version/commit ldflags contract of hatch_build.py: `main.version`
+    # carries the `v` prefix (e.g. `v1.2.3`) and `main.commit` the full SHA.
+    # Unlike the wheel builds (which keep the symbol table so CI govulncheck can
+    # scan them), these standalone binaries are fully stripped.
     ldflags:
-      - -w -X main.version={{ .Tag }} -X main.commit={{ .FullCommit }}
+      - -s -w -X main.version={{ .Tag }} -X main.commit={{ .FullCommit }}
     flags:
       - -trimpath
     mod_timestamp: "{{ .CommitTimestamp }}"
