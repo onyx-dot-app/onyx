@@ -398,6 +398,7 @@ class DocumentQuery:
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
             hierarchy_node_ids=index_filters.hierarchy_node_ids,
+            forced_document_sets=index_filters.forced_document_set,
         )
 
         # See https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
@@ -494,6 +495,7 @@ class DocumentQuery:
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
             hierarchy_node_ids=index_filters.hierarchy_node_ids,
+            forced_document_sets=index_filters.forced_document_set,
         )
 
         keyword_search_query = (
@@ -577,6 +579,7 @@ class DocumentQuery:
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
             hierarchy_node_ids=index_filters.hierarchy_node_ids,
+            forced_document_sets=index_filters.forced_document_set,
         )
 
         semantic_search_query = (
@@ -639,6 +642,7 @@ class DocumentQuery:
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
             hierarchy_node_ids=index_filters.hierarchy_node_ids,
+            forced_document_sets=index_filters.forced_document_set,
         )
         final_random_search_query = {
             "query": {
@@ -882,6 +886,8 @@ class DocumentQuery:
         # Assistant knowledge filters
         attached_document_ids: list[str] | None = None,
         hierarchy_node_ids: list[int] | None = None,
+        # Operator-forced document-set scope (NAMES), applied as a standalone AND clause.
+        forced_document_sets: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Returns filters to be passed into the "filter" key of a search query.
 
@@ -1268,6 +1274,12 @@ class DocumentQuery:
             # there is explicitly no list provided, we make no restrictions on
             # the documents that can be retrieved.
             filter_clauses.append(_get_acl_visibility_filter(access_control_list))
+
+        if forced_document_sets:
+            # Its own top-level AND clause (not merged into the OR-based
+            # knowledge_filter below), so it INTERSECTS rather than widens; placed
+            # after the ACL clause so it never loosens permissions.
+            filter_clauses.append(_get_document_set_filter(forced_document_sets))
 
         if source_types:
             # If at least one source type is provided, the caller will only

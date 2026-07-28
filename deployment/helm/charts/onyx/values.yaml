@@ -1544,6 +1544,10 @@ configMap:
   # Query Options
   DOC_TIME_DECAY: ""
   HYBRID_ALPHA: ""
+  # TEMPORARY (self-hosted only, will be removed soon): comma-separated document set
+  # NAMES. When set, the Onyx Search UI returns results only from those sets (chat is
+  # unaffected). Empty = no restriction.
+  FORCED_DOCUMENT_SET_NAMES: ""
   # Don't change the NLP models unless you know what you're doing
   EMBEDDING_BATCH_SIZE: ""
   DOCUMENT_ENCODER_MODEL: ""
