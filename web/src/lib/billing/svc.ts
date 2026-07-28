@@ -98,15 +98,29 @@ export async function endTrial(): Promise<EndTrialResponse> {
 export const resetStripeConnection = () =>
   billingPost<{ success: boolean; message: string }>("/reset-connection");
 
+// Comfortably past a claim that waits out the control plane's own 30s timeout.
+// These handlers drive a spinner, and the cache writes behind them have no
+// socket timeout of their own, so an unreachable cache would pin it forever.
+const LICENSE_REQUEST_TIMEOUT_MS = 60_000;
+
 // Self-hosted only actions
 async function selfHostedPost<T>(endpoint: string): Promise<T> {
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
     throw new Error(`${endpoint} is only available for self-hosted`);
   }
 
-  const response = await fetch(`/api/license${endpoint}`, {
-    method: "POST",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`/api/license${endpoint}`, {
+      method: "POST",
+      signal: AbortSignal.timeout(LICENSE_REQUEST_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new Error("License request timed out. Please try again.");
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));

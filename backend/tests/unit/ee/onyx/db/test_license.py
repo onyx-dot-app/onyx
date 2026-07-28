@@ -8,6 +8,7 @@ from ee.onyx.db.license import (
     delete_license,
     get_license,
     get_used_seats,
+    refresh_license_cache,
     upsert_license,
 )
 from ee.onyx.server.license.models import LicenseMetadata, LicenseSource, PlanType
@@ -252,3 +253,33 @@ class TestGetUsedSeatsAccountTypeFiltering:
         query = call_args[0][0]
         compiled = str(query.compile(compile_kwargs={"literal_binds": True}))
         assert "EXT_PERM_USER" in compiled
+
+
+class TestRefreshLicenseCacheLocking:
+    """The enforcement middleware calls refresh from async context, where the
+    Postgres lock's acquisition poll would sleep the event loop."""
+
+    @patch("ee.onyx.db.license.update_license_cache")
+    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
+    @patch("ee.onyx.db.license.get_cache_backend")
+    @patch("ee.onyx.utils.license.verify_license_signature")
+    def test_refresh_never_waits_on_the_cache_lock(
+        self,
+        mock_verify: MagicMock,
+        mock_get_cache: MagicMock,
+        _mock_cached: MagicMock,
+        mock_update_cache: MagicMock,
+    ) -> None:
+        lock = mock_get_cache.return_value.lock.return_value
+        lock.acquire.return_value = True
+        mock_verify.return_value = MagicMock(issued_at=datetime.now(timezone.utc))
+
+        db_session = MagicMock()
+        db_session.execute.return_value.scalars.return_value.first.return_value = (
+            License(license_data="signed")
+        )
+
+        refresh_license_cache(db_session)
+
+        lock.acquire.assert_called_once_with(blocking=False, blocking_timeout=None)
+        mock_update_cache.assert_called_once()

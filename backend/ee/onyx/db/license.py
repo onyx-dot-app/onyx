@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.license.models import LicenseMetadata, LicensePayload
 from onyx.auth.schemas import UserRole
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLock
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.db.enums import AccountType
 from onyx.db.models import License, User
@@ -22,6 +23,11 @@ logger = setup_logger()
 
 LICENSE_METADATA_KEY = "license:metadata"
 LICENSE_CACHE_TTL_SECONDS = 86400  # 24 hours
+
+# Serializes the read-compare-write in publish_license_metadata. Bounded so a
+# lost lease degrades to today's unguarded write rather than a stalled request.
+_LICENSE_CACHE_LOCK_KEY = "license:metadata:write"
+_LICENSE_CACHE_LOCK_TIMEOUT_SEC = 10
 
 # Namespaced + tenant-hashed so unrelated tenants don't block each other
 # and the lock id can't collide with other advisory locks in the codebase.
@@ -329,6 +335,57 @@ def update_license_cache(
     return metadata
 
 
+def publish_license_metadata(
+    payload: LicensePayload,
+    tenant_id: str | None = None,
+    wait_for_lock: bool = True,
+) -> LicenseMetadata:
+    """Cache metadata for *payload* unless a newer license is already cached.
+
+    Writers commit under the store lock but publish after releasing it, so
+    without serializing the compare-and-write two of them can commit in one
+    order and publish in the other, leaving the cache older than the row.
+    Returns whichever entry won.
+
+    wait_for_lock=False is for callers that cannot afford to wait on a
+    contended lock, and gives up serializing rather than the write itself.
+    """
+    lock = _acquire_license_cache_lock(tenant_id, wait_for_lock)
+    try:
+        cached = get_cached_license_metadata(tenant_id)
+        if cached and cached.issued_at > payload.issued_at:
+            return cached
+        return update_license_cache(payload, tenant_id=tenant_id)
+    finally:
+        if lock is not None:
+            lock.release()
+
+
+def _acquire_license_cache_lock(tenant_id: str | None, wait: bool) -> CacheLock | None:
+    """The held lock, or None when the caller must proceed without one.
+
+    Serializing is an improvement on an unserialized write, never a
+    precondition for one, and the Postgres backend holds this on a second
+    connection. Failing to publish a committed license would read as
+    unlicensed, so every way of not getting the lock falls through to the
+    write.
+    """
+    try:
+        lock = get_cache_backend(tenant_id=tenant_id).lock(
+            _LICENSE_CACHE_LOCK_KEY, timeout=_LICENSE_CACHE_LOCK_TIMEOUT_SEC
+        )
+        if lock.acquire(
+            blocking=wait,
+            blocking_timeout=_LICENSE_CACHE_LOCK_TIMEOUT_SEC if wait else None,
+        ):
+            return lock
+    except Exception as e:
+        logger.warning("License cache lock errored (%s), publishing unserialized", e)
+        return None
+    logger.warning("License cache lock contended, publishing unserialized")
+    return None
+
+
 def refresh_license_cache(
     db_session: Session,
     tenant_id: str | None = None,
@@ -345,7 +402,7 @@ def refresh_license_cache(
     """
     from ee.onyx.utils.license import verify_license_signature
 
-    # Read committed state only. Taking the store lock here would put Redis I/O
+    # Read committed state only. Taking the store lock here would put cache I/O
     # inside a held row lock, and this runs on the enforcement middleware's
     # path. A rebuild that loses to a concurrent store is corrected by the
     # issued_at comparison in the cache write below.
@@ -357,10 +414,11 @@ def refresh_license_cache(
 
     try:
         payload = verify_license_signature(license_record.license_data)
-        cached = get_cached_license_metadata(tenant_id)
-        if cached and cached.issued_at > payload.issued_at:
-            return cached
-        return update_license_cache(payload, tenant_id=tenant_id)
+        # Never waits: this runs inside the async middleware, where the
+        # Postgres lock's acquisition poll would sleep the event loop.
+        return publish_license_metadata(
+            payload, tenant_id=tenant_id, wait_for_lock=False
+        )
     except ValueError as e:
         logger.error("Failed to verify license during cache refresh: %s", e)
         invalidate_license_cache(tenant_id)

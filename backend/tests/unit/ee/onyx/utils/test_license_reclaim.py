@@ -4,6 +4,7 @@ stored license, validates the response, and persists through the same path.
 Also guards the point-of-use scheduler: one debounced reclaim per window,
 never an exception into the request that tripped it."""
 
+from collections.abc import Callable, Generator
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, call, patch
 
@@ -165,6 +166,12 @@ class TestPublishLicenseCache:
     """Runs after the store commits and outside its lock, so it must never
     raise and must yield to a newer entry another writer already published."""
 
+    @pytest.fixture(autouse=True)
+    def _cache_backend(self) -> Generator[MagicMock, None, None]:
+        with patch("ee.onyx.db.license.get_cache_backend") as mock_get_cache:
+            mock_get_cache.return_value.lock.return_value.acquire.return_value = True
+            yield mock_get_cache
+
     @patch("ee.onyx.db.license.invalidate_license_cache")
     @patch("ee.onyx.db.license.update_license_cache")
     @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
@@ -196,6 +203,61 @@ class TestPublishLicenseCache:
         publish_license_cache(payload)
 
         mock_update_cache.assert_not_called()
+
+    @patch("ee.onyx.db.license.update_license_cache")
+    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
+    def test_the_compare_and_write_is_serialized(
+        self,
+        _mock_cached: MagicMock,
+        mock_update_cache: MagicMock,
+        _cache_backend: MagicMock,
+    ) -> None:
+        """Two writers reading the cache before either writes would otherwise
+        publish in the opposite order to the one they committed in."""
+        lock = _cache_backend.return_value.lock.return_value
+
+        publish_license_cache(_make_license_payload())
+
+        mock_update_cache.assert_called_once()
+        lock.acquire.assert_called_once()
+        lock.release.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "unavailable",
+        [
+            pytest.param(
+                lambda lock: setattr(lock, "acquire", MagicMock(return_value=False)),
+                id="contended",
+            ),
+            pytest.param(
+                lambda lock: setattr(
+                    lock,
+                    "acquire",
+                    MagicMock(side_effect=RuntimeError("no connection")),
+                ),
+                id="raises",
+            ),
+        ],
+    )
+    @patch("ee.onyx.db.license.update_license_cache")
+    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
+    def test_an_unavailable_lock_still_publishes(
+        self,
+        _mock_cached: MagicMock,
+        mock_update_cache: MagicMock,
+        unavailable: Callable[[MagicMock], None],
+        _cache_backend: MagicMock,
+    ) -> None:
+        """A committed license that never reaches the cache reads as unlicensed
+        to the enforcement middleware, and the Postgres backend holds this lock
+        on a second connection the middleware path may not be able to spare."""
+        lock = _cache_backend.return_value.lock.return_value
+        unavailable(lock)
+
+        publish_license_cache(_make_license_payload())
+
+        mock_update_cache.assert_called_once()
+        lock.release.assert_not_called()
 
 
 class TestReclaimLicenseFromControlPlaneErrors:
@@ -295,30 +357,44 @@ class TestMaybeScheduleLicenseReclaim:
             expires=15 * 60,
         )
 
-    @patch("ee.onyx.utils.license.client_app")
-    @patch("ee.onyx.utils.license.get_redis_client")
+    @patch("ee.onyx.utils.license.get_cache_backend")
     def test_reads_the_block_from_the_same_namespace_the_task_writes(
         self,
-        mock_get_redis: MagicMock,
-        mock_client_app: MagicMock,
+        mock_get_cache: MagicMock,
     ) -> None:
-        """get_redis_client prefixes every key with the tenant it is given, so a
+        """The backend prefixes every key with the tenant it is given, so a
         writer and a reader that disagree on the tenant silently miss each
         other and the block never suppresses anything."""
-        mock_get_redis.return_value.get.return_value = license_fingerprint("blob")
+        mock_get_cache.return_value.get.return_value = license_fingerprint(
+            "blob"
+        ).encode()
 
         block_license_reclaim("blob")
         assert license_reclaim_is_blocked("blob") is True
 
-        assert mock_get_redis.call_args_list == [call(), call()]
-        mock_client_app.send_task.assert_not_called()
+        assert mock_get_cache.call_args_list == [call(), call()]
 
-    def test_a_block_naming_another_blob_does_not_suppress_this_one(self) -> None:
+    @patch("ee.onyx.utils.license.get_cache_backend")
+    def test_a_block_naming_another_blob_does_not_suppress_this_one(
+        self, mock_get_cache: MagicMock
+    ) -> None:
         """Clearing is best-effort, so a stale block must not outlive the
         license it rejected and stall the replacement for a day."""
-        with patch("ee.onyx.utils.license.get_redis_client") as mock_get_redis:
-            mock_get_redis.return_value.get.return_value = license_fingerprint("old")
-            assert license_reclaim_is_blocked("replacement") is False
+        mock_get_cache.return_value.get.return_value = license_fingerprint(
+            "old"
+        ).encode()
+        assert license_reclaim_is_blocked("replacement") is False
+
+    @patch("ee.onyx.utils.license.get_cache_backend")
+    def test_the_block_survives_a_deployment_without_redis(
+        self, mock_get_cache: MagicMock
+    ) -> None:
+        """Onyx Lite runs no Redis at all, and a block that silently no-ops
+        there would re-send a rejected credential every poll interval."""
+        mock_get_cache.return_value.get.return_value = None
+
+        assert license_reclaim_is_blocked("blob") is False
+        mock_get_cache.return_value.get.assert_called_once()
 
     @patch("ee.onyx.utils.license.client_app")
     @patch("ee.onyx.utils.license.get_redis_client")
@@ -332,25 +408,6 @@ class TestMaybeScheduleLicenseReclaim:
 
         maybe_schedule_license_reclaim(_expiring_in(timedelta(days=1)), "tenant_123")
 
-        mock_client_app.send_task.assert_not_called()
-
-    @patch("ee.onyx.utils.license.client_app")
-    @patch("ee.onyx.utils.license.get_redis_client")
-    def test_a_held_debounce_is_what_suppresses_a_blocked_license(
-        self,
-        mock_get_redis: MagicMock,
-        mock_client_app: MagicMock,
-    ) -> None:
-        # The block is keyed to the license blob, which the scheduler does not
-        # have. The task widens this debounce instead, so a rejected license
-        # stops costing an enqueue per window.
-        mock_get_redis.return_value.set.return_value = None
-
-        maybe_schedule_license_reclaim(_expiring_in(timedelta(days=-3)), "tenant_123")
-
-        # SET NX returns None when the key is already held, which is how a
-        # widened debounce keeps the blocked license from re-enqueueing.
-        mock_get_redis.return_value.set.assert_called_once()
         mock_client_app.send_task.assert_not_called()
 
     @patch("ee.onyx.utils.license.logger")

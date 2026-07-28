@@ -18,16 +18,17 @@ from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.server.license.models import LicenseData, LicensePayload
 from ee.onyx.utils.license_expiry import is_license_due_for_reclaim
 from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
 from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.settings.models import ApplicationStatus
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 # One reclaim attempt per debounce period, no matter how many requests see a
-# stale license. Redis key TTL is the debounce.
+# stale license. Redis key TTL is the debounce. Redis rather than the cache
+# backend, since what it debounces is a send onto the same broker.
 _LICENSE_RECLAIM_DEBOUNCE_KEY = "license_reclaim_debounce"
 _LICENSE_RECLAIM_DEBOUNCE_TTL_SEC = 15 * 60
 
@@ -165,24 +166,15 @@ def _is_stale_replacement(stored_data: str, incoming: LicensePayload) -> bool:
 def publish_license_cache(payload: LicensePayload) -> None:
     """Publish metadata for a license already committed. Never raises.
 
-    Runs outside the store lock, so a slower writer can arrive after a newer
-    one. It yields to whatever is cached if that entry is newer, and drops the
-    entry entirely on failure rather than leaving a superseded one to serve out
-    its TTL.
+    Drops the cached entry on failure rather than leaving a superseded one to
+    serve out its TTL.
     """
     # Call-time import: ee.onyx.db.license reaches back into this module, and
     # deferring exactly one side keeps that resolvable.
-    from ee.onyx.db.license import (
-        get_cached_license_metadata,
-        invalidate_license_cache,
-        update_license_cache,
-    )
+    from ee.onyx.db.license import invalidate_license_cache, publish_license_metadata
 
     try:
-        cached = get_cached_license_metadata()
-        if cached and cached.issued_at > payload.issued_at:
-            return
-        update_license_cache(payload)
+        publish_license_metadata(payload)
     except Exception as cache_error:
         logger.warning("Failed to publish license cache: %s", cache_error)
         try:
@@ -309,7 +301,7 @@ def block_license_reclaim(license_data: str) -> None:
     replacement that landed while it was in flight.
     """
     try:
-        get_redis_client().set(
+        get_cache_backend().set(
             _LICENSE_RECLAIM_BLOCKED_KEY,
             license_fingerprint(license_data),
             ex=_LICENSE_RECLAIM_BLOCKED_TTL_SEC,
@@ -319,33 +311,26 @@ def block_license_reclaim(license_data: str) -> None:
 
 
 def resume_license_reclaim() -> None:
-    """Let re-claims run again immediately. Never raises.
-
-    Drops the debounce as well as the block, since the block path widens the
-    debounce to a full day and a replacement license must not wait it out.
-    """
+    """Let re-claims run again immediately. Never raises."""
     try:
-        get_redis_client().delete(
-            _LICENSE_RECLAIM_BLOCKED_KEY, _LICENSE_RECLAIM_DEBOUNCE_KEY
-        )
+        get_cache_backend().delete(_LICENSE_RECLAIM_BLOCKED_KEY)
     except Exception as e:
         logger.warning("Failed to clear license reclaim block: %s", e)
+    try:
+        get_redis_client().delete(_LICENSE_RECLAIM_DEBOUNCE_KEY)
+    except Exception as e:
+        logger.warning("Failed to clear license reclaim debounce: %s", e)
 
 
-def license_reclaim_is_blocked(
-    license_data: str,
-    redis_client: TenantRedisClient | None = None,
-) -> bool:
+def license_reclaim_is_blocked(license_data: str) -> bool:
     """True when this exact license was rejected as auth within the last day.
 
     A block naming a different blob is ignored, so installing a replacement
     resumes re-claims even if clearing the block failed. Fails open: an
-    unreachable cache must not stop a legitimate reclaim. Takes a client so a
-    caller that needs one anyway reports a Redis outage once.
+    unreachable cache must not stop a legitimate reclaim.
     """
     try:
-        client = redis_client if redis_client is not None else get_redis_client()
-        blocked = client.get(_LICENSE_RECLAIM_BLOCKED_KEY)
+        blocked = get_cache_backend().get(_LICENSE_RECLAIM_BLOCKED_KEY)
     except Exception as e:
         logger.warning("Failed to read license reclaim block: %s", e)
         return False
@@ -368,7 +353,7 @@ def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None
         redis_client = get_redis_client()
         # The block is keyed to the license blob, which only the task has
         # cheaply at hand. Enqueueing is local and debounced, so let the task
-        # short-circuit and widen the debounce rather than read the row here.
+        # read the row and short-circuit rather than read it here.
 
         # SET NX doubles as the debounce and a cross-process lock: only the
         # first request in the window enqueues.
