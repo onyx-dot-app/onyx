@@ -5517,6 +5517,13 @@ class MCPServer(Base):
     available_in_craft: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    # Admin-defined headers sent on every request to the server for all auth
+    # types, merged below the auth headers (so they can never override e.g.
+    # the per-user Authorization). Values may carry gateway admission
+    # credentials, hence encrypted. Format: {"header-name": "value"}
+    custom_headers: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
+        EncryptedJson(), nullable=True
+    )
     # Admin connection config - used for the config page
     # and (when applicable) admin-managed auth
     # and (when applicable) per-user auth

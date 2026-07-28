@@ -59,6 +59,24 @@ DENYLISTED_MCP_HEADERS = {
     "host",
 }
 
+# Header names admins may never set via a server's custom headers.
+# Authorization is reserved for the credentials the server's auth_type
+# produces (e.g. the per-user OAuth token), which must always win that header.
+RESERVED_CUSTOM_HEADER_NAMES = {
+    "authorization",
+}
+
+
+def validate_custom_header_names(headers: dict[str, str]) -> None:
+    """Validate admin-defined custom header names, raising ValueError on
+    invalid, denylisted, or reserved names."""
+    for name in headers:
+        if _HTTP_FIELD_NAME_RE.fullmatch(name) is None:
+            raise ValueError(f"Invalid custom header name: {name!r}")
+        lowered = name.lower()
+        if lowered in DENYLISTED_MCP_HEADERS or lowered in RESERVED_CUSTOM_HEADER_NAMES:
+            raise ValueError(f"Custom headers may not set the {name!r} header")
+
 
 # This should be updated along with MCPConnectionData
 class MCPOAuthKeys(str, Enum):
@@ -210,6 +228,22 @@ class MCPToolCreateRequest(BaseModel):
             "Per-field flags marking which `admin_credentials` were edited"
         ),  # True = use value from request, False = use stored value
     )
+    custom_headers: Optional[dict[str, str]] = Field(
+        None,
+        description=(
+            "Admin-defined headers sent on every request to the server for "
+            "all auth types (e.g. an API-gateway admission key), merged "
+            "below the auth headers so they can never override the per-user "
+            "Authorization. Values may reference {user_email}. None leaves "
+            "stored headers unchanged; an empty dict clears them."
+        ),
+    )
+    custom_headers_changed: dict[str, bool] = Field(
+        default_factory=dict,
+        description=(
+            "Per-header flags marking which `custom_headers` values were edited"
+        ),  # True = use value from request, False = use stored value
+    )
     existing_server_id: Optional[int] = Field(
         None, description="ID of existing server to update (for editing)"
     )
@@ -234,6 +268,9 @@ class MCPToolCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_auth_configuration(self) -> "MCPToolCreateRequest":
+        if self.custom_headers:
+            validate_custom_header_names(self.custom_headers)
+
         # A shared API token is required to create an admin-managed server.
         # On update (`existing_server_id` set) it may be omitted: the upsert
         # path reuses the stored token, so requiring it here would reject
@@ -593,6 +630,13 @@ class MCPServer(BaseModel):
     admin_credentials: Optional[dict[str, str]] = Field(
         None,
         description="Admin's credential key-value pairs for template substitution and storage",
+    )
+    custom_headers: Optional[dict[str, str]] = Field(
+        None,
+        description=(
+            "Masked admin-defined custom headers, for prefilling the edit "
+            "form. Owner/admin auth-config views only."
+        ),
     )
     craft_connected: Optional[bool] = Field(
         None,

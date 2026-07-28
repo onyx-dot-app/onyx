@@ -6,7 +6,7 @@ from mcp.client.auth import OAuthClientProvider
 
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType, MCPTransport
-from onyx.db.mcp import ResolvedMCPCredentials
+from onyx.db.mcp import ResolvedMCPCredentials, extract_custom_headers
 from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.server.features.mcp.client import call_mcp_tool
 from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS
@@ -176,16 +176,21 @@ class MCPTool(Tool[None]):
                         denylisted_provided,
                     )
 
-            # Priority 2 + 3: stored connection-config headers, then the
-            # PT_OAuth login token — both override request headers.
-            headers.update(
-                ResolvedMCPCredentials(
-                    connection_config=self.connection_config,
-                    user_oauth_token=self._user_oauth_token,
-                ).build_headers()
+            # Priority 2 + 3: admin custom headers, then stored
+            # connection-config headers, then the PT_OAuth login token — all
+            # override request headers; auth headers override custom headers.
+            credentials = ResolvedMCPCredentials(
+                connection_config=self.connection_config,
+                user_oauth_token=self._user_oauth_token,
+                custom_headers=extract_custom_headers(self.mcp_server),
+                user_email=self.user_email,
             )
+            auth_headers = credentials.build_auth_headers()
+            headers.update(credentials.build_headers())
 
-            # Check if this is an authentication issue before making the call
+            # Check if this is an authentication issue before making the call.
+            # Custom headers don't count — they exist whether or not this user
+            # has connected.
             is_passthrough_oauth = (
                 self.mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH
             )
@@ -194,7 +199,7 @@ class MCPTool(Tool[None]):
                 and self.mcp_server.auth_type is not None
             )
             has_auth_config = (
-                (self.connection_config is not None and bool(headers))
+                (self.connection_config is not None and bool(auth_headers))
                 or bool(self._additional_headers)
             ) or (is_passthrough_oauth and self._user_oauth_token is not None)
 

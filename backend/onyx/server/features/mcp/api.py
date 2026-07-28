@@ -31,6 +31,7 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.db.constants import UNSET, UnsetType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     EndpointPolicy,
@@ -57,6 +58,7 @@ from onyx.db.mcp import (
     delete_mcp_server,
     delete_user_connection_configs_for_server,
     extract_connection_data,
+    extract_custom_headers,
     get_all_mcp_servers,
     get_all_mcp_tools_for_server,
     get_craft_enabled_mcp_servers,
@@ -66,6 +68,7 @@ from onyx.db.mcp import (
     get_server_auth_template,
     get_user_connection_config,
     get_user_connection_configs,
+    render_custom_headers,
     update_connection_config,
     update_mcp_server__no_commit,
     upsert_user_connection_config,
@@ -283,6 +286,32 @@ def _resolve_admin_credentials(
         if request_value:
             reject_masked_credentials({key: request_value})
         resolved[key] = request_value
+    return resolved
+
+
+def _resolve_custom_headers(
+    *,
+    request_headers: dict[str, str] | None,
+    request_headers_changed: dict[str, bool],
+    existing_headers: dict[str, str],
+) -> dict[str, str] | UnsetType:
+    """Resolve the custom-header dict to store for an upsert. ``None`` in the
+    request leaves the stored headers unchanged (older clients don't send the
+    field); otherwise the request dict is authoritative: keys absent from it
+    are removed, and each kept key takes the request value when its changed
+    flag is set (rejecting masked placeholders defensively) or the stored
+    value otherwise."""
+    if request_headers is None:
+        return UNSET
+    resolved: dict[str, str] = {}
+    for name, request_value in request_headers.items():
+        changed = request_headers_changed.get(name, name not in existing_headers)
+        if not changed and name in existing_headers:
+            resolved[name] = existing_headers[name]
+            continue
+        if request_value:
+            reject_masked_credentials({name: request_value})
+        resolved[name] = request_value
     return resolved
 
 
@@ -788,11 +817,18 @@ async def _connect_oauth(
     # the auth_url for us to send to the frontend. The callback handler waits for
     # the auth code to be available in redis; this code gets set by our callback endpoint
     # which is called by the frontend after the user goes through the login flow.
+    # The probe hits server_url, which may be an API gateway that requires the
+    # admin custom headers for admission.
+    probe_headers = render_custom_headers(
+        extract_custom_headers(mcp_server), user.email or ""
+    )
+    probe_headers.update(connection_config_dict.get("headers", {}))
+
     async def tmp_func() -> InitializeResult:
         try:
             x = await initialize_mcp_client(
                 probe_url,
-                connection_headers=connection_config_dict.get("headers", {}),
+                connection_headers=probe_headers,
                 transport=transport,
                 auth=oauth_auth,
             )
@@ -1142,9 +1178,15 @@ def save_user_credentials(
             )
 
         server_url = mcp_server.server_url
+        # Validate through the same headers runtime calls send: admin custom
+        # headers below the user's credential headers.
+        test_headers = render_custom_headers(
+            extract_custom_headers(mcp_server), email or ""
+        )
+        test_headers.update(config_data["headers"])
         is_valid, test_message = test_mcp_server_credentials(
             server_url,
-            config_data["headers"],
+            test_headers,
             transport=MCPTransport(request.transport.replace("-", "_").upper()),
             auth=auth,
         )
@@ -1443,6 +1485,17 @@ def _db_mcp_server_to_api_mcp_server(
     # Calculate tool count from the relationship
     tool_count = len(db_server.current_actions) if db_server.current_actions else 0
 
+    # Masked custom headers for the edit form; values are gateway admission
+    # credentials, so expose them only where admin credentials are exposed.
+    custom_headers_masked: dict[str, str] | None = None
+    if can_view_admin_credentials:
+        stored_custom_headers = extract_custom_headers(db_server)
+        if stored_custom_headers:
+            custom_headers_masked = {
+                name: mask_string(value)
+                for name, value in stored_custom_headers.items()
+            }
+
     return MCPServer(
         id=db_server.id,
         name=db_server.name,
@@ -1475,6 +1528,7 @@ def _db_mcp_server_to_api_mcp_server(
         auth_template=auth_template,
         user_credentials=user_credentials,
         admin_credentials=admin_credentials,
+        custom_headers=custom_headers_masked,
     )
 
 
@@ -1765,9 +1819,12 @@ def _list_mcp_tools_by_id(
         )
 
     user_id = str(user.id)
-    # Discover tools from the MCP server
+    # Discover tools from the MCP server. Admin custom headers go below the
+    # auth headers — server_url may be an API gateway that requires them.
     auth = None
-    headers: dict[str, str] = {}
+    headers: dict[str, str] = render_custom_headers(
+        extract_custom_headers(mcp_server), user.email or ""
+    )
 
     if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
         # TODO: just pass this in, but should work when auth is set already
@@ -2108,7 +2165,11 @@ def _upsert_mcp_server(
         ):
             delete_connection_config(mcp_server.admin_connection_config_id, db_session)
 
-        # Update the server with new values
+        # Update the server with new values. Custom headers are resolved
+        # against the stored dict so masked read-back values are never
+        # persisted; they are deliberately not part of
+        # `changing_connection_config` — editing a gateway header must not
+        # wipe user credentials.
         mcp_server = update_mcp_server__no_commit(
             server_id=request.existing_server_id,
             db_session=db_session,
@@ -2123,6 +2184,11 @@ def _upsert_mcp_server(
             oauth_scopes_override=request.oauth_scopes_override,
             oauth_additional_auth_params=request.oauth_additional_auth_params,
             transport=request.transport,
+            custom_headers=_resolve_custom_headers(
+                request_headers=request.custom_headers,
+                request_headers_changed=request.custom_headers_changed,
+                existing_headers=extract_custom_headers(mcp_server),
+            ),
         )
 
         logger.info(
@@ -2142,6 +2208,11 @@ def _upsert_mcp_server(
                 detail="Authenticated user email required to create MCP servers",
             )
 
+        resolved_custom_headers = _resolve_custom_headers(
+            request_headers=request.custom_headers,
+            request_headers_changed=request.custom_headers_changed,
+            existing_headers={},
+        )
         mcp_server = create_mcp_server__no_commit(
             owner_email=user.email,
             name=request.name,
@@ -2156,6 +2227,11 @@ def _upsert_mcp_server(
             oauth_additional_auth_params=request.oauth_additional_auth_params,
             transport=request.transport or MCPTransport.STREAMABLE_HTTP,
             db_session=db_session,
+            custom_headers=(
+                None
+                if isinstance(resolved_custom_headers, UnsetType)
+                else resolved_custom_headers
+            ),
         )
 
         logger.info(

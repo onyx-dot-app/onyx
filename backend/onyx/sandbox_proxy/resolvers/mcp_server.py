@@ -173,6 +173,7 @@ class MCPServerResolver(CredentialResolver):
                     str(e), sandbox_detail=_connect_detail(server.name, admin_managed)
                 ) from e
             headers = creds.build_headers()
+            auth_headers = creds.build_auth_headers()
             expired_oauth_config_id: int | None = None
             if (
                 server.auth_type == MCPAuthenticationType.OAUTH
@@ -183,18 +184,23 @@ class MCPServerResolver(CredentialResolver):
 
         # Refresh after the session closes — the primitive opens its own.
         if expired_oauth_config_id is not None:
-            headers = _refresh_oauth_headers(
+            refreshed = _refresh_oauth_headers(
                 tenant_id, server, str(user_id), expired_oauth_config_id
             )
-            if not headers:
+            if not refreshed:
                 raise CredentialUnavailableError(
                     f"OAuth token for MCP server {server.id} is expired and "
                     "could not be refreshed",
                     sandbox_detail=_reconnect_detail(server.name, admin_managed),
                 )
+            # Merge, don't replace: admin custom headers must survive refresh.
+            headers.update(refreshed)
+            auth_headers.update(refreshed)
 
+        # Auth headers only: custom headers exist whether or not this user has
+        # connected, so counting them would forward without user credentials.
         requires_auth = server.auth_type not in (None, MCPAuthenticationType.NONE)
-        if requires_auth and not headers:
+        if requires_auth and not auth_headers:
             raise CredentialUnavailableError(
                 f"no stored credentials for user {short_log_id(user_id)} on "
                 f"server {server.id}",

@@ -29,7 +29,12 @@ from onyx.db.models import (
     User__UserGroup,
     UserRole,
 )
-from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS, MCPConnectionData
+from onyx.server.features.mcp.models import (
+    DENYLISTED_MCP_HEADERS,
+    RESERVED_CUSTOM_HEADER_NAMES,
+    MCPConnectionData,
+    apply_auto_substitutions,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
 
@@ -228,6 +233,7 @@ def create_mcp_server__no_commit(
     oauth_additional_auth_params: dict[str, str] | None = None,
     admin_connection_config_id: int | None = None,
     is_public: bool = True,
+    custom_headers: dict[str, str] | None = None,
 ) -> MCPServer:
     """Create a new MCP server"""
     new_server = MCPServer(
@@ -245,6 +251,7 @@ def create_mcp_server__no_commit(
         oauth_additional_auth_params=oauth_additional_auth_params,
         admin_connection_config_id=admin_connection_config_id,
         is_public=is_public,
+        custom_headers=custom_headers or None,
     )
     db_session.add(new_server)
     db_session.flush()  # Get the ID without committing
@@ -270,6 +277,7 @@ def update_mcp_server__no_commit(
     last_refreshed_at: datetime.datetime | None = None,
     is_public: bool | None = None,
     available_in_craft: bool | None = None,
+    custom_headers: dict[str, str] | None | UnsetType = UNSET,
 ) -> MCPServer:
     """Update an existing MCP server"""
     server = get_mcp_server_by_id(server_id, db_session)
@@ -306,6 +314,10 @@ def update_mcp_server__no_commit(
         server.last_refreshed_at = last_refreshed_at
     if available_in_craft is not None:
         server.available_in_craft = available_in_craft
+    if not isinstance(custom_headers, UnsetType):
+        server.custom_headers = (  # ty: ignore[invalid-assignment]
+            custom_headers or None
+        )
 
     db_session.flush()  # Don't commit yet, let caller decide when to commit
     return server
@@ -419,23 +431,60 @@ class MCPCredentialsError(Exception):
     """Credentials for an MCP server cannot be resolved for this user."""
 
 
+def extract_custom_headers(server: MCPServer) -> dict[str, str]:
+    """The server's admin-defined custom headers as a plain dict (unmasked).
+    Empty when none are configured."""
+    if server.custom_headers is None:
+        return {}
+    return cast(dict[str, str], server.custom_headers.get_value(apply_mask=False))
+
+
+def render_custom_headers(
+    custom_headers: dict[str, str] | None, user_email: str
+) -> dict[str, str]:
+    """Admin-defined custom headers ready to send: denylisted and reserved
+    names stripped (write-time validation enforces this too; stripping again
+    keeps a directly-edited DB row from overriding e.g. Authorization) and
+    auto placeholders like ``{user_email}`` substituted."""
+    if not custom_headers:
+        return {}
+    rendered: dict[str, str] = {}
+    for name, value in custom_headers.items():
+        lowered = name.lower()
+        if lowered in DENYLISTED_MCP_HEADERS or lowered in RESERVED_CUSTOM_HEADER_NAMES:
+            # Names only — header values are credentials.
+            logger.warning(
+                "Stored MCP custom headers contained a denylisted or reserved "
+                "header that was stripped: %s",
+                name,
+            )
+            continue
+        rendered[name] = apply_auto_substitutions(value, user_email=user_email)
+    return rendered
+
+
 class ResolvedMCPCredentials(BaseModel):
     """Credential source for one (server, user) pair.
 
-    Exactly one of the fields is populated (both are None for auth type NONE):
-    `connection_config` for API_TOKEN / OAUTH servers, `user_oauth_token` for
-    PT_OAUTH servers.
+    Exactly one of `connection_config` / `user_oauth_token` is populated (both
+    are None for auth type NONE): `connection_config` for API_TOKEN / OAUTH
+    servers, `user_oauth_token` for PT_OAUTH servers. `custom_headers` carries
+    the server's admin-defined headers for every auth type.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
 
     connection_config: MCPConnectionConfig | None
     user_oauth_token: str | None
+    custom_headers: dict[str, str] | None = None
+    user_email: str = ""
 
-    def build_headers(self) -> dict[str, str]:
+    def build_auth_headers(self) -> dict[str, str]:
         """Auth headers for a request to the server: the stored
         connection-config headers, with PT_OAUTH's login token taking
-        precedence. Empty when no credentials are stored.
+        precedence. Empty when no credentials are stored — the signal for
+        "this user has not connected yet", so admin custom headers are
+        deliberately excluded here.
 
         Denylisted headers (see DENYLISTED_MCP_HEADERS) are stripped so every
         consumer gets the security filter automatically — stored credentials
@@ -453,6 +502,14 @@ class ResolvedMCPCredentials(BaseModel):
             )
         if self.user_oauth_token:
             headers["Authorization"] = f"Bearer {self.user_oauth_token}"
+        return headers
+
+    def build_headers(self) -> dict[str, str]:
+        """All headers for a request to the server: admin custom headers with
+        the auth headers merged on top, so the auth_type's credentials always
+        win a name collision."""
+        headers = render_custom_headers(self.custom_headers, self.user_email)
+        headers.update(self.build_auth_headers())
         return headers
 
 
@@ -480,6 +537,9 @@ def resolve_mcp_credentials(
     Raises MCPCredentialsError for PT_OAUTH with the anonymous user, who has no
     login OAuth token.
     """
+    custom_headers = extract_custom_headers(mcp_server)
+    user_email = "" if user.is_anonymous else user.email
+
     if mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
         if user.is_anonymous:
             raise MCPCredentialsError(
@@ -490,6 +550,8 @@ def resolve_mcp_credentials(
             user_oauth_token=(
                 user.oauth_accounts[0].access_token if user.oauth_accounts else None
             ),
+            custom_headers=custom_headers,
+            user_email=user_email,
         )
 
     if mcp_server.auth_type in (
@@ -505,10 +567,18 @@ def resolve_mcp_credentials(
         else:
             connection_config = mcp_server.admin_connection_config
         return ResolvedMCPCredentials(
-            connection_config=connection_config, user_oauth_token=None
+            connection_config=connection_config,
+            user_oauth_token=None,
+            custom_headers=custom_headers,
+            user_email=user_email,
         )
 
-    return ResolvedMCPCredentials(connection_config=None, user_oauth_token=None)
+    return ResolvedMCPCredentials(
+        connection_config=None,
+        user_oauth_token=None,
+        custom_headers=custom_headers,
+        user_email=user_email,
+    )
 
 
 def can_resolve_mcp_credentials(
@@ -534,7 +604,9 @@ def can_resolve_mcp_credentials(
         )
     except MCPCredentialsError:
         return False
-    return bool(credentials.build_headers())
+    # Auth headers only: admin custom headers exist regardless of whether this
+    # user has connected, so counting them would report everyone as connected.
+    return bool(credentials.build_auth_headers())
 
 
 def get_user_connection_configs(
