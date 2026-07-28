@@ -28,6 +28,22 @@ def _make_xlsx(sheets: dict[str, list[list[str]]]) -> io.BytesIO:
 
 
 class TestXlsxToText:
+    def test_formula_strings_are_not_indexed(self) -> None:
+        # Workbooks are read with data_only=True: cached calculated values are
+        # extracted instead of formula source. A cell whose formula was never
+        # evaluated by a spreadsheet app has no cached value and is omitted —
+        # the accepted tradeoff for not indexing raw "=SUM(...)" strings.
+        wb = openpyxl.Workbook()
+        ws = cast(Worksheet, wb.active)
+        ws.append(["Total", "=SUM(B2:B10)"])
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        result = xlsx_to_text(buf)
+        assert "=SUM" not in result
+        assert "Total" in result
+
     def test_single_sheet_basic(self) -> None:
         xlsx = _make_xlsx(
             {
