@@ -172,12 +172,13 @@ def _build_provider_block(
             "reasoning": capabilities.supports_reasoning,
             "temperature": capabilities.supports_temperature,
             "tool_call": capabilities.supports_tool_calls,
-            "interleaved": capabilities.supports_interleaved_reasoning,
             "modalities": {
                 "input": list(capabilities.input_modalities),
                 "output": list(capabilities.output_modalities),
             },
         }
+        if capabilities.supports_interleaved_reasoning:
+            entry["interleaved"] = True
         if capabilities.supports_reasoning:
             entry["options"] = {"reasoningEffort": "high"}
         if model.max_input_tokens:

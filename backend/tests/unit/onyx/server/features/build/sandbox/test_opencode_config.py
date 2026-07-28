@@ -78,7 +78,6 @@ def test_gateway_is_the_only_enabled_provider() -> None:
         "reasoning": False,
         "temperature": False,
         "tool_call": True,
-        "interleaved": False,
         "modalities": {
             "input": ["text"],
             "output": ["text"],
@@ -90,7 +89,6 @@ def test_gateway_is_the_only_enabled_provider() -> None:
         "reasoning": True,
         "temperature": False,
         "tool_call": True,
-        "interleaved": False,
         "modalities": {
             "input": ["text", "image"],
             "output": ["text"],
