@@ -14,6 +14,8 @@ Source of truth (wiki): `Engineering Projects/Group-Based Permissions System V2/
 | 03 | [03-detailed-design.md](03-detailed-design.md) | DB design (+rationale) · auth primitives · ~4 filter rewrites (+skill, +token-limit; §11) · write-path gate insertions · PAT · API · FE · file tree · pre-impl notes · open decisions | ✅ |
 | 04 | [04-implementation-plan.md](04-implementation-plan.md) | CLAUDE.md-format plan + plan-challenge results (passed all 6) | ✅ |
 | 05 | [05-pr-roadmap.md](05-pr-roadmap.md) | 6 ordered PRs (~2.3k LOC) w/ drift checkpoints + lands-together safety invariant | ✅ |
+| 06 | [06-frontend-affordance-followups.md](06-frontend-affordance-followups.md) | Original UI follow-up: the 3-tier gate model + the `is_editable` gap for agents — **superseded by 07** | ⤴︎ |
+| 07 | [07-ui-capability-model-design.md](07-ui-capability-model-design.md) | **UI redesign** (server-driven capability model): kills client-side `visibilityPermissions()`; `/me.admin_capabilities` (coarse) + per-resource `permissions{}` map (per-item) stamped by a shared `can_<action>` helper the write-guard also calls (drift impossible by construction); `<Can>` primitive; 49/109 affordance audit + complete mapping + real contract test + 5-PR roadmap. **v2** — revised after a 34-finding adversarial pressure test. Supersedes 06 | 🆕 design (v2) |
 
 **Decisions locked at GATE 2:** D1 cache `is_group_manager` boolean (route gate zero-query; managed-list stays
 live) · D2 admins-only create groups · D3 admin-or-manager-of-that-group assigns managers.
