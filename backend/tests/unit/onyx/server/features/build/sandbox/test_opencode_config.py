@@ -8,12 +8,15 @@ from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
-    GatewayModelConfig,
 )
 from onyx.server.features.build.sandbox.util.mcp_config import craft_mcp_fingerprint
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_base_config,
     build_provider_opencode_config,
+)
+from onyx.server.gateway.models import (
+    GatewayModelCapabilities,
+    GatewayModelDescriptor,
 )
 
 
@@ -25,12 +28,19 @@ def _gateway(*, default: str = "7/gpt-5.5") -> CraftLLMProviderConfig:
         api_base="https://onyx.test/api/gateway/v1",
         display_name="Onyx",
         models=[
-            GatewayModelConfig(id="7/gpt-5.5", display_name="GPT-5.5"),
-            GatewayModelConfig(
+            GatewayModelDescriptor(
+                id="7/gpt-5.5",
+                display_name="GPT-5.5",
+                provider="openai",
+            ),
+            GatewayModelDescriptor(
                 id="9/claude-opus-4-8",
                 display_name="Claude Opus 4.8",
-                supports_image_input=True,
-                supports_reasoning=True,
+                provider="anthropic",
+                capabilities=GatewayModelCapabilities(
+                    input_modalities=("text", "image"),
+                    supports_reasoning=True,
+                ),
                 max_input_tokens=200_000,
             ),
         ],

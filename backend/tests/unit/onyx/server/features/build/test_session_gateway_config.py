@@ -15,16 +15,14 @@ from onyx.llm.well_known_providers.auto_update_models import (
     LLMRecommendations,
 )
 from onyx.llm.well_known_providers.models import SimpleKnownModel
-from onyx.server.features.build.sandbox.models import (
-    CraftLLMProviderConfig,
-    GatewayModelConfig,
-)
+from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_provider_opencode_config,
 )
 from onyx.server.features.build.session import llm_config
 from onyx.server.features.build.session import manager as manager_module
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.gateway.models import GatewayModelDescriptor
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 
 
@@ -245,9 +243,10 @@ def _gateway_config() -> CraftLLMProviderConfig:
         api_key="proxy-placeholder",
         api_base="https://onyx.test/gateway/v1",
         models=[
-            GatewayModelConfig(
+            GatewayModelDescriptor(
                 id="13/gpt-5-mini",
                 display_name="GPT-5 Mini",
+                provider="openai",
             )
         ],
     )

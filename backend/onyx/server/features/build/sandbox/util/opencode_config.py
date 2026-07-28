@@ -165,22 +165,20 @@ def _build_provider_block(
         block["name"] = llm_provider_config.display_name
     models: dict[str, Any] = {}
     for model in llm_provider_config.models or []:
-        input_modalities = ["text"]
-        if model.supports_image_input:
-            input_modalities.append("image")
+        capabilities = model.capabilities
         entry: dict[str, Any] = {
             "name": model.display_name,
-            "attachment": model.supports_image_input,
-            "reasoning": model.supports_reasoning,
-            "temperature": False,
-            "tool_call": True,
-            "interleaved": False,
+            "attachment": "image" in capabilities.input_modalities,
+            "reasoning": capabilities.supports_reasoning,
+            "temperature": capabilities.supports_temperature,
+            "tool_call": capabilities.supports_tool_calls,
+            "interleaved": capabilities.supports_interleaved_reasoning,
             "modalities": {
-                "input": input_modalities,
-                "output": ["text"],
+                "input": list(capabilities.input_modalities),
+                "output": list(capabilities.output_modalities),
             },
         }
-        if model.supports_reasoning:
+        if capabilities.supports_reasoning:
             entry["options"] = {"reasoningEffort": "high"}
         if model.max_input_tokens:
             # opencode's schema requires both keys when "limit" is present.
