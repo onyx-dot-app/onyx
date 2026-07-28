@@ -70,7 +70,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.factory import get_default_llm, get_llm_for_persona, get_llm_token_counter
+from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.models import (
     USER_SELECTABLE_REASONING_EFFORTS,
     ReasoningEffort,
@@ -482,18 +482,29 @@ def rename_chat_session(
     # send-message. Manual renames return above and stay free.
     check_token_rate_limits(user)
 
-    llm = get_default_llm(
-        additional_headers=extract_headers(
-            request.headers, LITELLM_PASS_THROUGH_HEADERS
-        )
-    )
-
     # Read-phase short session: usage check + history fetch. Closed before the
     # LLM call so the underlying pool connection is fully released for the
     # 2-10s generation window. (db_session.close() alone is insufficient in
     # multi-tenant mode where the session is bound to an explicit Connection
     # held by get_session_with_tenant's outer with-block.)
     with get_session_with_current_tenant() as db_session:
+        chat_session = get_chat_session_by_id(
+            chat_session_id=chat_session_id,
+            user_id=user_id,
+            db_session=db_session,
+            eager_load_persona=True,
+        )
+        # Name with the model the session actually uses (session override →
+        # persona default → global default) — the global default may be a
+        # provider this user's session deliberately avoids.
+        llm = get_llm_for_persona(
+            persona=chat_session.persona,
+            user=user,
+            llm_override=chat_session.llm_override,
+            additional_headers=extract_headers(
+                request.headers, LITELLM_PASS_THROUGH_HEADERS
+            ),
+        )
         check_llm_cost_limit_for_provider(
             db_session=db_session,
             tenant_id=get_current_tenant_id(),
