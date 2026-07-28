@@ -1,9 +1,9 @@
 {{/*
+Pre-pulls the sandbox image onto every node in the sandbox pool so a user's
+first sandbox there doesn't pay the pull. See docs/craft/sandbox/image-and-spinup.md.
+
 Defaults are resolved field by field, NOT with `merge`: sprig's merge treats
-`false` and `0` as empty and silently overwrites them with the default, so
-`priorityClass.create: false` would be ignored and `value: 0` would become -10.
-Strings use `default` (empty string is not a meaningful setting); booleans and
-ints go through `hasKey`.
+`false` and `0` as empty, so `create: false` and `value: 0` would be overwritten.
 */}}
 {{- $prepull := .Values.sandboxImagePrepull | default dict }}
 {{- $res := $prepull.resources | default dict }}
@@ -17,47 +17,13 @@ ints go through `hasKey`.
 {{- $pcValue := -10 }}
 {{- if hasKey $pc "value" }}{{- $pcValue = $pc.value }}{{- end }}
 {{- if and (eq (include "onyx.craftEnabled" .) "true") $prepull.enabled }}
-{{- /*
-Pre-pulls the sandbox image onto every node in the sandbox pool so a user's
-first sandbox there doesn't pay the pull.
-
-Why a DaemonSet running `sleep infinity` and not a one-shot pre-pull Job: the
-kubelet never garbage-collects an image referenced by a running pod. A Job pulls
-and exits, leaving the layers GC-eligible (default imageGCHighThresholdPercent
-85%), so they silently evaporate under node disk pressure and the next sandbox
-cold-pulls again with no signal. A long-lived pod pins them. It also covers nodes
-that join *after* install, which a Job cannot.
-
-Cost of that pinning, which operators must size for: the sandbox image is ~3.3 GB
-extracted and it becomes UNRECLAIMABLE on every sandbox node. It shares a disk
-with the sandbox workspaces (`workspace` emptyDir, 50Gi sizeLimit), so node disk
-must have headroom for both — otherwise pressure that image GC used to absorb
-now resolves by evicting pods instead. Set `enabled: false` on pools too small
-to carry it.
-
-Priority is deliberately negative: a pending sandbox pod should be able to
-preempt the prepuller rather than fail to schedule (and trigger a needless
-scale-up) because a do-nothing pod held the last scrap of capacity. Preemption
-is safe — a sandbox running on the node pins the image itself, so the prepuller
-is redundant exactly when it would compete. Note this does NOT reorder
-disk-pressure *eviction*: kubelet ranks "exceeds ephemeral-storage request"
-ahead of priority, and evicting the prepuller would free ~0 bytes anyway.
-
-What this does NOT fix: the node that triggered an autoscale-up races this
-DaemonSet's own pull, so the pod that caused the scale-out may still cold-start.
-Closing that needs pre-booted spare capacity, node-image baking, or lazy-pull;
-see docs/craft/sandbox/image-and-spinup.md.
-*/}}
 {{- $cm := .Values.configMap }}
 {{- $sandboxNs := $cm.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 {{- $saName := (index $cm "SANDBOX_SERVICE_ACCOUNT_NAME") | default "sandbox" }}
 {{- $image := include "onyx.sandboxImage" . }}
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
-{{- /* PriorityClass is CLUSTER-scoped, so the name must include the release
-namespace: `onyx.fullname` omits it, so two same-named releases in different
-namespaces would render the same object, and the second install fails Helm's
-ownership check (then either release's upgrade/uninstall disrupts the other).
-Same trunc+hash shape as the RBAC names in sandbox-rbac.yaml. */}}
+{{- /* PriorityClass is cluster-scoped, so the name includes the release
+namespace. Same trunc+hash shape as the RBAC names in sandbox-rbac.yaml. */}}
 {{- $pcBase := printf "%s-%s" (include "onyx.fullname" .) .Release.Namespace }}
 {{- if gt (len $pcBase) 47 }}
 {{- $pcBase = printf "%s-%s" ($pcBase | trunc 38 | trimSuffix "-") (sha256sum $pcBase | trunc 8) }}
@@ -88,10 +54,6 @@ metadata:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox-image-prepuller
 spec:
-  {{- /* A tag bump should repull on every node at once, not node-by-node. Lower
-  this on large pools: N nodes pulling ~1 GB simultaneously is a thundering herd
-  against the registry, and Docker Hub rate limits are already a known problem
-  here (see BASE_IMAGE_REGISTRY in the sandbox Dockerfile). */}}
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
@@ -104,8 +66,8 @@ spec:
     metadata:
       labels:
         {{- include "onyx.selectorLabels" . | nindent 8 }}
-        {{- /* Deliberately NOT `component: sandbox` — that label is the selector
-        for the sandbox NetworkPolicies, and this pod is not a sandbox. */}}
+        {{- /* Not `component: sandbox` — that label is the selector for the
+        sandbox NetworkPolicies, and this pod is not a sandbox. */}}
         app.kubernetes.io/component: sandbox-image-prepuller
         admission.datadoghq.com/enabled: "false"
     spec:
@@ -117,12 +79,9 @@ spec:
       {{- with $pcName }}
       priorityClassName: {{ . }}
       {{- end }}
-      {{- /* Pull credentials must match the sandbox pods' exactly, or the
-      prepuller ImagePullBackOffs against a private registry and silently warms
-      nothing. Both routes are covered: the chart-wide secrets, and the sandbox
-      ServiceAccount, which an operator may have attached secrets to. The token
-      stays unmounted — this pod makes no API calls; it is here only so image
-      pull resolves the same credentials a sandbox pod would. */}}
+      {{- /* Pull credentials must resolve the same as the sandbox pods', or a
+      private registry leaves the prepuller in ImagePullBackOff. The SA is here
+      for its attached pull secrets only; this pod makes no API calls. */}}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -139,18 +98,12 @@ spec:
       containers:
         - name: prepuller
           image: {{ $image }}
-          {{- /* Always would defeat the purpose on every pod restart. */}}
+          {{- /* Always would re-pull on every pod restart. */}}
           imagePullPolicy: IfNotPresent
-          {{- /* Portable idle loop, NOT `sleep infinity`: "infinity" is a GNU
-          coreutils extension. It works on today's Debian-based sandbox image but
-          dies on busybox/alpine, and the failure is quiet — a CrashLooping
-          prepuller unpins the image with nothing to signal it. This survives a
-          base-image change. */}}
+          {{- /* Portable idle loop, not `sleep infinity` (a GNU coreutils
+          extension that dies on busybox/alpine). The pod must stay running:
+          kubelet only exempts images a running pod references from image GC. */}}
           command: ["sh", "-c", "while :; do sleep 86400; done"]
-          {{- /* ephemeral-storage is requested even though `sleep` writes nothing:
-          a container with no request is invisible to the scheduler's disk
-          accounting, which this repo treats as a bug (see
-          test_pod_spec.test_all_containers_set_ephemeral_storage_requests). */}}
           resources:
             requests:
               cpu: {{ $cpu | quote }}

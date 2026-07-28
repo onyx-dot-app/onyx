@@ -1,17 +1,24 @@
 """Invariants for the sandbox image-prepull DaemonSet.
 
-The DaemonSet exists to keep the sandbox image resident on every node in the
-sandbox pool so a user's first sandbox there doesn't pay the pull. Three
-properties make it work, and each fails silently if broken:
+The DaemonSet keeps the sandbox image resident on every node in the sandbox
+pool so a user's first sandbox there doesn't pay the pull. Four properties make
+it work:
 
-  - It must reference the *same* image as the sandbox pods. A drifted tag pins
-    layers nobody uses while every sandbox still cold-pulls.
-  - It must land on the same nodes (nodeSelector + tolerations), or it warms
-    the wrong pool.
-  - It must resolve the same pull credentials, or a private registry leaves it
-    in ImagePullBackOff while it appears deployed.
-  - It must stay running, because the kubelet only skips image GC for images a
+  - It references the same image as the sandbox pods. A drifted tag pins layers
+    nobody uses while every sandbox still cold-pulls.
+  - It lands on the same nodes (nodeSelector + tolerations), or it warms the
+    wrong pool.
+  - It resolves pull credentials, or a private registry leaves it in
+    ImagePullBackOff.
+  - It stays running, because the kubelet only skips image GC for images a
     running pod references. Hence the long-lived, shell-portable command.
+
+These are tested rather than asserted at runtime because none of them surface
+as an error: the DaemonSet reports Ready (or, on the credentials case,
+ImagePullBackOff on a pod nobody watches) while sandboxes go on cold-pulling at
+the original latency. The only signal is provisioning being slow, which is what
+the feature was meant to fix. All four are fixed at chart-render time, so a
+render test catches them before deploy.
 
 Skips if the ``helm`` binary or chart deps are unavailable.
 """
@@ -245,10 +252,14 @@ def test_repull_fanout_is_tunable_for_large_pools() -> None:
     assert ds["spec"]["updateStrategy"]["rollingUpdate"]["maxUnavailable"] == "25%"
 
 
-def test_prepuller_pull_credentials_match_the_sandbox_pod() -> None:
-    """A private registry must not leave the prepuller in ImagePullBackOff while
-    it silently warms nothing. Credentials reach a pod two ways — the chart-wide
-    secrets and the ServiceAccount — and both must match the sandbox pods'."""
+def test_prepuller_resolves_pull_credentials() -> None:
+    """A private registry must not leave the prepuller in ImagePullBackOff.
+
+    Credentials reach a pod two ways: the chart-wide secrets and the
+    ServiceAccount. The prepuller takes both. Note this is a superset of what
+    the sandbox PodTemplate resolves — it renders no imagePullSecrets and relies
+    on the sandbox SA alone — so the SA is the route that must agree.
+    """
     args = ["--set", "imagePullSecrets[0].name=regcred"]
     prepuller = _prepuller_pod_spec(args)
     sandbox = yaml.safe_load(_render(_PODTEMPLATE_TEMPLATE, args))["template"]["spec"]
