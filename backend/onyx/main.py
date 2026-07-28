@@ -24,8 +24,8 @@ from onyx.auth.users import (
     auth_backend,
     create_onyx_oauth_router,
     fastapi_users,
+    log_auth_mode,
     mobile_auth_backend,
-    verify_auth_setting,
     verify_user_auth_secret,
 )
 from onyx.cache.interface import CacheBackendType
@@ -375,8 +375,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         "onyx.server.metrics.license_metrics", "register_license_metrics"
     )()
 
-    # Warns on stale AUTH_TYPE env values.
-    verify_auth_setting()
+    log_auth_mode()
 
     # Will throw exception if USER_AUTH_SECRET is missing on a real deployment
     verify_user_auth_secret()

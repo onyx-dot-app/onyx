@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import os
 import random
 import secrets
 import string
@@ -181,25 +180,9 @@ def is_user_admin(user: User) -> bool:
     return user.role == UserRole.ADMIN
 
 
-def verify_auth_setting() -> None:
-    """Warn operators about inert AUTH_TYPE env values so they get cleaned up.
-    Call at app startup only, not from migrations/scripts."""
-    raw_auth_type = (os.environ.get("AUTH_TYPE") or "").lower()
-
-    if raw_auth_type == "disabled":
-        logger.warning(
-            "AUTH_TYPE='disabled' is no longer supported. Authentication is "
-            "always enabled. Remove the env var."
-        )
-    if raw_auth_type in ("google_oauth", "oidc", "saml"):
-        logger.warning(
-            "AUTH_TYPE='%s' single-provider mode was removed and Onyx is running "
-            "as 'basic'. SSO login is now served by SSO provider rows (Admin "
-            "Panel > Organization > SSO Providers). Remove AUTH_TYPE and the "
-            "legacy SSO env vars.",
-            raw_auth_type,
-        )
-
+def log_auth_mode() -> None:
+    """The label tracks tenancy, not enabled login methods: a single-tenant
+    deployment with an SSO provider row still logs 'basic'."""
     logger.notice("Using Auth Type: %s", "cloud" if MULTI_TENANT else "basic")
 
 
