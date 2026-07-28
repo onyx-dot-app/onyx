@@ -89,7 +89,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		return nil
 	}
 
-	if err := in.ensureDockerAndCompose(ctx); err != nil {
+	if err := in.resolveDockerProblems(ctx, in.gatherPreflight(ctx)); err != nil {
 		return err
 	}
 	if err := in.guardServicesStopped(ctx); err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/paths"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/prompt"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/release"
+	"github.com/onyx-dot-app/onyx/cli/internal/deploy/ui"
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 )
 
@@ -34,6 +35,9 @@ type Deps struct {
 	Runner     dockercmd.Runner
 	Release    *release.Client
 	CLIVersion string
+	// Fancy enables the Bubble Tea prompts and live progress. Off in tests
+	// and whenever a real TTY isn't driving the run.
+	Fancy bool
 }
 
 // NewDeps wires production dependencies.
@@ -43,6 +47,7 @@ func NewDeps(ios *iostreams.IOStreams, cliVersion string) Deps {
 		Runner:     dockercmd.ExecRunner{},
 		Release:    release.NewClient(),
 		CLIVersion: cliVersion,
+		Fancy:      ui.Enabled(ios),
 	}
 }
 
@@ -97,4 +102,76 @@ func (in *installer) plainf(format string, args ...any) {
 func (in *installer) stepf(title string) {
 	in.step++
 	fmt.Fprintf(in.deps.IOS.Out, "\n=== %s - Step %d/%d ===\n\n", title, in.step, in.totalSteps)
+}
+
+// fancy reports whether the interactive renderer drives this run (never
+// under --no-prompt, so scripted output stays line-oriented).
+func (in *installer) fancy() bool {
+	return in.deps.Fancy && !in.opts.NoPrompt
+}
+
+// selectOne asks a single choice: arrow-key select when fancy, a numbered
+// line prompt otherwise, the default when non-interactive.
+func (in *installer) selectOne(title string, options []ui.Option, defaultIdx int) (int, error) {
+	if in.prompt.AssumeDefaults {
+		return defaultIdx, nil
+	}
+	if in.fancy() {
+		return ui.Select(in.deps.IOS, title, options, defaultIdx)
+	}
+	in.infof("%s", title)
+	for i, o := range options {
+		marker := " "
+		if i == defaultIdx {
+			marker = "*"
+		}
+		in.plainf("  %s %d) %s%s", marker, i+1, o.Label, map[bool]string{true: " — " + o.Hint, false: ""}[o.Hint != ""])
+	}
+	answer, err := in.prompt.Ask(fmt.Sprintf("Choose an option [default: %d]: ", defaultIdx+1), fmt.Sprintf("%d", defaultIdx+1))
+	if err != nil {
+		return 0, err
+	}
+	for i := range options {
+		if answer == fmt.Sprintf("%d", i+1) {
+			return i, nil
+		}
+	}
+	return defaultIdx, nil
+}
+
+// askString asks a free-form value with a prefilled default.
+func (in *installer) askString(title, defaultVal string) (string, error) {
+	if in.prompt.AssumeDefaults {
+		return defaultVal, nil
+	}
+	if in.fancy() {
+		return ui.Input(in.deps.IOS, title, defaultVal)
+	}
+	return in.prompt.Ask(fmt.Sprintf("%s [default: %s]: ", title, defaultVal), defaultVal)
+}
+
+// confirmYN asks a yes/no question (select when fancy).
+func (in *installer) confirmYN(question string, defaultYes bool) (bool, error) {
+	if in.prompt.AssumeDefaults {
+		return defaultYes, nil
+	}
+	if in.fancy() {
+		def := 1
+		if defaultYes {
+			def = 0
+		}
+		idx, err := in.selectOne(question, []ui.Option{{Label: "Yes"}, {Label: "No"}}, def)
+		return idx == 0, err
+	}
+	return in.prompt.Confirm(question+" ", defaultYes)
+}
+
+// phase prints a styled (or plain) phase header for fast sections and
+// returns a live spinner task for long ones when fancy.
+func (in *installer) phase(title string, spinner bool) *ui.Task {
+	if in.fancy() && spinner {
+		return ui.StartTask(in.deps.IOS.Out, title)
+	}
+	fmt.Fprintf(in.deps.IOS.Out, "\n— %s —\n", title)
+	return nil
 }

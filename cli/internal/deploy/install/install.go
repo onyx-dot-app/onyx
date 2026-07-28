@@ -1,6 +1,7 @@
 package install
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/release"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/resources"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/state"
+	"github.com/onyx-dot-app/onyx/cli/internal/deploy/ui"
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/version"
 )
@@ -29,24 +31,24 @@ const (
 
 	waitTimeoutSeconds = 600
 	minComposeVersion  = "2.24.0"
+	failureLogTail     = 30
 )
 
-const banner = `
-  ____
- / __ \
-| |  | |_ __  _   ___  __
-| |  | | '_ \| | | \ \/ /
-| |__| | | | | |_| |>  <
- \____/|_| |_|\__, /_/\_\
-               __/ |
-              |___/
-`
+// preflight carries the environment facts gathered concurrently while the
+// user answers the setup questions. Healthy values stay quiet; only problems
+// surface as warnings or provisioning offers.
+type preflight struct {
+	dockerVersion  string
+	composeVersion string
+	composeType    string
+	memoryMB       int
+	diskGB         int
+}
 
 // RunInstall implements `deploy install` (and the install-onyx alias): fresh
 // installs, and restart/update runs against an existing deployment.
 func RunInstall(ctx context.Context, deps Deps, opts Options) error {
 	in := newInstaller(deps, opts)
-	in.totalSteps = 9
 	in.lite = opts.Lite
 	in.craft = opts.IncludeCraft
 	return in.runInstall(ctx)
@@ -58,60 +60,129 @@ func (in *installer) runInstall(ctx context.Context) error {
 			"--lite and --include-craft cannot be used together: Craft requires services (Vespa, Redis, background workers) that lite mode disables")
 	}
 
-	// Resolve the default deploy tag from the latest app release so users
-	// land on a pinned, tested version; fall back to main/edge offline.
-	defaultTag, lookupFailed := "edge", false
-	if !in.opts.Local {
-		if in.opts.Tag != "" {
-			defaultTag = in.opts.Tag
-		} else if tag, err := in.deps.Release.LatestAppTag(ctx); err == nil {
-			defaultTag = tag
-		} else {
-			lookupFailed = true
-		}
-	}
-
 	in.root = paths.Resolve(in.opts.Dir)
+	envPath := filepath.Join(in.deploymentDir(), ".env")
+	_, envErr := os.Stat(envPath)
+	rerun := envErr == nil
+
+	// The latest-release lookup and the environment checks run in the
+	// background while the user answers the questions below.
+	tagCh := make(chan string, 1)
+	go func() {
+		if in.opts.Local {
+			tagCh <- "edge"
+			return
+		}
+		if in.opts.Tag != "" {
+			tagCh <- in.opts.Tag
+			return
+		}
+		if tag, err := in.deps.Release.LatestAppTag(ctx); err == nil {
+			tagCh <- tag
+		} else {
+			in.warnf("Could not determine latest Onyx release — falling back to main / edge")
+			tagCh <- "edge"
+		}
+	}()
+	preCh := make(chan preflight, 1)
+	go func() { preCh <- in.gatherPreflight(ctx) }()
 
 	if in.opts.DryRun {
-		in.printPlan(defaultTag)
+		in.printPlan(<-tagCh)
 		return nil
 	}
 
-	if err := in.ensureDockerAndCompose(ctx); err != nil {
+	manifest, err := state.Load(in.root.Dir)
+	if err != nil {
+		return err
+	}
+	hadManifest := manifest != nil
+	if manifest == nil {
+		manifest = &state.Manifest{}
+	}
+
+	if in.fancy() {
+		in.plainf("%s", ui.AccentURL("Onyx installer"))
+		in.plainf("")
+	}
+
+	// ---- Questions: every decision is made up front ----
+	var updateTag string // rerun: non-empty means update to this tag
+	pre, preSeen := preflight{}, false
+	if rerun {
+		// The running-services guard needs docker handles, so resolve the
+		// environment before asking anything.
+		pre, preSeen = <-preCh, true
+		if err := in.resolveDockerProblems(ctx, pre); err != nil {
+			return err
+		}
+		if err := in.guardServicesStopped(ctx); err != nil {
+			return err
+		}
+		// The mode never changes implicitly on a rerun: the recorded mode
+		// (or the overlays on disk) wins unless --lite/--include-craft say
+		// otherwise. (install.sh re-asked every run, so a --no-prompt rerun
+		// silently flipped standard installs to lite.)
+		in.lite = in.opts.Lite || (!in.opts.IncludeCraft &&
+			(manifest.Mode == state.ModeLite || in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel))))
+		in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
+			in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
+
+		if in.opts.Tag != "" {
+			updateTag = in.opts.Tag
+		} else if !in.prompt.AssumeDefaults {
+			choice, err := in.selectOne("This deployment already exists. What would you like to do?",
+				[]ui.Option{
+					{Label: "Restart", Hint: "keep the current configuration"},
+					{Label: "Upgrade", Hint: "move to a newer Onyx version"},
+				}, 0)
+			if err != nil {
+				return err
+			}
+			if choice == 1 {
+				updateTag, err = in.askString("Version to deploy", <-tagCh)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	} else {
+		if err := in.askModeQuestion(); err != nil {
+			return err
+		}
+		if in.opts.Tag == "" {
+			tag, err := in.askString("Version to deploy", <-tagCh)
+			if err != nil {
+				return err
+			}
+			in.opts.Tag = tag
+		}
+	}
+
+	// ---- Join the checks; only problems surface ----
+	if !preSeen {
+		pre = <-preCh
+		if err := in.resolveDockerProblems(ctx, pre); err != nil {
+			return err
+		}
+	}
+	if err := in.resourceWarnings(pre); err != nil {
+		return err
+	}
+	if err := in.checkComposeVersion(ctx); err != nil {
 		return err
 	}
 
-	// ASCII banner + acknowledgment (mirrors install.sh).
-	in.plainf("%s", banner)
-	in.plainf("Welcome to the Onyx Installer")
-	in.plainf("=============================")
-	in.plainf("")
-	if lookupFailed {
-		in.warnf("Could not determine latest Onyx release — falling back to main / edge")
-	}
-	in.plainf("This command will:")
-	in.plainf("1. Set up Onyx deployment files in '%s'", in.root.Dir)
-	in.plainf("2. Check your system resources (Docker, memory, disk space)")
-	in.plainf("3. Guide you through deployment options (version, mode)")
-	in.plainf("")
-	if err := in.prompt.AcknowledgeEnter("Please acknowledge and press Enter to continue..."); err != nil {
-		return err
-	}
-
-	if err := in.verifyDocker(ctx); err != nil {
-		return err
-	}
-	if err := in.verifyResources(ctx); err != nil {
-		return err
-	}
-
-	in.stepf("Creating directory structure")
+	// ---- Phase 1: prepare configuration ----
+	in.phase("Preparing configuration", false)
 	if in.root.Source == paths.SourceLegacyCwd {
 		in.infof("Managing existing install at %s (created by install.sh)", in.root.Dir)
 	}
 	for _, alt := range in.root.Ambiguous {
 		in.warnf("Another Onyx install exists at %s — pass --dir to target it instead", alt)
+	}
+	if !hadManifest && paths.IsInstall(in.root.Dir) {
+		in.infof("No %s found — adopting this install; files not written by the CLI are treated as potentially customized", state.FileName)
 	}
 	for _, dir := range []string{
 		filepath.Join(in.root.Dir, "deployment"),
@@ -125,28 +196,14 @@ func (in *installer) runInstall(ctx context.Context) error {
 	if err := os.WriteFile(gitkeep, nil, 0644); err != nil {
 		return fmt.Errorf("failed to create %s: %w", gitkeep, err)
 	}
-	in.successf("Directory structure ready at %s", in.root.Dir)
 
-	manifest, err := state.Load(in.root.Dir)
-	if err != nil {
-		return err
+	initialTag := in.opts.Tag
+	if initialTag == "" {
+		initialTag = <-tagCh
 	}
-	hadManifest := manifest != nil
-	if manifest == nil {
-		manifest = &state.Manifest{}
-		if paths.IsInstall(in.root.Dir) {
-			in.infof("No %s found — adopting this install; files not written by the CLI are treated as potentially customized", state.FileName)
-		}
-	}
-
-	in.stepf("Preparing configuration files")
-	if err := in.chooseMode(manifest.Mode); err != nil {
-		return err
-	}
-
 	initialRef := ""
 	if !in.opts.Local {
-		initialRef = release.ConfigRef(defaultTag)
+		initialRef = release.ConfigRef(initialTag)
 	}
 	fetcher := &fileFetcher{in: in}
 	if err := in.materializeFiles(ctx, initialRef, managedFiles(in.lite, in.craft), manifest, fetcher); err != nil {
@@ -162,14 +219,13 @@ func (in *installer) runInstall(ctx context.Context) error {
 			return err
 		}
 	}
-	in.successf("All configuration files ready")
 
-	if err := in.checkComposeVersion(ctx); err != nil {
-		return err
+	var effectiveTag string
+	if rerun {
+		effectiveTag, err = in.reconfigureExistingEnv(envPath, updateTag)
+	} else {
+		effectiveTag, err = in.createFreshEnv(envPath, initialTag)
 	}
-
-	in.stepf("Setting up deployment configs")
-	effectiveTag, err := in.configureEnv(ctx, defaultTag)
 	if err != nil {
 		return err
 	}
@@ -188,15 +244,13 @@ func (in *installer) runInstall(ctx context.Context) error {
 		in.ensureCraftResources(ctx)
 	}
 
-	in.stepf("Checking for available ports")
 	hostPort := resources.FindAvailablePort(3000)
 	if hostPort != 3000 {
-		in.infof("Port 3000 is in use, found available port: %d", hostPort)
-	} else {
-		in.infof("Port 3000 is available")
+		in.infof("Port 3000 is in use — using %d", hostPort)
 	}
-	in.successf("Using port %d for the web server", hostPort)
+	in.successf("Configuration ready at %s (version %s)", in.root.Dir, effectiveTag)
 
+	// ---- Phases 2 + 3: pull and start ----
 	if err := in.pullAndStart(ctx, effectiveTag, hostPort); err != nil {
 		return err
 	}
@@ -221,17 +275,62 @@ func (in *installer) runInstall(ctx context.Context) error {
 	return nil
 }
 
-// ensureDockerAndCompose provisions Docker Engine and compose where install.sh
-// does (Linux/WSL), starts Docker Desktop on macOS later during verification,
-// and detect-and-instructs on native Windows.
-func (in *installer) ensureDockerAndCompose(ctx context.Context) error {
+// askModeQuestion is the single merged deployment-mode select (mode and
+// Craft in one question). Lite stays the default for new installs, matching
+// install.sh's interactive and --no-prompt behavior.
+func (in *installer) askModeQuestion() error {
+	if in.opts.Lite {
+		in.infof("Deployment mode: Lite (set via --lite flag)")
+		return nil
+	}
+	if in.opts.IncludeCraft {
+		return nil // craft implies standard; the conflict was rejected earlier
+	}
+	choice, err := in.selectOne("Deployment mode",
+		[]ui.Option{
+			{Label: "Lite", Hint: "chat, tools, uploads, projects — no vector search (recommended)"},
+			{Label: "Standard", Hint: "full search, connectors, and RAG"},
+			{Label: "Standard + Craft", Hint: "adds AI web-app building (binds the docker socket)"},
+		}, 0)
+	if err != nil {
+		return err
+	}
+	in.lite = choice == 0
+	in.craft = choice == 2
+	return nil
+}
+
+// gatherPreflight collects environment facts without side effects or output.
+func (in *installer) gatherPreflight(ctx context.Context) preflight {
+	p := preflight{diskGB: resources.DiskAvailableGB(".")}
+	if !dockercmd.Installed() {
+		return p
+	}
+	p.dockerVersion = in.docker.Version(ctx)
+	if c := dockercmd.DetectCompose(ctx, in.docker); c != nil {
+		p.composeVersion = c.Version(ctx)
+		p.composeType = c.TypeName()
+	}
+	dockerInfo := ""
+	if res, err := in.deps.Runner.Run(ctx, dockercmd.Command{Name: "docker", Args: []string{"system", "info"}}); err == nil {
+		dockerInfo = res.Stdout
+	}
+	p.memoryMB = resources.MemoryMB(dockerInfo)
+	return p
+}
+
+// resolveDockerProblems provisions or errors for anything missing, then
+// prints one compact summary line. Mirrors install.sh's behaviors: Docker
+// Engine and compose plugin auto-install on Linux/WSL, Docker Desktop
+// start-and-wait on macOS, instructions elsewhere.
+func (in *installer) resolveDockerProblems(ctx context.Context, pre preflight) error {
 	linuxLike := runtime.GOOS == "linux" || dockercmd.IsWSL()
 
 	if !dockercmd.Installed() {
 		switch {
 		case linuxLike:
 			in.infof("Docker is required but not installed.")
-			ok, err := in.prompt.Confirm("Install Docker Engine? (Y/n) [default: Y] ", true)
+			ok, err := in.confirmYN("Install Docker Engine?", true)
 			if err != nil {
 				return err
 			}
@@ -257,7 +356,7 @@ func (in *installer) ensureDockerAndCompose(ctx context.Context) error {
 	in.compose = dockercmd.DetectCompose(ctx, in.docker)
 	if in.compose == nil && linuxLike {
 		in.infof("Docker Compose is required but not installed.")
-		ok, err := in.prompt.Confirm("Install the Docker Compose plugin? (Y/n) [default: Y] ", true)
+		ok, err := in.confirmYN("Install the Docker Compose plugin?", true)
 		if err != nil {
 			return err
 		}
@@ -285,17 +384,6 @@ func (in *installer) ensureDockerAndCompose(ctx context.Context) error {
 		}
 		in.infof("Using sudo for docker commands in this run.")
 	}
-	return nil
-}
-
-func (in *installer) verifyDocker(ctx context.Context) error {
-	in.stepf("Verifying Docker installation")
-	if v := in.docker.Version(ctx); v != "" {
-		in.successf("Docker %s is installed", v)
-	} else {
-		in.successf("Docker is installed")
-	}
-	in.successf("Docker Compose %s is installed (%s)", in.compose.Version(ctx), in.compose.TypeName())
 
 	if !in.docker.DaemonRunning(ctx) {
 		if runtime.GOOS == "darwin" {
@@ -303,109 +391,71 @@ func (in *installer) verifyDocker(ctx context.Context) error {
 			if err := dockercmd.StartDockerDesktopDarwin(ctx, in.docker, in.deps.IOS.Out, 120*time.Second); err != nil {
 				return exitcodes.Newf(exitcodes.General, "%v", err)
 			}
-			in.successf("Docker Desktop is now running")
 		} else {
 			return exitcodes.New(exitcodes.General, "Docker daemon is not running. Please start Docker.")
 		}
-	} else {
-		in.successf("Docker daemon is running")
 	}
+
+	summary := []string{"Docker " + orDetect(pre.dockerVersion, in.docker.Version(ctx))}
+	if pre.composeVersion != "" {
+		summary = append(summary, fmt.Sprintf("Compose %s (%s)", pre.composeVersion, pre.composeType))
+	} else {
+		summary = append(summary, fmt.Sprintf("Compose %s (%s)", in.compose.Version(ctx), in.compose.TypeName()))
+	}
+	summary = append(summary, "daemon running")
+	if pre.memoryMB > 0 {
+		summary = append(summary, resources.FormatMemory(pre.memoryMB)+" RAM")
+	}
+	if pre.diskGB >= 0 {
+		summary = append(summary, fmt.Sprintf("%dGB free", pre.diskGB))
+	}
+	in.successf("%s", strings.Join(summary, " · "))
 	return nil
 }
 
-func (in *installer) verifyResources(ctx context.Context) error {
-	in.stepf("Verifying Docker resources")
-
-	dockerInfo := ""
-	if res, err := in.deps.Runner.Run(ctx, in.docker.Command(nil, "system", "info")); err == nil {
-		dockerInfo = res.Stdout
+func orDetect(v, fallback string) string {
+	if v != "" {
+		return v
 	}
-	memoryMB := resources.MemoryMB(dockerInfo)
-	if memoryMB > 0 {
-		if runtime.GOOS == "darwin" {
-			in.infof("Docker memory allocation: %s", resources.FormatMemory(memoryMB))
-		} else {
-			in.infof("System memory: %s (Docker uses host memory directly)", resources.FormatMemory(memoryMB))
-		}
-	} else {
-		in.warnf("Could not determine memory allocation")
-	}
+	return fallback
+}
 
-	diskGB := resources.DiskAvailableGB(".")
-	if diskGB >= 0 {
-		in.infof("Available disk space: %dGB", diskGB)
-	} else {
-		in.warnf("Could not determine available disk space")
-	}
-
+// resourceWarnings surfaces low-resource conditions only (healthy machines
+// see nothing) and asks whether to continue, like install.sh's warning path.
+func (in *installer) resourceWarnings(pre preflight) error {
 	ramWant, diskWant := expectedRAMGB, expectedDiskGB
+	mode := "standard"
 	if in.lite {
 		ramWant, diskWant = expectedRAMGBLite, expectedDiskGBLite
+		mode = "lite"
 	}
 	warning := false
-	if memoryMB > 0 && memoryMB < ramWant*1024 {
-		in.warnf("Less than %dGB RAM available (found: %s)", ramWant, resources.FormatMemory(memoryMB))
+	if pre.memoryMB > 0 && pre.memoryMB < ramWant*1024 {
+		in.warnf("Less than %dGB RAM available (found: %s)", ramWant, resources.FormatMemory(pre.memoryMB))
 		warning = true
 	}
-	if diskGB >= 0 && diskGB < diskWant {
-		in.warnf("Less than %dGB disk space available (found: %dGB)", diskWant, diskGB)
+	if pre.diskGB >= 0 && pre.diskGB < diskWant {
+		in.warnf("Less than %dGB disk space available (found: %dGB)", diskWant, pre.diskGB)
 		warning = true
 	}
-	if warning {
-		in.plainf("")
-		in.warnf("Onyx recommends at least %dGB RAM and %dGB disk space for optimal performance in standard mode.", ramWant, diskWant)
-		in.warnf("Lite mode requires less resources (1-4GB RAM, 8-16GB disk depending on usage), but does not include a vector database.")
-		in.plainf("")
-		cont, err := in.prompt.Confirm("Do you want to continue anyway? (Y/n): ", true)
-		if err != nil {
-			return err
-		}
-		if !cont {
-			return exitcodes.New(exitcodes.General, "Installation cancelled. Please allocate more resources and try again.")
-		}
-		in.infof("Proceeding with installation despite resource limitations...")
-	}
-	return nil
-}
-
-// chooseMode runs the lite-vs-standard prompt unless --lite already decided
-// it. Lite is the default for new installs (matching install.sh); an existing
-// install defaults to its recorded mode, so a --no-prompt restart cannot
-// silently switch a standard deployment to lite (an install.sh footgun).
-func (in *installer) chooseMode(prevMode state.Mode) error {
-	if in.lite {
-		in.infof("Deployment mode: Lite (set via --lite flag)")
+	if !warning {
 		return nil
 	}
-	if in.craft {
-		// Craft implies standard mode; the flag conflict was checked early.
-		return nil
-	}
-	def := "1"
-	if prevMode == state.ModeStandard {
-		def = "2"
-	}
-	in.infof("Which deployment mode would you like?")
-	in.plainf("")
-	in.plainf("  1) Lite      - Minimal deployment (no OpenSearch, Redis, or model servers)")
-	in.plainf("                  LLM chat, tools, file uploads, and Projects still work")
-	in.plainf("  2) Standard  - Full deployment with search, connectors, and RAG")
-	in.plainf("")
-	choice, err := in.prompt.Ask(fmt.Sprintf("Choose a mode (1 or 2) [default: %s]: ", def), def)
+	in.warnf("Onyx recommends at least %dGB RAM and %dGB disk space in %s mode.", ramWant, diskWant, mode)
+	cont, err := in.confirmYN("Continue anyway?", true)
 	if err != nil {
 		return err
 	}
-	in.plainf("")
-	if choice == "2" {
-		in.infof("Selected: Standard mode")
-	} else {
-		in.lite = true
-		in.infof("Selected: Lite mode")
+	if !cont {
+		return exitcodes.New(exitcodes.General, "Installation cancelled. Please allocate more resources and try again.")
 	}
 	return nil
 }
 
 func (in *installer) checkComposeVersion(ctx context.Context) error {
+	if in.compose == nil {
+		return nil
+	}
 	composeVersion := in.compose.Version(ctx)
 	if composeVersion == "dev" {
 		return nil
@@ -415,68 +465,26 @@ func (in *installer) checkComposeVersion(ctx context.Context) error {
 	if !ok || !have.LessThan(minimum) {
 		return nil
 	}
-	in.warnf("Docker Compose version %s is older than %s", composeVersion, minComposeVersion)
-	in.plainf("")
-	in.warnf("The docker-compose.yml file uses the newer env_file format that requires Docker Compose %s or later.", minComposeVersion)
-	in.infof("Upgrade Docker Compose (https://docs.docker.com/compose/install/) or manually flatten the env_file sections.")
-	in.plainf("")
-	cont, err := in.prompt.Confirm("Do you want to continue anyway? (Y/n): ", true)
+	in.warnf("Docker Compose %s is older than %s; docker-compose.yml uses the newer env_file format.", composeVersion, minComposeVersion)
+	in.infof("Upgrade Docker Compose: https://docs.docker.com/compose/install/")
+	cont, err := in.confirmYN("Continue anyway?", true)
 	if err != nil {
 		return err
 	}
 	if !cont {
 		return exitcodes.New(exitcodes.General, "Installation cancelled. Please upgrade Docker Compose and re-run.")
 	}
-	in.infof("Proceeding despite the Docker Compose version mismatch...")
 	return nil
 }
 
-// configureEnv creates or updates deployment/.env and returns the effective
-// image tag.
-func (in *installer) configureEnv(ctx context.Context, defaultTag string) (string, error) {
-	envPath := filepath.Join(in.root.Dir, "deployment", ".env")
-	existing, err := os.ReadFile(envPath)
-	switch {
-	case err == nil:
-		return in.reconfigureExistingEnv(ctx, envPath, string(existing), defaultTag)
-	case os.IsNotExist(err):
-		return in.createFreshEnv(envPath, defaultTag)
-	default:
-		return "", fmt.Errorf("failed to read %s: %w", envPath, err)
-	}
-}
-
-func (in *installer) createFreshEnv(envPath, defaultTag string) (string, error) {
-	in.infof("No existing .env file found. Setting up new deployment...")
-	in.plainf("")
-
-	tag := in.opts.Tag
-	if tag == "" {
-		in.infof("Which tag would you like to deploy?")
-		in.plainf("")
-		in.plainf("• Press Enter for %s (recommended)", defaultTag)
-		in.plainf("• Type a specific tag (e.g., v1.2.3)")
-		in.plainf("")
-		var err error
-		tag, err = in.prompt.Ask(fmt.Sprintf("Enter tag [default: %s]: ", defaultTag), defaultTag)
-		if err != nil {
-			return "", err
-		}
-		in.plainf("")
-	}
-	if tag == "edge" {
-		in.infof("Selected: edge (latest nightly)")
-	} else {
-		in.infof("Selected: %s", tag)
-	}
-
+// createFreshEnv writes deployment/.env from env.template with the chosen
+// tag, generated secrets, and mode adjustments.
+func (in *installer) createFreshEnv(envPath, tag string) (string, error) {
 	template, err := os.ReadFile(filepath.Join(in.root.Dir, "deployment", "env.template"))
 	if err != nil {
 		return "", fmt.Errorf("failed to read env.template: %w", err)
 	}
 	env := string(template)
-
-	in.infof("Creating .env file with your selections...")
 	env = SetVar(env, "IMAGE_TAG", tag)
 
 	if in.lite {
@@ -484,7 +492,6 @@ func (in *installer) createFreshEnv(envPath, defaultTag string) (string, error) 
 		// postgres file store at runtime; align .env so it isn't misleading.
 		env = SetVar(env, "COMPOSE_PROFILES", "")
 		env = SetVar(env, "FILE_STORE_BACKEND", "postgres")
-		in.successf("Cleared COMPOSE_PROFILES and set FILE_STORE_BACKEND=postgres for lite mode")
 	}
 
 	env = SetVar(env, "USER_AUTH_SECRET", `"`+randomHex(32)+`"`)
@@ -500,65 +507,34 @@ func (in *installer) createFreshEnv(envPath, defaultTag string) (string, error) 
 		env = SetVarUncomment(env, "SANDBOX_BACKEND", backend)
 		in.successf("Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=%s)", backend)
 		if backend == "docker" {
-			in.plainf("")
 			in.plainf("%s", craftSecurityWarning)
-			in.plainf("")
 		} else {
 			in.infof("Image tag %s predates the docker sandbox backend (v4.0.6+); using SANDBOX_BACKEND=%s.", tag, backend)
 		}
-	} else {
-		in.infof("Onyx Craft disabled (use --include-craft to enable)")
 	}
 
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
 		return "", fmt.Errorf("failed to write .env: %w", err)
 	}
-	in.successf(".env file created with your preferences")
-	in.plainf("")
-	in.infof("You can customize %s later for AI models, domains, and more.", envPath)
-	in.plainf("")
+	in.successf(".env created (auth secret and MinIO credentials generated) — customize it any time")
 	return tag, nil
 }
 
-func (in *installer) reconfigureExistingEnv(ctx context.Context, envPath, env, defaultTag string) (string, error) {
-	if err := in.guardServicesStopped(ctx); err != nil {
-		return "", err
+// reconfigureExistingEnv applies the rerun decision: restart keeps .env
+// untouched except craft/lite alignment; a non-empty updateTag rewrites
+// IMAGE_TAG (and nothing else).
+func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, error) {
+	existing, err := os.ReadFile(envPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read %s: %w", envPath, err)
 	}
+	env := string(existing)
 
-	update := false
-	tag := in.opts.Tag
-	if tag != "" {
-		// An explicit --tag on an existing install is an update request.
-		update = tag != Var(env, "IMAGE_TAG")
+	if updateTag != "" && updateTag != Var(env, "IMAGE_TAG") {
+		env = SetVar(env, "IMAGE_TAG", updateTag)
+		in.successf("Updated IMAGE_TAG to %s (all other settings preserved)", updateTag)
 	} else {
-		in.infof("Existing .env file found. What would you like to do?")
-		in.plainf("")
-		in.plainf("• Press Enter to restart with current configuration")
-		in.plainf("• Type 'update' to update to a newer version")
-		in.plainf("  (scriptable equivalent: onyx-cli deploy upgrade --tag <tag>)")
-		in.plainf("")
-		choice, err := in.prompt.Ask("Choose an option [default: restart]: ", "")
-		if err != nil {
-			return "", err
-		}
-		in.plainf("")
-		if choice == "update" {
-			update = true
-			tag, err = in.prompt.Ask(fmt.Sprintf("Enter tag [default: %s]: ", defaultTag), defaultTag)
-			if err != nil {
-				return "", err
-			}
-			in.plainf("")
-		}
-	}
-
-	if update {
-		in.infof("Updating configuration for version %s...", tag)
-		env = SetVar(env, "IMAGE_TAG", tag)
-		in.successf("Updated IMAGE_TAG to %s in .env file", tag)
-	} else {
-		in.infof("Keeping existing configuration...")
-		in.successf("Will restart with current settings")
+		in.infof("Restarting with the current configuration")
 	}
 
 	effectiveTag := Var(env, "IMAGE_TAG")
@@ -599,11 +575,8 @@ func (in *installer) guardServicesStopped(ctx context.Context) error {
 		return nil
 	}
 	in.errorf("Onyx services are currently running!")
-	in.plainf("")
-	in.infof("To make configuration changes, you must first shut down the services:")
+	in.infof("To make configuration changes, first shut them down:")
 	in.plainf("   onyx-cli deploy stop")
-	in.plainf("")
-	in.infof("Then re-run this command to make your changes.")
 	return exitcodes.New(exitcodes.General, "services are running")
 }
 
@@ -633,88 +606,148 @@ func (in *installer) pullAndStart(ctx context.Context, tag string, hostPort int)
 	dir := in.deploymentDir()
 	floating := release.IsFloatingTag(tag)
 
-	in.stepf("Pulling Docker images")
-	in.infof("This may take several minutes depending on your internet connection...")
 	pullArgs := []string{"pull"}
 	if !in.opts.Verbose {
 		pullArgs = append(pullArgs, "--quiet")
 	}
-	pull := in.compose.Command(dir, env, files, pullArgs...)
-	pull.Stdout, pull.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
-	if _, err := in.deps.Runner.Run(ctx, pull); err != nil {
-		in.errorf("Failed to download Docker images")
+	if err := in.runComposePhase(ctx, "Pulling images", dir, env, files, pullArgs, nil); err != nil {
+		in.infof("Check your internet connection and re-run. If the issue persists: founders@onyx.app")
 		return exitcodes.Newf(exitcodes.General, "docker compose pull failed: %v", err)
 	}
-	in.successf("Docker images downloaded successfully")
 
-	in.stepf("Starting Onyx services")
 	upArgs := []string{"up", "-d"}
 	if floating {
-		in.infof("Using '%s' tag - force pulling latest images and recreating containers...", tag)
 		upArgs = append(upArgs, "--pull", "always", "--force-recreate")
 	}
+	var poll func(*ui.Task, chan struct{})
 	if !in.opts.NoWait {
-		in.infof("Waiting up to %ds for all services to become healthy...", waitTimeoutSeconds)
 		upArgs = append(upArgs, "--wait", "--wait-timeout", fmt.Sprintf("%d", waitTimeoutSeconds))
+		poll = in.pollServiceHealth
 	}
-	in.plainf("")
-	up := in.compose.Command(dir, env, files, upArgs...)
-	up.Stdout, up.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
-	if _, err := in.deps.Runner.Run(ctx, up); err != nil {
-		in.errorf("Failed to start Onyx services")
-		in.plainf("")
+	if err := in.runComposePhase(ctx, "Starting services", dir, env, files, upArgs, poll); err != nil {
 		in.infof("Current container status:")
 		ps := in.compose.Command(dir, env, files, "ps")
 		ps.Stdout, ps.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
 		_, _ = in.deps.Runner.Run(ctx, ps)
-		in.plainf("")
 		in.infof("Check the logs of any unhealthy service:")
 		in.plainf("  onyx-cli deploy status")
 		in.plainf("  (cd %q && docker compose %s logs <service>)", dir, strings.Join(fileArgs(files), " "))
-		in.plainf("")
 		in.infof("If the issue persists, please contact: founders@onyx.app")
 		return exitcodes.Newf(exitcodes.General, "docker compose up failed: %v", err)
 	}
 	return nil
 }
 
+// runComposePhase runs one long compose command as a visible phase: a live
+// spinner with captured output when fancy (the tail is shown on failure),
+// streamed output otherwise.
+func (in *installer) runComposePhase(
+	ctx context.Context,
+	title, dir string,
+	env map[string]string,
+	files, args []string,
+	poll func(*ui.Task, chan struct{}),
+) error {
+	cmd := in.compose.Command(dir, env, files, args...)
+
+	if !in.fancy() || in.opts.Verbose {
+		in.phase(title, false)
+		cmd.Stdout, cmd.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
+		_, err := in.deps.Runner.Run(ctx, cmd)
+		if err == nil {
+			in.successf("%s complete", title)
+		} else {
+			in.errorf("%s failed", title)
+		}
+		return err
+	}
+
+	task := in.phase(title, true)
+	var captured bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &captured, &captured
+
+	stop := make(chan struct{})
+	if poll != nil {
+		go poll(task, stop)
+	}
+	_, err := in.deps.Runner.Run(ctx, cmd)
+	close(stop)
+	task.Done(err == nil, title)
+
+	if err != nil {
+		lines := strings.Split(strings.TrimSpace(captured.String()), "\n")
+		if len(lines) > failureLogTail {
+			lines = lines[len(lines)-failureLogTail:]
+		}
+		for _, l := range lines {
+			in.plainf("  %s", l)
+		}
+	}
+	return err
+}
+
+// pollServiceHealth updates the spinner with a live ready/total count while
+// `up --wait` blocks (otherwise silent for up to ten minutes).
+func (in *installer) pollServiceHealth(task *ui.Task, stop chan struct{}) {
+	ctx := context.Background()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-time.After(2 * time.Second):
+		}
+		cmd := in.docker.Command(nil, "ps",
+			"--filter", "label=com.docker.compose.project=onyx",
+			"--format", "{{.Status}}")
+		res, err := in.deps.Runner.Run(ctx, cmd)
+		if err != nil {
+			continue
+		}
+		total, ready := 0, 0
+		for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
+			if line == "" {
+				continue
+			}
+			total++
+			if strings.Contains(line, "(healthy)") ||
+				(strings.HasPrefix(line, "Up") && !strings.Contains(line, "health")) {
+				ready++
+			}
+		}
+		if total > 0 {
+			task.Update(fmt.Sprintf("%d/%d services ready", ready, total))
+		}
+	}
+}
+
 func (in *installer) printSuccess(ctx context.Context, hostPort int) {
-	in.stepf("Installation Complete!")
-	in.plainf("")
+	url := fmt.Sprintf("http://localhost:%d", hostPort)
+	headline := "Onyx is ready  →  " + ui.AccentURL(url)
 	if in.opts.NoWait {
-		in.plainf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		in.plainf("   ⚠️  Onyx containers started  ⚠️")
-		in.plainf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		in.infof("Services may still be initializing. Check status with: onyx-cli deploy status")
-	} else {
-		in.plainf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		in.plainf("   🎉 Onyx service is ready! 🎉")
-		in.plainf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		headline = "Onyx containers started (still initializing — check: onyx-cli deploy status)"
 	}
-	in.plainf("")
-	in.infof("Access Onyx at:")
-	in.plainf("   http://localhost:%d", hostPort)
-	in.plainf("")
-	in.infof("If authentication is enabled, you can create your admin account here:")
-	in.plainf("   • Visit http://localhost:%d/auth/signup to create your admin account", hostPort)
-	in.plainf("   • The first user created will automatically have admin privileges")
-	in.plainf("")
+	lines := []string{
+		headline,
+		"",
+		"First signup becomes the admin account: " + url + "/auth/signup",
+		"Manage:  onyx-cli deploy status · stop · upgrade · uninstall",
+	}
 	if in.lite {
-		in.infof("Running in Lite mode — the following services are NOT started:")
-		in.plainf("  • Vespa (vector database)")
-		in.plainf("  • Redis (cache)")
-		in.plainf("  • Model servers (embedding/inference)")
-		in.plainf("  • Background workers (Celery)")
-		in.plainf("")
-		in.infof("Connectors and RAG search are disabled. LLM chat, tools, user file")
-		in.infof("uploads, Projects, Agent knowledge, and code interpreter still work.")
-		in.plainf("")
+		lines = append(lines, "",
+			"Lite mode: no Vespa/Redis/model servers or background workers.",
+			"Connectors and RAG search are off; chat, tools, uploads, projects work.")
 	}
-	in.infof("Manage this deployment with: onyx-cli deploy status | stop | upgrade | uninstall")
-	in.infof("Refer to the README in the %s directory for more information.", in.root.Dir)
+
+	in.plainf("")
+	if in.fancy() {
+		ui.Card(in.deps.IOS.Out, lines...)
+	} else {
+		for _, l := range lines {
+			in.plainf("%s", l)
+		}
+	}
 	in.plainf("")
 	in.infof("For help or issues, contact: founders@onyx.app")
-	in.plainf("")
 	in.starPrompt(ctx)
 }
 
@@ -727,7 +760,7 @@ func (in *installer) starPrompt(ctx context.Context) {
 	if _, err := exec.LookPath("gh"); err != nil {
 		return
 	}
-	ok, err := in.prompt.Confirm("Enjoying Onyx? Star the repo on GitHub? [Y/n] ", true)
+	ok, err := in.confirmYN("Enjoying Onyx? Star the repo on GitHub?", true)
 	if err != nil || !ok {
 		return
 	}
