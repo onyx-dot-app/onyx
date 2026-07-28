@@ -1,4 +1,5 @@
 import io
+import zipfile
 from typing import cast
 from unittest.mock import patch
 
@@ -25,6 +26,40 @@ def _make_xlsx(sheets: dict[str, list[list[str]]]) -> io.BytesIO:
     wb.save(buf)
     buf.seek(0)
     return buf
+
+
+def _make_xlsx_with_cached_formula(formula: str, cached_value: str) -> io.BytesIO:
+    """Build an xlsx where a formula cell also carries a cached calculated
+    value, mimicking what Excel writes to the file. openpyxl itself never
+    computes formulas, so a plain ``ws["B1"] = formula`` save leaves an
+    empty ``<v></v>`` cache; patch it in directly at the XML level."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws["A1"] = 1
+    ws["B1"] = formula
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    with zipfile.ZipFile(buf) as zin:
+        contents = {name: zin.read(name) for name in zin.namelist()}
+
+    formula_body = formula.lstrip("=")
+    empty_cache = f"<f>{formula_body}</f><v></v>"
+    cached = f"<f>{formula_body}</f><v>{cached_value}</v>"
+    xml = contents["xl/worksheets/sheet1.xml"].decode("utf-8")
+    assert empty_cache in xml
+    contents["xl/worksheets/sheet1.xml"] = xml.replace(empty_cache, cached).encode(
+        "utf-8"
+    )
+
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+        for name, data in contents.items():
+            zout.writestr(name, data)
+    out.seek(0)
+    return out
 
 
 class TestXlsxToText:
@@ -201,6 +236,14 @@ class TestXlsxToText:
         assert "r1c1" in lines[0] and "r1c2" in lines[0]
         assert "r2c1" in lines[1] and "r2c2" in lines[1]
         assert "r3c1" in lines[2] and "r3c2" in lines[2]
+
+    def test_formula_cell_extracts_cached_value_not_formula_text(self) -> None:
+        """Regression: formula cells must index their calculated value, not
+        the raw formula string (requires load_workbook(..., data_only=True))."""
+        xlsx = _make_xlsx_with_cached_formula("=SUM(A1:A1)", "42")
+        result = xlsx_to_text(xlsx)
+        assert "42" in result
+        assert "SUM" not in result
 
 
 class TestSheetToCsvJaggedRows:
