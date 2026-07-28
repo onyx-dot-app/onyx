@@ -54,6 +54,10 @@ const config: StorybookConfig = {
       "process.env": JSON.stringify({}),
     };
 
+    // Vite's default publicDir copy races/collides with Storybook's own
+    // `staticDirs` copy of the same `public/` dir (EEXIST): storybookjs/storybook#24627
+    config.publicDir = false;
+
     return config;
   },
 };
