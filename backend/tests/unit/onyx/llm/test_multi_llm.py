@@ -6,6 +6,7 @@ from unittest.mock import ANY, patch
 
 import litellm
 import pytest
+from litellm.exceptions import BadRequestError
 from litellm.types.utils import ChatCompletionDeltaToolCall, Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
@@ -26,6 +27,7 @@ from onyx.llm.models import (
 )
 from onyx.llm.multi_llm import (
     LitellmLLM,
+    LLMStreamingToolUseUnsupportedError,
     _parse_anthropic_model_version,
     temporary_env_and_lock,
 )
@@ -428,6 +430,111 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
         )
+
+
+def _bad_request(message: str) -> BadRequestError:
+    return BadRequestError(message=message, model="m", llm_provider="bedrock")
+
+
+def _bash_tool() -> list[dict[str, Any]]:
+    return [{"type": "function", "function": {"name": "bash"}}]
+
+
+def _hi_prompt() -> LanguageModelInput:
+    return [UserMessage(content="Hi")]
+
+
+def test_streaming_tool_use_unsupported_bad_request_is_classified(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.side_effect = _bad_request(
+            "This model doesn't support tool use in streaming mode."
+        )
+
+        with pytest.raises(LLMStreamingToolUseUnsupportedError):
+            list(default_multi_llm.stream(_hi_prompt(), tools=_bash_tool()))
+
+    assert mock_completion.call_count == 1
+
+
+@pytest.mark.parametrize(
+    ("tools", "stream"),
+    [
+        (None, True),
+        (_bash_tool(), False),
+    ],
+)
+def test_tool_use_unsupported_bad_request_requires_streaming_tools(
+    default_multi_llm: LitellmLLM,
+    tools: list[dict[str, Any]] | None,
+    stream: bool,
+) -> None:
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.side_effect = _bad_request(
+            "This model doesn't support tool use in streaming mode."
+        )
+
+        with pytest.raises(BadRequestError):
+            default_multi_llm._completion(
+                prompt=_hi_prompt(),
+                tools=tools,
+                tool_choice=None,
+                stream=stream,
+                parallel_tool_calls=True,
+            )
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "prompt is too long",
+        "upstream provider rejected tools because they are not supported",
+    ],
+)
+def test_streaming_bad_request_without_full_tool_mismatch_is_not_classified(
+    default_multi_llm: LitellmLLM,
+    message: str,
+) -> None:
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.side_effect = _bad_request(message)
+
+        with pytest.raises(BadRequestError):
+            list(default_multi_llm.stream(_hi_prompt(), tools=_bash_tool()))
+
+
+def test_invoke_nonstream_uses_true_nonstream_transport_and_tracks_usage(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    response = litellm.ModelResponse(
+        id="chatcmpl-nonstream",
+        created=1784578000,
+        model="gpt-3.5-turbo",
+        choices=[
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {"role": "assistant", "content": "done"},
+            }
+        ],
+        usage={"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7},
+    )
+    tools = _bash_tool()
+
+    with (
+        patch("litellm.completion", return_value=response) as mock_completion,
+        patch.object(default_multi_llm, "_track_llm_cost") as track_cost,
+    ):
+        result = default_multi_llm.invoke_nonstream(_hi_prompt(), tools=tools)
+
+    assert result.choice.message.content == "done"
+    assert result.usage is not None
+    track_cost.assert_called_once_with(result.usage)
+    kwargs = mock_completion.call_args.kwargs
+    assert kwargs["stream"] is False
+    assert kwargs["tools"] == tools
+    assert "stream_options" not in kwargs
+    assert kwargs["parallel_tool_calls"] is True
 
 
 ANTHROPIC_MODELS_OMITTING_SAMPLING_PARAMS = [

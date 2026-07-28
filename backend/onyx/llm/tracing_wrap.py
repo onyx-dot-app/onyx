@@ -1,11 +1,11 @@
 """Auto-tracing wrapper applied to every concrete `LLM` subclass.
 
-Every concrete subclass of `onyx.llm.interfaces.LLM` has its `invoke` and
-`stream` methods auto-wrapped via `LLM.__init_subclass__` so that every LLM
-call lands in Braintrust without per-callsite instrumentation. The wrap is a
-no-op when an outer `generation_span` is already active — callers that
-explicitly wrap their calls (via `llm_generation_span`) continue to work and
-are not double-counted.
+Every concrete subclass of `onyx.llm.interfaces.LLM` has its `invoke`,
+`invoke_nonstream`, and `stream` methods auto-wrapped via
+`LLM.__init_subclass__` so that every LLM call lands in Braintrust without
+per-callsite instrumentation. The wrap is a no-op when an outer
+`generation_span` is already active — callers that explicitly wrap their calls
+(via `llm_generation_span`) continue to work and are not double-counted.
 
 Imports from `onyx.tracing.llm_utils` stay lazy (inside the wrappers) because
 it imports `onyx.llm.interfaces`, which imports this module — loading it at
@@ -65,9 +65,9 @@ def _outer_generation_span_active() -> bool:
 def _validate_prompt_param(fn: Callable[..., Any]) -> inspect.Signature:
     """Return the signature of ``fn``, asserting it can accept a ``prompt``.
 
-    Runs once at wrap time so a subclass whose ``invoke`` / ``stream``
-    signature can't possibly carry a ``prompt`` surfaces a clear error at
-    class creation rather than silently producing blank-input spans at
+    Runs once at wrap time so a subclass whose ``invoke`` / ``invoke_nonstream``
+    / ``stream`` signature can't possibly carry a ``prompt`` surfaces a clear
+    error at class creation rather than silently producing blank-input spans at
     runtime.
 
     An override is considered valid if it has any of:
@@ -91,9 +91,9 @@ def _validate_prompt_param(fn: Callable[..., Any]) -> inspect.Signature:
         name = getattr(fn, "__qualname__", repr(fn))
         raise TypeError(
             f"Cannot auto-trace {name}: signature cannot accept a "
-            f"'{_PROMPT_PARAM_NAME}' argument. LLM.invoke / LLM.stream "
-            f"subclass overrides must either keep the 'prompt' parameter "
-            f"name or accept *args / **kwargs."
+            f"'{_PROMPT_PARAM_NAME}' argument. LLM.invoke / "
+            f"LLM.invoke_nonstream / LLM.stream subclass overrides must either "
+            f"keep the 'prompt' parameter name or accept *args / **kwargs."
         )
     return sig
 
@@ -125,7 +125,7 @@ def _extract_prompt_and_tools(
 def wrap_invoke(
     invoke_fn: Callable[..., "ModelResponse"],
 ) -> Callable[..., "ModelResponse"]:
-    """Wrap a concrete ``LLM.invoke`` implementation with a fallback generation_span."""
+    """Wrap a concrete complete-response LLM method with a fallback generation_span."""
     if getattr(invoke_fn, _ALREADY_WRAPPED_ATTR, False):
         return invoke_fn
 

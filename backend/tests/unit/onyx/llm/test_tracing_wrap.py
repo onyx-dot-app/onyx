@@ -2,7 +2,8 @@
 """Unit tests for `onyx.llm.tracing_wrap`.
 
 Cover:
-- `LLM.__init_subclass__` auto-wraps `invoke` and `stream` on concrete subclasses
+- `LLM.__init_subclass__` auto-wraps `invoke`, `invoke_nonstream`, and `stream`
+  on concrete subclasses
 - Wrapper is idempotent (double-application is a no-op)
 - Outer-span guard (``_outer_generation_span_active``) skips fallback when
   an outer ``generation_span`` is active
@@ -119,8 +120,34 @@ class _NoOverrideLLM(_FakeLLM):
     (already-wrapped) methods must not be wrapped a second time."""
 
 
-def test_init_subclass_auto_wraps_invoke_and_stream() -> None:
+class _NonstreamLLM(_FakeLLM):
+    def __init__(self) -> None:
+        super().__init__()
+        self._invoke_nonstream_calls = 0
+
+    def invoke_nonstream(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> ModelResponse:
+        self._invoke_nonstream_calls += 1
+        self._last_prompt = prompt
+        return _TEST_MODEL_RESPONSE
+
+
+class _NoOverrideNonstreamLLM(_NonstreamLLM):
+    """Subclass that inherits an already-wrapped ``invoke_nonstream``."""
+
+
+def test_init_subclass_auto_wraps_invoke_invoke_nonstream_and_stream() -> None:
     assert getattr(_FakeLLM.invoke, _ALREADY_WRAPPED_ATTR, False) is True
+    assert getattr(_NonstreamLLM.invoke_nonstream, _ALREADY_WRAPPED_ATTR, False) is True
     assert getattr(_FakeLLM.stream, _ALREADY_WRAPPED_ATTR, False) is True
 
 
@@ -129,6 +156,7 @@ def test_inherited_methods_are_not_rewrapped() -> None:
     # so __init_subclass__ should not wrap them again.
     assert _NoOverrideLLM.invoke is _FakeLLM.invoke
     assert _NoOverrideLLM.stream is _FakeLLM.stream
+    assert _NoOverrideNonstreamLLM.invoke_nonstream is _NonstreamLLM.invoke_nonstream
 
 
 def test_wrap_invoke_is_idempotent() -> None:
@@ -137,6 +165,19 @@ def test_wrap_invoke_is_idempotent() -> None:
     wrapped_once = _FakeLLM.invoke
     wrapped_twice = wrap_invoke(wrapped_once)
     assert wrapped_twice is wrapped_once
+
+
+def test_wrap_invoke_can_directly_wrap_invoke_nonstream_shape() -> None:
+    def invoke_nonstream(self: LLM, prompt: LanguageModelInput) -> ModelResponse:
+        del self, prompt
+        return _TEST_MODEL_RESPONSE
+
+    wrapped = wrap_invoke(invoke_nonstream)
+    assert getattr(wrapped, _ALREADY_WRAPPED_ATTR, False) is True
+    with patch("onyx.tracing.llm_utils.record_llm_response") as recorder:
+        result = wrapped(_FakeLLM(), UserMessage(content="hello"))
+    assert result is _TEST_MODEL_RESPONSE
+    recorder.assert_called_once()
 
 
 def test_wrap_stream_is_idempotent() -> None:
@@ -151,6 +192,15 @@ def test_invoke_returns_inner_response() -> None:
     result = llm.invoke(prompt)
     assert result is _TEST_MODEL_RESPONSE
     assert llm._invoke_calls == 1
+    assert llm._last_prompt is prompt
+
+
+def test_invoke_nonstream_returns_inner_response() -> None:
+    llm = _NonstreamLLM()
+    prompt = UserMessage(content="hello")
+    result = llm.invoke_nonstream(prompt)
+    assert result is _TEST_MODEL_RESPONSE
+    assert llm._invoke_nonstream_calls == 1
     assert llm._last_prompt is prompt
 
 
@@ -296,6 +346,22 @@ def test_invoke_does_not_nest_inside_outer_generation_span() -> None:
     assert llm._invoke_calls == 1
 
 
+def test_invoke_nonstream_does_not_nest_inside_outer_generation_span() -> None:
+    llm = _NonstreamLLM()
+    prompt = UserMessage(content="hello")
+    with (
+        patch("onyx.tracing.llm_utils.llm_generation_span") as fallback_span,
+        trace("test_nonstream_no_nesting"),
+    ):
+        with generation_span(model="test", model_config={"model_provider": "test"}):
+            assert _outer_generation_span_active() is True
+            result = llm.invoke_nonstream(prompt)
+
+    assert result is _TEST_MODEL_RESPONSE
+    assert llm._invoke_nonstream_calls == 1
+    fallback_span.assert_not_called()
+
+
 @pytest.mark.parametrize("prompt_kind", ["positional", "keyword"])
 def test_invoke_records_prompt_via_both_call_styles(prompt_kind: str) -> None:
     llm = _FakeLLM()
@@ -305,6 +371,18 @@ def test_invoke_records_prompt_via_both_call_styles(prompt_kind: str) -> None:
     else:
         llm.invoke(prompt=prompt)
     assert llm._last_prompt is prompt
+
+
+def test_invoke_nonstream_records_response() -> None:
+    llm = _NonstreamLLM()
+    prompt = UserMessage(content="hello")
+
+    with patch("onyx.tracing.llm_utils.record_llm_response") as recorder:
+        result = llm.invoke_nonstream(prompt)
+
+    assert result is _TEST_MODEL_RESPONSE
+    recorder.assert_called_once()
+    assert recorder.call_args.args[1] is _TEST_MODEL_RESPONSE
 
 
 class _ExplodingLLM(LLM):

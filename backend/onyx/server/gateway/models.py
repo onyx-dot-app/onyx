@@ -201,3 +201,40 @@ class ChatCompletionChunk(_WireModel):
             ],
             **chunk_kwargs,
         )
+
+    @classmethod
+    def from_model_response(
+        cls, response: ModelResponse, model: str
+    ) -> "ChatCompletionChunk":
+        delta_kwargs: dict[str, Any] = {"role": response.choice.message.role}
+        if response.choice.message.content is not None:
+            delta_kwargs["content"] = response.choice.message.content
+        if response.choice.message.reasoning_content is not None:
+            delta_kwargs["reasoning_content"] = (
+                response.choice.message.reasoning_content
+            )
+        if response.choice.message.tool_calls:
+            delta_kwargs["tool_calls"] = [
+                {
+                    "index": index,
+                    **tc.model_dump(exclude_none=True),
+                }
+                for index, tc in enumerate(response.choice.message.tool_calls)
+            ]
+        chunk_kwargs: dict[str, Any] = {}
+        if response.usage is not None:
+            chunk_kwargs["usage"] = UsagePayload.from_usage(response.usage)
+        return cls(
+            id=response.id,
+            object="chat.completion.chunk",
+            created=_created_epoch(response.created),
+            model=model,
+            choices=[
+                ChunkChoicePayload(
+                    index=response.choice.index,
+                    delta=ChunkDeltaPayload(**delta_kwargs),
+                    finish_reason=response.choice.finish_reason,
+                )
+            ],
+            **chunk_kwargs,
+        )

@@ -40,7 +40,11 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.llm.models import FunctionCall as ToolFunctionCall
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
+from onyx.llm.multi_llm import (
+    LLMRateLimitError,
+    LLMStreamingToolUseUnsupportedError,
+    LLMTimeoutError,
+)
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build.craft_gateway import is_craft_gateway_request
 from onyx.server.gateway import api as gateway_api
@@ -205,16 +209,24 @@ class _RaisingCloseLLM(_ConfigOnlyLLM):
         return _RaisingCloseStream()
 
 
-def _gateway_stream(llm: LLM):
+def _gateway_stream(
+    llm: LLM,
+    *,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: ToolChoiceOptions | None = None,
+    structured_response_format: dict[str, Any] | None = None,
+    max_tokens: int | None = None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+):
     return gateway_api._stream_sse(
         llm=llm,
         flow=LLMFlow.CRAFT_LLM_GENERATION,
         messages=[UserMessage(content="hello")],
-        tools=None,
-        tool_choice=None,
-        structured_response_format=None,
-        max_tokens=None,
-        reasoning_effort=ReasoningEffort.AUTO,
+        tools=tools,
+        tool_choice=tool_choice,
+        structured_response_format=structured_response_format,
+        max_tokens=max_tokens,
+        reasoning_effort=reasoning_effort,
         model="1/test",
     )
 
@@ -422,23 +434,52 @@ def _wire_usage() -> Usage:
     )
 
 
-def test_completion_payload_serializes_openai_shape() -> None:
-    response = ModelResponse(
-        id="chatcmpl-1",
-        created="1784577906",
+def _tool_call(arguments: str = '{"cmd":"pwd"}') -> ChatCompletionMessageToolCall:
+    return ChatCompletionMessageToolCall(
+        id="call_1",
+        function=FunctionCall(name="bash", arguments=arguments),
+    )
+
+
+def _model_response(
+    *,
+    response_id: str = "fallback-1",
+    created: str = "1784577906",
+    content: str | None = None,
+    reasoning_content: str | None = None,
+    tool_calls: list[ChatCompletionMessageToolCall] | None = None,
+    finish_reason: str | None = None,
+    usage: Usage | None = None,
+) -> ModelResponse:
+    return ModelResponse(
+        id=response_id,
+        created=created,
         choice=Choice(
-            finish_reason="tool_calls",
+            finish_reason=finish_reason,
             message=Message(
-                content=None,
-                reasoning_content="thinking...",
-                tool_calls=[
-                    ChatCompletionMessageToolCall(
-                        id="call_1",
-                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
-                    )
-                ],
+                content=content,
+                reasoning_content=reasoning_content,
+                tool_calls=tool_calls,
             ),
         ),
+        usage=usage,
+    )
+
+
+def _empty_model_response() -> ModelResponse:
+    return _model_response(response_id="unused", created="0", content="unused")
+
+
+def _sse_payload(frame: str) -> dict[str, Any]:
+    return json.loads(frame.removeprefix("data: "))
+
+
+def test_completion_payload_serializes_openai_shape() -> None:
+    response = _model_response(
+        response_id="chatcmpl-1",
+        reasoning_content="thinking...",
+        tool_calls=[_tool_call('{"cmd":"ls"}')],
+        finish_reason="tool_calls",
         usage=_wire_usage(),
     )
 
@@ -583,6 +624,191 @@ def test_stream_records_accumulated_reasoning_on_span() -> None:
     record.assert_called_once()
     assert record.call_args.kwargs["reasoning"] == "thinking hard"
     assert record.call_args.kwargs["output"] == "done"
+
+
+class _StreamingToolFallbackLLM(_ConfigOnlyLLM):
+    def __init__(
+        self,
+        response: ModelResponse,
+        *,
+        fail_after_frame: bool = False,
+        fallback_exc: Exception | None = None,
+    ) -> None:
+        super().__init__(
+            LLMConfig(
+                model_provider="bedrock",
+                model_name="test",
+                temperature=0,
+                max_input_tokens=1_000,
+            )
+        )
+        self.response = response
+        self.fail_after_frame = fail_after_frame
+        self.fallback_exc = fallback_exc
+        self.invoke_nonstream_calls: list[dict[str, Any]] = []
+
+    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+        del args, kwargs
+        if self.fail_after_frame:
+            yield ModelResponseStream(
+                id="before-error",
+                created="0",
+                choice=StreamingChoice(delta=Delta(content="partial")),
+            )
+        raise LLMStreamingToolUseUnsupportedError(
+            "This model doesn't support tool use in streaming mode."
+        )
+
+    def invoke_nonstream(self, *args: object, **kwargs: object) -> ModelResponse:  # type: ignore[override]
+        del args
+        self.invoke_nonstream_calls.append(kwargs)
+        if self.fallback_exc is not None:
+            raise self.fallback_exc
+        return self.response
+
+
+class _StreamErrorFallbackSpyLLM(_ConfigOnlyLLM):
+    def __init__(self, exc: Exception) -> None:
+        super().__init__(
+            LLMConfig(
+                model_provider="openai",
+                model_name="test",
+                temperature=0,
+                max_input_tokens=1_000,
+            )
+        )
+        self.exc = exc
+        self.invoke_nonstream_calls = 0
+
+    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+        del args, kwargs
+        raise self.exc
+        yield
+
+    def invoke_nonstream(self, *args: object, **kwargs: object) -> ModelResponse:  # type: ignore[override]
+        del args, kwargs
+        self.invoke_nonstream_calls += 1
+        raise AssertionError("invoke_nonstream must not be called")
+
+
+def test_pre_frame_streaming_tool_error_falls_back_to_nonstream_sse() -> None:
+    response = _model_response(
+        content="complete",
+        reasoning_content="reasoned",
+        tool_calls=[_tool_call()],
+        finish_reason="tool_calls",
+        usage=_wire_usage(),
+    )
+    llm = _StreamingToolFallbackLLM(response)
+    tools = [{"type": "function", "function": {"name": "bash"}}]
+    response_format = {"type": "json_object"}
+
+    with (
+        patch.object(gateway_api, "llm_generation_span"),
+        patch.object(gateway_api, "record_llm_span_output") as record,
+    ):
+        frames = list(
+            _gateway_stream(
+                llm,
+                tools=tools,
+                tool_choice=ToolChoiceOptions.REQUIRED,
+                structured_response_format=response_format,
+                max_tokens=77,
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+
+    assert frames[-1] == "data: [DONE]\n\n"
+    payload = _sse_payload(frames[0])
+    assert payload["object"] == "chat.completion.chunk"
+    choice = payload["choices"][0]
+    assert choice["finish_reason"] == "tool_calls"
+    assert choice["delta"]["role"] == "assistant"
+    assert choice["delta"]["content"] == "complete"
+    assert choice["delta"]["reasoning_content"] == "reasoned"
+    assert choice["delta"]["tool_calls"][0]["index"] == 0
+    assert choice["delta"]["tool_calls"][0]["function"]["arguments"] == (
+        '{"cmd":"pwd"}'
+    )
+    assert payload["usage"]["total_tokens"] == 150
+    assert llm.invoke_nonstream_calls == [
+        {
+            "prompt": [UserMessage(content="hello")],
+            "tools": tools,
+            "tool_choice": ToolChoiceOptions.REQUIRED,
+            "structured_response_format": response_format,
+            "max_tokens": 77,
+            "reasoning_effort": ReasoningEffort.HIGH,
+        }
+    ]
+    record.assert_called_once()
+    recorded_tool_calls = record.call_args.kwargs["tool_calls"]
+    assert recorded_tool_calls is not None
+    assert recorded_tool_calls[0].id == "call_1"
+    assert recorded_tool_calls[0].function.name == "bash"
+    assert recorded_tool_calls[0].function.arguments == '{"cmd":"pwd"}'
+
+
+@pytest.mark.parametrize(
+    ("tools", "fail_after_frame", "error_frame_index"),
+    [
+        ([{"type": "function"}], True, 1),
+        (None, False, 0),
+    ],
+)
+def test_streaming_tool_error_when_fallback_is_unsafe_does_not_fallback(
+    tools: list[dict[str, Any]] | None,
+    fail_after_frame: bool,
+    error_frame_index: int,
+) -> None:
+    llm = _StreamingToolFallbackLLM(
+        _empty_model_response(),
+        fail_after_frame=fail_after_frame,
+    )
+
+    with patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()):
+        frames = list(_gateway_stream(llm, tools=tools))
+
+    assert len(llm.invoke_nonstream_calls) == 0
+    if fail_after_frame:
+        assert _sse_payload(frames[0])["choices"][0]["delta"]["content"] == "partial"
+    error = _sse_payload(frames[error_frame_index])["error"]
+    assert error["type"] == "upstream_error"
+    assert frames[-1] == "data: [DONE]\n\n"
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        LLMTimeoutError("too slow"),
+        RuntimeError("generic upstream failure"),
+    ],
+)
+def test_non_tool_mismatch_stream_errors_do_not_fallback(exc: Exception) -> None:
+    llm = _StreamErrorFallbackSpyLLM(exc)
+
+    with patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()):
+        frames = list(_gateway_stream(llm, tools=[{"type": "function"}]))
+
+    assert llm.invoke_nonstream_calls == 0
+    error = _sse_payload(frames[0])["error"]
+    assert error["type"] in {"timeout_error", "upstream_error"}
+    assert frames[-1] == "data: [DONE]\n\n"
+
+
+def test_streaming_tool_fallback_failure_uses_sanitized_stream_error() -> None:
+    llm = _StreamingToolFallbackLLM(
+        _empty_model_response(),
+        fallback_exc=RuntimeError("secret-provider-response"),
+    )
+
+    with patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()):
+        frames = list(_gateway_stream(llm, tools=[{"type": "function"}]))
+
+    assert len(llm.invoke_nonstream_calls) == 1
+    assert "upstream LLM request failed" in frames[0]
+    assert "secret-provider-response" not in frames[0]
+    assert frames[-1] == "data: [DONE]\n\n"
 
 
 class _RaisingInvokeLLM(_ConfigOnlyLLM):

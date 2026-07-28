@@ -142,6 +142,29 @@ class LLMRateLimitError(Exception):
     """
 
 
+class LLMStreamingToolUseUnsupportedError(Exception):
+    """
+    Exception raised when an LLM supports streaming and tools independently, but
+    rejects their combination for the current request.
+    """
+
+
+def _is_streaming_tool_use_unsupported_error(error: Exception) -> bool:
+    message = " ".join(str(error).lower().split())
+    names_tool_use = (
+        "tool use" in message or "tool calling" in message or "tools" in message
+    )
+    names_streaming = re.search(r"\bstreaming\b", message) is not None
+    names_unsupported = (
+        "doesn't support" in message
+        or "does not support" in message
+        or "do not support" in message
+        or "not support" in message
+        or "unsupported" in message
+    )
+    return names_tool_use and names_streaming and names_unsupported
+
+
 def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     """Convert Pydantic message models to dictionaries for LiteLLM.
 
@@ -925,6 +948,8 @@ class LitellmLLM(LLM):
                 try:
                     return _call_litellm(opts)
                 except BadRequestError as e:
+                    if stream and tools and _is_streaming_tool_use_unsupported_error(e):
+                        raise LLMStreamingToolUseUnsupportedError(e) from e
                     if i == len(attempts) - 1:
                         raise
                     # Only retry rejections a later attempt can strip away.
@@ -1061,6 +1086,53 @@ class LitellmLLM(LLM):
             model_response = from_litellm_model_response(response)
 
             # Track LLM cost for Onyx-managed API keys
+            if model_response.usage:
+                self._track_llm_cost(model_response.usage)
+
+            return model_response
+        finally:
+            if client is not None:
+                client.close()
+
+    def invoke_nonstream(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        user_identity: LLMUserIdentity | None = None,
+    ) -> ModelResponse:
+        from litellm import HTTPHandler
+        from litellm import ModelResponse as LiteLLMModelResponse
+
+        from onyx.llm.model_response import from_litellm_model_response
+
+        client = None
+        if self._uses_isolated_client():
+            client = HTTPHandler(timeout=timeout_override or self._timeout)
+
+        try:
+            response = cast(
+                LiteLLMModelResponse,
+                self._completion(
+                    prompt=prompt,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=False,
+                    structured_response_format=structured_response_format,
+                    timeout_override=timeout_override,
+                    max_tokens=max_tokens,
+                    parallel_tool_calls=True,
+                    reasoning_effort=reasoning_effort,
+                    user_identity=user_identity,
+                    client=client,
+                ),
+            )
+
+            model_response = from_litellm_model_response(response)
             if model_response.usage:
                 self._track_llm_cost(model_response.usage)
 
