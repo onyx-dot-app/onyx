@@ -141,14 +141,43 @@ func TestConstructs(t *testing.T) {
 	}
 }
 
+// sgrParams returns the parameter lists of all SGR sequences in s.
+func sgrParams(s string) [][]string {
+	var out [][]string
+	for _, m := range ansiRegex.FindAllString(s, -1) {
+		params := strings.TrimSuffix(strings.TrimPrefix(m, "\x1b["), "m")
+		out = append(out, strings.Split(params, ";"))
+	}
+	return out
+}
+
+func hasParams(seqs [][]string, want ...string) bool {
+	for _, params := range seqs {
+		found := 0
+		for _, w := range want {
+			for _, p := range params {
+				if p == w {
+					found++
+					break
+				}
+			}
+		}
+		if found == len(want) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestMergedEmphasisStyling(t *testing.T) {
 	out := render(t, "**bold *and italic* rest**", 80)
-	if !strings.Contains(out, "\x1b[1m") {
-		t.Errorf("expected bold SGR in output, got %q", out)
+	seqs := sgrParams(out)
+	if !hasParams(seqs, "1") {
+		t.Errorf("expected a bold SGR sequence, got %q", out)
 	}
 	// The nested leaf must carry BOTH bold and italic in a single merged
 	// style, not italic layered over a reset bold.
-	if !strings.Contains(out, ";3m") && !strings.Contains(out, "\x1b[3;") {
+	if !hasParams(seqs, "1", "3") {
 		t.Errorf("expected a merged bold+italic SGR sequence, got %q", out)
 	}
 	// After the italic span closes, the trailing text must still be bold.
@@ -156,8 +185,17 @@ func TestMergedEmphasisStyling(t *testing.T) {
 	if idx == -1 {
 		t.Fatalf("missing trailing text in %q", out)
 	}
-	if !strings.Contains(out[:idx], "\x1b[1m") {
+	if !hasParams(sgrParams(out[:idx]), "1") {
 		t.Errorf("expected bold to be re-opened for trailing text, got %q", out)
+	}
+}
+
+func TestBodyTextColored(t *testing.T) {
+	// Plain agent prose carries the body text color (ANSI 252) so responses
+	// stay distinct from default-foreground UI text.
+	out := render(t, "plain paragraph text", 80)
+	if !hasParams(sgrParams(out), "38", "5", "252") {
+		t.Errorf("expected body text foreground SGR, got %q", out)
 	}
 }
 

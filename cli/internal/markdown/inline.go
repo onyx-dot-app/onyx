@@ -27,6 +27,8 @@ func (a inlineAttrs) style() lipgloss.Style {
 		s = s.Foreground(codeColor)
 	case a.link:
 		s = s.Foreground(accentColor).Underline(true)
+	default:
+		s = s.Foreground(textColor)
 	}
 	if a.bold {
 		s = s.Bold(true)
