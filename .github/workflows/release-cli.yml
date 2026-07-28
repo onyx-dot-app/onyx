@@ -123,12 +123,24 @@ jobs:
           # Create and upload separately so a rerun can heal a partial release:
           # creation is skipped when the release already exists, and --clobber
           # replaces any assets left behind by a failed upload.
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
+          #
+          # Existence must be checked via the list endpoint: a draft release
+          # (e.g. notes drafted in the UI ahead of the tag) doesn't create the
+          # git tag until published, so tag-based lookups like `gh release view`
+          # return 404 for it and a blind create would produce a duplicate
+          # release (see the same lookup in deployment.yml). If the tag only has
+          # a draft, publish it instead of creating over it.
+          release_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n 1)"
+          if [ -z "$release_id" ]; then
             gh release create "$TAG" \
               --verify-tag \
               --title "onyx-cli ${TAG#cli/}" \
               --notes-file "${RUNNER_TEMP}/release-notes.md" \
               "${release_args[@]}"
+          elif [ "$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" --jq .draft)" = "true" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+              -F draft=false -f make_latest=false >/dev/null
           fi
           gh release upload "$TAG" --clobber \
             cli/dist/*.tar.gz cli/dist/*.zip cli/dist/*_checksums.txt
