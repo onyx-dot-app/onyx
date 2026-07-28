@@ -61,7 +61,7 @@
 }
 
 .tbl-row[data-selected] > td {
-  @apply bg-[var(--action-link-01)];
+  @apply bg-[var(--action-selection-01)];
 }
 
 .tbl-row[data-disabled] {
@@ -91,7 +91,7 @@ table[data-variant="rows"][data-selection="multi-select"] .tbl-row:hover > td {
 }
 table[data-variant="rows"] .tbl-row:focus-visible > td,
 table[data-variant="rows"] .tbl-row:has(:focus-visible) > td {
-  @apply bg-action-link-01;
+  @apply bg-action-selection-01;
 }
 
 /* ---- variant="cards" — rounded cards with gap ---- */
@@ -125,7 +125,7 @@ table[data-variant="cards"][data-selection="multi-select"] .tbl-row:hover > td {
 }
 table[data-variant="cards"] .tbl-row:focus-visible > td,
 table[data-variant="cards"] .tbl-row:has(:focus-visible) > td {
-  @apply bg-action-link-01;
+  @apply bg-action-selection-01;
 }
 
 /* ---- QualifierContainer ---- */

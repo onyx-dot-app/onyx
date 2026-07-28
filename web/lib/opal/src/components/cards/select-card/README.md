@@ -70,7 +70,7 @@ Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which 
 |---|---|---|
 | `empty` | transparent | `text-04` / icon `text-03` |
 | `filled` | `background-tint-00` | `text-04` / icon `text-03` |
-| `selected` | `action-link-01` | `action-link-05` |
+| `selected` | `action-selection-01` | `action-selection-05` |
 
 ## CSS
 

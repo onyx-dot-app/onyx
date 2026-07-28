@@ -417,7 +417,7 @@ function ProviderConnectCard({
         ref={rootRef}
         className={cn(
           "rounded-12 transition-shadow",
-          highlight && "ring-2 ring-action-link-04"
+          highlight && "ring-2 ring-action-selection-04"
         )}
       >
         <Card background="light" border="solid" rounding="lg">

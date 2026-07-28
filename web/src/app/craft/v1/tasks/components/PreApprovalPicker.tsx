@@ -98,7 +98,7 @@ function PreApprovalRow({ app, checked, onToggle }: PreApprovalRowProps) {
       }}
       className={cn(
         "rounded-12 cursor-pointer transition-shadow",
-        checked && "ring-2 ring-action-link-04"
+        checked && "ring-2 ring-action-selection-04"
       )}
       data-testid={`pre-approval-app-${app.id}`}
     >

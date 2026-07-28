@@ -198,7 +198,7 @@ export function BuildLLMPopover({
           onClick={() => applySelection(option)}
           rightChildren={
             isSelected ? (
-              <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
+              <SvgCheck className="h-4 w-4 stroke-action-selection-05 shrink-0" />
             ) : null
           }
           title={option.displayName}

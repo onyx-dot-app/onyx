@@ -25,14 +25,14 @@
 
 /* Transient state */
 .square-button[data-state="transient"] {
-  border: 1px solid var(--action-link-05);
-  background-color: var(--action-link-00);
+  border: 1px solid var(--action-selection-05);
+  background-color: var(--action-selection-00);
 }
 
 .square-button[data-state="transient"]:hover {
-  background-color: var(--action-link-01);
+  background-color: var(--action-selection-01);
 }
 
 .square-button[data-state="transient"]:active {
-  background-color: var(--action-link-02);
+  background-color: var(--action-selection-02);
 }
