@@ -37,6 +37,7 @@ from onyx.connectors.google_drive.doc_conversion import (
     onyx_document_id_from_drive_file,
 )
 from onyx.connectors.google_drive.file_retrieval import (
+    LISTING_MODIFIED_TIME_KEY,
     DriveFileFieldType,
     crawl_folders_for_files,
     get_all_files_for_oauth,
@@ -215,6 +216,15 @@ def _is_shared_drive_root(folder: GoogleDriveFileType) -> bool:
 
     # For shared drive content, the root has id == driveId
     return bool(drive_id and folder_id == drive_id)
+
+
+def _resume_start(
+    completed_until: SecondsSinceUnixEpoch,
+    start: SecondsSinceUnixEpoch | None,
+) -> SecondsSinceUnixEpoch:
+    """Resume from the checkpointed frontier, but never before the configured
+    range start (a corrupted frontier must not widen the requested time range)."""
+    return max(completed_until, start) if start is not None else completed_until
 
 
 def _public_access() -> ExternalAccess:
@@ -946,7 +956,11 @@ class GoogleDriveConnector(
                         field_type=field_type,
                         include_shared_with_me=self.include_files_shared_with_me,
                         max_num_pages=MY_DRIVE_PAGES_PER_CHECKPOINT,
-                        start=curr_stage.completed_until if resuming else start,
+                        start=(
+                            _resume_start(curr_stage.completed_until, start)
+                            if resuming
+                            else start
+                        ),
                         end=end,
                         cache_folders=not bool(curr_stage.completed_until),
                         page_token=curr_stage.next_page_token,
@@ -995,7 +1009,7 @@ class GoogleDriveConnector(
             if resuming:
                 drive_id = curr_stage.current_folder_or_drive_id
                 if drive_id:
-                    resume_start = curr_stage.completed_until
+                    resume_start = _resume_start(curr_stage.completed_until, start)
                     for file_or_token in _yield_from_drive(drive_id, resume_start):
                         if isinstance(file_or_token, str):
                             checkpoint.completion_map[
@@ -1061,7 +1075,7 @@ class GoogleDriveConnector(
                         user_email,
                     )
                 else:
-                    resume_start = curr_stage.completed_until
+                    resume_start = _resume_start(curr_stage.completed_until, start)
                     yield from _yield_from_folder_crawl(folder_id, resume_start)
                 last_processed_folder = folder_id
 
@@ -1546,7 +1560,11 @@ class GoogleDriveConnector(
             completion = checkpoint.completion_map[file.user_email]
 
             completed_until = completion.completed_until
-            modified_time = drive_file.get(GoogleFields.MODIFIED_TIME.value)
+            # for resolved shortcuts, the shortcut's own modifiedTime is the
+            # position in the modifiedTime-ordered listing
+            modified_time = drive_file.get(LISTING_MODIFIED_TIME_KEY) or drive_file.get(
+                GoogleFields.MODIFIED_TIME.value
+            )
             if isinstance(modified_time, str):
                 try:
                     completed_until = datetime.fromisoformat(modified_time).timestamp()
@@ -1557,6 +1575,16 @@ class GoogleDriveConnector(
                         file.completion_stage,
                         file.user_email,
                     )
+
+            # Never move the frontier backward within the same stage and
+            # drive/folder: a regression changes the listing query, invalidates
+            # the saved page token, and restarts retrieval from the regressed
+            # timestamp — which can loop forever.
+            if (
+                file.completion_stage == completion.stage
+                and file.parent_id == completion.current_folder_or_drive_id
+            ):
+                completed_until = max(completed_until, completion.completed_until)
 
             completion.update(
                 stage=file.completion_stage,
@@ -1614,7 +1642,7 @@ class GoogleDriveConnector(
             all_files_start = start
             # if resuming from a checkpoint
             if completion.stage == DriveRetrievalStage.OAUTH_FILES:
-                all_files_start = completion.completed_until
+                all_files_start = _resume_start(completion.completed_until, start)
 
             for file_or_token in self._oauth_retrieval_all_files(
                 field_type=field_type,

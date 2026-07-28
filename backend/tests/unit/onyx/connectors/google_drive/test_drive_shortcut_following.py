@@ -16,6 +16,7 @@ from onyx.connectors.google_drive.doc_conversion import (
 from onyx.connectors.google_drive.file_retrieval import (
     DRIVE_RESOURCE_KEY_FIELD,
     DRIVE_RESOURCE_KEY_HEADER,
+    LISTING_MODIFIED_TIME_KEY,
     DriveFileFieldType,
     _get_files_in_parent,
     crawl_folders_for_files,
@@ -146,6 +147,40 @@ def test_shortcut_to_file_yields_target_with_true_parent() -> None:
     assert files == [target]
     assert service.files_resource.get_calls[0]["fileId"] == "target_file"
     assert len(service.files_resource.get_calls) == 1
+
+
+def test_shortcut_resolution_stamps_listing_modified_time() -> None:
+    target = _target_file("target_file", "true_parent")
+    target["modifiedTime"] = "2024-01-15T00:00:00Z"
+    service = _FakeDriveService(
+        {
+            "shortcut_file": _shortcut("shortcut_file", "target_file", _PDF_MIME_TYPE),
+            "target_file": target,
+        }
+    )
+
+    def _fake_paginated_retrieval(**_kwargs: object) -> Iterator[dict[str, Any]]:
+        shortcut = _shortcut("shortcut_file", "target_file", _PDF_MIME_TYPE)
+        shortcut["modifiedTime"] = "2026-06-02T00:00:00Z"
+        yield shortcut
+
+    with patch(
+        f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
+        side_effect=_fake_paginated_retrieval,
+    ):
+        files = list(
+            _get_files_in_parent(
+                service=cast(Resource, service),
+                parent_id="shortcut_parent",
+                field_type=DriveFileFieldType.STANDARD,
+            )
+        )
+
+    assert len(files) == 1
+    # the target's own modifiedTime is preserved for doc metadata; the
+    # shortcut's listing position is stamped for checkpoint tracking
+    assert files[0]["modifiedTime"] == "2024-01-15T00:00:00Z"
+    assert files[0][LISTING_MODIFIED_TIME_KEY] == "2026-06-02T00:00:00Z"
 
 
 def test_shortcut_to_resource_key_file_uses_header() -> None:
