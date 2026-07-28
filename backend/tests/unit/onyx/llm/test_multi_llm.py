@@ -2294,6 +2294,42 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
         )
 
 
+def test_no_empty_tools_array_sent_when_no_tools(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    """Regression test for OpenAI-compatible providers (e.g. vLLM) that reject
+    an explicitly empty `tools` array with a 400.
+
+    When no tools are provided, `tools` must be omitted (None), not passed
+    through as `[]`.
+    """
+    messages: LanguageModelInput = [UserMessage(content="Hello!")]
+
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Hello!"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model="gpt-3.5-turbo",
+        ),
+    ]
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = mock_stream_chunks
+
+        default_multi_llm.invoke(messages, tools=[])
+
+        _, kwargs = mock_completion.call_args
+        assert kwargs.get("tools") is None, (
+            "tools must be None (omitted), not [], when no tools are provided"
+        )
+
+
 _TOOL_CHOICE_DOWNGRADE_TOOLS = [
     {
         "type": "function",
