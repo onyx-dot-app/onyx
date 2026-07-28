@@ -60,10 +60,11 @@ type installer struct {
 	compose *dockercmd.Compose
 
 	// Resolved during the run.
-	root  paths.InstallRoot
-	lite  bool
-	craft bool
-	wiz   *ui.Wizard // live wizard when the fancy renderer drives the run
+	root   paths.InstallRoot
+	lite   bool
+	craft  bool
+	wiz    *ui.Wizard // live wizard when the fancy renderer drives the run
+	cancel func()     // cancels in-flight work when the wizard is quit
 
 	// step counter for the "=== title - Step N/M ===" headers.
 	step, totalSteps int

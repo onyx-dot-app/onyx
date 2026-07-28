@@ -333,15 +333,20 @@ type Wizard struct {
 	done chan struct{}
 }
 
-// StartWizard launches the inline wizard program.
-func StartWizard(version string) *Wizard {
+// StartWizard launches the inline wizard program. onAbort fires when the
+// user quits the wizard (ctrl+c/esc) so the orchestration can cancel any
+// in-flight work — without it, killing the UI would leave compose running.
+func StartWizard(version string, onAbort func()) *Wizard {
 	w := &Wizard{
 		prog: tea.NewProgram(wizModel{version: version}),
 		done: make(chan struct{}),
 	}
 	go func() {
-		_, _ = w.prog.Run()
+		m, _ := w.prog.Run()
 		close(w.done)
+		if wm, ok := m.(wizModel); ok && wm.aborted && onAbort != nil {
+			onAbort()
+		}
 	}()
 	return w
 }

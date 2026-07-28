@@ -3,6 +3,7 @@ package install
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -48,10 +49,17 @@ type preflight struct {
 // RunInstall implements `deploy install` (and the install-onyx alias): fresh
 // installs, and restart/update runs against an existing deployment.
 func RunInstall(ctx context.Context, deps Deps, opts Options) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	in := newInstaller(deps, opts)
+	in.cancel = cancel
 	in.lite = opts.Lite
 	in.craft = opts.IncludeCraft
-	return in.runInstall(ctx)
+	err := in.runInstall(ctx)
+	if errors.Is(err, ui.ErrAborted) || (err != nil && ctx.Err() != nil) {
+		return exitcodes.New(exitcodes.General, "installation cancelled")
+	}
+	return err
 }
 
 func (in *installer) runInstall(ctx context.Context) error {
@@ -102,7 +110,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	}
 
 	if in.fancy() {
-		in.wiz = ui.StartWizard(in.deps.CLIVersion)
+		in.wiz = ui.StartWizard(in.deps.CLIVersion, in.cancel)
 		defer in.wiz.Abort()
 	}
 
