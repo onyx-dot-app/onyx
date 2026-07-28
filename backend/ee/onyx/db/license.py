@@ -364,7 +364,8 @@ def publish_license_metadata(
     Raises ValueError when the stored blob does not verify.
 
     wait_for_lock=False is for callers that cannot afford to wait on a
-    contended lock, and gives up serializing rather than the write itself.
+    contended lock. Without the lock the result is served to the caller but
+    never written to the cache.
     """
     # Deferred import: ee.onyx.utils.license imports this module.
     from ee.onyx.utils.license import verify_license_signature
@@ -398,12 +399,11 @@ def publish_license_metadata(
 def _license_cache_lock(
     tenant_id: str | None, wait: bool
 ) -> Generator[CacheLock | None]:
-    """Serialize the guarded block, or run it unserialized if that is not possible.
+    """Serialize the guarded block, yielding the held lock or None.
 
-    Serializing is an improvement on an unserialized write, never a
-    precondition for one, and the Postgres backend holds this on a second
-    connection. Failing to publish a committed license would read as
-    unlicensed, so every way of not getting the lock still runs the block.
+    Acquisition is best-effort and bounded: the Postgres backend holds this on
+    a second connection, and a caller on the event loop cannot wait. The block
+    always runs, and reads the yielded lock to decide what it may write.
     """
     lock: CacheLock | None = None
     try:
@@ -416,9 +416,9 @@ def _license_cache_lock(
         ):
             lock = candidate
         else:
-            logger.warning("License cache lock contended, publishing unserialized")
+            logger.warning("License cache lock contended, serving uncached")
     except Exception as e:
-        logger.warning("License cache lock errored (%s), publishing unserialized", e)
+        logger.warning("License cache lock errored (%s), serving uncached", e)
 
     try:
         yield lock
