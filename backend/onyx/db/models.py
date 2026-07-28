@@ -5204,9 +5204,9 @@ class PublicBase(DeclarativeBase):
       - the `alembic_tenants` tree (target_metadata `PublicBase.metadata`) can actually
         autogenerate against them.
 
-    Access these only through `get_catalog_session()`. Reading them from a
-    tenant-scoped session resolves against whichever database that tenant lives on,
-    which is the wrong database once tenants are sharded.
+    Access these only through `get_catalog_session()`. A tenant-scoped session lands on
+    whichever database that tenant lives on — the same one today, but the wrong one
+    once the tenant has been moved to another shard.
     """
 
     __abstract__ = True
