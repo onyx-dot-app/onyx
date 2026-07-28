@@ -886,7 +886,9 @@ class LitellmLLM(LLM):
                         api_version=api_version,
                         custom_llm_provider=self._custom_llm_provider or None,
                         messages=messages,
-                        tools=tools,
+                        # None (omitted) rather than [] — some OpenAI-compatible
+                        # servers reject requests with an empty tools array.
+                        tools=tools or None,
                         stream=stream,
                         timeout=timeout_override or self._timeout,
                         max_tokens=max_tokens,
