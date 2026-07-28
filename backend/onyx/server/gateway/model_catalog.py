@@ -43,7 +43,7 @@ def _capability_model_name(
     model_map: dict[str, Any],
     provider: LLMProviderView,
     model: ModelConfigurationView,
-) -> str | None:
+) -> str:
     if find_model_obj(model_map, provider.provider, model.name) is not None:
         return model.name
 
@@ -59,24 +59,15 @@ def _capability_model_name(
         )
         return deployment_name
 
-    return None
+    return model.name
 
 
 def _gateway_token_limits(
     model_map: dict[str, Any],
     provider: LLMProviderView,
     model: ModelConfigurationView,
-) -> tuple[int | None, int | None]:
+) -> tuple[int, int]:
     capability_model_name = _capability_model_name(model_map, provider, model)
-    if capability_model_name is None:
-        logger.warning(
-            "No capability metadata found for gateway model %s/%s; omitting "
-            "token limits",
-            provider.provider,
-            model.name,
-        )
-        return None, None
-
     max_input_tokens = model.configured_max_input_tokens or llm_max_input_tokens(
         model_map=model_map,
         model_name=capability_model_name,
@@ -87,17 +78,6 @@ def _gateway_token_limits(
         model_name=capability_model_name,
         model_provider=provider.provider,
     )
-    if max_input_tokens <= max_output_tokens:
-        logger.warning(
-            "Capability metadata for gateway model %s/%s has output limit %s "
-            "greater than or equal to input limit %s; omitting token limits",
-            provider.provider,
-            model.name,
-            max_output_tokens,
-            max_input_tokens,
-        )
-        return None, None
-
     return max_input_tokens, max_output_tokens
 
 

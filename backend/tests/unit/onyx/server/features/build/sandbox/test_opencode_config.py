@@ -71,6 +71,7 @@ def test_gateway_is_the_only_enabled_provider() -> None:
     assert set(provider["models"]) == {"7/gpt-5.5", "9/claude-opus-4-8"}
     assert provider["models"]["9/claude-opus-4-8"]["limit"] == {
         "context": 200_000,
+        "input": 200_000,
         "output": 128_000,
     }
     assert provider["models"]["7/gpt-5.5"] == {
@@ -97,6 +98,7 @@ def test_gateway_is_the_only_enabled_provider() -> None:
         "options": {"reasoningEffort": "high"},
         "limit": {
             "context": 200_000,
+            "input": 200_000,
             "output": 128_000,
         },
     }
@@ -142,14 +144,7 @@ def test_gateway_capabilities_are_adapted_instead_of_hardcoded() -> None:
     }
 
 
-@pytest.mark.parametrize(
-    ("max_input_tokens", "max_output_tokens"),
-    [(32_000, 32_000), (32_000, None)],
-)
-def test_gateway_omits_incoherent_token_limits(
-    max_input_tokens: int,
-    max_output_tokens: int | None,
-) -> None:
+def test_gateway_omits_partial_token_limits() -> None:
     gateway = CraftLLMProviderConfig(
         provider="onyx",
         model_name="7/broken-model",
@@ -160,8 +155,7 @@ def test_gateway_omits_incoherent_token_limits(
                 id="7/broken-model",
                 display_name="Broken",
                 provider="custom",
-                max_input_tokens=max_input_tokens,
-                max_output_tokens=max_output_tokens,
+                max_input_tokens=32_000,
             )
         ],
     )

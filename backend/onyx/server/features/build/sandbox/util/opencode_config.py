@@ -175,13 +175,13 @@ def _build_provider_block(
             entry["interleaved"] = True
         if capabilities.supports_reasoning:
             entry["options"] = {"reasoningEffort": "high"}
-        if (
-            model.max_input_tokens is not None
-            and model.max_output_tokens is not None
-            and model.max_input_tokens > model.max_output_tokens
-        ):
+        if model.max_input_tokens is not None and model.max_output_tokens is not None:
+            # OpenCode 1.15.x subtracts output from context when input is absent.
+            # LiteLLM reports input and output budgets independently, so include
+            # input explicitly to keep compaction from collapsing to zero.
             entry["limit"] = {
                 "context": model.max_input_tokens,
+                "input": model.max_input_tokens,
                 "output": model.max_output_tokens,
             }
         models[model.id] = entry

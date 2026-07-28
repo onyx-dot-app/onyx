@@ -233,6 +233,7 @@ def test_custom_azure_alias_renders_deployment_limits_for_opencode() -> None:
         "limit"
     ] == {
         "context": 272_000,
+        "input": 272_000,
         "output": 128_000,
     }
 
@@ -269,11 +270,12 @@ def test_gateway_config_preserves_explicit_context_override() -> None:
         "limit"
     ] == {
         "context": 200_000,
+        "input": 200_000,
         "output": 128_000,
     }
 
 
-def test_unknown_model_omits_limits_instead_of_inventing_invalid_pair() -> None:
+def test_unknown_model_renders_explicit_fallback_with_input_budget() -> None:
     provider = _provider(
         7,
         "custom",
@@ -288,19 +290,23 @@ def test_unknown_model_omits_limits_instead_of_inventing_invalid_pair() -> None:
 
     assert gateway_config is not None
     opencode_config = build_provider_opencode_config(gateway_config)
-    assert (
-        "limit" not in opencode_config["provider"]["onyx"]["models"]["7/unknown-model"]
-    )
+    assert opencode_config["provider"]["onyx"]["models"]["7/unknown-model"][
+        "limit"
+    ] == {
+        "context": 32_000,
+        "input": 32_000,
+        "output": 32_000,
+    }
 
 
-def test_incoherent_override_omits_limits_without_reducing_provider_output() -> None:
+def test_small_input_override_does_not_reduce_provider_output() -> None:
     provider = _provider(
         7,
         "azure",
         [
             _model(
                 "tiny-model",
-                configured_max_input_tokens=1_000,
+                configured_max_input_tokens=25_000,
             )
         ],
         deployment_name="gpt-5",
@@ -320,7 +326,11 @@ def test_incoherent_override_omits_limits_without_reducing_provider_output() -> 
 
     assert gateway_config is not None
     opencode_config = build_provider_opencode_config(gateway_config)
-    assert "limit" not in opencode_config["provider"]["onyx"]["models"]["7/tiny-model"]
+    assert opencode_config["provider"]["onyx"]["models"]["7/tiny-model"]["limit"] == {
+        "context": 25_000,
+        "input": 25_000,
+        "output": 128_000,
+    }
 
 
 def test_gateway_selection_renders_storage_columns() -> None:
