@@ -1,6 +1,7 @@
 // Package markdown renders CommonMark/GFM markdown into ANSI-styled text for
-// terminal display. It replaces glamour with a small goldmark-AST walker so the
-// binary does not carry syntax-highlighting lexers or an HTML sanitizer.
+// terminal display. It walks the goldmark AST directly and deliberately avoids
+// heavier renderer stacks (syntax-highlighting lexers, HTML sanitizers) to
+// keep the binary small.
 package markdown
 
 import (
@@ -40,8 +41,8 @@ func NewRenderer(width int) *Renderer {
 // Render converts md into styled, width-wrapped terminal output. It never
 // fails on partial or malformed markdown (an unterminated code fence
 // mid-stream parses as a code block to EOF per CommonMark); if rendering
-// panics due to a bug, the raw source is returned instead, matching the
-// fallback behavior the viewport had with glamour.
+// panics due to a bug, the raw source is returned instead so the chat
+// viewport always has something to display.
 func (r *Renderer) Render(md string) (out string) {
 	defer func() {
 		if recover() != nil {
