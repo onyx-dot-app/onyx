@@ -1,11 +1,10 @@
 """Pydantic models for sandbox module communication."""
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import TypeAlias
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import SandboxStatus
 from onyx.server.gateway.models import GatewayModelDescriptor
@@ -13,9 +12,10 @@ from onyx.server.gateway.models import GatewayModelDescriptor
 FileSet: TypeAlias = dict[str, bytes]
 
 
-@dataclass(frozen=True)
-class PromptAttachment:
+class PromptAttachment(BaseModel):
     """A session-relative file to include in an OpenCode prompt."""
+
+    model_config = ConfigDict(frozen=True)
 
     name: str
     path: str

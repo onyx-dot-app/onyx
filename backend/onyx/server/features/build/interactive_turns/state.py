@@ -283,6 +283,9 @@ def _runner_is_stale(
 def _save_turn(cache: CacheBackend, turn: InteractiveTurn, *, ex: int) -> None:
     payload = asdict(turn)
     payload.pop("reclaimed", None)
+    payload["attachments"] = [
+        attachment.model_dump() for attachment in turn.attachments
+    ]
     for field in ("turn_id", "session_id", "user_id"):
         payload[field] = str(payload[field])
     for field in ("last_heartbeat_at",):
