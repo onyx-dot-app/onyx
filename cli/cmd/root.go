@@ -103,6 +103,8 @@ func Execute() error {
 	rootCmd.AddCommand(newServeCmd())
 	rootCmd.AddCommand(newInstallSkillCmd(ios))
 	rootCmd.AddCommand(newExperimentsCmd(ios))
+	rootCmd.AddCommand(newDeployCmd(ios))
+	rootCmd.AddCommand(newInstallOnyxCmd(ios))
 
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if showVersion {
