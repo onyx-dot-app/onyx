@@ -19,6 +19,7 @@ import {
   MCPServer,
 } from "@/lib/tools/interfaces";
 import useServerTools from "@/hooks/useServerTools";
+import { can } from "@/lib/permissions/resource-actions";
 import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";
 import {
@@ -110,6 +111,14 @@ export default function MCPActionCard({
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
   const [isToolsRefreshing, setIsToolsRefreshing] = useState(false);
   const deleteModal = useCreateModal();
+
+  // Affordances ride on the server-stamped map: edit gates manage/edit-config/rename,
+  // authenticate gates connect, manage_status gates (dis)connect + refresh, delete the
+  // delete button.
+  const canEdit = can(server, "edit");
+  const canDelete = can(server, "delete");
+  const canAuthenticate = can(server, "authenticate");
+  const canManageStatus = can(server, "manage_status");
 
   // Update expanded state when initialExpanded changes
   const hasInitializedExpansion = useRef(false);
@@ -206,17 +215,23 @@ export default function MCPActionCard({
       <Actions
         status={status}
         serverName={title}
-        onDisconnect={onDisconnect}
-        onManage={onManage}
-        onAuthenticate={onAuthenticate}
-        onReconnect={onReconnect}
-        onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
+        onDisconnect={canManageStatus ? onDisconnect : undefined}
+        onManage={canEdit ? onManage : undefined}
+        onAuthenticate={canAuthenticate ? onAuthenticate : undefined}
+        onReconnect={canManageStatus ? onReconnect : undefined}
+        onDelete={
+          canDelete && onDelete ? () => deleteModal.toggle(true) : undefined
+        }
         toolCount={toolCount}
         isToolsExpanded={isToolsExpanded}
         onToggleTools={handleToggleTools}
       />
     ),
     [
+      canAuthenticate,
+      canDelete,
+      canEdit,
+      canManageStatus,
       deleteModal,
       handleToggleTools,
       isToolsExpanded,
@@ -251,13 +266,15 @@ export default function MCPActionCard({
 
     return (
       <div className="flex items-center gap-2">
-        <Button
-          icon={isToolsRefreshing ? SvgSimpleLoader : SvgRefreshCw}
-          prominence="internal"
-          onClick={handleRefreshTools}
-          tooltip="Refresh tools"
-          aria-label="Refresh tools"
-        />
+        {canManageStatus && (
+          <Button
+            icon={isToolsRefreshing ? SvgSimpleLoader : SvgRefreshCw}
+            prominence="internal"
+            onClick={handleRefreshTools}
+            tooltip="Refresh tools"
+            aria-label="Refresh tools"
+          />
+        )}
         {lastRefreshedText && (
           <Text as="p" text03 mainUiBody className="whitespace-nowrap">
             Tools last refreshed {lastRefreshedText}
@@ -266,6 +283,7 @@ export default function MCPActionCard({
       </div>
     );
   }, [
+    canManageStatus,
     server.last_refreshed_at,
     serverId,
     mutate,
@@ -281,8 +299,8 @@ export default function MCPActionCard({
         icon={icon}
         status={status}
         actions={actionsComponent}
-        onEdit={onEdit}
-        onRename={handleRename}
+        onEdit={canEdit ? onEdit : undefined}
+        onRename={canEdit ? handleRename : undefined}
         isExpanded={isToolsExpanded}
         onExpandedChange={setIsToolsExpanded}
         enableSearch={true}

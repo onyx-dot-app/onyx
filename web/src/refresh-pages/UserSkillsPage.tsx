@@ -10,6 +10,8 @@ import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
 import { useUser } from "@/providers/UserProvider";
+import { useCapabilities } from "@/hooks/useCapabilities";
+import { Permission } from "@/lib/types";
 import SkillCard, {
   type CustomSkillCardItem,
   type SkillCardItem,
@@ -29,7 +31,10 @@ import { toast } from "@/hooks/useToast";
 
 export default function UserSkillsPage() {
   const { data, error, isLoading, refresh } = useUserSkills();
-  const { user, isAdmin } = useUser();
+  const { user } = useUser();
+  // MANAGE_SKILLS (via admin_capabilities) reveals the manage entry to scoped skill
+  // managers, not just full admins.
+  const canManageSkills = useCapabilities(Permission.MANAGE_SKILLS);
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
@@ -165,7 +170,7 @@ export default function UserSkillsPage() {
         description="Capability bundles your Craft agent can reach for. This page shows what's currently available to you — skills granted by admins plus your own personal skills."
         rightChildren={
           <div className="flex items-center gap-2">
-            {isAdmin && (
+            {canManageSkills && (
               <Button
                 href="/craft/v1/skills/manage"
                 prominence="secondary"

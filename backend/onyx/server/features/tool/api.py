@@ -6,7 +6,9 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.permission_projection import tool_permissions
 from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import agent_mediated_scope_allows
@@ -16,6 +18,7 @@ from onyx.db.enums import Permission
 from onyx.db.enums import PermissionAuthority
 from onyx.db.models import Tool
 from onyx.db.models import User
+from onyx.db.tools import can_edit_custom_tool
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_action_agent_scope
@@ -256,16 +259,27 @@ def validate_tool(
 @router.get("/openapi", tags=PUBLIC_API_TAGS)
 def list_openapi_tools(
     db_session: Session = Depends(get_session),
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session, only_openapi=True)
 
+    # delete/toggle are global MANAGE_ACTIONS; resolve once. edit is per-tool and only
+    # queries agent scope for a scoped manager (admin/creator/non-manager short-circuit).
+    is_actions_admin = has_global_permission(user, Permission.MANAGE_ACTIONS)
     openapi_tools: list[ToolSnapshot] = []
     for tool in tools:
         if not should_expose_tool_to_fe(tool):
             continue
 
-        openapi_tools.append(ToolSnapshot.from_model(tool))
+        openapi_tools.append(
+            ToolSnapshot.from_model(
+                tool,
+                permissions=tool_permissions(
+                    can_edit=can_edit_custom_tool(user, tool, db_session),
+                    is_actions_admin=is_actions_admin,
+                ),
+            )
+        )
 
     return openapi_tools
 

@@ -10,9 +10,14 @@ from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import has_permission
+from onyx.auth.scoped_permissions import agent_mediated_scope_allows
 from onyx.db.constants import UNSET
 from onyx.db.constants import UnsetType
 from onyx.db.enums import MCPServerStatus
+from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.models import MCPServer
 from onyx.db.models import OAuthConfig
 from onyx.db.models import Persona
@@ -20,6 +25,7 @@ from onyx.db.models import Persona__Tool
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import Tool
 from onyx.db.models import ToolCall
+from onyx.db.models import User
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.utils.headers import HeaderItemDict
@@ -162,6 +168,69 @@ def get_mcp_server_agent_scope(
         .where(Tool.mcp_server_id == mcp_server_id, Persona.deleted.is_(False)),
         db_session,
     )
+
+
+# Read-mode mirrors of the tool/MCP write guards: same decision, no policy re-derived, so
+# the projection can stamp affordances. Guards stay the boundary; drift is caught by the
+# permission-projection contract test.
+
+
+def action_within_managed_scope(tool_id: int, db_session: Session, user: User) -> bool:
+    """Read-mode of ``_assert_action_within_managed_scope``: a scoped manager is in scope
+    for a custom action iff every agent using it is private and in a group they manage."""
+    group_ids, has_public_agent, has_ungrouped_private_agent = get_action_agent_scope(
+        tool_id, db_session
+    )
+    return agent_mediated_scope_allows(
+        user,
+        db_session,
+        group_ids=group_ids,
+        has_public_agent=has_public_agent,
+        has_ungrouped_private_agent=has_ungrouped_private_agent,
+    )
+
+
+def can_edit_custom_tool(user: User, tool: Tool, db_session: Session) -> bool:
+    """Read-mode of ``_get_editable_custom_tool`` (admin ∨ creator ∨ scoped branches,
+    minus its 404/400 fetch raises). Built-in tools are never editable here."""
+    if tool.in_code_tool_id is not None:
+        return False
+    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
+        return True
+    if tool.user_id is not None and tool.user_id == user.id:
+        return True
+    if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.SCOPED:
+        return action_within_managed_scope(tool.id, db_session, user)
+    return False
+
+
+def can_edit_mcp_server(user: User, server: MCPServer, db_session: Session) -> bool:
+    """Read-mode of ``_ensure_mcp_server_editable``: admin ∨ owner (by email) ∨ a scoped
+    manager whose groups cover every agent using the server's tools."""
+    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
+        return True
+    if server.owner == user.email:
+        return True
+    if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.SCOPED:
+        group_ids, has_public_agent, has_ungrouped_private_agent = (
+            get_mcp_server_agent_scope(server.id, db_session)
+        )
+        return agent_mediated_scope_allows(
+            user,
+            db_session,
+            group_ids=group_ids,
+            has_public_agent=has_public_agent,
+            has_ungrouped_private_agent=has_ungrouped_private_agent,
+        )
+    return False
+
+
+def can_admin_mcp_server(user: User, server: MCPServer) -> bool:
+    """Read-mode of ``_ensure_mcp_server_owner_or_admin``: admin ∨ owner (by email). Gates
+    delete, (dis)connect, and status refresh — those routes have no scoped-manager path."""
+    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
+        return True
+    return server.owner == user.email
 
 
 def get_tool_by_name(tool_name: str, db_session: Session) -> Tool:

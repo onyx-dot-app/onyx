@@ -77,3 +77,60 @@ def document_set_permissions(
         "delete": is_document_sets_admin,
         "publish": is_document_sets_admin,
     }
+
+
+TOOL_ACTIONS: frozenset[str] = frozenset({"edit", "delete", "toggle"})
+
+
+def tool_permissions(*, can_edit: bool, is_actions_admin: bool) -> dict[str, bool]:
+    """Custom action (OpenAPI tool) affordance map. ``edit`` is the editable decision the
+    write guard enforces (admin, creator, or a manager whose groups cover every agent
+    using the action). ``delete`` and ``toggle`` require global MANAGE_ACTIONS — the
+    routes carry no ``allow_scope``, so a scoped manager may edit a managed action but
+    never delete or enable/disable it."""
+    return {
+        "edit": can_edit,
+        "delete": is_actions_admin,
+        "toggle": is_actions_admin,
+    }
+
+
+MCP_SERVER_ACTIONS: frozenset[str] = frozenset(
+    {"edit", "delete", "authenticate", "manage_status"}
+)
+
+
+def mcp_server_permissions(*, can_edit: bool, can_admin: bool) -> dict[str, bool]:
+    """MCP server affordance map. ``edit`` is the editable decision (admin, owner-by-email,
+    or a manager whose groups cover every agent using the server's tools). ``delete``,
+    ``authenticate``, and ``manage_status`` (connect/disconnect/refresh) are owner-or-admin
+    only — those routes carry no ``allow_scope``, so a manager may edit a managed server
+    but not delete, authenticate, or change its connection status."""
+    return {
+        "edit": can_edit,
+        "delete": can_admin,
+        "authenticate": can_admin,
+        "manage_status": can_admin,
+    }
+
+
+CUSTOM_SKILL_ACTIONS: frozenset[str] = frozenset(
+    {"edit", "manage_access", "delete", "publish"}
+)
+
+
+def custom_skill_permissions(
+    *, can_edit: bool, is_full_admin: bool, is_skills_admin: bool
+) -> dict[str, bool]:
+    """Custom skill affordance map. ``edit`` (replace bundle, enable/disable) and
+    ``manage_access`` (group grants) are the managed-scope editable decision the write
+    guard enforces. ``delete`` is FULL_ADMIN only (its route requires
+    FULL_ADMIN_PANEL_ACCESS, no ``allow_scope``); ``publish`` (make org-wide public)
+    needs global MANAGE_SKILLS — a scoped manager fails the guard's non-public check when
+    flipping a skill public."""
+    return {
+        "edit": can_edit,
+        "manage_access": can_edit,
+        "delete": is_full_admin,
+        "publish": is_skills_admin,
+    }

@@ -13,22 +13,34 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.analytics import user_can_view_assistant_stats
 from onyx.auth.permission_projection import CC_PAIR_ACTIONS
 from onyx.auth.permission_projection import cc_pair_permissions
+from onyx.auth.permission_projection import CUSTOM_SKILL_ACTIONS
+from onyx.auth.permission_projection import custom_skill_permissions
 from onyx.auth.permission_projection import DOCUMENT_SET_ACTIONS
 from onyx.auth.permission_projection import document_set_permissions
+from onyx.auth.permission_projection import MCP_SERVER_ACTIONS
+from onyx.auth.permission_projection import mcp_server_permissions
 from onyx.auth.permission_projection import PERSONA_ACTIONS
 from onyx.auth.permission_projection import persona_permissions
+from onyx.auth.permission_projection import TOOL_ACTIONS
+from onyx.auth.permission_projection import tool_permissions
 from onyx.auth.permissions import has_global_permission
 from onyx.auth.scoped_permissions import assert_manages_group
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.auth.scoped_permissions import manages_group
 from onyx.auth.scoped_permissions import within_scope
 from onyx.db.document_set import fetch_all_document_sets_for_user
+from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import Permission
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__UserGroup
+from onyx.db.models import MCPServer
 from onyx.db.models import Persona
+from onyx.db.models import Persona__Tool
 from onyx.db.models import Persona__UserGroup
+from onyx.db.models import Skill
+from onyx.db.models import Skill__UserGroup
+from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
@@ -39,12 +51,21 @@ from onyx.db.persona import can_view_persona_stats
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import is_persona_editable_by_user
 from onyx.db.persona import persona_edit_within_scope
+from onyx.db.skill import get_group_ids_for_skill
+from onyx.db.tools import can_admin_mcp_server
+from onyx.db.tools import can_edit_custom_tool
+from onyx.db.tools import can_edit_mcp_server
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.mcp.api import _ensure_mcp_server_editable
+from onyx.server.features.mcp.api import _ensure_mcp_server_owner_or_admin
 from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.features.tool.api import _get_editable_custom_tool
 from tests.external_dependency_unit.conftest import create_test_user
 
 
-def _guard_raises(guard: Callable[..., None], *args: object, **kwargs: object) -> bool:
+def _guard_raises(
+    guard: Callable[..., object], *args: object, **kwargs: object
+) -> bool:
     try:
         guard(*args, **kwargs)
         return False
@@ -380,3 +401,253 @@ def test_persona_and_doc_set_key_coverage() -> None:
         document_set_permissions(is_editable=True, is_document_sets_admin=True)
     )
     assert ds_keys == set(DOCUMENT_SET_ACTIONS)
+
+
+def _make_tool(
+    db_session: Session,
+    *,
+    creator: User | None = None,
+    in_code: str | None = None,
+    mcp_server_id: int | None = None,
+) -> Tool:
+    tool = Tool(
+        name=f"proj-tool-{uuid4().hex[:12]}",
+        description="contract",
+        user_id=creator.id if creator else None,
+        in_code_tool_id=in_code,
+        mcp_server_id=mcp_server_id,
+    )
+    db_session.add(tool)
+    db_session.flush()
+    return tool
+
+
+def _make_mcp_server(db_session: Session, *, owner_email: str) -> MCPServer:
+    server = MCPServer(
+        name=f"proj-mcp-{uuid4().hex[:12]}",
+        owner=owner_email,
+        server_url="https://mcp.example.com",
+        status=MCPServerStatus.CONNECTED,
+    )
+    db_session.add(server)
+    db_session.flush()
+    return server
+
+
+def _link_persona_tool(db_session: Session, persona: Persona, tool: Tool) -> None:
+    db_session.add(Persona__Tool(persona_id=persona.id, tool_id=tool.id))
+    db_session.commit()
+
+
+def _make_skill(
+    db_session: Session, *, is_public: bool, groups: list[UserGroup]
+) -> Skill:
+    skill = Skill(
+        id=uuid4(),
+        slug=f"proj-skill-{uuid4().hex[:12]}",
+        name="contract skill",
+        description="contract",
+        # custom skills need a bundle source (ck_skill_definition_source)
+        bundle_file_id=f"proj-bundle-{uuid4().hex}",
+        bundle_sha256="0" * 64,
+        is_public=is_public,
+    )
+    db_session.add(skill)
+    db_session.flush()
+    for group in groups:
+        db_session.add(Skill__UserGroup(skill_id=skill.id, user_group_id=group.id))
+    db_session.commit()
+    return skill
+
+
+def test_tool_projection_matches_gates(db_session: Session) -> None:
+    """edit tracks the real _get_editable_custom_tool decision (admin ∨ creator ∨ scoped);
+    delete/toggle track global MANAGE_ACTIONS. A scoped manager edits a managed action but
+    can never delete or enable/disable it."""
+    managed = _make_group(db_session)
+
+    in_scope = create_test_user(db_session, "proj-tool-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    out_scope = create_test_user(db_session, "proj-tool-out")
+    _manage(db_session, out_scope, _make_group(db_session))
+    out_scope.effective_permissions = []
+
+    creator = create_test_user(db_session, "proj-tool-creator")
+    creator.effective_permissions = []
+
+    admin = create_test_user(db_session, "proj-tool-admin", is_admin=True)
+    db_session.commit()
+
+    tool = _make_tool(db_session, creator=creator)
+    # a private agent in the managed group references the action -> scoped to `managed`
+    persona = _make_persona(
+        db_session, owner=creator, is_public=False, groups=[managed]
+    )
+    _link_persona_tool(db_session, persona, tool)
+
+    for actor in (in_scope, out_scope, creator, admin):
+        enforced = not _guard_raises(
+            _get_editable_custom_tool, tool.id, db_session, actor
+        )
+        can_edit = can_edit_custom_tool(actor, tool, db_session)
+        assert can_edit == enforced, actor.email
+        is_actions_admin = has_global_permission(actor, Permission.MANAGE_ACTIONS)
+        tags = tool_permissions(can_edit=can_edit, is_actions_admin=is_actions_admin)
+        assert tags["edit"] == enforced
+        assert tags["delete"] == is_actions_admin  # A — never a scoped manager
+        assert tags["toggle"] == is_actions_admin  # A
+
+    # the fix: an in-scope manager can edit but not delete/toggle
+    assert tool_permissions(
+        can_edit=can_edit_custom_tool(in_scope, tool, db_session),
+        is_actions_admin=has_global_permission(in_scope, Permission.MANAGE_ACTIONS),
+    ) == {"edit": True, "delete": False, "toggle": False}
+
+
+def test_mcp_projection_matches_gates(db_session: Session) -> None:
+    """edit tracks _ensure_mcp_server_editable (admin ∨ owner ∨ scoped); delete/
+    authenticate/manage_status track _ensure_mcp_server_owner_or_admin (admin ∨ owner). A
+    scoped manager edits a managed server but can never delete/authenticate/change its
+    status."""
+    managed = _make_group(db_session)
+
+    in_scope = create_test_user(db_session, "proj-mcp-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    out_scope = create_test_user(db_session, "proj-mcp-out")
+    _manage(db_session, out_scope, _make_group(db_session))
+    out_scope.effective_permissions = []
+
+    owner = create_test_user(db_session, "proj-mcp-owner")
+    owner.effective_permissions = []
+
+    admin = create_test_user(db_session, "proj-mcp-admin", is_admin=True)
+    db_session.commit()
+
+    server = _make_mcp_server(db_session, owner_email=owner.email)
+    tool = _make_tool(db_session, mcp_server_id=server.id)
+    persona = _make_persona(db_session, owner=owner, is_public=False, groups=[managed])
+    _link_persona_tool(db_session, persona, tool)
+
+    for actor in (in_scope, out_scope, owner, admin):
+        edit_enforced = not _guard_raises(
+            _ensure_mcp_server_editable, server, actor, db_session
+        )
+        admin_enforced = not _guard_raises(
+            _ensure_mcp_server_owner_or_admin, server, actor
+        )
+        can_edit = can_edit_mcp_server(actor, server, db_session)
+        can_admin = can_admin_mcp_server(actor, server)
+        assert can_edit == edit_enforced, actor.email
+        assert can_admin == admin_enforced, actor.email
+        tags = mcp_server_permissions(can_edit=can_edit, can_admin=can_admin)
+        assert tags["edit"] == edit_enforced
+        assert tags["delete"] == admin_enforced
+        assert tags["authenticate"] == admin_enforced
+        assert tags["manage_status"] == admin_enforced
+
+    # the fix: an in-scope manager edits but can't delete/authenticate/manage_status
+    assert mcp_server_permissions(
+        can_edit=can_edit_mcp_server(in_scope, server, db_session),
+        can_admin=can_admin_mcp_server(in_scope, server),
+    ) == {
+        "edit": True,
+        "delete": False,
+        "authenticate": False,
+        "manage_status": False,
+    }
+
+
+def test_skill_projection_matches_gates(db_session: Session) -> None:
+    """edit/manage_access track the assert_within_scope guard on the skill's groups;
+    delete is FULL_ADMIN; publish (make public) is global MANAGE_SKILLS. A scoped manager
+    edits/re-grants a managed skill but can never delete or publish it."""
+    managed = _make_group(db_session)
+
+    in_scope = create_test_user(db_session, "proj-skill-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    out_scope = create_test_user(db_session, "proj-skill-out")
+    _manage(db_session, out_scope, _make_group(db_session))
+    out_scope.effective_permissions = []
+
+    admin = create_test_user(db_session, "proj-skill-admin", is_admin=True)
+    db_session.commit()
+
+    skill = _make_skill(db_session, is_public=False, groups=[managed])
+    group_ids = get_group_ids_for_skill(skill.id, db_session)
+
+    for actor in (in_scope, out_scope, admin):
+        edit_enforced = not _guard_raises(
+            assert_within_scope,
+            actor,
+            db_session,
+            permission=Permission.MANAGE_SKILLS,
+            current_group_ids=group_ids,
+            requested_group_ids=group_ids,
+            is_non_public=not skill.is_public,
+        )
+        # publish drives the same guard with the requested public state
+        publish_enforced = not _guard_raises(
+            assert_within_scope,
+            actor,
+            db_session,
+            permission=Permission.MANAGE_SKILLS,
+            current_group_ids=group_ids,
+            requested_group_ids=group_ids,
+            is_non_public=False,
+        )
+        can_edit = within_scope(
+            actor,
+            db_session,
+            permission=Permission.MANAGE_SKILLS,
+            current_group_ids=group_ids,
+            requested_group_ids=group_ids,
+            is_non_public=not skill.is_public,
+        )
+        assert can_edit == edit_enforced, actor.email
+        is_full_admin = has_global_permission(actor, Permission.FULL_ADMIN_PANEL_ACCESS)
+        is_skills_admin = has_global_permission(actor, Permission.MANAGE_SKILLS)
+        tags = custom_skill_permissions(
+            can_edit=can_edit,
+            is_full_admin=is_full_admin,
+            is_skills_admin=is_skills_admin,
+        )
+        assert tags["edit"] == edit_enforced
+        assert tags["manage_access"] == edit_enforced
+        assert tags["delete"] == is_full_admin
+        assert tags["publish"] == publish_enforced  # global MANAGE_SKILLS
+
+    # the fix: an in-scope manager edits/re-grants but can't delete or publish
+    assert custom_skill_permissions(
+        can_edit=within_scope(
+            in_scope,
+            db_session,
+            permission=Permission.MANAGE_SKILLS,
+            current_group_ids=group_ids,
+            requested_group_ids=group_ids,
+            is_non_public=not skill.is_public,
+        ),
+        is_full_admin=has_global_permission(
+            in_scope, Permission.FULL_ADMIN_PANEL_ACCESS
+        ),
+        is_skills_admin=has_global_permission(in_scope, Permission.MANAGE_SKILLS),
+    ) == {"edit": True, "manage_access": True, "delete": False, "publish": False}
+
+
+def test_actions_and_skill_key_coverage() -> None:
+    assert set(tool_permissions(can_edit=True, is_actions_admin=True)) == set(
+        TOOL_ACTIONS
+    )
+    assert set(mcp_server_permissions(can_edit=True, can_admin=True)) == set(
+        MCP_SERVER_ACTIONS
+    )
+    assert set(
+        custom_skill_permissions(
+            can_edit=True, is_full_admin=True, is_skills_admin=True
+        )
+    ) == set(CUSTOM_SKILL_ACTIONS)

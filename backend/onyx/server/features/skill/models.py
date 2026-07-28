@@ -6,6 +6,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import Field
 from pydantic import model_validator
 from sqlalchemy.orm import Session
 
@@ -60,6 +61,9 @@ class CustomSkillResponse(BaseModel):
     updated_at: datetime.datetime | None = None
     granted_group_ids: list[int] = []
     is_personal: bool
+    # Per-action affordance map for the requesting user (mirrors the write-side guards).
+    # Defaults empty (fail-closed); the admin skills list stamps the real map.
+    permissions: dict[str, bool] = Field(default_factory=dict)
 
     @classmethod
     def from_model(
@@ -68,6 +72,7 @@ class CustomSkillResponse(BaseModel):
         group_ids: list[int],
         *,
         has_grants: bool | None = None,
+        permissions: dict[str, bool] | None = None,
     ) -> "CustomSkillResponse":
         # Paths that withhold group ids from the response (user-facing) must
         # still pass grant existence so grants-shared skills aren't marked
@@ -77,6 +82,7 @@ class CustomSkillResponse(BaseModel):
             skill.built_in_skill_id is None and not skill.is_public and not grants_exist
         )
         return cls(
+            permissions=permissions or {},
             id=skill.id,
             slug=skill.slug,
             name=skill.name,

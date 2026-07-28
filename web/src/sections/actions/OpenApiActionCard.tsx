@@ -10,6 +10,7 @@ import { ToolSnapshot, ActionStatus, MethodSpec } from "@/lib/tools/interfaces";
 import ToolItem from "@/sections/actions/ToolItem";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
+import { can } from "@/lib/permissions/resource-actions";
 import { SvgServer, SvgTrash } from "@opal/icons";
 import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Button } from "@opal/components";
@@ -39,6 +40,12 @@ export default function OpenApiActionCard({
   const [searchQuery, setSearchQuery] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const deleteModal = useCreateModal();
+
+  // Affordances ride on the server-stamped map: edit gates manage/auth-config/rename,
+  // toggle gates enable/disable, delete is global MANAGE_ACTIONS.
+  const canEdit = can(tool, "edit");
+  const canDelete = can(tool, "delete");
+  const canToggle = can(tool, "toggle");
 
   const methodSpecs = useMemo<MethodSpec[]>(() => {
     try {
@@ -121,16 +128,21 @@ export default function OpenApiActionCard({
         toolCount={methodSpecs.length}
         isToolsExpanded={isToolsExpanded}
         onToggleTools={methodSpecs.length ? handleToggleTools : undefined}
-        onDisconnect={() => onOpenDisconnectModal?.(tool)}
-        onManage={onManage ? () => onManage(tool) : undefined}
-        onAuthenticate={() => {
-          onAuthenticate(tool);
-        }}
-        onReconnect={() => handleConnectionUpdate(true)}
-        onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
+        onDisconnect={
+          canToggle ? () => onOpenDisconnectModal?.(tool) : undefined
+        }
+        onManage={canEdit && onManage ? () => onManage(tool) : undefined}
+        onAuthenticate={canEdit ? () => onAuthenticate(tool) : undefined}
+        onReconnect={canToggle ? () => handleConnectionUpdate(true) : undefined}
+        onDelete={
+          canDelete && onDelete ? () => deleteModal.toggle(true) : undefined
+        }
       />
     ),
     [
+      canDelete,
+      canEdit,
+      canToggle,
       deleteModal,
       handleConnectionUpdate,
       handleToggleTools,
@@ -159,7 +171,7 @@ export default function OpenApiActionCard({
         icon={SvgServer}
         status={status}
         actions={actionsComponent}
-        onRename={handleRename}
+        onRename={canEdit ? handleRename : undefined}
         isExpanded={isToolsExpanded}
         onExpandedChange={setIsToolsExpanded}
         enableSearch={true}

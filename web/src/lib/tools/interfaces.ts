@@ -39,6 +39,8 @@ export interface MCPServer {
   status: MCPServerStatus;
   last_refreshed_at?: string;
   tool_count: number;
+  // Per-action affordance map for the requesting user (server-stamped, fail-closed).
+  permissions?: Record<string, boolean>;
 }
 
 export interface MCPServersResponse {
@@ -112,6 +114,9 @@ export interface ToolSnapshot {
   chat_selectable: boolean;
   agent_creation_selectable: boolean;
   default_enabled: boolean;
+
+  // Per-action affordance map for the requesting user (server-stamped, fail-closed).
+  permissions?: Record<string, boolean>;
 }
 
 export enum MCPAuthenticationType {

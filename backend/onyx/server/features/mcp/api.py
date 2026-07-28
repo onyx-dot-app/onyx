@@ -33,6 +33,7 @@ from onyx.auth.oauth_token_manager import build_oauth_authorization_url
 from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
 from onyx.auth.oauth_token_manager import OAuthFlowParams
 from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
+from onyx.auth.permission_projection import mcp_server_permissions
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
@@ -66,6 +67,8 @@ from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.db.models import Tool
 from onyx.db.models import User
+from onyx.db.tools import can_admin_mcp_server
+from onyx.db.tools import can_edit_mcp_server
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_mcp_server_agent_scope
@@ -1408,6 +1411,7 @@ def _db_mcp_server_to_api_mcp_server(
     db: Session,
     request_user: User | None,
     include_auth_config: bool = False,
+    permissions: dict[str, bool] | None = None,
 ) -> MCPServer:
     """Convert database MCP server to API model"""
 
@@ -1581,6 +1585,7 @@ def _db_mcp_server_to_api_mcp_server(
         auth_template=auth_template,
         user_credentials=user_credentials,
         admin_credentials=admin_credentials,
+        permissions=permissions or {},
     )
 
 
@@ -2371,9 +2376,18 @@ def get_mcp_servers_for_admin(
     try:
         db_mcp_servers = get_all_mcp_servers(db)
 
-        # Convert to API model format
+        # Stamp per-server affordances; edit/delete short-circuit for admins and owners, so
+        # only a scoped manager runs the per-server agent-scope query.
         mcp_servers = [
-            _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
+            _db_mcp_server_to_api_mcp_server(
+                db_server,
+                db,
+                request_user=user,
+                permissions=mcp_server_permissions(
+                    can_edit=can_edit_mcp_server(user, db_server, db),
+                    can_admin=can_admin_mcp_server(user, db_server),
+                ),
+            )
             for db_server in db_mcp_servers
         ]
 

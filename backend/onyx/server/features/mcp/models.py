@@ -455,6 +455,9 @@ class MCPServer(BaseModel):
         None,
         description="Admin's credential key-value pairs for template substitution and storage",
     )
+    # Per-action affordance map for the requesting user (mirrors the write-side guards).
+    # Defaults empty (fail-closed); the admin server list stamps the real map.
+    permissions: dict[str, bool] = Field(default_factory=dict)
 
 
 class MCPServersResponse(BaseModel):

@@ -8,8 +8,8 @@ interface CraftManageLayoutProps {
   children: React.ReactNode;
 }
 
-// Server-side admin-only gate (the /api/admin/* endpoints exclude curators,
-// unlike requireAdminAuth which allows them).
+// admin_capabilities + MANAGE_SKILLS (not effective_permissions) so a scoped skills
+// manager — whose admin routes are allow_scope=True — reaches the page, not just admins.
 export default async function CraftManageLayout({
   children,
 }: CraftManageLayoutProps) {
@@ -19,8 +19,8 @@ export default async function CraftManageLayout({
   }
   if (
     !hasPermission(
-      authResult.user?.effective_permissions ?? [],
-      Permission.FULL_ADMIN_PANEL_ACCESS
+      authResult.user?.admin_capabilities ?? [],
+      Permission.MANAGE_SKILLS
     )
   ) {
     return redirect("/craft/v1" as Route);

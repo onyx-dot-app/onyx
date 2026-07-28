@@ -9,6 +9,7 @@ import SkillSharePicker from "@/refresh-pages/admin/SkillsPage/SkillSharePicker"
 import { patchCustomSkill, replaceCustomSkillGrants } from "@/lib/skills/api";
 import { toast } from "@/hooks/useToast";
 import type { CustomSkill } from "@/refresh-pages/admin/SkillsPage/interfaces";
+import { can } from "@/lib/permissions/resource-actions";
 
 interface ShareSkillModalProps {
   skill: CustomSkill | null;
@@ -104,6 +105,7 @@ export default function ShareSkillModal({
               onIsPublicChange={setIsPublic}
               groupIds={groupIds}
               onGroupIdsChange={setGroupIds}
+              canPublish={can(skill, "publish")}
             />
             {skill.is_personal && (isPublic || groupIds.length > 0) && (
               <MessageCard
