@@ -1,35 +1,37 @@
-import os
+"""Facade over SharedSettings (shared_configs/settings.py).
+
+Constants keep their historical names so the hundreds of
+``from shared_configs.configs import X`` call sites are unaffected. The
+settings instance is constructed at module scope on purpose: reloading this
+module re-reads the environment (the seam ``monkeypatch.setenv`` +
+``importlib.reload`` tests rely on), while the TOML document itself stays
+memoized per path in settings_base.
+"""
+
 from typing import Any, List
 from urllib.parse import urlparse
+
+from shared_configs.settings import SharedSettings
 
 # Used for logging
 SLACK_CHANNEL_ID = "channel_id"
 
+_settings = SharedSettings()
+
 # Skip model warmup at startup
-# Default to True (skip warmup) if not set, otherwise respect the value
-SKIP_WARM_UP = os.environ.get("SKIP_WARM_UP", "true").lower() == "true"
+SKIP_WARM_UP = _settings.skip_warm_up
 
-# Check if model server is disabled
-DISABLE_MODEL_SERVER = os.environ.get("DISABLE_MODEL_SERVER", "").lower() == "true"
+# If the model server is disabled, hosts are the "disabled" sentinel so
+# downstream clients skip it (resolved inside SharedSettings).
+DISABLE_MODEL_SERVER = _settings.disable_model_server
+MODEL_SERVER_HOST = _settings.model_server_host
+MODEL_SERVER_ALLOWED_HOST = _settings.model_server_allowed_host
+INDEXING_MODEL_SERVER_HOST = _settings.indexing_model_server_host
 
-# If model server is disabled, use "disabled" as host to trigger proper handling
-if DISABLE_MODEL_SERVER:
-    MODEL_SERVER_HOST = "disabled"
-    MODEL_SERVER_ALLOWED_HOST = "disabled"
-    INDEXING_MODEL_SERVER_HOST = "disabled"
-else:
-    MODEL_SERVER_HOST = os.environ.get("MODEL_SERVER_HOST") or "localhost"
-    MODEL_SERVER_ALLOWED_HOST = os.environ.get("MODEL_SERVER_HOST") or "0.0.0.0"  # noqa: S104 — model server allowed-host default; intentional for containerized deployment
-    INDEXING_MODEL_SERVER_HOST = (
-        os.environ.get("INDEXING_MODEL_SERVER_HOST") or MODEL_SERVER_HOST
-    )
-
-MODEL_SERVER_PORT = int(os.environ.get("MODEL_SERVER_PORT") or "9000")
-# Model server for indexing should use a separate one to not allow indexing to introduce delay
-# for inference
-INDEXING_MODEL_SERVER_PORT = int(
-    os.environ.get("INDEXING_MODEL_SERVER_PORT") or MODEL_SERVER_PORT
-)
+MODEL_SERVER_PORT = _settings.model_server_port
+# Model server for indexing should use a separate one to not allow indexing to
+# introduce delay for inference
+INDEXING_MODEL_SERVER_PORT = _settings.indexing_model_server_port
 
 # Onyx custom Deep Learning Models
 CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
@@ -45,50 +47,45 @@ ALT_INDEX_SUFFIX = "__danswer_alt_index"
 
 # Used for loading defaults for automatic deployments and dev flows
 # For local, use: mixedbread-ai/mxbai-rerank-xsmall-v1
-DEFAULT_CROSS_ENCODER_MODEL_NAME = (
-    os.environ.get("DEFAULT_CROSS_ENCODER_MODEL_NAME") or None
-)
-DEFAULT_CROSS_ENCODER_API_KEY = os.environ.get("DEFAULT_CROSS_ENCODER_API_KEY") or None
-DEFAULT_CROSS_ENCODER_PROVIDER_TYPE = (
-    os.environ.get("DEFAULT_CROSS_ENCODER_PROVIDER_TYPE") or None
-)
-DISABLE_RERANK_FOR_STREAMING = (
-    os.environ.get("DISABLE_RERANK_FOR_STREAMING", "").lower() == "true"
-)
+DEFAULT_CROSS_ENCODER_MODEL_NAME = _settings.default_cross_encoder_model_name
+DEFAULT_CROSS_ENCODER_API_KEY = _settings.default_cross_encoder_api_key
+DEFAULT_CROSS_ENCODER_PROVIDER_TYPE = _settings.default_cross_encoder_provider_type
+DISABLE_RERANK_FOR_STREAMING = _settings.disable_rerank_for_streaming
 
-# This controls the minimum number of pytorch "threads" to allocate to the embedding
-# model. If torch finds more threads on its own, this value is not used.
-MIN_THREADS_ML_MODELS = int(os.environ.get("MIN_THREADS_ML_MODELS") or 1)
+# This controls the minimum number of pytorch "threads" to allocate to the
+# embedding model. If torch finds more threads on its own, this value is not
+# used.
+MIN_THREADS_ML_MODELS = _settings.min_threads_ml_models
 
-# Model server that has indexing only set will throw exception if used for reranking
-# or intent classification
-INDEXING_ONLY = os.environ.get("INDEXING_ONLY", "").lower() == "true"
+# Model server that has indexing only set will throw exception if used for
+# reranking or intent classification
+INDEXING_ONLY = _settings.indexing_only
 
 # The process needs to have this for the log file to write to
 # otherwise, it will not create additional log files
 # This should just be the filename base without extension or path.
-LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "onyx"
+LOG_FILE_NAME = _settings.log_file_name
 
 # Enable generating persistent log files for local dev environments
-DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true"
-# File logging is on by default. Set LOG_TO_FILE=false to disable it for a given
-# pod/process — it then logs to stdout only (e.g. read-only-root containers where
-# /var/log/onyx isn't writable).
-LOG_TO_FILE = os.environ.get("LOG_TO_FILE", "true").lower() != "false"
+DEV_LOGGING_ENABLED = _settings.dev_logging_enabled
+# File logging is on by default. Set LOG_TO_FILE=false to disable it for a
+# given pod/process — it then logs to stdout only (e.g. read-only-root
+# containers where /var/log/onyx isn't writable).
+LOG_TO_FILE = _settings.log_to_file
 # notset, debug, info, notice, warning, error, or critical
-LOG_LEVEL = os.environ.get("LOG_LEVEL") or "info"
+LOG_LEVEL = _settings.log_level
 
-# Log output format: "plain" (human-readable text, default) or "json" (structured
-# single-line JSON, suitable for container log aggregators). When "json", context
-# such as tenant/request/task ids are emitted as discrete fields rather than being
-# prefixed into the message string.
-LOG_FORMAT = (os.environ.get("LOG_FORMAT") or "plain").lower()
+# Log output format: "plain" (human-readable text, default) or "json"
+# (structured single-line JSON, suitable for container log aggregators). When
+# "json", context such as tenant/request/task ids are emitted as discrete
+# fields rather than being prefixed into the message string.
+LOG_FORMAT = _settings.log_format
 JSON_LOGGING = LOG_FORMAT == "json"
 
 # Timeout for API-based embedding models
 # NOTE: does not apply for Google VertexAI, since the python client doesn't
 # allow us to specify a custom timeout
-API_BASED_EMBEDDING_TIMEOUT = int(os.environ.get("API_BASED_EMBEDDING_TIMEOUT", "600"))
+API_BASED_EMBEDDING_TIMEOUT = _settings.api_based_embedding_timeout
 
 # Timeouts for requests to the self-hosted model server (embedding / rerank /
 # intent). The connect timeout fails fast on an unreachable server; the read
@@ -97,35 +94,29 @@ API_BASED_EMBEDDING_TIMEOUT = int(os.environ.get("API_BASED_EMBEDDING_TIMEOUT", 
 # requests.post (observed wedging every docprocessing thread for hours during
 # an upgrade). Reads are generous because CPU embedding of large batches can
 # legitimately take minutes.
-MODEL_SERVER_CONNECT_TIMEOUT = int(os.environ.get("MODEL_SERVER_CONNECT_TIMEOUT", "30"))
-MODEL_SERVER_READ_TIMEOUT = int(os.environ.get("MODEL_SERVER_READ_TIMEOUT", "600"))
+MODEL_SERVER_CONNECT_TIMEOUT = _settings.model_server_connect_timeout
+MODEL_SERVER_READ_TIMEOUT = _settings.model_server_read_timeout
 
-# Local batch size for VertexAI embedding models currently calibrated for item size of 512 tokens
-# NOTE: increasing this value may lead to API errors due to token limit exhaustion per call.
-VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE = int(
-    os.environ.get("VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", "50")
-)
+# Local batch size for VertexAI embedding models currently calibrated for item
+# size of 512 tokens
+# NOTE: increasing this value may lead to API errors due to token limit
+# exhaustion per call.
+VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE = _settings.vertexai_embedding_local_batch_size
 
 # Only used for OpenAI
-OPENAI_EMBEDDING_TIMEOUT = int(
-    os.environ.get("OPENAI_EMBEDDING_TIMEOUT", API_BASED_EMBEDDING_TIMEOUT)
-)
+OPENAI_EMBEDDING_TIMEOUT = _settings.openai_embedding_timeout
 
 # Whether or not to strictly enforce token limit for chunking.
-STRICT_CHUNK_TOKEN_LIMIT = (
-    os.environ.get("STRICT_CHUNK_TOKEN_LIMIT", "").lower() == "true"
-)
+STRICT_CHUNK_TOKEN_LIMIT = _settings.strict_chunk_token_limit
 
 # Set up Sentry integration (for error logging)
-SENTRY_DSN = os.environ.get("SENTRY_DSN")
+SENTRY_DSN = _settings.sentry_dsn
 
 # Celery task spans dominate ingestion volume (~94%), so default celery
 # tracing to 0. Web/API traces stay at a small non-zero rate so http.server
 # traces remain available. Both are env-tunable without a code change.
-SENTRY_TRACES_SAMPLE_RATE = float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.01"))
-SENTRY_CELERY_TRACES_SAMPLE_RATE = float(
-    os.environ.get("SENTRY_CELERY_TRACES_SAMPLE_RATE", "0.0")
-)
+SENTRY_TRACES_SAMPLE_RATE = _settings.sentry_traces_sample_rate
+SENTRY_CELERY_TRACES_SAMPLE_RATE = _settings.sentry_celery_traces_sample_rate
 
 
 # Fields which should only be set on new search setting
@@ -158,7 +149,7 @@ def validate_cors_origin(origin: str) -> None:
 # - "http://example.com" (single origin)
 # - "http://example.com,https://example.org" (multiple origins)
 # - "*" (allow all origins, credentials disabled)
-CORS_ALLOWED_ORIGIN_ENV = os.environ.get("CORS_ALLOWED_ORIGIN", "")
+CORS_ALLOWED_ORIGIN_ENV = _settings.cors_allowed_origin
 
 
 def parse_cors_allowed_origins(env_value: str) -> List[str]:
@@ -186,15 +177,13 @@ CORS_ALLOW_CREDENTIALS: bool = cors_allow_credentials(CORS_ALLOWED_ORIGIN)
 
 
 # Multi-tenancy configuration
-MULTI_TENANT = os.environ.get("MULTI_TENANT", "").lower() == "true"
+MULTI_TENANT = _settings.multi_tenant
 
-# Outside this file, should almost always use `POSTGRES_DEFAULT_SCHEMA` unless you
-# have a very good reason
+# Outside this file, should almost always use `POSTGRES_DEFAULT_SCHEMA` unless
+# you have a very good reason
 POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE = "public"
-POSTGRES_DEFAULT_SCHEMA = (
-    os.environ.get("POSTGRES_DEFAULT_SCHEMA") or POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-)
-DEFAULT_REDIS_PREFIX = os.environ.get("DEFAULT_REDIS_PREFIX") or "default"
+POSTGRES_DEFAULT_SCHEMA = _settings.postgres_default_schema
+DEFAULT_REDIS_PREFIX = _settings.default_redis_prefix
 
 
 async def async_return_default_schema(
@@ -207,7 +196,7 @@ async def async_return_default_schema(
 # Prefix used for all tenant ids
 TENANT_ID_PREFIX = "tenant_"
 
-DISALLOWED_SLACK_BOT_TENANT_IDS = os.environ.get("DISALLOWED_SLACK_BOT_TENANT_IDS")
+DISALLOWED_SLACK_BOT_TENANT_IDS = _settings.disallowed_slack_bot_tenant_ids
 DISALLOWED_SLACK_BOT_TENANT_LIST = (
     [
         tenant.strip()
@@ -218,7 +207,7 @@ DISALLOWED_SLACK_BOT_TENANT_LIST = (
     else None
 )
 
-IGNORED_SYNCING_TENANT_IDS = os.environ.get("IGNORED_SYNCING_TENANT_IDS")
+IGNORED_SYNCING_TENANT_IDS = _settings.ignored_syncing_tenant_ids
 IGNORED_SYNCING_TENANT_LIST = (
     [
         tenant.strip()
@@ -229,48 +218,31 @@ IGNORED_SYNCING_TENANT_LIST = (
     else None
 )
 
-ENVIRONMENT = os.environ.get("ENVIRONMENT") or "not_explicitly_set"
+ENVIRONMENT = _settings.environment
 
 
 #####
 # Usage Limits Configuration (meant for cloud, off by default for self-hosted)
 #####
 # Whether usage limits are enforced (defaults to MULTI_TENANT value)
-_USAGE_LIMITS_ENABLED_RAW = os.environ.get("USAGE_LIMITS_ENABLED")
-if _USAGE_LIMITS_ENABLED_RAW is not None:
-    USAGE_LIMITS_ENABLED = _USAGE_LIMITS_ENABLED_RAW.lower() == "true"
-else:
-    # Default: enabled on cloud (MULTI_TENANT), disabled for self-hosted
-    USAGE_LIMITS_ENABLED = MULTI_TENANT
+USAGE_LIMITS_ENABLED = _settings.usage_limits_enabled
 
 # Usage limit window in seconds (default: 1 week = 604800 seconds)
-USAGE_LIMIT_WINDOW_SECONDS = int(os.environ.get("USAGE_LIMIT_WINDOW_SECONDS", "604800"))
+USAGE_LIMIT_WINDOW_SECONDS = _settings.usage_limit_window_seconds
 
 # Per-week LLM usage cost limits in cents (e.g., 1000 = $10.00)
 # Trial users get lower limits than paid users
-USAGE_LIMIT_LLM_COST_CENTS_TRIAL = int(
-    os.environ.get("USAGE_LIMIT_LLM_COST_CENTS_TRIAL", "3200")  # $32.00 default
-)
-USAGE_LIMIT_LLM_COST_CENTS_PAID = int(
-    os.environ.get("USAGE_LIMIT_LLM_COST_CENTS_PAID", "6400")  # $64.00 default
-)
+USAGE_LIMIT_LLM_COST_CENTS_TRIAL = _settings.usage_limit_llm_cost_cents_trial
+USAGE_LIMIT_LLM_COST_CENTS_PAID = _settings.usage_limit_llm_cost_cents_paid
 
 # Per-week chunks indexed limits
-USAGE_LIMIT_CHUNKS_INDEXED_TRIAL = int(
-    os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_TRIAL", 400_000)
-)
-USAGE_LIMIT_CHUNKS_INDEXED_PAID = int(
-    os.environ.get("USAGE_LIMIT_CHUNKS_INDEXED_PAID", 4_000_000)
-)
+USAGE_LIMIT_CHUNKS_INDEXED_TRIAL = _settings.usage_limit_chunks_indexed_trial
+USAGE_LIMIT_CHUNKS_INDEXED_PAID = _settings.usage_limit_chunks_indexed_paid
 
 # Per-week API calls using API keys or Personal Access Tokens
-USAGE_LIMIT_API_CALLS_TRIAL = int(os.environ.get("USAGE_LIMIT_API_CALLS_TRIAL", "0"))
-USAGE_LIMIT_API_CALLS_PAID = int(os.environ.get("USAGE_LIMIT_API_CALLS_PAID", "40000"))
+USAGE_LIMIT_API_CALLS_TRIAL = _settings.usage_limit_api_calls_trial
+USAGE_LIMIT_API_CALLS_PAID = _settings.usage_limit_api_calls_paid
 
 # Per-week non-streaming API calls (more expensive, so lower limits)
-USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL = int(
-    os.environ.get("USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL", "0")
-)
-USAGE_LIMIT_NON_STREAMING_CALLS_PAID = int(
-    os.environ.get("USAGE_LIMIT_NON_STREAMING_CALLS_PAID", "160")
-)
+USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL = _settings.usage_limit_non_streaming_calls_trial
+USAGE_LIMIT_NON_STREAMING_CALLS_PAID = _settings.usage_limit_non_streaming_calls_paid
