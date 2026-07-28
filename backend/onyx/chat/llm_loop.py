@@ -75,7 +75,7 @@ from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
 from onyx.tools.utils import compute_all_tool_tokens
-from onyx.tracing.framework.create import TraceMetadata, trace
+from onyx.tracing.framework.create import ChatTraceMetadata, trace
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -663,7 +663,7 @@ def run_llm_loop(
     with trace(
         "run_llm_loop",
         group_id=chat_session_id,
-        metadata=TraceMetadata(
+        metadata=ChatTraceMetadata(
             chat_session_id=chat_session_id,
             user_id=user_identity.user_id if user_identity else None,
         ).model_dump(),

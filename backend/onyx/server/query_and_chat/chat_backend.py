@@ -115,7 +115,7 @@ from onyx.server.usage_limits import (
     is_usage_limits_enabled,
 )
 from onyx.server.utils import get_json_line
-from onyx.tracing.framework.create import TraceMetadata, ensure_trace
+from onyx.tracing.framework.create import ChatTraceMetadata, ensure_trace
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -514,7 +514,7 @@ def rename_chat_session(
     with ensure_trace(
         "chat_session_naming",
         group_id=str(chat_session_id),
-        metadata=TraceMetadata(
+        metadata=ChatTraceMetadata(
             chat_session_id=str(chat_session_id),
             user_id=str(user_id) if user_id else None,
         ).model_dump(),

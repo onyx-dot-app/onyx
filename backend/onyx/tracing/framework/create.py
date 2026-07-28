@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 logger = setup_logger(__name__)
 
 
-class TraceMetadata(BaseModel):
+class ChatTraceMetadata(BaseModel):
     tenant_id: str = Field(default_factory=get_current_tenant_id)
     chat_session_id: str | None = None
     user_id: str | None = None

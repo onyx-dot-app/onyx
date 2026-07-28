@@ -70,7 +70,7 @@ from onyx.tools.models import ToolCallInfo, ToolCallKickoff
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from onyx.tracing.framework.create import TraceMetadata, function_span, trace
+from onyx.tracing.framework.create import ChatTraceMetadata, function_span, trace
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
@@ -214,7 +214,7 @@ def run_deep_research_llm_loop(
     with trace(
         "run_deep_research_llm_loop",
         group_id=chat_session_id,
-        metadata=TraceMetadata(
+        metadata=ChatTraceMetadata(
             chat_session_id=chat_session_id,
             user_id=user_identity.user_id if user_identity else None,
         ).model_dump(),

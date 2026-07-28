@@ -34,7 +34,7 @@ from onyx.prompts.compression_prompts import (
     USER_REMINDER,
 )
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.create import TraceMetadata, ensure_trace
+from onyx.tracing.framework.create import ChatTraceMetadata, ensure_trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
@@ -387,7 +387,7 @@ def compress_chat_history(
     with ensure_trace(
         "chat_history_compression",
         group_id=str(chat_session_id),
-        metadata=TraceMetadata(chat_session_id=str(chat_session_id)).model_dump(),
+        metadata=ChatTraceMetadata(chat_session_id=str(chat_session_id)).model_dump(),
     ):
         try:
             # Read phase: existing summary + tool name map. Closed before LLM call.
