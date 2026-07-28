@@ -92,7 +92,10 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	if err := in.resolveDockerProblems(ctx, in.gatherPreflight(ctx)); err != nil {
 		return err
 	}
-	if err := in.guardServicesStopped(ctx); err != nil {
+	// Upgrading inherently restarts the deployment, and stopping loses no
+	// data — do it automatically instead of bouncing the user to another
+	// command.
+	if err := in.guardServicesStopped(ctx, true); err != nil {
 		return err
 	}
 

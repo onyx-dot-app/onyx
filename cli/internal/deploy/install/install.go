@@ -136,7 +136,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		if err := in.resolveDockerProblems(ctx, pre); err != nil {
 			return err
 		}
-		if err := in.guardServicesStopped(ctx); err != nil {
+		if err := in.guardServicesStopped(ctx, in.opts.Force && in.prompt.AssumeDefaults); err != nil {
 			return err
 		}
 		// The mode never changes implicitly on a rerun: the recorded mode
@@ -623,7 +623,7 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 // interactive runs offer to stop them right here; non-interactive runs
 // refuse with the remedy in the error itself (install.sh printed
 // "./install.sh --shutdown", which doesn't exist after curl|bash).
-func (in *installer) guardServicesStopped(ctx context.Context) error {
+func (in *installer) guardServicesStopped(ctx context.Context, autoStop bool) error {
 	files := in.composeFileNames(true)
 	cmd := in.compose.Command(in.deploymentDir(), stopFallbackEnv(), files, "ps", "-q")
 	res, err := in.deps.Runner.Run(ctx, cmd)
@@ -631,9 +631,14 @@ func (in *installer) guardServicesStopped(ctx context.Context) error {
 		return nil
 	}
 
+	if autoStop {
+		in.infof("Stopping the running services first (they restart at the end)...")
+		return in.stopRunningServices(ctx, files)
+	}
+
 	if in.prompt.AssumeDefaults {
 		return exitcodes.New(exitcodes.General,
-			"Onyx services are running — stop them first with `onyx-cli deploy stop`, then re-run")
+			"Onyx services are running — stop them first with `onyx-cli deploy stop` (or pass --force to stop them automatically), then re-run")
 	}
 
 	choice, err := in.selectOne("Onyx is already running. Reconfiguring needs the services stopped.",
@@ -650,6 +655,10 @@ func (in *installer) guardServicesStopped(ctx context.Context) error {
 	}
 
 	in.infof("Stopping Onyx services...")
+	return in.stopRunningServices(ctx, files)
+}
+
+func (in *installer) stopRunningServices(ctx context.Context, files []string) error {
 	stop := in.compose.Command(in.deploymentDir(), stopFallbackEnv(), files, "stop")
 	if in.wiz == nil {
 		stop.Stdout, stop.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut

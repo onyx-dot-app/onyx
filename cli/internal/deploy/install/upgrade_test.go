@@ -131,7 +131,7 @@ func TestUpgradeRequiresExistingInstall(t *testing.T) {
 	}
 }
 
-func TestUpgradeRefusesWhileRunning(t *testing.T) {
+func TestUpgradeAutoStopsRunningServices(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.0.0")
 
@@ -145,11 +145,17 @@ func TestUpgradeRefusesWhileRunning(t *testing.T) {
 	err := RunUpgrade(context.Background(), deps, Options{
 		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
 	})
-	if err == nil {
-		t.Fatal("expected refusal while services run")
+	if err != nil {
+		t.Fatalf("upgrade must auto-stop running services: %v", err)
 	}
-	if !strings.Contains(err.Error(), "onyx-cli deploy stop") {
-		t.Errorf("guard error must carry the remedy: %v", err)
+	stopped := false
+	for _, c := range running.calls {
+		if strings.HasSuffix(argv(c), " stop") {
+			stopped = true
+		}
+	}
+	if !stopped {
+		t.Error("compose stop never ran before the upgrade")
 	}
 }
 
