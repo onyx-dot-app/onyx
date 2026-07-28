@@ -8,12 +8,15 @@ from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
-    GatewayModelConfig,
 )
 from onyx.server.features.build.sandbox.util.mcp_config import craft_mcp_fingerprint
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_base_config,
     build_provider_opencode_config,
+)
+from onyx.server.gateway.models import (
+    GatewayModelCapabilities,
+    GatewayModelDescriptor,
 )
 
 
@@ -25,11 +28,19 @@ def _gateway(*, default: str = "7/gpt-5.5") -> CraftLLMProviderConfig:
         api_base="https://onyx.test/api/gateway/v1",
         display_name="Onyx",
         models=[
-            GatewayModelConfig(id="7/gpt-5.5", display_name="GPT-5.5"),
-            GatewayModelConfig(
+            GatewayModelDescriptor(
+                id="7/gpt-5.5",
+                display_name="GPT-5.5",
+                provider="openai",
+            ),
+            GatewayModelDescriptor(
                 id="9/claude-opus-4-8",
                 display_name="Claude Opus 4.8",
-                supports_reasoning=True,
+                provider="anthropic",
+                capabilities=GatewayModelCapabilities(
+                    input_modalities=("text", "image"),
+                    supports_reasoning=True,
+                ),
                 max_input_tokens=200_000,
             ),
         ],
@@ -60,6 +71,73 @@ def test_gateway_is_the_only_enabled_provider() -> None:
     assert provider["models"]["9/claude-opus-4-8"]["limit"] == {
         "context": 200_000,
         "output": 128_000,
+    }
+    assert provider["models"]["7/gpt-5.5"] == {
+        "name": "GPT-5.5",
+        "attachment": False,
+        "reasoning": False,
+        "temperature": False,
+        "tool_call": True,
+        "modalities": {
+            "input": ["text"],
+            "output": ["text"],
+        },
+    }
+    assert provider["models"]["9/claude-opus-4-8"] == {
+        "name": "Claude Opus 4.8",
+        "attachment": True,
+        "reasoning": True,
+        "temperature": False,
+        "tool_call": True,
+        "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"],
+        },
+        "options": {"reasoningEffort": "high"},
+        "limit": {
+            "context": 200_000,
+            "output": 128_000,
+        },
+    }
+
+
+def test_gateway_capabilities_are_adapted_instead_of_hardcoded() -> None:
+    gateway = CraftLLMProviderConfig(
+        provider="onyx",
+        model_name="4/custom-model",
+        api_key=None,
+        api_base="https://onyx.test/api/gateway/v1",
+        models=[
+            GatewayModelDescriptor(
+                id="4/custom-model",
+                display_name="Custom Model",
+                provider="custom",
+                capabilities=GatewayModelCapabilities(
+                    input_modalities=("text", "image", "pdf"),
+                    output_modalities=("text", "audio"),
+                    supports_tool_calls=False,
+                    supports_temperature=True,
+                    supports_interleaved_reasoning=True,
+                ),
+            )
+        ],
+    )
+
+    model = build_provider_opencode_config(gateway)["provider"]["onyx"]["models"][
+        "4/custom-model"
+    ]
+
+    assert model == {
+        "name": "Custom Model",
+        "attachment": True,
+        "reasoning": False,
+        "temperature": True,
+        "tool_call": False,
+        "interleaved": True,
+        "modalities": {
+            "input": ["text", "image", "pdf"],
+            "output": ["text", "audio"],
+        },
     }
 
 

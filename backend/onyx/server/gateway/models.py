@@ -1,8 +1,38 @@
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
+
+GatewayModality: TypeAlias = Literal["text", "audio", "image", "video", "pdf"]
+
+
+class GatewayModelCapabilities(BaseModel):
+    """Effective capabilities exposed by the Onyx OpenAI-compatible gateway."""
+
+    model_config = ConfigDict(frozen=True)
+
+    input_modalities: tuple[GatewayModality, ...] = ("text",)
+    output_modalities: tuple[GatewayModality, ...] = ("text",)
+    supports_reasoning: bool = False
+    supports_tool_calls: bool = True
+    supports_temperature: bool = False
+    supports_interleaved_reasoning: bool = False
+
+
+class GatewayModelDescriptor(BaseModel):
+    """Provider-neutral model metadata shared by gateway protocol adapters."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    display_name: str
+    provider: str
+    capabilities: GatewayModelCapabilities = Field(
+        default_factory=GatewayModelCapabilities
+    )
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
 
 
 class ChatCompletionRequest(BaseModel):
