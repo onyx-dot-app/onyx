@@ -25,6 +25,7 @@ from ee.onyx.server.user_group.models import UserGroup
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupRename
 from ee.onyx.server.user_group.models import UserGroupUpdate
+from onyx.auth.permission_projection import user_group_permissions
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
@@ -33,6 +34,7 @@ from onyx.auth.permissions import PermissionRegistryEntry
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_manages_group
 from onyx.auth.scoped_permissions import get_scoped_groups
+from onyx.auth.scoped_permissions import manages_group
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
@@ -61,10 +63,17 @@ def list_user_groups(
     # implies it) sees every group; a scoped manager sees only the groups they
     # manage. The group list has no built-in membership filter, so restrict it here
     # or a manager would see the whole org.
+    # Resolve the manager's scope + global authority once; per-group stamping is then
+    # pure set math (manages_group with a preloaded set issues no query).
+    managed_group_ids = get_scoped_groups(
+        user, db_session, Permission.MANAGE_USER_GROUPS
+    )
+    is_user_groups_admin = has_global_permission(user, Permission.MANAGE_USER_GROUPS)
+    is_full_admin = has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
     restrict_to_group_ids = (
         None
         if has_global_permission(user, Permission.READ_USER_GROUPS)
-        else get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS)
+        else managed_group_ids
     )
     user_groups = fetch_user_groups(
         db_session,
@@ -75,7 +84,20 @@ def list_user_groups(
     )
     mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
-        UserGroup.from_model(user_group, mask_credential_prefix=mask_credential_prefix)
+        UserGroup.from_model(
+            user_group,
+            mask_credential_prefix=mask_credential_prefix,
+            permissions=user_group_permissions(
+                can_manage=manages_group(
+                    user,
+                    db_session,
+                    group_id=user_group.id,
+                    managed_group_ids=managed_group_ids,
+                ),
+                is_user_groups_admin=is_user_groups_admin,
+                is_full_admin=is_full_admin,
+            ),
+        )
         for user_group in user_groups
     ]
 

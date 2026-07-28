@@ -302,6 +302,25 @@ async function saveGroupPermissions(
   }
 }
 
+// Make/revoke a member as a manager of the group (dedicated PR5 endpoint).
+async function setGroupManager(
+  groupId: number,
+  userId: string,
+  isManager: boolean
+): Promise<void> {
+  const res = await fetch(`${USER_GROUP_URL}/${groupId}/manager`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId, is_manager: isManager }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(
+      detail?.detail ?? `Failed to update group manager: ${res.statusText}`
+    );
+  }
+}
+
 export {
   renameGroup,
   createGroup,
@@ -311,4 +330,5 @@ export {
   updateDocSetGroupSharing,
   saveTokenLimits,
   saveGroupPermissions,
+  setGroupManager,
 };

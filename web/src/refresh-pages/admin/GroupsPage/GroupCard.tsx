@@ -18,6 +18,7 @@ import { renameGroup } from "./svc";
 import { toast } from "@/hooks/useToast";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { can } from "@/lib/permissions/resource-actions";
 
 interface GroupCardProps {
   group: UserGroup;
@@ -30,6 +31,8 @@ function GroupCard({ group }: GroupCardProps) {
   const isAdmin = group.name === "Admin";
   const isBasic = group.name === "Basic";
   const isSyncing = !group.is_up_to_date;
+  // Per-group manage gate: rename and the row → edit entry are manages_group (M).
+  const canManage = can(group, "manage");
 
   async function handleRename(newName: string) {
     try {
@@ -51,8 +54,10 @@ function GroupCard({ group }: GroupCardProps) {
         sizePreset="main-content"
         variant="section"
         tag={isBasic ? { title: "Default" } : undefined}
-        editable={!builtIn && !isSyncing}
-        onTitleChange={!builtIn && !isSyncing ? handleRename : undefined}
+        editable={!builtIn && !isSyncing && canManage}
+        onTitleChange={
+          !builtIn && !isSyncing && canManage ? handleRename : undefined
+        }
         rightChildren={
           <Section flexDirection="row" alignItems="start" gap={0}>
             <div className="py-1">
@@ -62,13 +67,17 @@ function GroupCard({ group }: GroupCardProps) {
                 )}
               </Text>
             </div>
-            <Button
-              icon={SvgChevronRight}
-              prominence="tertiary"
-              tooltip="View group"
-              aria-label="View group"
-              onClick={() => router.push(`/admin/groups/${group.id}` as Route)}
-            />
+            {canManage && (
+              <Button
+                icon={SvgChevronRight}
+                prominence="tertiary"
+                tooltip="View group"
+                aria-label="View group"
+                onClick={() =>
+                  router.push(`/admin/groups/${group.id}` as Route)
+                }
+              />
+            )}
           </Section>
         }
       />

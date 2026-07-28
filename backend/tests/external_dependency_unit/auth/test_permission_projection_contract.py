@@ -23,6 +23,8 @@ from onyx.auth.permission_projection import PERSONA_ACTIONS
 from onyx.auth.permission_projection import persona_permissions
 from onyx.auth.permission_projection import TOOL_ACTIONS
 from onyx.auth.permission_projection import tool_permissions
+from onyx.auth.permission_projection import USER_GROUP_ACTIONS
+from onyx.auth.permission_projection import user_group_permissions
 from onyx.auth.permissions import has_global_permission
 from onyx.auth.scoped_permissions import assert_manages_group
 from onyx.auth.scoped_permissions import assert_within_scope
@@ -651,3 +653,78 @@ def test_actions_and_skill_key_coverage() -> None:
             can_edit=True, is_full_admin=True, is_skills_admin=True
         )
     ) == set(CUSTOM_SKILL_ACTIONS)
+
+
+def test_user_group_projection_matches_gates(db_session: Session) -> None:
+    """manage tracks the real assert_manages_group guard (per-group); delete tracks global
+    MANAGE_USER_GROUPS; edit_permissions/edit_token_limits track FULL_ADMIN. The scoped
+    token-limit create (assert_within_scope on the group) equals manage, so the add-limit
+    affordance rides on manage."""
+    managed = _make_group(db_session)
+
+    in_scope = create_test_user(db_session, "proj-ug-in")
+    _manage(db_session, in_scope, managed)
+    in_scope.effective_permissions = []
+
+    out_scope = create_test_user(db_session, "proj-ug-out")
+    _manage(db_session, out_scope, _make_group(db_session))
+    out_scope.effective_permissions = []
+
+    admin = create_test_user(db_session, "proj-ug-admin", is_admin=True)
+    db_session.commit()
+
+    for actor in (in_scope, out_scope, admin):
+        manage_enforced = not _guard_raises(
+            assert_manages_group, actor, db_session, group_id=managed.id
+        )
+        # the token-limit POST guard (scoped create) is the same managed-scope decision
+        token_create_enforced = not _guard_raises(
+            assert_within_scope,
+            actor,
+            db_session,
+            permission=Permission.MANAGE_USER_GROUPS,
+            current_group_ids=[managed.id],
+            requested_group_ids=[managed.id],
+            is_non_public=True,
+        )
+        can_manage = manages_group(actor, db_session, group_id=managed.id)
+        assert can_manage == manage_enforced, actor.email
+        assert can_manage == token_create_enforced, actor.email
+
+        is_user_groups_admin = has_global_permission(
+            actor, Permission.MANAGE_USER_GROUPS
+        )
+        is_full_admin = has_global_permission(actor, Permission.FULL_ADMIN_PANEL_ACCESS)
+        tags = user_group_permissions(
+            can_manage=can_manage,
+            is_user_groups_admin=is_user_groups_admin,
+            is_full_admin=is_full_admin,
+        )
+        assert tags["manage"] == manage_enforced
+        assert tags["delete"] == is_user_groups_admin  # A — global MANAGE_USER_GROUPS
+        assert tags["edit_permissions"] == is_full_admin  # A — FULL_ADMIN
+        assert tags["edit_token_limits"] == is_full_admin  # A — FULL_ADMIN
+
+    # the fix: an in-scope manager manages their group but can't delete/edit-perms/tokens
+    assert user_group_permissions(
+        can_manage=manages_group(in_scope, db_session, group_id=managed.id),
+        is_user_groups_admin=has_global_permission(
+            in_scope, Permission.MANAGE_USER_GROUPS
+        ),
+        is_full_admin=has_global_permission(
+            in_scope, Permission.FULL_ADMIN_PANEL_ACCESS
+        ),
+    ) == {
+        "manage": True,
+        "delete": False,
+        "edit_permissions": False,
+        "edit_token_limits": False,
+    }
+
+
+def test_user_group_key_coverage() -> None:
+    assert set(
+        user_group_permissions(
+            can_manage=True, is_user_groups_admin=True, is_full_admin=True
+        )
+    ) == set(USER_GROUP_ACTIONS)

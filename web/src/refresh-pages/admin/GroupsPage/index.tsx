@@ -9,7 +9,10 @@ import { Button, MessageCard } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
+import { Permission } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
 import GroupsList from "./GroupsList";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { IllustrationContent } from "@opal/layouts";
@@ -18,6 +21,15 @@ import SvgNoResult from "@opal/illustrations/no-result";
 function GroupsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const { user } = useUser();
+
+  // Creating a group is global-only (the create route has no allow_scope), so gate on
+  // the global token — not admin_capabilities, which would show it to scoped managers
+  // who would then 403.
+  const canCreateGroup = hasPermission(
+    user?.effective_permissions ?? [],
+    Permission.MANAGE_USER_GROUPS
+  );
 
   const {
     data: groups,
@@ -58,8 +70,12 @@ function GroupsPage() {
           onSearchQueryChange={setSearchQuery}
           placeholder="Search groups..."
           emptyStateText="Create groups to organize users and manage access."
-          onAction={() => router.push("/admin/groups/create" as Route)}
-          actionLabel="New Group"
+          onAction={
+            canCreateGroup
+              ? () => router.push("/admin/groups/create" as Route)
+              : undefined
+          }
+          actionLabel={canCreateGroup ? "New Group" : undefined}
         />
 
         {isLoading && <SvgSimpleLoader />}

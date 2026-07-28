@@ -551,6 +551,8 @@ export interface UserGroup {
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
   is_default: boolean;
+  // Per-action affordance map for the requesting user (server-stamped, fail-closed).
+  permissions?: Record<string, boolean>;
 }
 
 export enum ValidSources {

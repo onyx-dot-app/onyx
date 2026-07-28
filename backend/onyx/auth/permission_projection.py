@@ -134,3 +134,25 @@ def custom_skill_permissions(
         "delete": is_full_admin,
         "publish": is_skills_admin,
     }
+
+
+USER_GROUP_ACTIONS: frozenset[str] = frozenset(
+    {"manage", "delete", "edit_permissions", "edit_token_limits"}
+)
+
+
+def user_group_permissions(
+    *, can_manage: bool, is_user_groups_admin: bool, is_full_admin: bool
+) -> dict[str, bool]:
+    """User group affordance map. ``manage`` (rename, membership, assign agents, set
+    manager) is the per-group ``manages_group`` decision — group in the manager's managed
+    set, or global MANAGE_USER_GROUPS. ``delete`` needs global MANAGE_USER_GROUPS (its
+    route has no ``allow_scope``). ``edit_permissions`` and ``edit_token_limits`` are
+    FULL_ADMIN (the permission-toggle route and the token-limit PUT/DELETE routes require
+    it); the scoped token-limit create folds into ``manage``."""
+    return {
+        "manage": can_manage,
+        "delete": is_user_groups_admin,
+        "edit_permissions": is_full_admin,
+        "edit_token_limits": is_full_admin,
+    }

@@ -12,6 +12,7 @@ import {
   SvgMinusCircle,
   SvgPlusCircle,
   SvgSimpleLoader,
+  SvgShield,
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -38,13 +39,14 @@ import {
   updateDocSetGroupSharing,
   saveTokenLimits,
   saveGroupPermissions,
+  setGroupManager,
 } from "./svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
 import GroupPermissionsSection from "./GroupPermissionsSection";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
-import { useUser } from "@/providers/UserProvider";
+import { can } from "@/lib/permissions/resource-actions";
 
 const addModeColumns = memberTableColumns;
 
@@ -67,7 +69,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const tokenLimitsDisabledTooltip = markdown(
     "Token rate limits are available on the [Enterprise version of Onyx](/admin/billing) only."
   );
-  const { isAdmin } = useUser();
 
   // Fetch the group data — poll every 5s while syncing so the UI updates
   // automatically when the backend finishes processing the previous edit.
@@ -87,6 +88,13 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     [groups, groupId]
   );
 
+  // Server-stamped per-group affordances. manage (M) gates membership/rename/save;
+  // delete is global MANAGE_USER_GROUPS; edit_permissions/edit_token_limits are FULL_ADMIN.
+  const canManage = can(group, "manage");
+  const canDelete = can(group, "delete");
+  const canEditPermissions = can(group, "edit_permissions");
+  const canEditTokenLimits = can(group, "edit_token_limits");
+
   const isSyncing = group != null && !group.is_up_to_date;
 
   // Fetch token rate limits for this group. Skip retry on tier-gated 402
@@ -102,7 +110,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const { data: groupPermissions, isLoading: permissionsLoading } = useSWR<
     string[]
   >(
-    isAdmin ? SWR_KEYS.userGroupPermissions(groupId) : null,
+    canEditPermissions ? SWR_KEYS.userGroupPermissions(groupId) : null,
     errorHandlingFetcher
   );
 
@@ -192,25 +200,87 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     setSelectedUserIds((prev) => prev.filter((id) => id !== userId));
   }, []);
 
+  const managerIds = useMemo(() => new Set(group?.manager_ids ?? []), [group]);
+  // A manager must be an existing member, so a not-yet-saved member can't be assigned.
+  const persistedMemberIds = useMemo(
+    () => new Set(group?.users.map((u) => u.id) ?? []),
+    [group]
+  );
+  const [pendingManagerId, setPendingManagerId] = useState<string | null>(null);
+
+  // The manager toggle hits its dedicated endpoint immediately (unlike member
+  // add/remove, which defers to Save), then revalidates the group.
+  const handleToggleManager = useCallback(
+    async (userId: string, makeManager: boolean) => {
+      setPendingManagerId(userId);
+      try {
+        await setGroupManager(groupId, userId, makeManager);
+        await mutate(SWR_KEYS.adminUserGroups);
+        toast.success(makeManager ? "Manager assigned" : "Manager revoked");
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to update manager"
+        );
+      } finally {
+        setPendingManagerId(null);
+      }
+    },
+    [groupId, mutate]
+  );
+
   const memberColumns = useMemo(
     () => [
       ...baseColumns,
       tc.actions({
         showSorting: false,
         showColumnVisibility: false,
-        cell: (row: MemberRow) => (
-          <IconButton
-            icon={SvgMinusCircle}
-            tertiary
-            onClick={(e) => {
-              e.stopPropagation();
-              handleRemoveMember(row.id ?? row.email);
-            }}
-          />
-        ),
+        cell: (row: MemberRow) => {
+          if (!canManage) return null;
+          const userId = row.id ?? row.email;
+          const isManager = managerIds.has(userId);
+          const isPersisted = persistedMemberIds.has(userId);
+          const isPending = pendingManagerId === userId;
+          return (
+            <div className="flex items-center gap-1">
+              <IconButton
+                icon={isPending ? SvgSimpleLoader : SvgShield}
+                tertiary
+                transient={isManager}
+                disabled={!isPersisted || isPending}
+                aria-label={isManager ? "Revoke manager" : "Make manager"}
+                tooltip={
+                  !isPersisted
+                    ? "Save the group before assigning a manager"
+                    : isManager
+                      ? "Revoke manager"
+                      : "Make manager"
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleManager(userId, !isManager);
+                }}
+              />
+              <IconButton
+                icon={SvgMinusCircle}
+                tertiary
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveMember(userId);
+                }}
+              />
+            </div>
+          );
+        },
       }),
     ],
-    [handleRemoveMember]
+    [
+      handleRemoveMember,
+      handleToggleManager,
+      managerIds,
+      persistedMemberIds,
+      pendingManagerId,
+      canManage,
+    ]
   );
 
   // IDs of members not visible in the add-mode table (e.g. inactive users).
@@ -278,13 +348,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         selectedDocSetIds
       );
 
-      // Save token rate limits (create/update/delete) — Enterprise-only
-      if (isEnterpriseTier) {
+      // Enterprise + FULL_ADMIN only — token PUT/DELETE are admin-only, so a scoped
+      // manager skips this.
+      if (isEnterpriseTier && canEditTokenLimits) {
         await saveTokenLimits(groupId, tokenLimits, tokenRateLimits ?? []);
       }
 
-      // Save permissions (bulk desired-state, admin only)
-      if (isAdmin) {
+      // Bulk desired-state replace; FULL_ADMIN only.
+      if (canEditPermissions) {
         await saveGroupPermissions(groupId, enabledPermissions);
       }
 
@@ -294,7 +365,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
       mutate(SWR_KEYS.adminUserGroups);
       mutate(SWR_KEYS.userGroupTokenRateLimit(groupId));
-      if (isAdmin) {
+      if (canEditPermissions) {
         mutate(SWR_KEYS.userGroupPermissions(groupId));
       }
       toast.success(`Group "${trimmed}" updated`);
@@ -352,7 +423,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       </Button>
       <Button
         onClick={handleSave}
-        disabled={!groupName.trim() || isSubmitting || isSyncing}
+        disabled={!groupName.trim() || isSubmitting || isSyncing || !canManage}
         tooltip={
           isSyncing
             ? "Document embeddings are being updated due to recent changes to this group."
@@ -436,13 +507,15 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                       Done
                     </Button>
                   ) : (
-                    <Button
-                      prominence="tertiary"
-                      icon={SvgPlusCircle}
-                      onClick={() => setIsAddingMembers(true)}
-                    >
-                      Add
-                    </Button>
+                    canManage && (
+                      <Button
+                        prominence="tertiary"
+                        icon={SvgPlusCircle}
+                        onClick={() => setIsAddingMembers(true)}
+                      >
+                        Add
+                      </Button>
+                    )
                   )}
                 </Section>
 
@@ -485,7 +558,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 )}
               </Section>
 
-              {isAdmin && (
+              {canEditPermissions && (
                 <GroupPermissionsSection
                   enabledPermissions={enabledPermissions}
                   onPermissionsChange={setEnabledPermissions}
@@ -504,27 +577,29 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               <TokenLimitSection
                 limits={tokenLimits}
                 onLimitsChange={setTokenLimits}
-                disabled={!isEnterpriseTier}
+                disabled={!isEnterpriseTier || !canEditTokenLimits}
                 disabledTooltip={tokenLimitsDisabledTooltip}
               />
 
-              {/* Delete This Group */}
-              <Card>
-                <InputHorizontal
-                  title="Delete This Group"
-                  description="Members will lose access to any resources shared with this group."
-                  center
-                >
-                  <Button
-                    variant="danger"
-                    prominence="secondary"
-                    icon={SvgTrash}
-                    onClick={() => setShowDeleteModal(true)}
+              {/* Delete This Group — global MANAGE_USER_GROUPS only */}
+              {canDelete && (
+                <Card>
+                  <InputHorizontal
+                    title="Delete This Group"
+                    description="Members will lose access to any resources shared with this group."
+                    center
                   >
-                    Delete Group
-                  </Button>
-                </InputHorizontal>
-              </Card>
+                    <Button
+                      variant="danger"
+                      prominence="secondary"
+                      icon={SvgTrash}
+                      onClick={() => setShowDeleteModal(true)}
+                    >
+                      Delete Group
+                    </Button>
+                  </InputHorizontal>
+                </Card>
+              )}
             </>
           )}
         </SettingsLayouts.Body>

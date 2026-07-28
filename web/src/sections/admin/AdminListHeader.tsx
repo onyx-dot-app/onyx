@@ -16,10 +16,11 @@ interface AdminListHeaderProps {
   placeholder?: string;
   /** Text shown in the empty-state card when no items exist. */
   emptyStateText: string;
-  /** Called when the action button is clicked. */
-  onAction: () => void;
-  /** Label for the action button. */
-  actionLabel: string;
+  /** Called when the action button is clicked. Omit (with actionLabel) to hide it —
+   *  e.g. a scoped manager who may view the list but can't create. */
+  onAction?: () => void;
+  /** Label for the action button. Omit (with onAction) to hide it. */
+  actionLabel?: string;
 }
 
 /**
@@ -59,11 +60,12 @@ export default function AdminListHeader({
   onAction,
   actionLabel,
 }: AdminListHeaderProps) {
-  const actionButton = (
-    <Button rightIcon={SvgPlusCircle} onClick={onAction}>
-      {actionLabel}
-    </Button>
-  );
+  const actionButton =
+    onAction && actionLabel ? (
+      <Button rightIcon={SvgPlusCircle} onClick={onAction}>
+        {actionLabel}
+      </Button>
+    ) : null;
 
   if (!hasItems) {
     return (
