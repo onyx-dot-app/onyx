@@ -216,10 +216,14 @@ func TestWidthInvariant(t *testing.T) {
 		"emoji":         strings.Repeat("🎉 party ", 50),
 		"wide table":    "| one | two | three | four |\n|---|---|---|---|\n| " + strings.Repeat("wide ", 30) + " | b | c | d |",
 		"nested":        "> - item " + strings.Repeat("word ", 50) + "\n> - second",
+		"deep nesting":  strings.Repeat("> ", 30) + "deeply quoted " + strings.Repeat("word ", 20),
 		"kitchen sink":  kitchenSink,
 	}
+	// Narrow widths matter: the viewport passes terminal width minus its
+	// indent, and rendering wider than asked makes the terminal soft-wrap,
+	// desyncing the viewport's row accounting.
 	for name, md := range inputs {
-		for _, width := range []int{20, 40, 80} {
+		for _, width := range []int{4, 12, 20, 40, 80} {
 			out := NewRenderer(width).Render(md)
 			for i, line := range strings.Split(out, "\n") {
 				if w := ansi.StringWidthWc(stripANSI(line)); w > width {

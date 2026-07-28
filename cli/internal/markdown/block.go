@@ -65,7 +65,7 @@ func renderBlock(source []byte, node ast.Node, width int) (string, bool) {
 
 func renderBlockquote(source []byte, n *ast.Blockquote, width int) (string, bool) {
 	bar := dimStyle.Render("│ ")
-	inner := renderBlocks(source, n, width-2)
+	inner := renderBlocks(source, n, innerWidth(width, 2))
 	if len(inner) == 0 {
 		return "", false
 	}
@@ -94,7 +94,7 @@ func renderList(source []byte, n *ast.List, width int) (string, bool) {
 			marker = "• "
 		}
 		mw := ansi.StringWidthWc(marker)
-		body := strings.Join(renderBlocks(source, it, width-mw), sep)
+		body := strings.Join(renderBlocks(source, it, innerWidth(width, mw)), sep)
 		items = append(items, prefixLines(body, bulletStyle.Render(marker), strings.Repeat(" ", mw)))
 	}
 	if len(items) == 0 {
@@ -115,7 +115,7 @@ func isTaskItem(item ast.Node) bool {
 
 func renderCode(source []byte, n ast.Node, lang string, width int) string {
 	bar := dimStyle.Render("│ ")
-	budget := width - 2
+	budget := innerWidth(width, 2)
 	var out []string
 	if lang != "" {
 		out = append(out, bar+dimStyle.Render(lang))
@@ -159,6 +159,16 @@ func renderHTMLBlock(source []byte, n *ast.HTMLBlock, width int) (string, bool) 
 		return "", false
 	}
 	return strings.Join(out, "\n"), true
+}
+
+// innerWidth is the wrap budget left inside a prefixed block. It never drops
+// below 1: x/ansi wrappers return input unwrapped for limits < 1, which would
+// produce arbitrarily long lines.
+func innerWidth(width, prefix int) int {
+	if w := width - prefix; w > 0 {
+		return w
+	}
+	return 1
 }
 
 // prefixLines prepends first to the first line of s and rest to every other.

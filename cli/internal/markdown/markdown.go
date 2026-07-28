@@ -7,15 +7,12 @@ package markdown
 import (
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 )
-
-// minWidth is the narrowest wrap width the renderer will accept; below this,
-// prefixed constructs (nested lists, blockquotes) run out of room.
-const minWidth = 20
 
 // mdParser is shared by all renderers: parsing is width-independent, and the
 // parser carries no state between Parse calls. Construction is done once so
@@ -30,10 +27,12 @@ type Renderer struct {
 	width int
 }
 
-// NewRenderer creates a renderer that wraps output at the given width.
+// NewRenderer creates a renderer that wraps output at the given width. The
+// width is never raised: producing lines wider than the caller's budget would
+// make the terminal soft-wrap them and desync the viewport's row accounting.
 func NewRenderer(width int) *Renderer {
-	if width < minWidth {
-		width = minWidth
+	if width < 1 {
+		width = 1
 	}
 	return &Renderer{width: width}
 }
@@ -51,5 +50,16 @@ func (r *Renderer) Render(md string) (out string) {
 	}()
 	source := []byte(md)
 	doc := mdParser.Parse(text.NewReader(source))
-	return strings.Join(renderBlocks(source, doc, r.width), "\n\n")
+	joined := strings.Join(renderBlocks(source, doc, r.width), "\n\n")
+
+	// Safety net for the width invariant: pathological input (e.g. deeply
+	// nested blockquotes) can stack prefixes past the budget; hard-wrap any
+	// such line rather than let the terminal soft-wrap it.
+	lines := strings.Split(joined, "\n")
+	for i, line := range lines {
+		if ansi.StringWidthWc(line) > r.width {
+			lines[i] = ansi.HardwrapWc(line, r.width, true)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
