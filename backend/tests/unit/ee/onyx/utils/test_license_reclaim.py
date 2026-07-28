@@ -21,6 +21,7 @@ from ee.onyx.utils.license import (
     verify_and_store_license,
 )
 from ee.onyx.utils.license_expiry import LICENSE_RECLAIM_WINDOW
+from onyx.cache.interface import CacheBackendType
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
 
 
@@ -79,7 +80,7 @@ class TestVerifyAndStoreLicense:
 
         assert result == payload
         mock_upsert.assert_called_once_with(db_session, "signed-license", commit=False)
-        mock_publish_cache.assert_called_once_with(payload)
+        mock_publish_cache.assert_called_once_with(payload, db_session)
 
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.verify_license_signature")
@@ -136,7 +137,7 @@ class TestReclaimLicenseFromControlPlane:
         # incoming one, then the stored one again for the staleness compare.
         assert call("signed-license") in mock_verify.call_args_list
         mock_upsert.assert_called_once_with(db_session, "signed-license", commit=False)
-        mock_publish_cache.assert_called_once_with(payload)
+        mock_publish_cache.assert_called_once_with(payload, db_session)
 
     @pytest.mark.parametrize(
         "license_row",
@@ -172,6 +173,12 @@ class TestPublishLicenseCache:
             mock_get_cache.return_value.lock.return_value.acquire.return_value = True
             yield mock_get_cache
 
+    @pytest.fixture(autouse=True)
+    def _row_present(self) -> Generator[MagicMock, None, None]:
+        with patch("ee.onyx.db.license.get_license") as mock_get_license:
+            mock_get_license.return_value = MagicMock(license_data="blob")
+            yield mock_get_license
+
     @patch("ee.onyx.db.license.invalidate_license_cache")
     @patch("ee.onyx.db.license.update_license_cache")
     @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
@@ -185,7 +192,7 @@ class TestPublishLicenseCache:
     ) -> None:
         mock_update_cache.side_effect = RuntimeError("cache failed")
 
-        publish_license_cache(_make_license_payload())
+        publish_license_cache(_make_license_payload(), MagicMock())
 
         mock_invalidate.assert_called_once()
         mock_logger.warning.assert_called_once()
@@ -200,7 +207,7 @@ class TestPublishLicenseCache:
             issued_at=payload.issued_at + timedelta(hours=1)
         )
 
-        publish_license_cache(payload)
+        publish_license_cache(payload, MagicMock())
 
         mock_update_cache.assert_not_called()
 
@@ -216,7 +223,7 @@ class TestPublishLicenseCache:
         publish in the opposite order to the one they committed in."""
         lock = _cache_backend.return_value.lock.return_value
 
-        publish_license_cache(_make_license_payload())
+        publish_license_cache(_make_license_payload(), MagicMock())
 
         mock_update_cache.assert_called_once()
         lock.acquire.assert_called_once()
@@ -254,10 +261,29 @@ class TestPublishLicenseCache:
         lock = _cache_backend.return_value.lock.return_value
         unavailable(lock)
 
-        publish_license_cache(_make_license_payload())
+        publish_license_cache(_make_license_payload(), MagicMock())
 
         mock_update_cache.assert_called_once()
         lock.release.assert_not_called()
+
+    @patch("ee.onyx.db.license.invalidate_license_cache")
+    @patch("ee.onyx.db.license.update_license_cache")
+    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
+    def test_a_deleted_row_is_not_resurrected(
+        self,
+        _mock_cached: MagicMock,
+        mock_update_cache: MagicMock,
+        mock_invalidate: MagicMock,
+        _row_present: MagicMock,
+    ) -> None:
+        """A writer that committed just before a delete must not publish an
+        entry for the row the delete removed."""
+        _row_present.return_value = None
+
+        publish_license_cache(_make_license_payload(), MagicMock())
+
+        mock_update_cache.assert_not_called()
+        mock_invalidate.assert_called_once()
 
 
 class TestReclaimLicenseFromControlPlaneErrors:
@@ -318,6 +344,22 @@ def _expiring_in(delta: timedelta) -> datetime:
 
 
 class TestMaybeScheduleLicenseReclaim:
+    @patch("ee.onyx.utils.license.CACHE_BACKEND", CacheBackendType.POSTGRES)
+    @patch("ee.onyx.utils.license.client_app")
+    @patch("ee.onyx.utils.license.get_redis_client")
+    def test_no_op_without_redis(
+        self,
+        mock_get_redis: MagicMock,
+        mock_client_app: MagicMock,
+    ) -> None:
+        """The debounce and the Celery broker are both this Redis, so where it
+        does not exist every request in the window would log a failed connect
+        for a send that can never be consumed."""
+        maybe_schedule_license_reclaim(_expiring_in(timedelta(days=1)), "tenant_123")
+
+        mock_get_redis.assert_not_called()
+        mock_client_app.send_task.assert_not_called()
+
     @patch("ee.onyx.utils.license.client_app")
     @patch("ee.onyx.utils.license.get_redis_client")
     def test_no_op_when_license_is_outside_the_reclaim_window(

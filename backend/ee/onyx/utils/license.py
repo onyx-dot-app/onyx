@@ -20,6 +20,8 @@ from ee.onyx.server.license.models import LicenseData, LicensePayload
 from ee.onyx.utils.license_expiry import is_license_due_for_reclaim
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackendType
+from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.models import ApplicationStatus
@@ -163,7 +165,7 @@ def _is_stale_replacement(stored_data: str, incoming: LicensePayload) -> bool:
     return True
 
 
-def publish_license_cache(payload: LicensePayload) -> None:
+def publish_license_cache(payload: LicensePayload, db_session: Session) -> None:
     """Publish metadata for a license already committed. Never raises.
 
     Drops the cached entry on failure rather than leaving a superseded one to
@@ -173,7 +175,7 @@ def publish_license_cache(payload: LicensePayload) -> None:
     from ee.onyx.db.license import invalidate_license_cache, publish_license_metadata
 
     try:
-        publish_license_metadata(payload)
+        publish_license_metadata(payload, db_session)
     except Exception as cache_error:
         logger.warning("Failed to publish license cache: %s", cache_error)
         try:
@@ -234,7 +236,7 @@ def verify_and_store_license(
     db_session.commit()
 
     resume_license_reclaim()
-    publish_license_cache(payload)
+    publish_license_cache(payload, db_session)
     return payload
 
 
@@ -362,6 +364,10 @@ def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None
     must not affect the request that tripped it.
     """
     if not is_license_due_for_reclaim(expires_at):
+        return
+    # Both the debounce and the broker behind send_task are this Redis. Where
+    # it does not exist the periodic poller owns reclaim instead.
+    if CACHE_BACKEND != CacheBackendType.REDIS:
         return
 
     try:

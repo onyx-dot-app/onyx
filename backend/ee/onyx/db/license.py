@@ -162,10 +162,12 @@ def delete_license(db_session: Session) -> bool:
     if existing:
         db_session.delete(existing)
         db_session.commit()
-        # Best effort: a store that committed just before this delete
-        # publishes outside the lock, so its entry can still land after this.
+        # Under the cache lock: a store that committed just before this delete
+        # publishes under the same lock and re-reads the row there, so its
+        # entry either lands before this invalidate or is never written.
         try:
-            invalidate_license_cache()
+            with _license_cache_lock(None, wait=True):
+                invalidate_license_cache()
         except Exception as e:
             logger.warning("License deleted but cache invalidation failed: %s", e)
         logger.info("License deleted")
@@ -338,20 +340,27 @@ def update_license_cache(
 
 def publish_license_metadata(
     payload: LicensePayload,
+    db_session: Session,
     tenant_id: str | None = None,
     wait_for_lock: bool = True,
-) -> LicenseMetadata:
-    """Cache metadata for *payload* unless a newer license is already cached.
+) -> LicenseMetadata | None:
+    """Cache metadata for *payload* unless a newer license is already cached,
+    or None without caching when the license row no longer exists.
 
     Writers commit under the store lock but publish after releasing it, so
     without serializing the compare-and-write two of them can commit in one
-    order and publish in the other, leaving the cache older than the row.
-    Returns whichever entry won.
+    order and publish in the other, leaving the cache older than the row. The
+    row re-read under the same lock keeps a publish from resurrecting an entry
+    for a license a concurrent delete just removed.
 
     wait_for_lock=False is for callers that cannot afford to wait on a
     contended lock, and gives up serializing rather than the write itself.
     """
     with _license_cache_lock(tenant_id, wait_for_lock):
+        db_session.expire_all()
+        if get_license(db_session) is None:
+            invalidate_license_cache(tenant_id)
+            return None
         cached = get_cached_license_metadata(tenant_id)
         if cached and cached.issued_at > payload.issued_at:
             return cached
@@ -419,7 +428,7 @@ def refresh_license_cache(
         # Never waits: this must be callable from an event loop, and the
         # Postgres lock's acquisition poll sleeps.
         return publish_license_metadata(
-            payload, tenant_id=tenant_id, wait_for_lock=False
+            payload, db_session, tenant_id=tenant_id, wait_for_lock=False
         )
     except ValueError as e:
         logger.error("Failed to verify license during cache refresh: %s", e)
