@@ -26,6 +26,7 @@ from onyx.db.user_usage import (
     get_group_cost_cents_buckets_since,
     get_total_cost_cents_buckets_since,
     get_usage_export,
+    get_usage_reset_window_start,
     get_user_cost_cents_buckets_since,
     get_user_cost_cents_since,
     get_user_usage_by_day_and_model,
@@ -293,11 +294,20 @@ def reset_usage(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ResetUsageResponse:
-    """Clear a user's current UTC-day usage bucket."""
+    """Clear a user's usage across every applicable active limit window."""
     user = get_user_by_email(payload.user_email, db_session)
     if user is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
-    reset_rows = reset_user_usage(db_session, str(user.id))
+
+    user_id = str(user.id)
+    group_limits = fetch_user_group_token_rate_limits(db_session, user.id)
+    rate_limits = [
+        *fetch_all_user_token_rate_limits(db_session, enabled_only=True),
+        *fetch_all_global_token_rate_limits(db_session, enabled_only=True),
+        *(limit for limits in group_limits.values() for limit in limits),
+    ]
+    window_start = get_usage_reset_window_start(datetime.now(timezone.utc), rate_limits)
+    reset_rows = reset_user_usage(db_session, user_id, window_start)
     db_session.commit()
     return ResetUsageResponse(reset_rows=reset_rows)
 

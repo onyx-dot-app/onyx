@@ -1,4 +1,4 @@
-"""Admin resets clear one user's current UTC-day bucket only."""
+"""Admin resets clear one user's active enforcement window."""
 
 import datetime
 import uuid
@@ -13,9 +13,11 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 
-from onyx.db.models import UserUsage
+from onyx.configs.constants import TokenRateLimitScope
+from onyx.db.models import TokenRateLimit, UserUsage
 from onyx.db.user_usage import (
     USER_USAGE_BUCKET_SECONDS,
+    get_usage_reset_window_start,
     get_user_cost_cents_since,
     reset_user_usage,
 )
@@ -61,19 +63,45 @@ def _record(db: Session, user_id: str, cost: float, window: datetime.datetime) -
 
 
 class TestResetUserUsage:
-    def test_clears_current_window_keeps_history(self, db: Session) -> None:
+    def test_clears_active_window_keeps_older_history(self, db: Session) -> None:
         uid = str(uuid.uuid4())
         now = datetime.datetime.now(tz=datetime.timezone.utc)
         current = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
-        prior = current - datetime.timedelta(days=14)
+        prior = current - datetime.timedelta(days=1)
+        historical = current - datetime.timedelta(days=14)
         _record(db, uid, 500.0, current)
-        _record(db, uid, 999.0, prior)
+        _record(db, uid, 400.0, prior)
+        _record(db, uid, 999.0, historical)
 
-        removed = reset_user_usage(db, uid)
+        removed = reset_user_usage(db, uid, prior)
 
-        assert removed == 1
-        assert get_user_cost_cents_since(db, uid, current) == 0.0
-        assert get_user_cost_cents_since(db, uid, prior) == 999.0
+        assert removed == 2
+        assert get_user_cost_cents_since(db, uid, prior) == 0.0
+        assert get_user_cost_cents_since(db, uid, historical) == 999.0
+
+    def test_reset_window_covers_longest_applicable_limit(self) -> None:
+        now = datetime.datetime(2026, 7, 28, 12, tzinfo=datetime.timezone.utc)
+        current = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
+        rate_limits = [
+            TokenRateLimit(
+                enabled=True,
+                token_budget=100,
+                cost_budget_cents=None,
+                period_hours=48,
+                scope=TokenRateLimitScope.USER,
+            ),
+            TokenRateLimit(
+                enabled=True,
+                token_budget=None,
+                cost_budget_cents=100.0,
+                period_hours=168,
+                scope=TokenRateLimitScope.GLOBAL,
+            ),
+        ]
+
+        assert get_usage_reset_window_start(now, rate_limits) == (
+            current - datetime.timedelta(days=6)
+        )
 
     def test_only_targets_the_given_user(self, db: Session) -> None:
         me, other = str(uuid.uuid4()), str(uuid.uuid4())
@@ -82,13 +110,17 @@ class TestResetUserUsage:
         _record(db, me, 500.0, current)
         _record(db, other, 500.0, current)
 
-        reset_user_usage(db, me)
+        reset_user_usage(db, me, current)
 
         assert get_user_cost_cents_since(db, me, current) == 0.0
         assert get_user_cost_cents_since(db, other, current) == 500.0
 
     def test_reset_with_no_rows_is_a_noop(self, db: Session) -> None:
-        assert reset_user_usage(db, str(uuid.uuid4())) == 0
+        current = get_window_start(
+            datetime.datetime.now(tz=datetime.timezone.utc),
+            USER_USAGE_BUCKET_SECONDS,
+        )
+        assert reset_user_usage(db, str(uuid.uuid4()), current) == 0
 
     def test_does_not_commit_the_callers_transaction(self, db: Session) -> None:
         uid = str(uuid.uuid4())
@@ -99,7 +131,7 @@ class TestResetUserUsage:
         _record(db, uid, 500.0, current)
         db.commit()
 
-        reset_user_usage(db, uid)
+        reset_user_usage(db, uid, current)
         db.rollback()
 
         assert get_user_cost_cents_since(db, uid, current) == 500.0

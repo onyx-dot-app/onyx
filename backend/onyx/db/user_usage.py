@@ -5,7 +5,7 @@ model, flow, provider), not an append-only per-call ledger."""
 
 from collections import defaultdict
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from math import ceil
 from typing import Any, cast
 
@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User, User__UserGroup, UserUsage
+from onyx.db.models import TokenRateLimit, User, User__UserGroup, UserUsage
 from onyx.utils.datetime import datetime_to_utc, get_window_start
 from onyx.utils.logger import setup_logger
 
@@ -255,17 +255,27 @@ def get_usage_export(
     ]
 
 
-def reset_user_usage(db_session: Session, user_id: str) -> int:
-    """Clear a user's current UTC-day bucket while preserving prior history."""
-    window_start = get_window_start(
-        datetime.now(timezone.utc), USER_USAGE_BUCKET_SECONDS
-    )
+def get_usage_reset_window_start(
+    now: datetime, rate_limits: Sequence[TokenRateLimit]
+) -> datetime:
+    """Return the earliest bucket included by any applicable limit."""
+    window_starts = [get_window_start(now, USER_USAGE_BUCKET_SECONDS)]
+    for rate_limit in rate_limits:
+        if rate_limit.token_budget is not None:
+            window_starts.append(get_token_window_start(now, rate_limit.period_hours))
+        if rate_limit.cost_budget_cents is not None:
+            window_starts.append(get_cost_window_start(now, rate_limit.period_hours))
+    return min(window_starts)
+
+
+def reset_user_usage(db_session: Session, user_id: str, window_start: datetime) -> int:
+    """Clear a user's usage within the active enforcement window."""
     result = cast(
         CursorResult[Any],
         db_session.execute(
             delete(UserUsage).where(
                 UserUsage.user_id == user_id,
-                UserUsage.window_start == window_start,
+                UserUsage.window_start >= window_start,
             )
         ),
     )

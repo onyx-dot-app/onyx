@@ -292,18 +292,34 @@ class TestResetUsageEndpoint:
         class _U:
             id = "00000000-0000-0000-0000-0000000000aa"
 
-        seen: dict[str, str] = {}
+        window_start = datetime.datetime(2026, 7, 22, tzinfo=datetime.timezone.utc)
+        seen: dict[str, object] = {}
         monkeypatch.setattr(api, "get_user_by_email", lambda _email, _db: _U())
+        monkeypatch.setattr(
+            api, "fetch_all_user_token_rate_limits", lambda *_a, **_k: []
+        )
+        monkeypatch.setattr(
+            api, "fetch_all_global_token_rate_limits", lambda *_a, **_k: []
+        )
+        monkeypatch.setattr(
+            api, "fetch_user_group_token_rate_limits", lambda *_a, **_k: {}
+        )
+        monkeypatch.setattr(
+            api, "get_usage_reset_window_start", lambda _now, _limits: window_start
+        )
         monkeypatch.setattr(
             api,
             "reset_user_usage",
-            lambda _db, user_id: seen.update(user_id=user_id) or 1,
+            lambda _db, user_id, cutoff: (
+                seen.update(user_id=user_id, cutoff=cutoff) or 1
+            ),
         )
         client = TestClient(_make_app(db_session, _ADMIN))
         resp = client.post("/admin/usage/reset", json={"user_email": "u@x.com"})
         assert resp.status_code == 200
         assert resp.json() == {"reset_rows": 1}
         assert seen["user_id"] == str(_U.id)
+        assert seen["cutoff"] == window_start
 
     def test_non_admin_rejected(self, db_session: Session) -> None:
         client = TestClient(_make_app(db_session, _NON_ADMIN))
