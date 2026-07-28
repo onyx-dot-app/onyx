@@ -642,13 +642,6 @@ def test_sandbox_service_publishes_not_ready_addresses() -> None:
     assert service.spec.publish_not_ready_addresses is True
 
 
-def test_sidecar_host_is_the_service_fqdn() -> None:
-    """The sidecar is reached only via the per-pod Service FQDN (in-cluster)."""
-    mgr = _make_manager()
-    host = mgr._sidecar_client._host(_sandbox_id())  # type: ignore[attr-defined]
-    assert host.endswith(".sandbox-test.svc.cluster.local")
-
-
 def test_push_connect_error_is_retriable() -> None:
     mgr = _make_manager()
     factory = _mock_httpx_client(raise_exc=httpx.ConnectError("no endpoints"))

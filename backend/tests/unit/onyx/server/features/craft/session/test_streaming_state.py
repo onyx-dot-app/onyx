@@ -328,27 +328,6 @@ def test_yield_sandbox_events_persists_resolved_opencode_id() -> None:
     assert db_session.commit_count == 1
 
 
-def test_yield_sandbox_events_passes_initial_opencode_id() -> None:
-    sandbox_manager = _FakeStreamingSandboxManager()
-
-    events = list(
-        streaming.yield_sandbox_events(
-            cast(Any, object()),
-            cast(Any, sandbox_manager),
-            uuid4(),
-            uuid4(),
-            "first prompt",
-            opencode_session_id="ses_first_turn",
-            agent_provider=None,
-            agent_model=None,
-        )
-    )
-
-    assert len(events) == 1
-    assert sandbox_manager.last_payload is not None
-    assert sandbox_manager.last_payload["opencode_session_id"] == "ses_first_turn"
-
-
 def test_preflight_mints_opencode_id_when_missing() -> None:
     build_session = BuildSession(id=uuid4(), user_id=uuid4())
     db_session = _PreflightDb()

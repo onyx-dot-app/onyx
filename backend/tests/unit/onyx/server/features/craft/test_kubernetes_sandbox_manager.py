@@ -16,7 +16,7 @@ _LONGEST_SUFFIX = "-opencode-auth"
 
 
 def test_pod_name_stays_within_dns_label_limit() -> None:
-    manager = KubernetesSandboxManager.__new__(KubernetesSandboxManager)
+    manager = object.__new__(KubernetesSandboxManager)
 
     # The name length is constant (``_get_pod_name`` truncates to the first 8
     # hex chars); this all-f UUID just exercises the full alphanumeric range so

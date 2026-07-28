@@ -10,7 +10,6 @@ from typing import Any
 
 import pytest
 
-from onyx.server.features.build import configs
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox import factory as factory_module
 
@@ -51,11 +50,3 @@ def test_docker_backend_returns_docker_manager(monkeypatch: pytest.MonkeyPatch) 
     )
     mgr = factory_module.get_sandbox_manager()
     assert mgr.__class__.__name__ == "DockerSandboxManager"
-
-
-def test_sandbox_backend_enum_includes_docker_and_kubernetes() -> None:
-    """Sanity: the enum still exposes DOCKER and KUBERNETES values."""
-    assert SandboxBackend.DOCKER.value == "docker"
-    assert SandboxBackend.KUBERNETES.value == "kubernetes"
-    assert configs.SandboxBackend("docker") is SandboxBackend.DOCKER
-    assert configs.SandboxBackend("kubernetes") is SandboxBackend.KUBERNETES

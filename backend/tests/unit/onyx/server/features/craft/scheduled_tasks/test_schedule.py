@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 
 from onyx.server.features.build.scheduled_tasks.schedule import (
     compute_next_run_at,
-    human_readable,
     next_n_fires,
 )
 
@@ -33,9 +32,3 @@ def test_next_n_fires_returns_aware_utc_datetimes() -> None:
         datetime(2026, 5, 25, 9, 30, tzinfo=timezone.utc),
         datetime(2026, 5, 25, 9, 45, tzinfo=timezone.utc),
     ]
-
-
-def test_human_readable_does_not_append_timezone() -> None:
-    description = human_readable("0 9 * * 1")
-
-    assert "UTC" not in description

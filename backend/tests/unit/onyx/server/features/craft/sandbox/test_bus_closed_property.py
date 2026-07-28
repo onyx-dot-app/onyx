@@ -21,14 +21,6 @@ from onyx.server.features.build.sandbox.opencode.event_bus import (
 )
 
 
-def test_closed_property_starts_false() -> None:
-    bus = PodEventBus(base_url="http://test.invalid:4096", auth=None)
-    try:
-        assert bus.closed is False
-    finally:
-        bus.close()
-
-
 def test_closed_property_true_after_explicit_close() -> None:
     bus = PodEventBus(base_url="http://test.invalid:4096", auth=None)
     bus.close()

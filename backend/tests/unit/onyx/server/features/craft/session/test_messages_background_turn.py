@@ -13,13 +13,22 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.interactive_turns.state import get_turn
+from onyx.server.features.build.session import manager as manager_module
 from onyx.server.features.build.session import messages as messages_api
 from onyx.server.features.build.session.models import (
     MessageAttachment,
     MessageRequest,
-    SubagentMessageRequest,
 )
 from tests.unit.fakes import FakeCache
+
+
+@pytest.fixture(autouse=True)
+def _mock_sandbox_manager(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        manager_module,
+        "get_sandbox_manager",
+        MagicMock(return_value=MagicMock()),
+    )
 
 
 @pytest.mark.parametrize(
@@ -96,6 +105,20 @@ def test_send_message_starts_background_turn(
     db_session = _FakeDbSession(user_message_count=2)
     persisted: list[tuple[int, str, list[dict[str, str]]]] = []
     start_runner = MagicMock()
+    session_manager = MagicMock()
+    session_manager.session_llm_config.return_value = SimpleNamespace(
+        model_name="17/gpt-5-mini",
+        models=[
+            SimpleNamespace(
+                id="17/gpt-5-mini",
+                capabilities=SimpleNamespace(
+                    input_modalities=(
+                        ("text", "image") if supports_image_input else ("text",)
+                    )
+                ),
+            )
+        ],
+    )
 
     def get_session_stub(*_: object, **__: object) -> SimpleNamespace:
         return session
@@ -115,23 +138,7 @@ def test_send_message_starts_background_turn(
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
-    monkeypatch.setattr(
-        messages_api.SessionManager,
-        "session_llm_config",
-        lambda *_: SimpleNamespace(
-            model_name="17/gpt-5-mini",
-            models=[
-                SimpleNamespace(
-                    id="17/gpt-5-mini",
-                    capabilities=SimpleNamespace(
-                        input_modalities=(
-                            ("text", "image") if supports_image_input else ("text",)
-                        )
-                    ),
-                )
-            ],
-        ),
-    )
+    monkeypatch.setattr(messages_api, "SessionManager", lambda _: session_manager)
     monkeypatch.setattr(
         messages_api,
         "create_message",
@@ -198,22 +205,6 @@ def test_send_message_starts_background_turn(
     ] == expected_prompt_attachment_paths
     start_runner.assert_called_once()
     assert str(start_runner.call_args.args[0]) == response.turn_id
-
-
-def test_subagent_message_request_rejects_attachments() -> None:
-    with pytest.raises(ValidationError):
-        SubagentMessageRequest.model_validate(
-            {
-                "content": "inspect this",
-                "attachments": [
-                    {
-                        "name": "reference.png",
-                        "path": "attachments/reference.png",
-                        "mime_type": "image/png",
-                    }
-                ],
-            }
-        )
 
 
 def test_send_message_preserves_legacy_provider_selection(

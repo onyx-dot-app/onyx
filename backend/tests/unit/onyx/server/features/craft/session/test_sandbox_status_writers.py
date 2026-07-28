@@ -6,7 +6,7 @@ test and forces a conscious decision: route the transition through
 ``sandbox_lifecycle`` instead, or (rarely) extend the allowed set here.
 """
 
-from pathlib import Path
+from tests.common.paths import find_ancestor_containing
 
 # Modules that MUST reference the status mutation (the spec).
 ALLOWED_REFERENCES: set[str] = {
@@ -18,10 +18,7 @@ ALLOWED_REFERENCES: set[str] = {
 
 
 def _modules_referencing_status_mutation() -> set[str]:
-    backend_dir = Path(__file__).resolve().parents[7]
-    assert backend_dir.name == "backend", (
-        f"Unexpected repo layout; expected 'backend', got {backend_dir}"
-    )
+    backend_dir = find_ancestor_containing("backend/onyx") / "backend"
     scan_roots = (
         backend_dir / "onyx" / "server" / "features" / "build",
         backend_dir / "onyx" / "background",
