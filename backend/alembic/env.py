@@ -6,11 +6,13 @@ from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.configs.app_configs import AWS_REGION_NAME
+from onyx.db.engine.shard_registry import ALEMBIC_TARGET_URL_ATTRIBUTE
 from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from sqlalchemy import event
 from sqlalchemy import pool
 from sqlalchemy import text
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.engine.base import Connection
 import os
 import ssl
@@ -54,6 +56,19 @@ if config.config_file_name is not None and config.attributes.get(
 target_metadata = [Base.metadata, ResultModelBase.metadata]
 
 logger = logging.getLogger(__name__)
+
+
+def connection_url() -> str:
+    """Database URL for this migration run.
+
+    Defaults to the process-wide POSTGRES_* settings. A caller that has already
+    decided which database to target — notably per-tenant migrations, which must
+    follow the tenant's shard — passes it via `ALEMBIC_TARGET_URL_ATTRIBUTE`.
+    """
+    return (
+        config.attributes.get(ALEMBIC_TARGET_URL_ATTRIBUTE) or build_connection_string()
+    )
+
 
 ssl_context: ssl.SSLContext | None = None
 if USE_IAM_AUTH:
@@ -243,11 +258,15 @@ def provide_iam_token_for_alembic(
     cparams: Any,
 ) -> None:
     if USE_IAM_AUTH:
-        # Database connection settings
+        # Derived from the URL actually being migrated, not the global POSTGRES_*
+        # settings: an RDS IAM token is only valid for the host/port/user it was
+        # minted for, so a tenant on a shard with different coordinates would be
+        # rejected if we used the defaults here.
+        url = make_url(connection_url())
         region = AWS_REGION_NAME
-        host = POSTGRES_HOST
-        port = POSTGRES_PORT
-        user = POSTGRES_USER
+        host = url.host or POSTGRES_HOST
+        port = str(url.port) if url.port else POSTGRES_PORT
+        user = url.username or POSTGRES_USER
 
         # Get IAM authentication token
         token = get_iam_auth_token(host, port, user, region)
@@ -274,7 +293,7 @@ async def run_async_migrations() -> None:
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
     engine = create_async_engine(
-        build_connection_string(),
+        connection_url(),
         poolclass=pool.NullPool,
         connect_args={"ssl": create_pg_ssl_context()},
     )
@@ -397,7 +416,7 @@ def run_migrations_offline() -> None:
         tenant_range_end,
         schemas,
     ) = get_schema_options()
-    url = build_connection_string()
+    url = connection_url()
 
     if schemas:
         # Use specific schema names directly without fetching all tenants

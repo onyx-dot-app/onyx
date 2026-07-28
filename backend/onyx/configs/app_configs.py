@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import urllib.parse
 from datetime import datetime, timezone
@@ -603,14 +604,54 @@ POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
 AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
-# Comma-separated replica / multi-host list. If unset, defaults to POSTGRES_HOST
-# only.
-_POSTGRES_HOSTS_STR = os.environ.get("POSTGRES_HOSTS", "").strip()
-POSTGRES_HOSTS: list[str] = (
-    [h.strip() for h in _POSTGRES_HOSTS_STR.split(",") if h.strip()]
-    if _POSTGRES_HOSTS_STR
-    else [POSTGRES_HOST]
+
+# --- Tenant sharding (multi-database) ---------------------------------------
+# Onyx addresses a tenant by schema (`schema_translate_map`). These settings let
+# tenants additionally be spread across separate physical databases ("shards").
+#
+# ONYX_DB_SHARDS is a JSON object of shard name -> connection overrides, e.g.
+#   {"shard-b": {"host": "other.rds.amazonaws.com", "db": "danswer"}}
+# Keys not supplied for a shard fall back to the POSTGRES_* values above.
+#
+# When unset, exactly one shard exists (named by ONYX_DB_DEFAULT_SHARD, built
+# from POSTGRES_*), which is the single-database behavior Onyx has always had.
+ONYX_DB_SHARDS_JSON = os.environ.get("ONYX_DB_SHARDS", "").strip()
+# Shard that hosts tenants with no explicit mapping.
+ONYX_DB_DEFAULT_SHARD = os.environ.get("ONYX_DB_DEFAULT_SHARD") or "default"
+# Shard that holds the shared `public` catalog tables (user_tenant_mapping etc.)
+# and the tenant -> shard map itself. Must be resolvable without a lookup.
+ONYX_DB_CATALOG_SHARD = os.environ.get("ONYX_DB_CATALOG_SHARD") or ONYX_DB_DEFAULT_SHARD
+# Operator escape hatch: JSON object of tenant_id -> shard name, consulted
+# before the catalog table. Intended for incident response, not routine use.
+ONYX_DB_SHARD_OVERRIDES_JSON = os.environ.get("ONYX_DB_SHARD_OVERRIDES", "").strip()
+# How long a resolved tenant -> shard mapping is cached in-process. This is the
+# backstop on staleness when the Redis version channel is unavailable.
+ONYX_DB_SHARD_MAP_TTL_SECONDS = int(
+    os.environ.get("ONYX_DB_SHARD_MAP_TTL_SECONDS") or 60
 )
+# How often a process re-reads the shared shard-map version from Redis. Bounds how
+# quickly a migrator's map flip reaches every process in the common case; the freeze
+# window itself is bounded by the TTL above, since a Redis-partitioned process never
+# sees the flip at all.
+ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS = float(
+    os.environ.get("ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS") or 5
+)
+
+if ONYX_DB_SHARD_MAP_TTL_SECONDS <= 0:
+    raise ValueError(
+        f"ONYX_DB_SHARD_MAP_TTL_SECONDS must be positive, got "
+        f"{ONYX_DB_SHARD_MAP_TTL_SECONDS}"
+    )
+if (
+    not math.isfinite(ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS)
+    or ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS <= 0
+):
+    # A non-finite interval would stop the poller permanently, silently reducing
+    # flip propagation to the TTL path.
+    raise ValueError(
+        f"ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS must be a positive finite number, "
+        f"got {ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS}"
+    )
 
 POSTGRES_API_SERVER_POOL_SIZE = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_SIZE") or 40
