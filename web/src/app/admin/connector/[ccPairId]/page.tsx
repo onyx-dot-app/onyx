@@ -51,7 +51,7 @@ import {
 } from "lucide-react";
 import IndexAttemptErrorsModal from "./IndexAttemptErrorsModal";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
-import { IndexAttemptSnapshot, Permission } from "@/lib/types";
+import { IndexAttemptSnapshot } from "@/lib/types";
 import { Spinner } from "@/components/Spinner";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
@@ -69,7 +69,7 @@ import { SvgSettings } from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
 import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { hasPermission } from "@/lib/permissions";
+import { can } from "@/lib/permissions/resource-actions";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -95,7 +95,7 @@ const PAGES_PER_BATCH = 8;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const router = useRouter();
-  const { user, permissions } = useUser();
+  const { user } = useUser();
 
   const {
     data: ccPair,
@@ -184,11 +184,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
   const latestIndexAttempt = indexAttempts?.[0];
   const canManageInlineFileConnectorFiles =
-    ccPair?.connector.source === "file" &&
-    (ccPair.is_editable_for_current_user ||
-      (hasPermission(permissions, Permission.MANAGE_CONNECTORS) &&
-        !hasPermission(permissions, Permission.FULL_ADMIN_PANEL_ACCESS) &&
-        ccPair.access_type === "public"));
+    ccPair?.connector.source === "file" && can(ccPair, "edit");
 
   const isResolvingErrors =
     (latestIndexAttempt?.status === "in_progress" ||
@@ -478,14 +474,14 @@ function Main({ ccPairId }: { ccPairId: number }) {
         <div className="ml-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 mr-4">
           <EditableStringFieldDisplay
             value={ccPair.name}
-            isEditable={ccPair.is_editable_for_current_user}
+            isEditable={can(ccPair, "edit")}
             onUpdate={handleUpdateName}
             scale={2.1}
           />
         </div>
 
         <div className="ml-auto flex gap-x-2">
-          {ccPair.is_editable_for_current_user && (
+          {can(ccPair, "edit") && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button prominence="secondary" icon={SvgSettings}>
@@ -691,22 +687,21 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
       </Card>
 
-      {credentialTemplates[ccPair.connector.source] &&
-        ccPair.is_editable_for_current_user && (
-          <>
-            <Title size="md" className="mt-10 mb-2">
-              Credential
-            </Title>
+      {credentialTemplates[ccPair.connector.source] && can(ccPair, "edit") && (
+        <>
+          <Title size="md" className="mt-10 mb-2">
+            Credential
+          </Title>
 
-            <div className="mt-2">
-              <CredentialSection
-                ccPair={ccPair}
-                sourceType={ccPair.connector.source}
-                refresh={() => refresh()}
-              />
-            </div>
-          </>
-        )}
+          <div className="mt-2">
+            <CredentialSection
+              ccPair={ccPair}
+              sourceType={ccPair.connector.source}
+              refresh={() => refresh()}
+            />
+          </div>
+        </>
+      )}
 
       {ccPair.connector.connector_specific_config &&
         Object.keys(ccPair.connector.connector_specific_config).length > 0 && (

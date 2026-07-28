@@ -51,6 +51,8 @@ export interface CCPairFullInfo {
   latest_deletion_attempt: DeletionAttemptSnapshot | null;
   access_type: AccessType;
   is_editable_for_current_user: boolean;
+  // per-action affordance map for the requesting user (mirrors the write-side gate)
+  permissions: Record<string, boolean>;
   deletion_failure_message: string | null;
   indexing: boolean;
   creator: UUID | null;

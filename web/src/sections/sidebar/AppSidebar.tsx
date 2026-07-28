@@ -470,7 +470,7 @@ const AppSidebar = memo(function AppSidebarInner() {
     ]
   );
 
-  const { isAdmin, hasAdminAccess, permissions, user } = useUser();
+  const { isAdmin, hasAdminAccess, adminCapabilities, user } = useUser();
   const activeSidebarTab = useAppFocus();
   const createProjectModal = useCreateModal();
   const showLogoWhenFolded = useShowLogoWhenFolded();
@@ -578,7 +578,7 @@ const AppSidebar = memo(function AppSidebarInner() {
       <div>
         {hasAdminAccess && (
           <SidebarTab
-            href={getFirstPermittedAdminRoute(permissions)}
+            href={getFirstPermittedAdminRoute(adminCapabilities)}
             icon={SvgSettings}
             folded={folded}
           >
@@ -596,7 +596,7 @@ const AppSidebar = memo(function AppSidebarInner() {
     [
       folded,
       hasAdminAccess,
-      permissions,
+      adminCapabilities,
       handleShowBuildIntro,
       isOnyxCraftEnabled,
     ]

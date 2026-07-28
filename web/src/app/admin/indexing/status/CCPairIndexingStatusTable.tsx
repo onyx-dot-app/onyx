@@ -302,6 +302,7 @@ export function CCPairIndexingStatusTable({
             last_status: "success",
             source: ValidSources.File,
             access_type: "public",
+            permissions: {},
             docs_indexed: 1000,
             last_success: "2023-07-01T12:00:00Z",
             last_finished_status: "success",

@@ -34,6 +34,9 @@ interface UserContextType {
   isAdmin: boolean;
   hasAdminAccess: boolean;
   permissions: string[];
+  // Coarse admin-reach set: effective tokens plus the scoped manager bundle. Feeds
+  // nav/page gates so a group manager is included; org-wide checks still use isAdmin.
+  adminCapabilities: string[];
   refreshUser: () => Promise<void>;
   isCloudSuperuser: boolean;
   authTypeMetadata: AuthTypeMetadata;
@@ -569,9 +572,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS
         ).includes(Permission.FULL_ADMIN_PANEL_ACCESS),
         hasAdminAccess: hasAnyAdminPermission(
-          upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS
+          upToDateUser?.admin_capabilities ?? EMPTY_PERMISSIONS
         ),
         permissions: upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS,
+        adminCapabilities:
+          upToDateUser?.admin_capabilities ?? EMPTY_PERMISSIONS,
         isCloudSuperuser: upToDateUser?.is_cloud_superuser ?? false,
       }}
     >

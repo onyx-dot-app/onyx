@@ -78,6 +78,7 @@ export enum Permission {
   MANAGE_ACTIONS = "manage:actions",
   READ_QUERY_HISTORY = "read:query_history",
   MANAGE_USER_GROUPS = "manage:user_groups",
+  MANAGE_SKILLS = "manage:skills",
   CREATE_USER_API_KEYS = "create:user_api_keys",
   MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys",
   MANAGE_BOTS = "manage:bots",
@@ -132,6 +133,9 @@ export interface User {
   is_admin?: boolean;
   // True if the user manages any group (drives manager nav visibility).
   is_group_manager?: boolean;
+  // effective tokens plus the scoped manager bundle; source for coarse admin-reach
+  // checks (nav, page access). Server-computed so the client never re-derives policy.
+  admin_capabilities?: string[];
 }
 
 export interface TenantInfo {
@@ -300,6 +304,8 @@ export interface ConnectorIndexingStatusLite {
   last_status: ValidStatuses | null;
   last_success: string | null;
   is_editable: boolean;
+  // per-action affordance map for the requesting user (mirrors the write-side gate)
+  permissions: Record<string, boolean>;
   docs_indexed: number;
   in_repeated_error_state: boolean;
   latest_index_attempt_docs_indexed: number | null;
