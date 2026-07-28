@@ -2,6 +2,8 @@ package composegen
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -249,5 +251,34 @@ func TestGenerateAllRejectsInvalidYaml(t *testing.T) {
 	lines := []string{"services:", "\t- tabs are not valid yaml indentation"}
 	if _, err := GenerateAll(lines); err == nil {
 		t.Fatal("expected YAML validation error, got nil")
+	}
+}
+
+// TestCheckedInFilesMatchTemplate renders the real template from the repo and
+// asserts the checked-in generated files are up to date, making `go test` a
+// drift gate independent of the docker-compose-sync pre-commit hook.
+func TestCheckedInFilesMatchTemplate(t *testing.T) {
+	dir := filepath.Join("..", "..", "..", "..", "deployment", "docker_compose")
+
+	data, err := os.ReadFile(filepath.Join(dir, TemplateName))
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", TemplateName, err)
+	}
+	templateLines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+
+	results, err := GenerateAll(templateLines)
+	if err != nil {
+		t.Fatalf("GenerateAll failed on the real template: %v", err)
+	}
+
+	for _, v := range Variants {
+		checkedIn, err := os.ReadFile(filepath.Join(dir, v.Filename))
+		if err != nil {
+			t.Fatalf("failed to read %s: %v", v.Filename, err)
+		}
+		if string(checkedIn) != results[v.Filename] {
+			t.Errorf("%s does not match %s: run `ods generate-compose --write` and commit the result",
+				v.Filename, TemplateName)
+		}
 	}
 }
