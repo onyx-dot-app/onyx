@@ -22,29 +22,32 @@ jobs:
         with:
           enable-cache: false
           version: "0.11.25"
+      # Build every platform wheel first, then publish once. Publishing per
+      # platform would leave a partial release on PyPI if a later platform
+      # failed; building all up front keeps the release atomic. Remove the
+      # cached Go binary before each build so the build hook recompiles for the
+      # target platform instead of reusing the previous platform's binary.
       - run: |
+          rm -f onyx-cli
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 uv build --wheel
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 ONYX_CLI_REUSE_BINARY=1 \
+          rm -f onyx-cli
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
             ONYX_CLI_WHEEL_PLATFORM_TAG=musllinux_1_2_x86_64 \
             uv build --wheel
+          rm -f onyx-cli
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 uv build --wheel
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 ONYX_CLI_REUSE_BINARY=1 \
+          rm -f onyx-cli
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
             ONYX_CLI_WHEEL_PLATFORM_TAG=musllinux_1_2_aarch64 \
             uv build --wheel
 
           for goos in windows darwin; do
             for goarch in amd64 arm64; do
+              rm -f onyx-cli
               GOOS="$goos" GOARCH="$goarch" uv build --wheel
             done
           done
         working-directory: cli
-      - name: Upload built wheels
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: onyx-cli-wheels
-          path: cli/dist/*.whl
-          if-no-files-found: error
-          retention-days: 7
 
       - run: uv publish
         working-directory: cli
@@ -321,23 +324,15 @@ jobs:
           fi
 
   govulncheck:
-    needs:
-      - pypi
     runs-on: ubuntu-latest
     permissions:
       contents: read # needed to checkout the repo for SARIF source locations
-      actions: read # needed to download the wheel artifact from the release job
       security-events: write # needed for SARIF uploads
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # ratchet:actions/download-artifact@v4
-        with:
-          name: onyx-cli-wheels
-          path: cli/dist
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
         with:
@@ -349,33 +344,36 @@ jobs:
           GOBIN="${RUNNER_TEMP}/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
           echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
 
-      - name: Run govulncheck on released wheel binaries
+      # Build unstripped binaries just for scanning, rather than trimming symbols
+      # from (and thereby bloating) the released production binaries. govulncheck
+      # only needs the symbol table, not the ldflags version/commit stamping the
+      # release build does, so a plain `go build` per platform is enough.
+      - name: Build binaries for scanning
+        working-directory: cli
+        run: |
+          set -euo pipefail
+          mkdir -p ../govulncheck-binaries
+
+          for goos in linux darwin windows; do
+            for goarch in amd64 arm64; do
+              out="../govulncheck-binaries/onyx-cli-${goos}-${goarch}"
+              if [ "$goos" = "linux" ]; then
+                GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -o "$out" .
+              else
+                GOOS="$goos" GOARCH="$goarch" go build -o "$out" .
+              fi
+            done
+          done
+
+      - name: Run govulncheck on freshly built binaries
         run: |
           set -euo pipefail
           scan_exit=0
-          mkdir -p wheel-binaries govulncheck-results/raw
+          mkdir -p govulncheck-results/raw
 
-          for wheel in cli/dist/*.whl; do
-            wheel_name="$(basename "$wheel" .whl)"
-            if [[ "$wheel_name" == *-musllinux_* ]]; then
-              echo "Skipping duplicate static Linux binary scan for $wheel_name"
-              continue
-            fi
-
-            extract_dir="wheel-binaries/${wheel_name}"
-            sarif_file="govulncheck-results/raw/${wheel_name}.sarif"
-
-            unzip -q "$wheel" -d "$extract_dir"
-            binary="$(
-              find "$extract_dir" \
-                \( -path '*.data/scripts/onyx-cli' -o -path '*.data/scripts/onyx-cli.exe' \) \
-                -type f \
-                -print -quit
-            )"
-            if [ -z "$binary" ]; then
-              echo "No onyx-cli binary found in $wheel" >&2
-              exit 1
-            fi
+          for binary in govulncheck-binaries/*; do
+            binary_name="$(basename "$binary")"
+            sarif_file="govulncheck-results/raw/${binary_name}.sarif"
 
             if ! govulncheck -mode=binary "$binary"; then
               scan_exit=1

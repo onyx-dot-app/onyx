@@ -36,14 +36,9 @@ class CustomBuildHook(BuildHookInterface):
         tag = os.getenv("GITHUB_REF_NAME", "dev").removeprefix(f"{tag_prefix}/")
         commit = os.getenv("GITHUB_SHA", "none")
 
-        if os.getenv("ONYX_CLI_REUSE_BINARY") == "1":
-            if not os.path.exists(binary_name):
-                msg = f"ONYX_CLI_REUSE_BINARY=1 set, but {binary_name!r} does not exist"
-                raise FileNotFoundError(msg)
-            print(f"Reusing Go binary '{binary_name}'...")
-        else:
+        if not os.path.exists(binary_name):
             print(f"Building Go binary '{binary_name}'...")
-            ldflags = f"-X main.version={tag} -X main.commit={commit} -w"
+            ldflags = f"-X main.version={tag} -X main.commit={commit} -s -w"
             env = os.environ.copy()
             if goos == "linux":
                 env.setdefault("CGO_ENABLED", "0")
