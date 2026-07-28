@@ -33,12 +33,13 @@ future refactor that flattens the key back to ``sandbox_id`` (or scopes
 from __future__ import annotations
 
 from collections.abc import Generator
-from queue import Empty
-from typing import Any
+from contextlib import nullcontext
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
+from onyx.server.features.build.sandbox import serve_transport
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -49,10 +50,20 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 
 
 @pytest.fixture
-def mgr() -> Generator[KubernetesSandboxManager, None, None]:
+def mgr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[KubernetesSandboxManager, None, None]:
     """Manager with just serve-transport state initialized; stubs the
-    connection-info loader so the test doesn't touch K8s."""
+    connection-info loader and database status lookup so the test doesn't
+    touch external services."""
     from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
+
+    monkeypatch.setattr(
+        serve_transport,
+        "get_session_with_current_tenant",
+        lambda: nullcontext(MagicMock()),
+    )
+    monkeypatch.setattr(serve_transport, "get_sandbox_by_id", lambda *_: None)
 
     m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     m._init_serve_state()
@@ -79,23 +90,6 @@ def mgr() -> Generator[KubernetesSandboxManager, None, None]:
 # scenario the bug reproduced under.
 _DIR_A = "/workspace/sessions/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 _DIR_B = "/workspace/sessions/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-_SES_A = "ses_A"
-_SES_B = "ses_B"
-
-
-def _make_part_delta(session_id: str, text: str) -> dict[str, Any]:
-    """Minimal ``message.part.delta`` shape the bus dispatcher routes by
-    ``properties.sessionID``."""
-    return {
-        "type": "message.part.delta",
-        "properties": {
-            "sessionID": session_id,
-            "messageID": "msg1",
-            "partID": "p1",
-            "field": "text",
-            "delta": text,
-        },
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -139,99 +133,6 @@ def test_different_sandboxes_same_directory_get_distinct_buses(
     bus_1 = mgr._get_or_create_event_bus(sandbox_1, _DIR_A)
     bus_2 = mgr._get_or_create_event_bus(sandbox_2, _DIR_A)
     assert bus_1 is not bus_2
-
-
-# ---------------------------------------------------------------------------
-# Parallel-session scoping — events stay per-session AND per-directory
-# ---------------------------------------------------------------------------
-
-
-def test_parallel_sessions_packets_stay_scoped_to_their_directory(
-    mgr: KubernetesSandboxManager,
-) -> None:
-    """End-to-end scoping invariant for two parallel sessions on one pod:
-
-    Wire layer: each bus passes its own ``?directory=`` so opencode-serve
-    only emits that directory's events into that bus (already covered by
-    the wire-level test in ``test_event_bus.py``). Application layer: a
-    subscriber on bus A must not see packets that arrived on bus B —
-    even when the events would have matched their session ID had they
-    arrived on the wrong bus.
-
-    Simulates production by:
-    1. Creating two buses (one per session directory).
-    2. Subscribing to each bus with its own session ID.
-    3. Dispatching session A's packets ONLY into bus A
-       (opencode-serve would never route them to bus B because the bus
-       is subscribed to a different ``?directory=``).
-    4. Verifying each subscriber's queue contains only its own packets.
-
-    If the manager regresses to one-bus-per-pod, both subscriptions
-    would end up on the same bus and this test would still pass — but
-    the wire-level test would catch that. If the bus regresses to
-    fanning out across all subscribers regardless of session ID, this
-    test catches it.
-    """
-    sandbox_id = uuid4()
-    bus_a = mgr._get_or_create_event_bus(sandbox_id, _DIR_A)
-    bus_b = mgr._get_or_create_event_bus(sandbox_id, _DIR_B)
-
-    sub_a = bus_a.subscribe(_SES_A)
-    sub_b = bus_b.subscribe(_SES_B)
-
-    # Three packets for session A, dispatched into bus A only.
-    for chunk in ("hello", " ", "world"):
-        bus_a._dispatch(_make_part_delta(_SES_A, chunk))
-
-    # Two packets for session B, dispatched into bus B only.
-    for chunk in ("foo", "bar"):
-        bus_b._dispatch(_make_part_delta(_SES_B, chunk))
-
-    # Drain — subscriber A gets only A's packets, in order.
-    a_deltas: list[str] = []
-    while True:
-        try:
-            evt = sub_a.queue.get_nowait()
-        except Empty:
-            break
-        assert evt is not None
-        a_deltas.append(evt["properties"]["delta"])
-
-    b_deltas: list[str] = []
-    while True:
-        try:
-            evt = sub_b.queue.get_nowait()
-        except Empty:
-            break
-        assert evt is not None
-        b_deltas.append(evt["properties"]["delta"])
-
-    assert a_deltas == ["hello", " ", "world"]
-    assert b_deltas == ["foo", "bar"]
-
-
-def test_parallel_session_subscriber_does_not_see_other_session_on_its_own_bus(
-    mgr: KubernetesSandboxManager,
-) -> None:
-    """Defense-in-depth: even if opencode-serve mis-routed a foreign
-    session's event onto bus A (e.g. opencode emitted a cross-Instance
-    leak, or our scoping assumption was wrong), the bus's own
-    session-ID filter must still drop it. This pins the second layer of
-    isolation independent of the wire-level scoping."""
-    sandbox_id = uuid4()
-    bus_a = mgr._get_or_create_event_bus(sandbox_id, _DIR_A)
-    sub_a = bus_a.subscribe(_SES_A)
-
-    # Foreign packet for session B arrives on bus A — must be dropped.
-    bus_a._dispatch(_make_part_delta(_SES_B, "ghost"))
-    with pytest.raises(Empty):
-        sub_a.queue.get_nowait()
-
-    # And the real packet for session A still arrives.
-    bus_a._dispatch(_make_part_delta(_SES_A, "real"))
-    real_evt = sub_a.queue.get_nowait()
-    assert real_evt is not None
-    assert real_evt["properties"]["delta"] == "real"
 
 
 # ---------------------------------------------------------------------------

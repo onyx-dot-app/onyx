@@ -12,7 +12,6 @@ import re
 import threading
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 from unittest.mock import MagicMock
 from uuid import UUID
 
@@ -31,8 +30,6 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
     LABEL_USER_ID,
-    SANDBOX_TMP_PATH,
-    SANDBOX_TMPFS_OPTIONS,
     ContainerCreateKwargs,
     _sandbox_container_name,
     _sandbox_volume_name,
@@ -45,13 +42,16 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
 )
+from tests.common.paths import find_ancestor_containing
 
 SANDBOX_ID = UUID("12345678-1234-1234-1234-1234567890ab")
 USER_ID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 TENANT_ID = "tenant-abc"
-REPO_ROOT = next(
-    parent for parent in Path(__file__).parents if (parent / "deployment").is_dir()
-)
+REPO_ROOT = find_ancestor_containing("deployment")
+
+# Pinned spec values — intentionally not imported from the implementation.
+EXPECTED_EXEC_USER = "1000:1000"
+EXPECTED_EXEC_ENV = {"HOME": "/home/sandbox", "USER": "sandbox"}
 
 
 def _bare_manager_with_image(image: str) -> tuple[dsm.DockerSandboxManager, MagicMock]:
@@ -271,7 +271,7 @@ def test_container_kwargs_has_required_security_options(
     kwargs: ContainerCreateKwargs,
 ) -> None:
     """The sandbox must not be privileged or escalate caps."""
-    assert kwargs["user"] == "1000:1000"
+    assert kwargs["user"] == EXPECTED_EXEC_USER
     assert kwargs["cap_drop"] == ["ALL"]
     assert "no-new-privileges:true" in kwargs["security_opt"]
     assert kwargs["privileged"] is False
@@ -295,9 +295,9 @@ def test_sandbox_exec_wrapper_pairs_uid_with_user_environment(
     mock_run.assert_called_once_with(
         container,
         ["/bin/sh", "-c", "id"],
-        user=dsm.SANDBOX_EXEC_USER,
+        user=EXPECTED_EXEC_USER,
         workdir="/workspace",
-        environment=dsm.SANDBOX_EXEC_ENV,
+        environment=EXPECTED_EXEC_ENV,
         check=False,
     )
 
@@ -335,16 +335,16 @@ def test_sandbox_stream_exec_wrappers_pair_uid_with_user_environment(
         container,
         ["tar", "-xzf", "-"],
         b"payload",
-        user=dsm.SANDBOX_EXEC_USER,
+        user=EXPECTED_EXEC_USER,
         workdir="/workspace",
-        environment=dsm.SANDBOX_EXEC_ENV,
+        environment=EXPECTED_EXEC_ENV,
     )
     mock_stdout.assert_called_once_with(
         container,
         ["tar", "-czf", "-"],
-        user=dsm.SANDBOX_EXEC_USER,
+        user=EXPECTED_EXEC_USER,
         workdir="/workspace",
-        environment=dsm.SANDBOX_EXEC_ENV,
+        environment=EXPECTED_EXEC_ENV,
         chunk_size=64 * 1024,
     )
 
@@ -527,7 +527,7 @@ def test_container_kwargs_mounts_tmp_as_tmpfs(
     kwargs: ContainerCreateKwargs,
 ) -> None:
     """Expose /tmp as sandbox-local scratch space without adding a host mount."""
-    assert kwargs["tmpfs"] == {SANDBOX_TMP_PATH: SANDBOX_TMPFS_OPTIONS}
+    assert kwargs["tmpfs"] == {"/tmp": "rw,nosuid,nodev,size=5g,mode=1777"}
 
 
 def test_container_kwargs_warns_on_internal_compose_host(

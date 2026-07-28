@@ -27,11 +27,13 @@ from onyx.server.features.build.configs import (
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
 )
+from onyx.server.features.build.sandbox import serve_transport
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     DockerSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
 from onyx.server.gateway.models import GatewayModelDescriptor
+from tests.unit.fakes import FakeCache
 
 _SBX = UUID("12345678-1234-1234-1234-1234567890ab")
 
@@ -342,11 +344,15 @@ def test_init_serve_state_is_idempotent() -> None:
     assert mgr._terminated_sandboxes == set()
 
 
-def test_prompt_slot_serializes_on_docker() -> None:
+def test_prompt_slot_serializes_on_docker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     Pins the prompt-slot lock contract on Docker — same as the K8s test, catches
     a regression if Docker skips ``_init_serve_state``.
     """
+    cache = FakeCache()
+    monkeypatch.setattr(serve_transport, "get_cache_backend", lambda: cache)
     mgr = _bare_manager()
 
     other_session = UUID("00000000-0000-0000-0000-000000000001")

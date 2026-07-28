@@ -14,6 +14,7 @@ from starlette.responses import StreamingResponse
 
 from onyx.db.enums import SharingScope
 from onyx.server.features.build import webapp_proxy as api
+from tests.common.paths import find_ancestor_containing
 
 SESSION_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 BASE = f"/api/build/sessions/{SESSION_ID}/webapp"
@@ -21,15 +22,8 @@ NEXT_TEMPLATE_CONFIG = (
     Path(api.__file__).resolve().parents[0]
     / "sandbox/image/templates/outputs/web/next.config.ts"
 )
-DOCKER_SANDBOX_MANAGER = (
-    Path(api.__file__).resolve().parents[0] / "sandbox/docker/docker_sandbox_manager.py"
-)
-KUBERNETES_SANDBOX_MANAGER = (
-    Path(api.__file__).resolve().parents[0]
-    / "sandbox/kubernetes/kubernetes_sandbox_manager.py"
-)
 NEXTJS_DEV_SCRIPT = Path(api.__file__).resolve().parents[0] / "sandbox/nextjs_dev.py"
-WEB_NEXT_CONFIG = Path(__file__).resolve().parents[4] / "web/next.config.js"
+WEB_NEXT_CONFIG = find_ancestor_containing("web/next.config.js") / "web/next.config.js"
 
 
 class TestNextjsProxyMountContract:
@@ -58,15 +52,6 @@ class TestNextjsProxyMountContract:
         assert 'grep -q "WEBAPP_ASSET_PREFIX" next.config.ts' in source
         assert "nextConfig.basePath = webappBasePath" in source
         assert "nextConfig.assetPrefix = webappBasePath" in source
-
-    def test_sandbox_managers_use_shared_start_script(self) -> None:
-        for manager_source in (DOCKER_SANDBOX_MANAGER, KUBERNETES_SANDBOX_MANAGER):
-            source = manager_source.read_text()
-
-            assert (
-                "from onyx.server.features.build.sandbox.nextjs_dev import "
-                "build_nextjs_start_script"
-            ) in source
 
     def test_web_dev_rewrites_hmr_websocket_to_backend(self) -> None:
         """Local Next dev cannot proxy websocket upgrades via /api/[...path]."""

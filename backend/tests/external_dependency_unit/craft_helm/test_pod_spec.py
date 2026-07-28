@@ -16,16 +16,18 @@ The static pod shape now lives in the Helm-rendered ``sandbox-pod`` PodTemplate
 the per-pod fields. This suite renders that chart template, feeds it through the
 overlay (via a mocked ``read_namespaced_pod_template``), and asserts the
 invariants on the result — so it verifies the Helm template + Python overlay
-end to end. Skips if the ``helm`` binary or chart deps are unavailable.
+end to end. Skips locally if the ``helm`` binary or chart deps are
+unavailable; in CI those conditions fail instead of masking the suite.
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import os
 import shutil
 import subprocess
-from pathlib import Path
+from typing import NoReturn
 
 import pytest
 import yaml
@@ -48,11 +50,15 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
+from tests.common.paths import find_ancestor_containing
 
-# backend/tests/unit/onyx/server/features/build/sandbox/ -> repo root
-_REPO_ROOT = Path(__file__).resolve().parents[8]
+_REPO_ROOT = find_ancestor_containing("deployment/helm/charts/onyx")
 _CHART_DIR = _REPO_ROOT / "deployment" / "helm" / "charts" / "onyx"
 _DEFAULT_KUBE_VERSION_ARGS = ["--kube-version", "1.33.0"]
+_HELM_TEST_SECRET_ARGS = [
+    "--set-string",
+    "auth.sandboxPushSecret.values.private_key=test-private-key",
+]
 
 
 def _chart_args_with_default_kube_version(
@@ -88,12 +94,19 @@ def _push_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _render_pod_template_yaml(extra_args: list[str] | None = None) -> str:
-    """Render the sandbox-pod PodTemplate from the chart."""
+def _skip_or_fail(reason: str) -> NoReturn:
+    """Skip locally, but fail in CI — a shard that renders nothing must not
+    report green."""
+    if os.environ.get("CI"):
+        pytest.fail(reason)
+    pytest.skip(reason)
+
+
+def _helm_template_cmd(extra_args: list[str] | None = None) -> list[str]:
     helm = shutil.which("helm")
     if helm is None:
-        pytest.skip("helm binary not available")
-    cmd = [
+        _skip_or_fail("helm binary not available")
+    return [
         helm,
         "template",
         "onyx",
@@ -103,33 +116,29 @@ def _render_pod_template_yaml(extra_args: list[str] | None = None) -> str:
         "-f",
         str(_CHART_DIR / "values-ci.yaml"),
         *_chart_args_with_default_kube_version(extra_args),
+        *_HELM_TEST_SECRET_ARGS,
+    ]
+
+
+def _render_pod_template_yaml(extra_args: list[str] | None = None) -> str:
+    """Render the sandbox-pod PodTemplate from the chart."""
+    cmd = [
+        *_helm_template_cmd(extra_args),
         "--show-only",
         "templates/sandbox-podtemplate.yaml",
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        pytest.skip(f"helm template failed (chart deps?): {result.stderr.strip()}")
+        _skip_or_fail(f"helm template failed (chart deps?): {result.stderr.strip()}")
     return result.stdout
 
 
 def _render_chart(
     extra_args: list[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    helm = shutil.which("helm")
-    if helm is None:
-        pytest.skip("helm binary not available")
-    cmd = [
-        helm,
-        "template",
-        "onyx",
-        str(_CHART_DIR),
-        "-n",
-        "onyx",
-        "-f",
-        str(_CHART_DIR / "values-ci.yaml"),
-        *_chart_args_with_default_kube_version(extra_args),
-    ]
-    return subprocess.run(cmd, capture_output=True, text=True)
+    return subprocess.run(
+        _helm_template_cmd(extra_args), capture_output=True, text=True
+    )
 
 
 def _render_pod_template() -> client.V1PodTemplate:

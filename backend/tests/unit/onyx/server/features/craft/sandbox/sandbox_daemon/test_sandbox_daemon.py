@@ -41,12 +41,9 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     FilesystemListRequest,
     sidecar_snapshot_restore_path,
 )
+from tests.common.paths import find_ancestor_containing
 
-# Resolve the sandbox_daemon directory relative to this test file so the path works in
-# both local dev and CI. This file lives at:
-#   backend/tests/unit/onyx/server/features/build/sandbox/sandbox_daemon/test_sandbox_daemon.py
-# so parents[9] is the repo root.
-_REPO_ROOT = Path(__file__).resolve().parents[9]
+_REPO_ROOT = find_ancestor_containing("backend/onyx")
 _DAEMON_DIR = (
     _REPO_ROOT / "backend/onyx/server/features/build/sandbox/image/sandbox_daemon"
 )
