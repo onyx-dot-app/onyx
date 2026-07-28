@@ -42,6 +42,9 @@ export interface MCPServer {
   auth_template?: MCPAuthTemplate | null;
   admin_credentials?: Record<string, string>;
   user_credentials?: Record<string, string>;
+  // Masked admin-defined headers sent on every request to the server (e.g. an
+  // API gateway admission key). Owner/admin auth-config views only.
+  custom_headers?: Record<string, string> | null;
   status: MCPServerStatus;
   is_public: boolean;
   groups: number[];

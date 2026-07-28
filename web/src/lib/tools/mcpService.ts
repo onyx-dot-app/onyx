@@ -208,6 +208,11 @@ export async function upsertMCPServer(serverData: {
   admin_credentials?: Record<string, string>;
   // Per-key analogue of `oauth_client_*_changed` for `admin_credentials`.
   admin_credentials_changed?: Record<string, boolean>;
+  // Admin-defined headers sent on every request to the server, for all auth
+  // types. Omit to leave stored headers unchanged; send {} to clear them.
+  custom_headers?: Record<string, string>;
+  // Per-key analogue of `admin_credentials_changed` for `custom_headers`.
+  custom_headers_changed?: Record<string, boolean>;
   existing_server_id?: number;
 }): Promise<ApiResponse<UpsertMCPServerResponse>> {
   try {

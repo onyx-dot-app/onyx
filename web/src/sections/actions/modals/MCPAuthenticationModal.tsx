@@ -34,6 +34,9 @@ import {
   MCPAuthTemplate,
 } from "@/lib/tools/interfaces";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
+import InputKeyValue, {
+  KeyValue,
+} from "@/refresh-components/inputs/InputKeyValue";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import { toast } from "@opal/layouts";
 import { SvgArrowExchange } from "@opal/icons";
@@ -60,6 +63,7 @@ export interface MCPAuthFormValues {
   oauth_token_endpoint: string;
   oauth_scopes_override: string;
   oauth_additional_auth_params: string;
+  custom_headers: KeyValue[];
 }
 
 const GOOGLE_AUTHORIZATION_ENDPOINT_HINT =
@@ -145,6 +149,8 @@ export default function MCPAuthenticationModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Open the Advanced (known-provider) section by default when configured.
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Open the Custom Headers section by default when headers are configured.
+  const [customHeadersOpen, setCustomHeadersOpen] = useState(false);
 
   const isOAuthEnabled = useOAuthPassThroughEnabled();
 
@@ -174,6 +180,12 @@ export default function MCPAuthenticationModal({
       }
       setAdvancedOpen(
         fullServer.oauth_provider_mode === MCPOAuthProviderMode.KNOWN_PROVIDER
+      );
+      setCustomHeadersOpen(
+        Boolean(
+          fullServer.custom_headers &&
+          Object.keys(fullServer.custom_headers).length > 0
+        )
       );
     }
   }, [fullServer]);
@@ -211,6 +223,7 @@ export default function MCPAuthenticationModal({
         oauth_token_endpoint: "",
         oauth_scopes_override: "",
         oauth_additional_auth_params: "",
+        custom_headers: [],
       };
     }
 
@@ -249,6 +262,10 @@ export default function MCPAuthenticationModal({
       // User Credentials (substitutions)
       user_credentials:
         (fullServer.user_credentials as Record<string, string>) || {},
+      // Custom headers (masked values; changed flags are computed on submit)
+      custom_headers: Object.entries(fullServer.custom_headers || {}).map(
+        ([key, value]) => ({ key, value: String(value) })
+      ),
     };
   }, [fullServer, mcpServer?.server_url]);
 
@@ -290,6 +307,35 @@ export default function MCPAuthenticationModal({
       flags[key] = current[key] !== initial[key];
     }
     return flags;
+  };
+
+  // Per-key changed flags for `custom_headers`, mirroring
+  // `computeAdminCredentialsChangedFlags`: the backend keeps the stored value
+  // for unchanged keys, so masked read-back values are never persisted.
+  const buildCustomHeadersPayload = (values: MCPAuthFormValues) => {
+    // Until the full server config loads, the stored headers are unknown;
+    // omit the field entirely so the backend leaves them untouched.
+    if (!fullServer) {
+      return {};
+    }
+    const initialByKey: Record<string, string> = {};
+    (initialValues.custom_headers || []).forEach((row) => {
+      if (row.key.trim()) {
+        initialByKey[row.key] = row.value;
+      }
+    });
+    const headers: Record<string, string> = {};
+    const changedFlags: Record<string, boolean> = {};
+    (values.custom_headers || []).forEach((row) => {
+      const key = row.key.trim();
+      if (!key) {
+        return;
+      }
+      headers[key] = row.value;
+      changedFlags[key] =
+        !(key in initialByKey) || row.value !== initialByKey[key];
+    });
+    return { custom_headers: headers, custom_headers_changed: changedFlags };
   };
 
   const constructServerData = (values: MCPAuthFormValues) => {
@@ -382,6 +428,7 @@ export default function MCPAuthenticationModal({
           ? parsedAdditionalAuthParams
           : undefined,
       ...oauthChangedFlags,
+      ...buildCustomHeadersPayload(values),
       existing_server_id: mcpServer.id,
     };
   };
@@ -946,6 +993,52 @@ export default function MCPAuthenticationModal({
                       description="Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider."
                     />
                   )}
+
+                  {/* Custom Headers (all auth types) */}
+                  <div className="flex flex-col gap-4 p-2">
+                    <Divider paddingPerpendicular="fit" />
+                    <SimpleCollapsible
+                      open={customHeadersOpen}
+                      onOpenChange={setCustomHeadersOpen}
+                    >
+                      <SimpleCollapsible.Header
+                        title="Custom Headers"
+                        description="Send additional static headers with every request to this server — e.g. the admission key of an API gateway in front of it."
+                      />
+                      <SimpleCollapsible.Content>
+                        <Section alignItems="stretch" height="auto">
+                          <FormField name="custom_headers" state="idle">
+                            <FormField.Control asChild>
+                              <InputKeyValue
+                                keyTitle="Header Name"
+                                valueTitle="Header Value"
+                                items={values.custom_headers}
+                                onChange={(items) =>
+                                  setFieldValue("custom_headers", items)
+                                }
+                                mode="fixed-line"
+                                layout="equal"
+                                addButtonLabel="Add Header"
+                              />
+                            </FormField.Control>
+                            <FormField.Description>
+                              Sent for every user alongside the authentication
+                              headers, which always take precedence — the{" "}
+                              <Text text03 secondaryMono className="inline">
+                                Authorization
+                              </Text>{" "}
+                              header cannot be set here. Values may use the{" "}
+                              <Text text03 secondaryMono className="inline">
+                                {"{user_email}"}
+                              </Text>{" "}
+                              placeholder and are stored encrypted and shown
+                              masked after saving.
+                            </FormField.Description>
+                          </FormField>
+                        </Section>
+                      </SimpleCollapsible.Content>
+                    </SimpleCollapsible>
+                  </div>
                 </Modal.Body>
 
                 <Modal.Footer>
