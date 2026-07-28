@@ -55,6 +55,7 @@ For self-hosted deployments:
 """
 
 import logging
+import time
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
@@ -78,6 +79,21 @@ def _is_path_allowed(path: str) -> bool:
     return any(
         path.startswith(prefix) for prefix in LICENSE_ENFORCEMENT_ALLOWED_PREFIXES
     )
+
+
+# Caps the gated re-check at one DB read per worker per interval, since every
+# request to a genuinely gated instance takes that branch, pre-auth.
+_GATED_RECHECK_INTERVAL_SEC = 30.0
+_last_gated_recheck = 0.0
+
+
+def _should_recheck_gated() -> bool:
+    global _last_gated_recheck
+    now = time.monotonic()
+    if now - _last_gated_recheck < _GATED_RECHECK_INTERVAL_SEC:
+        return False
+    _last_gated_recheck = now
+    return True
 
 
 def add_license_enforcement_middleware(
@@ -125,16 +141,31 @@ def add_license_enforcement_middleware(
                     )
 
             if metadata:
-                # Point-of-use renewal: a request observing an expired or
-                # expiring license triggers a debounced async re-claim. Runs
-                # before any gating decision so a gated instance heals itself.
+                # Runs before any gating decision so a gated instance heals.
                 maybe_schedule_license_reclaim(metadata.expires_at, tenant_id)
 
                 # User HAS a license (current or expired)
+                if (
+                    metadata.status == ApplicationStatus.GATED_ACCESS
+                    and _should_recheck_gated()
+                ):
+                    # Re-read the row before gating: a renewal whose cache
+                    # write failed must not stay gated for the entry's TTL.
+                    try:
+                        with get_session_with_current_tenant() as db_session:
+                            refreshed = refresh_license_cache(db_session, tenant_id)
+                        if refreshed:
+                            metadata = refreshed
+                    except Exception as e:
+                        # Best-effort: any failure keeps the cached verdict.
+                        logger.warning(
+                            "[license_enforcement] Gated re-check failed: %s", e
+                        )
+
                 if metadata.status == ApplicationStatus.GATED_ACCESS:
                     # License fully expired - gate the user
-                    # Note: GRACE_PERIOD and PAYMENT_REMINDER are for notifications only,
-                    # they don't block access
+                    # Note: GRACE_PERIOD and PAYMENT_REMINDER are for
+                    # notifications only, they don't block access
                     is_gated = True
                 else:
                     # License is active - check seat limit

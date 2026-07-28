@@ -13,11 +13,7 @@ class PlanType(str, Enum):
 
 
 class LicenseSource(str, Enum):
-    """Whether a license can be re-fetched from the control plane on its own.
-
-    Derived from the payload, never from how the blob happened to arrive, so
-    every writer agrees and the value cannot drift between cache rebuilds.
-    """
+    """Whether a license can be re-fetched from the control plane on its own."""
 
     AUTO_FETCH = "auto_fetch"
     MANUAL_UPLOAD = "manual_upload"

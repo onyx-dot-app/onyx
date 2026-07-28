@@ -250,7 +250,7 @@ class TestVerifyLicenseAuth:
         mock_is_valid: MagicMock,
         mock_verify: MagicMock,
     ) -> None:
-        """Should accept expired license when allow_expired=True."""
+        """A recently lapsed license still reaches the endpoints that un-lapse it."""
         from ee.onyx.server.tenants.proxy import verify_license_auth
 
         mock_payload = make_license_payload(expired=True)
@@ -260,3 +260,31 @@ class TestVerifyLicenseAuth:
         result = verify_license_auth("expired_license", allow_expired=True)
 
         assert result == mock_payload
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True)
+    @patch("ee.onyx.server.tenants.proxy.verify_license_signature")
+    @patch("ee.onyx.server.tenants.proxy.is_license_valid")
+    async def test_long_expired_license_is_refused_even_when_expiry_is_waived(
+        self,
+        mock_is_valid: MagicMock,
+        mock_verify: MagicMock,
+    ) -> None:
+        """A signed license has no revocation, so an old copy must not stay a
+        credential for whatever the tenant holds today."""
+        from fastapi import HTTPException
+
+        from ee.onyx.server.tenants.proxy import (
+            STALE_LICENSE_AUTH_GRACE,
+            verify_license_auth,
+        )
+
+        mock_verify.return_value = make_license_payload(
+            expired=True, expired_days_ago=STALE_LICENSE_AUTH_GRACE.days + 1
+        )
+        mock_is_valid.return_value = False
+
+        with pytest.raises(HTTPException) as exc_info:
+            verify_license_auth("ancient_license", allow_expired=True)
+
+        assert exc_info.value.status_code == 401

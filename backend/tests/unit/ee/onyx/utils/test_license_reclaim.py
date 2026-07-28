@@ -5,12 +5,15 @@ Also guards the point-of-use scheduler: one debounced reclaim per window,
 never an exception into the request that tripped it."""
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
 from ee.onyx.server.license.models import LicensePayload, LicenseSource, PlanType
 from ee.onyx.utils.license import (
+    block_license_reclaim,
+    license_fingerprint,
+    license_reclaim_is_blocked,
     maybe_schedule_license_reclaim,
     reclaim_license_from_control_plane,
     verify_and_store_license,
@@ -73,7 +76,7 @@ class TestVerifyAndStoreLicense:
         result = verify_and_store_license(db_session, "signed-license")
 
         assert result == payload
-        mock_upsert.assert_called_once_with(db_session, "signed-license")
+        mock_upsert.assert_called_once_with(db_session, "signed-license", commit=False)
         mock_update_cache.assert_called_once_with(payload)
 
     @patch("ee.onyx.db.license.upsert_license")
@@ -94,7 +97,6 @@ class TestVerifyAndStoreLicense:
 class TestReclaimLicenseFromControlPlane:
     @patch("ee.onyx.utils.license.CLOUD_DATA_PLANE_URL", "https://cloud.example.com")
     @patch("ee.onyx.db.license.get_license")
-    @patch("ee.onyx.db.license.get_license_metadata")
     @patch("ee.onyx.db.license.update_license_cache")
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.verify_license_signature")
@@ -105,12 +107,10 @@ class TestReclaimLicenseFromControlPlane:
         mock_verify: MagicMock,
         mock_upsert: MagicMock,
         mock_update_cache: MagicMock,
-        mock_get_metadata: MagicMock,
         mock_get_license: MagicMock,
     ) -> None:
         db_session = MagicMock()
         payload = _make_license_payload()
-        mock_get_metadata.return_value = MagicMock(tenant_id="tenant_123")
         mock_get_license.return_value = MagicMock(license_data="stored-license")
         mock_verify.return_value = payload
 
@@ -130,33 +130,27 @@ class TestReclaimLicenseFromControlPlane:
             },
             timeout=30,
         )
-        mock_verify.assert_called_once_with("signed-license")
-        mock_upsert.assert_called_once_with(db_session, "signed-license")
+        # The stored blob is verified first to address the request, then the
+        # incoming one, then the stored one again for the staleness compare.
+        assert call("signed-license") in mock_verify.call_args_list
+        mock_upsert.assert_called_once_with(db_session, "signed-license", commit=False)
         mock_update_cache.assert_called_once_with(payload)
 
     @pytest.mark.parametrize(
-        ("metadata", "license_row"),
-        [
-            (None, MagicMock(license_data="stored-license")),
-            (MagicMock(tenant_id=""), MagicMock(license_data="stored-license")),
-            (MagicMock(tenant_id="tenant_123"), None),
-            (MagicMock(tenant_id="tenant_123"), MagicMock(license_data="")),
-        ],
+        "license_row",
+        [None, MagicMock(license_data="")],
+        ids=["no-row", "empty-blob"],
     )
     @patch("ee.onyx.db.license.get_license")
-    @patch("ee.onyx.db.license.get_license_metadata")
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.requests.get")
     def test_returns_none_when_local_reclaim_prereqs_are_missing(
         self,
         mock_get_request: MagicMock,
         mock_upsert: MagicMock,
-        mock_get_metadata: MagicMock,
         mock_get_license: MagicMock,
-        metadata: MagicMock | None,
         license_row: MagicMock | None,
     ) -> None:
-        mock_get_metadata.return_value = metadata
         mock_get_license.return_value = license_row
 
         result = reclaim_license_from_control_plane(MagicMock())
@@ -165,6 +159,7 @@ class TestReclaimLicenseFromControlPlane:
         mock_get_request.assert_not_called()
         mock_upsert.assert_not_called()
 
+    @patch("ee.onyx.utils.license.resume_license_reclaim")
     @patch("ee.onyx.utils.license.logger")
     @patch("ee.onyx.db.license.get_license")
     @patch("ee.onyx.db.license.get_license_metadata")
@@ -181,6 +176,7 @@ class TestReclaimLicenseFromControlPlane:
         mock_get_metadata: MagicMock,
         mock_get_license: MagicMock,
         mock_logger: MagicMock,
+        _mock_clear_block: MagicMock,
     ) -> None:
         db_session = MagicMock()
         payload = _make_license_payload()
@@ -197,24 +193,24 @@ class TestReclaimLicenseFromControlPlane:
         result = reclaim_license_from_control_plane(db_session)
 
         assert result == payload
-        mock_upsert.assert_called_once_with(db_session, "signed-license")
+        mock_upsert.assert_called_once_with(db_session, "signed-license", commit=False)
         mock_logger.warning.assert_called_once_with(
             "Failed to update license cache: %s",
             mock_update_cache.side_effect,
         )
 
     @patch("ee.onyx.db.license.get_license")
-    @patch("ee.onyx.db.license.get_license_metadata")
+    @patch("ee.onyx.utils.license.verify_license_signature")
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.requests.get")
     def test_raises_value_error_when_response_has_no_license_field(
         self,
         mock_get_request: MagicMock,
         mock_upsert: MagicMock,
-        mock_get_metadata: MagicMock,
+        mock_verify: MagicMock,
         mock_get_license: MagicMock,
     ) -> None:
-        mock_get_metadata.return_value = MagicMock(tenant_id="tenant_123")
+        mock_verify.return_value = _make_license_payload()
         mock_get_license.return_value = MagicMock(license_data="stored-license")
 
         response = MagicMock()
@@ -260,8 +256,8 @@ def _expiring_in(delta: timedelta) -> datetime:
 
 
 class TestMaybeScheduleLicenseReclaim:
-    @patch("onyx.background.celery.versioned_apps.client.app")
-    @patch("onyx.redis.redis_pool.get_redis_client")
+    @patch("ee.onyx.utils.license.client_app")
+    @patch("ee.onyx.utils.license.get_redis_client")
     def test_no_op_when_license_is_outside_the_reclaim_window(
         self,
         mock_get_redis: MagicMock,
@@ -279,8 +275,8 @@ class TestMaybeScheduleLicenseReclaim:
         [timedelta(days=1), timedelta(days=-3)],
         ids=["expiring-soon", "already-expired"],
     )
-    @patch("onyx.background.celery.versioned_apps.client.app")
-    @patch("onyx.redis.redis_pool.get_redis_client")
+    @patch("ee.onyx.utils.license.client_app")
+    @patch("ee.onyx.utils.license.get_redis_client")
     def test_schedules_one_reclaim_when_debounce_lock_is_acquired(
         self,
         mock_get_redis: MagicMock,
@@ -299,8 +295,33 @@ class TestMaybeScheduleLicenseReclaim:
             expires=15 * 60,
         )
 
-    @patch("onyx.background.celery.versioned_apps.client.app")
-    @patch("onyx.redis.redis_pool.get_redis_client")
+    @patch("ee.onyx.utils.license.client_app")
+    @patch("ee.onyx.utils.license.get_redis_client")
+    def test_reads_the_block_from_the_same_namespace_the_task_writes(
+        self,
+        mock_get_redis: MagicMock,
+        mock_client_app: MagicMock,
+    ) -> None:
+        """get_redis_client prefixes every key with the tenant it is given, so a
+        writer and a reader that disagree on the tenant silently miss each
+        other and the block never suppresses anything."""
+        mock_get_redis.return_value.get.return_value = license_fingerprint("blob")
+
+        block_license_reclaim("blob")
+        assert license_reclaim_is_blocked("blob") is True
+
+        assert mock_get_redis.call_args_list == [call(), call()]
+        mock_client_app.send_task.assert_not_called()
+
+    def test_a_block_naming_another_blob_does_not_suppress_this_one(self) -> None:
+        """Clearing is best-effort, so a stale block must not outlive the
+        license it rejected and stall the replacement for a day."""
+        with patch("ee.onyx.utils.license.get_redis_client") as mock_get_redis:
+            mock_get_redis.return_value.get.return_value = license_fingerprint("old")
+            assert license_reclaim_is_blocked("replacement") is False
+
+    @patch("ee.onyx.utils.license.client_app")
+    @patch("ee.onyx.utils.license.get_redis_client")
     def test_no_op_when_debounce_lock_is_held(
         self,
         mock_get_redis: MagicMock,
@@ -313,25 +334,28 @@ class TestMaybeScheduleLicenseReclaim:
 
         mock_client_app.send_task.assert_not_called()
 
-    @patch("onyx.background.celery.versioned_apps.client.app")
-    @patch("onyx.redis.redis_pool.get_redis_client")
-    def test_no_op_when_reclaim_is_blocked(
+    @patch("ee.onyx.utils.license.client_app")
+    @patch("ee.onyx.utils.license.get_redis_client")
+    def test_a_held_debounce_is_what_suppresses_a_blocked_license(
         self,
         mock_get_redis: MagicMock,
         mock_client_app: MagicMock,
     ) -> None:
-        # A license the control plane already rejected must not spend another
-        # attempt, no matter how many requests observe it as stale.
-        mock_get_redis.return_value.exists.return_value = 1
+        # The block is keyed to the license blob, which the scheduler does not
+        # have. The task widens this debounce instead, so a rejected license
+        # stops costing an enqueue per window.
+        mock_get_redis.return_value.set.return_value = None
 
         maybe_schedule_license_reclaim(_expiring_in(timedelta(days=-3)), "tenant_123")
 
-        mock_get_redis.return_value.set.assert_not_called()
+        # SET NX returns None when the key is already held, which is how a
+        # widened debounce keeps the blocked license from re-enqueueing.
+        mock_get_redis.return_value.set.assert_called_once()
         mock_client_app.send_task.assert_not_called()
 
     @patch("ee.onyx.utils.license.logger")
-    @patch("onyx.background.celery.versioned_apps.client.app")
-    @patch("onyx.redis.redis_pool.get_redis_client")
+    @patch("ee.onyx.utils.license.client_app")
+    @patch("ee.onyx.utils.license.get_redis_client")
     def test_scheduling_failure_is_logged_and_swallowed(
         self,
         mock_get_redis: MagicMock,

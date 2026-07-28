@@ -19,6 +19,7 @@ Auth levels by endpoint:
 - /seats/update: Valid license required
 """
 
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 import httpx
@@ -35,6 +36,10 @@ from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
+
+# How long past expiry a signed license still authenticates renewal
+# endpoints. Bounds an old copy's life as a bearer credential.
+STALE_LICENSE_AUTH_GRACE = timedelta(days=90)
 
 BILLING_INFO_CACHE_KEY = "proxy:billing-information:v1"
 BILLING_INFO_CACHE_TTL_SEC = 300
@@ -90,6 +95,11 @@ def _extract_license_from_header(
     return authorization.split(" ", 1)[1]
 
 
+def _is_within_stale_license_grace(payload: LicensePayload) -> bool:
+    age = datetime.now(timezone.utc) - payload.expires_at
+    return age <= STALE_LICENSE_AUTH_GRACE
+
+
 def verify_license_auth(
     license_data: str,
     allow_expired: bool = False,
@@ -116,6 +126,13 @@ def verify_license_auth(
     if not allow_expired and not is_license_valid(payload):
         raise HTTPException(status_code=401, detail="License has expired")
 
+    # No revocation exists, so an old copy must age out as a credential.
+    if allow_expired and not _is_within_stale_license_grace(payload):
+        raise HTTPException(
+            status_code=401,
+            detail="License expired too long ago to be used for renewal",
+        )
+
     return payload
 
 
@@ -135,9 +152,9 @@ async def get_license_payload(
 async def get_license_payload_allow_expired(
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> LicensePayload:
-    """Dependency: Require license with valid signature, expired OK.
+    """Dependency: signature must verify, expiry is not checked.
 
-    Used by renewal-path endpoints, where the stored license may already have lapsed.
+    A lapsed instance still has to reach the endpoints that get it un-lapsed.
     """
     license_data = _extract_license_from_header(authorization, required=True)
     # license_data is guaranteed non-None when required=True
@@ -433,11 +450,7 @@ async def proxy_license_fetch(
     tenant_id: str,
     license_payload: LicensePayload = Depends(get_license_payload_allow_expired),
 ) -> LicenseFetchResponse:
-    """Proxy license fetch to control plane.
-
-    Auth: Valid signature required, expired OK for renewal delivery.
-    The tenant_id in path must match the authenticated tenant.
-    """
+    """Proxy license fetch to control plane."""
     # tenant_id is a required field in LicensePayload (Pydantic validates this),
     # but we check explicitly for defense in depth
     if not license_payload.tenant_id:

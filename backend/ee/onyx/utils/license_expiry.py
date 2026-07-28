@@ -1,14 +1,16 @@
-"""Tiered license-expiry warning stage derivation.
+"""Expiry-derived scheduling for licenses: warning stages and the reclaim window.
 
-Pure logic — no DB, no I/O. Given an `expires_at` and current time, returns the
-warning stage that should drive banner copy + notification + email triggers.
+Pure logic, no DB and no I/O. Given an `expires_at` and the current time,
+returns the warning stage driving banner copy, notifications, and emails, and
+whether the license is close enough to expiry to re-fetch from the control
+plane.
 
 Stages:
-    NONE  — more than 30 days remain, or grace period already exhausted
-    T_30D — 14 < days_remaining <= 30
-    T_14D —  1 < days_remaining <= 14
-    T_1D  —  0 < days_remaining <=  1
-    GRACE — license already expired, within 14-day grace window
+    NONE  more than 30 days remain, or grace period already exhausted
+    T_30D 14 < days_remaining <= 30
+    T_14D  1 < days_remaining <= 14
+    T_1D   0 < days_remaining <=  1
+    GRACE license already expired, within the 14-day grace window
 """
 
 from datetime import datetime, timedelta, timezone
@@ -22,7 +24,6 @@ LICENSE_RECLAIM_WINDOW = timedelta(days=7)
 
 
 def is_license_due_for_reclaim(expires_at: datetime) -> bool:
-    """True once the license is inside the reclaim window, or already past expiry."""
     return expires_at - datetime.now(timezone.utc) <= LICENSE_RECLAIM_WINDOW
 
 

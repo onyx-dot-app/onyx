@@ -26,12 +26,31 @@ LICENSE_CACHE_TTL_SECONDS = 86400  # 24 hours
 # Namespaced + tenant-hashed so unrelated tenants don't block each other
 # and the lock id can't collide with other advisory locks in the codebase.
 _SEAT_LOCK_NAMESPACE = "onyx_seat_lock"
+_LICENSE_STORE_LOCK_NAMESPACE = "onyx_license_store_lock"
+
+
+def _advisory_lock_id(namespace: str, tenant_id: str) -> int:
+    digest = hashlib.sha256(f"{namespace}:{tenant_id}".encode()).digest()
+    # pg_advisory_xact_lock takes a signed 8-byte int.
+    return struct.unpack("q", digest[:8])[0]
 
 
 def seat_lock_id_for_tenant(tenant_id: str) -> int:
-    digest = hashlib.sha256(f"{_SEAT_LOCK_NAMESPACE}:{tenant_id}".encode()).digest()
-    # pg_advisory_xact_lock takes a signed 8-byte int.
-    return struct.unpack("q", digest[:8])[0]
+    return _advisory_lock_id(_SEAT_LOCK_NAMESPACE, tenant_id)
+
+
+def acquire_license_store_lock(db_session: Session) -> None:
+    """Serialize read-compare-write on the license row.
+
+    Beat, the point-of-use scheduler, and the Sync button can all be storing a
+    license at once. Without this the newest blob can be read, approved, and
+    then overwritten by a slower response that was approved against the same
+    older row. Released on the caller's commit or rollback.
+    """
+    _acquire_advisory_lock(
+        db_session,
+        _advisory_lock_id(_LICENSE_STORE_LOCK_NAMESPACE, get_current_tenant_id()),
+    )
 
 
 def acquire_seat_lock(db_session: Session, tenant_id: str | None = None) -> None:
@@ -40,7 +59,12 @@ def acquire_seat_lock(db_session: Session, tenant_id: str | None = None) -> None
     Caller must run the seat check AND the seat-consuming write in the
     same transaction.
     """
-    lock_id = seat_lock_id_for_tenant(tenant_id or get_current_tenant_id())
+    _acquire_advisory_lock(
+        db_session, seat_lock_id_for_tenant(tenant_id or get_current_tenant_id())
+    )
+
+
+def _acquire_advisory_lock(db_session: Session, lock_id: int) -> None:
     # Bounded wait: a double-acquisition bug or wedged holder should fail
     # fast with lock_not_available, not hang until the idle-in-transaction
     # reaper kills the session (observed as 10-minute invite freezes).
@@ -79,9 +103,14 @@ def get_license(db_session: Session) -> License | None:
     return db_session.execute(select(License)).scalars().first()
 
 
-def upsert_license(db_session: Session, license_data: str) -> License:
+def upsert_license(
+    db_session: Session, license_data: str, commit: bool = True
+) -> License:
     """
     Insert or update the license (singleton pattern).
+
+    commit=False leaves the write uncommitted so the caller can extend the
+    transaction, and with it any advisory lock ordering later work.
 
     Args:
         db_session: Database session
@@ -94,17 +123,18 @@ def upsert_license(db_session: Session, license_data: str) -> License:
 
     if existing:
         existing.license_data = license_data
+        logger.info("License updated")
+    else:
+        existing = License(license_data=license_data)
+        db_session.add(existing)
+        logger.info("License created")
+
+    if commit:
         db_session.commit()
         db_session.refresh(existing)
-        logger.info("License updated")
-        return existing
-
-    new_license = License(license_data=license_data)
-    db_session.add(new_license)
-    db_session.commit()
-    db_session.refresh(new_license)
-    logger.info("License created")
-    return new_license
+    else:
+        db_session.flush()
+    return existing
 
 
 def delete_license(db_session: Session) -> bool:
@@ -117,12 +147,22 @@ def delete_license(db_session: Session) -> bool:
     Returns:
         True if deleted, False if no license existed
     """
+    # Serialized with verify_and_store_license, so an in-flight reclaim that
+    # started before the delete cannot re-insert the row afterward.
+    acquire_license_store_lock(db_session)
     existing = get_license(db_session)
     if existing:
         db_session.delete(existing)
         db_session.commit()
+        # After the commit, so a store that published its cache entry while
+        # holding the lock cannot outlive its row here.
+        try:
+            invalidate_license_cache()
+        except Exception as e:
+            logger.warning("License deleted but cache invalidation failed: %s", e)
         logger.info("License deleted")
         return True
+    db_session.rollback()
     return False
 
 
@@ -304,6 +344,10 @@ def refresh_license_cache(
     """
     from ee.onyx.utils.license import verify_license_signature
 
+    # Serialized with the store path, which publishes its cache entry before
+    # committing. Rebuilding outside the lock could cache the row a concurrent
+    # store is replacing, overwriting the newer entry it just published.
+    acquire_license_store_lock(db_session)
     license_record = get_license(db_session)
     if not license_record:
         invalidate_license_cache(tenant_id)

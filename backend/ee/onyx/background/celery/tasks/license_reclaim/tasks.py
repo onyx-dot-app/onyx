@@ -1,11 +1,13 @@
 import requests
 from celery import shared_task
 
-from ee.onyx.db.license import get_license_metadata
+from ee.onyx.db.license import get_license
+from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.utils.license import (
     block_license_reclaim,
     license_reclaim_is_blocked,
     reclaim_license_from_control_plane,
+    verify_license_signature,
 )
 from ee.onyx.utils.license_expiry import is_license_due_for_reclaim
 from onyx.configs.app_configs import JOB_TIMEOUT
@@ -16,7 +18,8 @@ from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
-# The control plane rejects the stored license as a credential under these.
+# The stored license IS the credential for a re-claim, so a rejection under
+# these can only repeat. Retrying it is wasted until a new license arrives.
 _AUTH_REJECTED_STATUSES = frozenset({401, 403})
 
 
@@ -30,48 +33,61 @@ def reclaim_license_task(*, tenant_id: str) -> None:  # noqa: ARG001
         return
 
     with get_session_with_current_tenant() as db_session:
-        metadata = get_license_metadata(db_session)
-        if not metadata:
+        license_row = get_license(db_session)
+        if not license_row or not license_row.license_data:
             return
 
-        if not is_license_due_for_reclaim(metadata.expires_at):
+        # Gate on the stored blob: a stale cache entry can misreport source
+        # and expiry.
+        try:
+            payload = verify_license_signature(license_row.license_data)
+        except ValueError:
+            logger.error("Stored license does not verify, skipping reclaim")
             return
 
-        if license_reclaim_is_blocked(metadata.tenant_id):
+        # Sales-issued licenses are replaced by hand, nothing to fetch.
+        if payload.source == LicenseSource.MANUAL_UPLOAD:
+            return
+
+        if not is_license_due_for_reclaim(payload.expires_at):
+            return
+
+        # A blocked enqueue is a cheap local no-op once per debounce window.
+        if license_reclaim_is_blocked(license_row.license_data):
             return
 
         try:
             renewed = reclaim_license_from_control_plane(db_session)
-        except requests.HTTPError as e:
-            status_code = e.response.status_code if e.response is not None else None
+        except (requests.RequestException, ValueError) as e:
+            response = getattr(e, "response", None)
+            status_code = response.status_code if response is not None else None
             if status_code in _AUTH_REJECTED_STATUSES:
-                # The stored license IS the credential, so retrying it can only
-                # fail the same way. Stop until a new license is installed.
-                block_license_reclaim(metadata.tenant_id)
+                # A slow rejection may lose to a replacement install. Only the
+                # blob still stored may be blocked, or a mismatched fingerprint
+                # would burn an attempt for the current license.
+                current = get_license(db_session)
+                if not current or current.license_data != license_row.license_data:
+                    return
+                block_license_reclaim(license_row.license_data)
                 logger.error(
                     "License reclaim rejected for tenant %s (HTTP %s). The stored "
                     "license is not accepted by the control plane and must be "
                     "replaced before renewals can resume.",
-                    metadata.tenant_id,
+                    payload.tenant_id,
                     status_code,
                 )
-                return
-            logger.warning(
-                "Failed to reclaim license for tenant %s: %s", metadata.tenant_id, e
-            )
-            return
-        except (requests.RequestException, ValueError) as e:
-            # A transient outage or a malformed response retries next run.
-            logger.warning(
-                "Failed to reclaim license for tenant %s: %s", metadata.tenant_id, e
-            )
+            else:
+                # A transient outage or a malformed response retries next run.
+                logger.warning(
+                    "Failed to reclaim license for tenant %s: %s", payload.tenant_id, e
+                )
             return
 
         if renewed is None:
             logger.warning(
-                "Skipped license reclaim for tenant %s: no license metadata to "
-                "authenticate with",
-                metadata.tenant_id,
+                "Skipped license reclaim for tenant %s: the stored license blob is "
+                "gone while its metadata is still cached",
+                payload.tenant_id,
             )
             return
 

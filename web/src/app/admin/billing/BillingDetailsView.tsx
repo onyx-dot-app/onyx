@@ -340,8 +340,9 @@ function SubscriptionCard({
                   {isEndingTrial ? "Upgrading..." : "Upgrade now"}
                 </OpalButton>
               )}
-              {/* Renewals re-issue the license, which the instance otherwise
-                  only picks up on the next reclaim sweep. */}
+              {/* Cloud has no local license to pull. Self-hosted refreshes
+                  itself only inside LICENSE_RECLAIM_WINDOW, so a change made
+                  earlier in the period needs a manual pull. */}
               {!NEXT_PUBLIC_CLOUD_ENABLED && (
                 <OpalButton
                   disabled={isSyncing}
@@ -360,14 +361,10 @@ function SubscriptionCard({
               </OpalButton>
             </Section>
           )}
-          {syncError && (
+          {/* Both actions live in one button row, so only one can be mid-flight. */}
+          {(syncError ?? endTrialError) && (
             <Text secondaryBody className="text-status-error-04">
-              {syncError}
-            </Text>
-          )}
-          {endTrialError && (
-            <Text secondaryBody className="text-status-error-04">
-              {endTrialError}
+              {syncError ?? endTrialError}
             </Text>
           )}
           {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
@@ -447,8 +444,6 @@ function SeatsCard({
         // Wait for control plane to process the subscription update before claiming
         await new Promise((resolve) => setTimeout(resolve, 1500));
         await claimLicense();
-        // Force refresh the Redis cache from the database
-        await refreshLicenseCache();
       }
       await onRefresh?.();
       setIsEditing(false);

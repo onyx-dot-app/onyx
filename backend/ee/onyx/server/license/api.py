@@ -50,14 +50,17 @@ _PEM_BEGIN = "-----BEGIN ONYX LICENSE-----"
 _PEM_END = "-----END ONYX LICENSE-----"
 
 
-def _strip_pem_delimiters(content: str) -> str:
-    """Strip PEM-style delimiters from license content if present."""
+def _normalize_license_file(content: str) -> str:
+    """Reduce a .lic file to the bare base64 blob.
+
+    All whitespace goes, not just the delimiter lines. The stored blob is later
+    sent as a Bearer token, and a header value carrying the wrapped file's
+    newlines is rejected before the request leaves the process.
+    """
     content = content.strip()
     if content.startswith(_PEM_BEGIN) and content.endswith(_PEM_END):
-        # Remove first and last lines (the delimiters)
-        lines = content.split("\n")
-        return "\n".join(lines[1:-1]).strip()
-    return content
+        content = content[len(_PEM_BEGIN) : -len(_PEM_END)]
+    return "".join(content.split())
 
 
 @router.get("")
@@ -115,9 +118,9 @@ async def claim_license(
 ) -> LicenseResponse:
     """Claim a license from the control plane (self-hosted only).
 
-    With a session_id, exchanges a completed Stripe checkout for a license. Without one,
-    re-claims using the stored license for auth, which picks up a license the control
-    plane regenerated after a seat change, portal visit, or renewal.
+    With a session_id, exchanges a completed Stripe checkout for a license.
+    Without one, re-claims using the stored license for auth, which picks up
+    whatever the control plane regenerated after a seat or plan change.
     """
     if MULTI_TENANT:
         raise OnyxError(
@@ -134,13 +137,9 @@ async def claim_license(
                 timeout=30,
             )
             response.raise_for_status()
-
-            try:
-                license_data = license_from_control_plane_response(response)
-            except ValueError:
-                raise OnyxError(OnyxErrorCode.NOT_FOUND, "No license in response")
-
-            payload = verify_and_store_license(db_session, license_data)
+            payload = verify_and_store_license(
+                db_session, license_from_control_plane_response(response)
+            )
         else:
             payload = reclaim_license_from_control_plane(db_session)
             if payload is None:
@@ -195,11 +194,7 @@ async def upload_license(
 
     try:
         content = await license_file.read()
-        license_data = content.decode("utf-8").strip()
-        # Strip PEM-style delimiters if present (used in .lic file format)
-        license_data = _strip_pem_delimiters(license_data)
-        # Remove any stray whitespace/newlines from user input
-        license_data = license_data.strip()
+        license_data = _normalize_license_file(content.decode("utf-8"))
     except UnicodeDecodeError:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid license file format")
 
