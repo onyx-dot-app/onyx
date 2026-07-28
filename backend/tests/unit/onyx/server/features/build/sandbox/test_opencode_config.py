@@ -103,6 +103,46 @@ def test_gateway_is_the_only_enabled_provider() -> None:
     }
 
 
+def test_gateway_capabilities_are_adapted_instead_of_hardcoded() -> None:
+    gateway = CraftLLMProviderConfig(
+        provider="onyx",
+        model_name="4/custom-model",
+        api_key=None,
+        api_base="https://onyx.test/api/gateway/v1",
+        models=[
+            GatewayModelDescriptor(
+                id="4/custom-model",
+                display_name="Custom Model",
+                provider="custom",
+                capabilities=GatewayModelCapabilities(
+                    input_modalities=("text", "image", "pdf"),
+                    output_modalities=("text", "audio"),
+                    supports_tool_calls=False,
+                    supports_temperature=True,
+                    supports_interleaved_reasoning=True,
+                ),
+            )
+        ],
+    )
+
+    model = build_provider_opencode_config(gateway)["provider"]["onyx"]["models"][
+        "4/custom-model"
+    ]
+
+    assert model == {
+        "name": "Custom Model",
+        "attachment": True,
+        "reasoning": False,
+        "temperature": True,
+        "tool_call": False,
+        "interleaved": True,
+        "modalities": {
+            "input": ["text", "image", "pdf"],
+            "output": ["text", "audio"],
+        },
+    }
+
+
 def test_default_must_exist_in_gateway_catalog() -> None:
     with pytest.raises(ValueError, match="not in the provider catalog"):
         build_provider_opencode_config(_gateway(default="missing"))
