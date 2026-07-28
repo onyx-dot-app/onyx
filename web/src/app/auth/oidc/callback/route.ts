@@ -21,10 +21,9 @@ export const GET = async (request: NextRequest) => {
     );
   }
 
-  // Error responses can carry a Set-Cookie too (PKCE cleanup), so status is
-  // the success signal, not cookie presence. Forward those cookies so the
-  // cleanup still reaches the browser.
-  if (!response.ok) {
+  // A completed login arrives as a 302, so 4xx/5xx is the failure signal here.
+  // Error responses carry the PKCE cleanup cookie, so forward it too.
+  if (response.status >= 400) {
     const errorRedirect = await authErrorRedirect(request, response);
     for (const cookie of response.headers.getSetCookie()) {
       errorRedirect.headers.append("set-cookie", cookie);
