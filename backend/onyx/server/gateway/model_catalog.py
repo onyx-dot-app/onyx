@@ -1,7 +1,13 @@
 from collections import Counter
 from collections.abc import Sequence
+from typing import Any
 
-from onyx.llm.model_capabilities import get_llm_max_output_tokens, get_model_map
+from onyx.llm.model_capabilities import (
+    find_model_obj,
+    get_llm_max_output_tokens,
+    get_model_map,
+    llm_max_input_tokens,
+)
 from onyx.llm.well_known_providers.llm_provider_options import (
     get_provider_display_name,
 )
@@ -11,6 +17,9 @@ from onyx.server.gateway.models import (
     GatewayModelDescriptor,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def gateway_provider_label(provider: LLMProviderView) -> str:
@@ -28,6 +37,48 @@ def ordered_gateway_providers(
 
 def _model_display_name(model: ModelConfigurationView) -> str:
     return model.custom_display_name or model.display_name or model.name
+
+
+def _capability_model_name(
+    model_map: dict[str, Any],
+    provider: LLMProviderView,
+    model: ModelConfigurationView,
+) -> str:
+    if find_model_obj(model_map, provider.provider, model.name) is not None:
+        return model.name
+
+    deployment_name = provider.deployment_name
+    if (
+        deployment_name
+        and find_model_obj(model_map, provider.provider, deployment_name) is not None
+    ):
+        logger.info(
+            "Using deployment %r capabilities for gateway model alias %r",
+            deployment_name,
+            model.name,
+        )
+        return deployment_name
+
+    return model.name
+
+
+def _gateway_token_limits(
+    model_map: dict[str, Any],
+    provider: LLMProviderView,
+    model: ModelConfigurationView,
+) -> tuple[int, int]:
+    capability_model_name = _capability_model_name(model_map, provider, model)
+    max_input_tokens = model.configured_max_input_tokens or llm_max_input_tokens(
+        model_map=model_map,
+        model_name=capability_model_name,
+        model_provider=provider.provider,
+    )
+    max_output_tokens = get_llm_max_output_tokens(
+        model_map=model_map,
+        model_name=capability_model_name,
+        model_provider=provider.provider,
+    )
+    return max_input_tokens, max_output_tokens
 
 
 def build_gateway_model_catalog(
@@ -59,6 +110,9 @@ def build_gateway_model_catalog(
         input_modalities: tuple[GatewayModality, ...] = (
             ("text", "image") if model.supports_image_input else ("text",)
         )
+        max_input_tokens, max_output_tokens = _gateway_token_limits(
+            model_map, provider, model
+        )
         catalog.append(
             GatewayModelDescriptor(
                 id=f"{provider.id}/{model.name}",
@@ -68,10 +122,8 @@ def build_gateway_model_catalog(
                     input_modalities=input_modalities,
                     supports_reasoning=model.supports_reasoning,
                 ),
-                max_input_tokens=model.max_input_tokens,
-                max_output_tokens=get_llm_max_output_tokens(
-                    model_map, model.name, provider.provider
-                ),
+                max_input_tokens=max_input_tokens,
+                max_output_tokens=max_output_tokens,
             )
         )
     return catalog
