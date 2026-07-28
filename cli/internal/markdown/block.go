@@ -121,13 +121,23 @@ func renderCode(source []byte, n ast.Node, lang string, width int) string {
 		out = append(out, bar+dimStyle.Render(lang))
 	}
 	lines := n.Lines()
+	rawLines := make([]string, 0, lines.Len())
 	for i := 0; i < lines.Len(); i++ {
 		seg := lines.At(i)
 		line := strings.TrimRight(string(seg.Value(source)), "\r\n")
-		line = strings.ReplaceAll(line, "\t", "    ")
-		wrapped := ansi.HardwrapWc(line, budget, true)
-		for _, l := range strings.Split(wrapped, "\n") {
-			out = append(out, bar+codeStyle.Render(l))
+		rawLines = append(rawLines, strings.ReplaceAll(line, "\t", "    "))
+	}
+	styled, ok := highlightLines(strings.Join(rawLines, "\n"), lang)
+	if !ok {
+		styled = make([]string, len(rawLines))
+		for i, l := range rawLines {
+			styled[i] = codeStyle.Render(l)
+		}
+	}
+	for _, l := range styled {
+		wrapped := ansi.HardwrapWc(l, budget, true)
+		for _, w := range strings.Split(wrapped, "\n") {
+			out = append(out, bar+w)
 		}
 	}
 	return strings.Join(out, "\n")
