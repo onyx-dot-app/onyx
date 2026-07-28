@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,6 +45,7 @@ type preflight struct {
 	composeType    string
 	memoryMB       int
 	diskGB         int
+	rootless       bool
 }
 
 // RunInstall implements `deploy install` (and the install-onyx alias): fresh
@@ -352,6 +354,7 @@ func (in *installer) gatherPreflight(ctx context.Context) preflight {
 		dockerInfo = res.Stdout
 	}
 	p.memoryMB = resources.MemoryMB(dockerInfo)
+	p.rootless = strings.Contains(strings.ToLower(dockerInfo), "rootless")
 	return p
 }
 
@@ -447,6 +450,10 @@ func (in *installer) resolveDockerProblems(ctx context.Context, pre preflight) e
 		summary = append(summary, fmt.Sprintf("Compose %s (%s)", in.compose.Version(ctx), in.compose.TypeName()))
 	}
 	summary = append(summary, "daemon running")
+	if pre.rootless {
+		in.rootless = true
+		summary = append(summary, "rootless")
+	}
 	if pre.memoryMB > 0 {
 		summary = append(summary, resources.FormatMemory(pre.memoryMB)+" RAM")
 	}
@@ -481,6 +488,10 @@ func (in *installer) resourceWarnings(pre preflight) error {
 	if pre.diskGB >= 0 && pre.diskGB < diskWant {
 		in.warnf("Less than %dGB disk space available (found: %dGB)", diskWant, pre.diskGB)
 		warning = true
+	}
+	if in.rootless && !in.lite {
+		in.warnf("Rootless Docker: the standard deployment's Vespa index requests unlimited memlock, which a rootless daemon usually can't grant.")
+		in.infof("Either raise the daemon's limits (systemctl --user edit docker: LimitMEMLOCK=infinity, LimitNOFILE=1048576, then systemctl --user restart docker) or use Lite mode, which has no Vespa.")
 	}
 	if !warning {
 		return nil
@@ -743,12 +754,15 @@ func (in *installer) runComposePhase(
 
 	if in.wiz == nil || in.opts.Verbose {
 		in.phase(title)
-		cmd.Stdout, cmd.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
+		var seen bytes.Buffer
+		cmd.Stdout = io.MultiWriter(in.deps.IOS.Out, &seen)
+		cmd.Stderr = io.MultiWriter(in.deps.IOS.ErrOut, &seen)
 		_, err := in.deps.Runner.Run(ctx, cmd)
 		if err == nil {
 			in.successf("%s complete", title)
 		} else {
 			in.errorf("%s failed", title)
+			in.printFailureDiagnosis(seen.String())
 		}
 		return err
 	}
@@ -777,8 +791,27 @@ func (in *installer) runComposePhase(
 		for _, l := range lines {
 			in.plainf("  %s", l)
 		}
+		in.printFailureDiagnosis(captured.String())
 	}
 	return err
+}
+
+// printFailureDiagnosis translates known failure signatures in compose
+// output into targeted remedies instead of leaving raw runtime errors.
+func (in *installer) printFailureDiagnosis(output string) {
+	lower := strings.ToLower(output)
+	if strings.Contains(lower, "setting rlimit") || strings.Contains(lower, "memlock") {
+		in.plainf("")
+		in.warnf("This looks like a ulimit failure: the Vespa index container requests unlimited memlock, which rootless Docker (and some hosts) can't grant.")
+		in.infof("Fix one of these ways, then re-run:")
+		in.plainf("  • Raise the daemon limits: systemctl --user edit docker → [Service] LimitMEMLOCK=infinity, LimitNOFILE=1048576 → systemctl --user restart docker")
+		in.plainf("  • Or deploy Lite mode (no Vespa): onyx-cli deploy install --lite")
+		return
+	}
+	if strings.Contains(lower, "address already in use") || strings.Contains(lower, "port is already allocated") {
+		in.plainf("")
+		in.warnf("A required port is taken by another process. Stop it, or set HOST_PORT before re-running.")
+	}
 }
 
 // pollServiceHealth feeds the wizard a live per-service checklist while
