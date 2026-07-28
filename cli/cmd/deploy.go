@@ -20,6 +20,9 @@ legacy install.sh in ./onyx_data are detected and managed in place. Pass
 
 	cmd.AddCommand(newDeployInstallCmd(ios))
 	cmd.AddCommand(newDeployUpgradeCmd(ios))
+	cmd.AddCommand(newDeployStopCmd(ios))
+	cmd.AddCommand(newDeployStatusCmd(ios))
+	cmd.AddCommand(newDeployUninstallCmd(ios))
 
 	return cmd
 }
