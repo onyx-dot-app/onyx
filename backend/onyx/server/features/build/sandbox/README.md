@@ -62,7 +62,7 @@ manager and the sandbox client. The Craft Compose overlay defaults it to
 reverse-proxy overrides must include their API path prefix, for example
 `https://onyx.your-org.example/api`.
 
-On EC2 the Docker bridge by default routes to `169.254.169.254` (IMDS), which can hand out IAM credentials. `install.sh --include-craft` installs a host-level `DOCKER-USER` iptables rule to drop sandbox→IMDS traffic when it has sudo/iptables access, and prints the manual command otherwise. There is no application-level fallback — fix this at the host firewall.
+On EC2 the Docker bridge by default routes to `169.254.169.254` (IMDS), which can hand out IAM credentials. The installer does NOT block this automatically — require IMDSv2 (`HttpTokens=required`) on the instance and/or add a host-level `DOCKER-USER` iptables rule dropping sandbox→IMDS traffic. There is no application-level fallback — fix this at the host firewall.
 
 ### Directory Structure
 
@@ -259,7 +259,7 @@ uv run pytest backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox.
 - **Resource limits** prevent resource exhaustion
 - **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL` + `ONYX_API_PREFIX`)
 - **Docker network isolation** is enforced by joining only the dedicated `onyx_craft_sandbox` bridge — compose's default network (postgres/redis/minio/model servers) is unreachable by DNS from inside a sandbox
-- **EC2 IMDS** must be blocked at the host firewall (`install.sh --include-craft` installs a `DOCKER-USER` iptables rule on EC2 when sudo is available) — there is no app-level fallback
+- **EC2 IMDS** must be blocked at the host level (require IMDSv2 via `HttpTokens=required`, or add a `DOCKER-USER` iptables rule — the installer does not do this automatically) — there is no app-level fallback
 
 ### Credentials Management
 

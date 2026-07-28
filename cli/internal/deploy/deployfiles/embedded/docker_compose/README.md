@@ -29,6 +29,22 @@ the install.sh script with --delete-data.
 
 To shut down the deployment without deleting, use install.sh --shutdown.
 
+### Onyx CLI (alternative)
+
+The same guided install also ships inside the Onyx CLI and will eventually
+replace install.sh once it stabilizes:
+
+```
+pip install onyx-cli && onyx-cli deploy install
+```
+
+It understands existing install.sh deployments (an `onyx_data` directory is
+detected and managed in place; new installs default to `~/.config/onyx`) and
+adds lifecycle commands: `onyx-cli deploy status` (versions, containers,
+health), `deploy stop`, `deploy upgrade [--tag vX.Y.Z]` (rewrites only
+IMAGE_TAG, preserves your .env edits, backs up hand-edited files), and
+`deploy uninstall`.
+
 ### Upgrading the deployment
 Onyx maintains backwards compatibility across all minor versions following SemVer. If following the install.sh script (or through Docker Compose), you can
 upgrade it by first bringing down the containers. To do this, use `install.sh --shutdown`
