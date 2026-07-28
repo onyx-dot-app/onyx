@@ -150,6 +150,7 @@ def delete_license(db_session: Session) -> bool:
     # Serialized with verify_and_store_license, so an in-flight reclaim that
     # started before the delete cannot re-insert the row afterward.
     acquire_license_store_lock(db_session)
+    db_session.expire_all()
     existing = get_license(db_session)
     if existing:
         db_session.delete(existing)
@@ -344,10 +345,11 @@ def refresh_license_cache(
     """
     from ee.onyx.utils.license import verify_license_signature
 
-    # Serialized with the store path, which publishes its cache entry before
-    # committing. Rebuilding outside the lock could cache the row a concurrent
-    # store is replacing, overwriting the newer entry it just published.
-    acquire_license_store_lock(db_session)
+    # Read committed state only. Taking the store lock here would put Redis I/O
+    # inside a held row lock, and this runs on the enforcement middleware's
+    # path. A rebuild that loses to a concurrent store is corrected by the
+    # issued_at comparison in the cache write below.
+    db_session.expire_all()
     license_record = get_license(db_session)
     if not license_record:
         invalidate_license_cache(tenant_id)
@@ -355,6 +357,9 @@ def refresh_license_cache(
 
     try:
         payload = verify_license_signature(license_record.license_data)
+        cached = get_cached_license_metadata(tenant_id)
+        if cached and cached.issued_at > payload.issued_at:
+            return cached
         return update_license_cache(payload, tenant_id=tenant_id)
     except ValueError as e:
         logger.error("Failed to verify license during cache refresh: %s", e)

@@ -15,6 +15,7 @@ from ee.onyx.utils.license import (
     license_fingerprint,
     license_reclaim_is_blocked,
     maybe_schedule_license_reclaim,
+    publish_license_cache,
     reclaim_license_from_control_plane,
     verify_and_store_license,
 )
@@ -60,14 +61,14 @@ class TestLicenseSourceDerivation:
 
 
 class TestVerifyAndStoreLicense:
-    @patch("ee.onyx.db.license.update_license_cache")
+    @patch("ee.onyx.utils.license.publish_license_cache")
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.verify_license_signature")
     def test_persists_and_caches_the_verified_payload(
         self,
         mock_verify: MagicMock,
         mock_upsert: MagicMock,
-        mock_update_cache: MagicMock,
+        mock_publish_cache: MagicMock,
     ) -> None:
         db_session = MagicMock()
         payload = _make_license_payload()
@@ -77,7 +78,7 @@ class TestVerifyAndStoreLicense:
 
         assert result == payload
         mock_upsert.assert_called_once_with(db_session, "signed-license", commit=False)
-        mock_update_cache.assert_called_once_with(payload)
+        mock_publish_cache.assert_called_once_with(payload)
 
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.verify_license_signature")
@@ -97,7 +98,7 @@ class TestVerifyAndStoreLicense:
 class TestReclaimLicenseFromControlPlane:
     @patch("ee.onyx.utils.license.CLOUD_DATA_PLANE_URL", "https://cloud.example.com")
     @patch("ee.onyx.db.license.get_license")
-    @patch("ee.onyx.db.license.update_license_cache")
+    @patch("ee.onyx.utils.license.publish_license_cache")
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.verify_license_signature")
     @patch("ee.onyx.utils.license.requests.get")
@@ -106,7 +107,7 @@ class TestReclaimLicenseFromControlPlane:
         mock_get_request: MagicMock,
         mock_verify: MagicMock,
         mock_upsert: MagicMock,
-        mock_update_cache: MagicMock,
+        mock_publish_cache: MagicMock,
         mock_get_license: MagicMock,
     ) -> None:
         db_session = MagicMock()
@@ -134,7 +135,7 @@ class TestReclaimLicenseFromControlPlane:
         # incoming one, then the stored one again for the staleness compare.
         assert call("signed-license") in mock_verify.call_args_list
         mock_upsert.assert_called_once_with(db_session, "signed-license", commit=False)
-        mock_update_cache.assert_called_once_with(payload)
+        mock_publish_cache.assert_called_once_with(payload)
 
     @pytest.mark.parametrize(
         "license_row",
@@ -159,46 +160,45 @@ class TestReclaimLicenseFromControlPlane:
         mock_get_request.assert_not_called()
         mock_upsert.assert_not_called()
 
-    @patch("ee.onyx.utils.license.resume_license_reclaim")
-    @patch("ee.onyx.utils.license.logger")
-    @patch("ee.onyx.db.license.get_license")
-    @patch("ee.onyx.db.license.get_license_metadata")
+
+class TestPublishLicenseCache:
+    """Runs after the store commits and outside its lock, so it must never
+    raise and must yield to a newer entry another writer already published."""
+
+    @patch("ee.onyx.db.license.invalidate_license_cache")
     @patch("ee.onyx.db.license.update_license_cache")
-    @patch("ee.onyx.db.license.upsert_license")
-    @patch("ee.onyx.utils.license.verify_license_signature")
-    @patch("ee.onyx.utils.license.requests.get")
-    def test_cache_update_failure_is_logged_and_swallowed(
+    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
+    @patch("ee.onyx.utils.license.logger")
+    def test_write_failure_drops_the_superseded_entry(
         self,
-        mock_get_request: MagicMock,
-        mock_verify: MagicMock,
-        mock_upsert: MagicMock,
-        mock_update_cache: MagicMock,
-        mock_get_metadata: MagicMock,
-        mock_get_license: MagicMock,
         mock_logger: MagicMock,
-        _mock_clear_block: MagicMock,
+        _mock_cached: MagicMock,
+        mock_update_cache: MagicMock,
+        mock_invalidate: MagicMock,
     ) -> None:
-        db_session = MagicMock()
-        payload = _make_license_payload()
-        mock_get_metadata.return_value = MagicMock(tenant_id="tenant_123")
-        mock_get_license.return_value = MagicMock(license_data="stored-license")
-        mock_verify.return_value = payload
         mock_update_cache.side_effect = RuntimeError("cache failed")
 
-        response = MagicMock()
-        response.json.return_value = {"license": "signed-license"}
-        response.raise_for_status = MagicMock()
-        mock_get_request.return_value = response
+        publish_license_cache(_make_license_payload())
 
-        result = reclaim_license_from_control_plane(db_session)
+        mock_invalidate.assert_called_once()
+        mock_logger.warning.assert_called_once()
 
-        assert result == payload
-        mock_upsert.assert_called_once_with(db_session, "signed-license", commit=False)
-        mock_logger.warning.assert_called_once_with(
-            "Failed to update license cache: %s",
-            mock_update_cache.side_effect,
+    @patch("ee.onyx.db.license.update_license_cache")
+    @patch("ee.onyx.db.license.get_cached_license_metadata")
+    def test_yields_to_a_newer_cached_entry(
+        self, mock_cached: MagicMock, mock_update_cache: MagicMock
+    ) -> None:
+        payload = _make_license_payload()
+        mock_cached.return_value = MagicMock(
+            issued_at=payload.issued_at + timedelta(hours=1)
         )
 
+        publish_license_cache(payload)
+
+        mock_update_cache.assert_not_called()
+
+
+class TestReclaimLicenseFromControlPlaneErrors:
     @patch("ee.onyx.db.license.get_license")
     @patch("ee.onyx.utils.license.verify_license_signature")
     @patch("ee.onyx.db.license.upsert_license")

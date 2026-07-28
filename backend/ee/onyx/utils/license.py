@@ -37,6 +37,10 @@ _LICENSE_RECLAIM_DEBOUNCE_TTL_SEC = 15 * 60
 _LICENSE_RECLAIM_BLOCKED_KEY = "license_reclaim_blocked"
 _LICENSE_RECLAIM_BLOCKED_TTL_SEC = 24 * 60 * 60
 
+# The stored license IS the credential for a re-claim, so a rejection under
+# these can only repeat until a replacement arrives.
+AUTH_REJECTED_STATUSES = frozenset({401, 403})
+
 # Path to the license public key file
 _LICENSE_PUBLIC_KEY_PATH = (
     Path(__file__).parent.parent.parent.parent / "keys" / "license_public_key.pem"
@@ -158,6 +162,40 @@ def _is_stale_replacement(stored_data: str, incoming: LicensePayload) -> bool:
     return True
 
 
+def publish_license_cache(payload: LicensePayload) -> None:
+    """Publish metadata for a license already committed. Never raises.
+
+    Runs outside the store lock, so a slower writer can arrive after a newer
+    one. It yields to whatever is cached if that entry is newer, and drops the
+    entry entirely on failure rather than leaving a superseded one to serve out
+    its TTL.
+    """
+    # Call-time import: ee.onyx.db.license reaches back into this module, and
+    # deferring exactly one side keeps that resolvable.
+    from ee.onyx.db.license import (
+        get_cached_license_metadata,
+        invalidate_license_cache,
+        update_license_cache,
+    )
+
+    try:
+        cached = get_cached_license_metadata()
+        if cached and cached.issued_at > payload.issued_at:
+            return
+        update_license_cache(payload)
+    except Exception as cache_error:
+        logger.warning("Failed to publish license cache: %s", cache_error)
+        try:
+            invalidate_license_cache()
+        except Exception as invalidate_error:
+            # The license is committed either way, and the enforcement
+            # middleware re-reads the row before gating.
+            logger.error(
+                "License stored but its stale cache entry survives: %s",
+                invalidate_error,
+            )
+
+
 def verify_and_store_license(
     db_session: Session,
     license_data: str,
@@ -177,8 +215,6 @@ def verify_and_store_license(
     from ee.onyx.db.license import (
         acquire_license_store_lock,
         get_license,
-        invalidate_license_cache,
-        update_license_cache,
         upsert_license,
     )
 
@@ -186,9 +222,11 @@ def verify_and_store_license(
     if expected_tenant_id is not None and payload.tenant_id != expected_tenant_id:
         raise ValueError("Control plane returned a license for a different tenant")
 
-    # Held through the cache write, so a slower writer cannot compare against
-    # a row being replaced or publish its older payload after a newer one.
     acquire_license_store_lock(db_session)
+    # The session may have loaded this row before the lock, and the identity
+    # map would hand back those stale attributes. Expire so the read below is
+    # the row as it stands now that writers are serialized.
+    db_session.expire_all()
     stored = get_license(db_session)
     if stored and _is_stale_replacement(stored.license_data, payload):
         db_session.rollback()
@@ -198,43 +236,25 @@ def verify_and_store_license(
         db_session.rollback()
         raise ValueError("Stored license was removed while the reclaim was in flight")
     upsert_license(db_session, license_data, commit=False)
+    # Commit inside the lock, publish outside it. Redis has no socket timeout,
+    # so a stalled cache write would otherwise hold the row lock and wedge
+    # every other store, refresh, and delete behind it.
+    db_session.commit()
 
-    # This license replaces whatever the control plane rejected, so re-claims
-    # may resume. Done before the cache write so a cache fault cannot strand
-    # the block.
     resume_license_reclaim()
-    try:
-        update_license_cache(payload)
-    except Exception as cache_error:
-        # Reads prefer the cache, so drop the superseded entry rather than
-        # serve it for its remaining TTL.
-        logger.warning("Failed to update license cache: %s", cache_error)
-        try:
-            invalidate_license_cache()
-        except Exception as invalidate_error:
-            # A cache outage must not fail a store the DB already accepted.
-            logger.error(
-                "License stored but its stale cache entry survives: %s",
-                invalidate_error,
-            )
-    try:
-        db_session.commit()
-    except Exception:
-        # The cache already carries a payload the DB never accepted.
-        try:
-            invalidate_license_cache()
-        except Exception as e:
-            logger.warning("Failed to drop cache for uncommitted license: %s", e)
-        raise
-
+    publish_license_cache(payload)
     return payload
 
 
 def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | None:
     """Re-fetch this instance's license from the control plane, authenticating with the stored one.
 
-    Returns None when no usable stored license exists to authenticate with.
-    Raises ValueError when the control plane response has no valid license.
+    Returns None when there is no usable stored license to authenticate with,
+    or when that license was already rejected. Raises ValueError when the
+    control plane response has no valid license.
+
+    Owns the reclaim block for every entry point, so the on-demand Sync button
+    cannot keep re-sending a credential the beat task already saw refused.
     """
     # Call-time import: ee.onyx.db.license reaches back into this module, and
     # deferring exactly one side keeps that resolvable.
@@ -249,14 +269,25 @@ def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | 
     if not tenant_id:
         return None
 
+    stored_data = license_row.license_data
+    if license_reclaim_is_blocked(stored_data):
+        return None
+
     response = requests.get(
         f"{CLOUD_DATA_PLANE_URL}/proxy/license/{tenant_id}",
         headers={
-            "Authorization": f"Bearer {license_row.license_data}",
+            "Authorization": f"Bearer {stored_data}",
             "Content-Type": "application/json",
         },
         timeout=30,
     )
+    if response.status_code in AUTH_REJECTED_STATUSES:
+        # Only block while this blob is still the stored one, or a slow
+        # rejection would suppress the replacement that overtook it.
+        db_session.expire_all()
+        current = get_license(db_session)
+        if current and current.license_data == stored_data:
+            block_license_reclaim(stored_data)
     response.raise_for_status()
 
     return verify_and_store_license(
