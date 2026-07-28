@@ -28,7 +28,7 @@ from onyx.db.models import (
 )
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.llm import cost_overrides
-from onyx.llm.cost import get_model_price_per_million
+from onyx.llm.cost import ModelPrice, get_model_price_per_million
 from onyx.server.features.usage.api import user_usage_router
 
 
@@ -234,14 +234,13 @@ class TestGetModelPricePerMillion:
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
-        cost_overrides.upsert_override(db_session, "gpt-4o", 1.0, 4.0)
+        cost_overrides.upsert_override(db_session, "gpt-4o", 1.0, 4.0, 0.5)
         cost_overrides.invalidate_override_cache()
 
-        in_price, out_price = get_model_price_per_million(
-            "gpt-4o", "openai", db_session
-        )
-        assert in_price == pytest.approx(1.0)
-        assert out_price == pytest.approx(4.0)
+        price = get_model_price_per_million("gpt-4o", "openai", db_session)
+        assert price.input_per_mtok == pytest.approx(1.0)
+        assert price.output_per_mtok == pytest.approx(4.0)
+        assert price.cache_per_mtok == pytest.approx(0.5)
 
     def test_litellm_fallback_when_no_override(
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
@@ -249,16 +248,19 @@ class TestGetModelPricePerMillion:
         monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
         # Clear tenant override cache between tests.
         cost_overrides.invalidate_override_cache()
-        in_price, out_price = get_model_price_per_million(
-            "gpt-4o", "openai", db_session
-        )
-        assert in_price == pytest.approx(2.5)
-        assert out_price == pytest.approx(10.0)
+        price = get_model_price_per_million("gpt-4o", "openai", db_session)
+        assert price.input_per_mtok == pytest.approx(2.5)
+        assert price.output_per_mtok == pytest.approx(10.0)
 
     def test_unknown_model_nulls(self) -> None:
-        assert get_model_price_per_million("totally-unknown-model-xyz", None) == (
-            None,
-            None,
+        assert get_model_price_per_million(
+            "totally-unknown-model-xyz", None
+        ) == ModelPrice(
+            model="totally-unknown-model-xyz",
+            provider=None,
+            input_per_mtok=None,
+            output_per_mtok=None,
+            cache_per_mtok=None,
         )
 
     def test_never_raises_on_lookup_failure(
@@ -270,7 +272,13 @@ class TestGetModelPricePerMillion:
         import litellm
 
         monkeypatch.setattr(litellm, "get_model_info", _boom)
-        assert get_model_price_per_million("gpt-4o", "openai") == (None, None)
+        assert get_model_price_per_million("gpt-4o", "openai") == ModelPrice(
+            model="gpt-4o",
+            provider="openai",
+            input_per_mtok=None,
+            output_per_mtok=None,
+            cache_per_mtok=None,
+        )
 
 
 def test_budget_reflects_user_cost_limit(

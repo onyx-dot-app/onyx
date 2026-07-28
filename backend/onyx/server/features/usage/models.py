@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from onyx.db.models import ModelCostOverride
 from onyx.db.user_usage import UserUsageByDay as UsageDayModel
+from onyx.llm.cost import ModelPrice
 
 
 class CostOverrideUpsertRequest(BaseModel):
@@ -74,18 +75,6 @@ class ResetUsageRequest(BaseModel):
 
 class ResetUsageResponse(BaseModel):
     reset_rows: int = Field(ge=0)
-
-
-class ModelPrice(BaseModel):
-    """USD per 1M tokens for the user's selected chat model; null if unpriced."""
-
-    model: str
-    provider: str | None
-    input_per_mtok: float | None
-    output_per_mtok: float | None
-    # null when the model/override doesn't price cache reads; the UI falls back
-    # to the input rate (how billing treats it).
-    cache_per_mtok: float | None = None
 
 
 class EffectiveCostBudget(BaseModel):

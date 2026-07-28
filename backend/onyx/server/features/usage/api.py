@@ -34,7 +34,7 @@ from onyx.db.user_usage import (
 from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.cost import get_model_prices_per_million
+from onyx.llm.cost import ModelPrice, get_model_price_per_million
 from onyx.llm.cost_overrides import (
     delete_override,
     invalidate_override_cache,
@@ -45,7 +45,6 @@ from onyx.server.features.usage.models import (
     CostOverride,
     CostOverrideUpsertRequest,
     EffectiveCostBudget,
-    ModelPrice,
     ResetUsageRequest,
     ResetUsageResponse,
     UsageExportRecord,
@@ -205,18 +204,10 @@ def get_my_usage(
     selected_model_price: ModelPrice | None = None
     if default_model is not None:
         provider = default_model.llm_provider.provider
-        input_per_mtok, output_per_mtok, cache_per_mtok = get_model_prices_per_million(
-            default_model.name, provider, db_session
-        )
+        price = get_model_price_per_million(default_model.name, provider, db_session)
         # Omit price block unless both input/output rates known.
-        if input_per_mtok is not None and output_per_mtok is not None:
-            selected_model_price = ModelPrice(
-                model=default_model.name,
-                provider=provider,
-                input_per_mtok=input_per_mtok,
-                output_per_mtok=output_per_mtok,
-                cache_per_mtok=cache_per_mtok,
-            )
+        if price.input_per_mtok is not None and price.output_per_mtok is not None:
+            selected_model_price = price
 
     # Price every configured chat model so users can compare costs, not just the
     # tenant default. Dedup on (provider, model); skip unpriced models.
@@ -228,19 +219,9 @@ def get_my_usage(
             if key in seen:
                 continue
             seen.add(key)
-            in_per_mtok, out_per_mtok, cache_per_mtok = get_model_prices_per_million(
-                mc.name, prov.provider, db_session
-            )
-            if in_per_mtok is not None and out_per_mtok is not None:
-                available_model_prices.append(
-                    ModelPrice(
-                        model=mc.name,
-                        provider=prov.provider,
-                        input_per_mtok=in_per_mtok,
-                        output_per_mtok=out_per_mtok,
-                        cache_per_mtok=cache_per_mtok,
-                    )
-                )
+            price = get_model_price_per_million(mc.name, prov.provider, db_session)
+            if price.input_per_mtok is not None and price.output_per_mtok is not None:
+                available_model_prices.append(price)
     available_model_prices.sort(key=lambda p: (p.input_per_mtok or 0.0, p.model))
 
     budget = _user_cost_budget(db_session, user_id)
