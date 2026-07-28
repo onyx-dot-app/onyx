@@ -3,10 +3,11 @@
 # Hub rate limits.
 ARG BASE_IMAGE_REGISTRY=docker.io
 
-# bun + node binary sources. Pinned via the registry prefix in their own stages because buildx
+# bun + node + go binary sources. Pinned via the registry prefix in their own stages because buildx
 # rejects variable expansion directly in `COPY --from=` -- the ARG is only expandable in a FROM.
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
 FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:05c08ce4291e9a58f59456a7985176defb12cdd42271f35ff81a3e167ea61d4c AS node_source
+FROM ${BASE_IMAGE_REGISTRY}/library/golang:1.26.4-trixie@sha256:68b7145ec43d1820b9a56704554b53d1520aa2a15cb5233e374188a31b2a1bce AS go_source
 
 FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:cc925e589b7543b910fea57a240468940003fbfc0515245a495dd0ad8fe7cef1
 
@@ -134,6 +135,19 @@ RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
   && ln -s python3.13 /usr/local/bin/python3 \
   && ln -s python3.13 /usr/local/bin/python \
   && python --version
+
+# Install the Go toolchain. `tools/ods` and `cli` both pin `go 1.26.4` in their go.mod,
+# and the golangci-lint pre-commit hook builds against the same version — keep this in
+# sync with them and with GO_VERSION in .github/workflows/pr-golang-tests.yml.
+#
+# Copied from the official golang image (digest-pinned in the go_source stage at the top,
+# routed through BASE_IMAGE_REGISTRY) rather than fetched from go.dev, for the same reasons
+# as the node install above: no MITM surface on the download, and buildkit resolves the
+# right arch from the manifest list. Module and build caches are not baked in; they live in
+# the dev user's home (see .devcontainer/zshrc).
+COPY --from=go_source /usr/local/go /usr/local/go
+ENV PATH=/usr/local/go/bin:$PATH
+RUN go version
 
 # Create non-root dev user with passwordless sudo
 RUN useradd -m -s /bin/zsh dev && \
