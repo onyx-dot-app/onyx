@@ -218,6 +218,20 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
 {{- end }}
 
+{{/*
+Sandbox container image and pull policy. Shared by the sandbox-pod PodTemplate
+and the image-prepull DaemonSet: the prepull only pins layers the sandbox pods
+actually use if both resolve to the identical reference, and a drift here is
+invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
+*/}}
+{{- define "onyx.sandboxImage" -}}
+{{- (index .Values.configMap "SANDBOX_CONTAINER_IMAGE") | default (printf "onyxdotapp/sandbox:%s" (.Values.global.version | default .Chart.AppVersion)) -}}
+{{- end }}
+
+{{- define "onyx.sandboxImagePullPolicy" -}}
+{{- (index .Values.configMap "SANDBOX_IMAGE_PULL_POLICY") | default .Values.global.pullPolicy -}}
+{{- end }}
+
 {{- define "onyx.sandboxProxyHost" -}}
 {{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (printf "%s-sandbox-proxy.%s.svc.cluster.local" (include "onyx.fullname" .) .Release.Namespace) -}}
 {{- end }}

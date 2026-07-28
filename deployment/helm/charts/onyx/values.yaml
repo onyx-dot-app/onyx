@@ -1654,6 +1654,41 @@ sandboxPod:
       value: sandbox
       effect: NoSchedule
 
+# -- Pre-pull the sandbox image onto the sandbox node pool (DaemonSet), so a
+# user's first sandbox on a node doesn't pay the image pull (~31s measured; see
+# docs/craft/sandbox/image-and-spinup.md). Image and pull policy are shared with
+# the sandbox-pod PodTemplate; scheduling follows sandboxPod above.
+#
+# The cost is disk, not CPU: holding the image makes ~3.3 GB UNRECLAIMABLE on
+# every sandbox node, on the same disk as the sandbox workspaces. Turn this off
+# when either applies:
+#   - Single-node / fixed tiny deployments: the image stays resident anyway and
+#     nothing evicts it, so the DaemonSet is pure overhead.
+#   - Nodes without headroom for 3.3 GB on top of the workspace ephemeral-storage
+#     limits. Disk pressure that image GC used to absorb would otherwise resolve
+#     by evicting pods instead.
+sandboxImagePrepull:
+  enabled: true
+  # Held for the pod's whole life, so keep it minimal. ephemeral-storage is
+  # requested despite `sleep` writing nothing: a container with no request is
+  # invisible to the scheduler's disk accounting.
+  resources:
+    cpu: 10m
+    memory: 32Mi
+    ephemeralStorage: 64Mi
+  # Below the cluster default on purpose, so a pending sandbox pod preempts the
+  # prepuller rather than failing to schedule (and triggering a needless
+  # scale-up). Safe: a sandbox running on the node pins the image itself, so the
+  # prepuller is redundant exactly when it would compete.
+  priorityClass:
+    create: true
+    value: -10
+  # Set to use an existing PriorityClass instead; skips creating the one above.
+  priorityClassName: ""
+  # Nodes that repull at once on a tag bump. Lower on large pools — N nodes
+  # pulling ~1 GB simultaneously is a thundering herd against the registry.
+  updateMaxUnavailable: "100%"
+
 # -- Sandbox egress proxy.
 sandboxProxy:
   # Allow IPv6 (::/0 minus link-local/IMDS) egress from the proxy. OFF by default: the AWS
