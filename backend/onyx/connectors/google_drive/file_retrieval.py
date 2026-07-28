@@ -39,11 +39,6 @@ logger = setup_logger()
 DRIVE_RESOURCE_KEY_HEADER = "X-Goog-Drive-Resource-Keys"
 DRIVE_RESOURCE_KEY_FIELD = "resourceKey"
 
-# Set on resolved shortcut targets: the shortcut's own modifiedTime, i.e. the
-# file's position in the modifiedTime-ordered listing. The target's modifiedTime
-# can lie far outside the listing position and must not drive checkpoint progress.
-LISTING_MODIFIED_TIME_KEY = "_onyx_listing_modified_time"
-
 
 class DriveFileFieldType(Enum):
     """Enum to specify which fields to retrieve from Google Drive files"""
@@ -373,11 +368,13 @@ def _resolve_file_or_shortcut(
     logger.debug(
         "Resolved Drive shortcut %s to target %s", file.get("id"), target.get("id")
     )
-    # Keep the shortcut's own modifiedTime: listings are ordered by it, so
-    # checkpoint progress must be tracked against it, not the target's.
+    # Use the shortcut's own modifiedTime: listings are filtered and ordered by
+    # it, so this preserves the invariant that a retrieved item's modifiedTime
+    # lies within the requested time range — the target's can sit far outside
+    # it, which would corrupt the checkpoint frontier and re-poll windows.
     listing_modified_time = file.get(GoogleFields.MODIFIED_TIME.value)
     if listing_modified_time is not None:
-        target[LISTING_MODIFIED_TIME_KEY] = listing_modified_time
+        target[GoogleFields.MODIFIED_TIME.value] = listing_modified_time
     return target
 
 

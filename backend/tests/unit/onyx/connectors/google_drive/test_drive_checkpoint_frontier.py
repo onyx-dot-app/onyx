@@ -4,8 +4,8 @@ The retrieval listing is ordered by modifiedTime and resumes from
 completed_until, so the frontier must never move backward within a stage +
 drive/folder. A regression changes the listing query, invalidates the saved
 page token, and restarts retrieval from the regressed timestamp — looping
-forever if the same file causes the same regression on every pass (as happens
-when a shortcut resolves to a target with an older modifiedTime).
+forever if the same file causes the same regression on every pass (as happened
+when shortcut resolution replaced a file's modifiedTime with its target's).
 """
 
 from collections.abc import Iterator
@@ -16,10 +16,7 @@ from onyx.connectors.google_drive.connector import (
     GoogleDriveConnector,
     _resume_start,
 )
-from onyx.connectors.google_drive.file_retrieval import (
-    LISTING_MODIFIED_TIME_KEY,
-    DriveFileFieldType,
-)
+from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.models import (
     DriveRetrievalStage,
     GoogleDriveCheckpoint,
@@ -38,7 +35,6 @@ def _ts(iso: str) -> float:
 def _file(
     file_id: str,
     modified_time: str,
-    listing_modified_time: str | None = None,
     parent_id: str | None = None,
     stage: DriveRetrievalStage = DriveRetrievalStage.MY_DRIVE_FILES,
 ) -> RetrievedDriveFile:
@@ -48,8 +44,6 @@ def _file(
         "modifiedTime": modified_time,
         "webViewLink": f"https://drive.google.com/file/d/{file_id}",
     }
-    if listing_modified_time is not None:
-        drive_file[LISTING_MODIFIED_TIME_KEY] = listing_modified_time
     return RetrievedDriveFile(
         completion_stage=stage,
         drive_file=drive_file,
@@ -100,32 +94,6 @@ def _funnel(
     )
 
 
-def test_resolved_shortcut_uses_listing_position_not_target_mtime() -> None:
-    checkpoint = _checkpoint()
-    completion = checkpoint.completion_map[_USER]
-    gen = _funnel(
-        checkpoint,
-        [
-            _file("f1", "2024-06-01T00:00:00Z"),
-            # resolved shortcut: target was last modified in January, but the
-            # shortcut sits at June 2nd in the listing
-            _file(
-                "f2",
-                "2024-01-15T00:00:00Z",
-                listing_modified_time="2024-06-02T00:00:00Z",
-            ),
-            _file("f3", "2024-06-03T00:00:00Z"),
-        ],
-    )
-
-    next(gen)
-    assert completion.completed_until == _ts("2024-06-01T00:00:00Z")
-    next(gen)
-    assert completion.completed_until == _ts("2024-06-02T00:00:00Z")
-    next(gen)
-    assert completion.completed_until == _ts("2024-06-03T00:00:00Z")
-
-
 def test_out_of_order_mtime_never_regresses_frontier() -> None:
     checkpoint = _checkpoint()
     completion = checkpoint.completion_map[_USER]
@@ -133,7 +101,7 @@ def test_out_of_order_mtime_never_regresses_frontier() -> None:
         checkpoint,
         [
             _file("f1", "2024-06-01T00:00:00Z"),
-            _file("f2", "2024-01-15T00:00:00Z"),  # no listing timestamp available
+            _file("f2", "2024-01-15T00:00:00Z"),  # unexpected out-of-order timestamp
             _file("f3", "2024-06-03T00:00:00Z"),
         ],
     )

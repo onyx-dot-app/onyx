@@ -37,7 +37,6 @@ from onyx.connectors.google_drive.doc_conversion import (
     onyx_document_id_from_drive_file,
 )
 from onyx.connectors.google_drive.file_retrieval import (
-    LISTING_MODIFIED_TIME_KEY,
     DriveFileFieldType,
     crawl_folders_for_files,
     get_all_files_for_oauth,
@@ -1562,11 +1561,7 @@ class GoogleDriveConnector(
             completion = checkpoint.completion_map[file.user_email]
 
             completed_until = completion.completed_until
-            # for resolved shortcuts, the shortcut's own modifiedTime is the
-            # position in the modifiedTime-ordered listing
-            modified_time = drive_file.get(LISTING_MODIFIED_TIME_KEY) or drive_file.get(
-                GoogleFields.MODIFIED_TIME.value
-            )
+            modified_time = drive_file.get(GoogleFields.MODIFIED_TIME.value)
             if isinstance(modified_time, str):
                 try:
                     completed_until = datetime.fromisoformat(modified_time).timestamp()

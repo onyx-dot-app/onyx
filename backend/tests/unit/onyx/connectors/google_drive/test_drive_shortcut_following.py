@@ -16,7 +16,6 @@ from onyx.connectors.google_drive.doc_conversion import (
 from onyx.connectors.google_drive.file_retrieval import (
     DRIVE_RESOURCE_KEY_FIELD,
     DRIVE_RESOURCE_KEY_HEADER,
-    LISTING_MODIFIED_TIME_KEY,
     DriveFileFieldType,
     _get_files_in_parent,
     crawl_folders_for_files,
@@ -149,7 +148,7 @@ def test_shortcut_to_file_yields_target_with_true_parent() -> None:
     assert len(service.files_resource.get_calls) == 1
 
 
-def test_shortcut_resolution_stamps_listing_modified_time() -> None:
+def test_shortcut_resolution_uses_shortcut_modified_time() -> None:
     target = _target_file("target_file", "true_parent")
     target["modifiedTime"] = "2024-01-15T00:00:00Z"
     service = _FakeDriveService(
@@ -177,10 +176,10 @@ def test_shortcut_resolution_stamps_listing_modified_time() -> None:
         )
 
     assert len(files) == 1
-    # the target's own modifiedTime is preserved for doc metadata; the
-    # shortcut's listing position is stamped for checkpoint tracking
-    assert files[0]["modifiedTime"] == "2024-01-15T00:00:00Z"
-    assert files[0][LISTING_MODIFIED_TIME_KEY] == "2026-06-02T00:00:00Z"
+    # the retrieved item keeps the shortcut's modifiedTime — the value the
+    # listing was filtered/ordered by — so it stays within the requested range
+    assert files[0]["modifiedTime"] == "2026-06-02T00:00:00Z"
+    assert files[0]["id"] == "target_file"
 
 
 def test_shortcut_to_resource_key_file_uses_header() -> None:
