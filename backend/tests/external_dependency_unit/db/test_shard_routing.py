@@ -43,8 +43,11 @@ from onyx.db.engine.sql_engine import (
     get_catalog_session,
     get_session_with_tenant,
 )
-from onyx.db.models import PublicBase
+from onyx.db.models import PublicBase, TenantShard
 
+# Shard names used throughout. DEFAULT_SHARD must match ONYX_DB_DEFAULT_SHARD,
+# which the `two_shards` fixture pins.
+DEFAULT_SHARD = "default"
 SECOND_SHARD = "shard-test-b"
 
 # Standalone probe table. `schema=None` so `schema_translate_map` rewrites it to
@@ -125,8 +128,8 @@ def two_shards(
 
     shards_json = f'{{"{SECOND_SHARD}": {{"db": "{second_database}"}}}}'
     monkeypatch.setattr(shard_registry, "ONYX_DB_SHARDS_JSON", shards_json)
-    monkeypatch.setattr(shard_registry, "ONYX_DB_DEFAULT_SHARD", "default")
-    monkeypatch.setattr(shard_registry, "ONYX_DB_CATALOG_SHARD", "default")
+    monkeypatch.setattr(shard_registry, "ONYX_DB_DEFAULT_SHARD", DEFAULT_SHARD)
+    monkeypatch.setattr(shard_registry, "ONYX_DB_CATALOG_SHARD", DEFAULT_SHARD)
     # Routing short-circuits to the default shard outside multi-tenant mode.
     monkeypatch.setattr(shard_routing, "MULTI_TENANT", True)
     monkeypatch.setattr(shard_routing, "ONYX_DB_SHARD_OVERRIDES_JSON", "")
@@ -139,10 +142,14 @@ def two_shards(
     tenant_a = f"tenant_{uuid4()}"
     tenant_b = f"tenant_{uuid4()}"
 
-    # The catalog table normally arrives via the `schema_private` Alembic tree, which
-    # the external-dependency-unit lane does not run. Create it on demand.
+    # `tenant_shard` normally arrives via the `schema_private` Alembic tree, which this
+    # lane does not run. Only that table, so unrelated models can't break this suite.
     catalog_engine = get_catalog_engine()
-    PublicBase.metadata.create_all(catalog_engine, checkfirst=True)
+    PublicBase.metadata.create_all(
+        catalog_engine,
+        tables=[PublicBase.metadata.tables[f"public.{TenantShard.__tablename__}"]],
+        checkfirst=True,
+    )
 
     # Tenant A on the default shard, tenant B on the second one.
     for tenant_id, engine in (
@@ -183,7 +190,7 @@ def _current_database(session: Any) -> str:
 
 
 def test_tenants_resolve_to_their_configured_shards(two_shards: dict[str, Any]) -> None:
-    assert get_shard_for_tenant(two_shards["tenant_a"]) == "default"
+    assert get_shard_for_tenant(two_shards["tenant_a"]) == DEFAULT_SHARD
     assert get_shard_for_tenant(two_shards["tenant_b"]) == SECOND_SHARD
 
 
@@ -194,7 +201,7 @@ def test_unmapped_tenant_falls_back_to_default_shard(
 
     This is what lets the mapping table stay empty until tenants are migrated.
     """
-    assert get_shard_for_tenant(f"tenant_{uuid4()}") == "default"
+    assert get_shard_for_tenant(f"tenant_{uuid4()}") == DEFAULT_SHARD
 
 
 def test_sessions_reach_different_physical_databases(
@@ -250,12 +257,12 @@ def test_flipping_the_map_reroutes_after_invalidation(
 ) -> None:
     """A migrator flip plus cache invalidation must take effect immediately."""
     tenant_a = two_shards["tenant_a"]
-    assert get_shard_for_tenant(tenant_a) == "default"
+    assert get_shard_for_tenant(tenant_a) == DEFAULT_SHARD
 
     _set_tenant_shard(tenant_a, SECOND_SHARD)
 
     # Still cached from the assertion above.
-    assert get_shard_for_tenant(tenant_a) == "default"
+    assert get_shard_for_tenant(tenant_a) == DEFAULT_SHARD
 
     invalidate_shard_cache(tenant_a)
     assert get_shard_for_tenant(tenant_a) == SECOND_SHARD
@@ -338,7 +345,7 @@ def test_version_bump_invalidates_without_a_local_invalidate_call(
     _poll_immediately(monkeypatch)
 
     # Prime the cache with the pre-flip answer.
-    assert get_shard_for_tenant(tenant_a) == "default"
+    assert get_shard_for_tenant(tenant_a) == DEFAULT_SHARD
 
     _set_tenant_shard(tenant_a, SECOND_SHARD)
 
@@ -419,7 +426,7 @@ def test_schema_creation_follows_the_shard_map(
     _set_tenant_shard(tenant_id, SECOND_SHARD)
     invalidate_shard_cache()
 
-    default_engine = shard_registry.get_engine_for_shard("default")
+    default_engine = shard_registry.get_engine_for_shard(DEFAULT_SHARD)
     second_engine = shard_registry.get_engine_for_shard(SECOND_SHARD)
     try:
         create_schema_if_not_exists(tenant_id)
@@ -540,7 +547,7 @@ def test_missing_catalog_table_still_falls_back_to_default(
         raise _make_undefined_table_error()
 
     monkeypatch.setattr(shard_routing, "get_catalog_engine", _undefined_table)
-    assert get_shard_for_tenant(tenant_id) == "default"
+    assert get_shard_for_tenant(tenant_id) == DEFAULT_SHARD
 
 
 def _make_undefined_table_error() -> ProgrammingError:
@@ -563,7 +570,7 @@ def test_stale_lookup_cannot_repopulate_cache_after_invalidation(
     generation = shard_routing._ShardCache.generation()
     # Simulate a flip landing while a lookup was in flight.
     invalidate_shard_cache()
-    shard_routing._ShardCache.put(tenant_b, "default", generation)
+    shard_routing._ShardCache.put(tenant_b, DEFAULT_SHARD, generation)
 
     assert shard_routing._ShardCache.get(tenant_b) is None
     assert get_shard_for_tenant(tenant_b) == SECOND_SHARD
@@ -587,9 +594,9 @@ def test_default_shard_cannot_be_redefined(
     monkeypatch.setattr(
         shard_registry,
         "ONYX_DB_SHARDS_JSON",
-        f'{{"default": {{"db": "{second_database}"}}}}',
+        f'{{"{DEFAULT_SHARD}": {{"db": "{second_database}"}}}}',
     )
-    monkeypatch.setattr(shard_registry, "ONYX_DB_DEFAULT_SHARD", "default")
+    monkeypatch.setattr(shard_registry, "ONYX_DB_DEFAULT_SHARD", DEFAULT_SHARD)
     shard_registry.reset_shard_specs()
 
     with pytest.raises(ShardConfigurationError):
@@ -611,8 +618,8 @@ def test_shard_password_is_url_encoded(
         "ONYX_DB_SHARDS_JSON",
         '{"pw-shard": {"password": "p@ss:w/rd"}}',
     )
-    monkeypatch.setattr(shard_registry, "ONYX_DB_DEFAULT_SHARD", "default")
-    monkeypatch.setattr(shard_registry, "ONYX_DB_CATALOG_SHARD", "default")
+    monkeypatch.setattr(shard_registry, "ONYX_DB_DEFAULT_SHARD", DEFAULT_SHARD)
+    monkeypatch.setattr(shard_registry, "ONYX_DB_CATALOG_SHARD", DEFAULT_SHARD)
     shard_registry.reset_shard_specs()
 
     spec = shard_registry.get_shard_spec("pw-shard")
@@ -627,7 +634,7 @@ def test_catalog_shard_is_validated_without_shard_json(
 ) -> None:
     """Naming a catalog shard that does not exist must fail at startup, not at request time."""
     monkeypatch.setattr(shard_registry, "ONYX_DB_SHARDS_JSON", "")
-    monkeypatch.setattr(shard_registry, "ONYX_DB_DEFAULT_SHARD", "default")
+    monkeypatch.setattr(shard_registry, "ONYX_DB_DEFAULT_SHARD", DEFAULT_SHARD)
     monkeypatch.setattr(shard_registry, "ONYX_DB_CATALOG_SHARD", "nonexistent-catalog")
     shard_registry.reset_shard_specs()
 

@@ -23,8 +23,8 @@ from onyx.db.engine.shard_registry import (
     divide_pool_budget,
     get_default_shard_name,
     get_shard_spec,
-    is_default_shard,
     is_sharded,
+    shard_app_name,
 )
 from onyx.db.engine.shard_routing import get_shard_for_tenant
 from onyx.db.engine.sql_engine import (
@@ -44,9 +44,7 @@ _ASYNC_ENGINES_LOCK = threading.Lock()
 
 
 def _build_async_engine(spec: ShardSpec) -> AsyncEngine:
-    app_name = SqlEngine.get_app_name() + "_async"
-    if not is_default_shard(spec.name):
-        app_name = f"{app_name}_{spec.name}"
+    app_name = shard_app_name(SqlEngine.get_app_name(), "async", spec.name)
 
     connection_string = build_connection_string(
         db_api=ASYNC_DB_API,

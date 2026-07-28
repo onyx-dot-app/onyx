@@ -14,7 +14,7 @@ Design notes:
   a thin pass-through to ``SqlEngine``.
 
 Connection budget: the *total* pool across shards is held roughly constant rather than
-multiplied per shard — see ``shard_pool_divisor``. Multiplying it would put N times the
+multiplied per shard — see ``divide_pool_budget``. Multiplying it would put N times the
 connection load on the database/pooler, which is how this deployment has hurt itself
 before.
 """
@@ -43,13 +43,24 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+# Alembic Config attribute a caller sets to pin a migration run to one database.
+# Deliberately NOT `sqlalchemy.url`: that option is already set by other callers (the
+# integration-test reset helpers) with a sync-driver URL, on the established
+# understanding that alembic/env.py ignores it and builds its own async engine.
+ALEMBIC_TARGET_URL_ATTRIBUTE = "onyx_target_url"
+
+
 class ShardConfigurationError(RuntimeError):
     """Raised when ONYX_DB_SHARDS is malformed or references an unknown shard."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class ShardSpec:
-    """Connection coordinates for one physical database."""
+    """Connection coordinates for one physical database.
+
+    repr/str omit the password so it can't leak via a log line or traceback; the
+    dataclass-generated repr would have included it.
+    """
 
     name: str
     host: str
@@ -58,9 +69,10 @@ class ShardSpec:
     user: str
     password: str
 
-    def describe(self) -> str:
-        """Loggable identity — never includes the password."""
+    def __repr__(self) -> str:
         return f"{self.name}({self.user}@{self.host}:{self.port}/{self.db})"
+
+    __str__ = __repr__
 
 
 def _validate_catalog_shard(specs: dict[str, ShardSpec]) -> None:
@@ -164,7 +176,7 @@ def get_shard_specs() -> dict[str, ShardSpec]:
                     logger.info(
                         "Tenant sharding enabled across %d databases: %s",
                         len(_SHARD_SPECS),
-                        ", ".join(s.describe() for s in _SHARD_SPECS.values()),
+                        ", ".join(str(s) for s in _SHARD_SPECS.values()),
                     )
     return _SHARD_SPECS
 
@@ -191,17 +203,27 @@ def is_sharded() -> bool:
 
 
 def divide_pool_budget(pool_size: int, max_overflow: int) -> tuple[int, int]:
-    """Split a connection budget across shards, keeping the total roughly constant.
+    """Divide SQLAlchemy pool settings by the shard count.
 
-    Multiplying it per shard would put N times the connection load on the
-    database/pooler, which is how this deployment has hurt itself before. An explicit
-    zero-overflow budget (celery beat) stays zero rather than being floored to 1.
+    Returns ``(pool_size, max_overflow)`` for ``create_engine`` — divided so N shards
+    don't open N times the connections, which has hurt this deployment before.
+    Unchanged with one shard. An explicit ``max_overflow=0`` (celery beat) stays 0.
     """
     divisor = max(1, len(get_shard_specs()))
     return (
         max(1, pool_size // divisor),
         0 if max_overflow == 0 else max(1, max_overflow // divisor),
     )
+
+
+def shard_app_name(base_app_name: str, driver: str, shard_name: str) -> str:
+    """`application_name` for a shard's connections, as seen in `pg_stat_activity`.
+
+    The default shard keeps its historical `<app>_<driver>` name; only extra shards
+    get a suffix.
+    """
+    name = f"{base_app_name}_{driver}"
+    return name if is_default_shard(shard_name) else f"{name}_{shard_name}"
 
 
 def is_default_shard(shard_name: str) -> bool:
@@ -253,7 +275,7 @@ class ShardRegistry:
 
             engine = cls._build_engine(spec)
             cls._engines[shard_name] = engine
-            logger.info("Created engine for shard %s", spec.describe())
+            logger.info("Created engine for shard %s", spec)
             return engine
 
     @classmethod
@@ -275,7 +297,7 @@ class ShardRegistry:
             host=spec.host,
             port=spec.port,
             db=spec.db,
-            app_name=f"{SqlEngine.get_app_name()}_sync_{spec.name}",
+            app_name=shard_app_name(SqlEngine.get_app_name(), "sync", spec.name),
             use_iam_auth=profile.use_iam,
         )
 

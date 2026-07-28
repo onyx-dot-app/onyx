@@ -12,14 +12,11 @@ when it changes. Propagation is bounded by the poll interval rather than the TTL
 
 Two deliberate choices:
 
-- **Read from the primary, not a replica.** This is one GET per process per poll
-  interval, so the cost is negligible, and it keeps replica lag out of the
-  correctness argument for a flip.
-- **Redis failure does not invalidate.** If the version cannot be read the local
-  cache is left alone and the TTL remains the backstop, i.e. behavior degrades to
-  what it would have been without this module. The consequence is that the
-  migrator must treat Redis as a *precondition* for a flip, not an optimization —
-  see ``shard_map_propagation_seconds``.
+- **Read from the primary, not a replica**, so replica lag stays out of the
+  correctness argument for a flip. It's one GET per process per interval.
+- **A Redis failure does not invalidate** — the cache is left alone and the TTL is the
+  backstop. So the migrator must treat Redis as a precondition for a flip, not an
+  optimization; see ``shard_map_propagation_seconds``.
 """
 
 import threading
@@ -30,6 +27,7 @@ from onyx.configs.app_configs import (
     ONYX_DB_SHARD_MAP_VERSION_POLL_SECONDS,
 )
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
+from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -54,11 +52,12 @@ class _VersionPoller:
     _redis_healthy: bool | None = None
 
     @classmethod
-    def _read_version(cls) -> str | None:
-        # Imported lazily: this module sits under the request hot path and the
-        # redis package pulls in a large import graph.
-        from onyx.redis.redis_pool import get_redis_client
+    def _read_version(cls) -> str:
+        """The shared version counter, or "0" if never bumped.
 
+        Raises on a Redis failure rather than returning a sentinel, so callers can't
+        confuse "unreachable" with "never bumped".
+        """
         client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
         raw = client.get(SHARD_MAP_VERSION_KEY)
         if raw is None:
@@ -156,8 +155,6 @@ def bump_shard_map_version() -> int:
     *before* unfreezing the tenant. Raises if Redis is unreachable — a flip whose
     invalidation cannot be published is not safe to proceed from.
     """
-    from onyx.redis.redis_pool import get_redis_client
-
     client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     version = int(client.incr(SHARD_MAP_VERSION_KEY))
     logger.info("Bumped shard map version to %s", version)

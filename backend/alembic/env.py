@@ -6,6 +6,7 @@ from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.configs.app_configs import AWS_REGION_NAME
+from onyx.db.engine.shard_registry import ALEMBIC_TARGET_URL_ATTRIBUTE
 from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from sqlalchemy import event
@@ -57,21 +58,16 @@ target_metadata = [Base.metadata, ResultModelBase.metadata]
 logger = logging.getLogger(__name__)
 
 
-# Config attribute a caller sets to pin this run to a specific database. Deliberately
-# *not* `sqlalchemy.url`: that option is already set by other callers (e.g. the
-# integration-test reset helpers) with a sync driver URL, on the established
-# understanding that this env.py ignores it and builds its own async engine.
-TARGET_URL_ATTRIBUTE = "onyx_target_url"
-
-
 def connection_url() -> str:
     """Database URL for this migration run.
 
     Defaults to the process-wide POSTGRES_* settings. A caller that has already
     decided which database to target — notably per-tenant migrations, which must
-    follow the tenant's shard — passes it via `TARGET_URL_ATTRIBUTE`.
+    follow the tenant's shard — passes it via `ALEMBIC_TARGET_URL_ATTRIBUTE`.
     """
-    return config.attributes.get(TARGET_URL_ATTRIBUTE) or build_connection_string()
+    return (
+        config.attributes.get(ALEMBIC_TARGET_URL_ATTRIBUTE) or build_connection_string()
+    )
 
 
 ssl_context: ssl.SSLContext | None = None

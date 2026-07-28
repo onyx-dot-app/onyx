@@ -8,7 +8,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema
 
-from onyx.db.engine.shard_registry import get_shard_spec
+from onyx.db.engine.shard_registry import (
+    ALEMBIC_TARGET_URL_ATTRIBUTE,
+    get_shard_spec,
+)
 from onyx.db.engine.shard_routing import get_engine_for_tenant, get_shard_for_tenant
 from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.tenant_utils import validate_tenant_id
@@ -44,8 +47,8 @@ def run_alembic_migrations(schema_name: str) -> None:
         alembic_cfg = Config(alembic_ini_path)
         # Pin the run to the tenant's shard. Uses env.py's dedicated attribute rather
         # than `sqlalchemy.url`, which env.py ignores by design.
-        alembic_cfg.attributes["onyx_target_url"] = _tenant_connection_string(
-            schema_name
+        alembic_cfg.attributes[ALEMBIC_TARGET_URL_ATTRIBUTE] = (
+            _tenant_connection_string(schema_name)
         )
         alembic_cfg.set_main_option(
             "script_location", os.path.join(root_dir, "alembic")

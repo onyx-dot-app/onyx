@@ -13,16 +13,11 @@ A tenant with no ``tenant_shard`` row lives on the default shard. That makes the
 empty until tenants are actually migrated, so no backfill is needed and an
 unconfigured deployment never depends on it existing.
 
-**Routing fails closed.** Single-shard deployments never reach the catalog at all, so
-every lookup that does reach it belongs to a deployment where the answer genuinely
-matters. If the catalog cannot be consulted, or names a shard this process does not
-know, resolution raises rather than assuming the default. Guessing "default" for a
-tenant that has already been migrated sends its *writes* to the database it was moved
-off — silent, and unrecoverable without reconciliation. A failed request is strictly
-better than that, so unavailability is preferred to misrouting.
-
-The one exception is a missing ``tenant_shard`` table, which is provably safe: if the
-table does not exist, no tenant can be mapped anywhere.
+**Routing fails closed.** If the catalog can't be consulted, or names an unknown
+shard, resolution raises instead of assuming the default — guessing "default" for an
+already-migrated tenant would send its writes to the database it moved off. The one
+exception is a missing ``tenant_shard`` table: nothing can be mapped, so the default
+is the only possible answer.
 """
 
 import json
@@ -92,12 +87,11 @@ def get_shard_overrides() -> dict[str, str]:
 
 
 class _ShardCache:
-    """tenant_id -> (shard_name, expires_at monotonic seconds).
+    """Cache of tenant_id -> (shard_name, expiry).
 
-    Entries carry the generation they were resolved under. A catalog read that began
-    before an invalidation must not install its now-stale answer afterwards, which is
-    otherwise a live race during a migration flip: the reader wins, and the tenant
-    stays routable to its old database for a full TTL past the freeze.
+    Entries record `_generation` as of when their lookup *started*; `invalidate()`
+    bumps it. That lets an in-flight lookup discard a result the migrator has already
+    superseded, instead of caching the pre-flip shard for a full TTL.
     """
 
     _entries: dict[str, tuple[str, float]] = {}
@@ -156,12 +150,10 @@ def reset_shard_overrides() -> None:
 
 
 def _is_undefined_table(exc: BaseException) -> bool:
-    """True if the failure is specifically 'public.tenant_shard does not exist'.
+    """True only for 'public.tenant_shard does not exist'.
 
-    Distinguishing this from every other failure is what makes the default-shard
-    fallback provably safe: if the table does not exist, no tenant can be mapped
-    anywhere, so the default is the only possible answer. Any other failure means
-    the mapping is unknown, which is a different situation entirely.
+    Separating this from other failures is what makes the default-shard fallback safe:
+    no table means nothing is mapped, whereas any other error means unknown.
     """
     if isinstance(exc, ProgrammingError):
         pgcode = getattr(getattr(exc, "orig", None), "pgcode", None)
