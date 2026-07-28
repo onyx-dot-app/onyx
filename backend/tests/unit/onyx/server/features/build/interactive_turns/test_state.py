@@ -18,6 +18,7 @@ from onyx.server.features.build.interactive_turns.state import (
     get_turn_for_request,
     touch_turn,
 )
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from tests.unit.fakes import FakeCache
 
 
@@ -79,6 +80,31 @@ def test_create_turn_records_active_and_request_mappings() -> None:
     )
     assert request_turn is not None
     assert request_turn.turn_id == turn.turn_id
+
+
+def test_create_turn_round_trips_prompt_attachments() -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    attachment = PromptAttachment(
+        name="reference image.png",
+        path="attachments/reference image.png",
+        mime_type="image/png",
+    )
+
+    turn = create_interactive_turn(
+        cache=cache,
+        session_id=session_id,
+        user_id=user_id,
+        client_request_id="req-with-image",
+        prompt="Use this image",
+        turn_index=0,
+        attachments=[attachment],
+    )
+
+    restored = get_turn(cache, turn.turn_id)
+    assert restored is not None
+    assert restored.attachments == [attachment]
 
 
 def test_finish_turn_clears_active_marker_but_keeps_request_mapping() -> None:

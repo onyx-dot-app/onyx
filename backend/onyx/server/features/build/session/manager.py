@@ -60,6 +60,7 @@ from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     DirectoryListing,
     FilesystemEntry,
+    PromptAttachment,
 )
 from onyx.server.features.build.sandbox.serve_transport import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
@@ -1024,6 +1025,7 @@ class SessionManager:
         sandbox_id: UUID,
         session_id: UUID,
         user_message_content: str,
+        attachments: list[PromptAttachment] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
         should_abort_on_teardown: Callable[[], bool] | None = None,
         turn_timeout_seconds: float | None = None,
@@ -1039,6 +1041,7 @@ class SessionManager:
             sandbox_id,
             session_id,
             user_message_content,
+            attachments=attachments,
             opencode_session_id=build_session.opencode_session_id,
             agent_provider=build_session.agent_provider,
             agent_model=build_session.agent_model,

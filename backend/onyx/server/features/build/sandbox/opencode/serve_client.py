@@ -16,6 +16,7 @@ import queue
 import time
 from collections.abc import Callable, Generator, Iterable
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from typing import Any, cast
 from uuid import uuid4
 
@@ -49,6 +50,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     ToolCallProgress,
     ToolCallStart,
 )
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.opencode.event_bus import (
     BUS_CLOSED_SENTINEL,
     PodEventBus,
@@ -1332,6 +1334,7 @@ class OpencodeServeClient:
         directory: str,
         model_provider: str | None = None,
         model_id: str | None = None,
+        attachments: list[PromptAttachment] | None = None,
         timeout: float = OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
         absolute_timeout: float | None = None,
         should_interrupt: Callable[[], bool] | None = None,
@@ -1388,6 +1391,7 @@ class OpencodeServeClient:
                     message,
                     model_provider,
                     model_id,
+                    attachments=attachments,
                     directory=directory,
                 )
                 prompt_posted = True
@@ -1628,6 +1632,7 @@ class OpencodeServeClient:
         model_provider: str | None,
         model_id: str | None,
         *,
+        attachments: list[PromptAttachment] | None = None,
         directory: str,
     ) -> None:
         """POST /session/.../prompt_async.
@@ -1637,7 +1642,17 @@ class OpencodeServeClient:
         ``model`` and opencode falls back to the session's default
         (written by ``setup_session_workspace`` into ``opencode.json``).
         """
-        body: dict[str, Any] = {"parts": [{"type": "text", "text": message}]}
+        parts: list[dict[str, str]] = [{"type": "text", "text": message}]
+        parts.extend(
+            {
+                "type": "file",
+                "mime": attachment.mime_type,
+                "filename": attachment.name,
+                "url": (PurePosixPath(directory) / attachment.path).as_uri(),
+            }
+            for attachment in attachments or []
+        )
+        body: dict[str, Any] = {"parts": parts}
         if model_provider and model_id:
             body["model"] = {"providerID": model_provider, "modelID": model_id}
         # idempotent=False: only the 401 reload retries this POST.

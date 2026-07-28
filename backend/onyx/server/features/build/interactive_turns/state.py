@@ -9,6 +9,7 @@ from enum import StrEnum
 from uuid import UUID, uuid4
 
 from onyx.cache.interface import CacheBackend, CacheLock
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.utils.datetime import datetime_to_utc
 
 
@@ -46,6 +47,7 @@ class InteractiveTurn:
     prompt: str
     status: InteractiveTurnStatus
     turn_index: int
+    attachments: list[PromptAttachment]
     last_heartbeat_at: datetime | None = None
     error_detail: str | None = None
     runner_id: str | None = None
@@ -74,6 +76,7 @@ def create_interactive_turn(
     client_request_id: str,
     prompt: str,
     turn_index: int,
+    attachments: list[PromptAttachment] | None = None,
 ) -> InteractiveTurn:
     now = datetime.now(tz=timezone.utc)
     turn = InteractiveTurn(
@@ -83,6 +86,7 @@ def create_interactive_turn(
         prompt=prompt,
         status=TURN_STATUS_QUEUED,
         turn_index=turn_index,
+        attachments=attachments or [],
         last_heartbeat_at=now,
     )
     _save_turn(cache, turn, ex=ACTIVE_TURN_TTL_SECONDS)
@@ -299,6 +303,10 @@ def _load_turn(raw: bytes | None) -> InteractiveTurn | None:
             prompt=payload["prompt"],
             status=InteractiveTurnStatus(payload["status"]),
             turn_index=int(payload["turn_index"]),
+            attachments=[
+                PromptAttachment(**attachment)
+                for attachment in payload.get("attachments", [])
+            ],
             last_heartbeat_at=_parse_dt(payload.get("last_heartbeat_at")),
             error_detail=payload.get("error_detail"),
             runner_id=payload.get("runner_id"),

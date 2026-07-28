@@ -39,6 +39,7 @@ from onyx.server.features.build.interactive_turns.state import (
     get_active_turn,
     get_turn_for_request,
 )
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.session.errors import RateLimitError
 from onyx.server.features.build.session.llm_config import GatewaySelection
 from onyx.server.features.build.session.manager import SessionManager
@@ -178,6 +179,15 @@ def send_message(
             client_request_id=client_request_id,
             prompt=request.content,
             turn_index=turn_index,
+            attachments=[
+                PromptAttachment(
+                    name=attachment.name,
+                    path=attachment.path,
+                    mime_type=attachment.mime_type,
+                )
+                for attachment in request.attachments
+                if attachment.mime_type.startswith("image/")
+            ],
         )
 
         try:

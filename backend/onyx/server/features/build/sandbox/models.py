@@ -1,5 +1,6 @@
 """Pydantic models for sandbox module communication."""
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TypeAlias
 from uuid import UUID
@@ -10,6 +11,15 @@ from onyx.db.enums import SandboxStatus
 from onyx.server.gateway.models import GatewayModelDescriptor
 
 FileSet: TypeAlias = dict[str, bytes]
+
+
+@dataclass(frozen=True)
+class PromptAttachment:
+    """A session-relative file to include in an OpenCode prompt."""
+
+    name: str
+    path: str
+    mime_type: str
 
 
 class CraftLLMProviderConfig(BaseModel):

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.interactive_turns.state import get_turn
 from onyx.server.features.build.session import messages as messages_api
 from onyx.server.features.build.session.models import (
     MessageAttachment,
@@ -125,7 +126,12 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
                     name="reference.png",
                     path="attachments/reference.png",
                     mime_type="image/png",
-                )
+                ),
+                MessageAttachment(
+                    name="notes.txt",
+                    path="attachments/notes.txt",
+                    mime_type="text/plain",
+                ),
             ],
         ),
         user=cast(User, SimpleNamespace(id=user_id)),
@@ -144,13 +150,23 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
                     "name": "reference.png",
                     "path": "attachments/reference.png",
                     "mime_type": "image/png",
-                }
+                },
+                {
+                    "name": "notes.txt",
+                    "path": "attachments/notes.txt",
+                    "mime_type": "text/plain",
+                },
             ],
         )
     ]
     assert session.agent_provider == "onyx"
     assert session.agent_model == "17/gpt-5-mini"
     assert db_session.commits == 1
+    turn = get_turn(cache, UUID(response.turn_id))
+    assert turn is not None
+    assert [attachment.path for attachment in turn.attachments] == [
+        "attachments/reference.png"
+    ]
     start_runner.assert_called_once()
     assert str(start_runner.call_args.args[0]) == response.turn_id
 
