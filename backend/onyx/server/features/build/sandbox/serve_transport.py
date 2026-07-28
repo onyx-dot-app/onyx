@@ -37,6 +37,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     AgentThoughtChunk,
     PromptResponse,
 )
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.opencode.event_bus import (
     BUS_CLOSED_SENTINEL,
     PodEventBus,
@@ -564,6 +565,7 @@ class _ServeMixin:
         agent_provider: str | None,
         agent_model: str | None,
         *,
+        attachments: list[PromptAttachment] | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
         should_abort_on_teardown: Callable[[], bool] | None = None,
@@ -616,6 +618,7 @@ class _ServeMixin:
                     directory=session_path,
                     model_provider=agent_provider,
                     model_id=agent_model,
+                    attachments=attachments,
                     timeout=OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
                     absolute_timeout=turn_timeout_seconds,
                     should_interrupt=should_interrupt,

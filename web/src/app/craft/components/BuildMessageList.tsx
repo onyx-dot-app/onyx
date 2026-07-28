@@ -21,6 +21,7 @@ import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import TodoListCard from "@/app/craft/components/TodoListCard";
 import HumanMessage from "@/app/app/message/HumanMessage";
+import CraftMessageAttachments from "@/app/craft/components/CraftMessageAttachments";
 import { BuildMessage } from "@/app/craft/types/streamingTypes";
 import {
   StreamItem,
@@ -38,6 +39,8 @@ type RenderBlock =
   | { kind: "item"; item: Exclude<StreamItem, { type: "tool_call" }> };
 
 interface BuildMessageListProps {
+  sessionId: string | null;
+  attachmentRefreshKey?: number;
   messages: BuildMessage[];
   streamItems: StreamItem[];
   isStreaming?: boolean;
@@ -67,6 +70,8 @@ interface BuildMessageListProps {
  * mid-stream.
  */
 export default function BuildMessageList({
+  sessionId,
+  attachmentRefreshKey = 0,
   messages,
   streamItems,
   isStreaming = false,
@@ -353,6 +358,13 @@ export default function BuildMessageList({
           if (message.type === "user") {
             return (
               <div key={message.id} className="py-4">
+                {sessionId && message.attachments && (
+                  <CraftMessageAttachments
+                    sessionId={sessionId}
+                    attachments={message.attachments}
+                    refreshKey={attachmentRefreshKey}
+                  />
+                )}
                 <HumanMessage content={message.content} nodeId={idx} />
               </div>
             );

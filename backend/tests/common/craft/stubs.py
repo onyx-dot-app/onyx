@@ -62,6 +62,7 @@ from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
+    PromptAttachment,
     SandboxInfo,
     SnapshotResult,
 )
@@ -526,6 +527,7 @@ class StubSandboxManager(SandboxManager):
         session_id: UUID,
         message: str,
         *,
+        attachments: list[PromptAttachment] | None = None,
         opencode_session_id: str | None = None,
         agent_provider: str | None = None,
         agent_model: str | None = None,
@@ -539,6 +541,7 @@ class StubSandboxManager(SandboxManager):
             "sandbox_id": sandbox_id,
             "session_id": session_id,
             "message": message,
+            "attachments": attachments,
             "opencode_session_id": opencode_session_id,
             "agent_provider": agent_provider,
             "agent_model": agent_model,

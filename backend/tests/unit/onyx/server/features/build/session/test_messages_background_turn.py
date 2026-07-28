@@ -6,14 +6,33 @@ from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.interactive_turns.state import get_turn
 from onyx.server.features.build.session import messages as messages_api
-from onyx.server.features.build.session.models import MessageRequest
+from onyx.server.features.build.session.models import (
+    MessageAttachment,
+    MessageRequest,
+    SubagentMessageRequest,
+)
 from tests.unit.fakes import FakeCache
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/attachments/reference.png",
+        "outputs/reference.png",
+        "attachments/../outputs/reference.png",
+    ],
+)
+def test_message_attachment_rejects_paths_outside_attachments(path: str) -> None:
+    with pytest.raises(ValidationError):
+        MessageAttachment(name="reference.png", path=path, mime_type="image/png")
 
 
 class _FakeQuery:
@@ -58,13 +77,24 @@ def _patch_skill_state(
     monkeypatch.setattr(messages_api, "session_runtime_stale", lambda *_: stale)
 
 
-def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("supports_image_input", "expected_prompt_attachment_paths"),
+    [
+        (True, ["attachments/reference.png"]),
+        (False, []),
+    ],
+)
+def test_send_message_starts_background_turn(
+    monkeypatch: pytest.MonkeyPatch,
+    supports_image_input: bool,
+    expected_prompt_attachment_paths: list[str],
+) -> None:
     cache = FakeCache()
     session_id = uuid4()
     user_id = uuid4()
     session = SimpleNamespace(id=session_id)
     db_session = _FakeDbSession(user_message_count=2)
-    persisted: list[tuple[int, str]] = []
+    persisted: list[tuple[int, str, list[dict[str, str]]]] = []
     start_runner = MagicMock()
 
     def get_session_stub(*_: object, **__: object) -> SimpleNamespace:
@@ -77,13 +107,31 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
         **_: object,
     ) -> None:
         content = cast(dict[str, str], message_metadata["content"])
-        persisted.append((turn_index, content["text"]))
+        attachments = cast(list[dict[str, str]], message_metadata["attachments"])
+        persisted.append((turn_index, content["text"], attachments))
 
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
     _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(
+        messages_api.SessionManager,
+        "session_llm_config",
+        lambda *_: SimpleNamespace(
+            model_name="17/gpt-5-mini",
+            models=[
+                SimpleNamespace(
+                    id="17/gpt-5-mini",
+                    capabilities=SimpleNamespace(
+                        input_modalities=(
+                            ("text", "image") if supports_image_input else ("text",)
+                        )
+                    ),
+                )
+            ],
+        ),
+    )
     monkeypatch.setattr(
         messages_api,
         "create_message",
@@ -102,6 +150,18 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
             client_request_id="req-1",
             provider_id=17,
             model="gpt-5-mini",
+            attachments=[
+                MessageAttachment(
+                    name="reference.png",
+                    path="attachments/reference.png",
+                    mime_type="image/png",
+                ),
+                MessageAttachment(
+                    name="notes.txt",
+                    path="attachments/notes.txt",
+                    mime_type="text/plain",
+                ),
+            ],
         ),
         user=cast(User, SimpleNamespace(id=user_id)),
         db_session=cast(Session, db_session),
@@ -110,12 +170,50 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
     assert response.session_id == str(session_id)
     assert response.status == "QUEUED"
     assert response.turn_index == 2
-    assert persisted == [(2, "hello")]
+    assert persisted == [
+        (
+            2,
+            "hello",
+            [
+                {
+                    "name": "reference.png",
+                    "path": "attachments/reference.png",
+                    "mime_type": "image/png",
+                },
+                {
+                    "name": "notes.txt",
+                    "path": "attachments/notes.txt",
+                    "mime_type": "text/plain",
+                },
+            ],
+        )
+    ]
     assert session.agent_provider == "onyx"
     assert session.agent_model == "17/gpt-5-mini"
     assert db_session.commits == 1
+    turn = get_turn(cache, UUID(response.turn_id))
+    assert turn is not None
+    assert [
+        attachment.path for attachment in turn.attachments
+    ] == expected_prompt_attachment_paths
     start_runner.assert_called_once()
     assert str(start_runner.call_args.args[0]) == response.turn_id
+
+
+def test_subagent_message_request_rejects_attachments() -> None:
+    with pytest.raises(ValidationError):
+        SubagentMessageRequest.model_validate(
+            {
+                "content": "inspect this",
+                "attachments": [
+                    {
+                        "name": "reference.png",
+                        "path": "attachments/reference.png",
+                        "mime_type": "image/png",
+                    }
+                ],
+            }
+        )
 
 
 def test_send_message_preserves_legacy_provider_selection(
