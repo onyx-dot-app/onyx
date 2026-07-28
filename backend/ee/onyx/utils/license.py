@@ -402,6 +402,7 @@ def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None
 def get_license_status(
     payload: LicensePayload,
     grace_period_end: datetime | None = None,
+    now: datetime | None = None,
 ) -> ApplicationStatus:
     """
     Determine current license status based on expiry.
@@ -409,11 +410,13 @@ def get_license_status(
     Args:
         payload: The verified license payload
         grace_period_end: Optional grace period end datetime
+        now: Evaluation instant, so a caller deriving other values from the
+            status can keep every comparison on one clock sample
 
     Returns:
         ApplicationStatus indicating current license state
     """
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
 
     # Check if grace period has expired
     if grace_period_end and now > grace_period_end:

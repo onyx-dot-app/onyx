@@ -273,27 +273,13 @@ def invalidate_license_cache(tenant_id: str | None = None) -> None:
     logger.info("License cache invalidated")
 
 
-def update_license_cache(
+def build_license_metadata(
     payload: LicensePayload,
     grace_period_end: datetime | None = None,
     tenant_id: str | None = None,
-) -> LicenseMetadata:
-    """
-    Update the cache with license metadata.
-
-    We cache all license statuses (ACTIVE, GRACE_PERIOD, GATED_ACCESS) because:
-    1. Frontend needs status to show appropriate UI/banners
-    2. Caching avoids repeated DB + crypto verification on every request
-    3. Status enforcement happens at the feature level, not here
-
-    Args:
-        payload: Verified license payload
-        grace_period_end: Optional grace period end time
-        tenant_id: Tenant ID (for multi-tenant deployments)
-
-    Returns:
-        The cached LicenseMetadata
-    """
+) -> tuple[LicenseMetadata, int]:
+    """Metadata for *payload* plus the TTL that keeps its write-time status
+    from outliving the boundary that would change it."""
     from ee.onyx.utils.license import get_license_status
     from ee.onyx.utils.license_expiry import (
         get_expiry_warning_stage,
@@ -301,14 +287,16 @@ def update_license_cache(
     )
 
     tenant = tenant_id or get_current_tenant_id()
-    cache = get_cache_backend(tenant_id=tenant_id)
 
     used_seats = get_used_seats(tenant)
     # Default the grace window to 14 days past expires_at so the license-
     # enforcement middleware returns GRACE_PERIOD (not GATED_ACCESS) during
     # that window — matching the banner copy and daily admin emails.
     effective_grace_end = grace_period_end or get_grace_period_end(payload.expires_at)
-    status = get_license_status(payload, effective_grace_end)
+    # One clock sample for status and TTL, or a boundary crossing between the
+    # two reads caches the old status for the full default TTL.
+    now = datetime.now(timezone.utc)
+    status = get_license_status(payload, effective_grace_end, now=now)
     warning_stage = get_expiry_warning_stage(payload.expires_at)
 
     metadata = LicenseMetadata(
@@ -327,13 +315,25 @@ def update_license_cache(
         customer_tier=payload.customer_tier,
     )
 
-    # The cached status is computed at write time, so the entry must not
-    # outlive the boundary that would change it (expiry, then grace end).
     ttl = LICENSE_CACHE_TTL_SECONDS
-    now = datetime.now(timezone.utc)
     for boundary in (payload.expires_at, effective_grace_end):
         if boundary > now:
             ttl = min(ttl, max(60, int((boundary - now).total_seconds()) + 1))
+    return metadata, ttl
+
+
+def update_license_cache(
+    payload: LicensePayload,
+    grace_period_end: datetime | None = None,
+    tenant_id: str | None = None,
+) -> LicenseMetadata:
+    """Cache metadata for *payload*, expiring at its next status boundary.
+
+    All statuses are cached (ACTIVE, GRACE_PERIOD, GATED_ACCESS): the frontend
+    renders banners from them, and enforcement happens at the feature level.
+    """
+    metadata, ttl = build_license_metadata(payload, grace_period_end, tenant_id)
+    cache = get_cache_backend(tenant_id=tenant_id)
     cache.set(
         LICENSE_METADATA_KEY,
         metadata.model_dump_json(),
@@ -341,7 +341,9 @@ def update_license_cache(
     )
 
     logger.info(
-        "License cache updated: %s seats, status=%s", metadata.seats, status.value
+        "License cache updated: %s seats, status=%s",
+        metadata.seats,
+        metadata.status.value,
     )
     return metadata
 
@@ -377,8 +379,13 @@ def publish_license_metadata(
         cached = get_cached_license_metadata(tenant_id)
         if cached and cached.issued_at > payload.issued_at:
             return cached
+        if lock is None:
+            # An unserialized write can overwrite a newer entry or resurrect
+            # one a delete just removed, so serve the caller without caching.
+            metadata, _ = build_license_metadata(payload, tenant_id=tenant_id)
+            return metadata
         metadata = update_license_cache(payload, tenant_id=tenant_id)
-        if lock is not None and not lock.owned():
+        if not lock.owned():
             # The lease expired mid-publish, so this write raced whatever
             # took the lock over. A dropped entry rebuilds on the next read.
             # A wrong one serves entitlements for its whole TTL.

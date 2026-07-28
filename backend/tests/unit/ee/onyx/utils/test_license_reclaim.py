@@ -269,23 +269,28 @@ class TestPublishLicenseCache:
             ),
         ],
     )
+    @patch("ee.onyx.db.license.build_license_metadata")
     @patch("ee.onyx.db.license.update_license_cache")
     @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
-    def test_an_unavailable_lock_still_publishes(
+    def test_an_unavailable_lock_serves_without_caching(
         self,
         _mock_cached: MagicMock,
         mock_update_cache: MagicMock,
+        mock_build: MagicMock,
         unavailable: Callable[[MagicMock], None],
         _cache_backend: MagicMock,
     ) -> None:
-        """A committed license that never reaches the cache reads as unlicensed
-        to the enforcement middleware."""
+        """An unserialized write can overwrite a newer entry or resurrect a
+        deleted one, so the caller gets its metadata and the cache stays
+        untouched until a locked publish lands."""
+        mock_build.return_value = (MagicMock(), 60)
         lock = _cache_backend.return_value.lock.return_value
         unavailable(lock)
 
         publish_license_cache(MagicMock())
 
-        mock_update_cache.assert_called_once()
+        mock_build.assert_called_once()
+        mock_update_cache.assert_not_called()
         lock.release.assert_not_called()
 
     @patch("ee.onyx.db.license.invalidate_license_cache")
