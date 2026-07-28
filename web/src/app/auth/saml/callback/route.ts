@@ -51,8 +51,8 @@ async function handleSamlCallback(
 
   const response = await fetch(url.toString(), fetchOptions);
 
-  // Error responses can carry a Set-Cookie too, so status is the success
-  // signal, not cookie presence.
+  // This backend returns 204 with the session cookie rather than a redirect
+  // like the oauth/oidc callbacks, so 2xx is the success signal here.
   if (!response.ok) {
     return authErrorRedirect(request, response, SEE_OTHER_REDIRECT_STATUS);
   }
