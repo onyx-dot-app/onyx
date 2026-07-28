@@ -171,12 +171,9 @@ describe("Apps associated-skill setup notice", () => {
     render(<ExternalAppsPage />);
 
     expect(
-      screen.getByText(
-        "Connected · Not all associated skills are enabled. This app may not work correctly."
-      )
+      screen.getByText("Connected · not all associated skills are enabled")
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Skill setup required")).toBeInTheDocument();
-    expect(screen.queryByLabelText("App ready")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review skills" })).toHaveAttribute(
       "href",
       "/craft/v1/skills?externalAppId=42"
@@ -192,20 +189,17 @@ describe("Apps associated-skill setup notice", () => {
     render(<ExternalAppsPage />);
 
     expect(
-      screen.queryByText(
-        "Connected · Not all associated skills are enabled. This app may not work correctly."
-      )
+      screen.queryByText("Connected · not all associated skills are enabled")
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Review skills" })
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("App ready")).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Skill setup required")
     ).not.toBeInTheDocument();
   });
 
-  it("does not claim an external app is ready before skills load", () => {
+  it("does not warn about skills before they load", () => {
     mockUseUserSkills.mockReturnValue({
       data: undefined,
       refresh: mockRefreshSkills,
@@ -213,9 +207,11 @@ describe("Apps associated-skill setup notice", () => {
 
     render(<ExternalAppsPage />);
 
-    expect(screen.queryByLabelText("App ready")).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText("Skill setup required")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Review skills" })
     ).not.toBeInTheDocument();
   });
 
@@ -228,9 +224,7 @@ describe("Apps associated-skill setup notice", () => {
     render(<ExternalAppsPage />);
 
     expect(
-      screen.getByText(
-        "Connected · Not all associated skills are enabled. This app may not work correctly."
-      )
+      screen.getByText("Connected · not all associated skills are enabled")
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review skills" })).toHaveAttribute(
       "href",
@@ -292,7 +286,6 @@ describe("Apps vs MCP servers", () => {
 
     // MCP servers expose MCP tools, not skills, so neither skill glyph applies —
     // the green check used to render here purely because no skill data existed.
-    expect(activeTab().queryByLabelText("App ready")).not.toBeInTheDocument();
     expect(
       activeTab().queryByLabelText("Skill setup required")
     ).not.toBeInTheDocument();
@@ -317,6 +310,42 @@ describe("Apps vs MCP servers", () => {
     expect(
       activeTab().getByText(/Not available for your account/)
     ).toBeInTheDocument();
+  });
+
+  it("leads with connected cards, then orders the rest by name", () => {
+    mockEndpoints([
+      appFixture({
+        id: 1,
+        name: "Zulip",
+        app_type: "CUSTOM",
+        authenticated: true,
+      }),
+      appFixture({
+        id: 2,
+        name: "Asana",
+        app_type: "CUSTOM",
+        authenticated: false,
+      }),
+      appFixture({
+        id: 3,
+        name: "Monday",
+        app_type: "CUSTOM",
+        authenticated: true,
+      }),
+      appFixture({
+        id: 4,
+        name: "Basecamp",
+        app_type: "CUSTOM",
+        authenticated: false,
+      }),
+    ]);
+
+    render(<ExternalAppsPage />);
+
+    const names = activeTab()
+      .getAllByText(/^(Zulip|Asana|Monday|Basecamp)$/)
+      .map((node) => node.textContent);
+    expect(names).toEqual(["Monday", "Zulip", "Asana", "Basecamp"]);
   });
 
   it("reserves the inactive kind's space so switching tabs cannot move the page", async () => {
@@ -369,6 +398,5 @@ describe("Apps vs MCP servers", () => {
     render(<ExternalAppsPage />);
 
     expect(screen.getByLabelText("Skill setup required")).toBeInTheDocument();
-    expect(screen.queryByLabelText("App ready")).not.toBeInTheDocument();
   });
 });
