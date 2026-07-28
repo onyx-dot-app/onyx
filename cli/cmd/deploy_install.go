@@ -51,7 +51,7 @@ every prompt, including Lite mode).`,
 	}
 
 	// Flag names match install.sh so bootstrap passthrough keeps working.
-	cmd.Flags().BoolVar(&opts.Lite, "lite", false, "Deploy Onyx Lite (no Vespa, Redis, or model servers)")
+	cmd.Flags().BoolVar(&opts.Lite, "lite", false, "Deploy Onyx Lite (no OpenSearch, Redis, or model servers)")
 	cmd.Flags().BoolVar(&opts.IncludeCraft, "include-craft", false, "Enable Onyx Craft (AI-powered web app building)")
 	cmd.Flags().StringVar(&opts.Tag, "tag", "", "Image tag to deploy (default: the latest Onyx release)")
 	cmd.Flags().BoolVar(&opts.Local, "local", false, "Use existing config files on disk instead of downloading")

@@ -67,7 +67,7 @@ func RunInstall(ctx context.Context, deps Deps, opts Options) error {
 func (in *installer) runInstall(ctx context.Context) error {
 	if in.opts.Lite && in.opts.IncludeCraft {
 		return exitcodes.New(exitcodes.BadRequest,
-			"--lite and --include-craft cannot be used together: Craft requires services (Vespa, Redis, background workers) that lite mode disables")
+			"--lite and --include-craft cannot be used together: Craft requires services (OpenSearch, Redis, background workers) that lite mode disables")
 	}
 
 	in.root = paths.Resolve(in.opts.Dir)
@@ -490,8 +490,8 @@ func (in *installer) resourceWarnings(pre preflight) error {
 		warning = true
 	}
 	if in.rootless && !in.lite {
-		in.warnf("Rootless Docker: the standard deployment's Vespa index requests unlimited memlock, which a rootless daemon usually can't grant.")
-		in.infof("Either raise the daemon's limits (systemctl --user edit docker: LimitMEMLOCK=infinity, LimitNOFILE=1048576, then systemctl --user restart docker) or use Lite mode, which has no Vespa.")
+		in.warnf("Rootless Docker: the standard deployment's OpenSearch index requests unlimited memlock, which a rootless daemon usually can't grant.")
+		in.infof("Either raise the daemon's limits (systemctl --user edit docker: LimitMEMLOCK=infinity, LimitNOFILE=1048576, then systemctl --user restart docker) or use Lite mode, which has no OpenSearch.")
 	}
 	if !warning {
 		return nil
@@ -811,10 +811,11 @@ func (in *installer) printFailureDiagnosis(output string) {
 	lower := strings.ToLower(output)
 	if strings.Contains(lower, "setting rlimit") || strings.Contains(lower, "memlock") {
 		in.plainf("")
-		in.warnf("This looks like a ulimit failure: the Vespa index container requests unlimited memlock, which rootless Docker (and some hosts) can't grant.")
+		in.warnf("This looks like a ulimit failure: the OpenSearch index container requests unlimited memlock, which rootless Docker (and some hosts) can't grant.")
 		in.infof("Fix one of these ways, then re-run:")
 		in.plainf("  • Raise the daemon limits: systemctl --user edit docker → [Service] LimitMEMLOCK=infinity, LimitNOFILE=1048576 → systemctl --user restart docker")
-		in.plainf("  • Or deploy Lite mode (no Vespa): onyx-cli deploy install --lite")
+		in.plainf("    (OpenSearch may also need: sudo sysctl -w vm.max_map_count=262144)")
+		in.plainf("  • Or deploy Lite mode (no OpenSearch): onyx-cli deploy install --lite")
 		return
 	}
 	if strings.Contains(lower, "address already in use") || strings.Contains(lower, "port is already allocated") {
@@ -875,7 +876,7 @@ func (in *installer) printSuccess(ctx context.Context, hostPort int) {
 	}
 	if in.lite {
 		lines = append(lines, "",
-			"Lite mode: no Vespa/Redis/model servers or background workers.",
+			"Lite mode: no OpenSearch/Redis/model servers or background workers.",
 			"Connectors and RAG search are off; chat, tools, uploads, projects work.")
 	}
 
