@@ -69,7 +69,7 @@ export default function SkillFilesPicker({
       className={cn(
         "flex w-full items-center gap-2 rounded-xl border border-dashed p-2",
         isDragActive
-          ? "border-action-link-05 bg-action-link-01"
+          ? "border-action-selection-05 bg-action-selection-01"
           : "border-border-01"
       )}
     >

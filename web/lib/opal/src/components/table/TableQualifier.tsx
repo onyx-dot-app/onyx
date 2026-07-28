@@ -37,10 +37,10 @@ const iconSizesMap = {
 
 function getOverlayStyles(selected: boolean, disabled: boolean) {
   if (disabled) {
-    return selected ? "flex bg-action-link-00" : "hidden";
+    return selected ? "flex bg-action-selection-00" : "hidden";
   }
   if (selected) {
-    return "flex bg-action-link-00";
+    return "flex bg-action-selection-00";
   }
   return "flex opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 bg-background-tint-01";
 }
@@ -100,7 +100,7 @@ function TableQualifier({
             disabled
               ? "bg-background-neutral-03"
               : selected
-                ? "bg-action-link-00"
+                ? "bg-action-selection-00"
                 : "bg-background-tint-01"
           )}
         >

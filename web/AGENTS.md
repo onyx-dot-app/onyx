@@ -437,7 +437,7 @@ function ContactForm() {
 - **Text:** `text-01` through `text-05`, `text-inverted-XX`
 - **Backgrounds:** `background-neutral-XX`, `background-tint-XX` (and inverted variants)
 - **Borders:** `border-01` through `border-05`, `border-inverted-XX`
-- **Actions:** `action-link-XX`, `action-danger-XX`
+- **Actions:** `action-selection-XX`, `action-danger-XX`
 - **Status:** `status-info-XX`, `status-success-XX`, `status-warning-XX`, `status-error-XX`
 - **Theme:** `theme-primary-XX`, `theme-red-XX`, `theme-blue-XX`, etc.
 
@@ -446,7 +446,7 @@ function ContactForm() {
 <div className="bg-background-neutral-01 border border-border-02" />
 <div className="bg-background-tint-02 border border-border-01" />
 <div className="bg-status-success-01" />
-<div className="bg-action-link-01" />
+<div className="bg-action-selection-01" />
 <div className="bg-theme-primary-05" />
 
 // ❌ Bad - Do NOT use standard Tailwind colors

@@ -76,9 +76,21 @@ export const BUTTON_COLORS: ButtonColorMatrix = {
   },
   action: {
     primary: {
-      rest: { bg: "bg-action-link-05", fg: "text-text-light-05", border: "" },
-      active: { bg: "bg-action-link-06", fg: "text-text-light-05", border: "" },
-      disabled: { bg: "bg-action-link-02", fg: "text-text-01", border: "" },
+      rest: {
+        bg: "bg-action-selection-05",
+        fg: "text-text-light-05",
+        border: "",
+      },
+      active: {
+        bg: "bg-action-selection-06",
+        fg: "text-text-light-05",
+        border: "",
+      },
+      disabled: {
+        bg: "bg-action-selection-02",
+        fg: "text-text-01",
+        border: "",
+      },
     },
     secondary: {
       rest: {
@@ -93,8 +105,8 @@ export const BUTTON_COLORS: ButtonColorMatrix = {
       },
       disabled: {
         bg: "bg-background-neutral-02",
-        fg: "text-action-link-03",
-        border: "border border-action-link-03",
+        fg: "text-action-selection-03",
+        border: "border border-action-selection-03",
       },
     },
     tertiary: {
@@ -108,7 +120,11 @@ export const BUTTON_COLORS: ButtonColorMatrix = {
         fg: "text-action-text-link-05",
         border: "",
       },
-      disabled: { bg: "bg-transparent", fg: "text-action-link-03", border: "" },
+      disabled: {
+        bg: "bg-transparent",
+        fg: "text-action-selection-03",
+        border: "",
+      },
     },
     internal: {
       rest: {
@@ -121,7 +137,11 @@ export const BUTTON_COLORS: ButtonColorMatrix = {
         fg: "text-action-text-link-05",
         border: "",
       },
-      disabled: { bg: "bg-transparent", fg: "text-action-link-03", border: "" },
+      disabled: {
+        bg: "bg-transparent",
+        fg: "text-action-selection-03",
+        border: "",
+      },
     },
   },
   danger: {

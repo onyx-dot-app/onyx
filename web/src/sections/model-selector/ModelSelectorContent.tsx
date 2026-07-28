@@ -160,7 +160,7 @@ function SelectedCheckIcon(props: IconProps) {
   return (
     <SvgCheck
       {...props}
-      className={cn(props.className, "text-action-link-05")}
+      className={cn(props.className, "text-action-selection-05")}
     />
   );
 }

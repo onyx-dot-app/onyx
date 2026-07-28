@@ -61,7 +61,7 @@ function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
     strong: { color: color("--text-05"), fontWeight: "bold" },
     // No color: italics inherit block color (paragraph/list text-05, blockquote text-04).
     em: { fontStyle: "italic" },
-    link: { color: color("--action-link-05"), underline: true },
+    link: { color: color("--action-selection-05"), underline: true },
     list: {
       color: color("--text-05"),
       markerColor: color("--text-03"),

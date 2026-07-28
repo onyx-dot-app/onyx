@@ -48,4 +48,4 @@ For filterable lists, render `Search` as the first child of `Content`. It is a s
 | `.Group` / `.Label` | Radix props | Uppercase group label |
 | `.Separator` | `paddingParallel`, `paddingPerpendicular` | Opal `Divider` |
 
-Requires the `@radix-ui/react-select` peer dependency. The selected row uses the `select-heavy` selected tokens (`action-link-01` background with the interactive foreground vars), and keyboard/hover highlight comes from Radix's `data-highlighted`.
+Requires the `@radix-ui/react-select` peer dependency. The selected row uses the `select-heavy` selected tokens (`action-selection-01` background with the interactive foreground vars), and keyboard/hover highlight comes from Radix's `data-highlighted`.

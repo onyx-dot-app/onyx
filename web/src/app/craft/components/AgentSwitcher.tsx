@@ -24,7 +24,7 @@ function SubagentStatus({ subagent }: { subagent: SubagentState }) {
       {subagent.status === "running" && (
         <span
           aria-hidden
-          className="w-2 h-2 rounded-full bg-action-link-04 animate-pulse shrink-0"
+          className="w-2 h-2 rounded-full bg-action-selection-04 animate-pulse shrink-0"
         />
       )}
       {subagent.status === "done" && (

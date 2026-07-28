@@ -299,7 +299,7 @@ export default function NotificationsPopover({
 
         <Section flexDirection="row" gap={0.25} justifyContent="end">
           {undismissedCount !== 0 && (
-            <span className="text-action-link-05 font-secondary-body">
+            <span className="text-action-selection-05 font-secondary-body">
               {`${undismissedCount} unread`}
             </span>
           )}

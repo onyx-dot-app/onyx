@@ -8,7 +8,7 @@
    Trigger on the .opal-input chrome plus an open-state border. Items are
    pure layout rows: Radix owns interaction, so highlight and selection are
    styled from its data attributes, with the selected row using the
-   select-heavy tokens (action-link bg, interactive foreground vars).
+   select-heavy tokens (action-selection bg, interactive foreground vars).
    --------------------------------------------------------------------------- */
 
 .opal-input-select-root {
@@ -77,9 +77,9 @@
 }
 
 .opal-input-select-item[data-state="checked"] {
-  background-color: var(--action-link-01);
-  --interactive-foreground: var(--action-link-05);
-  --interactive-foreground-icon: var(--action-link-05);
+  background-color: var(--action-selection-01);
+  --interactive-foreground: var(--action-selection-05);
+  --interactive-foreground-icon: var(--action-selection-05);
 }
 
 .opal-input-select-label {

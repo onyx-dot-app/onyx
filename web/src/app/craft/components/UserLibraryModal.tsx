@@ -333,7 +333,7 @@ export default function UserLibraryModal({
 
                 {/* Drag overlay — consistent feedback regardless of state */}
                 {isDragging && (
-                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-12 border-2 border-dashed border-action-link-04 bg-action-link-01/90">
+                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-12 border-2 border-dashed border-action-selection-04 bg-action-selection-01/90">
                     <Text font="main-ui-action" color="text-05">
                       Drop files to upload
                     </Text>
@@ -447,8 +447,8 @@ function UploadDropzone({ onClick, active }: UploadDropzoneProps) {
       className={cn(
         "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-12 border border-dashed px-6 py-10 text-center transition-colors",
         active
-          ? "border-action-link-04 bg-action-link-01"
-          : "border-border-03 bg-background-tint-02 hover:border-action-link-04 hover:bg-action-link-01"
+          ? "border-action-selection-04 bg-action-selection-01"
+          : "border-border-03 bg-background-tint-02 hover:border-action-selection-04 hover:bg-action-selection-01"
       )}
     >
       <SvgUploadCloud size={28} className="stroke-text-03" />

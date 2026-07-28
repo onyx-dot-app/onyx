@@ -16,12 +16,12 @@
   }
 
   &[data-selected="true"] {
-    @apply bg-action-link-01;
+    @apply bg-action-selection-01;
   }
 
   /* Ensure selected wins over keyboard-nav hover override */
   [data-keyboard-nav="true"] &[data-selected="true"] {
-    @apply bg-action-link-01;
+    @apply bg-action-selection-01;
   }
 }
 
@@ -157,7 +157,7 @@
   color: var(--text-04) !important;
 
   .group\/LineItem[data-selected="true"] & {
-    color: var(--action-link-05) !important;
+    color: var(--action-selection-05) !important;
   }
 }
 
@@ -210,7 +210,7 @@
   @apply stroke-text-03;
 
   .group\/LineItem[data-selected="true"] & {
-    @apply stroke-action-link-05;
+    @apply stroke-action-selection-05;
   }
 }
 
