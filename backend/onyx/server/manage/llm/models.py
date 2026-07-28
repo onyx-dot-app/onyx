@@ -225,6 +225,10 @@ class ModelConfigurationView(BaseModel):
     name: str
     is_visible: bool
     max_input_tokens: int | None = None
+    # The persisted override/source value, before static-provider capability
+    # enrichment. Internal consumers use this to distinguish an intentional
+    # limit from a fallback inferred from the display model name.
+    configured_max_input_tokens: int | None = Field(default=None, exclude=True)
     supports_image_input: bool
     supports_reasoning: bool = False
     # True when this is the provider's recommended default model.
@@ -258,6 +262,7 @@ class ModelConfigurationView(BaseModel):
                 name=model_configuration_model.name,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
+                configured_max_input_tokens=model_configuration_model.max_input_tokens,
                 # Dynamic/custom-config providers under-report vision; fall back
                 # to the LiteLLM cost map when no VISION flow is stored.
                 supports_image_input=(
@@ -317,6 +322,7 @@ class ModelConfigurationView(BaseModel):
                     model_provider=provider_name,
                 )
             ),
+            configured_max_input_tokens=model_configuration_model.max_input_tokens,
             supports_image_input=(
                 True
                 if LLMModelFlowType.VISION

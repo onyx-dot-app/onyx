@@ -42,6 +42,7 @@ def _gateway(*, default: str = "7/gpt-5.5") -> CraftLLMProviderConfig:
                     supports_reasoning=True,
                 ),
                 max_input_tokens=200_000,
+                max_output_tokens=128_000,
             ),
         ],
     )
@@ -139,6 +140,36 @@ def test_gateway_capabilities_are_adapted_instead_of_hardcoded() -> None:
             "output": ["text", "audio"],
         },
     }
+
+
+@pytest.mark.parametrize(
+    ("max_input_tokens", "max_output_tokens"),
+    [(32_000, 32_000), (32_000, None)],
+)
+def test_gateway_omits_incoherent_token_limits(
+    max_input_tokens: int,
+    max_output_tokens: int | None,
+) -> None:
+    gateway = CraftLLMProviderConfig(
+        provider="onyx",
+        model_name="7/broken-model",
+        api_key=None,
+        api_base="https://onyx.test/api/gateway/v1",
+        models=[
+            GatewayModelDescriptor(
+                id="7/broken-model",
+                display_name="Broken",
+                provider="custom",
+                max_input_tokens=max_input_tokens,
+                max_output_tokens=max_output_tokens,
+            )
+        ],
+    )
+
+    model = build_provider_opencode_config(gateway)["provider"]["onyx"]["models"][
+        "7/broken-model"
+    ]
+    assert "limit" not in model
 
 
 def test_default_must_exist_in_gateway_catalog() -> None:
