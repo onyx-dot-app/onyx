@@ -18,12 +18,6 @@ from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
 )
 
-# Fallback output budget for gateway models the litellm map has no entry for
-# (build_onyx_gateway_config derives the real per-model value). 128k matches the
-# recommended Craft models (Claude Fable/Opus 4.8, GPT-5.6) per models.dev;
-# providers enforce their own real caps regardless.
-_GATEWAY_DEFAULT_MAX_OUTPUT_TOKENS = 128_000
-
 # The gateway is an OpenAI-compatible endpoint, wired via opencode's
 # openai-compatible SDK package.
 _OPENAI_COMPATIBLE_NPM = "@ai-sdk/openai-compatible"
@@ -181,11 +175,14 @@ def _build_provider_block(
             entry["interleaved"] = True
         if capabilities.supports_reasoning:
             entry["options"] = {"reasoningEffort": "high"}
-        if model.max_input_tokens:
-            # opencode's schema requires both keys when "limit" is present.
+        if model.max_input_tokens is not None and model.max_output_tokens is not None:
+            # OpenCode 1.15.x subtracts output from context when input is absent.
+            # LiteLLM reports input and output budgets independently, so include
+            # input explicitly to keep compaction from collapsing to zero.
             entry["limit"] = {
                 "context": model.max_input_tokens,
-                "output": model.max_output_tokens or _GATEWAY_DEFAULT_MAX_OUTPUT_TOKENS,
+                "input": model.max_input_tokens,
+                "output": model.max_output_tokens,
             }
         models[model.id] = entry
     block["models"] = models

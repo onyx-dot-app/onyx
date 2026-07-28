@@ -22,6 +22,7 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 from onyx.server.features.build.session import llm_config
 from onyx.server.features.build.session import manager as manager_module
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.gateway import model_catalog
 from onyx.server.gateway.models import GatewayModelDescriptor
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 
@@ -34,6 +35,7 @@ def _model(
     supports_image_input: bool = False,
     supports_reasoning: bool = False,
     max_input_tokens: int | None = None,
+    configured_max_input_tokens: int | None = None,
 ) -> ModelConfigurationView:
     return ModelConfigurationView(
         name=name,
@@ -42,6 +44,7 @@ def _model(
         supports_image_input=supports_image_input,
         supports_reasoning=supports_reasoning,
         max_input_tokens=max_input_tokens,
+        configured_max_input_tokens=configured_max_input_tokens,
     )
 
 
@@ -51,12 +54,14 @@ def _provider(
     models: list[ModelConfigurationView],
     *,
     name: str | None = None,
+    deployment_name: str | None = None,
 ) -> LLMProviderView:
     return LLMProviderView(
         id=provider_id,
         name=name,
         provider=provider_type,
         api_key="test-key",
+        deployment_name=deployment_name,
         model_configurations=models,
     )
 
@@ -193,6 +198,139 @@ def test_gateway_config_preserves_url_path_prefix() -> None:
 
     assert config is not None
     assert config.api_base == "https://onyx.example/api/gateway/v1"
+
+
+def test_custom_azure_alias_renders_deployment_limits_for_opencode() -> None:
+    provider = _provider(
+        300,
+        "azure",
+        [
+            _model(
+                "GPT-5.6-SOL",
+                # This is the misleading fallback produced when the alias itself
+                # is absent from LiteLLM, matching the production regression.
+                max_input_tokens=30_976,
+            )
+        ],
+        deployment_name="gpt-5",
+    )
+    model_map = {
+        "azure/gpt-5": {
+            "max_input_tokens": 272_000,
+            "max_output_tokens": 128_000,
+        }
+    }
+
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(model_catalog, "get_model_map", return_value=model_map),
+    ):
+        gateway_config = llm_config.build_onyx_gateway_config([provider])
+
+    assert gateway_config is not None
+    opencode_config = build_provider_opencode_config(gateway_config)
+    assert opencode_config["provider"]["onyx"]["models"]["300/GPT-5.6-SOL"][
+        "limit"
+    ] == {
+        "context": 272_000,
+        "input": 272_000,
+        "output": 128_000,
+    }
+
+
+def test_gateway_config_preserves_explicit_context_override() -> None:
+    provider = _provider(
+        300,
+        "azure",
+        [
+            _model(
+                "Customer Alias",
+                max_input_tokens=30_976,
+                configured_max_input_tokens=200_000,
+            )
+        ],
+        deployment_name="gpt-5",
+    )
+    model_map = {
+        "azure/gpt-5": {
+            "max_input_tokens": 272_000,
+            "max_output_tokens": 128_000,
+        }
+    }
+
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(model_catalog, "get_model_map", return_value=model_map),
+    ):
+        gateway_config = llm_config.build_onyx_gateway_config([provider])
+
+    assert gateway_config is not None
+    opencode_config = build_provider_opencode_config(gateway_config)
+    assert opencode_config["provider"]["onyx"]["models"]["300/Customer Alias"][
+        "limit"
+    ] == {
+        "context": 200_000,
+        "input": 200_000,
+        "output": 128_000,
+    }
+
+
+def test_unknown_model_renders_explicit_fallback_with_input_budget() -> None:
+    provider = _provider(
+        7,
+        "custom",
+        [_model("unknown-model", max_input_tokens=30_976)],
+    )
+
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(model_catalog, "get_model_map", return_value={}),
+    ):
+        gateway_config = llm_config.build_onyx_gateway_config([provider])
+
+    assert gateway_config is not None
+    opencode_config = build_provider_opencode_config(gateway_config)
+    assert opencode_config["provider"]["onyx"]["models"]["7/unknown-model"][
+        "limit"
+    ] == {
+        "context": 32_000,
+        "input": 32_000,
+        "output": 32_000,
+    }
+
+
+def test_small_input_override_does_not_reduce_provider_output() -> None:
+    provider = _provider(
+        7,
+        "azure",
+        [
+            _model(
+                "tiny-model",
+                configured_max_input_tokens=25_000,
+            )
+        ],
+        deployment_name="gpt-5",
+    )
+    model_map = {
+        "azure/gpt-5": {
+            "max_input_tokens": 272_000,
+            "max_output_tokens": 128_000,
+        }
+    }
+
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(model_catalog, "get_model_map", return_value=model_map),
+    ):
+        gateway_config = llm_config.build_onyx_gateway_config([provider])
+
+    assert gateway_config is not None
+    opencode_config = build_provider_opencode_config(gateway_config)
+    assert opencode_config["provider"]["onyx"]["models"]["7/tiny-model"]["limit"] == {
+        "context": 25_000,
+        "input": 25_000,
+        "output": 128_000,
+    }
 
 
 def test_gateway_selection_renders_storage_columns() -> None:

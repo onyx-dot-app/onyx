@@ -246,6 +246,28 @@ class TestModelConfigurationViewFromModelStatic:
     # NOT in DYNAMIC_LLM_PROVIDERS
     STATIC_PROVIDER = "openai"
 
+    def test_distinguishes_persisted_limit_from_capability_enrichment(self) -> None:
+        persisted = self._patched_static_view(
+            _make_model_config(
+                name="gpt-4o",
+                display_name=None,
+                max_input_tokens=90_000,
+            )
+        )
+        inferred = self._patched_static_view(
+            _make_model_config(
+                name="gpt-4o",
+                display_name=None,
+                max_input_tokens=None,
+            )
+        )
+
+        assert persisted.max_input_tokens == 90_000
+        assert persisted.configured_max_input_tokens == 90_000
+        assert inferred.max_input_tokens == 128_000
+        assert inferred.configured_max_input_tokens is None
+        assert "configured_max_input_tokens" not in persisted.model_dump()
+
     def test_supports_reasoning_from_stored_flow(self) -> None:
         """Stored REASONING flow → True even when model_is_reasoning_model returns False."""
         mc = _make_model_config(
