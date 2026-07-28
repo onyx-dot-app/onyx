@@ -716,6 +716,8 @@ export interface UploadFileResponse {
   size_bytes: number;
 }
 
+const FILE_UPLOAD_TIMEOUT_MS = 60_000;
+
 /**
  * Upload a file to the session's sandbox.
  * The file will be placed in the sandbox's user_uploaded_files directory.
@@ -727,10 +729,27 @@ export async function uploadFile(
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/upload`, {
-    method: "POST",
-    body: formData,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    FILE_UPLOAD_TIMEOUT_MS
+  );
+
+  let res: Response;
+  try {
+    res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/upload`, {
+      method: "POST",
+      body: formData,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("Upload timed out. Remove the file and try again.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
