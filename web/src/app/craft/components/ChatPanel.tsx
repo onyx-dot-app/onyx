@@ -22,7 +22,10 @@ import {
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
 import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
-import { SessionErrorCode } from "@/app/craft/types/streamingTypes";
+import {
+  BuildMessageAttachment,
+  SessionErrorCode,
+} from "@/app/craft/types/streamingTypes";
 import {
   BuildFile,
   UploadFileStatus,
@@ -67,6 +70,20 @@ import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
   existingSessionId?: string | null;
+}
+
+function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
+  return files.flatMap((file) =>
+    file.status === UploadFileStatus.COMPLETED && file.path
+      ? [
+          {
+            name: file.name,
+            path: file.path,
+            mimeType: file.file_type,
+          },
+        ]
+      : []
+  );
 }
 
 /**
@@ -446,6 +463,7 @@ export default function BuildChatPanel({
       track(AnalyticsEvent.SENT_CRAFT_MESSAGE);
 
       const chosen = modelOverride ?? selectedModel;
+      const attachments = toMessageAttachments(files);
 
       if (hasSession && sessionId) {
         // Existing session flow
@@ -461,9 +479,10 @@ export default function BuildChatPanel({
           type: "user",
           content: message,
           timestamp: new Date(),
+          attachments,
         });
         // Stream the response
-        await streamMessage(sessionId, message, chosen);
+        await streamMessage(sessionId, message, chosen, attachments);
         refreshLimits();
       } else {
         // New session flow - ALWAYS use pre-provisioned session
@@ -480,20 +499,6 @@ export default function BuildChatPanel({
         // The backend session already exists (created during pre-provisioning).
         // Files were already uploaded immediately when attached to the pre-provisioned session.
         // Here we initialize the LOCAL Zustand store entry with the right state.
-        const userMessage = {
-          id: `msg-${Date.now()}`,
-          type: "user" as const,
-          content: message,
-          timestamp: new Date(),
-        };
-        // Initialize local state (NOT an API call - backend session already exists)
-        // - status: "running" disables input immediately
-        // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
-        createSession(newSessionId, {
-          messages: [userMessage],
-          status: "running",
-        });
-
         // Handle files that weren't successfully uploaded yet
         // This handles edge cases where:
         // 1. File is still uploading when user sends message - wait for it
@@ -525,6 +530,20 @@ export default function BuildChatPanel({
         }
 
         // Note: PENDING files are auto-uploaded by the context when session becomes available
+        const userMessage = {
+          id: `msg-${Date.now()}`,
+          type: "user" as const,
+          content: message,
+          timestamp: new Date(),
+          attachments,
+        };
+        // Initialize local state (NOT an API call - backend session already exists)
+        // - status: "running" disables input immediately
+        // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
+        createSession(newSessionId, {
+          messages: [userMessage],
+          status: "running",
+        });
 
         // Navigate to URL - session controller will set currentSessionId
         router.push(
@@ -537,7 +556,7 @@ export default function BuildChatPanel({
         setTimeout(() => nameBuildSession(newSessionId), 1000);
 
         // Stream the response (uses session ID directly, not currentSessionId)
-        await streamMessage(newSessionId, message, chosen);
+        await streamMessage(newSessionId, message, chosen, attachments);
         refreshLimits();
       }
     },
@@ -716,6 +735,8 @@ export default function BuildChatPanel({
                     />
                   ) : (
                     <BuildMessageList
+                      sessionId={sessionId ?? existingSessionId ?? null}
+                      attachmentRefreshKey={session?.webappNeedsRefresh}
                       messages={session?.messages ?? []}
                       streamItems={session?.streamItems ?? []}
                       isStreaming={displayIsRunning}

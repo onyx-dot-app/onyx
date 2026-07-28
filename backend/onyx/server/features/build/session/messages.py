@@ -1,6 +1,7 @@
 """API endpoints for Build Mode message management."""
 
 from collections.abc import Generator
+from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -154,14 +155,19 @@ def send_message(
         elif request.provider and request.model:
             session.agent_provider = request.provider
             session.agent_model = request.model
+        message_metadata: dict[str, Any] = {
+            "type": "user_message",
+            "content": {"type": "text", "text": request.content},
+        }
+        if request.attachments:
+            message_metadata["attachments"] = [
+                attachment.model_dump() for attachment in request.attachments
+            ]
         create_message(
             session_id=session_id,
             message_type=MessageType.USER,
             turn_index=turn_index,
-            message_metadata={
-                "type": "user_message",
-                "content": {"type": "text", "text": request.content},
-            },
+            message_metadata=message_metadata,
             db_session=db_session,
         )
 

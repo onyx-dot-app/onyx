@@ -6,14 +6,31 @@ from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.session import messages as messages_api
-from onyx.server.features.build.session.models import MessageRequest
+from onyx.server.features.build.session.models import (
+    MessageAttachment,
+    MessageRequest,
+)
 from tests.unit.fakes import FakeCache
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/attachments/reference.png",
+        "outputs/reference.png",
+        "attachments/../outputs/reference.png",
+    ],
+)
+def test_message_attachment_rejects_paths_outside_attachments(path: str) -> None:
+    with pytest.raises(ValidationError):
+        MessageAttachment(name="reference.png", path=path, mime_type="image/png")
 
 
 class _FakeQuery:
@@ -64,7 +81,7 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
     user_id = uuid4()
     session = SimpleNamespace(id=session_id)
     db_session = _FakeDbSession(user_message_count=2)
-    persisted: list[tuple[int, str]] = []
+    persisted: list[tuple[int, str, list[dict[str, str]]]] = []
     start_runner = MagicMock()
 
     def get_session_stub(*_: object, **__: object) -> SimpleNamespace:
@@ -77,7 +94,8 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
         **_: object,
     ) -> None:
         content = cast(dict[str, str], message_metadata["content"])
-        persisted.append((turn_index, content["text"]))
+        attachments = cast(list[dict[str, str]], message_metadata["attachments"])
+        persisted.append((turn_index, content["text"], attachments))
 
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
     _patch_skill_state(monkeypatch)
@@ -102,6 +120,13 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
             client_request_id="req-1",
             provider_id=17,
             model="gpt-5-mini",
+            attachments=[
+                MessageAttachment(
+                    name="reference.png",
+                    path="attachments/reference.png",
+                    mime_type="image/png",
+                )
+            ],
         ),
         user=cast(User, SimpleNamespace(id=user_id)),
         db_session=cast(Session, db_session),
@@ -110,7 +135,19 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
     assert response.session_id == str(session_id)
     assert response.status == "QUEUED"
     assert response.turn_index == 2
-    assert persisted == [(2, "hello")]
+    assert persisted == [
+        (
+            2,
+            "hello",
+            [
+                {
+                    "name": "reference.png",
+                    "path": "attachments/reference.png",
+                    "mime_type": "image/png",
+                }
+            ],
+        )
+    ]
     assert session.agent_provider == "onyx"
     assert session.agent_model == "17/gpt-5-mini"
     assert db_session.commits == 1

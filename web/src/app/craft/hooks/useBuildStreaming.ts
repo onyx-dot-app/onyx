@@ -6,6 +6,7 @@ import { useSWRConfig } from "swr";
 import {
   Artifact,
   ArtifactType,
+  BuildMessageAttachment,
   SessionErrorCode,
 } from "@/app/craft/types/streamingTypes";
 
@@ -952,7 +953,8 @@ export function useBuildStreaming() {
     async (
       sessionId: string,
       content: string,
-      model?: BuildLlmSelection | null
+      model?: BuildLlmSelection | null,
+      attachments: BuildMessageAttachment[] = []
     ): Promise<void> => {
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
@@ -981,7 +983,8 @@ export function useBuildStreaming() {
           content,
           crypto.randomUUID(),
           controller.signal,
-          model
+          model,
+          attachments
         );
         updateSessionData(sessionId, {
           activeTurnId: turn.turn_id,
