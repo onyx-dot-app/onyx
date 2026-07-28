@@ -101,7 +101,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          prev_tag="$(git tag -l 'cli/v*' --sort=-v:refname | grep -vxF "$TAG" | head -n 1)"
+          # Nearest cli/v* tag in the ancestry, not the highest by version:
+          # version-sorting would pick a newer tag as "previous" when releasing
+          # a backport, corrupting the changelog range. Empty on the first release.
+          prev_tag="$(git describe --tags --abbrev=0 --match='cli/v*' "${TAG}^" 2>/dev/null || true)"
           {
             echo "## Changes"
             if [ -n "$prev_tag" ]; then
@@ -117,11 +120,17 @@ jobs:
             release_args+=(--prerelease)
           fi
 
-          gh release create "$TAG" \
-            --verify-tag \
-            --title "onyx-cli ${TAG#cli/}" \
-            --notes-file "${RUNNER_TEMP}/release-notes.md" \
-            "${release_args[@]}" \
+          # Create and upload separately so a rerun can heal a partial release:
+          # creation is skipped when the release already exists, and --clobber
+          # replaces any assets left behind by a failed upload.
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --verify-tag \
+              --title "onyx-cli ${TAG#cli/}" \
+              --notes-file "${RUNNER_TEMP}/release-notes.md" \
+              "${release_args[@]}"
+          fi
+          gh release upload "$TAG" --clobber \
             cli/dist/*.tar.gz cli/dist/*.zip cli/dist/*_checksums.txt
 
   docker-amd64:
