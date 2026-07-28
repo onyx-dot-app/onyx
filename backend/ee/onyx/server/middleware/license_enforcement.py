@@ -163,9 +163,8 @@ def add_license_enforcement_middleware(
                         )
 
                 if metadata.status == ApplicationStatus.GATED_ACCESS:
-                    # License fully expired - gate the user
-                    # Note: GRACE_PERIOD and PAYMENT_REMINDER are for
-                    # notifications only, they don't block access
+                    # GRACE_PERIOD and PAYMENT_REMINDER are notification-only,
+                    # they don't block.
                     is_gated = True
                 else:
                     # License is active - check seat limit

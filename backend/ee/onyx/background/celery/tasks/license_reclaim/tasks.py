@@ -1,12 +1,11 @@
 import requests
 from celery import shared_task
 
-from ee.onyx.db.license import get_license
 from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.utils.license import (
     AUTH_REJECTED_STATUSES,
+    load_verified_license,
     reclaim_license_from_control_plane,
-    verify_license_signature,
 )
 from ee.onyx.utils.license_expiry import is_license_due_for_reclaim
 from onyx.configs.app_configs import JOB_TIMEOUT
@@ -28,17 +27,16 @@ def reclaim_license_task(*, tenant_id: str) -> None:  # noqa: ARG001
         return
 
     with get_session_with_current_tenant() as db_session:
-        license_row = get_license(db_session)
-        if not license_row or not license_row.license_data:
-            return
-
-        # Gate on the stored blob: a stale cache entry can misreport source
-        # and expiry.
+        # Gates below run on the signed blob, the only value that cannot lag
+        # the row.
         try:
-            payload = verify_license_signature(license_row.license_data)
+            stored = load_verified_license(db_session)
         except ValueError:
             logger.error("Stored license does not verify, skipping reclaim")
             return
+        if stored is None:
+            return
+        payload = stored.payload
 
         # Sales-issued licenses are replaced by hand, nothing to fetch.
         if payload.source == LicenseSource.MANUAL_UPLOAD:

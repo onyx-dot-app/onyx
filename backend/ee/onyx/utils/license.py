@@ -6,6 +6,7 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 
 import requests
 from cryptography.exceptions import InvalidSignature
@@ -38,8 +39,7 @@ _LICENSE_RECLAIM_DEBOUNCE_TTL_SEC = 15 * 60
 _LICENSE_RECLAIM_BLOCKED_KEY = "license_reclaim_blocked"
 _LICENSE_RECLAIM_BLOCKED_TTL_SEC = 24 * 60 * 60
 
-# The stored license IS the credential for a re-claim, so a rejection under
-# these can only repeat until a replacement arrives.
+# Statuses meaning the stored license itself was refused, not a transient fault.
 AUTH_REJECTED_STATUSES = frozenset({401, 403})
 
 # Path to the license public key file
@@ -145,9 +145,9 @@ def verify_license_signature(license_data: str) -> LicensePayload:
 def _is_stale_replacement(stored_data: str, incoming: LicensePayload) -> bool:
     """True when the stored license was issued after the incoming one.
 
-    Beat, the point-of-use scheduler, and the Sync button can all be in flight
-    at once, so a slow response must not overwrite a newer license that landed
-    while it was outstanding. An unreadable stored blob is not newer.
+    Stores can overlap, so a slow response must not overwrite a newer license
+    that landed while it was outstanding. An unreadable stored blob is not
+    newer.
     """
     try:
         stored = verify_license_signature(stored_data)
@@ -169,8 +169,7 @@ def publish_license_cache(payload: LicensePayload) -> None:
     Drops the cached entry on failure rather than leaving a superseded one to
     serve out its TTL.
     """
-    # Call-time import: ee.onyx.db.license reaches back into this module, and
-    # deferring exactly one side keeps that resolvable.
+    # Deferred import: ee.onyx.db.license imports this module.
     from ee.onyx.db.license import invalidate_license_cache, publish_license_metadata
 
     try:
@@ -201,9 +200,10 @@ def verify_and_store_license(
     expected_tenant_id rejects a license addressed to someone else. The blob is
     signed but not addressed, so without it an upstream mix-up would replace
     this instance's credential with another tenant's.
+
+    Returns the incoming payload even when it was discarded as older.
     """
-    # Call-time import: ee.onyx.db.license reaches back into this module, and
-    # deferring exactly one side keeps that resolvable.
+    # Deferred import: ee.onyx.db.license imports this module.
     from ee.onyx.db.license import (
         acquire_license_store_lock,
         get_license,
@@ -228,14 +228,36 @@ def verify_and_store_license(
         db_session.rollback()
         raise ValueError("Stored license was removed while the reclaim was in flight")
     upsert_license(db_session, license_data, commit=False)
-    # Commit inside the lock, publish outside it. Redis has no socket timeout,
-    # so a stalled cache write would otherwise hold the row lock and wedge
-    # every other store, refresh, and delete behind it.
+    # Commit inside the lock, publish outside it: the Redis cache backend has
+    # no socket timeout, so a stalled publish would hold the advisory lock and
+    # wedge every other store, refresh, and delete behind it.
     db_session.commit()
 
     resume_license_reclaim()
     publish_license_cache(payload)
     return payload
+
+
+class StoredLicense(NamedTuple):
+    license_data: str
+    payload: LicensePayload
+
+
+def load_verified_license(db_session: Session) -> StoredLicense | None:
+    """The stored license and its verified payload, or None when there is none.
+
+    Raises ValueError on a stored blob that does not verify. Callers must
+    decide whether that is terminal, since retrying cannot fix it.
+    """
+    # Deferred import: ee.onyx.db.license imports this module.
+    from ee.onyx.db.license import get_license
+
+    license_row = get_license(db_session)
+    if not license_row or not license_row.license_data:
+        return None
+    return StoredLicense(
+        license_row.license_data, verify_license_signature(license_row.license_data)
+    )
 
 
 def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | None:
@@ -245,24 +267,19 @@ def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | 
     or when that license was already rejected. Raises ValueError when the
     control plane response has no valid license.
 
-    Owns the reclaim block for every entry point, so the on-demand Sync button
-    cannot keep re-sending a credential the beat task already saw refused.
+    Reads and sets the reclaim block itself, so callers must not
+    re-implement it.
     """
-    # Call-time import: ee.onyx.db.license reaches back into this module, and
-    # deferring exactly one side keeps that resolvable.
+    # Deferred import: ee.onyx.db.license imports this module.
     from ee.onyx.db.license import get_license
 
-    license_row = get_license(db_session)
-    if not license_row or not license_row.license_data:
+    stored = load_verified_license(db_session)
+    if stored is None:
         return None
 
     # Addressed from the stored blob so a cache outage cannot stop a reclaim.
-    tenant_id = verify_license_signature(license_row.license_data).tenant_id
-    if not tenant_id:
-        return None
-
-    stored_data = license_row.license_data
-    if license_reclaim_is_blocked(stored_data):
+    stored_data, tenant_id = stored.license_data, stored.payload.tenant_id
+    if not tenant_id or license_reclaim_is_blocked(stored_data):
         return None
 
     response = requests.get(
@@ -290,7 +307,7 @@ def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload | 
 
 
 def license_fingerprint(license_data: str) -> str:
-    """Short stable id for a license blob, safe to store in Redis."""
+    """Short stable id for a license blob, safe to put in the cache."""
     return hashlib.sha256(license_data.encode()).hexdigest()[:32]
 
 
@@ -336,9 +353,7 @@ def license_reclaim_is_blocked(license_data: str) -> bool:
         return False
     if blocked is None:
         return False
-    if isinstance(blocked, bytes):
-        blocked = blocked.decode()
-    return blocked == license_fingerprint(license_data)
+    return blocked.decode() == license_fingerprint(license_data)
 
 
 def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None:
@@ -351,10 +366,6 @@ def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None
 
     try:
         redis_client = get_redis_client()
-        # The block is keyed to the license blob, which only the task has
-        # cheaply at hand. Enqueueing is local and debounced, so let the task
-        # read the row and short-circuit rather than read it here.
-
         # SET NX doubles as the debounce and a cross-process lock: only the
         # first request in the window enqueues.
         if not redis_client.set(

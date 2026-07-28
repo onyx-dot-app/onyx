@@ -39,8 +39,8 @@ def _make_license_payload(stripe_customer_id: str | None = None) -> LicensePaylo
 
 
 class TestLicenseSourceDerivation:
-    """Source is a function of the payload, so every writer computes the same
-    value and a cache rebuild cannot disagree with the write that preceded it."""
+    """Source is derived from the payload, so every writer computes the same
+    value."""
 
     @pytest.mark.parametrize(
         ("stripe_customer_id", "expected"),

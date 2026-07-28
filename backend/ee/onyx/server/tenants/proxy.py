@@ -14,8 +14,8 @@ Auth levels by endpoint:
 - /create-checkout-session: No auth (new customer) or expired license OK (renewal)
 - /claim-license: Session ID based (one-time after Stripe payment)
 - /create-customer-portal-session: Expired license OK (need portal to fix payment)
-- /billing-information: Valid signature required, expired OK (read subscription state after lapse)
-- /license/{tenant_id}: Valid signature required, expired OK (renewal), path tenant_id must match license tenant_id
+- /billing-information: Valid signature required, expired OK within STALE_LICENSE_AUTH_GRACE
+- /license/{tenant_id}: Valid signature required, expired OK within STALE_LICENSE_AUTH_GRACE, path tenant_id must match license tenant_id
 - /seats/update: Valid license required
 """
 
@@ -114,7 +114,8 @@ def verify_license_auth(
         LicensePayload if valid
 
     Raises:
-        HTTPException: If license is invalid or expired (when not allowed)
+        HTTPException: invalid signature, expired (unless allowed), or
+            expired past STALE_LICENSE_AUTH_GRACE.
     """
     _check_license_enforcement_enabled()
 
@@ -123,15 +124,15 @@ def verify_license_auth(
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"Invalid license: {e}")
 
-    if not allow_expired and not is_license_valid(payload):
+    if allow_expired:
+        # No revocation exists, so an old copy must age out as a credential.
+        if not _is_within_stale_license_grace(payload):
+            raise HTTPException(
+                status_code=401,
+                detail="License expired too long ago to be used for renewal",
+            )
+    elif not is_license_valid(payload):
         raise HTTPException(status_code=401, detail="License has expired")
-
-    # No revocation exists, so an old copy must age out as a credential.
-    if allow_expired and not _is_within_stale_license_grace(payload):
-        raise HTTPException(
-            status_code=401,
-            detail="License expired too long ago to be used for renewal",
-        )
 
     return payload
 
@@ -152,7 +153,7 @@ async def get_license_payload(
 async def get_license_payload_allow_expired(
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> LicensePayload:
-    """Dependency: signature must verify, expiry is not checked.
+    """Dependency: signature must verify, expiry allowed within STALE_LICENSE_AUTH_GRACE.
 
     A lapsed instance still has to reach the endpoints that get it un-lapsed.
     """

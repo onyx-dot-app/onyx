@@ -11,6 +11,7 @@ import requests
 from ee.onyx.background.celery.tasks.beat_schedule import ee_tasks_to_schedule
 from ee.onyx.background.celery.tasks.license_reclaim.tasks import reclaim_license_task
 from ee.onyx.server.license.models import LicenseSource
+from ee.onyx.utils.license import StoredLicense
 from onyx.configs.constants import OnyxCeleryTask
 
 TASKS_MODULE = "ee.onyx.background.celery.tasks.license_reclaim.tasks"
@@ -24,7 +25,7 @@ def _make_payload(
     payload = MagicMock()
     payload.tenant_id = "tenant_123"
     payload.expires_at = datetime.now(timezone.utc) + expires_delta
-    # Explicit: an auto-specced attribute is neither enum member, which reads
+    # Explicit: a bare MagicMock attribute is neither enum member, which reads
     # as re-fetchable and silently skips the manual-license guard.
     payload.source = source
     return payload
@@ -36,15 +37,16 @@ class TestManualLicensesAreNotReclaimed:
         so the control plane has nothing newer to return."""
         with (
             patch(f"{TASKS_MODULE}.get_session_with_current_tenant") as mock_session,
-            patch(f"{TASKS_MODULE}.get_license") as mock_get_license,
-            patch(f"{TASKS_MODULE}.verify_license_signature") as mock_verify,
+            patch(f"{TASKS_MODULE}.load_verified_license") as mock_load,
             patch(f"{TASKS_MODULE}.reclaim_license_from_control_plane") as mock_reclaim,
         ):
             mock_session.return_value.__enter__.return_value = MagicMock()
-            mock_get_license.return_value = MagicMock(license_data="stored-blob")
-            mock_verify.return_value = _make_payload(
-                expires_delta=timedelta(days=1),
-                source=LicenseSource.MANUAL_UPLOAD,
+            mock_load.return_value = StoredLicense(
+                "stored-blob",
+                _make_payload(
+                    expires_delta=timedelta(days=1),
+                    source=LicenseSource.MANUAL_UPLOAD,
+                ),
             )
             reclaim_license_task(tenant_id="tenant_123")
 
@@ -68,13 +70,13 @@ class TestReclaimLicenseTask:
         db_session = MagicMock()
         with (
             patch(f"{TASKS_MODULE}.get_session_with_current_tenant") as mock_session,
-            patch(f"{TASKS_MODULE}.get_license") as mock_get_license,
-            patch(f"{TASKS_MODULE}.verify_license_signature") as mock_verify,
+            patch(f"{TASKS_MODULE}.load_verified_license") as mock_load,
             patch(f"{TASKS_MODULE}.reclaim_license_from_control_plane") as mock_reclaim,
         ):
             mock_session.return_value.__enter__.return_value = db_session
-            mock_get_license.return_value = MagicMock(license_data="stored-blob")
-            mock_verify.return_value = _make_payload(expires_delta=expires_delta)
+            mock_load.return_value = StoredLicense(
+                "stored-blob", _make_payload(expires_delta=expires_delta)
+            )
 
             reclaim_license_task(tenant_id="tenant_123")
 
@@ -86,12 +88,11 @@ class TestReclaimLicenseTask:
     def test_noops_when_no_license_is_stored(self) -> None:
         with (
             patch(f"{TASKS_MODULE}.get_session_with_current_tenant") as mock_session,
-            patch(f"{TASKS_MODULE}.get_license") as mock_get_license,
-            patch(f"{TASKS_MODULE}.verify_license_signature"),
+            patch(f"{TASKS_MODULE}.load_verified_license") as mock_load,
             patch(f"{TASKS_MODULE}.reclaim_license_from_control_plane") as mock_reclaim,
         ):
             mock_session.return_value.__enter__.return_value = MagicMock()
-            mock_get_license.return_value = None
+            mock_load.return_value = None
 
             reclaim_license_task(tenant_id="tenant_123")
 
@@ -115,14 +116,14 @@ class TestReclaimLicenseTask:
     def test_swallows_reclaim_failures(self, reclaim_error: Exception) -> None:
         with (
             patch(f"{TASKS_MODULE}.get_session_with_current_tenant") as mock_session,
-            patch(f"{TASKS_MODULE}.get_license") as mock_get_license,
-            patch(f"{TASKS_MODULE}.verify_license_signature") as mock_verify,
+            patch(f"{TASKS_MODULE}.load_verified_license") as mock_load,
             patch(f"{TASKS_MODULE}.reclaim_license_from_control_plane") as mock_reclaim,
             patch(f"{TASKS_MODULE}.logger") as mock_logger,
         ):
             mock_session.return_value.__enter__.return_value = MagicMock()
-            mock_get_license.return_value = MagicMock(license_data="stored-blob")
-            mock_verify.return_value = _make_payload(expires_delta=timedelta(days=1))
+            mock_load.return_value = StoredLicense(
+                "stored-blob", _make_payload(expires_delta=timedelta(days=1))
+            )
             mock_reclaim.side_effect = reclaim_error
 
             reclaim_license_task(tenant_id="tenant_123")
@@ -149,14 +150,14 @@ class TestTerminalAuthRejection:
     def _run_with_error(self, error: Exception) -> MagicMock:
         with (
             patch(f"{TASKS_MODULE}.get_session_with_current_tenant") as mock_session,
-            patch(f"{TASKS_MODULE}.get_license") as mock_get_license,
-            patch(f"{TASKS_MODULE}.verify_license_signature") as mock_verify,
+            patch(f"{TASKS_MODULE}.load_verified_license") as mock_load,
             patch(f"{TASKS_MODULE}.reclaim_license_from_control_plane") as mock_reclaim,
             patch(f"{TASKS_MODULE}.logger") as mock_logger,
         ):
             mock_session.return_value.__enter__.return_value = MagicMock()
-            mock_get_license.return_value = MagicMock(license_data="stored-blob")
-            mock_verify.return_value = _make_payload(expires_delta=timedelta(days=1))
+            mock_load.return_value = StoredLicense(
+                "stored-blob", _make_payload(expires_delta=timedelta(days=1))
+            )
             mock_reclaim.side_effect = error
             reclaim_license_task(tenant_id="tenant_123")
         return mock_logger

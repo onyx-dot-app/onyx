@@ -2,6 +2,8 @@
 
 import hashlib
 import struct
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import NamedTuple
 
@@ -24,8 +26,8 @@ logger = setup_logger()
 LICENSE_METADATA_KEY = "license:metadata"
 LICENSE_CACHE_TTL_SECONDS = 86400  # 24 hours
 
-# Serializes the read-compare-write in publish_license_metadata. Bounded so a
-# lost lease degrades to today's unguarded write rather than a stalled request.
+# Serializes the read-compare-write in publish_license_metadata, and bounds
+# acquisition: a contended lock publishes unserialized rather than stalling.
 _LICENSE_CACHE_LOCK_KEY = "license:metadata:write"
 _LICENSE_CACHE_LOCK_TIMEOUT_SEC = 10
 
@@ -48,10 +50,9 @@ def seat_lock_id_for_tenant(tenant_id: str) -> int:
 def acquire_license_store_lock(db_session: Session) -> None:
     """Serialize read-compare-write on the license row.
 
-    Beat, the point-of-use scheduler, and the Sync button can all be storing a
-    license at once. Without this the newest blob can be read, approved, and
-    then overwritten by a slower response that was approved against the same
-    older row. Released on the caller's commit or rollback.
+    Callers must read the stored blob and write its replacement inside this
+    lock, or a slower response overwrites a newer license. Released on the
+    caller's commit or rollback.
     """
     _acquire_advisory_lock(
         db_session,
@@ -115,8 +116,8 @@ def upsert_license(
     """
     Insert or update the license (singleton pattern).
 
-    commit=False leaves the write uncommitted so the caller can extend the
-    transaction, and with it any advisory lock ordering later work.
+    commit=False flushes without committing, so the caller can keep the
+    transaction, and its advisory locks, open across later work.
 
     Args:
         db_session: Database session
@@ -125,22 +126,22 @@ def upsert_license(
     Returns:
         The created or updated License object
     """
-    existing = get_license(db_session)
+    license_row = get_license(db_session)
 
-    if existing:
-        existing.license_data = license_data
+    if license_row:
+        license_row.license_data = license_data
         logger.info("License updated")
     else:
-        existing = License(license_data=license_data)
-        db_session.add(existing)
+        license_row = License(license_data=license_data)
+        db_session.add(license_row)
         logger.info("License created")
 
     if commit:
         db_session.commit()
-        db_session.refresh(existing)
+        db_session.refresh(license_row)
     else:
         db_session.flush()
-    return existing
+    return license_row
 
 
 def delete_license(db_session: Session) -> bool:
@@ -161,8 +162,8 @@ def delete_license(db_session: Session) -> bool:
     if existing:
         db_session.delete(existing)
         db_session.commit()
-        # After the commit, so a store that published its cache entry while
-        # holding the lock cannot outlive its row here.
+        # Best effort: a store that committed just before this delete
+        # publishes outside the lock, so its entry can still land after this.
         try:
             invalidate_license_cache()
         except Exception as e:
@@ -350,40 +351,43 @@ def publish_license_metadata(
     wait_for_lock=False is for callers that cannot afford to wait on a
     contended lock, and gives up serializing rather than the write itself.
     """
-    lock = _acquire_license_cache_lock(tenant_id, wait_for_lock)
-    try:
+    with _license_cache_lock(tenant_id, wait_for_lock):
         cached = get_cached_license_metadata(tenant_id)
         if cached and cached.issued_at > payload.issued_at:
             return cached
         return update_license_cache(payload, tenant_id=tenant_id)
-    finally:
-        if lock is not None:
-            lock.release()
 
 
-def _acquire_license_cache_lock(tenant_id: str | None, wait: bool) -> CacheLock | None:
-    """The held lock, or None when the caller must proceed without one.
+@contextmanager
+def _license_cache_lock(tenant_id: str | None, wait: bool) -> Generator[None]:
+    """Serialize the guarded block, or run it unserialized if that is not possible.
 
     Serializing is an improvement on an unserialized write, never a
     precondition for one, and the Postgres backend holds this on a second
     connection. Failing to publish a committed license would read as
-    unlicensed, so every way of not getting the lock falls through to the
-    write.
+    unlicensed, so every way of not getting the lock still runs the block.
     """
+    lock: CacheLock | None = None
     try:
-        lock = get_cache_backend(tenant_id=tenant_id).lock(
+        candidate = get_cache_backend(tenant_id=tenant_id).lock(
             _LICENSE_CACHE_LOCK_KEY, timeout=_LICENSE_CACHE_LOCK_TIMEOUT_SEC
         )
-        if lock.acquire(
+        if candidate.acquire(
             blocking=wait,
             blocking_timeout=_LICENSE_CACHE_LOCK_TIMEOUT_SEC if wait else None,
         ):
-            return lock
+            lock = candidate
+        else:
+            logger.warning("License cache lock contended, publishing unserialized")
     except Exception as e:
         logger.warning("License cache lock errored (%s), publishing unserialized", e)
-        return None
-    logger.warning("License cache lock contended, publishing unserialized")
-    return None
+
+    try:
+        yield
+    finally:
+        # Releasing a lease that already expired raises.
+        if lock is not None and lock.owned():
+            lock.release()
 
 
 def refresh_license_cache(
@@ -402,10 +406,8 @@ def refresh_license_cache(
     """
     from ee.onyx.utils.license import verify_license_signature
 
-    # Read committed state only. Taking the store lock here would put cache I/O
-    # inside a held row lock, and this runs on the enforcement middleware's
-    # path. A rebuild that loses to a concurrent store is corrected by the
-    # issued_at comparison in the cache write below.
+    # No store lock: this rebuild must not hold one across cache I/O. Losing a
+    # race with a concurrent store is caught by the issued_at compare below.
     db_session.expire_all()
     license_record = get_license(db_session)
     if not license_record:
@@ -414,8 +416,8 @@ def refresh_license_cache(
 
     try:
         payload = verify_license_signature(license_record.license_data)
-        # Never waits: this runs inside the async middleware, where the
-        # Postgres lock's acquisition poll would sleep the event loop.
+        # Never waits: this must be callable from an event loop, and the
+        # Postgres lock's acquisition poll sleeps.
         return publish_license_metadata(
             payload, tenant_id=tenant_id, wait_for_lock=False
         )

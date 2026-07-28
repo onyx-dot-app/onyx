@@ -53,7 +53,8 @@ _PEM_END = "-----END ONYX LICENSE-----"
 def _normalize_license_file(content: str) -> str:
     """Reduce a .lic file to the bare base64 blob.
 
-    All whitespace goes, not just the delimiter lines. The stored blob is later
+    The blob is later sent as a Bearer token, so an embedded newline from the
+    wrapped file would be rejected as an invalid header value. The stored blob is later
     sent as a Bearer token, and a header value carrying the wrapped file's
     newlines is rejected before the request leaves the process.
     """

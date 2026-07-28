@@ -159,9 +159,8 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
                 run_fn=_run_scheduled_eval,
             )
         )
-    # Renewing a license is the only way an expiring instance keeps working,
-    # and the point-of-use scheduler enqueues onto a Celery worker this
-    # deployment does not run.
+    # EE-only: no license exists elsewhere. This deployment runs no Celery
+    # worker, so neither beat nor the point-of-use scheduler can renew.
     if global_version.is_ee_version():
         tasks.append(
             _PeriodicTaskDef(

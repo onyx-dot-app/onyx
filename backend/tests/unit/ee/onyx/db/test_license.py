@@ -256,8 +256,8 @@ class TestGetUsedSeatsAccountTypeFiltering:
 
 
 class TestRefreshLicenseCacheLocking:
-    """The enforcement middleware calls refresh from async context, where the
-    Postgres lock's acquisition poll would sleep the event loop."""
+    """refresh_license_cache runs on async request paths, so it must never
+    sleep on the cache lock."""
 
     @patch("ee.onyx.db.license.update_license_cache")
     @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)

@@ -32,7 +32,6 @@ import {
   resetStripeConnection,
   updateSeatCount,
   claimLicense,
-  refreshLicenseCache,
 } from "@/lib/billing/svc";
 import { formatDateShort } from "@/lib/dateUtils";
 import { humanReadableFormatShort } from "@opal/time";
@@ -187,6 +186,8 @@ function SubscriptionCard({
     (license?.expires_at && new Date(license.expires_at) < new Date());
   const isExpired = isExpiredFromBilling || isExpiredFromLicense;
   const isCanceling = billing?.cancel_at_period_end;
+  // Each handler clears both, so at most one of these is ever set.
+  const actionError = syncError ?? endTrialError;
 
   let subtitle: string;
   if (isExpired) {
@@ -227,6 +228,7 @@ function SubscriptionCard({
   const handleSyncLicense = async () => {
     setIsSyncing(true);
     setSyncError(null);
+    setEndTrialError(null);
     try {
       await claimLicense();
       await onRefresh?.();
@@ -242,6 +244,7 @@ function SubscriptionCard({
   const handleEndTrial = async () => {
     setIsEndingTrial(true);
     setEndTrialError(null);
+    setSyncError(null);
     try {
       await endTrial();
       await onRefresh?.();
@@ -361,10 +364,9 @@ function SubscriptionCard({
               </OpalButton>
             </Section>
           )}
-          {/* Both actions live in one button row, so only one can be mid-flight. */}
-          {(syncError ?? endTrialError) && (
+          {actionError && (
             <Text secondaryBody className="text-status-error-04">
-              {syncError ?? endTrialError}
+              {actionError}
             </Text>
           )}
           {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}

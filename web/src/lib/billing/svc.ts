@@ -98,9 +98,9 @@ export async function endTrial(): Promise<EndTrialResponse> {
 export const resetStripeConnection = () =>
   billingPost<{ success: boolean; message: string }>("/reset-connection");
 
-// Comfortably past a claim that waits out the control plane's own 30s timeout.
-// These handlers drive a spinner, and the cache writes behind them have no
-// socket timeout of their own, so an unreachable cache would pin it forever.
+// Comfortably past the backend's own 30s timeout on its control-plane call.
+// The cache writes behind these handlers have no socket timeout, so an
+// unreachable cache would pin the spinner.
 const LICENSE_REQUEST_TIMEOUT_MS = 60_000;
 
 // Self-hosted only actions
