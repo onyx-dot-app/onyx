@@ -23,7 +23,6 @@
     "terser": "^5.49.0"
   },
   "devDependencies": {
-    "@types/dompurify": "^3.0.0",
     "@types/node": "^26.1.1",
     "typescript": "^6.0.3",
     "vite": "^8.1.5"

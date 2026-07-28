@@ -113,7 +113,7 @@
     "@storybook/react-vite": "10.5.0",
     "@swc/core": "^1.15.43",
     "@swc/jest": "^0.2.39",
-    "@tailwindcss/postcss": "^4.3.0",
+    "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/typography": "^0.5.19",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
