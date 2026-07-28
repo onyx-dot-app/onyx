@@ -16,15 +16,18 @@ The static pod shape now lives in the Helm-rendered ``sandbox-pod`` PodTemplate
 the per-pod fields. This suite renders that chart template, feeds it through the
 overlay (via a mocked ``read_namespaced_pod_template``), and asserts the
 invariants on the result — so it verifies the Helm template + Python overlay
-end to end. Skips if the ``helm`` binary or chart deps are unavailable.
+end to end. Skips locally if the ``helm`` binary or chart deps are
+unavailable; in CI those conditions fail instead of masking the suite.
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import os
 import shutil
 import subprocess
+from typing import NoReturn
 
 import pytest
 import yaml
@@ -91,10 +94,18 @@ def _push_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _skip_or_fail(reason: str) -> NoReturn:
+    """Skip locally, but fail in CI — a shard that renders nothing must not
+    report green."""
+    if os.environ.get("CI"):
+        pytest.fail(reason)
+    pytest.skip(reason)
+
+
 def _helm_template_cmd(extra_args: list[str] | None = None) -> list[str]:
     helm = shutil.which("helm")
     if helm is None:
-        pytest.skip("helm binary not available")
+        _skip_or_fail("helm binary not available")
     return [
         helm,
         "template",
@@ -118,7 +129,7 @@ def _render_pod_template_yaml(extra_args: list[str] | None = None) -> str:
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        pytest.skip(f"helm template failed (chart deps?): {result.stderr.strip()}")
+        _skip_or_fail(f"helm template failed (chart deps?): {result.stderr.strip()}")
     return result.stdout
 
 

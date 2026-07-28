@@ -123,6 +123,19 @@ jobs:
         with:
           version: v3.19.0
 
+      - name: Build Helm chart dependencies
+        if: matrix.test-dir == 'craft_helm'
+        run: |
+          # Register every repo the lockfile pins, then vendor the deps the
+          # pod-spec tests need to render the chart (charts/*.tgz is gitignored).
+          i=0
+          awk '$1 == "repository:" && $2 ~ /^https/ {print $2}' \
+              deployment/helm/charts/onyx/Chart.lock | sort -u |
+            while read -r repo; do
+              helm repo add "dep-$((i+=1))" "$repo"
+            done
+          helm dependency build deployment/helm/charts/onyx
+
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
