@@ -1061,35 +1061,24 @@ class SlackConnector(
             self._workspace_metadata = self._resolve_workspace_metadata(self.client)
 
     def _resolve_workspace_metadata(self, client: WebClient) -> _WorkspaceMetadata:
-        try:
-            auth_response = client.auth_test()
-        except Exception as e:
-            logger.warning("Failed to get workspace URL from auth_test: %s", e)
-            return _WorkspaceMetadata()
+        """Fails closed: nothing is cached and the index attempt surfaces the error.
+
+        Grid public-channel ACLs derive from ``team_id_to_user_emails``, and
+        ``get_channel_access`` falls back to org-wide ``is_public=True`` when it
+        is empty. Swallowing a failure here would silently widen
+        workspace-scoped permissions, so only cosmetic lookups may degrade.
+        """
+        auth_response = client.auth_test()
 
         url = auth_response.get("url")
         if not auth_response.get("enterprise_id"):
             return _WorkspaceMetadata(url=url)
 
-        try:
-            team_ids = list_grid_team_ids(client)
-        except SlackApiError as e:
-            logger.warning(
-                "auth.teams.list failed on Grid org: %s", e.response.get("error", "")
-            )
-            team_ids = []
-
+        team_ids = list_grid_team_ids(client)
         team_id_to_url = self._fetch_team_urls(client, team_ids) if team_ids else {}
-        team_id_to_user_emails: dict[str, set[str]] = {}
-        if team_ids:
-            try:
-                team_id_to_user_emails = fetch_team_user_emails(client, team_ids)
-            except SlackApiError as e:
-                # Grid public-channel access stays org-wide instead of per-workspace.
-                logger.warning(
-                    "users.list per-team failed on Grid org: %s",
-                    e.response.get("error", ""),
-                )
+        team_id_to_user_emails = (
+            fetch_team_user_emails(client, team_ids) if team_ids else {}
+        )
 
         logger.info(
             "Slack Enterprise Grid detected: teams=%s urls_resolved=%s users_scoped=%s",
@@ -1513,9 +1502,13 @@ class SlackConnector(
                     f"Slack API returned a failure: {error_msg}"
                 )
 
-            # 3) Grid: verify team:read by calling auth.teams.list
+            # 3) Grid: verify team:read, and the users scopes that public-channel
+            # ACLs depend on, so a missing scope fails here instead of at index time.
             if auth_response.get("enterprise_id"):
-                self.fast_client.auth_teams_list(limit=1)
+                teams_response = self.fast_client.auth_teams_list(limit=1)
+                teams = teams_response.get("teams", [])
+                if teams:
+                    self.fast_client.users_list(team_id=teams[0]["id"], limit=1)
 
             # 4) If channels are specified and regex is not enabled, verify each is accessible
             # NOTE: removed this for now since it may be too slow for large workspaces which may
@@ -1562,6 +1555,12 @@ class SlackConnector(
                         "Slack Enterprise Grid org detected but the bot token "
                         "lacks the `team:read` scope required to list workspaces "
                         "(auth.teams.list)."
+                    )
+                if needed_scope in ("users:read", "users:read.email"):
+                    raise InsufficientPermissionsError(
+                        "Slack Enterprise Grid org detected but the bot token "
+                        f"lacks the `{needed_scope}` scope required to scope "
+                        "public channels to workspace members (users.list)."
                     )
                 raise InsufficientPermissionsError(
                     "Slack bot token lacks the necessary scope to list/access channels. "

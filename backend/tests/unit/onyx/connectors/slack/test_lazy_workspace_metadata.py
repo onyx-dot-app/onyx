@@ -10,6 +10,10 @@ that client, and that the exposed properties stay side-effect free.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+from slack_sdk.errors import SlackApiError
+
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.slack.connector import SlackConnector
 
 _AUTH_NON_GRID = {"url": "https://workspace.slack.com"}
@@ -78,15 +82,56 @@ class TestLazyResolution:
         assert connector.workspace_url == "https://workspace.slack.com"
         client.auth_test.assert_called_once()
 
-    def test_failed_resolution_is_not_retried(self) -> None:
+    def test_failed_resolution_raises_and_caches_nothing(self) -> None:
+        """Fails closed: an empty Grid mapping would widen public-channel ACLs."""
         connector, client, _ = _connector()
-        client.auth_test.side_effect = Exception("rate limited")
+        client.auth_test.side_effect = SlackApiError("boom", MagicMock())
 
-        connector._ensure_workspace_metadata()
-        connector._ensure_workspace_metadata()
+        with pytest.raises(SlackApiError):
+            connector._ensure_workspace_metadata()
 
-        assert connector.workspace_url is None
-        client.auth_test.assert_called_once()
+        assert connector._workspace_metadata is None
+
+        client.auth_test.side_effect = None
+        client.auth_test.return_value = _AUTH_NON_GRID
+        connector._ensure_workspace_metadata()
+        assert connector.workspace_url == "https://workspace.slack.com"
+
+    def test_grid_team_enumeration_failure_raises(self) -> None:
+        connector, client, _ = _connector()
+        client.auth_test.return_value = _AUTH_GRID
+
+        with patch(
+            "onyx.connectors.slack.connector.list_grid_team_ids",
+            side_effect=SlackApiError("missing_scope", MagicMock()),
+        ):
+            with pytest.raises(SlackApiError):
+                connector._ensure_workspace_metadata()
+
+        assert connector._workspace_metadata is None
+
+    def test_grid_user_email_failure_raises(self) -> None:
+        connector, client, _ = _connector()
+        client.auth_test.return_value = _AUTH_GRID
+
+        with (
+            patch(
+                "onyx.connectors.slack.connector.list_grid_team_ids",
+                return_value=["T1"],
+            ),
+            patch(
+                "onyx.connectors.slack.connector.fetch_team_url",
+                return_value="https://t1.slack.com",
+            ),
+            patch(
+                "onyx.connectors.slack.connector.fetch_team_user_emails",
+                side_effect=SlackApiError("missing_scope", MagicMock()),
+            ),
+        ):
+            with pytest.raises(SlackApiError):
+                connector._ensure_workspace_metadata()
+
+        assert connector._workspace_metadata is None
 
     def test_new_credentials_invalidate_cached_metadata(self) -> None:
         connector, client, _ = _connector()
@@ -137,6 +182,41 @@ class TestLazyGridResolution:
         assert connector.grid_team_id_to_user_emails == {"T1": {"a@example.com"}}
         list_teams.assert_called_once()
         client.auth_test.assert_called_once()
+
+    def test_validation_probes_users_scope_on_grid(self) -> None:
+        connector, _, fast_client = _connector()
+        fast_client.auth_test.return_value = {"ok": True, "enterprise_id": "E1"}
+        fast_client.conversations_list.return_value = {"ok": True}
+        fast_client.auth_teams_list.return_value = {"teams": [{"id": "T1"}]}
+
+        connector.validate_connector_settings()
+
+        fast_client.users_list.assert_called_once_with(team_id="T1", limit=1)
+
+    def test_validation_surfaces_missing_users_scope(self) -> None:
+        connector, _, fast_client = _connector()
+        fast_client.auth_test.return_value = {"ok": True, "enterprise_id": "E1"}
+        fast_client.conversations_list.return_value = {"ok": True}
+        fast_client.auth_teams_list.return_value = {"teams": [{"id": "T1"}]}
+        error_response = MagicMock()
+        error_response.get.side_effect = lambda key, default=None: {
+            "error": "missing_scope",
+            "needed": "users:read.email",
+        }.get(key, default)
+        fast_client.users_list.side_effect = SlackApiError("boom", error_response)
+
+        with pytest.raises(InsufficientPermissionsError, match="users:read.email"):
+            connector.validate_connector_settings()
+
+    def test_validation_skips_users_probe_off_grid(self) -> None:
+        connector, _, fast_client = _connector()
+        fast_client.auth_test.return_value = {"ok": True}
+        fast_client.conversations_list.return_value = {"ok": True}
+
+        connector.validate_connector_settings()
+
+        fast_client.auth_teams_list.assert_not_called()
+        fast_client.users_list.assert_not_called()
 
     def test_non_grid_workspace_skips_team_enumeration(self) -> None:
         connector, client, _ = _connector()
