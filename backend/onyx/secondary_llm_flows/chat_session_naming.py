@@ -1,6 +1,9 @@
+from collections.abc import Sequence
+
 from onyx.chat.llm_step import translate_history_to_llm_format
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
+from onyx.db.models import ChatMessage
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import llm_response_to_string
@@ -10,6 +13,25 @@ from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+DEFAULT_CHAT_SESSION_NAME = "New Chat"
+FALLBACK_CHAT_SESSION_NAME_LENGTH = 40
+
+
+def get_fallback_chat_session_name(chat_history: Sequence[ChatMessage]) -> str:
+    user_message = next(
+        (
+            message.message.strip()
+            for message in chat_history
+            if message.message_type == MessageType.USER and message.message.strip()
+        ),
+        "",
+    )
+    if not user_message:
+        return DEFAULT_CHAT_SESSION_NAME
+    if len(user_message) <= FALLBACK_CHAT_SESSION_NAME_LENGTH:
+        return user_message
+    return user_message[:FALLBACK_CHAT_SESSION_NAME_LENGTH].rstrip() + "..."
 
 
 def generate_chat_session_name(
@@ -34,7 +56,6 @@ def generate_chat_session_name(
         complete_message_history, llm.config
     )
 
-    # Call LLM with Braintrust tracing
     with llm_generation_span(
         llm=llm,
         flow=LLMFlow.CHAT_SESSION_NAMING,

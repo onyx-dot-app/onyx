@@ -68,6 +68,14 @@ class UsageExportResponse(BaseModel):
     users: list[UsageExportUser]
 
 
+class ResetUsageRequest(BaseModel):
+    user_email: str = Field(min_length=1)
+
+
+class ResetUsageResponse(BaseModel):
+    reset_rows: int = Field(ge=0)
+
+
 class ModelPrice(BaseModel):
     """USD per 1M tokens for the user's selected chat model; null if unpriced."""
 
@@ -75,6 +83,9 @@ class ModelPrice(BaseModel):
     provider: str | None
     input_per_mtok: float | None
     output_per_mtok: float | None
+    # null when the model/override doesn't price cache reads; the UI falls back
+    # to the input rate (how billing treats it).
+    cache_per_mtok: float | None = None
 
 
 class EffectiveCostBudget(BaseModel):
@@ -93,3 +104,4 @@ class UserUsageResponse(BaseModel):
     budget_remaining_cents: float | None
     budget_period_hours: int | None = None
     selected_model_price: ModelPrice | None
+    available_model_prices: list[ModelPrice] = Field(default_factory=list)

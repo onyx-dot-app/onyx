@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import Table, create_engine, event, text
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -24,6 +25,7 @@ from onyx.db.models import UserUsage
 from onyx.db.user_usage import UsageExportRow, get_usage_export
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.server.features.usage.api import admin_usage_router
+from onyx.server.features.usage.models import ResetUsageResponse
 
 
 @compiles(PGUUID, "sqlite")
@@ -264,3 +266,50 @@ class TestExportEndpoint:
         )
         assert resp.status_code == 400
         assert resp.json()["error_code"] == "INVALID_INPUT"
+
+
+class TestResetUsageEndpoint:
+    def test_empty_email_is_rejected(self, db_session: Session) -> None:
+        client = TestClient(_make_app(db_session, _ADMIN))
+        resp = client.post("/admin/usage/reset", json={"user_email": ""})
+        assert resp.status_code == 422
+
+    def test_unknown_user_is_404(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import onyx.server.features.usage.api as api
+
+        monkeypatch.setattr(api, "get_user_by_email", lambda _email, _db: None)
+        client = TestClient(_make_app(db_session, _ADMIN))
+        resp = client.post("/admin/usage/reset", json={"user_email": "nope@x.com"})
+        assert resp.status_code == 404
+
+    def test_resets_found_user(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import onyx.server.features.usage.api as api
+
+        class _U:
+            id = "00000000-0000-0000-0000-0000000000aa"
+
+        seen: dict[str, str] = {}
+        monkeypatch.setattr(api, "get_user_by_email", lambda _email, _db: _U())
+        monkeypatch.setattr(
+            api,
+            "reset_user_usage",
+            lambda _db, user_id: seen.update(user_id=user_id) or 1,
+        )
+        client = TestClient(_make_app(db_session, _ADMIN))
+        resp = client.post("/admin/usage/reset", json={"user_email": "u@x.com"})
+        assert resp.status_code == 200
+        assert resp.json() == {"reset_rows": 1}
+        assert seen["user_id"] == str(_U.id)
+
+    def test_non_admin_rejected(self, db_session: Session) -> None:
+        client = TestClient(_make_app(db_session, _NON_ADMIN))
+        resp = client.post("/admin/usage/reset", json={"user_email": "u@x.com"})
+        assert resp.status_code == 403
+
+    def test_negative_reset_count_is_invalid(self) -> None:
+        with pytest.raises(ValidationError):
+            ResetUsageResponse(reset_rows=-1)
