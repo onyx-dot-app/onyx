@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -221,20 +221,71 @@ function AppConnections({ query }: AppConnectionsProps) {
           >{`${KIND_COPY[kind].label} · ${byKind[kind].length}`}</Tabs.Trigger>
         ))}
       </Tabs.List>
-      {KIND_ORDER.map((kind) => (
-        <Tabs.Content key={kind} value={kind}>
+      <KindSlot tab={tab}>
+        {(kind) => (
+          <Text font="secondary-body" color="text-03">
+            {KIND_COPY[kind].blurb}
+          </Text>
+        )}
+      </KindSlot>
+      <KindSlot tab={tab} panel>
+        {(kind, active) => (
           <ConnectableList
             kind={kind}
             items={byKind[kind]}
             searching={searching}
-            connectParam={connectParam}
+            // Only the visible kind may claim a deep link; the others are
+            // rendered purely to hold their height.
+            connectParam={active ? connectParam : null}
             skillsLoaded={skillsData !== undefined}
             skillSetupByAppId={skillSetupByAppId}
             onChange={refresh}
           />
-        </Tabs.Content>
-      ))}
+        )}
+      </KindSlot>
     </Tabs>
+  );
+}
+
+interface KindSlotProps {
+  tab: ConnectableKind;
+  /** Wire the active kind up as the tab's panel (`role="tabpanel"`). */
+  panel?: boolean;
+  children: (kind: ConnectableKind, active: boolean) => ReactNode;
+}
+
+/**
+ * Renders one piece of the page for every kind, stacked in a single grid cell
+ * with only the active kind visible. Apps and MCP servers share the layout but
+ * not their content lengths, so every slot reserves the tallest kind's height:
+ * the page's geometry — and with it the scrollbar, which would otherwise
+ * re-center the whole page sideways — stays put when the tab changes.
+ */
+function KindSlot({ tab, panel, children }: KindSlotProps) {
+  return (
+    <div className={cn("grid", !panel && "pt-6 pb-2")}>
+      {KIND_ORDER.map((kind) => {
+        const active = kind === tab;
+        const content = children(kind, active);
+        return (
+          <div
+            key={kind}
+            className={cn("col-start-1 row-start-1", !active && "invisible")}
+            aria-hidden={!active}
+          >
+            {!panel ? (
+              content
+            ) : active ? (
+              <Tabs.Content value={kind}>{content}</Tabs.Content>
+            ) : (
+              // Mirrors the top padding Tabs.Content applies, so the height an
+              // unselected kind holds matches what it occupies once selected.
+              <div className="w-full pt-4">{content}</div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -297,11 +348,7 @@ function ConnectableList({
   }
 
   return (
-    <div className="flex flex-col gap-6 pt-2">
-      <Text font="secondary-body" color="text-03">
-        {copy.blurb}
-      </Text>
-
+    <div className="flex flex-col gap-6">
       {connected.length > 0 && (
         <section className="flex flex-col gap-2">
           <Text font="secondary-body" color="text-03">
