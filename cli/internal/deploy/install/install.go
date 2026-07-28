@@ -653,13 +653,33 @@ func (in *installer) pullAndStart(ctx context.Context, tag string, hostPort int)
 	dir := in.deploymentDir()
 	floating := release.IsFloatingTag(tag)
 
-	pullArgs := []string{"pull"}
-	if !in.opts.Verbose {
-		pullArgs = append(pullArgs, "--quiet")
-	}
-	if err := in.runComposePhase(ctx, ui.StagePull, "Pulling images", dir, env, files, pullArgs, false); err != nil {
-		in.infof("Check your internet connection and re-run. If the issue persists: founders@onyx.app")
-		return exitcodes.Newf(exitcodes.General, "docker compose pull failed: %v", err)
+	if in.wiz != nil {
+		// Compose's own progress renderer (parallel per-layer bars) beats
+		// anything a spinner can convey: hand it the raw terminal for the
+		// pull, then resume the wizard.
+		in.wiz.Stage(ui.StagePull)
+		began := time.Now()
+		pull := in.compose.Command(dir, env, files, "pull")
+		pull.Stdout, pull.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
+		err := in.wiz.Suspend(func() error {
+			_, err := in.deps.Runner.Run(ctx, pull)
+			return err
+		})
+		if err != nil {
+			in.errorf("Pulling images failed")
+			in.infof("Check your internet connection and re-run. If the issue persists: founders@onyx.app")
+			return exitcodes.Newf(exitcodes.General, "docker compose pull failed: %v", err)
+		}
+		in.wiz.Note("ok", fmt.Sprintf("Pulling images (%ds)", int(time.Since(began).Seconds())))
+	} else {
+		pullArgs := []string{"pull"}
+		if !in.opts.Verbose {
+			pullArgs = append(pullArgs, "--quiet")
+		}
+		if err := in.runComposePhase(ctx, ui.StagePull, "Pulling images", dir, env, files, pullArgs, false); err != nil {
+			in.infof("Check your internet connection and re-run. If the issue persists: founders@onyx.app")
+			return exitcodes.Newf(exitcodes.General, "docker compose pull failed: %v", err)
+		}
 	}
 
 	upArgs := []string{"up", "-d"}
