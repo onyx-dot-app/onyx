@@ -1,19 +1,33 @@
 import time
 from collections.abc import Sequence
+from datetime import datetime, timezone
+from typing import Any
 
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CapabilityCheckTrigger,
     CredentialCapability,
+    CredentialCapabilityReport,
+    compute_capability_verdicts,
+)
+from onyx.connectors.capability_checks.registry import (
+    get_applicable_capabilities,
+    get_capability_checks,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
 )
+from onyx.connectors.factory import identify_connector_class, instantiate_connector
+from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.models import InputType
+from onyx.db.models import Credential
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -193,3 +207,75 @@ def run_capability_checks(
             outcome_by_check_id[check.check_id] = _execute_check(check, context)
         results.append(_build_result(check, outcome_by_check_id[check.check_id]))
     return results
+
+
+def generate_capability_report(
+    db_session: Session,
+    credential: Credential,
+    connector_specific_config: dict[str, Any] | None = None,
+    connector_id: int | None = None,
+    input_type: InputType | None = None,
+    trigger: CapabilityCheckTrigger = CapabilityCheckTrigger.MANUAL,
+) -> CredentialCapabilityReport:
+    """Runs every capability check for a credential and packages a report.
+
+    Check failures are report content; this raises only for programmer errors
+    (e.g. a source with no connector class). Without a
+    ``connector_specific_config``, instantiation falls back to the source's
+    ``minimal_probe_config()``; when that is None or instantiation fails,
+    instance-requiring checks are SKIPPED. Unlike ``validate_ccpair_for_user``,
+    no source is exempted: MOCK_CONNECTOR must run so integration tests can
+    exercise the full pipeline.
+    """
+    source = credential.source
+    checks = get_capability_checks(source)
+    connector_class = identify_connector_class(source, input_type)
+
+    instantiation_config = (
+        connector_specific_config
+        if connector_specific_config is not None
+        else connector_class.minimal_probe_config()
+    )
+    connector: BaseConnector | None = None
+    if instantiation_config is not None:
+        try:
+            connector = instantiate_connector(
+                db_session=db_session,
+                source=source,
+                input_type=input_type,
+                connector_specific_config=instantiation_config,
+                credential=credential,
+            )
+        except Exception as e:
+            logger.warning(
+                "Could not instantiate %s connector for capability checks; "
+                "instance-requiring checks will be skipped: %s",
+                source,
+                e,
+            )
+
+    credential_json = (
+        credential.credential_json.get_value(apply_mask=False)
+        if credential.credential_json
+        else {}
+    )
+    context = CapabilityCheckContext(
+        source=source,
+        credential_json=credential_json,
+        connector=connector,
+        # The real config only, never the probe config: checks marked
+        # requires_connector_config must skip on config-less runs.
+        connector_specific_config=connector_specific_config,
+    )
+    results = run_capability_checks(checks, context)
+    return CredentialCapabilityReport(
+        credential_id=credential.id,
+        source=source,
+        connector_id=connector_id,
+        checked_at=datetime.now(timezone.utc),
+        trigger=trigger,
+        verdicts=compute_capability_verdicts(
+            get_applicable_capabilities(source), results
+        ),
+        check_results=results,
+    )

@@ -106,7 +106,7 @@ def identify_connector_class(
 def instantiate_connector(
     db_session: Session,
     source: DocumentSource,
-    input_type: InputType,
+    input_type: InputType | None,
     connector_specific_config: dict[str, Any],
     credential: Credential,
     raw_file_callback: RawFileCallback | None = None,
