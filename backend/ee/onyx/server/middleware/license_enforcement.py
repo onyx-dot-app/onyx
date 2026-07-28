@@ -61,12 +61,14 @@ from collections.abc import Awaitable, Callable
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.concurrency import run_in_threadpool
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.configs.license_enforcement_config import (
     LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
 )
 from ee.onyx.db.license import get_cached_license_metadata, refresh_license_cache
+from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.utils.license import maybe_schedule_license_reclaim
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -85,6 +87,11 @@ def _is_path_allowed(path: str) -> bool:
 # request to a genuinely gated instance takes that branch, pre-auth.
 _GATED_RECHECK_INTERVAL_SEC = 30.0
 _last_gated_recheck = 0.0
+
+
+def _refresh_from_db(tenant_id: str) -> LicenseMetadata | None:
+    with get_session_with_current_tenant() as db_session:
+        return refresh_license_cache(db_session, tenant_id)
 
 
 def _should_recheck_gated() -> bool:
@@ -142,7 +149,11 @@ def add_license_enforcement_middleware(
 
             if metadata:
                 # Runs before any gating decision so a gated instance heals.
-                maybe_schedule_license_reclaim(metadata.expires_at, tenant_id)
+                # Off the event loop: it does Redis and broker I/O with no
+                # socket timeout, and this middleware is async.
+                await run_in_threadpool(
+                    maybe_schedule_license_reclaim, metadata.expires_at, tenant_id
+                )
 
                 # User HAS a license (current or expired)
                 if (
@@ -152,8 +163,7 @@ def add_license_enforcement_middleware(
                     # Re-read the row before gating: a renewal whose cache
                     # write failed must not stay gated for the entry's TTL.
                     try:
-                        with get_session_with_current_tenant() as db_session:
-                            refreshed = refresh_license_cache(db_session, tenant_id)
+                        refreshed = await run_in_threadpool(_refresh_from_db, tenant_id)
                         if refreshed:
                             metadata = refreshed
                     except Exception as e:

@@ -80,7 +80,7 @@ class TestVerifyAndStoreLicense:
 
         assert result == payload
         mock_upsert.assert_called_once_with(db_session, "signed-license", commit=False)
-        mock_publish_cache.assert_called_once_with(payload, db_session)
+        mock_publish_cache.assert_called_once_with(db_session)
 
     @patch("ee.onyx.db.license.upsert_license")
     @patch("ee.onyx.utils.license.verify_license_signature")
@@ -137,7 +137,7 @@ class TestReclaimLicenseFromControlPlane:
         # incoming one, then the stored one again for the staleness compare.
         assert call("signed-license") in mock_verify.call_args_list
         mock_upsert.assert_called_once_with(db_session, "signed-license", commit=False)
-        mock_publish_cache.assert_called_once_with(payload, db_session)
+        mock_publish_cache.assert_called_once_with(db_session)
 
     @pytest.mark.parametrize(
         "license_row",
@@ -165,12 +165,15 @@ class TestReclaimLicenseFromControlPlane:
 
 class TestPublishLicenseCache:
     """Runs after the store commits and outside its lock, so it must never
-    raise and must yield to a newer entry another writer already published."""
+    raise, must converge on current row state, and must yield to a newer
+    entry another writer already published."""
 
     @pytest.fixture(autouse=True)
     def _cache_backend(self) -> Generator[MagicMock, None, None]:
         with patch("ee.onyx.db.license.get_cache_backend") as mock_get_cache:
-            mock_get_cache.return_value.lock.return_value.acquire.return_value = True
+            lock = mock_get_cache.return_value.lock.return_value
+            lock.acquire.return_value = True
+            lock.owned.return_value = True
             yield mock_get_cache
 
     @pytest.fixture(autouse=True)
@@ -178,6 +181,12 @@ class TestPublishLicenseCache:
         with patch("ee.onyx.db.license.get_license") as mock_get_license:
             mock_get_license.return_value = MagicMock(license_data="blob")
             yield mock_get_license
+
+    @pytest.fixture(autouse=True)
+    def _row_payload(self) -> Generator[MagicMock, None, None]:
+        with patch("ee.onyx.utils.license.verify_license_signature") as mock_verify:
+            mock_verify.return_value = _make_license_payload()
+            yield mock_verify
 
     @patch("ee.onyx.db.license.invalidate_license_cache")
     @patch("ee.onyx.db.license.update_license_cache")
@@ -192,7 +201,7 @@ class TestPublishLicenseCache:
     ) -> None:
         mock_update_cache.side_effect = RuntimeError("cache failed")
 
-        publish_license_cache(_make_license_payload(), MagicMock())
+        publish_license_cache(MagicMock())
 
         mock_invalidate.assert_called_once()
         mock_logger.warning.assert_called_once()
@@ -200,16 +209,32 @@ class TestPublishLicenseCache:
     @patch("ee.onyx.db.license.update_license_cache")
     @patch("ee.onyx.db.license.get_cached_license_metadata")
     def test_yields_to_a_newer_cached_entry(
-        self, mock_cached: MagicMock, mock_update_cache: MagicMock
+        self,
+        mock_cached: MagicMock,
+        mock_update_cache: MagicMock,
+        _row_payload: MagicMock,
     ) -> None:
-        payload = _make_license_payload()
         mock_cached.return_value = MagicMock(
-            issued_at=payload.issued_at + timedelta(hours=1)
+            issued_at=_row_payload.return_value.issued_at + timedelta(hours=1)
         )
 
-        publish_license_cache(payload, MagicMock())
+        publish_license_cache(MagicMock())
 
         mock_update_cache.assert_not_called()
+
+    @patch("ee.onyx.db.license.update_license_cache")
+    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
+    def test_publishes_current_row_state(
+        self,
+        _mock_cached: MagicMock,
+        mock_update_cache: MagicMock,
+        _row_payload: MagicMock,
+    ) -> None:
+        """The entry derives from the row re-read under the lock, so a slow
+        publisher advertises its overtaker's license rather than its own."""
+        publish_license_cache(MagicMock())
+
+        assert mock_update_cache.call_args.args[0] is _row_payload.return_value
 
     @patch("ee.onyx.db.license.update_license_cache")
     @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
@@ -223,7 +248,7 @@ class TestPublishLicenseCache:
         publish in the opposite order to the one they committed in."""
         lock = _cache_backend.return_value.lock.return_value
 
-        publish_license_cache(_make_license_payload(), MagicMock())
+        publish_license_cache(MagicMock())
 
         mock_update_cache.assert_called_once()
         lock.acquire.assert_called_once()
@@ -238,9 +263,7 @@ class TestPublishLicenseCache:
             ),
             pytest.param(
                 lambda lock: setattr(
-                    lock,
-                    "acquire",
-                    MagicMock(side_effect=RuntimeError("no connection")),
+                    lock, "acquire", MagicMock(side_effect=RuntimeError("no conn"))
                 ),
                 id="raises",
             ),
@@ -256,12 +279,11 @@ class TestPublishLicenseCache:
         _cache_backend: MagicMock,
     ) -> None:
         """A committed license that never reaches the cache reads as unlicensed
-        to the enforcement middleware, and the Postgres backend holds this lock
-        on a second connection the middleware path may not be able to spare."""
+        to the enforcement middleware."""
         lock = _cache_backend.return_value.lock.return_value
         unavailable(lock)
 
-        publish_license_cache(_make_license_payload(), MagicMock())
+        publish_license_cache(MagicMock())
 
         mock_update_cache.assert_called_once()
         lock.release.assert_not_called()
@@ -280,9 +302,29 @@ class TestPublishLicenseCache:
         entry for the row the delete removed."""
         _row_present.return_value = None
 
-        publish_license_cache(_make_license_payload(), MagicMock())
+        publish_license_cache(MagicMock())
 
         mock_update_cache.assert_not_called()
+        mock_invalidate.assert_called_once()
+
+    @patch("ee.onyx.db.license.invalidate_license_cache")
+    @patch("ee.onyx.db.license.update_license_cache")
+    @patch("ee.onyx.db.license.get_cached_license_metadata", return_value=None)
+    def test_a_lost_lease_drops_the_entry(
+        self,
+        _mock_cached: MagicMock,
+        mock_update_cache: MagicMock,
+        mock_invalidate: MagicMock,
+        _cache_backend: MagicMock,
+    ) -> None:
+        """A write that outlived its lease may have raced a delete's
+        invalidate, so a dropped entry beats a possibly-resurrected one."""
+        lock = _cache_backend.return_value.lock.return_value
+        lock.owned.side_effect = [False, False]
+
+        publish_license_cache(MagicMock())
+
+        mock_update_cache.assert_called_once()
         mock_invalidate.assert_called_once()
 
 

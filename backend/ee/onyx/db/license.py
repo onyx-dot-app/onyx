@@ -4,7 +4,7 @@ import hashlib
 import struct
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import NamedTuple
 
 from sqlalchemy import func, select, text
@@ -26,10 +26,11 @@ logger = setup_logger()
 LICENSE_METADATA_KEY = "license:metadata"
 LICENSE_CACHE_TTL_SECONDS = 86400  # 24 hours
 
-# Serializes the read-compare-write in publish_license_metadata, and bounds
-# acquisition: a contended lock publishes unserialized rather than stalling.
+# Serializes the row-read-compare-write in publish_license_metadata, and
+# bounds acquisition: a contended lock publishes unserialized rather than
+# stalling. The lease must comfortably outlive one SELECT plus two cache ops.
 _LICENSE_CACHE_LOCK_KEY = "license:metadata:write"
-_LICENSE_CACHE_LOCK_TIMEOUT_SEC = 10
+_LICENSE_CACHE_LOCK_TIMEOUT_SEC = 30
 
 # Namespaced + tenant-hashed so unrelated tenants don't block each other
 # and the lock id can't collide with other advisory locks in the codebase.
@@ -326,10 +327,17 @@ def update_license_cache(
         customer_tier=payload.customer_tier,
     )
 
+    # The cached status is computed at write time, so the entry must not
+    # outlive the boundary that would change it (expiry, then grace end).
+    ttl = LICENSE_CACHE_TTL_SECONDS
+    now = datetime.now(timezone.utc)
+    for boundary in (payload.expires_at, effective_grace_end):
+        if boundary > now:
+            ttl = min(ttl, max(60, int((boundary - now).total_seconds()) + 1))
     cache.set(
         LICENSE_METADATA_KEY,
         metadata.model_dump_json(),
-        ex=LICENSE_CACHE_TTL_SECONDS,
+        ex=ttl,
     )
 
     logger.info(
@@ -339,36 +347,50 @@ def update_license_cache(
 
 
 def publish_license_metadata(
-    payload: LicensePayload,
     db_session: Session,
     tenant_id: str | None = None,
     wait_for_lock: bool = True,
 ) -> LicenseMetadata | None:
-    """Cache metadata for *payload* unless a newer license is already cached,
-    or None without caching when the license row no longer exists.
+    """Rebuild the cache from the license row, or None (uncached) without one.
 
-    Writers commit under the store lock but publish after releasing it, so
-    without serializing the compare-and-write two of them can commit in one
-    order and publish in the other, leaving the cache older than the row. The
-    row re-read under the same lock keeps a publish from resurrecting an entry
-    for a license a concurrent delete just removed.
+    Writers commit under the store lock but publish after releasing it, so two
+    of them can commit in one order and publish in the other. Deriving the
+    entry from the row re-read under the cache write lock makes every publish
+    converge on current row state: a slow publisher advertises its overtaker's
+    license, and one that outlived a delete writes nothing.
+
+    Raises ValueError when the stored blob does not verify.
 
     wait_for_lock=False is for callers that cannot afford to wait on a
     contended lock, and gives up serializing rather than the write itself.
     """
-    with _license_cache_lock(tenant_id, wait_for_lock):
+    # Deferred import: ee.onyx.utils.license imports this module.
+    from ee.onyx.utils.license import verify_license_signature
+
+    with _license_cache_lock(tenant_id, wait_for_lock) as lock:
         db_session.expire_all()
-        if get_license(db_session) is None:
+        license_row = get_license(db_session)
+        if license_row is None:
             invalidate_license_cache(tenant_id)
             return None
+        payload = verify_license_signature(license_row.license_data)
         cached = get_cached_license_metadata(tenant_id)
         if cached and cached.issued_at > payload.issued_at:
             return cached
-        return update_license_cache(payload, tenant_id=tenant_id)
+        metadata = update_license_cache(payload, tenant_id=tenant_id)
+        if lock is not None and not lock.owned():
+            # The lease expired mid-publish, so this write raced whatever
+            # took the lock over. A dropped entry rebuilds on the next read.
+            # A wrong one serves entitlements for its whole TTL.
+            logger.warning("License cache lease lost mid-publish, dropping entry")
+            invalidate_license_cache(tenant_id)
+        return metadata
 
 
 @contextmanager
-def _license_cache_lock(tenant_id: str | None, wait: bool) -> Generator[None]:
+def _license_cache_lock(
+    tenant_id: str | None, wait: bool
+) -> Generator[CacheLock | None]:
     """Serialize the guarded block, or run it unserialized if that is not possible.
 
     Serializing is an improvement on an unserialized write, never a
@@ -392,7 +414,7 @@ def _license_cache_lock(tenant_id: str | None, wait: bool) -> Generator[None]:
         logger.warning("License cache lock errored (%s), publishing unserialized", e)
 
     try:
-        yield
+        yield lock
     finally:
         # Releasing a lease that already expired raises.
         if lock is not None and lock.owned():
@@ -413,22 +435,11 @@ def refresh_license_cache(
     Returns:
         LicenseMetadata if license exists, None otherwise
     """
-    from ee.onyx.utils.license import verify_license_signature
-
-    # No store lock: this rebuild must not hold one across cache I/O. Losing a
-    # race with a concurrent store is caught by the issued_at compare below.
-    db_session.expire_all()
-    license_record = get_license(db_session)
-    if not license_record:
-        invalidate_license_cache(tenant_id)
-        return None
-
     try:
-        payload = verify_license_signature(license_record.license_data)
         # Never waits: this must be callable from an event loop, and the
         # Postgres lock's acquisition poll sleeps.
         return publish_license_metadata(
-            payload, db_session, tenant_id=tenant_id, wait_for_lock=False
+            db_session, tenant_id=tenant_id, wait_for_lock=False
         )
     except ValueError as e:
         logger.error("Failed to verify license during cache refresh: %s", e)

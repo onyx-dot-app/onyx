@@ -165,8 +165,8 @@ def _is_stale_replacement(stored_data: str, incoming: LicensePayload) -> bool:
     return True
 
 
-def publish_license_cache(payload: LicensePayload, db_session: Session) -> None:
-    """Publish metadata for a license already committed. Never raises.
+def publish_license_cache(db_session: Session) -> None:
+    """Publish metadata for the committed license row. Never raises.
 
     Drops the cached entry on failure rather than leaving a superseded one to
     serve out its TTL.
@@ -175,7 +175,7 @@ def publish_license_cache(payload: LicensePayload, db_session: Session) -> None:
     from ee.onyx.db.license import invalidate_license_cache, publish_license_metadata
 
     try:
-        publish_license_metadata(payload, db_session)
+        publish_license_metadata(db_session)
     except Exception as cache_error:
         logger.warning("Failed to publish license cache: %s", cache_error)
         try:
@@ -236,7 +236,7 @@ def verify_and_store_license(
     db_session.commit()
 
     resume_license_reclaim()
-    publish_license_cache(payload, db_session)
+    publish_license_cache(db_session)
     return payload
 
 
