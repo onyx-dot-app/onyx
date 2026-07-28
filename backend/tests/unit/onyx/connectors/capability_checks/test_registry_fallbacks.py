@@ -13,14 +13,18 @@ from onyx.connectors.capability_checks.registry import (
     get_applicable_capabilities,
     get_capability_checks,
 )
+from onyx.connectors.interfaces import BaseConnector
 
 
 def test_unregistered_source_gets_connector_settings_fallback() -> None:
-    """Verifies fallback synthesis for a source with no named INDEXING checks."""
+    """
+    Verifies fallback synthesis for a source with no named INDEXING checks.
+    """
     # Under test.
     checks = get_capability_checks(DocumentSource.GITHUB)
 
-    # Postcondition. On OSS builds only the synthesized INDEXING check exists.
+    # Postcondition.
+    # On OSS builds only the synthesized INDEXING check exists.
     indexing_checks = [
         check for check in checks if check.capability == CredentialCapability.INDEXING
     ]
@@ -33,9 +37,10 @@ def test_unregistered_source_gets_connector_settings_fallback() -> None:
 
 
 def test_registered_source_gets_no_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verifies that registered named checks shadow the INDEXING fallback."""
-    # Precondition. Nothing is registered at framework stage, so register a
-    # named check the way a per-connector session would.
+    """Verifies that registered named checks clobber the INDEXING fallback."""
+    # Precondition.
+    # Nothing is registered at framework stage, so register a named check the
+    # way a per-connector session would.
     named_check = CapabilityCheck(
         capability=CredentialCapability.INDEXING,
         check_id="github_named_check",
@@ -58,9 +63,11 @@ def test_registered_source_gets_no_fallback(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_fallback_check_calls_validate_connector_settings() -> None:
-    """Verifies the synthesized fallback wraps ``validate_connector_settings``."""
+    """
+    Verifies the synthesized fallback wraps ``validate_connector_settings``.
+    """
     # Precondition.
-    connector = MagicMock()
+    connector = MagicMock(spec=BaseConnector)
     context = CapabilityCheckContext(
         source=DocumentSource.GITHUB,
         credential_json={},
@@ -77,8 +84,9 @@ def test_fallback_check_calls_validate_connector_settings() -> None:
 
 def test_oss_build_only_has_indexing_capability() -> None:
     """Verifies the EE-noop path: perm-sync capabilities do not exist on OSS."""
-    # Under test and postcondition. Google Drive is sync-capable on EE, so it
-    # is the strongest witness that the OSS noop returns INDEXING only.
+    # Under test and postcondition.
+    # Google Drive is sync-capable on EE, so it is the strongest witness that
+    # the OSS noop returns INDEXING only.
     assert get_applicable_capabilities(DocumentSource.GOOGLE_DRIVE) == {
         CredentialCapability.INDEXING
     }

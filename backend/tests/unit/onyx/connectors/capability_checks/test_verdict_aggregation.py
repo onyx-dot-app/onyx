@@ -23,7 +23,10 @@ def _result(
 
 
 def test_not_applicable_wins_over_all_results() -> None:
-    """Verifies that an inapplicable capability is NOT_APPLICABLE regardless of results."""
+    """
+    Verifies that an inapplicable capability is NOT_APPLICABLE regardless of
+    results.
+    """
     # Precondition.
     results = [_result(CapabilityCheckStatus.FAILED)]
 
@@ -62,12 +65,33 @@ def test_only_optional_failures_pass_with_warnings() -> None:
     )
 
 
-def test_optional_failure_outranks_indeterminate() -> None:
-    """Verifies the plan-mandated ordering: warnings before INDETERMINATE."""
+def test_required_indeterminate_outranks_optional_failure() -> None:
+    """
+    Verifies that an unverified required check blocks any PASSED claim, even
+    when a non-required check produced a definite warning.
+    """
     # Precondition.
     results = [
         _result(CapabilityCheckStatus.FAILED, required=False),
-        _result(CapabilityCheckStatus.INDETERMINATE),
+        _result(CapabilityCheckStatus.INDETERMINATE, required=True),
+    ]
+
+    # Under test and postcondition.
+    assert (
+        aggregate_capability_verdict(True, results) == CapabilityVerdict.INDETERMINATE
+    )
+
+
+def test_optional_failure_outranks_optional_indeterminate() -> None:
+    """
+    Verifies that with the required core verified, a definite warning outranks
+    a transient non-required indeterminate.
+    """
+    # Precondition.
+    results = [
+        _result(CapabilityCheckStatus.PASSED, required=True),
+        _result(CapabilityCheckStatus.FAILED, required=False),
+        _result(CapabilityCheckStatus.INDETERMINATE, required=False),
     ]
 
     # Under test and postcondition.
@@ -78,7 +102,9 @@ def test_optional_failure_outranks_indeterminate() -> None:
 
 
 def test_indeterminate_without_failures() -> None:
-    """Verifies that a transient error yields INDETERMINATE when nothing failed."""
+    """
+    Verifies that a transient error yields INDETERMINATE when nothing failed.
+    """
     # Precondition.
     results = [
         _result(CapabilityCheckStatus.PASSED),
@@ -132,8 +158,9 @@ def test_all_passed_yields_passed() -> None:
 
 def test_compute_capability_verdicts_slack_shaped_scenario() -> None:
     """Verifies per-capability grouping for a Slack-shaped report."""
-    # Precondition. Indexing passes, doc perm sync has a required failure, and
-    # group sync is not applicable (Slack has none by design).
+    # Precondition.
+    # Indexing passes, doc perm sync has a required failure, and group sync is
+    # not applicable (Slack has none by design).
     results = [
         _result(CapabilityCheckStatus.PASSED, capability=CredentialCapability.INDEXING),
         _result(

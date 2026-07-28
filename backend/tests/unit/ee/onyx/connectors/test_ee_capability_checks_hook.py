@@ -13,6 +13,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CredentialCapability,
 )
+from onyx.connectors.interfaces import BaseConnector
 
 
 def test_slack_perm_sync_capabilities_exclude_group_sync() -> None:
@@ -33,14 +34,17 @@ def test_google_drive_has_both_perm_sync_capabilities() -> None:
 
 
 def test_censoring_only_source_has_no_perm_sync_capabilities() -> None:
-    """Verifies Salesforce (query-time censoring only) maps to no capabilities."""
+    """
+    Verifies Salesforce (query-time censoring only) maps to no capabilities.
+    """
     # Under test and postcondition.
     assert get_applicable_perm_sync_capabilities(DocumentSource.SALESFORCE) == set()
 
 
 def test_fallback_synthesis_respects_applicability() -> None:
-    """Verifies only applicable capabilities get a fallback (Slack has no
-    group sync by design, so only the doc-sync fallback is synthesized).
+    """
+    Verifies only applicable capabilities get a fallback (Slack has no group
+    sync by design, so only the doc-sync fallback is synthesized).
     """
     # Under test.
     checks = get_perm_sync_capability_checks(DocumentSource.SLACK)
@@ -54,12 +58,15 @@ def test_fallback_synthesis_respects_applicability() -> None:
 
 
 def test_unregistered_sync_source_gets_shared_fallback_checks() -> None:
-    """Verifies fallback synthesis for a sync-capable source with no named checks."""
+    """
+    Verifies fallback synthesis for a sync-capable source with no named checks.
+    """
     # Under test.
     checks = get_perm_sync_capability_checks(DocumentSource.GOOGLE_DRIVE)
 
-    # Postcondition. One fallback per applicable capability, sharing a single
-    # run callable (and check_id) so the runner executes it once and mirrors.
+    # Postcondition.
+    # One fallback per applicable capability, sharing a single run callable (and
+    # check_id) so the runner executes it once and mirrors.
     assert {check.capability for check in checks} == {
         CredentialCapability.DOC_PERMISSION_SYNC,
         CredentialCapability.EXTERNAL_GROUP_SYNC,
@@ -69,12 +76,15 @@ def test_unregistered_sync_source_gets_shared_fallback_checks() -> None:
     assert {check.check_id for check in checks} == {"google_drive_perm_sync"}
 
 
-def test_registered_checks_shadow_only_their_capability(
+def test_registered_checks_clobber_only_their_capability(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verifies named checks shadow the fallback per capability, not per source."""
-    # Precondition. Nothing is registered at framework stage, so register a
-    # named doc-sync check the way a per-connector session would.
+    """
+    Verifies named checks clobber the fallback per capability, not per source.
+    """
+    # Precondition.
+    # Nothing is registered at framework stage, so register a named doc-sync
+    # check the way a per-connector session would.
     named_check = CapabilityCheck(
         capability=CredentialCapability.DOC_PERMISSION_SYNC,
         check_id="google_drive_named_check",
@@ -90,8 +100,9 @@ def test_registered_checks_shadow_only_their_capability(
     # Under test.
     checks = get_perm_sync_capability_checks(DocumentSource.GOOGLE_DRIVE)
 
-    # Postcondition. Doc sync uses the named check; group sync, applicable but
-    # still unregistered, keeps its fallback.
+    # Postcondition.
+    # Doc sync uses the named check; group sync, applicable but still
+    # unregistered, keeps its fallback.
     doc_sync_checks = [
         check
         for check in checks
@@ -116,7 +127,7 @@ def test_censoring_only_source_gets_no_fallback_checks() -> None:
 def test_fallback_check_calls_validate_perm_sync() -> None:
     """Verifies the synthesized fallback wraps ``validate_perm_sync``."""
     # Precondition.
-    connector = MagicMock()
+    connector = MagicMock(spec=BaseConnector)
     context = CapabilityCheckContext(
         source=DocumentSource.GOOGLE_DRIVE,
         credential_json={},

@@ -1,16 +1,17 @@
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import BaseConnector
 
 
 class CredentialCapability(str, Enum):
-    """User-visible capabilities a credential may or may not support for a source."""
+    """
+    User-visible capabilities a credential may or may not support for a source.
+    """
 
     INDEXING = "indexing"
     DOC_PERMISSION_SYNC = "doc_permission_sync"
@@ -22,10 +23,11 @@ class CapabilityCheckStatus(str, Enum):
     # A ``ConnectorValidationError``-family failure: real and actionable.
     FAILED = "failed"
     # Transient or unknown failure (``UnexpectedValidationError`` or any
-    # unrecognized exception). Mirrors the contract that such errors must
-    # never be treated as proof the credential is broken.
+    # unrecognized exception). Mirrors the contract that such errors must never
+    # be treated as proof the credential is broken.
     INDETERMINATE = "indeterminate"
-    # The check needs state (connector instance or config) that was not supplied.
+    # The check needs state (connector instance or config) that was not
+    # supplied.
     SKIPPED = "skipped"
 
 
@@ -40,14 +42,16 @@ class CapabilityVerdict(str, Enum):
     NOT_APPLICABLE = "not_applicable"
 
 
-@dataclass
-class CapabilityCheckContext:
+class CapabilityCheckContext(BaseModel):
     """Inputs available to a capability check at run time.
 
     ``connector`` and ``connector_specific_config`` are None for config-less
-    credential-time runs; the runner skips checks that declare a requirement
-    on them.
+    credential-time runs; the runner skips checks that declare a requirement on
+    them.
     """
+
+    # ``BaseConnector`` is not a pydantic type; validate by isinstance.
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     source: DocumentSource
     credential_json: dict[str, Any]
@@ -55,13 +59,15 @@ class CapabilityCheckContext:
     connector_specific_config: dict[str, Any] | None = None
 
 
-@dataclass(frozen=True)
-class CapabilityCheck:
-    """A named, declarative probe of one permission assumption a connector makes.
-
-    ``run`` raises a ``ValidationError``-family exception on failure and
-    returns nothing on success; the runner maps exceptions to statuses.
+class CapabilityCheck(BaseModel):
     """
+    A named, declarative probe of one permission assumption a connector makes.
+
+    ``run`` raises a ``ValidationError``-family exception on failure and returns
+    nothing on success; the runner maps exceptions to statuses.
+    """
+
+    model_config = ConfigDict(frozen=True)
 
     capability: CredentialCapability
     check_id: str
@@ -75,7 +81,7 @@ class CapabilityCheck:
     # Per-check hang guard in seconds; None falls back to the
     # ``CAPABILITY_CHECK_TIMEOUT_SECONDS`` default. Timing out maps to
     # INDETERMINATE, never FAILED.
-    timeout_seconds: int | None = None
+    timeout_seconds: float | None = None
     # True for synthesized wrappers around the legacy validation blobs
     # (``validate_connector_settings`` / ``validate_perm_sync``) rather than
     # named per-permission probes; the FE labels these "basic check".
@@ -106,8 +112,13 @@ def aggregate_capability_verdict(
 ) -> CapabilityVerdict:
     """Rolls the per-check results of one capability up into a single verdict.
 
-    Pure function. An empty result list aggregates to SKIPPED (vacuously,
-    "all checks were skipped").
+    Pure function. Required checks gate the verdict: a required failure is
+    FAILED, and a required indeterminate is INDETERMINATE, since the
+    capability's core is unverified and no PASSED claim can be made.
+    Non-required outcomes only downgrade: failures to PASSED_WITH_WARNINGS
+    (definite, stable, actionable), indeterminates to INDETERMINATE when no
+    warning outranks them (transient, self-resolves on re-run). An empty result
+    list aggregates to SKIPPED (vacuously, "all checks were skipped").
     """
     if not applicable:
         return CapabilityVerdict.NOT_APPLICABLE
@@ -116,6 +127,11 @@ def aggregate_capability_verdict(
         for result in results
     ):
         return CapabilityVerdict.FAILED
+    if any(
+        result.status == CapabilityCheckStatus.INDETERMINATE and result.required
+        for result in results
+    ):
+        return CapabilityVerdict.INDETERMINATE
     if any(result.status == CapabilityCheckStatus.FAILED for result in results):
         return CapabilityVerdict.PASSED_WITH_WARNINGS
     if any(result.status == CapabilityCheckStatus.INDETERMINATE for result in results):

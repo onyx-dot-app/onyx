@@ -25,7 +25,7 @@ def _make_check(
     requires_connector_instance: bool = False,
     requires_connector_config: bool = False,
     capability: CredentialCapability = CredentialCapability.INDEXING,
-    timeout_seconds: int | None = None,
+    timeout_seconds: float | None = None,
     is_fallback: bool = False,
 ) -> CapabilityCheck:
     return CapabilityCheck(
@@ -136,11 +136,13 @@ def test_skips_instance_requiring_check_without_connector() -> None:
 
 
 def test_skips_config_requiring_check_even_with_connector() -> None:
-    """Verifies that config-requiring checks skip when only an instance exists."""
+    """
+    Verifies that config-requiring checks skip when only an instance exists.
+    """
     # Precondition.
     run = MagicMock()
     check = _make_check(run, requires_connector_config=True)
-    connector = cast(BaseConnector, MagicMock())
+    connector = cast(BaseConnector, MagicMock(spec=BaseConnector))
 
     # Under test.
     results = run_capability_checks(
@@ -195,13 +197,19 @@ def test_failure_does_not_stop_subsequent_checks() -> None:
 
 
 def test_timeout_maps_to_indeterminate() -> None:
-    """Verifies that the per-check hang guard yields INDETERMINATE, not FAILED."""
+    """
+    Verifies that the per-check hang guard yields INDETERMINATE, not FAILED.
+    """
+    # Precondition.
+    # The sleep must exceed the timeout.
+    timeout_seconds = 0.5
+    slow_run_duration_seconds = 1
+    assert slow_run_duration_seconds > timeout_seconds
 
-    # Precondition. The sleep must exceed the one-second guard.
     def slow_run(_context: CapabilityCheckContext) -> None:
-        time.sleep(2)
+        time.sleep(slow_run_duration_seconds)
 
-    check = _make_check(slow_run, timeout_seconds=1)
+    check = _make_check(slow_run, timeout_seconds=timeout_seconds)
 
     # Under test.
     results = run_capability_checks([check], _context())
@@ -213,8 +221,11 @@ def test_timeout_maps_to_indeterminate() -> None:
 
 
 def test_shared_run_callable_executes_once_and_mirrors() -> None:
-    """Verifies the shared perm-sync fallback contract: one execution, two results."""
-    # Precondition. One callable registered under both sync capabilities.
+    """
+    Verifies the shared perm-sync fallback contract: one execution, two results.
+    """
+    # Precondition.
+    # One callable registered under both sync capabilities.
     call_count = 0
 
     def shared_run(_context: CapabilityCheckContext) -> None:
@@ -238,7 +249,8 @@ def test_shared_run_callable_executes_once_and_mirrors() -> None:
     # Under test.
     results = run_capability_checks(checks, _context())
 
-    # Postcondition. Both capabilities carry the mirrored outcome.
+    # Postcondition.
+    # Both capabilities carry the mirrored outcome.
     assert call_count == 1
     assert [result.status for result in results] == [
         CapabilityCheckStatus.FAILED,

@@ -18,8 +18,7 @@ from onyx.connectors.capability_checks.models import (
 )
 
 # Named perm-sync checks per source. Empty at framework stage: per-connector
-# work registers named checks here, shadowing the synthesized fallback for the
-# capabilities that apply to that source.
+# work registers named checks here.
 _DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {}
 
 _EXTERNAL_GROUP_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {}
@@ -33,12 +32,13 @@ def _run_perm_sync_fallback(context: CapabilityCheckContext) -> None:
 def _build_perm_sync_fallback_check(
     source: DocumentSource, capability: CredentialCapability
 ) -> CapabilityCheck:
-    """Builds the baseline check for a perm-sync capability with no named checks.
+    """
+    Builds the baseline check for a perm-sync capability with no named checks.
 
     Wraps the legacy ``validate_perm_sync`` blob, which covers doc sync and
     group sync together; the checks for both capabilities therefore share one
-    run callable (and one check_id), and the runner executes it once per run
-    and mirrors the outcome onto each.
+    run callable (and one check_id), and the runner executes it once per run and
+    mirrors the outcome onto each.
     """
     return CapabilityCheck(
         capability=capability,
