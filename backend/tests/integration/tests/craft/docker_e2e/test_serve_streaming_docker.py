@@ -320,29 +320,34 @@ def test_parallel_sessions_on_shared_sandbox_stream_independently(
     ``/event`` bus and both hung waiting for terminators)."""
     first = _provision_live_session(provision_sandbox, streaming_user)
     try:
+        # The sleep keeps turn 1 live while session 2 provisions below, so the
+        # two turns genuinely stream in parallel on the shared opencode-serve.
         turn_one = BuildSessionManager.start_turn(
             streaming_user,
             first.session_id,
-            "Write the word ALPHA on 20 separate lines, nothing else.",
+            "Run the bash command `sleep 45`, then write the word ALPHA on "
+            "20 separate lines, nothing else.",
         )
-        # Session 1 has a message now, so this provisions a distinct second
-        # session (the create endpoint reuses a still-empty session otherwise).
-        second = _provision_live_session(provision_sandbox, streaming_user)
-        assert second.container_name == first.container_name, (
-            "expected both sessions to share the user's sandbox container"
-        )
-        turn_two = BuildSessionManager.start_turn(
-            streaming_user,
-            second.session_id,
-            "Write the word BRAVO on 20 separate lines, nothing else.",
-        )
-
         with ThreadPoolExecutor(max_workers=2) as pool:
+            # Attach immediately: the events endpoint is attach-only and 409s
+            # once a turn is no longer the session's active turn.
             future_one = pool.submit(
                 _collect_turn_events,
                 streaming_user,
                 first.session_id,
                 turn_one.turn_id,
+            )
+            # Session 1 has a message now, so this provisions a distinct
+            # second session (the create endpoint reuses a still-empty session
+            # otherwise).
+            second = _provision_live_session(provision_sandbox, streaming_user)
+            assert second.container_name == first.container_name, (
+                "expected both sessions to share the user's sandbox container"
+            )
+            turn_two = BuildSessionManager.start_turn(
+                streaming_user,
+                second.session_id,
+                "Write the word BRAVO on 20 separate lines, nothing else.",
             )
             future_two = pool.submit(
                 _collect_turn_events,
