@@ -18,6 +18,7 @@ from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import has_permission
 from onyx.auth.scoped_permissions import assert_within_scope
+from onyx.auth.scoped_permissions import within_scope
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
@@ -378,6 +379,89 @@ def _assert_persona_update_within_managed_scope(
         requested_group_ids=requested_group_ids,
         is_non_public=not current_is_public and not requested_is_public,
     )
+
+
+def persona_edit_within_scope(
+    user: User,
+    db_session: Session,
+    *,
+    group_ids: list[int],
+    is_public: bool,
+    managed_group_ids: set[int] | None = None,
+) -> bool:
+    """Read-mode of ``_assert_persona_update_within_managed_scope`` (requested := current).
+    Non-SCOPED holders and personal (no-group) agents pass; a scoped manager passes only
+    when within_scope holds. Pinned to that guard by the contract test."""
+    if has_permission(user, Permission.MANAGE_AGENTS) is not PermissionAuthority.SCOPED:
+        return True
+    if not group_ids:
+        return True
+    return within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_AGENTS,
+        current_group_ids=group_ids,
+        requested_group_ids=group_ids,
+        is_non_public=not is_public,
+        managed_group_ids=managed_group_ids,
+    )
+
+
+def can_edit_persona(
+    user: User,
+    persona: Persona,
+    db_session: Session,
+    *,
+    is_editable: bool,
+    managed_group_ids: set[int] | None = None,
+) -> bool:
+    """The get_editable filter is a superset (owner ∪ EDITOR-share ∪ managed-scope), so a
+    scoped manager EDITOR-shared on an out-of-scope grouped agent qualifies there but is
+    ANDed out by the managed-scope gate — matching the write path. ``is_editable`` is that
+    filter's result."""
+    if not is_editable:
+        return False
+    return persona_edit_within_scope(
+        user,
+        db_session,
+        group_ids=[group.id for group in persona.groups],
+        is_public=persona.is_public,
+        managed_group_ids=managed_group_ids,
+    )
+
+
+def is_persona_editable_by_user(
+    db_session: Session, persona_id: int, user: User
+) -> bool:
+    """Non-raising editability check via the same get_editable filter the edit affordance
+    should reflect (superset: owner ∪ EDITOR-share ∪ managed-scope)."""
+    stmt = select(Persona).where(Persona.id == persona_id).distinct()
+    stmt = _add_user_filters(stmt=stmt, user=user, get_editable=True)
+    return db_session.scalars(stmt).one_or_none() is not None
+
+
+def can_view_persona_stats(user: User, persona: Persona) -> bool:
+    """Owner-or-full-admin — mirrors ee ``user_can_view_assistant_stats`` (pinned by the
+    contract test). Stats are EE-only but the gate itself is trivially MIT-computable."""
+    return has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS) or (
+        persona.user_id == user.id
+    )
+
+
+def can_delete_persona(user: User, persona: Persona, db_session: Session) -> bool:
+    """Owner-or-admin — mirrors the delete/publish handlers' ownership check (via
+    ``get_persona_by_id(is_for_edit=True)``): a global MANAGE_AGENTS holder, the owner,
+    or an owner-group member. A scoped manager is NOT included: deleting or publishing a
+    managed-group agent is owner/admin only, not a manager scope."""
+    if has_global_permission(user, Permission.MANAGE_AGENTS):
+        return True
+    if persona.user_id == user.id:
+        return True
+    if persona.owner_group_id is not None:
+        return persona.owner_group_id in get_user_group_ids_for_user(
+            db_session, user.id
+        )
+    return False
 
 
 def create_update_persona(

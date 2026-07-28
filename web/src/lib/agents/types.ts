@@ -69,6 +69,8 @@ export interface Agent extends MinimalAgent {
 
 export interface FullAgent extends Agent {
   search_start_date: string | null;
+  // per-action affordance map for the requesting user; stamped by GET /persona/{id}
+  permissions: Record<string, boolean>;
 }
 
 // ── Upsert / API parameter types ──────────────────────────────────────────────

@@ -396,6 +396,8 @@ class FullPersonaSnapshot(PersonaSnapshot):
     search_start_date: datetime | None = None
     # Per-requesting-user context, set by the single-persona endpoint
     user_permission: PersonaAccessLevel | None = None
+    # per-action affordance map for the requesting user; stamped by the endpoint
+    permissions: dict[str, bool] = Field(default_factory=dict)
     admin_count: int = 0
     ownership_vacant: bool = False
 

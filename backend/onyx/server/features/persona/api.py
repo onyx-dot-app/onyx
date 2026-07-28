@@ -13,6 +13,8 @@ from pydantic import model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from onyx.auth.permission_projection import persona_permissions
+from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_limited_user
@@ -25,6 +27,9 @@ from onyx.db.enums import Permission
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import User
+from onyx.db.persona import can_delete_persona
+from onyx.db.persona import can_edit_persona
+from onyx.db.persona import can_view_persona_stats
 from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
 from onyx.db.persona import delete_persona_label
@@ -35,6 +40,7 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import get_persona_count_for_user
 from onyx.db.persona import get_persona_snapshots_for_user
 from onyx.db.persona import get_persona_snapshots_paginated
+from onyx.db.persona import is_persona_editable_by_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
 from onyx.db.persona import update_persona_featured
@@ -596,6 +602,22 @@ def get_persona(
     if user is not None:
         snapshot.user_permission = get_persona_access_level(
             persona, user, user_group_ids
+        )
+        snapshot.permissions = persona_permissions(
+            can_edit=can_edit_persona(
+                user,
+                persona,
+                db_session,
+                is_editable=is_persona_editable_by_user(db_session, persona.id, user),
+            ),
+            can_view_stats=can_view_persona_stats(user, persona),
+            can_delete=can_delete_persona(user, persona, db_session),
+            is_manage_agents_admin=has_global_permission(
+                user, Permission.MANAGE_AGENTS
+            ),
+            is_full_admin=has_global_permission(
+                user, Permission.FULL_ADMIN_PANEL_ACCESS
+            ),
         )
     return snapshot
 

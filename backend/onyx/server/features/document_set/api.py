@@ -3,8 +3,12 @@ from fastapi import Depends
 from fastapi import Query
 from sqlalchemy.orm import Session
 
+from onyx.auth.permission_projection import document_set_permissions
+from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
+from onyx.auth.scoped_permissions import get_scoped_groups
+from onyx.auth.scoped_permissions import within_scope
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority
@@ -165,7 +169,37 @@ def list_document_sets_for_user(
     document_sets = fetch_all_document_sets_for_user(
         db_session=db_session, user=user, get_editable=get_editable
     )
-    return [DocumentSetSummary.from_model(ds) for ds in document_sets]
+    # Stamp editability from the shared within_scope decision on each row's
+    # already-loaded groups, with the managed-group set resolved once — no second
+    # document-set query, and no client-side double-fetch.
+    managed_group_ids = get_scoped_groups(
+        user, db_session, Permission.MANAGE_DOCUMENT_SETS
+    )
+    is_document_sets_admin = has_global_permission(
+        user, Permission.MANAGE_DOCUMENT_SETS
+    )
+    summaries: list[DocumentSetSummary] = []
+    for ds in document_sets:
+        group_ids = [group.id for group in ds.groups]
+        is_editable = within_scope(
+            user,
+            db_session,
+            permission=Permission.MANAGE_DOCUMENT_SETS,
+            current_group_ids=group_ids,
+            requested_group_ids=group_ids,
+            is_non_public=not ds.is_public,
+            managed_group_ids=managed_group_ids,
+        )
+        summaries.append(
+            DocumentSetSummary.from_model(
+                ds,
+                permissions=document_set_permissions(
+                    is_editable=is_editable,
+                    is_document_sets_admin=is_document_sets_admin,
+                ),
+            )
+        )
+    return summaries
 
 
 @router.get("/document-set-public")

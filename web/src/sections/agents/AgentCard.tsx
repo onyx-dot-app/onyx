@@ -11,7 +11,7 @@ import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { checkUserOwnsAgent } from "@/lib/agents/utils";
+import { can } from "@/lib/permissions/resource-actions";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
 import {
@@ -19,8 +19,6 @@ import {
   updateAgentFeaturedStatus,
 } from "@/lib/agents/svc";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions";
-import { Permission } from "@/lib/types";
 import {
   SvgActions,
   SvgBarChart,
@@ -52,16 +50,13 @@ export default function AgentCard({ agent }: AgentCardProps) {
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
     [agent.id, pinnedAgents]
   );
-  const { user, isAdmin, permissions } = useUser();
+  const { isAdmin } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const canUpdateFeaturedStatus = hasPermission(
-    permissions,
-    Permission.MANAGE_AGENTS
-  );
-  const isOwnedByUser = checkUserOwnsAgent(user, agent);
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
+  // Per-item affordances come from the full agent the server stamped, not ownership.
+  const canUpdateFeaturedStatus = can(fullAgent, "feature");
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -146,7 +141,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
               description={agent.description}
               rightChildren={
                 <>
-                  {isOwnedByUser && businessTier && (
+                  {can(fullAgent, "view_stats") && businessTier && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgBarChart}
@@ -158,7 +153,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
-                  {isOwnedByUser && (
+                  {can(fullAgent, "edit") && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgEdit}
@@ -170,7 +165,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
-                  {isOwnedByUser && (
+                  {can(fullAgent, "share") && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgShare}

@@ -17,6 +17,7 @@ import Title from "@/components/ui/title";
 import { DocumentSetSummary } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
+import { can } from "@/lib/permissions/resource-actions";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
 import { toast } from "@/hooks/useToast";
@@ -147,35 +148,20 @@ const EditRow = ({
 interface DocumentFeedbackTableProps {
   documentSets: DocumentSetSummary[];
   refresh: () => void;
-  refreshEditable: () => void;
-  editableDocumentSets: DocumentSetSummary[];
 }
 
 const DocumentSetTable = ({
   documentSets,
-  editableDocumentSets,
   refresh,
-  refreshEditable,
 }: DocumentFeedbackTableProps) => {
   const [page, setPage] = useState(1);
 
-  // sort by name for consistent ordering
-  documentSets.sort((a, b) => {
-    if (a.name < b.name) {
-      return -1;
-    } else if (a.name > b.name) {
-      return 1;
-    } else {
-      return 0;
-    }
+  // editable rows first, then by name — editability now rides on each row's
+  // permissions map, so no second fetch + set-diff is needed.
+  const sortedDocumentSets = [...documentSets].sort((a, b) => {
+    const editDiff = Number(can(b, "edit")) - Number(can(a, "edit"));
+    return editDiff !== 0 ? editDiff : a.name.localeCompare(b.name);
   });
-
-  const sortedDocumentSets = [
-    ...editableDocumentSets,
-    ...documentSets.filter(
-      (ds) => !editableDocumentSets.some((eds) => eds.id === ds.id)
-    ),
-  ];
 
   return (
     <div>
@@ -194,9 +180,7 @@ const DocumentSetTable = ({
           {sortedDocumentSets
             .slice((page - 1) * numToDisplay, page * numToDisplay)
             .map((documentSet) => {
-              const isEditable = editableDocumentSets.some(
-                (eds) => eds.id === documentSet.id
-              );
+              const isEditable = can(documentSet, "edit");
               return (
                 <TableRow key={documentSet.id}>
                   <TableCell className="whitespace-normal break-all">
@@ -322,7 +306,7 @@ const DocumentSetTable = ({
                             );
                           }
                           refresh();
-                          refreshEditable();
+                          refresh();
                         }}
                       />
                     ) : (
@@ -356,14 +340,7 @@ function Main() {
     refreshDocumentSets,
   } = useDocumentSets();
 
-  const {
-    data: editableDocumentSets,
-    isLoading: isEditableDocumentSetsLoading,
-    error: editableDocumentSetsError,
-    refreshDocumentSets: refreshEditableDocumentSets,
-  } = useDocumentSets(true);
-
-  if (isDocumentSetsLoading || isEditableDocumentSetsLoading) {
+  if (isDocumentSetsLoading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <ThreeDotsLoader />
@@ -373,10 +350,6 @@ function Main() {
 
   if (documentSetsError || !documentSets) {
     return <div>Error: {documentSetsError}</div>;
-  }
-
-  if (editableDocumentSetsError || !editableDocumentSets) {
-    return <div>Error: {editableDocumentSetsError}</div>;
   }
 
   return (
@@ -405,9 +378,7 @@ function Main() {
           <Divider />
           <DocumentSetTable
             documentSets={documentSets}
-            editableDocumentSets={editableDocumentSets}
             refresh={refreshDocumentSets}
-            refreshEditable={refreshEditableDocumentSets}
           />
         </>
       )}

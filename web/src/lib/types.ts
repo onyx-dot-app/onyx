@@ -452,6 +452,8 @@ export interface DocumentSetSummary {
   is_public: boolean;
   users: string[];
   groups: number[];
+  // per-action affordance map for the requesting user (mirrors the write-side gate)
+  permissions: Record<string, boolean>;
   federated_connector_summaries: FederatedConnectorSummary[];
 }
 
