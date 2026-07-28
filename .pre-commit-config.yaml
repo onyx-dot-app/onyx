@@ -68,18 +68,30 @@ repos:
         alias: docker-compose-sync
         name: sync docker compose files from template
         # Regenerates docker-compose.yml / docker-compose.prod.yml /
-        # docker-compose.prod-no-letsencrypt.yml from docker-compose.template.yml.
+        # docker-compose.prod-no-letsencrypt.yml from docker-compose.template.yml,
+        # then refreshes the copies of the guided-install deployment files that
+        # onyx-cli embeds (cli/internal/deploy/deployfiles/embedded/).
         # `ods generate-compose` ships in onyx-devtools (tools/ods); changes to the
-        # generator need an ods release before this hook picks them up.
+        # generator need an ods release before this hook picks them up — until the
+        # release that adds the embedded-copy sync, the extra trigger paths below
+        # are harmless no-ops (the cli module's drift test still gates staleness).
         args:
           ["--no-project", "--with=onyx-devtools", "ods", "generate-compose", "--write"]
         pass_filenames: false
         files: >-
-          (?x)^deployment/docker_compose/(
-            docker-compose\.template\.yml
-            |docker-compose\.yml
-            |docker-compose\.prod\.yml
-            |docker-compose\.prod-no-letsencrypt\.yml
+          (?x)^(
+            deployment/docker_compose/(
+              docker-compose\.template\.yml
+              |docker-compose\.yml
+              |docker-compose\.prod\.yml
+              |docker-compose\.prod-no-letsencrypt\.yml
+              |docker-compose\.onyx-lite\.yml
+              |docker-compose\.craft\.yml
+              |env\.template
+              |README\.md
+            )
+            |deployment/data/nginx/(app\.conf\.template|run-nginx\.sh)
+            |cli/internal/deploy/deployfiles/embedded/.+
           )$
       - id: uv-run
         alias: ty
