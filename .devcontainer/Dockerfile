@@ -3,11 +3,10 @@
 # Hub rate limits.
 ARG BASE_IMAGE_REGISTRY=docker.io
 
-# bun + node + go binary sources. Pinned via the registry prefix in their own stages because buildx
+# bun + node binary sources. Pinned via the registry prefix in their own stages because buildx
 # rejects variable expansion directly in `COPY --from=` -- the ARG is only expandable in a FROM.
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
 FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:05c08ce4291e9a58f59456a7985176defb12cdd42271f35ff81a3e167ea61d4c AS node_source
-FROM ${BASE_IMAGE_REGISTRY}/library/golang:1.26.4-trixie@sha256:68b7145ec43d1820b9a56704554b53d1520aa2a15cb5233e374188a31b2a1bce AS go_source
 
 FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:cc925e589b7543b910fea57a240468940003fbfc0515245a495dd0ad8fe7cef1
 
@@ -140,12 +139,29 @@ RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
 # and the golangci-lint pre-commit hook builds against the same version — keep this in
 # sync with them and with GO_VERSION in .github/workflows/pr-golang-tests.yml.
 #
-# Copied from the official golang image (digest-pinned in the go_source stage at the top,
-# routed through BASE_IMAGE_REGISTRY) rather than fetched from go.dev, for the same reasons
-# as the node install above: no MITM surface on the download, and buildkit resolves the
-# right arch from the manifest list. Module and build caches are not baked in; they live in
-# the dev user's home (see .devcontainer/zshrc).
-COPY --from=go_source /usr/local/go /usr/local/go
+# Fetched from go.dev with a pinned per-arch checksum (same shape as the prek install
+# above) rather than copied out of the official golang image: base images here route
+# through the ECR pull-through cache, which only populates on tag-based pulls, so a
+# `golang:...@sha256:...` stage fails to resolve until something has already pulled that
+# exact digest by tag. The sha256 pin is what defeats a compromised mirror or MITM, so
+# nothing is given up by not going through a registry.
+#
+# Module and build caches are not baked in; they live in the dev user's home
+# (see .devcontainer/zshrc).
+ARG GO_VERSION=1.26.4
+RUN set -eux; \
+  case "$(dpkg --print-architecture)" in \
+    amd64) GO_ARCH=amd64; \
+           GO_SHA256=1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f ;; \
+    arm64) GO_ARCH=arm64; \
+           GO_SHA256=ef758ae7c6cf9267c9c0ef080b8965f453d89ab2d25d9eb22de4405925238768 ;; \
+    *) echo "unsupported arch for go: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+  esac; \
+  curl -fsSL -o /tmp/go.tar.gz \
+    "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"; \
+  echo "${GO_SHA256}  /tmp/go.tar.gz" | sha256sum -c -; \
+  tar -C /usr/local -xzf /tmp/go.tar.gz; \
+  rm -f /tmp/go.tar.gz
 ENV PATH=/usr/local/go/bin:$PATH
 RUN go version
 
