@@ -67,6 +67,7 @@ def _parse_overrides() -> dict[str, str]:
     return {str(k): str(v) for k, v in raw.items()}
 
 
+# Built once under the lock and never mutated in place, so readers need no lock.
 _OVERRIDES: dict[str, str] | None = None
 _OVERRIDES_LOCK = threading.Lock()
 
@@ -104,6 +105,8 @@ class _ShardCache:
 
     @classmethod
     def get(cls, tenant_id: str) -> str | None:
+        # Read without the lock: this is the hot path, a single dict read is atomic,
+        # and `invalidate` rebinds `_entries` rather than emptying it in place.
         entry = cls._entries.get(tenant_id)
         if entry is None:
             return None

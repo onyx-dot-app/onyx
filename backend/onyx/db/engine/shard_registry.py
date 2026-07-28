@@ -261,7 +261,9 @@ class ShardRegistry:
             return engine
 
         with cls._lock:
-            # Re-check: another thread may have built it while we waited.
+            # Re-check: another thread may have built it while we waited. The lock has
+            # to span build-and-store as a unit — locking each dict access instead lets
+            # racing callers each build an engine and orphan the losers' pools.
             engine = cls._engines.get(shard_name)
             if engine is not None:
                 return engine

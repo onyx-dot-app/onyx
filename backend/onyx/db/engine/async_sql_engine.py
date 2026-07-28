@@ -112,7 +112,8 @@ def get_async_engine_for_shard(shard_name: str) -> AsyncEngine:
         return engine
 
     with _ASYNC_ENGINES_LOCK:
-        # Re-check: another coroutine may have built it while we waited.
+        # Re-check: another coroutine may have built it while we waited. The lock has
+        # to span build-and-store as a unit — see ShardRegistry.get_engine.
         engine = _ASYNC_ENGINES.get(shard_name)
         if engine is not None:
             return engine
