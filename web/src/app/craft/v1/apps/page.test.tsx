@@ -1,4 +1,10 @@
-import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+import {
+  render,
+  screen,
+  setupUser,
+  waitFor,
+  within,
+} from "@tests/setup/test-utils";
 import ExternalAppsPage from "@/app/craft/v1/apps/page";
 import type { SkillsList } from "@/lib/skills/types";
 import {
@@ -140,6 +146,12 @@ function mockEndpoints(
   });
 }
 
+/** Queries scoped to the visible tab: every kind stays mounted so the page
+ * keeps its geometry, so "on screen" means "inside the active panel". */
+function activeTab() {
+  return within(screen.getByRole("tabpanel"));
+}
+
 describe("Apps associated-skill setup notice", () => {
   beforeEach(() => {
     mockMutateApps.mockReset();
@@ -159,12 +171,9 @@ describe("Apps associated-skill setup notice", () => {
     render(<ExternalAppsPage />);
 
     expect(
-      screen.getByText(
-        "Connected · Not all associated skills are enabled. This app may not work correctly."
-      )
+      screen.getByText("Connected · not all associated skills are enabled")
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Skill setup required")).toBeInTheDocument();
-    expect(screen.queryByLabelText("App ready")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review skills" })).toHaveAttribute(
       "href",
       "/craft/v1/skills?externalAppId=42"
@@ -180,20 +189,17 @@ describe("Apps associated-skill setup notice", () => {
     render(<ExternalAppsPage />);
 
     expect(
-      screen.queryByText(
-        "Connected · Not all associated skills are enabled. This app may not work correctly."
-      )
+      screen.queryByText("Connected · not all associated skills are enabled")
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Review skills" })
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("App ready")).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Skill setup required")
     ).not.toBeInTheDocument();
   });
 
-  it("does not claim an external app is ready before skills load", () => {
+  it("does not warn about skills before they load", () => {
     mockUseUserSkills.mockReturnValue({
       data: undefined,
       refresh: mockRefreshSkills,
@@ -201,9 +207,11 @@ describe("Apps associated-skill setup notice", () => {
 
     render(<ExternalAppsPage />);
 
-    expect(screen.queryByLabelText("App ready")).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText("Skill setup required")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Review skills" })
     ).not.toBeInTheDocument();
   });
 
@@ -216,9 +224,7 @@ describe("Apps associated-skill setup notice", () => {
     render(<ExternalAppsPage />);
 
     expect(
-      screen.getByText(
-        "Connected · Not all associated skills are enabled. This app may not work correctly."
-      )
+      screen.getByText("Connected · not all associated skills are enabled")
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review skills" })).toHaveAttribute(
       "href",
@@ -262,13 +268,13 @@ describe("Apps vs MCP servers", () => {
 
     render(<ExternalAppsPage />);
 
-    expect(screen.getByText("Acme CRM")).toBeInTheDocument();
-    expect(screen.queryByText("Asana MCP")).not.toBeInTheDocument();
+    expect(activeTab().getByText("Acme CRM")).toBeInTheDocument();
+    expect(activeTab().queryByText("Asana MCP")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /MCP servers/ }));
 
-    expect(screen.getByText("Asana MCP")).toBeInTheDocument();
-    expect(screen.queryByText("Acme CRM")).not.toBeInTheDocument();
+    expect(activeTab().getByText("Asana MCP")).toBeInTheDocument();
+    expect(activeTab().queryByText("Acme CRM")).not.toBeInTheDocument();
   });
 
   it("does not claim a connected MCP server is skill-ready", async () => {
@@ -280,14 +286,13 @@ describe("Apps vs MCP servers", () => {
 
     // MCP servers expose MCP tools, not skills, so neither skill glyph applies —
     // the green check used to render here purely because no skill data existed.
-    expect(screen.queryByLabelText("App ready")).not.toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Skill setup required")
+      activeTab().queryByLabelText("Skill setup required")
     ).not.toBeInTheDocument();
     // Still listed as connected — the row's presence is the status.
-    expect(screen.getAllByText("Connected").length).toBeGreaterThan(0);
+    expect(activeTab().getAllByText("Connected").length).toBeGreaterThan(0);
     expect(
-      screen.queryByText(/Not available for your account/)
+      activeTab().queryByText(/Not available for your account/)
     ).not.toBeInTheDocument();
   });
 
@@ -300,11 +305,75 @@ describe("Apps vs MCP servers", () => {
     render(<ExternalAppsPage />);
     await user.click(screen.getByRole("tab", { name: /MCP servers/ }));
 
-    expect(screen.getByText("Asana MCP")).toBeInTheDocument();
-    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    expect(activeTab().getByText("Asana MCP")).toBeInTheDocument();
+    expect(activeTab().queryByText("Connected")).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Not available for your account/)
+      activeTab().getByText(/Not available for your account/)
     ).toBeInTheDocument();
+  });
+
+  it("leads with connected cards, then orders the rest by name", () => {
+    mockEndpoints([
+      appFixture({
+        id: 1,
+        name: "Zulip",
+        app_type: "CUSTOM",
+        authenticated: true,
+      }),
+      appFixture({
+        id: 2,
+        name: "Asana",
+        app_type: "CUSTOM",
+        authenticated: false,
+      }),
+      appFixture({
+        id: 3,
+        name: "Monday",
+        app_type: "CUSTOM",
+        authenticated: true,
+      }),
+      appFixture({
+        id: 4,
+        name: "Basecamp",
+        app_type: "CUSTOM",
+        authenticated: false,
+      }),
+    ]);
+
+    render(<ExternalAppsPage />);
+
+    const names = activeTab()
+      .getAllByText(/^(Zulip|Asana|Monday|Basecamp)$/)
+      .map((node) => node.textContent);
+    expect(names).toEqual(["Monday", "Zulip", "Asana", "Basecamp"]);
+  });
+
+  it("reserves the inactive kind's space so switching tabs cannot move the page", async () => {
+    const user = setupUser();
+    mockEndpoints([ACME_CRM_APP], [mcpServer()]);
+
+    render(<ExternalAppsPage />);
+
+    // Each kind's blurb and list stay mounted in a shared slot — that is what
+    // holds the taller kind's height on either tab — but only the active kind
+    // is visible and reachable.
+    const hiddenState = (matcher: RegExp | string) =>
+      screen
+        .getByText(matcher)
+        .closest("[aria-hidden]")
+        ?.getAttribute("aria-hidden");
+
+    expect(hiddenState(/Integrations Onyx supports/)).toBe("false");
+    expect(hiddenState("Acme CRM")).toBe("false");
+    expect(hiddenState(/Servers an admin made available/)).toBe("true");
+    expect(hiddenState("Asana MCP")).toBe("true");
+
+    await user.click(screen.getByRole("tab", { name: /MCP servers/ }));
+
+    expect(hiddenState(/Integrations Onyx supports/)).toBe("true");
+    expect(hiddenState("Acme CRM")).toBe("true");
+    expect(hiddenState(/Servers an admin made available/)).toBe("false");
+    expect(hiddenState("Asana MCP")).toBe("false");
   });
 
   it("reads built-in skills when deciding whether an app needs setup", () => {
@@ -329,6 +398,5 @@ describe("Apps vs MCP servers", () => {
     render(<ExternalAppsPage />);
 
     expect(screen.getByLabelText("Skill setup required")).toBeInTheDocument();
-    expect(screen.queryByLabelText("App ready")).not.toBeInTheDocument();
   });
 });
