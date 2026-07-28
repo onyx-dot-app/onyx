@@ -17,6 +17,9 @@ Or with uv:
 uv pip install onyx-cli
 ```
 
+Standalone binaries for Linux, macOS, and Windows (amd64/arm64) are also attached
+to each [`cli/v*` GitHub release](https://github.com/onyx-dot-app/onyx/releases?q=cli%2Fv).
+
 ## Setup
 
 Run the interactive chat TUI — on first launch it will guide you through setup:

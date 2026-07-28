@@ -49,6 +49,69 @@ jobs:
       - run: uv publish
         working-directory: cli
 
+  github-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to create the GitHub release and upload archives
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # full history + tags for the previous-release changelog range
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: "1.26.4"
+          cache: false
+
+      # GoReleaser OSS only supports plain semver tags (monorepo tag prefixes
+      # are a Pro feature), so point it at a local-only `vX.Y.Z` tag. The tag is
+      # never pushed: the bare `v*` namespace belongs to main product releases.
+      # `-f` handles a CLI version number that also exists as a product tag.
+      - name: Create local semver tag for GoReleaser
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git tag -f "${TAG#cli/}"
+          echo "GORELEASER_CURRENT_TAG=${TAG#cli/}" >> "$GITHUB_ENV"
+
+      - name: Build release archives
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # ratchet:goreleaser/goreleaser-action@v7.2.3
+        with:
+          distribution: goreleaser
+          version: v2.17.1
+          workdir: cli
+          args: release --clean --skip=publish,announce
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prev_tag="$(git tag -l 'cli/v*' --sort=-v:refname | grep -vxF "$TAG" | head -n 1)"
+          {
+            echo "## Changes"
+            if [ -n "$prev_tag" ]; then
+              git log --no-merges --pretty='format:* %s (%h)' "${prev_tag}..${TAG}" -- cli/
+            else
+              git log --no-merges --pretty='format:* %s (%h)' "${TAG}" -- cli/
+            fi
+            echo
+          } > "${RUNNER_TEMP}/release-notes.md"
+
+          release_args=(--latest=false)
+          if [[ ! "$TAG" =~ ^cli/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            release_args+=(--prerelease)
+          fi
+
+          gh release create "$TAG" \
+            --verify-tag \
+            --title "onyx-cli ${TAG#cli/}" \
+            --notes-file "${RUNNER_TEMP}/release-notes.md" \
+            "${release_args[@]}" \
+            cli/dist/*.tar.gz cli/dist/*.zip cli/dist/*_checksums.txt
+
   docker-amd64:
     runs-on:
       - runs-on
