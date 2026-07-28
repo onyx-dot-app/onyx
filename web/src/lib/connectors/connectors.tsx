@@ -1214,6 +1214,22 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     values: [],
     advanced_values: [],
   },
+  lark: {
+    description: "Configure Lark connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Lark folder token",
+        label: "Folder Token",
+        name: "folder_token",
+        optional: true,
+        description:
+          "Leave blank to sync the app-accessible root folder, or specify a folder to limit the sync scope.",
+      },
+    ],
+    advanced_values: [],
+    overrideDefaultFreq: 4 * 60 * 60,
+  },
   notion: {
     description: "Configure Notion connector",
     values: [
@@ -1887,9 +1903,19 @@ export function createConnectorInitialValues(
     name: "",
     groups: [],
     access_type: "public",
+    refreshFreq: getDefaultRefreshFreqMinutes(connector),
     ...buildInitialValuesForFields(configuration.values),
     ...buildInitialValuesForFields(configuration.advanced_values),
   };
+}
+
+export function getDefaultRefreshFreqMinutes(
+  connector: ConfigurableSources
+): number {
+  const overrideDefaultFreq = connectorConfigs[connector].overrideDefaultFreq;
+  return overrideDefaultFreq
+    ? overrideDefaultFreq / 60
+    : defaultRefreshFreqMinutes;
 }
 
 export function createConnectorValidationSchema(

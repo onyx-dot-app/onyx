@@ -8,6 +8,8 @@ import { ValidSources } from "@/lib/types";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { Agent } from "@/lib/agents/types";
 import React from "react";
+import Image from "next/image";
+import larkIcon from "@public/Lark_Suite_logo_2022.png";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
 import { SvgFileText, SvgGlobe, SvgUploadCloud, SvgMail } from "@opal/icons";
 import {
@@ -94,6 +96,18 @@ const slackMetadata = {
   baseSourceType: "slack",
 };
 
+const LarkIcon: React.FC<{ size?: number; className?: string }> = ({
+  size = 16,
+  className,
+}) =>
+  React.createElement(Image, {
+    src: larkIcon,
+    alt: "",
+    width: size,
+    height: size,
+    className: `object-contain ${className ?? ""}`,
+  });
+
 export const SOURCE_METADATA_MAP: SourceMap = {
   // Knowledge Base & Wikis
   confluence: {
@@ -116,6 +130,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Coda",
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/coda",
+  },
+  lark: {
+    icon: LarkIcon,
+    displayName: "Lark",
+    category: SourceCategory.Wiki,
   },
   notion: {
     icon: SvgNotion,

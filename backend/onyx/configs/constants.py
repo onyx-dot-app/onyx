@@ -225,6 +225,7 @@ class DocumentSource(str, Enum):
     FILE = "file"
     CODA = "coda"
     CANVAS = "canvas"
+    LARK = "lark"
     NOTION = "notion"
     ZULIP = "zulip"
     LINEAR = "linear"
@@ -705,6 +706,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.FILE: "Uploaded files",
     DocumentSource.CANVAS: "Courses, pages, and assignments",
     DocumentSource.CODA: "Documents, tables, and team workspace pages",
+    DocumentSource.LARK: "Documents and team workspace pages",
     DocumentSource.NOTION: "Documentation, notes, and project pages",
     DocumentSource.ZULIP: "Chat messages and topic discussions",
     DocumentSource.LINEAR: "Engineering and product tickets",

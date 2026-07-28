@@ -27,7 +27,7 @@ import {
   connectorConfigs,
   createConnectorInitialValues,
   createConnectorValidationSchema,
-  defaultRefreshFreqMinutes,
+  getDefaultRefreshFreqMinutes,
   isLoadState,
   Connector,
   ConnectorBase,
@@ -179,6 +179,7 @@ export default function AddConnector({
   // Get credential template and configuration
   const credentialTemplate = credentialTemplates[connector];
   const configuration: ConnectionConfiguration = connectorConfigs[connector];
+  const connectorDefaultRefreshFreqMinutes = getDefaultRefreshFreqMinutes(connector);
 
   // Form context and popup management
   const { setFormStep, setAllowCreate, formStep } = useFormContext();
@@ -337,7 +338,8 @@ export default function AddConnector({
         const advancedConfiguration: any = {
           pruneFreq: (pruneFreq ?? defaultPruneFreqHours) * 3600,
           indexingStart: convertStringToDateTime(indexingStart),
-          refreshFreq: (refreshFreq ?? defaultRefreshFreqMinutes) * 60,
+          refreshFreq:
+            (refreshFreq ?? connectorDefaultRefreshFreqMinutes) * 60,
         };
 
         // File-specific handling
@@ -666,7 +668,10 @@ export default function AddConnector({
 
           {formStep === 2 && (
             <CardSection>
-              <AdvancedFormPage defaultPruneFreqHours={defaultPruneFreqHours} />
+              <AdvancedFormPage
+                defaultPruneFreqHours={defaultPruneFreqHours}
+                defaultRefreshFreqMinutes={connectorDefaultRefreshFreqMinutes}
+              />
             </CardSection>
           )}
 

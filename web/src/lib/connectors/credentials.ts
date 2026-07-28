@@ -125,6 +125,11 @@ export interface CodaCredentialJson {
   coda_bearer_token: string;
 }
 
+export interface LarkCredentialJson {
+  lark_app_id: string;
+  lark_app_secret: string;
+}
+
 export interface NotionCredentialJson {
   notion_integration_token: string;
 }
@@ -317,6 +322,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   productboard: { productboard_access_token: "" } as ProductboardCredentialJson,
   slab: { slab_bot_token: "" } as SlabCredentialJson,
   coda: { coda_bearer_token: "" } as CodaCredentialJson,
+  lark: { lark_app_id: "", lark_app_secret: "" } as LarkCredentialJson,
   notion: { notion_integration_token: "" } as NotionCredentialJson,
   guru: { guru_user: "", guru_user_token: "" } as GuruCredentialJson,
   gong: {
@@ -544,6 +550,10 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Coda
   coda_bearer_token: "Coda Bearer Token",
+
+  // Lark
+  lark_app_id: "Lark App ID",
+  lark_app_secret: "Lark App Secret",
 
   // Notion
   notion_integration_token: "Notion Integration Token",

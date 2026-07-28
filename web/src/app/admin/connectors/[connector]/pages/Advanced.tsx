@@ -5,10 +5,12 @@ import { Button } from "@opal/components";
 import { SvgTrash } from "@opal/icons";
 interface AdvancedFormPageProps {
   defaultPruneFreqHours?: number;
+  defaultRefreshFreqMinutes?: number;
 }
 
 export default function AdvancedFormPage({
   defaultPruneFreqHours = 600,
+  defaultRefreshFreqMinutes = 30,
 }: AdvancedFormPageProps) {
   return (
     <div className="py-4 flex flex-col gap-y-6 rounded-lg max-w-2xl mx-auto">
@@ -30,7 +32,7 @@ export default function AdvancedFormPage({
       />
 
       <NumberInput
-        description="This is how frequently we pull new documents from the source (in minutes). If you input 0, we will never pull new documents for this connector."
+        description={`This is how frequently we pull new documents from the source (in minutes). Default is ${defaultRefreshFreqMinutes} minutes. If you input 0, we will never pull new documents for this connector.`}
         label="Refresh Frequency (minutes)"
         name="refreshFreq"
       />

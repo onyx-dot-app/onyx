@@ -76,6 +76,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.canvas.connector",
         class_name="CanvasConnector",
     ),
+    DocumentSource.LARK: ConnectorMapping(
+        module_path="onyx.connectors.lark.connector",
+        class_name="LarkConnector",
+    ),
     DocumentSource.NOTION: ConnectorMapping(
         module_path="onyx.connectors.notion.connector",
         class_name="NotionConnector",
