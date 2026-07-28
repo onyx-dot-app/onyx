@@ -165,7 +165,21 @@ def _build_provider_block(
         block["name"] = llm_provider_config.display_name
     models: dict[str, Any] = {}
     for model in llm_provider_config.models or []:
-        entry: dict[str, Any] = {"name": model.display_name}
+        input_modalities = ["text"]
+        if model.supports_image_input:
+            input_modalities.append("image")
+        entry: dict[str, Any] = {
+            "name": model.display_name,
+            "attachment": model.supports_image_input,
+            "reasoning": model.supports_reasoning,
+            "temperature": False,
+            "tool_call": True,
+            "interleaved": False,
+            "modalities": {
+                "input": input_modalities,
+                "output": ["text"],
+            },
+        }
         if model.supports_reasoning:
             entry["options"] = {"reasoningEffort": "high"}
         if model.max_input_tokens:

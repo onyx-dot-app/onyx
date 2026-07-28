@@ -14,6 +14,7 @@ FileSet: TypeAlias = dict[str, bytes]
 class GatewayModelConfig(BaseModel):
     id: str
     display_name: str
+    supports_image_input: bool = False
     supports_reasoning: bool = False
     max_input_tokens: int | None = None
     max_output_tokens: int | None = None

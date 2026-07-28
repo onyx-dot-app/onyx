@@ -29,6 +29,7 @@ def _gateway(*, default: str = "7/gpt-5.5") -> CraftLLMProviderConfig:
             GatewayModelConfig(
                 id="9/claude-opus-4-8",
                 display_name="Claude Opus 4.8",
+                supports_image_input=True,
                 supports_reasoning=True,
                 max_input_tokens=200_000,
             ),
@@ -60,6 +61,35 @@ def test_gateway_is_the_only_enabled_provider() -> None:
     assert provider["models"]["9/claude-opus-4-8"]["limit"] == {
         "context": 200_000,
         "output": 128_000,
+    }
+    assert provider["models"]["7/gpt-5.5"] == {
+        "name": "GPT-5.5",
+        "attachment": False,
+        "reasoning": False,
+        "temperature": False,
+        "tool_call": True,
+        "interleaved": False,
+        "modalities": {
+            "input": ["text"],
+            "output": ["text"],
+        },
+    }
+    assert provider["models"]["9/claude-opus-4-8"] == {
+        "name": "Claude Opus 4.8",
+        "attachment": True,
+        "reasoning": True,
+        "temperature": False,
+        "tool_call": True,
+        "interleaved": False,
+        "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"],
+        },
+        "options": {"reasoningEffort": "high"},
+        "limit": {
+            "context": 200_000,
+            "output": 128_000,
+        },
     }
 
 

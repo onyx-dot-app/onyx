@@ -175,6 +175,7 @@ def build_onyx_gateway_config(
             GatewayModelConfig(
                 id=f"{provider.id}/{model.name}",
                 display_name=display_name,
+                supports_image_input=model.supports_image_input,
                 supports_reasoning=model.supports_reasoning,
                 max_input_tokens=model.max_input_tokens,
                 max_output_tokens=get_llm_max_output_tokens(

@@ -33,6 +33,7 @@ def _model(
     *,
     display_name: str | None = None,
     is_visible: bool = True,
+    supports_image_input: bool = False,
     supports_reasoning: bool = False,
     max_input_tokens: int | None = None,
 ) -> ModelConfigurationView:
@@ -40,7 +41,7 @@ def _model(
         name=name,
         display_name=display_name,
         is_visible=is_visible,
-        supports_image_input=False,
+        supports_image_input=supports_image_input,
         supports_reasoning=supports_reasoning,
         max_input_tokens=max_input_tokens,
     )
@@ -133,6 +134,47 @@ def test_gateway_config_fallback_supports_any_provider() -> None:
 
     assert config is not None
     assert config.model_name == "2/bedrock-model"
+
+
+def test_gateway_model_capabilities_reach_opencode_catalog() -> None:
+    provider = _provider(
+        3,
+        "anthropic",
+        [
+            _model(
+                "claude-opus-5",
+                supports_image_input=True,
+                supports_reasoning=True,
+            ),
+            _model("claude-text-only"),
+        ],
+    )
+
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
+        gateway_config = llm_config.build_onyx_gateway_config([provider])
+
+    assert gateway_config is not None
+    opencode_models = build_provider_opencode_config(gateway_config)["provider"][
+        "onyx"
+    ]["models"]
+
+    vision_model = opencode_models["3/claude-opus-5"]
+    assert vision_model["modalities"] == {
+        "input": ["text", "image"],
+        "output": ["text"],
+    }
+    assert vision_model["attachment"] is True
+    assert vision_model["reasoning"] is True
+    assert vision_model["options"] == {"reasoningEffort": "high"}
+
+    text_model = opencode_models["3/claude-text-only"]
+    assert text_model["modalities"] == {
+        "input": ["text"],
+        "output": ["text"],
+    }
+    assert text_model["attachment"] is False
+    assert text_model["reasoning"] is False
+    assert "options" not in text_model
 
 
 def test_gateway_config_can_target_direct_api_service() -> None:
