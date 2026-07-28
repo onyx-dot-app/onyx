@@ -63,6 +63,7 @@ type installer struct {
 	root  paths.InstallRoot
 	lite  bool
 	craft bool
+	wiz   *ui.Wizard // live wizard when the fancy renderer drives the run
 
 	// step counter for the "=== title - Step N/M ===" headers.
 	step, totalSteps int
@@ -80,22 +81,42 @@ func newInstaller(deps Deps, opts Options) *installer {
 // Output helpers mirroring install.sh's prefixes (plain text, no color).
 
 func (in *installer) successf(format string, args ...any) {
+	if in.wiz != nil {
+		in.wiz.Note("ok", fmt.Sprintf(format, args...))
+		return
+	}
 	fmt.Fprintf(in.deps.IOS.Out, "✓ "+format+"\n", args...)
 }
 
 func (in *installer) infof(format string, args ...any) {
+	if in.wiz != nil {
+		in.wiz.Note("", fmt.Sprintf(format, args...))
+		return
+	}
 	fmt.Fprintf(in.deps.IOS.Out, "ℹ "+format+"\n", args...)
 }
 
 func (in *installer) warnf(format string, args ...any) {
+	if in.wiz != nil {
+		in.wiz.Note("warn", fmt.Sprintf(format, args...))
+		return
+	}
 	fmt.Fprintf(in.deps.IOS.Out, "⚠ "+format+"\n", args...)
 }
 
 func (in *installer) errorf(format string, args ...any) {
+	if in.wiz != nil {
+		in.wiz.Note("err", fmt.Sprintf(format, args...))
+		return
+	}
 	fmt.Fprintf(in.deps.IOS.ErrOut, "✗ "+format+"\n", args...)
 }
 
 func (in *installer) plainf(format string, args ...any) {
+	if in.wiz != nil {
+		in.wiz.Note("", fmt.Sprintf(format, args...))
+		return
+	}
 	fmt.Fprintf(in.deps.IOS.Out, format+"\n", args...)
 }
 
@@ -116,8 +137,8 @@ func (in *installer) selectOne(title string, options []ui.Option, defaultIdx int
 	if in.prompt.AssumeDefaults {
 		return defaultIdx, nil
 	}
-	if in.fancy() {
-		return ui.Select(in.deps.IOS, title, options, defaultIdx)
+	if in.wiz != nil {
+		return in.wiz.Select(title, options, defaultIdx)
 	}
 	in.infof("%s", title)
 	for i, o := range options {
@@ -144,8 +165,8 @@ func (in *installer) askString(title, defaultVal string) (string, error) {
 	if in.prompt.AssumeDefaults {
 		return defaultVal, nil
 	}
-	if in.fancy() {
-		return ui.Input(in.deps.IOS, title, defaultVal)
+	if in.wiz != nil {
+		return in.wiz.Input(title, defaultVal)
 	}
 	return in.prompt.Ask(fmt.Sprintf("%s [default: %s]: ", title, defaultVal), defaultVal)
 }
@@ -155,23 +176,31 @@ func (in *installer) confirmYN(question string, defaultYes bool) (bool, error) {
 	if in.prompt.AssumeDefaults {
 		return defaultYes, nil
 	}
-	if in.fancy() {
+	if in.wiz != nil {
 		def := 1
 		if defaultYes {
 			def = 0
 		}
-		idx, err := in.selectOne(question, []ui.Option{{Label: "Yes"}, {Label: "No"}}, def)
+		idx, err := in.wiz.Select(question, []ui.Option{{Label: "Yes"}, {Label: "No"}}, def)
 		return idx == 0, err
 	}
 	return in.prompt.Confirm(question+" ", defaultYes)
 }
 
-// phase prints a styled (or plain) phase header for fast sections and
-// returns a live spinner task for long ones when fancy.
-func (in *installer) phase(title string, spinner bool) *ui.Task {
-	if in.fancy() && spinner {
-		return ui.StartTask(in.deps.IOS.Out, title)
+// phase prints a plain phase header (the wizard's rail replaces it when the
+// fancy renderer is active).
+func (in *installer) phase(title string) {
+	if in.wiz != nil {
+		return
 	}
 	fmt.Fprintf(in.deps.IOS.Out, "\n— %s —\n", title)
-	return nil
+}
+
+// suspend hands the terminal back to fn when the wizard is live (sudo
+// password prompts, provisioning output).
+func (in *installer) suspend(fn func() error) error {
+	if in.wiz != nil {
+		return in.wiz.Suspend(fn)
+	}
+	return fn()
 }

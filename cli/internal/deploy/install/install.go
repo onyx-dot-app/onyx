@@ -102,8 +102,8 @@ func (in *installer) runInstall(ctx context.Context) error {
 	}
 
 	if in.fancy() {
-		in.plainf("%s", ui.AccentURL("Onyx installer"))
-		in.plainf("")
+		in.wiz = ui.StartWizard(in.deps.CLIVersion)
+		defer in.wiz.Abort()
 	}
 
 	// ---- Questions: every decision is made up front ----
@@ -145,6 +145,13 @@ func (in *installer) runInstall(ctx context.Context) error {
 					return err
 				}
 			}
+			if in.wiz != nil {
+				action := "Restart"
+				if updateTag != "" {
+					action = "Upgrade → " + updateTag
+				}
+				in.wiz.Answer("Action", action)
+			}
 		}
 	} else {
 		if err := in.askModeQuestion(); err != nil {
@@ -156,6 +163,9 @@ func (in *installer) runInstall(ctx context.Context) error {
 				return err
 			}
 			in.opts.Tag = tag
+		}
+		if in.wiz != nil {
+			in.wiz.Answer("Version", in.opts.Tag)
 		}
 	}
 
@@ -174,7 +184,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	}
 
 	// ---- Phase 1: prepare configuration ----
-	in.phase("Preparing configuration", false)
+	in.phase("Preparing configuration")
 	if in.root.Source == paths.SourceLegacyCwd {
 		in.infof("Managing existing install at %s (created by install.sh)", in.root.Dir)
 	}
@@ -297,6 +307,9 @@ func (in *installer) askModeQuestion() error {
 	}
 	in.lite = choice == 0
 	in.craft = choice == 2
+	if in.wiz != nil {
+		in.wiz.Answer("Mode", []string{"Lite", "Standard", "Std+Craft"}[choice])
+	}
 	return nil
 }
 
@@ -337,7 +350,9 @@ func (in *installer) resolveDockerProblems(ctx context.Context, pre preflight) e
 			if !ok {
 				return exitcodes.New(exitcodes.General, "Docker is required to run Onyx")
 			}
-			if err := dockercmd.InstallDockerLinux(ctx, in.deps.Runner, in.deps.IOS.Out); err != nil {
+			if err := in.suspend(func() error {
+				return dockercmd.InstallDockerLinux(ctx, in.deps.Runner, in.deps.IOS.Out)
+			}); err != nil {
 				return exitcodes.Newf(exitcodes.General, "Docker installation failed: %v\n  Visit: https://docs.docker.com/get-docker/", err)
 			}
 			if !dockercmd.Installed() {
@@ -363,7 +378,9 @@ func (in *installer) resolveDockerProblems(ctx context.Context, pre preflight) e
 		if !ok {
 			return exitcodes.New(exitcodes.General, "Docker Compose is required to run Onyx")
 		}
-		if err := dockercmd.InstallComposePluginLinux(ctx, in.deps.Runner, in.deps.IOS.Out); err != nil {
+		if err := in.suspend(func() error {
+			return dockercmd.InstallComposePluginLinux(ctx, in.deps.Runner, in.deps.IOS.Out)
+		}); err != nil {
 			return exitcodes.Newf(exitcodes.General, "Failed to install the Docker Compose plugin: %v\n  Visit: https://docs.docker.com/compose/install/", err)
 		}
 		in.compose = dockercmd.DetectCompose(ctx, in.docker)
@@ -379,7 +396,9 @@ func (in *installer) resolveDockerProblems(ctx context.Context, pre preflight) e
 
 	in.docker.RefreshSudo(ctx)
 	if in.docker.UsingSudo() {
-		if err := dockercmd.EnsureDockerGroup(ctx, in.deps.Runner, in.deps.IOS.Out); err != nil {
+		if err := in.suspend(func() error {
+			return dockercmd.EnsureDockerGroup(ctx, in.deps.Runner, in.deps.IOS.Out)
+		}); err != nil {
 			in.warnf("Could not add you to the docker group: %v", err)
 		}
 		in.infof("Using sudo for docker commands in this run.")
@@ -388,7 +407,9 @@ func (in *installer) resolveDockerProblems(ctx context.Context, pre preflight) e
 	if !in.docker.DaemonRunning(ctx) {
 		if runtime.GOOS == "darwin" {
 			in.infof("Docker daemon is not running. Starting Docker Desktop...")
-			if err := dockercmd.StartDockerDesktopDarwin(ctx, in.docker, in.deps.IOS.Out, 120*time.Second); err != nil {
+			if err := in.suspend(func() error {
+				return dockercmd.StartDockerDesktopDarwin(ctx, in.docker, in.deps.IOS.Out, 120*time.Second)
+			}); err != nil {
 				return exitcodes.Newf(exitcodes.General, "%v", err)
 			}
 		} else {
@@ -610,7 +631,7 @@ func (in *installer) pullAndStart(ctx context.Context, tag string, hostPort int)
 	if !in.opts.Verbose {
 		pullArgs = append(pullArgs, "--quiet")
 	}
-	if err := in.runComposePhase(ctx, "Pulling images", dir, env, files, pullArgs, nil); err != nil {
+	if err := in.runComposePhase(ctx, ui.StagePull, "Pulling images", dir, env, files, pullArgs, false); err != nil {
 		in.infof("Check your internet connection and re-run. If the issue persists: founders@onyx.app")
 		return exitcodes.Newf(exitcodes.General, "docker compose pull failed: %v", err)
 	}
@@ -619,12 +640,12 @@ func (in *installer) pullAndStart(ctx context.Context, tag string, hostPort int)
 	if floating {
 		upArgs = append(upArgs, "--pull", "always", "--force-recreate")
 	}
-	var poll func(*ui.Task, chan struct{})
+	poll := false
 	if !in.opts.NoWait {
 		upArgs = append(upArgs, "--wait", "--wait-timeout", fmt.Sprintf("%d", waitTimeoutSeconds))
-		poll = in.pollServiceHealth
+		poll = true
 	}
-	if err := in.runComposePhase(ctx, "Starting services", dir, env, files, upArgs, poll); err != nil {
+	if err := in.runComposePhase(ctx, ui.StageStart, "Starting services", dir, env, files, upArgs, poll); err != nil {
 		in.infof("Current container status:")
 		ps := in.compose.Command(dir, env, files, "ps")
 		ps.Stdout, ps.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
@@ -638,20 +659,21 @@ func (in *installer) pullAndStart(ctx context.Context, tag string, hostPort int)
 	return nil
 }
 
-// runComposePhase runs one long compose command as a visible phase: a live
-// spinner with captured output when fancy (the tail is shown on failure),
-// streamed output otherwise.
+// runComposePhase runs one long compose command as a visible phase: a rail
+// stage with a live task (and per-service checklist) in the wizard, streamed
+// output otherwise. On failure only the log tail is shown.
 func (in *installer) runComposePhase(
 	ctx context.Context,
+	stage int,
 	title, dir string,
 	env map[string]string,
 	files, args []string,
-	poll func(*ui.Task, chan struct{}),
+	poll bool,
 ) error {
 	cmd := in.compose.Command(dir, env, files, args...)
 
-	if !in.fancy() || in.opts.Verbose {
-		in.phase(title, false)
+	if in.wiz == nil || in.opts.Verbose {
+		in.phase(title)
 		cmd.Stdout, cmd.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
 		_, err := in.deps.Runner.Run(ctx, cmd)
 		if err == nil {
@@ -662,19 +684,23 @@ func (in *installer) runComposePhase(
 		return err
 	}
 
-	task := in.phase(title, true)
+	in.wiz.Stage(stage)
+	in.wiz.TaskStart(title)
 	var captured bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &captured, &captured
 
 	stop := make(chan struct{})
-	if poll != nil {
-		go poll(task, stop)
+	if poll {
+		go in.pollServiceHealth(stop)
 	}
 	_, err := in.deps.Runner.Run(ctx, cmd)
 	close(stop)
-	task.Done(err == nil, title)
+	in.wiz.TaskDone(err == nil)
 
 	if err != nil {
+		// Tear the wizard down so the tail prints as plain scrollback.
+		in.wiz.Abort()
+		in.wiz = nil
 		lines := strings.Split(strings.TrimSpace(captured.String()), "\n")
 		if len(lines) > failureLogTail {
 			lines = lines[len(lines)-failureLogTail:]
@@ -686,9 +712,9 @@ func (in *installer) runComposePhase(
 	return err
 }
 
-// pollServiceHealth updates the spinner with a live ready/total count while
+// pollServiceHealth feeds the wizard a live per-service checklist while
 // `up --wait` blocks (otherwise silent for up to ten minutes).
-func (in *installer) pollServiceHealth(task *ui.Task, stop chan struct{}) {
+func (in *installer) pollServiceHealth(stop chan struct{}) {
 	ctx := context.Background()
 	for {
 		select {
@@ -698,31 +724,35 @@ func (in *installer) pollServiceHealth(task *ui.Task, stop chan struct{}) {
 		}
 		cmd := in.docker.Command(nil, "ps",
 			"--filter", "label=com.docker.compose.project=onyx",
-			"--format", "{{.Status}}")
+			"--format", "{{.Names}}\t{{.Status}}")
 		res, err := in.deps.Runner.Run(ctx, cmd)
 		if err != nil {
 			continue
 		}
-		total, ready := 0, 0
+		var rows []ui.ServiceRow
+		ready := 0
 		for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
-			if line == "" {
+			parts := strings.SplitN(line, "\t", 2)
+			if len(parts) != 2 {
 				continue
 			}
-			total++
-			if strings.Contains(line, "(healthy)") ||
-				(strings.HasPrefix(line, "Up") && !strings.Contains(line, "health")) {
+			ok := strings.Contains(parts[1], "(healthy)") ||
+				(strings.HasPrefix(parts[1], "Up") && !strings.Contains(parts[1], "health"))
+			if ok {
 				ready++
 			}
+			rows = append(rows, ui.ServiceRow{Name: strings.TrimPrefix(parts[0], "onyx-"), Ready: ok})
 		}
-		if total > 0 {
-			task.Update(fmt.Sprintf("%d/%d services ready", ready, total))
+		if len(rows) > 0 && in.wiz != nil {
+			in.wiz.Services(rows)
+			in.wiz.TaskExtra(fmt.Sprintf("%d/%d ready", ready, len(rows)))
 		}
 	}
 }
 
 func (in *installer) printSuccess(ctx context.Context, hostPort int) {
 	url := fmt.Sprintf("http://localhost:%d", hostPort)
-	headline := "Onyx is ready  →  " + ui.AccentURL(url)
+	headline := "Onyx is ready  →  " + ui.Accent(url)
 	if in.opts.NoWait {
 		headline = "Onyx containers started (still initializing — check: onyx-cli deploy status)"
 	}
@@ -738,32 +768,47 @@ func (in *installer) printSuccess(ctx context.Context, hostPort int) {
 			"Connectors and RAG search are off; chat, tools, uploads, projects work.")
 	}
 
-	in.plainf("")
-	if in.fancy() {
-		ui.Card(in.deps.IOS.Out, lines...)
-	} else {
-		for _, l := range lines {
-			in.plainf("%s", l)
+	if in.wiz != nil {
+		star := in.askStarQuestion()
+		in.wiz.Stage(ui.StageDone)
+		in.wiz.Finish(append([]string{"🎉 " + lines[0]}, lines[1:]...)...)
+		in.wiz = nil
+		if star {
+			in.starRepo(ctx)
 		}
+		return
+	}
+	in.plainf("")
+	for _, l := range lines {
+		in.plainf("%s", l)
 	}
 	in.plainf("")
 	in.infof("For help or issues, contact: founders@onyx.app")
 	in.starPrompt(ctx)
 }
 
-// starPrompt ports install.sh's GitHub star prompt: only when interactive and
-// the gh CLI is available.
+// starPrompt ports install.sh's GitHub star prompt: only when interactive
+// and the gh CLI is available.
 func (in *installer) starPrompt(ctx context.Context) {
+	if in.askStarQuestion() {
+		in.starRepo(ctx)
+	}
+}
+
+// askStarQuestion asks while the UI is still live (the wizard closes on
+// Finish, so callers ask first and run the API call after).
+func (in *installer) askStarQuestion() bool {
 	if in.prompt.AssumeDefaults {
-		return
+		return false
 	}
 	if _, err := exec.LookPath("gh"); err != nil {
-		return
+		return false
 	}
 	ok, err := in.confirmYN("Enjoying Onyx? Star the repo on GitHub?", true)
-	if err != nil || !ok {
-		return
-	}
+	return err == nil && ok
+}
+
+func (in *installer) starRepo(ctx context.Context) {
 	cmd := dockercmd.Command{
 		Name: "gh",
 		Args: []string{"api", "-X", "PUT", "/user/starred/onyx-dot-app/onyx"},
