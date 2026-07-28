@@ -1,7 +1,7 @@
 # =============================================================================
 # THIS FILE IS GENERATED - DO NOT EDIT DIRECTLY
 # Source of truth: deployment/docker_compose/docker-compose.template.yml
-# Regenerate:      python3 deployment/docker_compose/generate_compose.py --write
+# Regenerate:      ods generate-compose --write
 # =============================================================================
 # =============================================================================
 # ONYX DOCKER COMPOSE
