@@ -2,6 +2,7 @@ import contextvars
 import copy
 import itertools
 import re
+import threading
 from collections.abc import Callable, Generator
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -11,7 +12,7 @@ from typing import Any, cast
 from urllib.error import URLError
 from urllib.parse import urlparse
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.http_retry import ConnectionErrorRetryHandler, RetryHandler
@@ -797,6 +798,18 @@ def _process_message(
         )
 
 
+class _WorkspaceMetadata(BaseModel):
+    """Workspace URL and Enterprise Grid topology for a single bot token."""
+
+    model_config = ConfigDict(frozen=True)
+
+    url: str | None = None
+    is_grid: bool = False
+    team_ids: list[str] = []
+    team_id_to_url: dict[str, str] = {}
+    team_id_to_user_emails: dict[str, set[str]] = {}
+
+
 class SlackConnector(
     SlimConnectorWithPermSync,
     CredentialsConnector,
@@ -853,25 +866,33 @@ class SlackConnector(
         self.credentials_provider: CredentialsProviderInterface | None = None
         self.credential_prefix: str | None = None
         self.use_redis: bool = use_redis
-        self._workspace_url: str | None = None
-        self._is_grid: bool = False
-        self._team_ids: list[str] = []
-        self._team_id_to_url: dict[str, str] = {}
-        self._team_id_to_user_emails: dict[str, set[str]] = {}
+        # None until _ensure_workspace_metadata() resolves it.
+        self._workspace_metadata: _WorkspaceMetadata | None = None
+        self._workspace_metadata_lock = threading.Lock()
         # self.delay_lock: str | None = None  # the redis key for the shared lock
         # self.delay_key: str | None = None  # the redis key for the shared delay
 
     @property
+    def workspace_url(self) -> str | None:
+        metadata = self._workspace_metadata
+        return metadata.url if metadata else None
+
+    @property
     def grid_team_ids(self) -> list[str] | None:
-        return self._team_ids if self._is_grid else None
+        metadata = self._workspace_metadata
+        return metadata.team_ids if metadata and metadata.is_grid else None
 
     @property
     def grid_team_id_to_url(self) -> dict[str, str] | None:
-        return self._team_id_to_url if self._is_grid else None
+        metadata = self._workspace_metadata
+        return metadata.team_id_to_url if metadata and metadata.is_grid else None
 
     @property
     def grid_team_id_to_user_emails(self) -> dict[str, set[str]] | None:
-        return self._team_id_to_user_emails if self._is_grid else None
+        metadata = self._workspace_metadata
+        return (
+            metadata.team_id_to_user_emails if metadata and metadata.is_grid else None
+        )
 
     @classmethod
     @override
@@ -1016,67 +1037,92 @@ class SlackConnector(
         self.text_cleaner = SlackTextCleaner(client=self.client)
         self.credentials_provider = credentials_provider
 
-        is_grid = False
+        with self._workspace_metadata_lock:
+            self._workspace_metadata = None
+
+    def _ensure_workspace_metadata(self) -> None:
+        """Resolves workspace metadata once, for the indexing paths.
+
+        Deliberately not resolved in ``set_credentials_provider``: validation
+        instantiates the connector but never reads this metadata, and
+        ``self.client`` serializes on a Redis lock shared with running indexing
+        jobs, so resolving eagerly lets a rate-limited indexing job block
+        connector creation for the length of its backoff.
+
+        ``workspace_url`` and the ``grid_*`` properties are plain accessors, so
+        every entry point that reads them must call this first.
+        """
+        if self._workspace_metadata is not None:
+            return
+
+        with self._workspace_metadata_lock:
+            if self._workspace_metadata is not None or self.client is None:
+                return
+            self._workspace_metadata = self._resolve_workspace_metadata(self.client)
+
+    def _resolve_workspace_metadata(self, client: WebClient) -> _WorkspaceMetadata:
         try:
-            auth_response = self.client.auth_test()
-            self._workspace_url = auth_response.get("url")
-            is_grid = bool(auth_response.get("enterprise_id"))
+            auth_response = client.auth_test()
         except Exception as e:
             logger.warning("Failed to get workspace URL from auth_test: %s", e)
-            self._workspace_url = None
+            return _WorkspaceMetadata()
 
-        self._is_grid = is_grid
-        self._team_ids = []
-        self._team_id_to_url = {}
-        self._team_id_to_user_emails = {}
-        if self._is_grid and self.client is not None:
+        url = auth_response.get("url")
+        if not auth_response.get("enterprise_id"):
+            return _WorkspaceMetadata(url=url)
+
+        try:
+            team_ids = list_grid_team_ids(client)
+        except SlackApiError as e:
+            logger.warning(
+                "auth.teams.list failed on Grid org: %s", e.response.get("error", "")
+            )
+            team_ids = []
+
+        team_id_to_url = self._fetch_team_urls(client, team_ids) if team_ids else {}
+        team_id_to_user_emails: dict[str, set[str]] = {}
+        if team_ids:
             try:
-                self._team_ids = list_grid_team_ids(self.client)
+                team_id_to_user_emails = fetch_team_user_emails(client, team_ids)
             except SlackApiError as e:
+                # Grid public-channel access stays org-wide instead of per-workspace.
                 logger.warning(
-                    "auth.teams.list failed on Grid org: %s",
+                    "users.list per-team failed on Grid org: %s",
                     e.response.get("error", ""),
                 )
-                self._team_ids = []
-            if self._team_ids:
-                grid_client = self.client
-                with ThreadPoolExecutor(
-                    max_workers=min(8, len(self._team_ids))
-                ) as executor:
-                    url_futures = {
-                        executor.submit(fetch_team_url, grid_client, tid): tid
-                        for tid in self._team_ids
-                    }
-                    for future in as_completed(url_futures):
-                        tid = url_futures[future]
-                        try:
-                            url = future.result()
-                        except Exception as e:
-                            # swallow per-team failures so one bad team.info doesn't abort init
-                            logger.warning(
-                                "team.info failed for team_id=%s: %s", tid, e
-                            )
-                            continue
-                        if url:
-                            self._team_id_to_url[tid] = url
+
+        logger.info(
+            "Slack Enterprise Grid detected: teams=%s urls_resolved=%s users_scoped=%s",
+            len(team_ids),
+            len(team_id_to_url),
+            sum(len(v) for v in team_id_to_user_emails.values()),
+        )
+        return _WorkspaceMetadata(
+            url=url,
+            is_grid=True,
+            team_ids=team_ids,
+            team_id_to_url=team_id_to_url,
+            team_id_to_user_emails=team_id_to_user_emails,
+        )
+
+    @staticmethod
+    def _fetch_team_urls(client: WebClient, team_ids: list[str]) -> dict[str, str]:
+        team_id_to_url: dict[str, str] = {}
+        with ThreadPoolExecutor(max_workers=min(8, len(team_ids))) as executor:
+            futures = {
+                executor.submit(fetch_team_url, client, tid): tid for tid in team_ids
+            }
+            for future in as_completed(futures):
+                tid = futures[future]
                 try:
-                    self._team_id_to_user_emails = fetch_team_user_emails(
-                        grid_client, self._team_ids
-                    )
-                except SlackApiError as e:
-                    # Public-channel access on Grid stays org-wide instead of
-                    # per-workspace if this fails. Surfaced via missing_scope etc.
-                    logger.warning(
-                        "users.list per-team failed on Grid org: %s",
-                        e.response.get("error", ""),
-                    )
-                    self._team_id_to_user_emails = {}
-            logger.info(
-                "Slack Enterprise Grid detected: teams=%s urls_resolved=%s users_scoped=%s",
-                len(self._team_ids),
-                len(self._team_id_to_url),
-                sum(len(v) for v in self._team_id_to_user_emails.values()),
-            )
+                    url = future.result()
+                except Exception as e:
+                    # one bad team.info must not abort the whole resolution
+                    logger.warning("team.info failed for team_id=%s: %s", tid, e)
+                    continue
+                if url:
+                    team_id_to_url[tid] = url
+        return team_id_to_url
 
     def retrieve_all_slim_docs_perm_sync(
         self,
@@ -1087,6 +1133,8 @@ class SlackConnector(
         if self.client is None:
             raise ConnectorMissingCredentialError("Slack")
 
+        self._ensure_workspace_metadata()
+
         return _get_all_doc_ids(
             client=self.client,
             channels_to_include=self.channels,
@@ -1095,7 +1143,7 @@ class SlackConnector(
             exclude_regex_enabled=self.exclude_channel_regex_enabled,
             msg_filter_func=self.msg_filter_func,
             callback=callback,
-            workspace_url=self._workspace_url,
+            workspace_url=self.workspace_url,
             start=start,
             end=end,
             team_ids=self.grid_team_ids,
@@ -1127,14 +1175,17 @@ class SlackConnector(
         if self.client is None or self.text_cleaner is None:
             raise ConnectorMissingCredentialError("Slack")
 
+        self._ensure_workspace_metadata()
+
         checkpoint = copy.deepcopy(checkpoint)
 
         # if this is the very first time we've called this, need to
         # get all relevant channels and save them into the checkpoint
         if checkpoint.channel_ids is None:
-            if self._is_grid and self._team_ids:
+            grid_team_ids = self.grid_team_ids
+            if grid_team_ids:
                 raw_channels = get_channels_across_teams(
-                    client=self.client, team_ids=self._team_ids
+                    client=self.client, team_ids=grid_team_ids
                 )
             else:
                 raw_channels = get_channels(self.client)
@@ -1210,7 +1261,7 @@ class SlackConnector(
                 yield _channel_to_hierarchy_node(
                     channel,
                     checkpoint.current_channel_access,
-                    self._workspace_url,
+                    self.workspace_url,
                     team_id_to_url=self.grid_team_id_to_url,
                 )
 
