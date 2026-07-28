@@ -1434,9 +1434,10 @@ class GoogleDriveConnector(
             ].current_folder_or_drive_id
             if drive_id is None:
                 raise ValueError("drive id not set in checkpoint")
-            resume_start = checkpoint.completion_map[
-                self.primary_admin_email
-            ].completed_until
+            resume_start = _resume_start(
+                checkpoint.completion_map[self.primary_admin_email].completed_until,
+                start,
+            )
             for file_or_token in _yield_from_drive(drive_id, resume_start):
                 if isinstance(file_or_token, str):
                     checkpoint.completion_map[
@@ -1514,9 +1515,10 @@ class GoogleDriveConnector(
                 self.primary_admin_email
             ].current_folder_or_drive_id
         ):
-            resume_start = checkpoint.completion_map[
-                self.primary_admin_email
-            ].completed_until
+            resume_start = _resume_start(
+                checkpoint.completion_map[self.primary_admin_email].completed_until,
+                start,
+            )
             yield from _yield_from_folder_crawl(
                 folder_id,  # ty: ignore[possibly-unresolved-reference]
                 resume_start,
