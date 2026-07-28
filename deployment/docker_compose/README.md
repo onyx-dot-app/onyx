@@ -51,3 +51,19 @@ Every image publishes a `-dev` twin for each of its tags (e.g. `latest-dev`, `v1
 its `-dev` twin adds interactive debugging tools (vim, nano, curl, ps, psql) that the default image leaves out to stay
 minimal. The web-server, model-server, and sandbox `-dev` tags are identical to their plain counterparts and exist so
 that one version string covers every image.
+
+## Maintaining the compose files (contributors)
+
+`docker-compose.yml`, `docker-compose.prod.yml` and `docker-compose.prod-no-letsencrypt.yml` are
+generated from the single source of truth `docker-compose.template.yml` — do not hand-edit them.
+To change any of the three, edit the template (per-variant differences are expressed with `#!for` /
+`#!only` / `#!value` directives, documented in `ods generate-compose --help`) and regenerate:
+
+```
+ods generate-compose --write
+```
+
+The generator lives in `tools/ods` (`internal/composegen`) and ships with the `onyx-devtools`
+package. The `docker-compose-sync` pre-commit hook runs it automatically for commits touching the
+template or the generated files, so a stray edit to a generated file gets reverted on the next
+commit.

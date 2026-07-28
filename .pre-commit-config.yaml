@@ -65,6 +65,23 @@ repos:
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
+        alias: docker-compose-sync
+        name: sync docker compose files from template
+        # Regenerates docker-compose.yml / docker-compose.prod.yml /
+        # docker-compose.prod-no-letsencrypt.yml from docker-compose.template.yml.
+        # `ods generate-compose` ships in onyx-devtools (tools/ods); changes to the
+        # generator need an ods release before this hook picks them up.
+        args:
+          ["--no-project", "--with=onyx-devtools", "ods", "generate-compose", "--write"]
+        pass_filenames: false
+        files: >-
+          (?x)^deployment/docker_compose/(
+            docker-compose\.template\.yml
+            |docker-compose\.yml
+            |docker-compose\.prod\.yml
+            |docker-compose\.prod-no-letsencrypt\.yml
+          )$
+      - id: uv-run
         alias: ty
         name: ty
         args: ["ty", "check"]

@@ -1,8 +1,14 @@
+# =============================================================================
+# THIS FILE IS GENERATED - DO NOT EDIT DIRECTLY
+# Source of truth: deployment/docker_compose/docker-compose.template.yml
+# Regenerate:      ods generate-compose --write
+# =============================================================================
+
 name: onyx
 
 services:
   api_server:
-    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -10,23 +16,31 @@ services:
       # with debugging tools (published with a -dev tag suffix).
       target: runtime
     command: >
-      /bin/sh -c "
-      alembic upgrade head &&
+      /bin/sh -c "alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
+    env_file:
+      - path: .env
+        required: false
     depends_on:
-      - relational_db
-      - opensearch
-      - cache
-      - minio
-      - inference_model_server
+      relational_db:
+        condition: service_started
+      opensearch:
+        condition: service_started
+      cache:
+        condition: service_started
+      inference_model_server:
+        condition: service_started
+      minio:
+        condition: service_started
     restart: unless-stopped
     environment:
+      # Auth Settings
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
-      - POSTGRES_HOST=relational_db
+      - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      - REDIS_HOST=cache
+      - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - CODE_INTERPRETER_BASE_URL=${CODE_INTERPRETER_BASE_URL:-http://code-interpreter:8000}
       - USE_IAM_AUTH=${USE_IAM_AUTH}
@@ -37,9 +51,6 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
-    env_file:
-      - path: .env
-        required: false
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -50,13 +61,30 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')",
+        ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      # Generous start_period so that `docker compose up --wait` does not flag
+      # the container unhealthy while alembic migrations run on a fresh DB.
+      # Healthy is reported as soon as /health responds, so this does not slow
+      # down fast boots.
+      start_period: 600s
+    # Optional, only for debugging purposes
     volumes:
       - api_server_logs:/var/log/onyx
       # Shared volume for persistent document storage (Craft file-system mode)
       - file-system:/app/file-system
 
   background:
-    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -69,19 +97,27 @@ services:
         update-ca-certificates;
       fi &&
       /app/scripts/supervisord_entrypoint.sh"
+    env_file:
+      - path: .env
+        required: false
     depends_on:
-      - relational_db
-      - opensearch
-      - cache
-      - inference_model_server
-      - indexing_model_server
+      relational_db:
+        condition: service_started
+      opensearch:
+        condition: service_started
+      cache:
+        condition: service_started
+      inference_model_server:
+        condition: service_started
+      indexing_model_server:
+        condition: service_started
     restart: unless-stopped
     environment:
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
-      - POSTGRES_HOST=relational_db
+      - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      - REDIS_HOST=cache
+      - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
       - USE_IAM_AUTH=${USE_IAM_AUTH}
@@ -97,14 +133,12 @@ services:
       # API Server connection for Discord bot message processing
       - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
       - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
-    env_file:
-      - path: .env
-        required: false
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Optional, only for debugging purposes
     volumes:
       - background_logs:/var/log/onyx
       # Shared volume for persistent document storage (Craft file-system mode)
@@ -124,31 +158,47 @@ services:
     #   - ${CA_CERT_PATH:-./custom-ca.crt}:/etc/ssl/certs/custom-ca.crt:ro
 
   web_server:
-    image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}
+    image: ${ONYX_WEB_SERVER_IMAGE:-onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}}
     build:
       context: ../../web
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
-        - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
         - NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED:-}
+        # Enterprise Edition only
+        - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
+        # DO NOT TURN ON unless you have EXPLICIT PERMISSION from Onyx.
+        - NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED:-false}
+        - NODE_OPTIONS=${NODE_OPTIONS:-"--max-old-space-size=4096"}
+    env_file:
+      - path: .env
+        required: false
     depends_on:
       - api_server
     restart: unless-stopped
     environment:
-      - INTERNAL_URL=http://api_server:8080
-    env_file:
-      - path: .env
-        required: false
+      - INTERNAL_URL=${INTERNAL_URL:-http://api_server:8080}
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "6"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3000/', (r) => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # Uncomment the block below to enable the MCP server for Onyx.
   # mcp_server:
-  #   image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+  #   image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
   #   build:
   #     context: ../../backend
   #     dockerfile: Dockerfile
@@ -168,8 +218,8 @@ services:
   #     - cache
   #   restart: "no"
   #   environment:
-  #     - POSTGRES_HOST=relational_db
-  #     - REDIS_HOST=cache
+  #     - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
+  #     - REDIS_HOST=${REDIS_HOST:-cache}
   #     # MCP Server Configuration
   #     - MCP_SERVER_ENABLED=${MCP_SERVER_ENABLED:-false}
   #     - MCP_SERVER_PORT=${MCP_SERVER_PORT:-8090}
@@ -183,31 +233,24 @@ services:
   #     options:
   #       max-size: "50m"
   #       max-file: "6"
+  #   # Optional, only for debugging purposes
   #   volumes:
   #     - mcp_server_logs:/var/log/onyx
 
-  relational_db:
-    image: postgres:15.2-alpine
-    shm_size: 1g
-    command: -c 'max_connections=250'
-    restart: unless-stopped
-    # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
-    env_file:
-      - path: .env
-        required: false
-    volumes:
-      - db_volume:/var/lib/postgresql/data
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "6"
-
   inference_model_server:
-    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
+    image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
+    # GPU Support: Uncomment the following lines to enable GPU support
+    # Requires nvidia-container-toolkit to be installed on the host
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
     restart: unless-stopped
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
@@ -216,19 +259,42 @@ services:
     volumes:
       # Not necessary, this is just to reduce download time during startup
       - model_cache_huggingface:/app/.cache/huggingface/
-      # optional, only for debugging purposes
+      # Optional, only for debugging purposes
       - inference_model_server_logs:/var/log/onyx
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "6"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:9000/api/health')",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      # Generous start_period to absorb HuggingFace model downloads on first
+      # boot. Healthy is reported as soon as /api/health responds.
+      start_period: 600s
 
   indexing_model_server:
-    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
+    image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
     build:
       context: ../../backend
       dockerfile: Dockerfile.model_server
+    # GPU Support: Uncomment the following lines to enable GPU support
+    # Requires nvidia-container-toolkit to be installed on the host
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
     restart: unless-stopped
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
@@ -239,8 +305,44 @@ services:
     volumes:
       # Not necessary, this is just to reduce download time during startup
       - indexing_huggingface_model_cache:/app/.cache/huggingface/
-      # optional, only for debugging purposes
+      # Optional, only for debugging purposes
       - indexing_model_server_logs:/var/log/onyx
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:9000/api/health')",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      # Generous start_period to absorb HuggingFace model downloads on first
+      # boot. Healthy is reported as soon as /api/health responds.
+      start_period: 600s
+
+  relational_db:
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/postgres:15.2-alpine
+    shm_size: 1g
+    command: -c 'max_connections=250'
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+    # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - db_volume:/var/lib/postgresql/data
     logging:
       driver: json-file
       options:
@@ -248,7 +350,7 @@ services:
         max-file: "6"
 
   opensearch:
-    image: opensearchproject/opensearch:3.6.0
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/opensearchproject/opensearch:3.6.0
     restart: unless-stopped
     # OpenSearch is the search backend and is enabled by default. To run against
     # an external OpenSearch instance, set OPENSEARCH_HOST in your env and
@@ -287,17 +389,29 @@ services:
         max-file: "6"
 
   nginx:
-    image: nginx:1.25.5-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.25.5-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
     depends_on:
-      - api_server
-      - web_server
+      api_server:
+        condition: service_healthy
+      web_server:
+        condition: service_healthy
+    env_file:
+      - .env.nginx
+    environment:
+      # Nginx proxy timeout settings (in seconds)
+      - NGINX_PROXY_CONNECT_TIMEOUT=${NGINX_PROXY_CONNECT_TIMEOUT:-300}
+      - NGINX_PROXY_SEND_TIMEOUT=${NGINX_PROXY_SEND_TIMEOUT:-300}
+      - NGINX_PROXY_READ_TIMEOUT=${NGINX_PROXY_READ_TIMEOUT:-300}
     ports:
       - "80:80"
       - "443:443"
     volumes:
+      # Mount templates read-only; the startup command copies them into
+      # the writable /etc/nginx/conf.d/ inside the container.  This avoids
+      # "Permission denied" errors on Windows Docker bind mounts.
       - ../data/nginx:/nginx-templates:ro
       - ../data/certbot/conf:/etc/letsencrypt
       - ../data/certbot/www:/var/www/certbot
@@ -306,19 +420,15 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+    # The specified script waits for the api_server to start up.
+    # Without this we've seen issues where nginx shows no error logs but
+    # does not receive any traffic
     command: >
       /bin/sh -c "rm -f /etc/nginx/conf.d/default.conf
       && cp -a /nginx-templates/. /etc/nginx/conf.d/
       && sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
       && chmod +x /tmp/run-nginx.sh
       && /tmp/run-nginx.sh app.conf.template.prod"
-    env_file:
-      - .env.nginx
-    environment:
-      # Nginx proxy timeout settings (in seconds)
-      - NGINX_PROXY_CONNECT_TIMEOUT=${NGINX_PROXY_CONNECT_TIMEOUT:-300}
-      - NGINX_PROXY_SEND_TIMEOUT=${NGINX_PROXY_SEND_TIMEOUT:-300}
-      - NGINX_PROXY_READ_TIMEOUT=${NGINX_PROXY_READ_TIMEOUT:-300}
     healthcheck:
       test:
         [
@@ -348,8 +458,18 @@ services:
         max-file: "6"
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
+  cache:
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/redis:7.4-alpine
+    restart: unless-stopped
+    # docker silently mounts /data even without an explicit volume mount, which enables
+    # persistence. explicitly setting save and appendonly forces ephemeral behavior.
+    command: redis-server --save "" --appendonly no
+    # Use tmpfs to prevent creation of anonymous volumes for /data
+    tmpfs:
+      - /data
+
   minio:
-    image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set a strong value in .env, not minioadmin}
@@ -364,16 +484,6 @@ services:
       timeout: 20s
       retries: 3
 
-  cache:
-    image: redis:7.4-alpine
-    restart: unless-stopped
-    # docker silently mounts /data even without an explicit volume mount, which enables
-    # persistence. explicitly setting save and appendonly forces ephemeral behavior.
-    command: redis-server --save "" --appendonly no
-    # Use tmpfs to prevent creation of anonymous volumes for /data
-    tmpfs:
-      - /data
-
   code-interpreter:
     image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-latest}
     command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
@@ -383,24 +493,27 @@ services:
         required: false
 
     # Below is needed for the `docker-out-of-docker` execution mode
+    # For Linux rootless Docker, set DOCKER_SOCK_PATH=${XDG_RUNTIME_DIR}/docker.sock
     user: root
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_SOCK_PATH:-/var/run/docker.sock}:/var/run/docker.sock
 
     # uncomment below + comment out the above to use the `docker-in-docker` execution mode
     # privileged: true
 
 volumes:
+  # Necessary for persisting data for use
   db_volume:
   minio_data:
+  # Caches to prevent re-downloading models, not strictly necessary
   model_cache_huggingface:
   indexing_huggingface_model_cache:
-  # for logs that we don't want to lose on container restarts
+  # Logs preserved across container restarts
   api_server_logs:
   background_logs:
+  # mcp_server_logs:
   inference_model_server_logs:
   indexing_model_server_logs:
-  # mcp_server_logs:
   # Shared volume for persistent document storage (Craft file-system mode)
   file-system:
   # Persistent data for OpenSearch.

@@ -1,8 +1,13 @@
-# =============================================================================
-# THIS FILE IS GENERATED - DO NOT EDIT DIRECTLY
-# Source of truth: deployment/docker_compose/docker-compose.template.yml
-# Regenerate:      ods generate-compose --write
-# =============================================================================
+#!# ===========================================================================
+#!# SOURCE TEMPLATE for the generated compose files:
+#!#   docker-compose.yml                     (variant: default)
+#!#   docker-compose.prod.yml                (variant: prod)
+#!#   docker-compose.prod-no-letsencrypt.yml (variant: no-letsencrypt)
+#!# Edit THIS file, then regenerate with:
+#!#   ods generate-compose --write
+#!# Directive reference: run `ods generate-compose --help`.
+#!# ===========================================================================
+#!for default
 # =============================================================================
 # ONYX DOCKER COMPOSE
 # =============================================================================
@@ -40,6 +45,7 @@
 #
 # For a complete production setup, refer to docker-compose.prod.yml
 # =============================================================================
+#!endfor
 
 name: onyx
 
@@ -56,7 +62,9 @@ services:
       /bin/sh -c "alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
+    #!for default
     # Check env.template and copy to .env for env vars
+    #!endfor
     env_file:
       - path: .env
         required: false
@@ -71,16 +79,21 @@ services:
         condition: service_started
       minio:
         condition: service_started
+        #!only default
         required: false
     restart: unless-stopped
+    #!for default
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
     # 2. Uncomment the ports below
     # ports:
     #   - "8080:8080"
+    #!endfor
     environment:
       # Auth Settings
+      #!value prod,no-letsencrypt: - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - AUTH_TYPE=${AUTH_TYPE:-basic}
+      #!only default
       - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
@@ -88,12 +101,24 @@ services:
       - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - CODE_INTERPRETER_BASE_URL=${CODE_INTERPRETER_BASE_URL:-http://code-interpreter:8000}
+      #!for prod,no-letsencrypt
+      - USE_IAM_AUTH=${USE_IAM_AUTH}
+      - AWS_REGION_NAME=${AWS_REGION_NAME-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
+      # MinIO configuration
+      #!endfor
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
+      #!value prod,no-letsencrypt: - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
+      #!value prod,no-letsencrypt: - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      #!for default
       # Onyx Craft configuration (disabled by default, set ENABLE_CRAFT=true in .env to enable)
       # Use --include-craft with install script, or manually set in .env file
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
+      #!endfor
+    #!value prod,no-letsencrypt: # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -156,6 +181,10 @@ services:
         condition: service_started
     restart: unless-stopped
     environment:
+      #!for prod,no-letsencrypt
+      - AUTH_TYPE=${AUTH_TYPE:-oidc}
+      #!endfor
+      #!only default
       - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
@@ -163,16 +192,28 @@ services:
       - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
+      #!for prod,no-letsencrypt
+      - USE_IAM_AUTH=${USE_IAM_AUTH}
+      - AWS_REGION_NAME=${AWS_REGION_NAME-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
+      # MinIO configuration
+      #!endfor
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
+      #!value prod,no-letsencrypt: - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
+      #!value prod,no-letsencrypt: - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
       - DISCORD_BOT_INVOKE_CHAR=${DISCORD_BOT_INVOKE_CHAR:-!}
       # API Server connection for Discord bot message processing
       - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
       - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
+      #!for default
       # Onyx Craft configuration (set up automatically on container startup)
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
+      #!endfor
+    #!value prod,no-letsencrypt: # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -188,11 +229,13 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+    #!value prod,no-letsencrypt: # Uncomment the following lines if you need to include a custom CA certificate
     # PRODUCTION: Uncomment the following lines if you need to include a custom CA certificate
     # This section enables the use of a custom CA certificate
     # If present, the custom CA certificate is mounted as a volume
     # The container checks for its existence and updates the system's CA certificates
     # This allows for secure communication with services using custom SSL certificates
+    #!only default
     # Optional volume mount for CA certificate
     # volumes:
     #   # Maps to the CA_CERT_PATH environment variable in the Dockerfile
@@ -292,10 +335,18 @@ services:
     #         - driver: nvidia
     #           count: all
     #           capabilities: [gpu]
+    #!for default
     env_file:
       - path: .env
         required: false
+    #!endfor
     restart: unless-stopped
+    #!for prod,no-letsencrypt
+    environment:
+      - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
+      # Set to debug to get more fine-grained logs
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    #!endfor
     volumes:
       # Not necessary, this is just to reduce download time during startup
       - model_cache_huggingface:/app/.cache/huggingface/
@@ -335,12 +386,21 @@ services:
     #         - driver: nvidia
     #           count: all
     #           capabilities: [gpu]
+    #!for default
     env_file:
       - path: .env
         required: false
+    #!endfor
     restart: unless-stopped
     environment:
+      #!only prod,no-letsencrypt
+      - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - INDEXING_ONLY=True
+      #!for prod,no-letsencrypt
+      # Set to debug to get more fine-grained logs
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-1}
+      #!endfor
     volumes:
       # Not necessary, this is just to reduce download time during startup
       - indexing_huggingface_model_cache:/app/.cache/huggingface/
@@ -374,6 +434,7 @@ services:
       - path: .env
         required: false
     restart: unless-stopped
+    #!for default
     # PRODUCTION: Override the defaults by passing in the environment variables
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
@@ -383,6 +444,10 @@ services:
     # 2. Uncomment the ports below
     # ports:
     #   - "5432:5432"
+    #!endfor
+    #!for prod,no-letsencrypt
+    # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
+    #!endfor
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
@@ -445,26 +510,44 @@ services:
         condition: service_healthy
       web_server:
         condition: service_healthy
+    #!for default
     env_file:
       - path: .env
         required: false
+    #!endfor
+    #!for prod,no-letsencrypt
+    env_file:
+      - .env.nginx
+    #!endfor
     environment:
+      #!only default
       - DOMAIN=localhost
       # Nginx proxy timeout settings (in seconds)
       - NGINX_PROXY_CONNECT_TIMEOUT=${NGINX_PROXY_CONNECT_TIMEOUT:-300}
       - NGINX_PROXY_SEND_TIMEOUT=${NGINX_PROXY_SEND_TIMEOUT:-300}
       - NGINX_PROXY_READ_TIMEOUT=${NGINX_PROXY_READ_TIMEOUT:-300}
     ports:
+      #!value prod,no-letsencrypt: - "80:80"
       - "${HOST_PORT_80:-80}:80"
+      #!value prod,no-letsencrypt: - "443:443"
       - "${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
     volumes:
       # Mount templates read-only; the startup command copies them into
       # the writable /etc/nginx/conf.d/ inside the container.  This avoids
       # "Permission denied" errors on Windows Docker bind mounts.
       - ../data/nginx:/nginx-templates:ro
+      #!for prod
+      - ../data/certbot/conf:/etc/letsencrypt
+      - ../data/certbot/www:/var/www/certbot
+      #!endfor
+      #!for no-letsencrypt
+      - ../data/sslcerts:/etc/nginx/sslcerts
+      #!endfor
+    #!for default
     # PRODUCTION: Add SSL certificate volumes for HTTPS support:
     #   - ../data/certbot/conf:/etc/letsencrypt
     #   - ../data/certbot/www:/var/www/certbot
+    #!endfor
     logging:
       driver: json-file
       options:
@@ -473,12 +556,16 @@ services:
     # The specified script waits for the api_server to start up.
     # Without this we've seen issues where nginx shows no error logs but
     # does not receive any traffic
+    #!for default
     # PRODUCTION: Change to app.conf.template.prod for production nginx config
+    #!endfor
     command: >
       /bin/sh -c "rm -f /etc/nginx/conf.d/default.conf
       && cp -a /nginx-templates/. /etc/nginx/conf.d/
       && sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
       && chmod +x /tmp/run-nginx.sh
+      #!value prod: && /tmp/run-nginx.sh app.conf.template.prod"
+      #!value no-letsencrypt: && /tmp/run-nginx.sh app.conf.template.no-letsencrypt"
       && /tmp/run-nginx.sh app.conf.template"
     healthcheck:
       test:
@@ -495,28 +582,50 @@ services:
       retries: 5
       start_period: 30s
 
+  #!for prod
+  # follows https://pentacent.medium.com/nginx-and-lets-encrypt-with-docker-in-less-than-5-minutes-b4b8a60d3a71
+  certbot:
+    image: certbot/certbot
+    restart: unless-stopped
+    volumes:
+      - ../data/certbot/conf:/etc/letsencrypt
+      - ../data/certbot/www:/var/www/certbot
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+  #!endfor
   cache:
     image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/redis:7.4-alpine
     restart: unless-stopped
+    #!for default
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
     # 2. Uncomment the ports below
     # ports:
     #   - "6379:6379"
+    #!endfor
     # docker silently mounts /data even without an explicit volume mount, which enables
     # persistence. explicitly setting save and appendonly forces ephemeral behavior.
     command: redis-server --save "" --appendonly no
+    #!for default
     env_file:
       - path: .env
         required: false
+    #!endfor
     # Use tmpfs to prevent creation of anonymous volumes for /data
     tmpfs:
       - /data
 
   minio:
     image: ${BASE_IMAGE_REGISTRY:-docker.io}/minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
+    #!only default
     profiles: ["s3-filestore"]
     restart: unless-stopped
+    #!for default
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
     # 2. Uncomment the ports below
@@ -526,9 +635,13 @@ services:
     env_file:
       - path: .env
         required: false
+    #!endfor
     environment:
+      #!value prod,no-letsencrypt: MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set a strong value in .env, not minioadmin}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      #!value prod,no-letsencrypt: MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set a strong value in .env, not minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      #!only default
       # Note: we've seen the default bucket creation logic not work in some cases
       MINIO_DEFAULT_BUCKETS: ${S3_FILE_STORE_BUCKET_NAME:-onyx-file-store-bucket}
     volumes:
@@ -557,6 +670,7 @@ services:
     # uncomment below + comment out the above to use the `docker-in-docker` execution mode
     # privileged: true
 
+  #!for default
   # PRODUCTION: Uncomment the following certbot service for SSL certificate management
   # certbot:
   #   image: certbot/certbot
@@ -571,6 +685,7 @@ services:
   #       max-file: "6"
   #   entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
+  #!endfor
 volumes:
   # Necessary for persisting data for use
   db_volume:
