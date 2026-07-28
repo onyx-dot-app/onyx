@@ -13,6 +13,10 @@ import (
 // language definitions embedded below. Chroma's own lexers package is
 // deliberately not imported: it embeds all 268 language definitions and
 // costs several MB of binary weight; this set costs well under 1MB.
+//
+// The XML files under lexers/ are vendored verbatim from
+// github.com/alecthomas/chroma/v2 v2.23.1 (lexers/embedded/), MIT licensed —
+// see lexers/LICENSE and lexers/README.md for provenance.
 
 //go:embed lexers/*.xml
 var lexerFS embed.FS
