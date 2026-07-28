@@ -54,6 +54,13 @@ def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> N
                 )
 
 
+def _can_view_secret_header_values(tool: Tool, user: User) -> bool:
+    """Real header values only for callers who could edit the tool anyway."""
+    return user.role == UserRole.ADMIN or (
+        tool.user_id is not None and tool.user_id == user.id
+    )
+
+
 def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User) -> Tool:
     """Fetch a custom tool and ensure the caller has permission to edit it."""
     try:
@@ -100,7 +107,7 @@ def create_custom_tool(
         enabled=True,
     )
     db_session.commit()
-    return ToolSnapshot.from_model(tool)
+    return ToolSnapshot.from_model(tool, include_secret_header_values=True)
 
 
 @admin_router.put("/custom/{tool_id}", tags=PUBLIC_API_TAGS)
@@ -125,7 +132,7 @@ def update_custom_tool(
         passthrough_auth=tool_data.passthrough_auth,
         oauth_config_id=tool_data.oauth_config_id,
     )
-    return ToolSnapshot.from_model(updated_tool)
+    return ToolSnapshot.from_model(updated_tool, include_secret_header_values=True)
 
 
 @admin_router.delete("/custom/{tool_id}", tags=PUBLIC_API_TAGS)
@@ -220,7 +227,7 @@ def validate_tool(
 @router.get("/openapi", tags=PUBLIC_API_TAGS)
 def list_openapi_tools(
     db_session: Session = Depends(get_session),
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session, only_openapi=True)
 
@@ -229,7 +236,12 @@ def list_openapi_tools(
         if not should_expose_tool_to_fe(tool):
             continue
 
-        openapi_tools.append(ToolSnapshot.from_model(tool))
+        openapi_tools.append(
+            ToolSnapshot.from_model(
+                tool,
+                include_secret_header_values=_can_view_secret_header_values(tool, user),
+            )
+        )
 
     return openapi_tools
 
@@ -238,13 +250,16 @@ def list_openapi_tools(
 def get_custom_tool(
     tool_id: int,
     db_session: Session = Depends(get_session),
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> ToolSnapshot:
     try:
         tool = get_tool_by_id(tool_id, db_session)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return ToolSnapshot.from_model(tool)
+    return ToolSnapshot.from_model(
+        tool,
+        include_secret_header_values=_can_view_secret_header_values(tool, user),
+    )
 
 
 @router.get("", tags=PUBLIC_API_TAGS)
@@ -280,6 +295,11 @@ def list_tools(
                 pass
 
         # All custom tools and available built-in tools are included
-        filtered_tools.append(ToolSnapshot.from_model(tool))
+        filtered_tools.append(
+            ToolSnapshot.from_model(
+                tool,
+                include_secret_header_values=_can_view_secret_header_values(tool, user),
+            )
+        )
 
     return filtered_tools

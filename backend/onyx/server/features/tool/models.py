@@ -2,8 +2,23 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from onyx.configs.constants import MASK_CREDENTIAL_CHAR
 from onyx.db.models import Tool
 from onyx.server.features.tool.tool_visibility import get_tool_visibility_config
+
+_MASKED_HEADER_VALUE = MASK_CREDENTIAL_CHAR * 12
+
+
+def _mask_header_values(headers: list[Any] | None) -> list[Any] | None:
+    if not headers:
+        return headers
+    masked: list[Any] = []
+    for header in headers:
+        if isinstance(header, dict) and "value" in header:
+            masked.append({**header, "value": _MASKED_HEADER_VALUE})
+        else:
+            masked.append(header)
+    return masked
 
 
 class ToolSnapshot(BaseModel):
@@ -27,7 +42,9 @@ class ToolSnapshot(BaseModel):
     default_enabled: bool = False
 
     @classmethod
-    def from_model(cls, tool: Tool) -> "ToolSnapshot":
+    def from_model(
+        cls, tool: Tool, include_secret_header_values: bool = False
+    ) -> "ToolSnapshot":
         # Get visibility config for this tool
         config = get_tool_visibility_config(tool)
 
@@ -38,7 +55,13 @@ class ToolSnapshot(BaseModel):
             definition=tool.openapi_schema,
             display_name=tool.display_name or tool.name,
             in_code_tool_id=tool.in_code_tool_id,
-            custom_headers=tool.custom_headers,
+            # Header values are admin-configured secrets (API keys etc.) — only
+            # callers that may edit the tool get the real values back.
+            custom_headers=(
+                tool.custom_headers
+                if include_secret_header_values
+                else _mask_header_values(tool.custom_headers)
+            ),
             passthrough_auth=tool.passthrough_auth,
             mcp_server_id=tool.mcp_server_id,
             user_id=str(tool.user_id) if tool.user_id else None,
