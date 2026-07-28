@@ -1,1 +1,1 @@
-export { default } from "@/refresh-pages/admin/ImageGenerationPage";
+export { default } from "@/views/admin/ImageGenerationPage";

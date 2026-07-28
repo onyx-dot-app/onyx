@@ -5,6 +5,8 @@ import {
   SvgGithub,
   SvgGoogleCalendar,
   SvgGoogleDrive,
+  SvgHubspot,
+  SvgNotion,
 } from "@opal/logos";
 import { SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
@@ -17,6 +19,8 @@ export type ExternalAppType =
   | "GMAIL"
   | "LINEAR"
   | "GITHUB"
+  | "HUBSPOT"
+  | "NOTION"
   | "CUSTOM";
 
 const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
@@ -27,6 +31,8 @@ const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
     GMAIL: SvgGmail,
     LINEAR: SvgLinear,
     GITHUB: SvgGithub,
+    HUBSPOT: SvgHubspot,
+    NOTION: SvgNotion,
   };
 
 /** Logo for a known `app_type`, with a generic fallback for CUSTOM /
@@ -70,7 +76,6 @@ export interface ActionPolicyView {
 export interface BuiltInExternalAppDescriptor {
   app_type: ExternalAppType;
   name: string;
-  description: string;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   required_org_credential_fields: OrgCredentialFieldDescriptor[];
@@ -81,32 +86,36 @@ export interface BuiltInExternalAppDescriptor {
 export interface ExternalAppAdminResponse {
   id: number;
   name: string;
-  description: string;
   app_type: ExternalAppType;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
   enabled: boolean;
   actions: ActionPolicyView[];
+  associated_skills: {
+    id: string;
+    name: string;
+    is_valid: boolean | null;
+  }[];
   // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
-  // admin may only enable/disable + set policies (the UI hides the rest).
+  // admin may only set availability and policies (the UI hides the rest).
   is_onyx_managed: boolean;
 }
 
 export interface ExternalAppUserResponse {
   id: number;
   name: string;
-  description: string;
-  slug: string;
   app_type: ExternalAppType;
   credential_keys: string[];
   credential_values: Record<string, string>;
   authenticated: boolean;
+  // OAuth apps connect via a popup; others via the credential form.
+  supports_oauth: boolean;
 }
 
 /**
  * Built-in descriptors still available to add. Only one app per `app_type` is
- * allowed (server-enforced via the built-in skill's unique slug), so configured
+ * allowed, so configured
  * types are dropped to avoid a duplicate-resource error. Cloud managed built-ins
  * are pre-provisioned (always configured) and never show here. CUSTOM apps have
  * no descriptor, so they never match and are left untouched.

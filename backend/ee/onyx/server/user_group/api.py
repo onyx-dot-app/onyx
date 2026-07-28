@@ -1,40 +1,40 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.persona import update_persona_access
-from ee.onyx.db.user_group import add_users_to_user_group
+from ee.onyx.db.user_group import (
+    add_users_to_user_group,
+    fetch_user_group,
+    fetch_user_groups,
+    fetch_user_groups_for_user,
+    insert_user_group,
+    prepare_user_group_for_deletion,
+    rename_user_group,
+    set_group_permission__no_commit,
+    update_user_curator_relationship,
+    update_user_group,
+)
 from ee.onyx.db.user_group import delete_user_group as db_delete_user_group
-from ee.onyx.db.user_group import fetch_user_group
-from ee.onyx.db.user_group import fetch_user_groups
-from ee.onyx.db.user_group import fetch_user_groups_for_user
-from ee.onyx.db.user_group import insert_user_group
-from ee.onyx.db.user_group import prepare_user_group_for_deletion
-from ee.onyx.db.user_group import rename_user_group
-from ee.onyx.db.user_group import set_group_permission__no_commit
-from ee.onyx.db.user_group import update_user_curator_relationship
-from ee.onyx.db.user_group import update_user_group
-from ee.onyx.server.user_group.models import AddUsersToUserGroupRequest
-from ee.onyx.server.user_group.models import MinimalUserGroupSnapshot
-from ee.onyx.server.user_group.models import SetCuratorRequest
-from ee.onyx.server.user_group.models import SetPermissionRequest
-from ee.onyx.server.user_group.models import SetPermissionResponse
-from ee.onyx.server.user_group.models import UpdateGroupAgentsRequest
-from ee.onyx.server.user_group.models import UserGroup
-from ee.onyx.server.user_group.models import UserGroupCreate
-from ee.onyx.server.user_group.models import UserGroupRename
-from ee.onyx.server.user_group.models import UserGroupUpdate
-from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
-from onyx.auth.permissions import require_permission
+from ee.onyx.server.user_group.models import (
+    AddUsersToUserGroupRequest,
+    MinimalUserGroupSnapshot,
+    SetCuratorRequest,
+    SetPermissionRequest,
+    SetPermissionResponse,
+    UpdateGroupAgentsRequest,
+    UserGroup,
+    UserGroupCreate,
+    UserGroupRename,
+    UserGroupUpdate,
+)
+from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS, require_permission
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import User
-from onyx.db.models import UserRole
+from onyx.db.models import User, UserRole
 from onyx.db.persona import get_persona_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError

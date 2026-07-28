@@ -5,9 +5,7 @@ import os
 import pkgutil
 import sys
 from types import ModuleType
-from typing import List
-from typing import Type
-from typing import TypeVar
+from typing import List, Type, TypeVar
 
 T = TypeVar("T")
 

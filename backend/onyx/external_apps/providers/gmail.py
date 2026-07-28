@@ -1,14 +1,19 @@
 from collections.abc import Mapping
 
-from onyx.configs.app_configs import EXT_APP_GMAIL_CLIENT_ID
-from onyx.configs.app_configs import EXT_APP_GMAIL_CLIENT_SECRET
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.external_apps.presentation.payload_decoders import GmailRawMimeDecoder
-from onyx.external_apps.presentation.payload_decoders import PayloadDecoder
-from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.actions import ExternalAppAction
-from onyx.external_apps.providers.actions import RestRoute
+from onyx.configs.app_configs import (
+    EXT_APP_GMAIL_CLIENT_ID,
+    EXT_APP_GMAIL_CLIENT_SECRET,
+)
+from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.external_apps.presentation.payload_decoders import (
+    GmailRawMimeDecoder,
+    PayloadDecoder,
+)
+from onyx.external_apps.providers.actions import (
+    EndpointSpec,
+    ExternalAppAction,
+    RestRoute,
+)
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_base import GoogleOAuthProvider
 
@@ -155,10 +160,6 @@ class GmailProvider(GoogleOAuthProvider, OnyxManagedExtApp):
         # the integration safer by default.
         scope="https://www.googleapis.com/auth/gmail.modify",
         upstream_url_patterns=["https://gmail\\.googleapis\\.com/gmail/.*"],
-        description=(
-            "Read, search, send, and draft email from your Gmail account inside "
-            "Onyx Craft."
-        ),
         google_api_name="Gmail API",
         endpoint_catalog=_ENDPOINTS,
     )

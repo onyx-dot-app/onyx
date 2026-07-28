@@ -1,13 +1,11 @@
 """Unit tests for LoginCaptchaMiddleware."""
 
-from unittest.mock import AsyncMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from onyx.auth.captcha import CaptchaAction
-from onyx.auth.captcha import CaptchaVerificationError
+from onyx.auth.captcha import CaptchaAction, CaptchaVerificationError
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.server.auth import captcha_api as captcha_api_module
 from onyx.server.auth.captcha_api import LoginCaptchaMiddleware

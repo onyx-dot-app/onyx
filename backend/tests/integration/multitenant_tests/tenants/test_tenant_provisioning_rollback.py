@@ -9,13 +9,14 @@ This test verifies the full flow: provisioning failure → rollback → schema c
 """
 
 import uuid
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from sqlalchemy import text
 
-from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
-from ee.onyx.server.tenants.schema_management import drop_schema
+from ee.onyx.server.tenants.schema_management import (
+    create_schema_if_not_exists,
+    drop_schema,
+)
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from shared_configs.configs import TENANT_ID_PREFIX
 

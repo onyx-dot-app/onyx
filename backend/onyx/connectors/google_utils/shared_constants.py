@@ -22,6 +22,8 @@ GOOGLE_SCOPES = {
 DB_CREDENTIALS_DICT_TOKEN_KEY = "google_tokens"
 # This is the service account key
 DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY = "google_service_account_key"
+# This is the OAuth app credential ({"web": {...}}), pre-filled from the instance default
+DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY = "google_app_credential"
 # The email saved for both auth types
 DB_CREDENTIALS_PRIMARY_ADMIN_KEY = "google_primary_admin"
 

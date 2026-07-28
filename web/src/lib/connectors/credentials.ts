@@ -57,6 +57,12 @@ export interface GitlabCredentialJson {
   gitlab_access_token: string;
 }
 
+export interface LumAppsCredentialJson {
+  lumapps_application_id: string;
+  lumapps_api_key: string;
+  lumapps_service_user: string;
+}
+
 export interface BitbucketCredentialJson {
   bitbucket_email: string;
   bitbucket_api_token: string;
@@ -179,6 +185,13 @@ export interface ZendeskCredentialJson {
   zendesk_token: string;
 }
 
+export interface BoxCredentialJson {
+  box_client_id: string;
+  box_client_secret: string;
+  box_enterprise_id: string;
+  box_user_email: string | null;
+}
+
 export interface DropboxCredentialJson {
   dropbox_access_token: string;
 }
@@ -258,6 +271,10 @@ export interface BraintrustCredentialJson {
   braintrust_api_key: string;
 }
 
+export interface CanvasCredentialJson {
+  canvas_access_token: string;
+}
+
 export interface MediaWikiCredentialJson {}
 export interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
 
@@ -297,6 +314,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
     gitlab_url: "",
     gitlab_access_token: "",
   } as GitlabCredentialJson,
+  lumapps: {
+    lumapps_application_id: "",
+    lumapps_api_key: "",
+    lumapps_service_user: "",
+  } as LumAppsCredentialJson,
   bitbucket: {
     bitbucket_email: "",
     bitbucket_api_token: "",
@@ -342,6 +364,12 @@ export const credentialTemplates: Record<ValidSources, any> = {
     loopio_client_id: "",
     loopio_client_token: "",
   } as LoopioCredentialJson,
+  box: {
+    box_client_id: "",
+    box_client_secret: "",
+    box_enterprise_id: "",
+    box_user_email: null,
+  } as BoxCredentialJson,
   dropbox: { dropbox_access_token: "" } as DropboxCredentialJson,
   salesforce: {
     sf_username: "",
@@ -460,6 +488,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
   braintrust: {
     braintrust_api_key: "",
   } as BraintrustCredentialJson,
+  canvas: {
+    canvas_access_token: "",
+  } as CanvasCredentialJson,
   egnyte: {
     domain: "",
     access_token: "",
@@ -508,6 +539,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
 export const credentialDisplayNames: Record<string, string> = {
   // Github
   github_access_token: "GitHub Access Token",
+
+  // LumApps
+  lumapps_application_id: "LumApps Application ID",
+  lumapps_api_key: "LumApps API Key",
+  lumapps_service_user: "Service User Email (to index on behalf of)",
 
   // Gitlab
   gitlab_url: "GitLab URL",
@@ -594,6 +630,12 @@ export const credentialDisplayNames: Record<string, string> = {
   zendesk_email: "Zendesk Email",
   zendesk_token: "Zendesk Token",
 
+  // Box
+  box_client_id: "Box Client ID",
+  box_client_secret: "Box Client Secret",
+  box_enterprise_id: "Box Enterprise ID",
+  box_user_email: "Email of Box user to impersonate (optional)",
+
   // Dropbox
   dropbox_access_token: "Dropbox API Key",
 
@@ -663,6 +705,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Braintrust
   braintrust_api_key: "Braintrust API Key",
+
+  // Canvas
+  canvas_access_token: "Canvas Access Token",
 
   // GitBook
   gitbook_space_id: "GitBook Space ID",

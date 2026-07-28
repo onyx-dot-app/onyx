@@ -1,4 +1,4 @@
-import { getUserInitials } from "@/lib/user";
+import { getUserInitials } from "@/lib/users/svc";
 
 describe("getUserInitials", () => {
   it("returns first letters of first two name parts", () => {

@@ -4,49 +4,51 @@ constructed ``User`` and the test ``db_session`` (no ``TestClient``)."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from uuid import UUID
-from uuid import uuid4
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
 
 import pytest
 import redis
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
-from onyx.db.enums import ApprovalDecidedVia
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    EndpointPolicy,
+    GatedAppKind,
+)
 from onyx.db.models import BuildSession
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import MatchedAction
 from onyx.sandbox_proxy import approval_cache
-from onyx.server.features.build.approvals.api import DecisionBody
-from onyx.server.features.build.approvals.api import list_live_approvals
-from onyx.server.features.build.approvals.api import submit_decision
-from onyx.server.features.build.approvals.api import submit_session_grant
-from onyx.server.features.build.db import action_approval
+from onyx.server.features.build.approvals.api import (
+    DecisionBody,
+    list_live_approvals,
+    submit_decision,
+    submit_session_grant,
+)
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from onyx.server.features.build.db.action_approval import (
+    get_action_approval,
+    get_action_approval_for_user,
+    insert_action_approval,
+    try_record_decision,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import action_entry
 from tests.common.craft.payloads import default_action_entries as _default_actions
-from tests.external_dependency_unit.craft.db_helpers import force_approval_created_at
-from tests.external_dependency_unit.craft.db_helpers import make_external_app
-from tests.external_dependency_unit.craft.db_helpers import make_skill
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import (
+    force_approval_created_at,
+    make_external_app,
+    make_skill,
+    make_user,
+)
 
 
 def _stub_send_wake_noop(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(approval_cache, "send_wake", lambda *_args, **_kwargs: None)
-
-
-# Hardcoded spec; the completeness check below pins the source constant to it.
-WAIT_TIMEOUT_S_SPEC = 180
-
-
-def test_wait_timeout_spec() -> None:
-    assert approval_cache.WAIT_TIMEOUT_S == WAIT_TIMEOUT_S_SPEC
 
 
 # --------------------------------------------------------------------------- #
@@ -63,28 +65,28 @@ def test_list_live_approvals_filter_logic(
     user = make_user(db_session, email_prefix="live_filter")
     session = build_session_with_user(user=user)
 
-    pending = action_approval.insert_action_approval(
+    pending = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=_default_actions(),
         app_name="Shell",
         payload={"cmd": "ls"},
     )
-    decided = action_approval.insert_action_approval(
+    decided = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=_default_actions(),
         app_name="Shell",
         payload={"cmd": "rm"},
     )
-    stale = action_approval.insert_action_approval(
+    stale = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=_default_actions(),
         app_name="Shell",
         payload={"cmd": "old"},
     )
-    result = action_approval.try_record_decision(
+    result = try_record_decision(
         db_session,
         approval_id=decided.approval_id,
         decision=ApprovalDecision.APPROVED,
@@ -92,8 +94,9 @@ def test_list_live_approvals_filter_logic(
     assert result is not None
     db_session.commit()
 
-    # Push the stale row just past the 180s spec cutoff (hardcoded, not derived).
-    stale_when = datetime.now(timezone.utc) - timedelta(seconds=190)
+    stale_when = datetime.now(timezone.utc) - timedelta(
+        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 10
+    )
     force_approval_created_at(db_session, stale.approval_id, stale_when)
 
     response = list_live_approvals(
@@ -116,7 +119,7 @@ def test_list_live_approvals_non_owner_gets_not_found(
     owner = make_user(db_session, email_prefix="live_owner_a")
     intruder = make_user(db_session, email_prefix="live_owner_b")
     session = build_session_with_user(user=owner)
-    action_approval.insert_action_approval(
+    insert_action_approval(
         db_session,
         session_id=session.id,
         actions=_default_actions(),
@@ -154,7 +157,7 @@ def test_submit_decision_happy_path_returns_refreshed_row(
 
     user = make_user(db_session, email_prefix="decide_happy")
     session = build_session_with_user(user=user)
-    approval = action_approval.insert_action_approval(
+    approval = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=_default_actions(),
@@ -165,9 +168,7 @@ def test_submit_decision_happy_path_returns_refreshed_row(
 
     # Pre-read through the same accessor the API uses, populating the identity
     # map so we can observe the refresh propagate to this exact object.
-    current = action_approval.get_action_approval_for_user(
-        db_session, approval.approval_id, user.id
-    )
+    current = get_action_approval_for_user(db_session, approval.approval_id, user.id)
     assert current is not None
     assert current.decision is None
     assert current.decided_at is None
@@ -201,7 +202,7 @@ def test_submit_decision_same_decision_retry_is_idempotent(
 
     user = make_user(db_session, email_prefix="decide_retry")
     session = build_session_with_user(user=user)
-    approval = action_approval.insert_action_approval(
+    approval = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=_default_actions(),
@@ -240,7 +241,7 @@ def test_submit_decision_different_decision_raises_conflict(
 
     user = make_user(db_session, email_prefix="decide_conflict")
     session = build_session_with_user(user=user)
-    approval = action_approval.insert_action_approval(
+    approval = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=_default_actions(),
@@ -282,7 +283,7 @@ def test_submit_decision_not_found(
         owner = make_user(db_session, email_prefix="decide_owner")
         user = make_user(db_session, email_prefix="decide_intruder")
         session = build_session_with_user(user=owner)
-        approval = action_approval.insert_action_approval(
+        approval = insert_action_approval(
             db_session,
             session_id=session.id,
             actions=_default_actions(),
@@ -311,7 +312,7 @@ def test_submit_decision_pushes_wake_on_redis(
     """Successful decisions push the decision value onto ``approval:wake:{id}``."""
     user = make_user(db_session, email_prefix="decide_wake")
     session = build_session_with_user(user=user)
-    approval = action_approval.insert_action_approval(
+    approval = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=_default_actions(),
@@ -355,37 +356,37 @@ def test_submit_session_grant_approves_matching_pending_rows(
     always_read = action_entry("slack.channel.read", policy=EndpointPolicy.ALWAYS)
     ask_upload = action_entry("slack.files.upload")
 
-    current = action_approval.insert_action_approval(
+    current = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=[ask_send, always_read],
         app_name="Slack",
         payload={"text": "current"},
-        external_app_id=app.id,
+        target=(GatedAppKind.EXTERNAL_APP, app.id),
     )
-    matching = action_approval.insert_action_approval(
+    matching = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=[ask_send],
         app_name="Slack",
         payload={"text": "matching"},
-        external_app_id=app.id,
+        target=(GatedAppKind.EXTERNAL_APP, app.id),
     )
-    broader = action_approval.insert_action_approval(
+    broader = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=[ask_send, ask_upload],
         app_name="Slack",
         payload={"text": "broader"},
-        external_app_id=app.id,
+        target=(GatedAppKind.EXTERNAL_APP, app.id),
     )
-    other = action_approval.insert_action_approval(
+    other = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=[ask_send],
         app_name="Other",
         payload={"text": "other"},
-        external_app_id=other_app.id,
+        target=(GatedAppKind.EXTERNAL_APP, other_app.id),
     )
     db_session.commit()
 
@@ -425,13 +426,15 @@ def test_submit_session_grant_approves_matching_pending_rows(
     cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert approval_cache.cached_session_grants_cover(
         session_id=session.id,
-        external_app_id=app.id,
+        kind=GatedAppKind.EXTERNAL_APP,
+        target_id=app.id,
         action_types=["slack.chat.post"],
         cache=cache,
     )
     assert not approval_cache.cached_session_grants_cover(
         session_id=session.id,
-        external_app_id=app.id,
+        kind=GatedAppKind.EXTERNAL_APP,
+        target_id=app.id,
         action_types=["slack.files.upload"],
         cache=cache,
     )
@@ -446,7 +449,7 @@ def test_submit_decision_swallows_transient_wake_failure(
     """A failing wake push must NOT bubble out — the decision is committed regardless."""
     user = make_user(db_session, email_prefix="decide_wake_fail")
     session = build_session_with_user(user=user)
-    approval = action_approval.insert_action_approval(
+    approval = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=_default_actions(),
@@ -489,7 +492,7 @@ def test_submit_decision_swallows_transient_wake_failure(
 
     # Verify the row is committed in Postgres, not just in-memory.
     db_session.expire_all()
-    persisted = action_approval.get_action_approval(db_session, approval.approval_id)
+    persisted = get_action_approval(db_session, approval.approval_id)
     assert persisted is not None
     assert persisted.decision == ApprovalDecision.APPROVED
 
@@ -525,7 +528,7 @@ def test_list_live_approvals_returns_multi_action_view(
             policy=EndpointPolicy.ALWAYS,
         ),
     ]
-    action_approval.insert_action_approval(
+    insert_action_approval(
         db_session,
         session_id=session.id,
         actions=[a.model_dump(mode="json") for a in expected_actions],

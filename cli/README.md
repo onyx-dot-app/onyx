@@ -31,7 +31,8 @@ Environment variables override config file values:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ONYX_SERVER_URL` | No | Server URL (default: `https://cloud.onyx.app`) |
+| `ONYX_SERVER_URL` | No | Server origin or already-prefixed API base (default: `https://cloud.onyx.app`) |
+| `ONYX_API_PREFIX` | No | API path prefix (default: `/api`); set to empty for direct backend access |
 | `ONYX_PAT` | No | Personal access token for authentication (required if no config file) |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
 | `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |
@@ -127,6 +128,7 @@ When called without a TTY (e.g., by an AI agent or piped into another command), 
 - **Results to stdout**, progress/errors to stderr
 - **No ANSI codes** or interactive prompts
 - **`ask` output truncated** to 50000 bytes by default; full response saved to a temp file. Use `--max-output 0` to disable.
+- **`search` stdout stays valid JSON**: over the limit, whole results are dropped and a `truncation` object carries metadata plus the temp file path of the full response.
 
 ### Configuration
 

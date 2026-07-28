@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Text } from "@opal/components";
 import type { TextFont, TextColor } from "@opal/components";
 import { markdown } from "@opal/utils";

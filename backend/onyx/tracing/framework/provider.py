@@ -2,23 +2,16 @@ from __future__ import annotations
 
 import threading
 import uuid
-from abc import ABC
-from abc import abstractmethod
-from datetime import datetime
-from datetime import timezone
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import Any
 
 from onyx.utils.logger import setup_logger
 
 from .processor_interface import TracingProcessor
 from .scope import Scope
-from .spans import NoOpSpan
-from .spans import Span
-from .spans import SpanImpl
-from .spans import TSpanData
-from .traces import NoOpTrace
-from .traces import Trace
-from .traces import TraceImpl
+from .spans import NoOpSpan, Span, SpanImpl, TSpanData
+from .traces import NoOpTrace, Trace, TraceImpl
 
 logger = setup_logger(__name__)
 

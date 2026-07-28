@@ -14,15 +14,9 @@ We haven't explored all of the cloud APIs' pagination strategies. @raunakab take
 
 import json
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import TypeVar
+from collections.abc import Callable, Generator, Iterator
+from datetime import datetime, timedelta, timezone
+from typing import Any, TypeVar, cast
 from urllib.parse import quote
 
 import bs4
@@ -30,20 +24,26 @@ import requests
 from atlassian import Confluence
 from requests import HTTPError
 
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
-from onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
-from onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
+from onyx.configs.app_configs import (
+    CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE,
+    OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
+    OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
+)
 from onyx.connectors.confluence.models import ConfluenceUser
 from onyx.connectors.confluence.user_profile_override import (
     process_confluence_user_profiles_override,
 )
-from onyx.connectors.confluence.utils import _handle_http_error
-from onyx.connectors.confluence.utils import confluence_refresh_tokens
-from onyx.connectors.confluence.utils import get_start_param_from_url
-from onyx.connectors.confluence.utils import update_param_in_path
+from onyx.connectors.confluence.utils import (
+    _handle_http_error,
+    confluence_refresh_tokens,
+    get_start_param_from_url,
+    update_param_in_path,
+)
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
@@ -70,12 +70,16 @@ _CONFCLOUD_77618_404_BODY_SIGNATURES = (
 )
 
 _USER_NOT_FOUND = "Unknown Confluence User"
-_USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
-_USER_EMAIL_CACHE: dict[str, str | None] = {}
+# All three caches are keyed by (confluence instance base url, identifier). The
+# Confluence Server/DC username and userKey namespaces are per-instance, so a bare
+# identifier key would let one instance's user resolve to another instance's email
+# when several Confluence connectors run in the same multi-tenant worker process.
+_USER_ID_TO_DISPLAY_NAME_CACHE: dict[tuple[str, str], str | None] = {}
+_USER_EMAIL_CACHE: dict[tuple[str, str], str | None] = {}
 # Separate cache from _USER_EMAIL_CACHE: the DC 9.1+ REST space-permissions
 # response only includes a user's userKey (CONFSERVER-100505), not their
 # username, so we have to resolve email by a different identifier.
-_USER_KEY_TO_EMAIL_CACHE: dict[str, str | None] = {}
+_USER_KEY_TO_EMAIL_CACHE: dict[tuple[str, str], str | None] = {}
 _DEFAULT_PAGINATION_LIMIT = 1000
 _MINIMUM_PAGINATION_LIMIT = 5
 
@@ -1298,7 +1302,8 @@ def get_user_email_from_username__server(
     confluence_client: OnyxConfluence, user_name: str
 ) -> str | None:
     global _USER_EMAIL_CACHE
-    if _USER_EMAIL_CACHE.get(user_name) is None:
+    cache_key = (confluence_client._url, user_name)
+    if _USER_EMAIL_CACHE.get(cache_key) is None:
         try:
             response = confluence_client.get_mobile_parameters(user_name)
             email = response.get("email")
@@ -1321,8 +1326,8 @@ def get_user_email_from_username__server(
                 e,
             )
             email = None
-        _USER_EMAIL_CACHE[user_name] = email
-    return _USER_EMAIL_CACHE[user_name]
+        _USER_EMAIL_CACHE[cache_key] = email
+    return _USER_EMAIL_CACHE[cache_key]
 
 
 def get_user_email_from_userkey__server(
@@ -1339,7 +1344,8 @@ def get_user_email_from_userkey__server(
     different (userKey is opaque hex, username is human-readable).
     """
     global _USER_KEY_TO_EMAIL_CACHE
-    if user_key not in _USER_KEY_TO_EMAIL_CACHE:
+    cache_key = (confluence_client._url, user_key)
+    if cache_key not in _USER_KEY_TO_EMAIL_CACHE:
         try:
             response = confluence_client.get_user_details_by_userkey(user_key)
             email = response.get("email") if isinstance(response, dict) else None
@@ -1360,8 +1366,8 @@ def get_user_email_from_userkey__server(
                 e,
             )
             email = None
-        _USER_KEY_TO_EMAIL_CACHE[user_key] = email
-    return _USER_KEY_TO_EMAIL_CACHE[user_key]
+        _USER_KEY_TO_EMAIL_CACHE[cache_key] = email
+    return _USER_KEY_TO_EMAIL_CACHE[cache_key]
 
 
 def _parse_dc_version(version_str: str) -> tuple[int, int] | None:
@@ -1388,7 +1394,8 @@ def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:
         str: The User Display Name. 'Unknown User' if the user is deactivated or not found
     """
     global _USER_ID_TO_DISPLAY_NAME_CACHE
-    if _USER_ID_TO_DISPLAY_NAME_CACHE.get(user_id) is None:
+    cache_key = (confluence_client._url, user_id)
+    if _USER_ID_TO_DISPLAY_NAME_CACHE.get(cache_key) is None:
         try:
             result = confluence_client.get_user_details_by_userkey(user_id)
             found_display_name = result.get("displayName")
@@ -1402,9 +1409,9 @@ def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:
             except Exception:
                 found_display_name = None
 
-        _USER_ID_TO_DISPLAY_NAME_CACHE[user_id] = found_display_name
+        _USER_ID_TO_DISPLAY_NAME_CACHE[cache_key] = found_display_name
 
-    return _USER_ID_TO_DISPLAY_NAME_CACHE.get(user_id) or _USER_NOT_FOUND
+    return _USER_ID_TO_DISPLAY_NAME_CACHE.get(cache_key) or _USER_NOT_FOUND
 
 
 def sanitize_attachment_title(title: str) -> str:

@@ -1,7 +1,5 @@
 from onyx.configs.app_configs import CONNECTOR_MAX_EXTRACTED_TEXT_CHARS
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import ImageSection, TabularSection, TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -20,6 +18,10 @@ def cap_sections_text(
     remaining = CONNECTOR_MAX_EXTRACTED_TEXT_CHARS
     for i, section in enumerate(sections):
         if isinstance(section, ImageSection):
+            continue
+        if section.text is None:
+            # File-backed (e.g. streamed TabularSection) — content lives in the
+            # file store and is already bounded; nothing inline to cap.
             continue
         if len(section.text) > remaining:
             logger.warning(

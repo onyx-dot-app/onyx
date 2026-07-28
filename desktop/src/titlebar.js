@@ -60,39 +60,51 @@
         }
       }
 
-      html,
-      body {
-        height: var(--onyx-desktop-viewport-height);
-        min-height: var(--onyx-desktop-viewport-height);
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-      }
-
-      body {
-        padding-top: var(--onyx-desktop-titlebar-height) !important;
+      /* Reserve the native overlay-titlebar strip on the ROOT element. Doing
+         this on <html> (rather than <body>) keeps the reservation working no
+         matter how the embedded web app structures or restyles <body>, and
+         shifts every normal-flow descendant below the titlebar. box-sizing +
+         padding-top carves out the strip; the fixed titlebar element is drawn
+         on top of it. */
+      html {
         box-sizing: border-box;
+        height: var(--onyx-desktop-viewport-height) !important;
+        padding-top: var(--onyx-desktop-titlebar-height) !important;
+        overflow: hidden !important;
       }
 
-      body > div#__next,
-      body > div#root,
-      body > main {
-        height: var(--onyx-desktop-safe-height);
-        min-height: var(--onyx-desktop-safe-height);
-        overflow: auto;
-      }
-
-      /* Override common Tailwind viewport helpers so content fits under the titlebar */
-      .h-screen {
+      body {
         height: var(--onyx-desktop-safe-height) !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+      }
+
+      /* Clamp full-viewport-height containers to the area BELOW the titlebar so
+         their bottom edge doesn't overflow past the window. Covers raw Tailwind
+         utilities AND the Opal layout classes that bake height:100vh into a
+         compiled class name via @apply (which the utility overrides miss). */
+      .h-screen,
+      .max-h-screen,
+      .opal-sidebar-root__column,
+      .opal-sidebar-root__overlay[data-variant="mobile"],
+      .opal-sidebar-root__overlay[data-variant="medium"] {
+        height: var(--onyx-desktop-safe-height) !important;
+        max-height: var(--onyx-desktop-safe-height) !important;
       }
 
       .min-h-screen {
         min-height: var(--onyx-desktop-safe-height) !important;
       }
 
-      .max-h-screen {
-        max-height: var(--onyx-desktop-safe-height) !important;
+      /* Fixed sidebar overlays / backdrops are positioned against the viewport,
+         so inset-y-0 pins them to y=0 (under the traffic lights). Re-anchor them
+         below the titlebar. */
+      .opal-sidebar-root__overlay[data-variant="mobile"],
+      .opal-sidebar-root__overlay[data-variant="medium"],
+      .opal-sidebar-root__backdrop {
+        top: var(--onyx-desktop-titlebar-height) !important;
+        bottom: 0 !important;
       }
 
       #${TITLEBAR_ID} {

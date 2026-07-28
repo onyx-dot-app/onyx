@@ -65,6 +65,7 @@ export interface CreateAgentOptions {
  *
  * **Connectors:**
  * - `createFileConnector(name)` - Creates a file connector with mock credentials
+ * - `findCCPairByName(source, name)` - Looks up a connector-credential pair ID by source + name
  * - `deleteCCPair(ccPairId)` - Deletes a connector-credential pair (with polling until complete)
  *
  * **Document Sets:**
@@ -344,6 +345,40 @@ export class OnyxApiClient {
 
     await this.handleResponse(response, "Failed to pause connector");
     this.log(`Paused connector CC Pair ID: ${ccPairId}`);
+  }
+
+  /**
+   * Finds a connector-credential pair by source and exact connector name.
+   * Useful for cleaning up connectors created through the UI, where the test
+   * never sees the ccPairId directly.
+   *
+   * @param source - The connector source (e.g. "web", "file")
+   * @param name - The exact connector name to match
+   * @returns The ccPairId, or null if no connector with that name exists
+   */
+  async findCCPairByName(source: string, name: string): Promise<number | null> {
+    const response = await this.post(
+      "/manage/admin/connector/indexing-status",
+      {
+        source,
+        name_filter: name,
+        get_all_connectors: true,
+      }
+    );
+
+    const sourceGroups = await this.handleResponse<
+      { indexing_statuses: { cc_pair_id: number; name: string }[] }[]
+    >(response, "Failed to fetch connector indexing status");
+
+    for (const group of sourceGroups) {
+      const match = group.indexing_statuses.find(
+        (status) => status.name === name
+      );
+      if (match) {
+        return match.cc_pair_id;
+      }
+    }
+    return null;
   }
 
   /**

@@ -1,28 +1,22 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import Column
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import Column, delete, desc, select, update
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
-from onyx.db.enums import AccountType
-from onyx.db.enums import DefaultAppMode
-from onyx.db.enums import ThemePreference
-from onyx.db.models import AccessToken
-from onyx.db.models import Assistant__UserSpecificConfig
-from onyx.db.models import Memory
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
+from onyx.db.enums import AccountType, DefaultAppMode, ThemePreference
+from onyx.db.models import (
+    AccessToken,
+    Assistant__UserSpecificConfig,
+    Memory,
+    User,
+    User__UserGroup,
+    UserGroup,
+)
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.users import assign_user_to_default_groups__no_commit
-from onyx.db.users import is_limited_user
-from onyx.server.manage.models import MemoryItem
-from onyx.server.manage.models import UserSpecificAssistantPreference
+from onyx.db.users import assign_user_to_default_groups__no_commit, is_limited_user
+from onyx.server.manage.models import MemoryItem, UserSpecificAssistantPreference
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -130,6 +124,23 @@ def get_latest_access_token_for_user(
         return None
 
 
+def update_users_craft_enabled(
+    user_ids: list[UUID],
+    craft_enabled: bool | None,
+    db_session: Session,
+) -> None:
+    """Admin-controlled per-user Craft override; None clears the override
+    (follow the workspace default)."""
+    if not user_ids:
+        return
+    db_session.execute(
+        update(User)
+        .where(User.id.in_(user_ids))  # ty: ignore[unresolved-attribute]
+        .values(craft_enabled=craft_enabled)
+    )
+    db_session.commit()
+
+
 def update_user_temperature_override_enabled(
     user_id: UUID,
     temperature_override_enabled: bool,
@@ -210,6 +221,20 @@ def update_user_theme_preference(
         update(User)
         .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(theme_preference=theme_preference)
+    )
+    db_session.commit()
+
+
+def update_user_language(
+    user_id: UUID,
+    language: str,
+    db_session: Session,
+) -> None:
+    """Update user's language setting."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(language=language)
     )
     db_session.commit()
 

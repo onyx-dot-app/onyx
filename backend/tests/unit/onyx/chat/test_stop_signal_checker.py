@@ -7,14 +7,17 @@ so no external services are needed.
 
 from uuid import uuid4
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
-from onyx.chat.chat_processing_checker import is_chat_session_processing
-from onyx.chat.chat_processing_checker import set_processing_status
-from onyx.chat.stop_signal_checker import FENCE_TTL
-from onyx.chat.stop_signal_checker import is_connected
-from onyx.chat.stop_signal_checker import reset_cancel_status
-from onyx.chat.stop_signal_checker import set_fence
+from onyx.cache.interface import CacheBackend, CacheLock
+from onyx.chat.chat_processing_checker import (
+    is_chat_session_processing,
+    set_processing_status,
+)
+from onyx.chat.stop_signal_checker import (
+    FENCE_TTL,
+    is_connected,
+    reset_cancel_status,
+    set_fence,
+)
 
 
 class _MemoryCacheBackend(CacheBackend):

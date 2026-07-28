@@ -19,20 +19,23 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tools
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import AssistantMessage
-from onyx.llm.models import ChatCompletionMessage
-from onyx.llm.models import SystemMessage
-from onyx.llm.models import UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    ChatCompletionMessage,
+    SystemMessage,
+    UserMessage,
+)
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.prompts.compression_prompts import PROGRESSIVE_SUMMARY_SYSTEM_PROMPT_BLOCK
-from onyx.prompts.compression_prompts import PROGRESSIVE_USER_REMINDER
-from onyx.prompts.compression_prompts import SUMMARIZATION_CUTOFF_MARKER
-from onyx.prompts.compression_prompts import SUMMARIZATION_PROMPT
-from onyx.prompts.compression_prompts import USER_REMINDER
+from onyx.prompts.compression_prompts import (
+    PROGRESSIVE_SUMMARY_SYSTEM_PROMPT_BLOCK,
+    PROGRESSIVE_USER_REMINDER,
+    SUMMARIZATION_CUTOFF_MARKER,
+    SUMMARIZATION_PROMPT,
+    USER_REMINDER,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

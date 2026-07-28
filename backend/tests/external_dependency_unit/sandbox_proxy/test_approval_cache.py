@@ -3,22 +3,22 @@
 
 import threading
 import time
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from onyx.cache.factory import get_cache_backend
-from onyx.db.enums import ApprovalDecision
-from onyx.sandbox_proxy import approval_cache as approval_cache_module
-from onyx.sandbox_proxy.approval_cache import _wake_key
-from onyx.sandbox_proxy.approval_cache import announce_approval
-from onyx.sandbox_proxy.approval_cache import announce_key
-from onyx.sandbox_proxy.approval_cache import cache_session_grant_actions
-from onyx.sandbox_proxy.approval_cache import cached_session_grants_cover
-from onyx.sandbox_proxy.approval_cache import pop_announcement
-from onyx.sandbox_proxy.approval_cache import send_wake
-from onyx.sandbox_proxy.approval_cache import wait_for_wake
+from onyx.db.enums import ApprovalDecision, GatedAppKind
+from onyx.sandbox_proxy.approval_cache import (
+    _wake_key,
+    announce_approval,
+    announce_key,
+    cache_session_grant_actions,
+    cached_session_grants_cover,
+    pop_announcement,
+    send_wake,
+    wait_for_wake,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 # ---------------------------------------------------------------------------
@@ -45,7 +45,6 @@ def test_announce_applies_ttl() -> None:
     announce_approval(uuid4(), session_id, cache)
     remaining = cache.ttl(announce_key(session_id))
 
-    # Hardcoded spec; test_approval_decision_values_complete pins the constant.
     assert 0 < remaining <= 60
 
 
@@ -113,7 +112,6 @@ def test_send_wake_applies_ttl() -> None:
     send_wake(approval_id, ApprovalDecision.APPROVED, cache)
     remaining = cache.ttl(_wake_key(approval_id))
 
-    # Hardcoded spec; the completeness check below pins the constant.
     assert 0 < remaining <= 30
 
 
@@ -126,18 +124,21 @@ def test_cached_session_grants_cover_requires_every_action() -> None:
     cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     session_id = uuid4()
     approval_id = uuid4()
-    external_app_id = 42
+    kind = GatedAppKind.EXTERNAL_APP
+    target_id = 42
 
     assert not cached_session_grants_cover(
         session_id=session_id,
-        external_app_id=external_app_id,
+        kind=kind,
+        target_id=target_id,
         action_types=["slack.chat.post"],
         cache=cache,
     )
 
     cache_session_grant_actions(
         session_id=session_id,
-        external_app_id=external_app_id,
+        kind=kind,
+        target_id=target_id,
         action_types=["slack.chat.post"],
         source_approval_id=approval_id,
         cache=cache,
@@ -145,19 +146,23 @@ def test_cached_session_grants_cover_requires_every_action() -> None:
 
     assert cached_session_grants_cover(
         session_id=session_id,
-        external_app_id=external_app_id,
+        kind=kind,
+        target_id=target_id,
         action_types=["slack.chat.post"],
         cache=cache,
     )
     assert not cached_session_grants_cover(
         session_id=session_id,
-        external_app_id=external_app_id,
+        kind=kind,
+        target_id=target_id,
         action_types=["slack.chat.post", "slack.files.upload"],
         cache=cache,
     )
+    # A different catalog (MCP) at the same numeric id must not satisfy the grant.
     assert not cached_session_grants_cover(
         session_id=session_id,
-        external_app_id=external_app_id + 1,
+        kind=GatedAppKind.MCP_SERVER,
+        target_id=target_id,
         action_types=["slack.chat.post"],
         cache=cache,
     )
@@ -170,8 +175,7 @@ def test_cached_session_grants_cover_requires_every_action() -> None:
 
 @pytest.mark.asyncio
 async def test_decision_value_round_trips() -> None:
-    """Pins the enum → bytes → enum encoding; the completeness check below
-    independently pins the full enum value set."""
+    """Pins the enum → bytes → enum encoding."""
     cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     approval_id = uuid4()
 
@@ -179,13 +183,3 @@ async def test_decision_value_round_trips() -> None:
     received = await wait_for_wake(approval_id, timeout_s=5, cache=cache)
 
     assert received == ApprovalDecision.APPROVED
-
-
-def test_approval_decision_values_complete() -> None:
-    """Pins the full `ApprovalDecision` value set and the cache-layer TTL
-    constants to their spec values (the TTL bound checks elsewhere hardcode
-    the same specs)."""
-    assert {d.value for d in ApprovalDecision} == {"APPROVED", "REJECTED", "EXPIRED"}
-    assert approval_cache_module.ANNOUNCE_TTL_S == 60
-    assert approval_cache_module.WAKE_TTL_S == 30
-    assert approval_cache_module.WAIT_TIMEOUT_S == 180

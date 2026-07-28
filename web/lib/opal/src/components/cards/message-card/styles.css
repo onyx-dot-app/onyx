@@ -23,6 +23,10 @@
   @apply bg-status-warning-00;
 }
 
+.opal-message-card[data-variant="pending"] {
+  @apply bg-theme-amber-01;
+}
+
 .opal-message-card[data-variant="error"] {
   @apply bg-status-error-00;
 }

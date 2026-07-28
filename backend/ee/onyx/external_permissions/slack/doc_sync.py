@@ -2,22 +2,28 @@ from collections.abc import Generator
 
 from slack_sdk import WebClient
 
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
+from ee.onyx.external_permissions.perm_sync_types import (
+    FetchAllDocumentsFunction,
+    FetchAllDocumentsIdsFunction,
+)
 from ee.onyx.external_permissions.slack.channel_access import get_channel_access
-from ee.onyx.external_permissions.slack.utils import fetch_team_user_emails
-from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
-from onyx.access.models import DocExternalAccess
-from onyx.access.models import ExternalAccess
+from ee.onyx.external_permissions.slack.utils import (
+    fetch_team_user_emails,
+    fetch_user_id_to_email_map,
+)
+from ee.onyx.external_permissions.utils import credential_json
+from onyx.access.models import DocExternalAccess, ExternalAccess
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import HierarchyNode
-from onyx.connectors.slack.connector import filter_channels
-from onyx.connectors.slack.connector import get_channels
-from onyx.connectors.slack.connector import get_channels_across_teams
-from onyx.connectors.slack.connector import list_grid_team_ids
-from onyx.connectors.slack.connector import make_paginated_slack_api_call
-from onyx.connectors.slack.connector import SlackConnector
+from onyx.connectors.slack.connector import (
+    SlackConnector,
+    filter_channels,
+    get_channels,
+    get_channels_across_teams,
+    list_grid_team_ids,
+    make_paginated_slack_api_call,
+)
 from onyx.connectors.slack.models import ChannelType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -245,14 +251,10 @@ def slack_doc_sync(
     tenant_id = get_current_tenant_id()
     provider = OnyxDBCredentialsProvider(tenant_id, "slack", cc_pair.credential.id)
     r = get_redis_client(tenant_id=tenant_id)
-    credential_json = (
-        cc_pair.credential.credential_json.get_value(apply_mask=False)
-        if cc_pair.credential.credential_json
-        else {}
-    )
+    creds = credential_json(cc_pair)
     slack_client = SlackConnector.make_slack_web_client(
         provider.get_provider_key(),
-        credential_json["slack_bot_token"],
+        creds["slack_bot_token"],
         SlackConnector.MAX_RETRIES,
         r,
     )

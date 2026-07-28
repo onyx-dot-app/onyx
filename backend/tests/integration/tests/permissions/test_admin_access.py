@@ -12,8 +12,7 @@ import pytest
 
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
 
 # Representative endpoints that use require_permission(Permission.FULL_ADMIN_PANEL_ACCESS).
 # One per major router file to cover breadth without redundancy.
@@ -23,6 +22,7 @@ ADMIN_ACCESS_ENDPOINTS: list[tuple[str, str]] = [
     ("GET", "/manage/users/invited"),
     ("GET", "/manage/admin/valid-domains"),
     ("GET", "/manage/users/download"),
+    ("GET", "/build/admin/base-instructions"),
 ]
 
 

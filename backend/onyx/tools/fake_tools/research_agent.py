@@ -1,74 +1,82 @@
 import queue
 import time
 from collections.abc import Callable
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
-from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.citation_processor import CitationMode
-from onyx.chat.citation_processor import DynamicCitationProcessor
-from onyx.chat.citation_utils import collapse_citations
-from onyx.chat.citation_utils import update_citation_processor_from_tool_response
+from onyx.chat.citation_processor import (
+    CitationMapping,
+    CitationMode,
+    DynamicCitationProcessor,
+)
+from onyx.chat.citation_utils import (
+    collapse_citations,
+    update_citation_processor_from_tool_response,
+)
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
-from onyx.chat.llm_step import run_llm_step
-from onyx.chat.llm_step import run_llm_step_pkt_generator
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import LlmStepResult
-from onyx.chat.models import ToolCallSimple
+from onyx.chat.llm_step import run_llm_step, run_llm_step_pkt_generator
+from onyx.chat.models import ChatMessageSimple, LlmStepResult, ToolCallSimple
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.dr_mock_tools import (
+    RESEARCH_AGENT_TASK_KEY,
+    THINK_TOOL_RESPONSE_MESSAGE,
+    THINK_TOOL_RESPONSE_TOKEN_COUNT,
     get_research_agent_additional_tool_definitions,
 )
-from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TASK_KEY
-from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_MESSAGE
-from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
-from onyx.deep_research.models import CombinedResearchAgentCallResult
-from onyx.deep_research.models import ResearchAgentCallResult
-from onyx.deep_research.utils import check_special_tool_calls
-from onyx.deep_research.utils import create_think_tool_token_processor
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import ToolChoiceOptions
-from onyx.prompts.deep_research.dr_tool_prompts import OPEN_URLS_TOOL_DESCRIPTION
-from onyx.prompts.deep_research.dr_tool_prompts import (
-    OPEN_URLS_TOOL_DESCRIPTION_REASONING,
+from onyx.deep_research.models import (
+    CombinedResearchAgentCallResult,
+    ResearchAgentCallResult,
 )
-from onyx.prompts.deep_research.dr_tool_prompts import WEB_SEARCH_TOOL_DESCRIPTION
-from onyx.prompts.deep_research.research_agent import MAX_RESEARCH_CYCLES
-from onyx.prompts.deep_research.research_agent import OPEN_URL_REMINDER_RESEARCH_AGENT
-from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT
-from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT_REASONING
-from onyx.prompts.deep_research.research_agent import RESEARCH_REPORT_PROMPT
-from onyx.prompts.deep_research.research_agent import USER_REPORT_QUERY
+from onyx.deep_research.utils import (
+    check_special_tool_calls,
+    create_think_tool_token_processor,
+)
+from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
+from onyx.prompts.deep_research.dr_tool_prompts import (
+    OPEN_URLS_TOOL_DESCRIPTION,
+    OPEN_URLS_TOOL_DESCRIPTION_REASONING,
+    WEB_SEARCH_TOOL_DESCRIPTION,
+)
+from onyx.prompts.deep_research.research_agent import (
+    MAX_RESEARCH_CYCLES,
+    OPEN_URL_REMINDER_RESEARCH_AGENT,
+    RESEARCH_AGENT_PROMPT,
+    RESEARCH_AGENT_PROMPT_REASONING,
+    RESEARCH_REPORT_PROMPT,
+    USER_REPORT_QUERY,
+)
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import IntermediateReportCitedDocs
-from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
-from onyx.server.query_and_chat.streaming_models import IntermediateReportStart
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import PacketException
-from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.server.query_and_chat.streaming_models import StreamingType
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
+    IntermediateReportCitedDocs,
+    IntermediateReportDelta,
+    IntermediateReportStart,
+    Packet,
+    PacketException,
+    ResearchAgentStart,
+    SectionEnd,
+    StreamingType,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolCallInfo
-from onyx.tools.models import ToolCallKickoff
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import ToolCallInfo, ToolCallKickoff, ToolResponse
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
-from onyx.tools.utils import generate_tools_description
+from onyx.tools.utils import (
+    compute_all_tool_tokens,
+    compute_tool_definition_tokens,
+    generate_tools_description,
+)
 from onyx.tracing.framework.create import function_span
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -94,6 +102,7 @@ def generate_intermediate_report(
     user_identity: LLMUserIdentity | None,
     emitter: Emitter,
     placement: Placement,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> str:
     # NOTE: This step outputs a lot of tokens and has been observed to run for more than 10 minutes in a nontrivial percentage of
     # research tasks. This is also model / inference provider dependent.
@@ -134,7 +143,7 @@ def generate_intermediate_report(
             placement=placement,
             citation_processor=citation_processor,
             state_container=state_container,
-            reasoning_effort=ReasoningEffort.LOW,
+            reasoning_effort=reasoning_effort,
             final_documents=None,
             user_identity=user_identity,
             max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
@@ -214,6 +223,7 @@ def run_research_agent_call(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> ResearchAgentCallResult | None:
     turn_index = research_agent_call.placement.turn_index
     tab_index = research_agent_call.placement.tab_index
@@ -286,11 +296,10 @@ def run_research_agent_call(
                     if any(isinstance(tool, WebSearchTool) for tool in current_tools)
                     else ""
                 )
-                open_urls_tip = (
-                    OPEN_URLS_TOOL_DESCRIPTION
-                    if any(isinstance(tool, OpenURLTool) for tool in current_tools)
-                    else ""
+                has_open_url_tool: bool = any(
+                    isinstance(tool, OpenURLTool) for tool in current_tools
                 )
+                open_urls_tip = OPEN_URLS_TOOL_DESCRIPTION if has_open_url_tool else ""
                 if is_reasoning_model and open_urls_tip:
                     open_urls_tip = OPEN_URLS_TOOL_DESCRIPTION_REASONING
 
@@ -314,7 +323,8 @@ def run_research_agent_call(
                     message_type=MessageType.SYSTEM,
                 )
 
-                if just_ran_web_search:
+                # Gate the open_url nudge on the tool actually being available.
+                if just_ran_web_search and has_open_url_tool:
                     reminder_message = ChatMessageSimple(
                         message=OPEN_URL_REMINDER_RESEARCH_AGENT,
                         token_count=100,
@@ -323,18 +333,24 @@ def run_research_agent_call(
                 else:
                     reminder_message = None
 
+                research_agent_tools = get_research_agent_additional_tool_definitions(
+                    include_think_tool=not is_reasoning_model
+                )
+                tool_token_budget = compute_all_tool_tokens(
+                    current_tools, token_counter
+                ) + compute_tool_definition_tokens(research_agent_tools, token_counter)
+
                 constructed_history = construct_message_history(
                     system_prompt=system_prompt,
                     custom_agent_prompt=None,
                     simple_chat_history=msg_history,
                     reminder_message=reminder_message,
                     context_files=None,
-                    available_tokens=llm.config.max_input_tokens,
+                    available_tokens=max(
+                        0, llm.config.max_input_tokens - tool_token_budget
+                    ),
                 )
 
-                research_agent_tools = get_research_agent_additional_tool_definitions(
-                    include_think_tool=not is_reasoning_model
-                )
                 # Use think tool processor for non-reasoning models to convert
                 # think_tool calls to reasoning content (same as dr_loop.py)
                 custom_processor = (
@@ -357,7 +373,7 @@ def run_research_agent_call(
                     ),
                     citation_processor=None,
                     state_container=None,
-                    reasoning_effort=ReasoningEffort.LOW,
+                    reasoning_effort=reasoning_effort,
                     final_documents=None,
                     user_identity=user_identity,
                     custom_token_processor=custom_processor,
@@ -398,6 +414,7 @@ def run_research_agent_call(
                         citation_processor=citation_processor,
                         user_identity=user_identity,
                         emitter=emitter,
+                        reasoning_effort=reasoning_effort,
                         placement=Placement(
                             turn_index=turn_index,
                             tab_index=tab_index,
@@ -598,6 +615,7 @@ def run_research_agent_call(
                 citation_processor=citation_processor,
                 user_identity=user_identity,
                 emitter=emitter,
+                reasoning_effort=reasoning_effort,
                 placement=Placement(
                     turn_index=turn_index,
                     tab_index=tab_index,
@@ -656,6 +674,7 @@ def run_research_agent_calls(
     token_counter: Callable[[str], int],
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None = None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> CombinedResearchAgentCallResult:
     # Run all research agent calls in parallel with timeout
     functions_with_args = [
@@ -671,6 +690,7 @@ def run_research_agent_calls(
                 is_reasoning_model,
                 token_counter,
                 user_identity,
+                reasoning_effort,
             ),
         )
         for research_agent_call, parent_tool_call_id in zip(
@@ -716,13 +736,11 @@ if __name__ == "__main__":
     from uuid import uuid4
 
     from onyx.chat.chat_state import ChatStateContainer
-    from onyx.db.engine.sql_engine import get_session_with_current_tenant
-    from onyx.db.engine.sql_engine import SqlEngine
+    from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
     from onyx.db.models import User
     from onyx.db.persona import get_default_behavior_persona
-    from onyx.llm.factory import get_default_llm
-    from onyx.llm.factory import get_llm_token_counter
-    from onyx.llm.utils import model_is_reasoning_model
+    from onyx.llm.factory import get_default_llm, get_llm_token_counter
+    from onyx.llm.model_capabilities import model_is_reasoning_model
     from onyx.server.query_and_chat.placement import Placement
     from onyx.tools.models import ToolCallKickoff
     from onyx.tools.tool_constructor import construct_tools

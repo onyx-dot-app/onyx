@@ -4,10 +4,7 @@ import json
 import tempfile
 import uuid
 from io import BytesIO
-from typing import Any
-from typing import cast
-from typing import IO
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, Any, cast
 
 import puremagic
 from sqlalchemy.orm import Session
@@ -16,13 +13,17 @@ if TYPE_CHECKING:
     from google.cloud.storage import Client as GCSClient
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.file_record import delete_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id_optional
-from onyx.db.file_record import get_filerecord_by_prefix
-from onyx.db.file_record import upsert_filerecord
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_current_tenant_if_none,
+)
+from onyx.db.file_record import (
+    delete_filerecord_by_file_id,
+    get_filerecord_by_file_id,
+    get_filerecord_by_file_id_optional,
+    get_filerecord_by_prefix,
+    upsert_filerecord,
+)
 from onyx.db.models import FileRecord
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.s3_key_utils import generate_s3_key
@@ -124,8 +125,7 @@ class GCSBackedFileStore(FileStore):
 
     def initialize(self) -> None:
         """Initialize the GCS file store by ensuring the bucket exists."""
-        from google.api_core.exceptions import Forbidden
-        from google.api_core.exceptions import NotFound
+        from google.api_core.exceptions import Forbidden, NotFound
 
         client = self._get_gcs_client()
         try:

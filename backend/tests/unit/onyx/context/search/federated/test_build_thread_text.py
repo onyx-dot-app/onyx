@@ -1,7 +1,6 @@
 """Tests for _build_thread_text function."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.context.search.federated.slack_search import _build_thread_text
 

@@ -120,12 +120,6 @@ Resources:
           Image: onyxdotapp/onyx-model-server:latest
           Cpu: 0
           Essential: true
-          Command:
-            - "/bin/sh"
-            - "-c"
-            - >
-              if [ "${DISABLE_MODEL_SERVER}" = "True" ] || [ "${DISABLE_MODEL_SERVER}" = "true" ]; then echo 'Skipping service...';
-              exit 0; else exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000; fi
           PortMappings:
             - Name: model-server
               ContainerPort: 9000

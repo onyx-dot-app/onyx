@@ -27,35 +27,18 @@ from uuid import UUID
 import httpx
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding
-from cryptography.hazmat.primitives.serialization import PublicFormat
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from fastapi.testclient import TestClient
 
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
-    FilesystemListRequest,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_FILESYSTEM_LIST_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_HEALTH_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_READY_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_SNAPSHOT_CREATE_PATH,
-)
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    FilesystemListRequest,
     sidecar_snapshot_restore_path,
 )
 

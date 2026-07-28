@@ -5,8 +5,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import HTTPException
-from fastapi import status
+from fastapi import HTTPException, status
 
 
 class BasicAuthenticationError(HTTPException):

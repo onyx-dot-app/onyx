@@ -1,10 +1,8 @@
 import io
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any
-from typing import cast
-from urllib.parse import urlparse
-from urllib.parse import urlunparse
+from typing import Any, cast
+from urllib.parse import urlparse, urlunparse
 
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
@@ -12,49 +10,62 @@ from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.section_utils import cap_sections_text
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
+    is_tabular_file,
 )
-from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    tabular_file_to_sections,
+from onyx.connectors.google_drive.constants import (
+    DRIVE_FOLDER_TYPE,
+    DRIVE_SHORTCUT_TYPE,
 )
-from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
-from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
-from onyx.connectors.google_drive.models import GDriveMimeType
-from onyx.connectors.google_drive.models import GoogleDriveFileType
-from onyx.connectors.google_drive.section_extraction import get_document_sections
-from onyx.connectors.google_drive.section_extraction import HEADING_DELIMITER
-from onyx.connectors.google_utils.resources import get_drive_service
-from onyx.connectors.google_utils.resources import get_google_authorized_session
-from onyx.connectors.google_utils.resources import GoogleDriveService
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.extract_file_text import read_docx_file
-from onyx.file_processing.extract_file_text import read_pdf_file
-from onyx.file_processing.extract_file_text import read_pptx_file
-from onyx.file_processing.file_types import OnyxFileExtensions
-from onyx.file_processing.file_types import OnyxMimeTypes
-from onyx.file_processing.file_types import PRESENTATION_MIME_TYPE
-from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPE
-from onyx.file_processing.image_utils import make_image_callback
-from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.connectors.google_drive.file_retrieval import (
+    DRIVE_RESOURCE_KEY_FIELD,
+    add_drive_resource_key_header,
+)
+from onyx.connectors.google_drive.models import GDriveMimeType, GoogleDriveFileType
+from onyx.connectors.google_drive.section_extraction import (
+    HEADING_DELIMITER,
+    get_document_sections,
+)
+from onyx.connectors.google_utils.resources import (
+    GoogleDriveService,
+    get_drive_service,
+    get_google_authorized_session,
+)
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    ImageSection,
+    SlimDocument,
+    TabularSection,
+    TextSection,
+)
+from onyx.file_processing.extract_file_text import (
+    extract_file_text,
+    get_file_ext,
+    read_docx_file,
+    read_pdf_file,
+    read_pptx_file,
+)
+from onyx.file_processing.file_types import (
+    PRESENTATION_MIME_TYPE,
+    SPREADSHEET_MIME_TYPE,
+    OnyxFileExtensions,
+    OnyxMimeTypes,
+)
+from onyx.file_processing.image_utils import (
+    make_image_callback,
+    store_image_and_create_section,
+)
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
+    noop_fallback,
 )
-from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()
 
@@ -210,6 +221,8 @@ _FALLBACK_WEB_VIEW_LINK_TEMPLATES = {
     GDriveMimeType.SPREADSHEET.value: "https://docs.google.com/spreadsheets/d/{}/view",
     GDriveMimeType.PPT.value: "https://docs.google.com/presentation/d/{}/view",
 }
+# Fallback template for non-native (uploaded binary) Drive files.
+_FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE = "https://drive.google.com/file/d/{}/view"
 
 MAX_RETRIEVER_EMAILS = 20
 CHUNK_SIZE_BUFFER = 64  # extra bytes past the limit to read
@@ -245,7 +258,7 @@ def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
         mime_type = file.get("mimeType", "")
         template = _FALLBACK_WEB_VIEW_LINK_TEMPLATES.get(mime_type)
         if template is None:
-            link = f"https://drive.google.com/file/d/{file_id}/view"
+            link = _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE.format(file_id)
         else:
             link = template.format(file_id)
         logger.debug(
@@ -268,7 +281,10 @@ class ExportSizeThresholdExceeded(Exception):
 
 
 def download_request(
-    service: GoogleDriveService, file_id: str, size_threshold: int
+    service: GoogleDriveService,
+    file_id: str,
+    size_threshold: int,
+    resource_key: str | None = None,
 ) -> bytes:
     """
     Download the file from Google Drive.
@@ -278,6 +294,7 @@ def download_request(
     request = service.files().get_media(  # ty: ignore[unresolved-attribute]
         fileId=file_id
     )
+    add_drive_resource_key_header(request, file_id, resource_key)
     return _download_request(request, file_id, size_threshold)
 
 
@@ -318,13 +335,14 @@ def _download_and_extract_sections_basic(
     file_id = file["id"]
     file_name = file["name"]
     mime_type = file["mimeType"]
+    resource_key = file.get(DRIVE_RESOURCE_KEY_FIELD)
     link = file.get(WEB_VIEW_LINK_KEY, "")
 
     # For non-Google files, download the file
     # Use the correct API call for downloading files
     # lazy evaluation to only download the file if necessary
     def response_call() -> bytes:
-        return download_request(service, file_id, size_threshold)
+        return download_request(service, file_id, size_threshold, resource_key)
 
     def _extract_tabular(
         raw_bytes: bytes, name: str, content_type: str
@@ -341,11 +359,11 @@ def _download_and_extract_sections_basic(
             tabular_sections = result.sections
             staged_file_id = result.staged_file_id
         else:
-            tabular_sections = tabular_file_to_sections(
-                io.BytesIO(raw_bytes),
-                file_name=name,
-                link=link,
+            logger.warning(
+                "Skipping tabular file %s because raw_file_callback is not set",
+                name,
             )
+            return FileExtractionResult(sections=[], staged_file_id=None)
         sections: list[TextSection | ImageSection | TabularSection] = list(
             tabular_sections
         )
@@ -378,6 +396,7 @@ def _download_and_extract_sections_basic(
         request = service.files().export_media(  # ty: ignore[unresolved-attribute]
             fileId=file_id, mimeType=export_mime_type
         )
+        add_drive_resource_key_header(request, file_id, resource_key)
         response = _download_request(request, file_id, size_threshold)
         if not response:
             logger.warning("Failed to export %s as %s", file_name, export_mime_type)
@@ -573,6 +592,9 @@ def _get_external_access_for_raw_gdrive_file(
     admin_drive_service: GoogleDriveService,
     fallback_user_email: str,
     add_prefix: bool = False,
+    fallback_drive_service_factory: (
+        Callable[[], GoogleDriveService | None] | None
+    ) = None,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
@@ -592,6 +614,7 @@ def _get_external_access_for_raw_gdrive_file(
                 GoogleDriveService,
                 str,
                 bool,
+                Callable[[], GoogleDriveService | None] | None,
             ],
             ExternalAccess,
         ],
@@ -608,6 +631,7 @@ def _get_external_access_for_raw_gdrive_file(
         admin_drive_service,
         fallback_user_email,
         add_prefix,
+        fallback_drive_service_factory,
     )
 
 
@@ -880,6 +904,11 @@ def _convert_drive_item_to_document(
                     owner.get("displayName", "") for owner in file.get("owners", [])
                 ),
             },
+            doc_created_at=(
+                datetime.fromisoformat(created_time.replace("Z", "+00:00"))
+                if (created_time := file.get("createdTime"))
+                else None
+            ),
             doc_updated_at=datetime.fromisoformat(
                 file.get("modifiedTime", "").replace("Z", "+00:00")
             ),
@@ -948,6 +977,14 @@ def build_slim_document(
                 user_email=permission_sync_context.primary_admin_email,
             ),
             fallback_user_email=retriever_email,
+            fallback_drive_service_factory=lambda: (
+                None
+                if retriever_email == owner_email
+                else get_drive_service(
+                    creds,
+                    user_email=retriever_email,
+                )
+            ),
         )
         if permission_sync_context
         else None
@@ -956,4 +993,9 @@ def build_slim_document(
         id=onyx_document_id_from_drive_file(file),
         external_access=external_access,
         parent_hierarchy_raw_node_id=(file.get("parents") or [None])[0],
+        doc_created_at=(
+            datetime.fromisoformat(created_time.replace("Z", "+00:00"))
+            if (created_time := file.get("createdTime"))
+            else None
+        ),
     )

@@ -8,22 +8,9 @@ import { Text } from "@/components/ui/text";
 import type { IconFunctionComponent } from "@/icons/types";
 import type { SidebarVariant } from "@/components/sidebar/interfaces";
 
-// ---------------------------------------------------------------------------
-// SidebarTab — React Native port of web's Opal SidebarTab
-// (web/lib/opal/src/components/buttons/sidebar-tab/components.tsx), built on the
-// `Interactive.Stateful` sidebar-heavy / sidebar-light color matrix
-// (web/lib/opal/src/core/interactive/stateful/styles.css:543-662).
-//
-// Web "hover" → RN "pressed" (NativeWind's `active:` modifier on Pressable).
-// All classes resolve to the same Onyx token hex as web.
-// ---------------------------------------------------------------------------
-
 interface SidebarTabColors {
-  /** Selected background; empty/filled is transparent (omitted). */
   bg: string;
-  /** Label foreground color class. */
   label: string;
-  /** Icon foreground. */
   icon: string;
 }
 
@@ -36,7 +23,6 @@ function resolveColors(
     return { bg: "", label: "text-text-03", icon: "text-text-03" };
   }
   if (variant === "sidebar-light") {
-    // All states use text-02 foreground; selected adds the tint-00 background.
     return {
       bg: selected ? "bg-background-tint-00" : "",
       label: "text-text-02",
@@ -55,23 +41,17 @@ function resolveColors(
 }
 
 interface SidebarTabProps {
-  /** Collapses the label, showing only the icon (inert on phone — sidebar is open/closed). */
   folded?: boolean;
-  /** Marks this tab as the currently active item. */
   selected?: boolean;
-  /** Color variant. @default "sidebar-heavy" */
   variant?: SidebarVariant;
-  /** Renders an empty spacer in place of the icon, for nested items. */
   nested?: boolean;
-  /** Disables the tab — muted colors, suppressed press. */
   disabled?: boolean;
   onPress?: () => void;
-  /** Optional route to navigate to on press (expo-router). */
   href?: Href;
   icon?: IconFunctionComponent;
-  /** Content rendered on the right (e.g. a count or action). */
+  // Leading-slot node (e.g. an agent avatar), used instead of `icon`.
+  leading?: React.ReactNode;
   rightChildren?: React.ReactNode;
-  /** Accepted for web API parity; a no-op on touch. */
   tooltip?: string;
   children?: React.ReactNode;
 }
@@ -85,6 +65,7 @@ function SidebarTab({
   onPress,
   href,
   icon,
+  leading,
   rightChildren,
   children,
 }: SidebarTabProps) {
@@ -107,13 +88,13 @@ function SidebarTab({
         disabled && "opacity-50",
       )}
     >
-      {/* Leading slot — mirrors web's ContentSm (web/lib/opal/.../content/ContentSm.tsx
-          + styles.css): a 16px icon inside a `p-0.5` container (the padding "around"
-          the icon), then a 2px gap (web's `gap: 0.125rem`) before the label, or a
-          matching spacer for nested items so labels align. Explicit margin instead of
-          `gap`, which doesn't render reliably in RN/NativeWind. */}
+      {/* Leading icon/avatar/spacer; explicit `mr-0.5` instead of `gap` (unreliable in RN/NativeWind). */}
       {nested ? (
         <View className="mr-0.5 w-5" aria-hidden />
+      ) : leading ? (
+        <View className="mr-0.5 items-center justify-center p-0.5">
+          {leading}
+        </View>
       ) : icon ? (
         <View className="mr-0.5 items-center justify-center p-0.5">
           <Icon as={icon} size={16} className={colors.icon} />

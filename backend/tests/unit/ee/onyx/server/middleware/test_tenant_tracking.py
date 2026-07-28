@@ -7,9 +7,7 @@ served against the wrong tenant. (Contrast license enforcement, which fails
 *open*; tenant routing is a data-isolation boundary and must not.)
 """
 
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException

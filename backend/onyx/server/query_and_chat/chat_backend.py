@@ -5,13 +5,8 @@ from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
-from fastapi import Response
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -21,92 +16,104 @@ from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.cache.factory import get_cache_backend
-from onyx.chat.chat_processing_checker import get_processing_run_id
-from onyx.chat.chat_processing_checker import is_chat_session_processing
+from onyx.chat.chat_processing_checker import (
+    get_processing_run_id,
+    is_chat_session_processing,
+)
 from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.chat_utils import convert_chat_history_basic
-from onyx.chat.chat_utils import create_chat_history_chain
-from onyx.chat.chat_utils import create_chat_session_from_request
-from onyx.chat.chat_utils import extract_headers
-from onyx.chat.models import ChatFullResponse
-from onyx.chat.models import CreateChatSessionID
-from onyx.chat.process_message import gather_stream_full
-from onyx.chat.process_message import handle_multi_model_stream
-from onyx.chat.process_message import handle_stream_message_objects
+from onyx.chat.chat_utils import (
+    convert_chat_history_basic,
+    create_chat_history_chain,
+    create_chat_session_from_request,
+    extract_headers,
+)
+from onyx.chat.models import ChatFullResponse, CreateChatSessionID
+from onyx.chat.process_message import (
+    gather_stream_full,
+    handle_multi_model_stream,
+    handle_stream_message_objects,
+)
 from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import set_fence
-from onyx.chat.stream_buffer import has_stream_buffer
-from onyx.chat.stream_buffer import read_stream_chunks
+from onyx.chat.stream_buffer import has_stream_buffer, read_stream_chunks
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
-from onyx.configs.chat_configs import CHAT_RESUME_POLL_INTERVAL_S
-from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.configs.chat_configs import (
+    CHAT_HEARTBEAT_INTERVAL_S,
+    CHAT_RESUME_POLL_INTERVAL_S,
+    HARD_DELETE_CHATS,
+)
+from onyx.configs.constants import PUBLIC_API_TAGS, MessageType, MilestoneRecordType
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
-from onyx.db.chat import add_chats_to_session_from_slack_thread
-from onyx.db.chat import delete_all_chat_sessions_for_user
-from onyx.db.chat import delete_chat_session
-from onyx.db.chat import duplicate_chat_session_for_user_from_slack
-from onyx.db.chat import get_chat_message
-from onyx.db.chat import get_chat_messages_by_session
-from onyx.db.chat import get_chat_session_by_id
-from onyx.db.chat import get_chat_sessions_by_user
-from onyx.db.chat import set_as_latest_chat_message
-from onyx.db.chat import set_preferred_response
-from onyx.db.chat import translate_db_message_to_chat_message_detail
-from onyx.db.chat import update_chat_session
+from onyx.db.chat import (
+    add_chats_to_session_from_slack_thread,
+    delete_all_chat_sessions_for_user,
+    delete_chat_session,
+    duplicate_chat_session_for_user_from_slack,
+    get_chat_message,
+    get_chat_messages_by_session,
+    get_chat_session_by_id,
+    get_chat_sessions_by_user,
+    set_as_latest_chat_message,
+    set_preferred_response,
+    translate_db_message_to_chat_message_detail,
+    update_chat_session,
+)
 from onyx.db.chat_search import search_chat_sessions
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
-from onyx.db.feedback import create_chat_message_feedback
-from onyx.db.feedback import remove_chat_message_feedback
-from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import Persona
-from onyx.db.models import User
+from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
+from onyx.db.models import ChatSessionSharedStatus, Persona, User
 from onyx.db.persona import get_persona_by_id
-from onyx.db.usage import increment_usage
-from onyx.db.usage import UsageType
+from onyx.db.usage import UsageType, increment_usage
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.factory import get_default_llm
-from onyx.llm.factory import get_llm_for_persona
-from onyx.llm.factory import get_llm_token_counter
+from onyx.llm.factory import get_default_llm, get_llm_for_persona, get_llm_token_counter
+from onyx.llm.models import (
+    USER_SELECTABLE_REASONING_EFFORTS,
+    ReasoningEffort,
+    parse_user_selectable_reasoning_effort,
+)
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
-from onyx.server.query_and_chat.models import ChatFeedbackRequest
-from onyx.server.query_and_chat.models import ChatMessageIdentifier
-from onyx.server.query_and_chat.models import ChatRenameRequest
-from onyx.server.query_and_chat.models import ChatSearchResponse
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.models import ChatSessionDetailResponse
-from onyx.server.query_and_chat.models import ChatSessionDetails
-from onyx.server.query_and_chat.models import ChatSessionGroup
-from onyx.server.query_and_chat.models import ChatSessionsResponse
-from onyx.server.query_and_chat.models import ChatSessionSummary
-from onyx.server.query_and_chat.models import ChatSessionUpdateRequest
-from onyx.server.query_and_chat.models import CurrentRunInfo
-from onyx.server.query_and_chat.models import MessageOrigin
-from onyx.server.query_and_chat.models import RenameChatSessionResponse
-from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.server.query_and_chat.models import SetPreferredResponseRequest
-from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
-from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
+from onyx.server.query_and_chat.chat_utils import (
+    is_spreadsheet_mime_type,
+    parse_spreadsheet_for_preview,
+)
+from onyx.server.query_and_chat.models import (
+    ChatFeedbackRequest,
+    ChatMessageIdentifier,
+    ChatRenameRequest,
+    ChatSearchResponse,
+    ChatSessionCreationRequest,
+    ChatSessionDetailResponse,
+    ChatSessionDetails,
+    ChatSessionGroup,
+    ChatSessionsResponse,
+    ChatSessionSummary,
+    ChatSessionUpdateRequest,
+    CurrentRunInfo,
+    MessageOrigin,
+    RenameChatSessionResponse,
+    SendMessageRequest,
+    SetPreferredResponseRequest,
+    UpdateChatSessionReasoningRequest,
+    UpdateChatSessionTemperatureRequest,
+    UpdateChatSessionThreadRequest,
+)
 from onyx.server.query_and_chat.session_loading import (
     translate_assistant_message_to_packets,
 )
-from onyx.server.query_and_chat.streaming_models import heartbeat_packet
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import Packet, heartbeat_packet
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
-from onyx.server.usage_limits import check_llm_cost_limit_for_provider
-from onyx.server.usage_limits import check_usage_and_raise
-from onyx.server.usage_limits import is_usage_limits_enabled
+from onyx.server.usage_limits import (
+    check_llm_cost_limit_for_provider,
+    check_usage_and_raise,
+    is_usage_limits_enabled,
+)
 from onyx.server.utils import get_json_line
 from onyx.tracing.framework.create import ensure_trace
 from onyx.utils.headers import get_custom_tool_additional_request_headers
@@ -207,6 +214,7 @@ def get_user_chat_sessions(
                 shared_status=chat.shared_status,
                 current_alternate_model=chat.current_alternate_model,
                 current_temperature_override=chat.temperature_override,
+                current_reasoning_effort_override=chat.reasoning_effort_override,
             )
             for chat in chat_sessions
         ],
@@ -250,6 +258,41 @@ def update_chat_session_temperature(
 
     chat_session.temperature_override = update_thread_req.temperature_override
 
+    db_session.add(chat_session)
+    db_session.commit()
+
+
+@router.put("/update-chat-session-reasoning")
+def update_chat_session_reasoning(
+    update_thread_req: UpdateChatSessionReasoningRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    chat_session = get_chat_session_by_id(
+        chat_session_id=update_thread_req.chat_session_id,
+        user_id=user.id,
+        db_session=db_session,
+    )
+
+    # NULL clears the override. Any set value must be a user-selectable effort.
+    reasoning_effort: ReasoningEffort | None = None
+    if update_thread_req.reasoning_effort_override is not None:
+        try:
+            reasoning_effort = parse_user_selectable_reasoning_effort(
+                update_thread_req.reasoning_effort_override
+            )
+        except ValueError:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "reasoning_effort_override must be one of: "
+                + ", ".join(
+                    effort.value
+                    for effort in ReasoningEffort
+                    if effort in USER_SELECTABLE_REASONING_EFFORTS
+                ),
+            )
+
+    chat_session.reasoning_effort_override = reasoning_effort
     db_session.add(chat_session)
     db_session.commit()
 
@@ -378,6 +421,7 @@ def get_chat_session(
         time_created=chat_session.time_created,
         shared_status=chat_session.shared_status,
         current_temperature_override=chat_session.temperature_override,
+        current_reasoning_effort_override=chat_session.reasoning_effort_override,
         deleted=chat_session.deleted,
         owner_name=chat_session.user.personal_name if chat_session.user else None,
         # Packets are now directly serialized as Packet Pydantic models
@@ -433,6 +477,10 @@ def rename_chat_session(
                 description=name,
             )
         return RenameChatSessionResponse(new_name=name)
+
+    # Auto-naming calls an LLM, so apply the same per-user budget gate as
+    # send-message. Manual renames return above and stay free.
+    check_token_rate_limits(user)
 
     llm = get_default_llm(
         additional_headers=extract_headers(
@@ -893,6 +941,7 @@ def seed_chat_from_slack(
 def fetch_chat_file(
     file_id: str,
     request: Request,
+    parsed: bool = Query(False),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
@@ -912,11 +961,13 @@ def fetch_chat_file(
         raise HTTPException(status_code=404, detail="File not found")
 
     media_type = file_record.file_type
-    file_io = file_store.read_file(file_id, mode="b")
+    # `parsed` only changes behavior for spreadsheet files (xlsx is a binary zip
+    # the frontend cannot render); everything else is served raw as usual.
+    parse_spreadsheet = parsed and is_spreadsheet_mime_type(media_type)
 
     # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
     # Use `private` because this is behind auth / tenant scoping.
-    etag = f'"{file_id}"'
+    etag = f'"{file_id}-parsed"' if parse_spreadsheet else f'"{file_id}"'
     cache_headers = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
@@ -926,11 +977,21 @@ def fetch_chat_file(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
 
+    if parse_spreadsheet:
+        # Use a tempfile since openpyxl needs a seekable file and the workbook
+        # may be large.
+        with file_store.read_file(file_id, mode="b", use_tempfile=True) as xlsx_io:
+            preview = parse_spreadsheet_for_preview(
+                xlsx_io, file_record.display_name or ""
+            )
+        return JSONResponse(content=preview.model_dump(), headers=cache_headers)
+
+    file_io = file_store.read_file(file_id, mode="b")
     return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
 
 
 @router.get("/search", tags=PUBLIC_API_TAGS)
-async def search_chats(
+def search_chats(
     query: str | None = Query(None),
     page: int = Query(1),
     page_size: int = Query(10),
@@ -950,7 +1011,6 @@ async def search_chats(
         page=page,
         page_size=page_size,
         include_deleted=False,
-        include_onyxbot_flows=False,
     )
 
     # Group chat sessions by time period
@@ -976,6 +1036,7 @@ async def search_chats(
             shared_status=session.shared_status,
             current_alternate_model=session.current_alternate_model,
             current_temperature_override=session.temperature_override,
+            current_reasoning_effort_override=session.reasoning_effort_override,
         )
 
         if session_date == today:

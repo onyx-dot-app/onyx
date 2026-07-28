@@ -23,7 +23,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <UploadFilesProvider>
       <BuildProvider>
         <BuildOnboardingProvider>
-          <div className="flex flex-row w-full h-full">
+          <div className="flex h-full min-h-0 w-full flex-row overflow-hidden contain-layout">
             <BuildSidebar />
             {children}
           </div>

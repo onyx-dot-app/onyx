@@ -1,9 +1,10 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from unittest.mock import patch
 
-from onyx.connectors.fireflies.connector import _FIREFLIES_POLL_OVERLAP_SECONDS
-from onyx.connectors.fireflies.connector import FirefliesConnector
+from onyx.connectors.fireflies.connector import (
+    _FIREFLIES_POLL_OVERLAP_SECONDS,
+    FirefliesConnector,
+)
 
 
 def _fmt(epoch_seconds: int) -> str:

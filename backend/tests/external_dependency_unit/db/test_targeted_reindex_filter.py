@@ -13,32 +13,32 @@ from sqlalchemy.orm import Session
 
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
 from onyx.db.enums import IndexingStatus
-from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
-from onyx.db.index_attempt import count_index_attempts_for_cc_pair
 from onyx.db.index_attempt import (
+    cancel_indexing_attempts_for_ccpair,
+    count_index_attempts_for_cc_pair,
     count_unique_active_cc_pairs_with_successful_index_attempts,
+    count_unique_cc_pairs_with_successful_index_attempts,
+    get_in_progress_index_attempts,
+    get_index_attempts_for_cc_pair,
+    get_last_attempt,
+    get_last_attempt_for_cc_pair,
+    get_latest_index_attempt_for_cc_pair_id,
+    get_latest_index_attempts,
+    get_latest_index_attempts_by_status,
+    get_latest_successful_index_attempt_for_cc_pair_id,
+    get_latest_successful_index_attempts_parallel,
+    get_paginated_index_attempts_for_cc_pair_id,
+    get_recent_attempts_for_cc_pair,
+    get_recent_completed_attempts_for_cc_pair,
 )
-from onyx.db.index_attempt import count_unique_cc_pairs_with_successful_index_attempts
-from onyx.db.index_attempt import get_in_progress_index_attempts
-from onyx.db.index_attempt import get_index_attempts_for_cc_pair
-from onyx.db.index_attempt import get_last_attempt
-from onyx.db.index_attempt import get_last_attempt_for_cc_pair
-from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
-from onyx.db.index_attempt import get_latest_index_attempts
-from onyx.db.index_attempt import get_latest_index_attempts_by_status
-from onyx.db.index_attempt import get_latest_successful_index_attempt_for_cc_pair_id
-from onyx.db.index_attempt import get_latest_successful_index_attempts_parallel
-from onyx.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id
-from onyx.db.index_attempt import get_recent_attempts_for_cc_pair
-from onyx.db.index_attempt import get_recent_completed_attempts_for_cc_pair
 from onyx.db.indexing_coordination import IndexingCoordination
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import TargetedReindexJob
+from onyx.db.models import ConnectorCredentialPair, IndexAttempt, TargetedReindexJob
 from onyx.db.search_settings import get_current_search_settings
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+)
 
 
 @pytest.fixture
@@ -553,8 +553,7 @@ def test_get_last_successful_poll_range_end_skips_targeted(
 ) -> None:
     """The freshness scheduler reads `poll_range_end` from the latest
     successful full-run attempt, ignoring targeted reindexes."""
-    from datetime import datetime
-    from datetime import timezone
+    from datetime import datetime, timezone
 
     settings = get_current_search_settings(db_session)
     full_run_end = datetime(2026, 1, 1, tzinfo=timezone.utc)

@@ -1,10 +1,10 @@
-import { PersonaSharePermission } from "@/lib/agents/types";
 import { SvgBubbleText, SvgEdit, SvgLock, SvgOrganization } from "@opal/icons";
 import { SharePermissionMenuOption } from "@/sections/modals/SharePermissionMenu";
 
 export type ShareScope = "PRIVATE" | "PUBLIC";
+export type ShareAccessPermission = "EDITOR" | "VIEWER";
 
-export const PERMISSION_OPTIONS: SharePermissionMenuOption<PersonaSharePermission>[] =
+export const PERMISSION_OPTIONS: SharePermissionMenuOption<ShareAccessPermission>[] =
   [
     {
       icon: SvgBubbleText,

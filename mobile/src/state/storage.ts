@@ -1,8 +1,5 @@
-// MMKV instances + a string storage adapter shared by TanStack Query's persister
-// and (later) zustand's `persist` middleware.
-//
-// react-native-mmkv v4 has NO `new MMKV()` — use the createMMKV factory. Two
-// separate instances so a query-cache clear can't touch other persisted state.
+// react-native-mmkv v4 has no `new MMKV()` — use createMMKV. Two separate instances so a
+// query-cache clear can't touch other persisted state.
 import { createMMKV, type MMKV } from "react-native-mmkv";
 
 export const appStorage: MMKV = createMMKV({ id: "onyx.app" });

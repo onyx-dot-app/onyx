@@ -121,6 +121,23 @@ func (w *Writer) Finish() {
 	fmt.Fprintf(w.out(), "  cat %s | tail -50\n", tmpPath)
 }
 
+// SaveFull writes content to a new temp file and returns its path.
+func SaveFull(pattern string, content string) (string, error) {
+	f, err := os.CreateTemp("", pattern)
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.WriteString(content); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	return f.Name(), nil
+}
+
 // closeTmpFile closes and optionally removes the temp file.
 func (w *Writer) closeTmpFile(remove bool) {
 	if w.tmpFile == nil {

@@ -6,14 +6,14 @@ export enum Scope {
 
 export interface TokenRateLimitArgs {
   enabled: boolean;
-  token_budget: number;
+  token_budget: number | null;
   period_hours: number;
 }
 
 export interface TokenRateLimit {
   token_id: number;
   enabled: boolean;
-  token_budget: number;
+  token_budget: number | null;
   period_hours: number;
 }
 

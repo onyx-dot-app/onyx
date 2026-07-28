@@ -3,7 +3,7 @@
 LOAD-BEARING: referenced by every "Celery <name>" configuration in
 .vscode/launch.json (both local and k8s variants). Deleting or renaming this
 file will break the vscode debugger for celery. See also CONTRIBUTING.md
-("VSCode Debugger") and docs/dev/local-kubernetes.md.
+("VSCode Debugger") and docs/craft/dev/local-kubernetes.md.
 
 The reloader runs inside the debugged process and re-launches via fork;
 debugpy follows the fork when launch.json sets `subProcess: true`. The
@@ -23,8 +23,7 @@ import os
 import sys
 from pathlib import Path
 
-from watchfiles import DefaultFilter
-from watchfiles import run_process
+from watchfiles import DefaultFilter, run_process
 
 # Built-in ext-app + craft skill bundles are content shipped to the sandbox,
 # not imported by the worker, so editing them shouldn't trigger a restart.
@@ -38,7 +37,7 @@ _SANDBOX_IMAGE_DIR = str(
 
 
 def _run(argv: list[str]) -> None:
-    from celery.__main__ import main  # ty: ignore[unresolved-import]
+    from celery.__main__ import main
 
     sys.argv[:] = argv
     main()

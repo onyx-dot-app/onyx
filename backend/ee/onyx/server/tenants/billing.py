@@ -1,6 +1,5 @@
 from enum import Enum as PyEnum
-from typing import cast
-from typing import Literal
+from typing import Literal, cast
 
 import requests
 import stripe
@@ -9,9 +8,11 @@ from sqlalchemy.orm import Session
 from ee.onyx.configs.app_configs import STRIPE_SECRET_KEY
 from ee.onyx.db.license import acquire_seat_lock
 from ee.onyx.server.tenants.access import generate_data_plane_token
-from ee.onyx.server.tenants.models import BillingInformation
-from ee.onyx.server.tenants.models import StripeCheckoutSessionResult
-from ee.onyx.server.tenants.models import SubscriptionStatusResponse
+from ee.onyx.server.tenants.models import (
+    BillingInformation,
+    StripeCheckoutSessionResult,
+    SubscriptionStatusResponse,
+)
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.error_handling.error_codes import OnyxErrorCode

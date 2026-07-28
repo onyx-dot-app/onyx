@@ -25,3 +25,10 @@ def build_ext_group_name_for_onyx(ext_group_name: str, source: DocumentSource) -
     NOTE: the name is lowercased to handle case sensitivity for group names
     """
     return f"{source.value}_{ext_group_name}".lower()
+
+
+def build_domain_group_id(domain: str) -> str:
+    """Group id for "everyone at <domain>" Drive shares. The Drive group sync
+    populates it with the real Workspace roster for the domain, so membership is
+    Google's own rather than inferred from a user's email string."""
+    return f"domain:{domain.lower()}"

@@ -1,5 +1,5 @@
 import { User } from "@/lib/types";
-import { checkUserIsNoAuthUser } from "@/lib/user";
+import { checkUserIsNoAuthUser } from "@/lib/users/svc";
 import { MinimalAgent, Agent } from "@/lib/agents/types";
 
 /**

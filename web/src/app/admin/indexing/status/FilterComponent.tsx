@@ -201,6 +201,14 @@ export const FilterComponent = forwardRef<
                 Failed
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
+                checked={selectedStatuses.includes("interrupted")}
+                onCheckedChange={() => handleStatusChange("interrupted")}
+                className="flex items-center justify-between"
+                onSelect={(e) => e.preventDefault()}
+              >
+                Interrupted
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("in_progress")}
                 onCheckedChange={() => handleStatusChange("in_progress")}
                 className="flex items-center justify-between"

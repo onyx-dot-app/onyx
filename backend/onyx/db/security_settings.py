@@ -27,9 +27,11 @@ def upsert_overrides(db_session: Session, overrides: SecuritySettingsOverrides) 
     actually clears fields the admin removed — leaving them out would keep
     the previously-set value.
     """
+    # KV-backed overrides (no column) are persisted by the store layer.
     payload = {
         name: getattr(overrides, name)
         for name in SecuritySettingsOverrides.model_fields
+        if hasattr(SecuritySettingsRow, name)
     }
     stmt = insert(SecuritySettingsRow).values(id=True, **payload)
     stmt = stmt.on_conflict_do_update(index_elements=["id"], set_=payload)

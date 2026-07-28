@@ -9,6 +9,6 @@
 /.github/workflows/post-merge-beta-cherry-pick.yml @justin-tahara @jmelahman
 
 # Enterprise Edition code owners
-/backend/ee/ @evan-onyx @Weves
-/web/src/ee/ @evan-onyx @Weves
-/web/src/app/ee/ @evan-onyx @Weves
+/backend/ee/ @evan-onyx @Weves @jmelahman @justin-tahara
+/web/src/ee/ @evan-onyx @Weves @jmelahman @justin-tahara
+/web/src/app/ee/ @evan-onyx @Weves @jmelahman @justin-tahara

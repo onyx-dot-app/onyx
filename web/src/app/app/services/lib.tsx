@@ -4,6 +4,7 @@ import {
   StreamStopInfo,
 } from "@/lib/search/interfaces";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
+import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { FeedbackType } from "@/app/app/interfaces";
 import {
   BackendMessage,
@@ -55,6 +56,23 @@ export async function updateTemperatureOverrideForChatSession(
     body: JSON.stringify({
       chat_session_id: chatSessionId,
       temperature_override: newTemperature,
+    }),
+  });
+  return response;
+}
+
+export async function updateReasoningEffortForChatSession(
+  chatSessionId: string,
+  newReasoningEffort: ReasoningEffortOverride | null
+) {
+  const response = await fetch("/api/chat/update-chat-session-reasoning", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      chat_session_id: chatSessionId,
+      reasoning_effort_override: newReasoningEffort,
     }),
   });
   return response;

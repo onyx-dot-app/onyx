@@ -1,22 +1,20 @@
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import INDEX_SEPARATOR
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import Tag
+from onyx.configs.constants import INDEX_SEPARATOR, DocumentSource
+from onyx.context.search.models import IndexFilters, Tag, TimeRange
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
-from onyx.document_index.vespa_constants import DOC_UPDATED_AT
-from onyx.document_index.vespa_constants import DOCUMENT_SETS
-from onyx.document_index.vespa_constants import HIDDEN
-from onyx.document_index.vespa_constants import METADATA_LIST
-from onyx.document_index.vespa_constants import PERSONAS
-from onyx.document_index.vespa_constants import SOURCE_TYPE
-from onyx.document_index.vespa_constants import TENANT_ID
-from onyx.document_index.vespa_constants import USER_PROJECT
+from onyx.document_index.vespa_constants import (
+    DOC_UPDATED_AT,
+    DOCUMENT_SETS,
+    HIDDEN,
+    METADATA_LIST,
+    PERSONAS,
+    SOURCE_TYPE,
+    TENANT_ID,
+    USER_PROJECT,
+)
 from shared_configs.configs import MULTI_TENANT
 
 
@@ -181,7 +179,9 @@ class TestBuildVespaFilters:
         """Test time cutoff filtering."""
         # With cutoff time
         cutoff_time = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        filters = IndexFilters(access_control_list=[], time_cutoff=cutoff_time)
+        filters = IndexFilters(
+            access_control_list=[], updated_at_range=TimeRange(start=cutoff_time)
+        )
         result = build_vespa_filters(filters)
         cutoff_secs = int(cutoff_time.timestamp())
         assert (
@@ -189,19 +189,50 @@ class TestBuildVespaFilters:
         )
 
         # No cutoff time
-        filters = IndexFilters(access_control_list=[], time_cutoff=None)
+        filters = IndexFilters(access_control_list=[], updated_at_range=None)
         result = build_vespa_filters(filters)
         assert f"!({HIDDEN}=true) and " == result
 
         # Test untimed logic (when cutoff is old enough)
         old_cutoff = datetime.now(timezone.utc) - timedelta(days=100)
-        filters = IndexFilters(access_control_list=[], time_cutoff=old_cutoff)
+        filters = IndexFilters(
+            access_control_list=[], updated_at_range=TimeRange(start=old_cutoff)
+        )
         result = build_vespa_filters(filters)
         old_cutoff_secs = int(old_cutoff.timestamp())
         assert (
             f"!({HIDDEN}=true) and !({DOC_UPDATED_AT} < {old_cutoff_secs}) and "
             == result
         )
+
+    def test_time_range_filter(self) -> None:
+        """A bounded updated_at_range emits strict >= and <= clauses and
+        excludes untimed docs (no `!(... < ...)` form), even when the lower
+        bound is old."""
+        start = datetime(2020, 1, 1, tzinfo=timezone.utc)
+        end = datetime(2020, 1, 31, 23, 59, 59, tzinfo=timezone.utc)
+        filters = IndexFilters(
+            access_control_list=[],
+            updated_at_range=TimeRange(start=start, end=end),
+        )
+        result = build_vespa_filters(filters)
+        start_secs = int(start.timestamp())
+        end_secs = int(end.timestamp())
+        assert (
+            f"!({HIDDEN}=true) and ({DOC_UPDATED_AT} >= {start_secs}) and "
+            f"({DOC_UPDATED_AT} <= {end_secs}) and " == result
+        )
+
+    def test_time_upper_bound_only(self) -> None:
+        """An upper bound alone (via updated_at_range) emits just a <= clause."""
+        end = datetime(2023, 6, 1, tzinfo=timezone.utc)
+        filters = IndexFilters(
+            access_control_list=[],
+            updated_at_range=TimeRange(end=end),
+        )
+        result = build_vespa_filters(filters)
+        end_secs = int(end.timestamp())
+        assert f"!({HIDDEN}=true) and ({DOC_UPDATED_AT} <= {end_secs}) and " == result
 
     def test_combined_filters(self) -> None:
         """Test combining multiple filter types.
@@ -216,7 +247,7 @@ class TestBuildVespaFilters:
             document_set=["set1"],
             project_id_filter=789,
             persona_id_filter=42,
-            time_cutoff=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            updated_at_range=TimeRange(start=datetime(2023, 1, 1, tzinfo=timezone.utc)),
         )
 
         result = build_vespa_filters(filters)

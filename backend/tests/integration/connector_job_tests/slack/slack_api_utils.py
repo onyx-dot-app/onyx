@@ -9,8 +9,7 @@ Assumptions:
     - chat:write.public
 """
 
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 from slack_sdk import WebClient

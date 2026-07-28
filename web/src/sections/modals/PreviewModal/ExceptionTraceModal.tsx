@@ -1,4 +1,4 @@
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { SvgAlertTriangle } from "@opal/icons";
 import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
 import { CopyButton } from "@opal/components";

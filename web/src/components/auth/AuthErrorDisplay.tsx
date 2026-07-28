@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 
 const ERROR_MESSAGES = {
   Anonymous: "Your team does not have anonymous access enabled.",

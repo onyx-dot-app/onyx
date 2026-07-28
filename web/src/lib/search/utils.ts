@@ -17,7 +17,9 @@ export const buildFilters = (
     source_type:
       sources.length > 0 ? sources.map((source) => source.internalName) : null,
     document_set: documentSets.length > 0 ? documentSets : null,
-    time_cutoff: timeRange?.from ? timeRange.from : null,
+    updated_at_range: timeRange?.from
+      ? { start: timeRange.from, end: null }
+      : null,
     tags: tags,
   };
 

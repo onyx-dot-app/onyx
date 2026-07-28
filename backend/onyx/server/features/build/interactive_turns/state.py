@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
-from dataclasses import dataclass
-from datetime import datetime
-from datetime import timezone
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from enum import StrEnum
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from onyx.cache.interface import CacheBackend
-from onyx.cache.interface import CacheLock
+from onyx.cache.interface import CacheBackend, CacheLock
+from onyx.utils.datetime import datetime_to_utc
 
 
 class InteractiveTurnStatus(StrEnum):
@@ -52,6 +49,8 @@ class InteractiveTurn:
     last_heartbeat_at: datetime | None = None
     error_detail: str | None = None
     runner_id: str | None = None
+    # Claim-local flag for stale-RUNNING recovery; not persisted (see _save_turn).
+    reclaimed: bool = False
 
     @property
     def is_active(self) -> bool:
@@ -160,6 +159,12 @@ def claim_turn_for_runner(
     turn = get_turn(cache, turn_id)
     if turn is None or turn.status not in ACTIVE_TURN_STATUSES:
         return None
+    # Pre-lock rejection so periodic reclaim retries don't contend on the
+    # active-turn lock; re-checked under it.
+    if turn.status == TURN_STATUS_RUNNING and not _runner_is_stale(
+        turn, stale_after_seconds=stale_after_seconds
+    ):
+        return None
 
     try:
         lock = acquire_active_turn_lock(cache, turn.session_id)
@@ -175,11 +180,13 @@ def claim_turn_for_runner(
         ):
             return None
 
+        was_stale_reclaim = turn.status == TURN_STATUS_RUNNING
         now = datetime.now(tz=timezone.utc)
         turn.status = TURN_STATUS_RUNNING
         turn.last_heartbeat_at = now
         turn.runner_id = str(uuid4())
         turn.error_detail = None
+        turn.reclaimed = was_stale_reclaim
         _save_turn(cache, turn, ex=ACTIVE_TURN_TTL_SECONDS)
         cache.set(
             _active_turn_key(turn.session_id),
@@ -265,15 +272,13 @@ def _runner_is_stale(
 ) -> bool:
     if turn.last_heartbeat_at is None:
         return True
-    heartbeat = turn.last_heartbeat_at
-    if heartbeat.tzinfo is None:
-        heartbeat = heartbeat.replace(tzinfo=timezone.utc)
-    age = datetime.now(tz=timezone.utc) - heartbeat
+    age = datetime.now(tz=timezone.utc) - datetime_to_utc(turn.last_heartbeat_at)
     return age.total_seconds() >= stale_after_seconds
 
 
 def _save_turn(cache: CacheBackend, turn: InteractiveTurn, *, ex: int) -> None:
     payload = asdict(turn)
+    payload.pop("reclaimed", None)
     for field in ("turn_id", "session_id", "user_id"):
         payload[field] = str(payload[field])
     for field in ("last_heartbeat_at",):

@@ -1,105 +1,69 @@
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
 
 import pytest
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
-from tests.daily.connectors.google_drive.consts_and_utils import _pick
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_MY_DRIVE_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_EMAIL,
+    ADMIN_FILE_IDS,
+    ADMIN_FOLDER_3_FILE_IDS,
+    ADMIN_MY_DRIVE_ID,
     ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    assert_expected_docs_in_retrieved_docs,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    assert_hierarchy_nodes_match_expected,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_DOC_SINGLETON,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_DOCS_IN_FOLDER,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_FOLDER_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_FOLDER_URL,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_URL
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_URL
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_1_URL
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_2_URL
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_URL
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_ID
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_URL
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    get_expected_hierarchy_for_shared_drives,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import id_to_name
-from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
-from tests.daily.connectors.google_drive.consts_and_utils import (
+    FOLDER_1_1_FILE_IDS,
+    FOLDER_1_1_URL,
+    FOLDER_1_2_FILE_IDS,
+    FOLDER_1_2_URL,
+    FOLDER_1_FILE_IDS,
+    FOLDER_2_1_FILE_IDS,
+    FOLDER_2_1_URL,
+    FOLDER_2_2_FILE_IDS,
+    FOLDER_2_2_URL,
+    FOLDER_2_FILE_IDS,
+    FOLDER_2_URL,
+    FOLDER_3_ID,
+    FOLDER_3_URL,
     MISC_SHARED_DRIVE_FNAMES,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import PILL_FOLDER_ID
-from tests.daily.connectors.google_drive.consts_and_utils import (
+    PILL_FOLDER_ID,
     RESTRICTED_ACCESS_FOLDER_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     RESTRICTED_ACCESS_FOLDER_URL,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FOLDER_ID
-from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_URL
-from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import (
+    SECTIONS_FILE_IDS,
+    SECTIONS_FOLDER_ID,
+    SHARED_DRIVE_1_FILE_IDS,
+    SHARED_DRIVE_1_URL,
+    SHARED_DRIVE_2_FILE_IDS,
     TEST_USER_1_DRIVE_B_FOLDER_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_DRIVE_B_ID
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_DRIVE_B_ID,
+    TEST_USER_1_EMAIL,
     TEST_USER_1_EXTRA_DRIVE_1_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_DRIVE_2_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_FOLDER_ID,
-)
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_FILE_IDS,
     TEST_USER_1_MY_DRIVE_FOLDER_ID,
+    TEST_USER_1_MY_DRIVE_ID,
+    TEST_USER_2_EMAIL,
+    TEST_USER_2_FILE_IDS,
+    TEST_USER_2_MY_DRIVE,
+    TEST_USER_3_EMAIL,
+    TEST_USER_3_FILE_IDS,
+    TEST_USER_3_MY_DRIVE_ID,
+    _pick,
+    assert_expected_docs_in_retrieved_docs,
+    assert_hierarchy_nodes_match_expected,
+    assert_resource_key_shortcut_target_in_retrieved_docs,
+    get_expected_hierarchy_for_shared_drives,
+    id_to_name,
+    load_connector_outputs,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_MY_DRIVE_ID
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_MY_DRIVE
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_MY_DRIVE_ID
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
@@ -146,6 +110,7 @@ def test_include_all(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
@@ -338,6 +303,7 @@ def test_include_my_drives_only(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     expected_nodes = _pick(
         FOLDER_3_ID,
@@ -528,7 +494,12 @@ def test_shared_folder_owned_by_external_user(
     assert expected_docs[0] in output.documents[0].id
 
 
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
 def test_shared_with_me(
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_with_me")
@@ -556,6 +527,7 @@ def test_shared_with_me(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     retrieved_ids = {urlparse(doc.id).path.split("/")[-1] for doc in output.documents}
     for id in retrieved_ids:

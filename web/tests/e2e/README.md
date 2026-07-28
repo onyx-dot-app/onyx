@@ -2,7 +2,7 @@
 
 Hard rules for tests under `web/tests/e2e/`. Read before adding or modifying a spec.
 
-For the broader Onyx testing strategy and where Playwright fits among unit / external-dependency / integration tests, see `CLAUDE.md` ("Testing Strategy") and `backend/tests/README.md`. For Jest + React Testing Library guidance for component tests, see `web/tests/README.md`.
+For the broader Onyx testing strategy and where Playwright fits among unit / external-dependency / integration tests, see `backend/AGENTS.md` ("Testing Strategy") and `backend/tests/README.md`. For Jest + React Testing Library guidance for component tests, see `web/tests/README.md`.
 
 ## 1. Use the Page Object Model
 

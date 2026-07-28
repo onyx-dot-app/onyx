@@ -15,30 +15,33 @@ Architecture Note (User-Shared Sandbox Model):
 """
 
 import time
-from abc import ABC
-from abc import abstractmethod
-from collections.abc import Callable
-from collections.abc import Generator
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentPlanUpdate
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import CurrentModeUpdate
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
-from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import PushFailure
-from onyx.server.features.build.sandbox.models import PushResult
-from onyx.server.features.build.sandbox.models import RetriableWriteError
-from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentPlanUpdate,
+    AgentThoughtChunk,
+    CurrentModeUpdate,
+    Error,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
+from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
+    CraftMCPServerConfig,
+    FatalWriteError,
+    FileSet,
+    FilesystemEntry,
+    PushFailure,
+    PushResult,
+    RetriableWriteError,
+    SandboxInfo,
+    SnapshotResult,
+)
 from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
@@ -114,17 +117,14 @@ class SandboxManager(_ServeMixin, ABC):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
-        *,
-        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
-        ``all_llm_configs``: the full set of LLM providers the user has
-        configured. K8s pre-loads each into opencode-serve's startup config
-        so per-prompt model overrides can cross providers without restarting
-        the pod. Defaults to ``[llm_config]`` (single-provider, back-compat).
+        Craft MCP servers and the gateway provider catalog are NOT registered
+        here — they live in the per-session ``opencode.json`` (see
+        ``setup_session_workspace`` / ``regenerate_session_config``) so a model
+        change or MCP-set change hot-reloads without a pod re-provision.
 
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces
@@ -136,7 +136,6 @@ class SandboxManager(_ServeMixin, ABC):
             sandbox_id: Unique identifier for the sandbox
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
-            llm_config: LLM provider configuration (for default config)
             onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the sandbox
 
         Returns:
@@ -163,10 +162,11 @@ class SandboxManager(_ServeMixin, ABC):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         nextjs_port: int | None,
-        skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -182,7 +182,7 @@ class SandboxManager(_ServeMixin, ABC):
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration (passed to AGENTS.md rendering)
             nextjs_port: Port for the Next.js dev server, or None for headless.
-            skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
+            connectable_apps_section: Pre-rendered ``{{CONNECTABLE_APPS_LIST}}`` (may be empty).
             user_name: User's name for personalization in AGENTS.md
 
         Raises:
@@ -203,7 +203,27 @@ class SandboxManager(_ServeMixin, ABC):
         Implementations MUST call ``self._close_session_buses(sandbox_id,
         session_id)`` — otherwise the per-session ``PodEventBus`` (reader
         thread + httpx connection) leaks until api_server restarts.
+
+        Raises when cleanup fails while the sandbox is reachable. A missing
+        sandbox is already clean and should be treated as success.
         """
+        ...
+
+    @abstractmethod
+    def regenerate_session_config(
+        self,
+        *,
+        sandbox_id: UUID,
+        session_id: UUID,
+        agent_provider: str | None,
+        agent_model: str | None,
+        nextjs_port: int | None,
+        connectable_apps_section: str,
+        user_name: str | None = None,
+        llm_config: CraftLLMProviderConfig | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
+    ) -> None:
+        """Rewrite generated session configuration without replacing outputs."""
         ...
 
     @abstractmethod
@@ -244,8 +264,9 @@ class SandboxManager(_ServeMixin, ABC):
         session_id: UUID,
         snapshot_storage_path: str,
         nextjs_port: int | None,
-        llm_config: LLMProviderConfig,
-        skills_section: str,
+        llm_config: CraftLLMProviderConfig,
+        connectable_apps_section: str,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Restore a session workspace from a snapshot.
 
@@ -345,6 +366,8 @@ class SandboxManager(_ServeMixin, ABC):
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
+        should_abort_on_teardown: Callable[[], bool] | None = None,
+        turn_timeout_seconds: float | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream typed sandbox events for one user message via
         opencode-serve.
@@ -366,6 +389,8 @@ class SandboxManager(_ServeMixin, ABC):
             agent_model,
             on_opencode_session_resolved=on_opencode_session_resolved,
             should_interrupt=should_interrupt,
+            should_abort_on_teardown=should_abort_on_teardown,
+            turn_timeout_seconds=turn_timeout_seconds,
         )
 
     def send_subagent_message(

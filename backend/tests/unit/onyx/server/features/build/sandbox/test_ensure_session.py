@@ -28,8 +28,10 @@ from typing import Any
 import httpx
 import pytest
 
-from onyx.server.features.build.sandbox.opencode.serve_client import ClientTimeouts
-from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
+from onyx.server.features.build.sandbox.opencode.serve_client import (
+    ClientTimeouts,
+    OpencodeServeClient,
+)
 
 _STALE_ID = "ses_stale_old_id_001"
 _FRESH_ID = "ses_fresh_new_id_002"
@@ -130,6 +132,21 @@ def test_ensure_session_creates_when_no_id_supplied() -> None:
     assert len(transport.requests) == 1
     assert transport.requests[0].method == "POST"
     assert transport.requests[0].url.path == "/session"
+
+
+def test_dispose_instance_uses_directory_scoped_endpoint() -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.method == "POST"
+        assert req.url.path == "/instance/dispose"
+        assert req.url.params["directory"] == _CWD
+        return httpx.Response(200, json=True)
+
+    transport = _RecordingTransport(handler)
+    client = _make_client(transport)
+
+    client.dispose_instance(directory=_CWD)
+
+    assert len(transport.requests) == 1
 
 
 def test_ensure_session_raises_on_5xx_lookup() -> None:

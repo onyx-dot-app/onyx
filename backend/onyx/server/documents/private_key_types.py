@@ -2,8 +2,7 @@ import base64
 from enum import Enum
 from typing import Protocol
 
-from fastapi import HTTPException
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 
 from onyx.server.documents.document_utils import validate_pkcs12_content
 

@@ -1,59 +1,61 @@
 from __future__ import annotations
 
 import json
-from typing import Any
-from typing import cast
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_utils import extract_citation_order_from_text
-from onyx.coding_agent.mock_tools import CODING_AGENT_QUERY_KEY
-from onyx.coding_agent.mock_tools import CODING_AGENT_REPO_KEY
+from onyx.coding_agent.mock_tools import CODING_AGENT_QUERY_KEY, CODING_AGENT_REPO_KEY
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SearchDoc
-from onyx.db.chat import get_db_search_doc_by_id
-from onyx.db.chat import translate_db_search_doc_to_saved_search_doc
+from onyx.context.search.models import SavedSearchDoc, SearchDoc
+from onyx.db.chat import (
+    get_db_search_doc_by_id,
+    translate_db_search_doc_to_saved_search_doc,
+)
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tool_by_id
-from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_IN_CODE_ID
-from onyx.deep_research.dr_mock_tools import RESEARCH_AGENT_TASK_KEY
+from onyx.deep_research.dr_mock_tools import (
+    RESEARCH_AGENT_IN_CODE_ID,
+    RESEARCH_AGENT_TASK_KEY,
+)
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import CodingAgentFinal
-from onyx.server.query_and_chat.streaming_models import CodingAgentStart
-from onyx.server.query_and_chat.streaming_models import CustomToolArgs
-from onyx.server.query_and_chat.streaming_models import CustomToolDelta
-from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
-from onyx.server.query_and_chat.streaming_models import CustomToolStart
-from onyx.server.query_and_chat.streaming_models import FileReaderResult
-from onyx.server.query_and_chat.streaming_models import FileReaderStart
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
-from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
-from onyx.server.query_and_chat.streaming_models import IntermediateReportStart
-from onyx.server.query_and_chat.streaming_models import MemoryToolDelta
-from onyx.server.query_and_chat.streaming_models import MemoryToolStart
-from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
-from onyx.server.query_and_chat.streaming_models import OpenUrlStart
-from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
-from onyx.server.query_and_chat.streaming_models import OverallStop
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import PythonToolDelta
-from onyx.server.query_and_chat.streaming_models import PythonToolStart
-from onyx.server.query_and_chat.streaming_models import ReasoningDelta
-from onyx.server.query_and_chat.streaming_models import ReasoningStart
-from onyx.server.query_and_chat.streaming_models import ResearchAgentStart
-from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.server.query_and_chat.streaming_models import TopLevelBranching
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
+    CitationInfo,
+    CodingAgentFinal,
+    CodingAgentStart,
+    CustomToolArgs,
+    CustomToolDelta,
+    CustomToolErrorInfo,
+    CustomToolStart,
+    FileReaderResult,
+    FileReaderStart,
+    GeneratedImage,
+    ImageGenerationFinal,
+    ImageGenerationToolStart,
+    IntermediateReportDelta,
+    IntermediateReportStart,
+    MemoryToolDelta,
+    MemoryToolStart,
+    OpenUrlDocuments,
+    OpenUrlStart,
+    OpenUrlUrls,
+    OverallStop,
+    Packet,
+    PythonToolDelta,
+    PythonToolStart,
+    ReasoningDelta,
+    ReasoningStart,
+    ResearchAgentStart,
+    SearchToolDocumentsDelta,
+    SearchToolQueriesDelta,
+    SearchToolStart,
+    SectionEnd,
+    TopLevelBranching,
+)
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )

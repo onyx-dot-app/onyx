@@ -1,34 +1,34 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Response
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import User
-from onyx.db.models import VoiceProvider
-from onyx.db.voice import deactivate_stt_provider
-from onyx.db.voice import deactivate_tts_provider
-from onyx.db.voice import delete_voice_provider
-from onyx.db.voice import fetch_voice_provider_by_id
-from onyx.db.voice import fetch_voice_provider_by_type
-from onyx.db.voice import fetch_voice_providers
-from onyx.db.voice import set_default_stt_provider
-from onyx.db.voice import set_default_tts_provider
-from onyx.db.voice import upsert_voice_provider
+from onyx.db.models import User, VoiceProvider
+from onyx.db.voice import (
+    deactivate_stt_provider,
+    deactivate_tts_provider,
+    delete_voice_provider,
+    fetch_voice_provider_by_id,
+    fetch_voice_provider_by_type,
+    fetch_voice_providers,
+    set_default_stt_provider,
+    set_default_tts_provider,
+    upsert_voice_provider,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.manage.voice.models import VoiceOption
-from onyx.server.manage.voice.models import VoiceProviderTestRequest
-from onyx.server.manage.voice.models import VoiceProviderUpdateSuccess
-from onyx.server.manage.voice.models import VoiceProviderUpsertRequest
-from onyx.server.manage.voice.models import VoiceProviderView
+from onyx.server.manage.voice.models import (
+    VoiceOption,
+    VoiceProviderTestRequest,
+    VoiceProviderUpdateSuccess,
+    VoiceProviderUpsertRequest,
+    VoiceProviderView,
+)
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException
-from onyx.utils.url import validate_outbound_http_url
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 from onyx.voice.factory import get_voice_provider
 
 logger = setup_logger()

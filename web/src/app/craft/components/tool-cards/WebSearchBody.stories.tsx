@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import WebSearchBody from "@/app/craft/components/tool-cards/WebSearchBody";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 

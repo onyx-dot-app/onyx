@@ -64,26 +64,25 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from fastapi import FastAPI
-from fastapi import HTTPException
-from fastapi import Response
-from fastapi.responses import JSONResponse
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 
-from mock_llm.models import AssistantMessage
-from mock_llm.models import ChatCompletionChunk
-from mock_llm.models import ChatCompletionRequest
-from mock_llm.models import ChatCompletionResponse
-from mock_llm.models import ChatMessage
-from mock_llm.models import Choice
-from mock_llm.models import ChunkChoice
-from mock_llm.models import ChunkDelta
-from mock_llm.models import StreamToolCall
-from mock_llm.models import StreamToolCallFunction
-from mock_llm.models import ToolCall
-from mock_llm.models import ToolCallFunction
-from mock_llm.models import ToolDefinition
-from mock_llm.models import Usage
+from mock_llm.models import (
+    AssistantMessage,
+    ChatCompletionChunk,
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+    ChatMessage,
+    Choice,
+    ChunkChoice,
+    ChunkDelta,
+    StreamToolCall,
+    StreamToolCallFunction,
+    ToolCall,
+    ToolCallFunction,
+    ToolDefinition,
+    Usage,
+)
 
 app = FastAPI()
 

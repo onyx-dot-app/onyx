@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import InfoBlock from "./InfoBlock";
 import { SvgAlertCircle, SvgCheckCircle, SvgSettings } from "@opal/icons";
 

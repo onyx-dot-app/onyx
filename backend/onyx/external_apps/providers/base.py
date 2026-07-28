@@ -1,12 +1,9 @@
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import Any
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import requests
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.presentation.payload_decoders import PayloadDecoder
@@ -55,6 +52,23 @@ def token_response_error(http_response: requests.Response, body: Any) -> str | N
     return None
 
 
+def parse_granted_scopes(raw: object) -> list[str] | None:
+    """Normalise a granted-scope signal (delimited string or list) into a scope
+    list. Returns ``None`` — never ``[]`` — for an absent/empty signal, so
+    callers record "grant unknown" rather than an (impossible) empty grant.
+    """
+    if isinstance(raw, str):
+        # Space- or comma-delimited (RFC 6749 §3.3; GitHub/Slack), incl. mixed
+        # forms like "repo, gist" — normalise to spaces so split() handles all.
+        parts: list[str] = raw.replace(",", " ").split()
+    elif isinstance(raw, list):
+        parts = [str(scope) for scope in raw]
+    else:
+        return None
+    scopes = [stripped for part in parts if (stripped := part.strip())]
+    return scopes or None
+
+
 class OrgCredentialField(BaseModel):
     """One credential field the admin must fill in when configuring a
     built-in provider (e.g. OAuth client_id, client_secret)."""
@@ -80,6 +94,13 @@ class OAuthFlowSpec(BaseModel):
     # The query param the `scope` value rides under. Slack uses `user_scope`
     # to request user-acting tokens; without it Slack assumes bot scopes.
     scope_param: str
+    # Space-joined scopes requested as optional. Providers that honor them
+    # (e.g. HubSpot) drop any the account can't grant rather than failing the
+    # whole authorize page, so writes don't lock out read-only tiers. Empty
+    # means the param is omitted.
+    optional_scope: str = ""
+    # The query param `optional_scope` rides under, mirroring `scope_param`.
+    optional_scope_param: str = "optional_scope"
     extra_authorize_params: dict[str, str] = {}
 
 
@@ -90,7 +111,6 @@ class AdminDescriptorSpec(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    description: str
     upstream_url_patterns: list[str]
     auth_template: dict[str, str]
     required_org_credential_fields: list[OrgCredentialField]
@@ -117,6 +137,25 @@ class OAuthProviderSpec(ProviderSpec):
     OAuth 2.0 flow. Paired with :class:`OAuthExternalAppProvider`."""
 
     oauth: OAuthFlowSpec
+
+
+class TokenExchangeRequest(BaseModel):
+    """The authorization-code token-exchange POST, built by the provider so a
+    divergent provider can override how client credentials and the grant ride
+    on the request. The default is RFC-6749 form-encoded creds in the body;
+    Notion, for example, needs HTTP Basic client auth plus a JSON body. The
+    OAuth callback route consumes this without knowing any provider specifics.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    headers: dict[str, str]
+    body: dict[str, str]
+    # How ``body`` is encoded on the wire: JSON (``requests.post(json=...)``)
+    # when True, RFC-6749 form-encoded (``data=...``) when False. The callback
+    # route maps this to exactly one of `data`/`json` so `requests` never sees
+    # both (which would silently drop the form body in favour of JSON).
+    json_encoded: bool = False
 
 
 class ExternalAppProvider(ABC):
@@ -236,6 +275,38 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         credentials to persist for the user (e.g. pull the user access token out
         of Slack's nested ``authed_user``). Raise ``OnyxError`` if the expected
         token is absent."""
+
+    def extract_granted_scopes(self, response_data: dict[str, Any]) -> list[str] | None:
+        """The scopes the user granted, from the connect-time token response, or
+        ``None`` when the provider gives no authoritative signal.
+
+        Default reads the RFC 6749 §3.3 ``scope`` field. Override for providers
+        that nest it (Slack) or require a separate lookup (HubSpot).
+        """
+        return parse_granted_scopes(response_data.get("scope"))
+
+    # --- Initial-grant token exchange (override for divergent client auth) ---
+
+    def build_token_exchange_request(
+        self, code: str, client_id: str, client_secret: str, redirect_uri: str
+    ) -> TokenExchangeRequest:
+        """Build the authorization-code → token exchange POST. The default sends
+        RFC-6749 form-encoded client credentials in the body. Override for a
+        provider that requires HTTP Basic client auth and/or a JSON body (e.g.
+        Notion)."""
+        return TokenExchangeRequest(
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+            },
+            body={
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "redirect_uri": redirect_uri,
+            },
+        )
 
     # --- Refresh template method (override a hook below, not this) ---
 

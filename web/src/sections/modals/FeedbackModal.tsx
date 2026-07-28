@@ -3,9 +3,9 @@
 import { FeedbackType } from "@/app/app/interfaces";
 import { Button } from "@opal/components";
 import useFeedbackController from "@/hooks/useFeedbackController";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { useModal } from "@opal/components";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import { InputVertical } from "@opal/layouts";

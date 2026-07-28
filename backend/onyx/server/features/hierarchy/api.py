@@ -1,6 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
@@ -10,21 +8,32 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.document import get_accessible_documents_for_hierarchy_node_paginated
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.hierarchy import get_accessible_hierarchy_nodes_for_source
+from onyx.db.hierarchy import (
+    get_accessible_hierarchy_nodes_for_source,
+    search_accessible_hierarchy_nodes,
+)
 from onyx.db.models import User
 from onyx.db.opensearch_migration import get_opensearch_retrieval_state
-from onyx.server.features.hierarchy.constants import DOCUMENT_PAGE_SIZE
-from onyx.server.features.hierarchy.constants import HIERARCHY_NODE_DOCUMENTS_PATH
-from onyx.server.features.hierarchy.constants import HIERARCHY_NODES_LIST_PATH
-from onyx.server.features.hierarchy.constants import HIERARCHY_NODES_PREFIX
-from onyx.server.features.hierarchy.models import DocumentPageCursor
-from onyx.server.features.hierarchy.models import DocumentSortDirection
-from onyx.server.features.hierarchy.models import DocumentSortField
-from onyx.server.features.hierarchy.models import DocumentSummary
-from onyx.server.features.hierarchy.models import HierarchyNodeDocumentsRequest
-from onyx.server.features.hierarchy.models import HierarchyNodeDocumentsResponse
-from onyx.server.features.hierarchy.models import HierarchyNodesResponse
-from onyx.server.features.hierarchy.models import HierarchyNodeSummary
+from onyx.server.features.hierarchy.constants import (
+    DOCUMENT_PAGE_SIZE,
+    HIERARCHY_NODE_DOCUMENTS_PATH,
+    HIERARCHY_NODE_SEARCH_LIMIT,
+    HIERARCHY_NODES_LIST_PATH,
+    HIERARCHY_NODES_PREFIX,
+    HIERARCHY_NODES_SEARCH_PATH,
+)
+from onyx.server.features.hierarchy.models import (
+    DocumentPageCursor,
+    DocumentSortDirection,
+    DocumentSortField,
+    DocumentSummary,
+    HierarchyNodeDocumentsRequest,
+    HierarchyNodeDocumentsResponse,
+    HierarchyNodeSearchResponse,
+    HierarchyNodeSearchSummary,
+    HierarchyNodesResponse,
+    HierarchyNodeSummary,
+)
 
 OPENSEARCH_NOT_ENABLED_MESSAGE = "Per-source knowledge selection is coming soon in v3.0! OpenSearch indexing must be enabled to use this feature."
 
@@ -135,4 +144,35 @@ def list_accessible_hierarchy_node_documents(
         sort_field=sort_field,
         sort_direction=sort_direction,
         folder_position=documents_request.folder_position,
+    )
+
+
+@router.get(HIERARCHY_NODES_SEARCH_PATH)
+def search_hierarchy_nodes(
+    query: str = Query(min_length=1),
+    source: list[DocumentSource] | None = Query(default=None),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> HierarchyNodeSearchResponse:
+    _require_opensearch(db_session)
+    user_email, external_group_ids = _get_user_access_info(user, db_session)
+    nodes = search_accessible_hierarchy_nodes(
+        db_session=db_session,
+        query=query,
+        sources=source,
+        user_email=user_email,
+        external_group_ids=external_group_ids,
+        limit=HIERARCHY_NODE_SEARCH_LIMIT,
+    )
+    return HierarchyNodeSearchResponse(
+        nodes=[
+            HierarchyNodeSearchSummary(
+                id=node.id,
+                title=node.display_name,
+                link=node.link,
+                parent_id=node.parent_id,
+                source=node.source,
+            )
+            for node in nodes
+        ]
     )

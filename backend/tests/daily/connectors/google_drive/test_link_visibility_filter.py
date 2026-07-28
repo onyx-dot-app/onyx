@@ -4,8 +4,7 @@ from unittest.mock import patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
-from onyx.connectors.google_drive.models import DriveRetrievalStage
-from onyx.connectors.google_drive.models import RetrievedDriveFile
+from onyx.connectors.google_drive.models import DriveRetrievalStage, RetrievedDriveFile
 
 
 def _stub_run_functions(

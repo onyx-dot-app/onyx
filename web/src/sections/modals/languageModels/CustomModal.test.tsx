@@ -8,7 +8,7 @@
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
 import CustomModal from "@/sections/modals/languageModels/CustomModal";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 // Mock SWR's mutate function and useSWR
@@ -36,7 +36,7 @@ jest.mock("swr", () => {
 });
 
 // Mock toast
-jest.mock("@/hooks/useToast", () => {
+jest.mock("@opal/layouts/toast/store", () => {
   const success = jest.fn();
   const error = jest.fn();
   const toastFn = Object.assign(jest.fn(), {

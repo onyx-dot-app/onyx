@@ -7,8 +7,7 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
 
 
 def test_limited(reset: None) -> None:  # noqa: ARG001
@@ -156,8 +155,8 @@ def test_api_key_admin_service_account(reset: None) -> None:  # noqa: ARG001
 
 
 def test_limited_key_blocked_by_current_user(reset: None) -> None:  # noqa: ARG001
-    """A LIMITED API key (service account, no permissions) should be rejected
-    by endpoints behind current_user but allowed through current_limited_user."""
+    """A LIMITED API key (service account, chat scope only) should be rejected
+    by BASIC_ACCESS-scoped endpoints but allowed through current_limited_user."""
     admin_user: DATestUser = UserManager.create(name="admin_user")
 
     limited_key: DATestAPIKey = APIKeyManager.create(

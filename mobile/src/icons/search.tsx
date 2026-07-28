@@ -2,7 +2,6 @@ import Svg, { Path } from "react-native-svg";
 
 import type { IconProps } from "@/icons/types";
 
-// RN variant of web Opal `SvgSearch` (web/lib/opal/src/icons/search.tsx).
 const SvgSearch = ({ size = 16, ...props }: IconProps) => (
   <Svg
     width={size}

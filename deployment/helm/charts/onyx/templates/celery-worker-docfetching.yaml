@@ -34,6 +34,8 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      # Grace for the watchdog to interrupt its in-flight attempt before SIGKILL.
+      terminationGracePeriodSeconds: {{ .Values.celery_worker_docfetching.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

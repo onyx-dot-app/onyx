@@ -1,30 +1,30 @@
 import json
-from typing import Any
-from typing import cast
-from typing import Literal
-from typing import TypedDict
+from typing import Any, Literal, TypedDict, cast
 from uuid import UUID
 
 import httpx
 
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
-from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.models import (
+    AUTO_PLACE_AFTER_LATEST_MESSAGE,
+    ChatSessionCreationRequest,
+    SendMessageRequest,
+)
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.test_models import DATestChatMessage
-from tests.integration.common_utils.test_models import DATestChatSession
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import ErrorResponse
-from tests.integration.common_utils.test_models import StreamedResponse
-from tests.integration.common_utils.test_models import ToolCallDebug
-from tests.integration.common_utils.test_models import ToolName
-from tests.integration.common_utils.test_models import ToolResult
+from tests.integration.common_utils.test_models import (
+    DATestChatMessage,
+    DATestChatSession,
+    DATestUser,
+    ErrorResponse,
+    StreamedResponse,
+    ToolCallDebug,
+    ToolName,
+    ToolResult,
+)
 
 
 class StreamPacketObj(TypedDict, total=False):

@@ -4,9 +4,9 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { useModal } from "@opal/components";
 import { SvgAddLines } from "@opal/icons";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 
 const validationSchema = Yup.object({

@@ -3,8 +3,7 @@ validate_connector_settings RoleAssignments permission probe."""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -197,8 +196,7 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
 ) -> None:
     """retrieve_all_slim_docs (pruning path) never calls _create_rest_client_context
     and returns SlimDocuments with empty ExternalAccess."""
-    from onyx.connectors.models import ExternalAccess
-    from onyx.connectors.models import SlimDocument
+    from onyx.connectors.models import ExternalAccess, SlimDocument
     from onyx.connectors.sharepoint.connector import DriveItemData
 
     connector = _make_connector()
@@ -213,6 +211,7 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
     driveitem.id = "item-1"
     driveitem.web_url = SITE_URL + "/doc.docx"
     driveitem.parent_reference_path = None
+    driveitem.created_datetime = None
     mock_fetch_driveitems.return_value = [
         (driveitem, "Documents", None),
     ]

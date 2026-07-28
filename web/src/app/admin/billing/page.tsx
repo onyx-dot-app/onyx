@@ -75,7 +75,9 @@ function FooterLinks({
           <Text secondaryBody text03>
             Have a license key?
           </Text>
-          <LinkButton onClick={onActivateLicense}>{licenseText}</LinkButton>
+          <LinkButton onClick={onActivateLicense} external={false}>
+            {licenseText}
+          </LinkButton>
         </>
       )}
       <LinkButton href={billingHelpHref}>Billing Help</LinkButton>

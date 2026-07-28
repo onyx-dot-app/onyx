@@ -10,6 +10,7 @@ import { getNotificationIcon } from "@/lib/notifications";
 import {
   dismissAllNotifications,
   dismissNotification,
+  invalidateNotificationCaches,
 } from "@/lib/notifications/api";
 import { timeAgo } from "@opal/time";
 import useNotifications from "@/hooks/useNotifications";
@@ -20,7 +21,13 @@ import {
   SvgChevronLeft,
   SvgSimpleLoader,
 } from "@opal/icons";
-import { Button, Divider, LineItemButton, Text } from "@opal/components";
+import {
+  Button,
+  Divider,
+  LineItemButton,
+  MessageCard,
+  Text,
+} from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { IllustrationContent } from "@opal/layouts";
 import { SvgEmpty } from "@opal/illustrations";
@@ -113,7 +120,6 @@ export default function NotificationsPopover({
     notifications,
     undismissedCount,
     isLoading,
-    refresh,
     hasMore,
     isLoadingMore,
     loadMore,
@@ -129,22 +135,20 @@ export default function NotificationsPopover({
     new Set()
   );
 
-  const handleDismiss = useCallback(
-    async (notificationId: number) => {
-      try {
-        await dismissNotification(notificationId);
-        setSessionDismissedIds((prev) => {
-          const next = new Set(prev);
-          next.add(notificationId);
-          return next;
-        });
-        void refresh();
-      } catch (error) {
-        console.error("Error dismissing notification:", error);
-      }
-    },
-    [refresh]
-  );
+  const handleDismiss = useCallback(async (notificationId: number) => {
+    try {
+      await dismissNotification(notificationId);
+      setSessionDismissedIds((prev) => {
+        const next = new Set(prev);
+        next.add(notificationId);
+        return next;
+      });
+      // Shared invalidation so the banner queue and badge update too.
+      void invalidateNotificationCaches();
+    } catch (error) {
+      console.error("Error dismissing notification:", error);
+    }
+  }, []);
 
   const handleNotificationClick = useCallback(
     (notification: NotificationData) => {
@@ -193,13 +197,31 @@ export default function NotificationsPopover({
     [sessionDismissedIds]
   );
 
-  const newNotifications = useMemo(
-    () => notifications.filter((n) => getState(n) === "new"),
+  // Admin site-wide announcement pins above the New/Older sections while
+  // undismissed, instead of paging through with the rest of the feed.
+  const pinnedAnnouncement = useMemo(
+    () =>
+      notifications.find(
+        (n) =>
+          n.notif_type === NotificationType.SYSTEM_ANNOUNCEMENT &&
+          getState(n) === "new"
+      ) ?? null,
     [notifications, getState]
   );
+
+  const newNotifications = useMemo(
+    () =>
+      notifications.filter(
+        (n) => getState(n) === "new" && n.id !== pinnedAnnouncement?.id
+      ),
+    [notifications, getState, pinnedAnnouncement]
+  );
   const olderNotifications = useMemo(
-    () => notifications.filter((n) => getState(n) === "older"),
-    [notifications, getState]
+    () =>
+      notifications.filter(
+        (n) => getState(n) === "older" && n.id !== pinnedAnnouncement?.id
+      ),
+    [notifications, getState, pinnedAnnouncement]
   );
 
   const handleDismissAll = useCallback(async () => {
@@ -210,13 +232,18 @@ export default function NotificationsPopover({
         newNotifications.forEach((notification) => {
           next.add(notification.id);
         });
+        // The pinned announcement is excluded from newNotifications, but the
+        // server call dismissed it too, so unpin it client-side immediately.
+        if (pinnedAnnouncement) {
+          next.add(pinnedAnnouncement.id);
+        }
         return next;
       });
-      void refresh();
+      void invalidateNotificationCaches();
     } catch (error) {
       console.error("Error dismissing notifications:", error);
     }
-  }, [refresh, newNotifications]);
+  }, [newNotifications, pinnedAnnouncement]);
 
   useEffect(() => {
     if (!hasMore || isLoadingMore) return;
@@ -287,21 +314,37 @@ export default function NotificationsPopover({
         </Section>
       </Section>
 
+      {pinnedAnnouncement && (
+        <div className="px-1 pb-1">
+          <MessageCard
+            variant="info"
+            icon={getNotificationIcon(pinnedAnnouncement.notif_type)}
+            title={pinnedAnnouncement.title}
+            description={pinnedAnnouncement.description ?? undefined}
+            onClose={() => void handleDismiss(pinnedAnnouncement.id)}
+          />
+        </div>
+      )}
+
       {isLoading ? (
         <div className="h-(--notifications-popover)">
           <Section>
             <SvgSimpleLoader />
           </Section>
         </div>
-      ) : !notifications || notifications.length === 0 ? (
-        <div className="h-(--notifications-popover)">
-          <Section>
-            <IllustrationContent
-              title="No notifications"
-              illustration={SvgEmpty}
-            />
-          </Section>
-        </div>
+      ) : newNotifications.length === 0 && olderNotifications.length === 0 ? (
+        // With a pinned announcement and nothing else, render nothing below it
+        // (an empty-state here would contradict the visible notification).
+        !pinnedAnnouncement && (
+          <div className="h-(--notifications-popover)">
+            <Section>
+              <IllustrationContent
+                title="No notifications"
+                illustration={SvgEmpty}
+              />
+            </Section>
+          </div>
+        )
       ) : (
         <div
           ref={scrollContainerRef}

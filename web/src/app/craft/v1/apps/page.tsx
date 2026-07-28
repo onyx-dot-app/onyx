@@ -7,23 +7,81 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import useOnMount from "@/hooks/useOnMount";
 import { cn } from "@opal/utils";
-import { Button, Card, InputTypeIn, Text } from "@opal/components";
-import { SettingsLayouts } from "@opal/layouts";
-import { SvgCheckCircle, SvgPlug, SvgSettings } from "@opal/icons";
+import { Button, Card, InputTypeIn, Tabs, Text } from "@opal/components";
 import {
-  ExternalAppUserResponse,
-  getAppTypeLogo,
-} from "@/app/craft/v1/apps/registry";
+  Content,
+  ContentAction,
+  IllustrationContent,
+  SettingsLayouts,
+  toast,
+} from "@opal/layouts";
+import { SvgNoResult, SvgUnPlugged } from "@opal/illustrations";
 import {
-  disconnectUserFromApp,
-  startExternalAppOAuth,
-} from "@/app/craft/services/externalAppsService";
+  SvgAlertCircle,
+  SvgCheckCircle,
+  SvgPlug,
+  SvgSettings,
+} from "@opal/icons";
+import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
+import { MCPServersResponse } from "@/lib/tools/interfaces";
+import {
+  ConnectableApp,
+  ConnectableKind,
+  CRAFT_APPS_TAB_PARAM,
+  externalAppToConnectable,
+  mcpServerToConnectable,
+  parseConnectableTab,
+} from "@/app/craft/v1/apps/connectableApps";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
-import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
+import useUserSkills from "@/hooks/useUserSkills";
+import { useCraftMcpServers } from "@/lib/tools/hooks";
+import { compareByName } from "@/lib/skills/picker";
 
-// The user's own app connections. Org-wide configuration lives at
-// /craft/v1/apps/manage (admin-only); admins get a shortcut button to it here.
+// Apps and MCP servers are connected, governed, and taught to the agent
+// differently, so each kind gets its own tab rather than one blended list.
+const KIND_COPY: Record<
+  ConnectableKind,
+  {
+    label: string;
+    blurb: string;
+    browseLabel: string;
+    emptyTitle: string;
+    empty: string;
+  }
+> = {
+  app: {
+    label: "Apps",
+    blurb:
+      "Integrations Onyx supports directly. Each comes with skills that teach Craft how to use it — start here.",
+    browseLabel: "Browse apps",
+    emptyTitle: "No apps yet",
+    empty: "No apps are configured for your organization yet.",
+  },
+  mcp: {
+    label: "MCP servers",
+    blurb:
+      "Servers an admin made available to Craft. Use these when the app you need isn't listed under Apps, or when you specifically want a server's own MCP tools.",
+    browseLabel: "Browse servers",
+    emptyTitle: "No MCP servers yet",
+    empty: "No MCP servers have been made available to Craft.",
+  },
+};
+
+const KIND_ORDER: ConnectableKind[] = ["app", "mcp"];
+
+interface SkillSetup {
+  total: number;
+  selected: number;
+}
+
+/** Readiness of an app's associated skills. `"unknown"` covers both "skills
+ * haven't loaded" and "not an external app", neither of which should claim
+ * readiness. */
+type SkillStatus = "unknown" | "ready" | "needs-setup";
+
+// The user's own app connections. Org-wide configuration lives in the admin
+// panel's Craft section; admins get a shortcut button to it here.
 export default function ExternalAppsPage() {
   const { isAdmin } = useUser();
   const [query, setQuery] = useState("");
@@ -44,15 +102,13 @@ export default function ExternalAppsPage() {
         description="Connect the tools Onyx Craft can use as context while it works."
         rightChildren={
           isAdmin ? (
-            <div className="flex items-center gap-2">
-              <Button
-                href="/craft/v1/apps/manage"
-                prominence="secondary"
-                icon={SvgSettings}
-              >
-                Manage apps
-              </Button>
-            </div>
+            <Button
+              href="/admin/craft/apps"
+              prominence="secondary"
+              icon={SvgSettings}
+            >
+              Manage apps
+            </Button>
           ) : undefined
         }
       >
@@ -76,25 +132,63 @@ interface AppConnectionsProps {
 }
 
 function AppConnections({ query }: AppConnectionsProps) {
-  const { data, mutate } = useSWR<ExternalAppUserResponse[]>(
-    SWR_KEYS.buildExternalApps,
-    errorHandlingFetcher,
-    { keepPreviousData: true }
-  );
-  const connectSlug = useSearchParams().get("connect");
+  const { data: externalApps, mutate: mutateApps } = useSWR<
+    ExternalAppUserResponse[]
+  >(SWR_KEYS.buildExternalApps, errorHandlingFetcher, {
+    keepPreviousData: true,
+  });
+  const { data: mcpData, refresh: refreshMcp } = useCraftMcpServers();
+  const { data: skillsData, refresh: refreshSkills } = useUserSkills();
+  const searchParams = useSearchParams();
+  const connectParam = searchParams.get("connect");
+  const urlTab = parseConnectableTab(searchParams.get(CRAFT_APPS_TAB_PARAM));
+  // The tab is deep-linkable (`?tab=mcp`), so the URL drives it — including on a
+  // client-side navigation from this same page, which doesn't remount.
+  const [tab, setTab] = useState<ConnectableKind>(urlTab);
+  useEffect(() => setTab(urlTab), [urlTab]);
 
-  const { connected, browse } = useMemo(() => {
+  const skillSetupByAppId = useMemo(() => {
+    const setup = new Map<number, SkillSetup>();
+    // Both lists matter: a built-in provider's associated skill is a built-in
+    // skill row, so reading only `customs` misses every built-in app.
+    const skills = [
+      ...(skillsData?.builtins ?? []),
+      ...(skillsData?.customs ?? []),
+    ];
+    for (const skill of skills) {
+      const externalAppId = skill.external_app?.external_app_id;
+      if (externalAppId === undefined) continue;
+      const current = setup.get(externalAppId) ?? { total: 0, selected: 0 };
+      current.total += 1;
+      if (skill.enabled) current.selected += 1;
+      setup.set(externalAppId, current);
+    }
+    return setup;
+  }, [skillsData]);
+
+  const refresh = () => {
+    void mutateApps();
+    void refreshMcp();
+    void refreshSkills();
+  };
+
+  const { byKind, searching, isLoading, isEmpty } = useMemo(() => {
+    const allApps = (externalApps ?? []).map(externalAppToConnectable);
+    const allMcp = (mcpData?.mcp_servers ?? []).map(mcpServerToConnectable);
     const q = query.trim().toLowerCase();
-    const filtered = (data ?? []).filter((app) =>
-      q ? app.name.toLowerCase().includes(q) : true
-    );
+    const visible = (items: ConnectableApp[]) =>
+      items
+        .filter((item) => (q ? item.name.toLowerCase().includes(q) : true))
+        .sort(compareByName);
     return {
-      connected: filtered.filter((app) => app.authenticated),
-      browse: filtered.filter((app) => !app.authenticated),
+      byKind: { app: visible(allApps), mcp: visible(allMcp) },
+      searching: q.length > 0,
+      isLoading: externalApps === undefined && mcpData === undefined,
+      isEmpty: allApps.length === 0 && allMcp.length === 0,
     };
-  }, [data, query]);
+  }, [externalApps, mcpData, query]);
 
-  if (data === undefined) {
+  if (isLoading) {
     return (
       <Card background="none" border="dashed" rounding="lg">
         <Text font="main-content-body">Loading…</Text>
@@ -102,31 +196,125 @@ function AppConnections({ query }: AppConnectionsProps) {
     );
   }
 
-  if (data.length === 0) {
+  if (isEmpty) {
     return (
-      <Card background="none" border="dashed" rounding="lg">
-        <Text font="main-content-body" color="text-03">
-          No external apps are enabled for your org yet. Ask an admin to enable
-          one.
-        </Text>
-      </Card>
+      <IllustrationContent
+        illustration={SvgUnPlugged}
+        title="Nothing to connect yet"
+        description="No apps or MCP servers are configured for your organization yet."
+      />
+    );
+  }
+
+  // `?connect=` deep-links only ever target an external app; `?tab=mcp` is how
+  // the input-bar picker lands a user on an MCP server they need to connect.
+  return (
+    <Tabs
+      value={tab}
+      onValueChange={(next) => setTab(parseConnectableTab(next))}
+    >
+      <Tabs.List>
+        {KIND_ORDER.map((kind) => (
+          <Tabs.Trigger
+            key={kind}
+            value={kind}
+          >{`${KIND_COPY[kind].label} · ${byKind[kind].length}`}</Tabs.Trigger>
+        ))}
+      </Tabs.List>
+      {KIND_ORDER.map((kind) => (
+        <Tabs.Content key={kind} value={kind}>
+          <ConnectableList
+            kind={kind}
+            items={byKind[kind]}
+            searching={searching}
+            connectParam={connectParam}
+            skillsLoaded={skillsData !== undefined}
+            skillSetupByAppId={skillSetupByAppId}
+            onChange={refresh}
+          />
+        </Tabs.Content>
+      ))}
+    </Tabs>
+  );
+}
+
+interface ConnectableListProps {
+  kind: ConnectableKind;
+  items: ConnectableApp[];
+  searching: boolean;
+  connectParam: string | null;
+  /** False until the skills fetch resolves; readiness is unknown until then. */
+  skillsLoaded: boolean;
+  skillSetupByAppId: Map<number, SkillSetup>;
+  onChange: () => void;
+}
+
+function ConnectableList({
+  kind,
+  items,
+  searching,
+  connectParam,
+  skillsLoaded,
+  skillSetupByAppId,
+  onChange,
+}: ConnectableListProps) {
+  const copy = KIND_COPY[kind];
+  const connected = items.filter((item) => item.authenticated);
+  const browse = items.filter((item) => !item.authenticated);
+
+  // Skill enablement is an external-app concept — MCP servers expose MCP tools,
+  // not skills, so their rows carry no readiness state at all.
+  function skillStatusOf(item: ConnectableApp): SkillStatus {
+    if (item.kind !== "app" || !skillsLoaded) return "unknown";
+    const setup =
+      item.externalAppId === null
+        ? undefined
+        : skillSetupByAppId.get(item.externalAppId);
+    if (
+      setup !== undefined &&
+      setup.total > 0 &&
+      setup.selected < setup.total
+    ) {
+      return "needs-setup";
+    }
+    return "ready";
+  }
+
+  if (items.length === 0) {
+    return searching ? (
+      <IllustrationContent
+        illustration={SvgNoResult}
+        title="No matches"
+        description="Nothing here matches your search."
+      />
+    ) : (
+      <IllustrationContent
+        illustration={SvgUnPlugged}
+        title={copy.emptyTitle}
+        description={copy.empty}
+      />
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 pt-2">
+      <Text font="secondary-body" color="text-03">
+        {copy.blurb}
+      </Text>
+
       {connected.length > 0 && (
         <section className="flex flex-col gap-2">
           <Text font="secondary-body" color="text-03">
             Connected
           </Text>
           <div className="flex flex-col gap-2">
-            {connected.map((userApp) => (
+            {connected.map((item) => (
               <ProviderConnectCard
-                key={userApp.id}
+                key={item.key}
                 variant="row"
-                userApp={userApp}
-                onChange={() => mutate()}
+                app={item}
+                skillStatus={skillStatusOf(item)}
+                onChange={onChange}
               />
             ))}
           </div>
@@ -135,21 +323,23 @@ function AppConnections({ query }: AppConnectionsProps) {
 
       <section className="flex flex-col gap-2">
         <Text font="secondary-body" color="text-03">
-          Browse apps
+          {copy.browseLabel}
         </Text>
         {browse.length === 0 ? (
           <Text font="secondary-body" color="text-03">
-            {query ? "No apps match your search." : "Everything is connected."}
+            Everything is connected.
           </Text>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {browse.map((userApp) => (
+            {browse.map((item) => (
               <ProviderConnectCard
-                key={userApp.id}
+                key={item.key}
                 variant="tile"
-                userApp={userApp}
-                highlight={connectSlug === userApp.slug}
-                onChange={() => mutate()}
+                app={item}
+                highlight={
+                  connectParam !== null && connectParam === item.connectId
+                }
+                onChange={onChange}
               />
             ))}
           </div>
@@ -160,16 +350,19 @@ function AppConnections({ query }: AppConnectionsProps) {
 }
 
 interface ProviderConnectCardProps {
-  userApp: ExternalAppUserResponse;
+  app: ConnectableApp;
   variant: "row" | "tile";
   highlight?: boolean;
+  /** Row variant only: whether the app's skills are ready to use. */
+  skillStatus?: SkillStatus;
   onChange: () => void;
 }
 
 function ProviderConnectCard({
-  userApp,
+  app,
   variant,
   highlight,
+  skillStatus = "unknown",
   onChange,
 }: ProviderConnectCardProps) {
   const [isStarting, setIsStarting] = useState(false);
@@ -187,16 +380,13 @@ function ProviderConnectCard({
   }, [highlight]);
 
   async function connect() {
-    // Custom apps have no OAuth provider — collect the user's credentials
-    // directly via a popup instead of redirecting to an authorize URL.
-    if (userApp.app_type === "CUSTOM") {
+    if (app.connectMode === "credentials") {
       setCredModalOpen(true);
       return;
     }
     setIsStarting(true);
     try {
-      const { authorize_url } = await startExternalAppOAuth(userApp.id);
-      window.location.href = authorize_url;
+      window.location.href = await app.startOAuth();
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : "Failed to start authorization"
@@ -205,12 +395,11 @@ function ProviderConnectCard({
     }
   }
 
-  // Overwrite stored creds with `{}` — flips `authenticated` to false
-  // on the next list call. Avoids a dedicated DELETE endpoint.
   async function disconnect() {
+    if (!app.disconnect) return;
     setIsStarting(true);
     try {
-      await disconnectUserFromApp(userApp.id);
+      await app.disconnect();
       onChange();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to disconnect");
@@ -219,7 +408,8 @@ function ProviderConnectCard({
     }
   }
 
-  const Logo = getAppTypeLogo(userApp.app_type);
+  const Logo = app.logo;
+  const needsSkillSetup = skillStatus === "needs-setup";
 
   return (
     <>
@@ -232,37 +422,73 @@ function ProviderConnectCard({
       >
         <Card background="light" border="solid" rounding="lg">
           {variant === "row" ? (
-            <div className="flex items-center gap-3 w-full">
-              <Logo className="w-8 h-8" />
-              <div className="flex-1 flex flex-col gap-0.5">
+            <ContentAction
+              sizePreset="main-ui"
+              variant="section"
+              padding="fit"
+              center
+              icon={Logo}
+              title={app.name}
+              description={
+                needsSkillSetup
+                  ? "Connected · Not all associated skills are enabled. This app may not work correctly."
+                  : "Connected"
+              }
+              rightChildren={
                 <div className="flex items-center gap-2">
-                  <Text font="main-ui-action">{userApp.name}</Text>
-                  <SvgCheckCircle className="w-4 h-4 text-status-success-05" />
+                  {needsSkillSetup ? (
+                    <SvgAlertCircle
+                      className="w-4 h-4 text-status-warning-05"
+                      aria-label="Skill setup required"
+                    />
+                  ) : skillStatus === "ready" ? (
+                    <SvgCheckCircle
+                      className="w-4 h-4 text-status-success-05"
+                      aria-label="App ready"
+                    />
+                  ) : null}
+                  {needsSkillSetup && app.externalAppId !== null && (
+                    <Button
+                      prominence="secondary"
+                      href={`/craft/v1/skills?externalAppId=${app.externalAppId}`}
+                    >
+                      Review skills
+                    </Button>
+                  )}
+                  {app.disconnect && (
+                    <Button
+                      prominence={needsSkillSetup ? "tertiary" : "secondary"}
+                      disabled={isStarting}
+                      onClick={disconnect}
+                    >
+                      {isStarting ? "…" : "Disconnect"}
+                    </Button>
+                  )}
                 </div>
-                <Text font="secondary-body" color="text-03">
-                  Connected
-                </Text>
-              </div>
-              <Button
-                prominence="secondary"
-                disabled={isStarting}
-                onClick={disconnect}
-              >
-                {isStarting ? "…" : "Disconnect"}
-              </Button>
-            </div>
+              }
+            />
           ) : (
             <div className="flex flex-col gap-3 w-full">
-              <div className="flex items-center gap-3">
-                <Logo className="w-8 h-8" />
-                <Text font="main-ui-action">{userApp.name}</Text>
-              </div>
-              <Text font="secondary-body" color="text-03">
-                {userApp.description}
-              </Text>
-              <Button disabled={isStarting} onClick={connect}>
-                {isStarting ? "Redirecting…" : "Connect"}
-              </Button>
+              <Content
+                sizePreset="main-ui"
+                variant="section"
+                icon={Logo}
+                title={app.name}
+                description={app.description}
+              />
+              {app.connectMode === null ? (
+                // Org-managed and not usable by this account (e.g. an admin
+                // config that yields no credentials, or pass-through OAuth for a
+                // password-login user). There is no user-side action.
+                <Text font="secondary-body" color="text-03">
+                  Not available for your account — ask an admin to check this
+                  connection.
+                </Text>
+              ) : (
+                <Button disabled={isStarting} onClick={connect}>
+                  {isStarting ? "Redirecting…" : "Connect"}
+                </Button>
+              )}
             </div>
           )}
         </Card>
@@ -272,7 +498,11 @@ function ProviderConnectCard({
         open={credModalOpen}
         onClose={() => setCredModalOpen(false)}
         onSaved={onChange}
-        userApp={userApp}
+        name={app.name}
+        logo={app.logo}
+        credentialKeys={app.credentialKeys}
+        credentialValues={app.credentialValues}
+        save={app.saveCredentials}
       />
     </>
   );

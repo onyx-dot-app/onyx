@@ -10,8 +10,8 @@ from onyx.tools.tool_implementations.open_url.models import FailedFetch
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import FailureReason
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     _build_failure_message,
+    _format_failed_url,
 )
-from onyx.tools.tool_implementations.open_url.open_url_tool import _format_failed_url
 
 
 def test_format_failed_url_with_reason() -> None:

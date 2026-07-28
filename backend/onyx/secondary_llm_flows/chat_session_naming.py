@@ -4,11 +4,9 @@ from onyx.configs.constants import MessageType
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import llm_response_to_string
-from onyx.prompts.chat_prompts import CHAT_NAMING_REMINDER
-from onyx.prompts.chat_prompts import CHAT_NAMING_SYSTEM_PROMPT
+from onyx.prompts.chat_prompts import CHAT_NAMING_REMINDER, CHAT_NAMING_SYSTEM_PROMPT
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_response
+from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

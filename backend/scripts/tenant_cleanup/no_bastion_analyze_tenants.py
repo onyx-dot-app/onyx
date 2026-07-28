@@ -15,14 +15,14 @@ import csv
 import json
 import subprocess
 import sys
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from scripts.tenant_cleanup.no_bastion_cleanup_utils import find_background_pod
-from scripts.tenant_cleanup.no_bastion_cleanup_utils import find_worker_pod
+from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
+    find_background_pod,
+    find_worker_pod,
+)
 
 
 def collect_tenant_data(

@@ -1,19 +1,22 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.enums import HierarchyNodeType
-from onyx.db.enums import PersonaAccessLevel
-from onyx.db.enums import PersonaSharePermission
-from onyx.db.enums import PersonaSharingStatus
-from onyx.db.models import Document
-from onyx.db.models import HierarchyNode
-from onyx.db.models import Persona
-from onyx.db.models import PersonaLabel
-from onyx.db.models import StarterMessage
+from onyx.db.enums import (
+    HierarchyNodeType,
+    PersonaAccessLevel,
+    PersonaSharePermission,
+    PersonaSharingStatus,
+)
+from onyx.db.models import (
+    Document,
+    HierarchyNode,
+    Persona,
+    PersonaLabel,
+    StarterMessage,
+)
 from onyx.db.persona_sharing import derive_persona_sharing_status
 from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.tool.models import ToolSnapshot
@@ -235,6 +238,9 @@ class MinimalPersonaSnapshot(BaseModel):
         cls,
         persona: Persona,
         user_permission: PersonaAccessLevel | None = None,
+        # Fail closed: the owner email is PII and is only included when a caller
+        # explicitly opts in (owner / admin paths). See the DB-layer callers.
+        include_owner_email: bool = False,
     ) -> "MinimalPersonaSnapshot":
         # Collect unique sources from document sets, hierarchy nodes, and attached documents
         sources: set[DocumentSource] = set()
@@ -288,7 +294,12 @@ class MinimalPersonaSnapshot(BaseModel):
             builtin_persona=persona.builtin_persona,
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
-                MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
+                # Owner email is PII: keep the id (needed for ownership/creator
+                # filtering) but blank the email for non-owner/non-admin callers.
+                MinimalUserSnapshot(
+                    id=persona.user.id,
+                    email=persona.user.email if include_owner_email else "",
+                )
                 if persona.user
                 else None
             ),

@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import EditGroupPage from "@/refresh-pages/admin/GroupsPage/EditGroupPage";
+import EditGroupPage from "@/views/admin/GroupsPage/EditGroupPage";
 
 export default function EditGroupRoute({
   params,

@@ -5,6 +5,11 @@ PRESENTATION_MIME_TYPE = (
 SPREADSHEET_MIME_TYPE = (
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+# Macro-enabled Excel workbooks (.xlsm) — parseable by openpyxl just like xlsx.
+# Stored lowercase; chat MIME classification normalizes to lowercase before
+# membership checks.
+SPREADSHEET_MACRO_MIME_TYPE = "application/vnd.ms-excel.sheet.macroenabled.12"
+SPREADSHEET_MIME_TYPES = {SPREADSHEET_MIME_TYPE, SPREADSHEET_MACRO_MIME_TYPE}
 WORD_PROCESSING_MIME_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 )
@@ -15,7 +20,7 @@ PLAIN_TEXT_MIME_TYPE = "text/plain"
 class OnyxMimeTypes:
     IMAGE_MIME_TYPES = {"image/jpg", "image/jpeg", "image/png", "image/webp"}
     CSV_MIME_TYPES = {"text/csv"}
-    TABULAR_MIME_TYPES = CSV_MIME_TYPES | {SPREADSHEET_MIME_TYPE}
+    TABULAR_MIME_TYPES = CSV_MIME_TYPES | SPREADSHEET_MIME_TYPES
     TEXT_MIME_TYPES = {
         PLAIN_TEXT_MIME_TYPE,
         "text/markdown",

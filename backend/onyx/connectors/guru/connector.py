@@ -1,6 +1,5 @@
 import json
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
@@ -8,15 +7,19 @@ import requests
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
 
@@ -82,6 +85,7 @@ class GuruConnector(LoadConnector, PollConnector):
                 link = GURU_CARDS_URL + card["slug"]
                 content_text = parse_html_page_basic(card["content"])
                 last_updated = time_str_to_utc(card["lastModified"])
+                date_created = time_str_to_utc(card["dateCreated"])
                 last_verified = (
                     time_str_to_utc(card.get("lastVerified"))
                     if card.get("lastVerified")
@@ -124,6 +128,8 @@ class GuruConnector(LoadConnector, PollConnector):
                         source=DocumentSource.GURU,
                         semantic_identifier=title,
                         doc_updated_at=latest_time,
+                        # NOTE: doc_created_at population not yet verified against live data
+                        doc_created_at=date_created,
                         primary_owners=[author] if author is not None else None,
                         # Can add verifies and commenters later
                         metadata=metadata_dict,

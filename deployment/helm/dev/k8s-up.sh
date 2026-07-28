@@ -2,7 +2,7 @@
 #
 # k8s-up.sh — bring up an Onyx dev cluster on the local machine.
 #
-# Idempotent. See docs/dev/local-kubernetes.md for the full workflow.
+# Idempotent. See docs/craft/dev/local-kubernetes.md for the full workflow.
 #
 # Usage:
 #   deployment/helm/dev/k8s-up.sh
@@ -33,7 +33,7 @@ require() {
   local bin="$1"
   if ! command -v "$bin" >/dev/null 2>&1; then
     echo "error: '$bin' is required but not on PATH" >&2
-    echo "see docs/dev/local-kubernetes.md for installation" >&2
+    echo "see docs/craft/dev/local-kubernetes.md for installation" >&2
     exit 1
   fi
 }

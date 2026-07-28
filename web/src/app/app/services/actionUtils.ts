@@ -52,6 +52,7 @@ const isOpenUrlTool = (tool: ToolSnapshot): boolean => {
 const isCodeInterpreterTool = (tool: ToolSnapshot): boolean => {
   return (
     tool.in_code_tool_id === "PythonTool" ||
+    tool.name === "run_python" ||
     tool.name === "python" ||
     tool.display_name?.toLowerCase().includes("code interpreter")
   );

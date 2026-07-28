@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { FieldMessage } from "./FieldMessage";
 
 const meta: Meta<typeof FieldMessage> = {

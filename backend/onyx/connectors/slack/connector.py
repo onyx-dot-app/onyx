@@ -2,69 +2,70 @@ import contextvars
 import copy
 import itertools
 import re
-from collections.abc import Callable
-from collections.abc import Generator
-from concurrent.futures import as_completed
-from concurrent.futures import Future
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from enum import Enum
-from http.client import IncompleteRead
-from http.client import RemoteDisconnected
-from typing import Any
-from typing import cast
+from http.client import IncompleteRead, RemoteDisconnected
+from typing import Any, cast
 from urllib.error import URLError
 from urllib.parse import urlparse
 
 from pydantic import BaseModel
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from slack_sdk.http_retry import ConnectionErrorRetryHandler
-from slack_sdk.http_retry import RetryHandler
+from slack_sdk.http_retry import ConnectionErrorRetryHandler, RetryHandler
 from slack_sdk.http_retry.builtin_interval_calculators import (
     FixedValueRetryIntervalCalculator,
 )
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import ENABLE_EXPENSIVE_EXPERT_CALLS
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import SLACK_NUM_THREADS
+from onyx.configs.app_configs import (
+    ENABLE_EXPENSIVE_EXPERT_CALLS,
+    INDEX_BATCH_SIZE,
+    SLACK_NUM_THREADS,
+)
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import CredentialsConnector
-from onyx.connectors.interfaces import CredentialsProviderInterface
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import NormalizationResult
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    CredentialsConnector,
+    CredentialsProviderInterface,
+    GenerateSlimDocumentOutput,
+    NormalizationResult,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    EntityFailure,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
 from onyx.connectors.slack.access import get_channel_access
-from onyx.connectors.slack.models import ChannelType
-from onyx.connectors.slack.models import MessageType
-from onyx.connectors.slack.models import ThreadType
+from onyx.connectors.slack.models import ChannelType, MessageType, ThreadType
 from onyx.connectors.slack.onyx_retry_handler import OnyxRedisSlackRetryHandler
 from onyx.connectors.slack.onyx_slack_web_client import OnyxSlackWebClient
-from onyx.connectors.slack.utils import expert_info_from_slack_id
-from onyx.connectors.slack.utils import fetch_team_user_emails
-from onyx.connectors.slack.utils import get_message_link
-from onyx.connectors.slack.utils import make_paginated_slack_api_call
-from onyx.connectors.slack.utils import SlackTextCleaner
+from onyx.connectors.slack.utils import (
+    SlackTextCleaner,
+    expert_info_from_slack_id,
+    fetch_team_user_emails,
+    get_message_link,
+    make_paginated_slack_api_call,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_pool import get_redis_client
@@ -336,6 +337,7 @@ def thread_to_doc(
         source=DocumentSource.SLACK,
         semantic_identifier=doc_sem_id,
         doc_updated_at=get_latest_message_time(thread),
+        doc_created_at=datetime.fromtimestamp(float(thread[0]["ts"]), tz=timezone.utc),
         primary_owners=valid_experts,
         doc_metadata={
             "hierarchy": {
@@ -709,6 +711,10 @@ def _get_all_doc_ids(
                         ),
                         external_access=external_access,
                         parent_hierarchy_raw_node_id=channel_id,
+                        # Slack ts is the thread root's creation time (epoch seconds)
+                        doc_created_at=datetime.fromtimestamp(
+                            float(message["ts"]), tz=timezone.utc
+                        ),
                     )
                 )
 

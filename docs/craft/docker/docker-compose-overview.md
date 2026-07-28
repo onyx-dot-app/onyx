@@ -30,7 +30,6 @@ bash "$WT"/deployment/docker_compose/install.sh --local --include-craft
 cat >> ~/onyx_data/deployment/.env <<'ENV'
 ENABLE_CRAFT=true
 SANDBOX_BACKEND=docker
-SANDBOX_API_SERVER_URL=http://host.docker.internal:3001
 HOST_PORT=3001
 ENV
 
@@ -49,12 +48,8 @@ ENV
 
 ## Prerequisites
 
-- macOS with **Docker Desktop** (or OrbStack) — these provide `host.docker.internal`
-  resolution from inside the `onyx_craft_sandbox` bridge network, which the
-  sandbox container needs to reach api_server.
-- On Linux, replace `http://host.docker.internal:3001` with your machine's
-  reachable address (or use `--add-host` workarounds). Native Linux Docker
-  does *not* resolve `host.docker.internal` by default.
+- Docker Desktop, OrbStack, or Docker Engine on Linux. The Craft overlay uses
+  the private `onyx-craft-api` bridge alias on every platform.
 - ~80 GB free Docker disk. Onyx's full stack pulls ~30 GB; local image
   builds add another 10–15 GB; build cache balloons to 40+ GB if you let
   it. See [OpenSearch read-only block](#opensearch-flipped-into-read-only-mode-disk-full) below.
@@ -70,7 +65,7 @@ These must end up in `~/onyx_data/deployment/.env` after install:
 |---|---|---|
 | `ENABLE_CRAFT=true` | yes | `--include-craft` sets this (fresh installs and existing `.env`). |
 | `SANDBOX_BACKEND=docker` | yes | `--include-craft` sets this alongside `ENABLE_CRAFT`. |
-| `SANDBOX_API_SERVER_URL=http://host.docker.internal:3001` | yes | Provision raises `ValueError("SANDBOX_API_SERVER_URL must be set")` without it. Must be a URL the sandbox container can reach **from the `onyx_craft_sandbox` bridge** — compose-internal hostnames (`api_server`, `nginx`) won't resolve there. Match the port to `HOST_PORT`. |
+| `ONYX_SERVER_URL` | optional | Complete API base URL. The Craft overlay defaults to `http://onyx-craft-api:8080` on the private sandbox bridge. Override with a public URL only when desired, including its `/api` path prefix. |
 | `HOST_PORT=3001` | only if 3000 conflicts | Default is 3000; nginx binds this on the host. Free up 3000 or change here. |
 | `IMAGE_TAG` | optional | Uses the normal compose default (`latest`) unless set. Craft uses this same tag for the sandbox image, so do not set a separate sandbox image for normal deployments. There are **no** Craft-specific app/backend images — Craft is enabled at runtime via `ENABLE_CRAFT=true` (above). See [image architecture](../infra/image-architecture.md). |
 | `ONYX_BACKEND_IMAGE` | only when running unreleased PRs | Lets you override just the backend image without forcing model-server / web-server to the same tag. |
@@ -122,12 +117,11 @@ adapt the prompts (Standard mode = `2`, keep existing env = blank).
 ### 3. Fix the .env
 
 On an existing `.env`, `--include-craft` writes `ENABLE_CRAFT=true` and
-`SANDBOX_BACKEND=docker` for you (on both the update and restart paths). It
-does **not** set the host-specific values, so append those yourself:
+`SANDBOX_BACKEND=docker` for you (on both the update and restart paths).
+Set `HOST_PORT` only when the default port is unavailable:
 
 ```bash
 cat >> ~/onyx_data/deployment/.env <<'ENV'
-SANDBOX_API_SERVER_URL=http://host.docker.internal:3001
 HOST_PORT=3001
 ENV
 ```

@@ -1,26 +1,33 @@
 import html
 import time
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.bookstack.client import BookStackApiClient
-from onyx.connectors.bookstack.client import BookStackClientRequestFailedError
+from onyx.connectors.bookstack.client import (
+    BookStackApiClient,
+    BookStackClientRequestFailedError,
+)
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
 from onyx.file_processing.html_utils import parse_html_page_basic
 
 
@@ -83,6 +90,9 @@ class BookstackConnector(LoadConnector, PollConnector):
         updated_at_str = (
             str(book.get("updated_at")) if book.get("updated_at") is not None else None
         )
+        created_at_str = (
+            str(book.get("created_at")) if book.get("created_at") is not None else None
+        )
         return Document(
             id="book__" + str(book.get("id")),
             sections=[TextSection(link=url, text=text)],
@@ -91,6 +101,10 @@ class BookstackConnector(LoadConnector, PollConnector):
             title=title,
             doc_updated_at=(
                 time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=(
+                time_str_to_utc(created_at_str) if created_at_str is not None else None
             ),
             metadata={"type": "book"},
         )
@@ -112,6 +126,11 @@ class BookstackConnector(LoadConnector, PollConnector):
             if chapter.get("updated_at") is not None
             else None
         )
+        created_at_str = (
+            str(chapter.get("created_at"))
+            if chapter.get("created_at") is not None
+            else None
+        )
         return Document(
             id="chapter__" + str(chapter.get("id")),
             sections=[TextSection(link=url, text=text)],
@@ -120,6 +139,10 @@ class BookstackConnector(LoadConnector, PollConnector):
             title=title,
             doc_updated_at=(
                 time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=(
+                time_str_to_utc(created_at_str) if created_at_str is not None else None
             ),
             metadata={"type": "chapter"},
         )
@@ -136,6 +159,11 @@ class BookstackConnector(LoadConnector, PollConnector):
             if shelf.get("updated_at") is not None
             else None
         )
+        created_at_str = (
+            str(shelf.get("created_at"))
+            if shelf.get("created_at") is not None
+            else None
+        )
         return Document(
             id="shelf:" + str(shelf.get("id")),
             sections=[TextSection(link=url, text=text)],
@@ -144,6 +172,10 @@ class BookstackConnector(LoadConnector, PollConnector):
             title=title,
             doc_updated_at=(
                 time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=(
+                time_str_to_utc(created_at_str) if created_at_str is not None else None
             ),
             metadata={"type": "shelf"},
         )
@@ -168,6 +200,11 @@ class BookstackConnector(LoadConnector, PollConnector):
             if page_data.get("updated_at") is not None
             else None
         )
+        created_at_str = (
+            str(page_data.get("created_at"))
+            if page_data.get("created_at") is not None
+            else None
+        )
         time.sleep(0.1)
         return Document(
             id="page:" + page_id,
@@ -177,6 +214,10 @@ class BookstackConnector(LoadConnector, PollConnector):
             title=str(title),
             doc_updated_at=(
                 time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=(
+                time_str_to_utc(created_at_str) if created_at_str is not None else None
             ),
             metadata={"type": "page"},
         )

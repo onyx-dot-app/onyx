@@ -9,13 +9,14 @@ from uuid import uuid4
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import remove_llm_provider, upsert_llm_provider
 from onyx.db.models import User
 from onyx.llm.constants import LlmProviderNames
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    LLMProviderView,
+    ModelConfigurationUpsertRequest,
+)
 from tests.external_dependency_unit.conftest import create_test_user
 
 

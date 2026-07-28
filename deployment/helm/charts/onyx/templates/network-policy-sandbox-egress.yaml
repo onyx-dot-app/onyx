@@ -1,0 +1,64 @@
+{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- $sandboxNs := (index (.Values.configMap | default (dict)) "SANDBOX_NAMESPACE") | default "onyx-sandboxes" }}
+{{- $proxyNs := (index (.Values.configMap | default (dict)) "SANDBOX_PROXY_NAMESPACE") | default $.Release.Namespace }}
+# CNI-layer egress allow-list for Craft sandbox pods: proxy + DNS only, default-deny. Declarative
+# backstop to the in-pod iptables, which is the authoritative runtime control (see firewall-init.sh);
+# only enforced where the CNI honors NetworkPolicy, inert otherwise. DNS must stay allowed or
+# sandbox-init's proxy-FQDN resolution breaks. Each ipBlock is its own egress rule per the IPv4/IPv6
+# fail-closed caveat documented in the proxy-side policy (templates/sandbox-proxy/networkpolicy-egress.yaml).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-egress
+  namespace: {{ $sandboxNs }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sandbox
+  policyTypes: [Egress]
+  egress:
+    # Egress proxy pod ($proxyNs = SANDBOX_PROXY_NAMESPACE or release ns; matched by pod label, not Service).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $proxyNs }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: sandbox-proxy
+      ports:
+        - protocol: TCP
+          port: {{ include "onyx.sandboxProxyPort" . }}
+    # Proxy by CIDR (craft.proxyExtraCIDRs) when SANDBOX_PROXY_HOST points at a non-chart-labeled target.
+    {{- range (index (.Values.craft | default (dict)) "proxyExtraCIDRs" | default list) }}
+    - to:
+        - ipBlock:
+            cidr: {{ . | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ include "onyx.sandboxProxyPort" $ }}
+    {{- end }}
+    # kube-dns.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # NodeLocal DNS / non-pod DNS listeners (craft.dnsExtraCIDRs), e.g. 169.254.20.10/32.
+    {{- range (index (.Values.craft | default (dict)) "dnsExtraCIDRs" | default list) }}
+    - to:
+        - ipBlock:
+            cidr: {{ . | quote }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+{{- end }}

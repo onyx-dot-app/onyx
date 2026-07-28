@@ -19,7 +19,6 @@ descendants. Works with any children — DOM elements, React components, or frag
 
 | Selector | Effect |
 |----------|--------|
-| `.opal-disabled` | `self-stretch` (wrapper stretches to fill parent cross-axis) |
 | `[data-opal-disabled]` | `cursor-not-allowed`, `select-none`, `pointer-events: none` |
 | `[data-opal-disabled]:not(.interactive)` | `opacity-50` (non-Interactive elements only) |
 | `[data-opal-disabled].interactive` | `pointer-events: auto` (Interactive elements handle their own disabled colors) |

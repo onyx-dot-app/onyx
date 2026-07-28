@@ -1,21 +1,22 @@
 from collections.abc import Iterator
-from typing import Any
-from typing import Callable
+from typing import Any, Callable
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
-from onyx.server.query_and_chat.models import MessageResponseIDInfo
-from onyx.server.query_and_chat.models import MultiModelMessageResponseIDInfo
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.tools.models import SearchToolUsage
-from onyx.tools.models import ToolCallKickoff
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.server.query_and_chat.models import (
+    MessageResponseIDInfo,
+    MultiModelMessageResponseIDInfo,
+)
+from onyx.server.query_and_chat.streaming_models import (
+    CitationInfo,
+    GeneratedImage,
+    Packet,
+)
+from onyx.tools.models import SearchToolUsage, ToolCallKickoff
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
 
@@ -98,6 +99,9 @@ class ChatFullResponse(BaseModel):
 class ChatLoadedFile(InMemoryChatFile):
     content_text: str | None
     token_count: int
+    # True while the user-file worker is still processing the file — its
+    # canonical plaintext (e.g. including image captions) doesn't exist yet.
+    content_pending: bool = False
 
     # Named distinctly from the base ``lazy_from_descriptor`` so the subclass
     # can require ``content_text`` / ``token_count`` without violating LSP on
@@ -112,6 +116,7 @@ class ChatLoadedFile(InMemoryChatFile):
         content_text: str | None,
         token_count: int,
         loader: Callable[[], bytes],
+        content_pending: bool = False,
     ) -> "ChatLoadedFile":
         """Construct a ``ChatLoadedFile`` whose ``content`` bytes are loaded
         only on first access. ``content_text`` and ``token_count`` are passed
@@ -126,6 +131,7 @@ class ChatLoadedFile(InMemoryChatFile):
             filename=filename,
             content_text=content_text,
             token_count=token_count,
+            content_pending=content_pending,
         )
         install_lazy_content_loader(inst, loader)
         return inst

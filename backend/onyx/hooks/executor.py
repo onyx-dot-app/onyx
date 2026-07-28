@@ -9,8 +9,7 @@ via fetch_versioned_implementation so that:
   - EE: ee.onyx.hooks.executor._execute_hook_impl → real HTTP call
 """
 
-from typing import Any
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session

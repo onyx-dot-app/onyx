@@ -4,7 +4,7 @@
 # laptop. Pairs with telepresence intercept so api_server / celery / web run
 # in your vscode debugger while the rest of the stack runs in-cluster.
 #
-# See docs/dev/local-kubernetes.md for the full workflow.
+# See docs/craft/dev/local-kubernetes.md for the full workflow.
 
 # Track nightly `edge` builds instead of `latest` (a released tag) — keeps
 # in-cluster images closer to main, reducing schema/code skew with local
@@ -79,7 +79,8 @@ codeInterpreter:
 configMap:
   ENABLE_CRAFT: "true"
   # Host gateway (Docker Desktop), not internal cluster DNS; Linux-kind devs sub their own.
-  SANDBOX_API_SERVER_URL: "http://host.docker.internal:3000"
+  # Full base URL, path prefix included — the Next dev server proxies the API under /api.
+  ONYX_SERVER_URL: "http://host.docker.internal:3000/api"
   ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
 
 sandboxProxy:

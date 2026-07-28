@@ -9,6 +9,14 @@ The integration tests are designed with a "manager" class and a "test" class for
 
 The idea is that each test can use the manager class to create (.create()) a "test*" object. It can then perform an operation on the object (e.g., send a request to the API) and then check if the "test*" object is in the expected state by using the manager class (.verify()) function.
 
+Craft Kubernetes tests under `tests/integration/tests/craft/k8s/` run in the
+dedicated `pr-craft-k8s-tests.yml` lane against a Helm-installed kind cluster
+with the real api_server, web_server, Celery workers, sandbox-proxy, and sandbox
+pods. Prefer the same API-manager shape there for API behavior. Use direct
+sandbox manager calls only for low-level Kubernetes contracts that are not
+exposed cleanly through public APIs; direct task/stub checks belong in
+`tests/external_dependency_unit/craft/`.
+
 ## Instructions for Running Integration Tests Locally
 0. Generate dependencies
 First install openap-generator

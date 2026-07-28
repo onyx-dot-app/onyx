@@ -17,22 +17,22 @@ the OAuth cookie.
 import hashlib
 import hmac
 import time
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from enum import StrEnum
 
 import httpx
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from onyx.configs.app_configs import CAPTCHA_COOKIE_TTL_SECONDS
-from onyx.configs.app_configs import CAPTCHA_ENABLED
-from onyx.configs.app_configs import RECAPTCHA_ENTERPRISE_API_KEY
-from onyx.configs.app_configs import RECAPTCHA_ENTERPRISE_PROJECT_ID
-from onyx.configs.app_configs import RECAPTCHA_HOSTNAME_ALLOWLIST
-from onyx.configs.app_configs import RECAPTCHA_SCORE_THRESHOLD
-from onyx.configs.app_configs import RECAPTCHA_SITE_KEY
-from onyx.configs.app_configs import USER_AUTH_SECRET
+from onyx.configs.app_configs import (
+    CAPTCHA_COOKIE_TTL_SECONDS,
+    CAPTCHA_ENABLED,
+    RECAPTCHA_ENTERPRISE_API_KEY,
+    RECAPTCHA_ENTERPRISE_PROJECT_ID,
+    RECAPTCHA_HOSTNAME_ALLOWLIST,
+    RECAPTCHA_SCORE_THRESHOLD,
+    RECAPTCHA_SITE_KEY,
+    USER_AUTH_SECRET,
+)
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.utils.logger import setup_logger
 

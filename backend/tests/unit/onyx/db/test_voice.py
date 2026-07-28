@@ -6,20 +6,22 @@ from uuid import uuid4
 import pytest
 
 from onyx.db.models import VoiceProvider
-from onyx.db.voice import deactivate_stt_provider
-from onyx.db.voice import deactivate_tts_provider
-from onyx.db.voice import delete_voice_provider
-from onyx.db.voice import fetch_default_stt_provider
-from onyx.db.voice import fetch_default_tts_provider
-from onyx.db.voice import fetch_voice_provider_by_id
-from onyx.db.voice import fetch_voice_provider_by_type
-from onyx.db.voice import fetch_voice_providers
-from onyx.db.voice import MAX_VOICE_PLAYBACK_SPEED
-from onyx.db.voice import MIN_VOICE_PLAYBACK_SPEED
-from onyx.db.voice import set_default_stt_provider
-from onyx.db.voice import set_default_tts_provider
-from onyx.db.voice import update_user_voice_settings
-from onyx.db.voice import upsert_voice_provider
+from onyx.db.voice import (
+    MAX_VOICE_PLAYBACK_SPEED,
+    MIN_VOICE_PLAYBACK_SPEED,
+    deactivate_stt_provider,
+    deactivate_tts_provider,
+    delete_voice_provider,
+    fetch_default_stt_provider,
+    fetch_default_tts_provider,
+    fetch_voice_provider_by_id,
+    fetch_voice_provider_by_type,
+    fetch_voice_providers,
+    set_default_stt_provider,
+    set_default_tts_provider,
+    update_user_voice_settings,
+    upsert_voice_provider,
+)
 from onyx.error_handling.exceptions import OnyxError
 
 

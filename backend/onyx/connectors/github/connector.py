@@ -1,20 +1,13 @@
 import copy
 import os
-from collections.abc import Callable
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from collections.abc import Callable, Generator
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from io import BytesIO
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from github import Github
-from github import RateLimitExceededException
-from github import Repository
-from github.GithubException import GithubException
-from github.GithubException import UnknownObjectException
+from github import Github, RateLimitExceededException, Repository
+from github.GithubException import GithubException, UnknownObjectException
 from github.Issue import Issue
 from github.NamedUser import NamedUser
 from github.PaginatedList import PaginatedList
@@ -25,34 +18,41 @@ from typing_extensions import override
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.connector_runner import CheckpointOutputWrapper
-from onyx.connectors.connector_runner import ConnectorRunner
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.connector_runner import CheckpointOutputWrapper, ConnectorRunner
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+    ValidationError,
+)
 from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
-from onyx.connectors.github.utils import deserialize_repository
-from onyx.connectors.github.utils import get_external_access_permission
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import ConnectorCheckpoint
-from onyx.connectors.interfaces import ConnectorFailure
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import IndexingHeartbeatInterface
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import file_io_to_text
-from onyx.file_processing.extract_file_text import is_text_file
+from onyx.connectors.github.utils import (
+    deserialize_repository,
+    get_external_access_permission,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    GenerateSlimDocumentOutput,
+    IndexingHeartbeatInterface,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    EntityFailure,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
+from onyx.file_processing.extract_file_text import file_io_to_text, is_text_file
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -107,6 +107,9 @@ GITHUB_PATH_DENYLIST = {
 GITHUB_MAX_FILE_SIZE_BYTES = 1_000_000
 # Number of files emitted per checkpoint batch in the FILES stage.
 FILE_BATCH_SIZE = 100
+
+_GITHUB_EMPTY_REPOSITORY_TREE_STATUS = 409
+_GITHUB_EMPTY_REPOSITORY_TREE_MESSAGE = "Git Repository is empty."
 
 
 def _is_indexable_path(path: str, size: int | None) -> bool:
@@ -367,6 +370,11 @@ def _convert_pr_to_document(
             if pull_request.updated_at
             else None
         ),
+        doc_created_at=(
+            pull_request.created_at.replace(tzinfo=timezone.utc)
+            if pull_request.created_at
+            else None
+        ),
         # this metadata is used in perm sync
         doc_metadata=doc_metadata,
         metadata={
@@ -448,6 +456,9 @@ def _convert_issue_to_document(
         semantic_identifier=f"{issue.number}: {issue.title}",
         # updated_at is UTC time but is timezone unaware
         doc_updated_at=issue.updated_at.replace(tzinfo=timezone.utc),
+        doc_created_at=(
+            issue.created_at.replace(tzinfo=timezone.utc) if issue.created_at else None
+        ),
         # this metadata is used in perm sync
         doc_metadata=doc_metadata,
         metadata={
@@ -497,13 +508,13 @@ def _convert_file_to_document(
     path: str,
     content_text: str,
     repo_external_access: ExternalAccess | None,
+    branch: str,
 ) -> Document:
     repo_full_name = repo.full_name
     parts = repo_full_name.split("/", 1)
     owner_name = parts[0] if parts else ""
     repo_name = parts[1] if len(parts) > 1 else repo_full_name
 
-    branch = repo.default_branch
     html_url = f"{repo.html_url}/blob/{branch}/{path}"
     _, extension = os.path.splitext(path)
 
@@ -557,6 +568,9 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     # Resolved + filtered file paths for the current repo's FILES stage.
     # Populated once when the stage begins, then paginated via curr_page.
     file_paths: list[str] | None = None
+    # Branch file_paths was listed from; a resumed checkpoint whose branch no
+    # longer matches (connector edited, default branch changed) is re-listed.
+    file_paths_branch: str | None = None
 
     # Used for the fallback cursor-based pagination strategy
     num_retrieved: int
@@ -564,13 +578,14 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
 
     def reset(self) -> None:
         """
-        Resets curr_page, num_retrieved, cursor_url, and file_paths to their
-        initial values (0, 0, None, None)
+        Resets curr_page, num_retrieved, cursor_url, file_paths, and
+        file_paths_branch to their initial values (0, 0, None, None, None)
         """
         self.curr_page = 0
         self.num_retrieved = 0
         self.cursor_url = None
         self.file_paths = None
+        self.file_paths_branch = None
 
 
 def make_cursor_url_callback(
@@ -599,6 +614,7 @@ class GithubConnector(
         include_prs: bool = True,
         include_issues: bool = False,
         include_files: bool = False,
+        branch: str | None = None,
     ) -> None:
         self.repo_owner = repo_owner
         self.repositories = repositories
@@ -606,6 +622,8 @@ class GithubConnector(
         self.include_prs = include_prs
         self.include_issues = include_issues
         self.include_files = include_files
+        # Branch to index files from; None means each repo's default branch.
+        self.branch = (branch or "").strip() or None
         self.github_client: Github | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -721,10 +739,13 @@ class GithubConnector(
             state=self.state_filter, sort="updated", direction="desc"
         )
 
+    def _resolve_branch(self, repo: Repository.Repository) -> str:
+        return self.branch or repo.default_branch
+
     def _list_indexable_files(
         self, repo: Repository.Repository, attempt_num: int = 0
     ) -> tuple[list[str], bool]:
-        """Resolve the repo's default-branch tree and return indexable file paths.
+        """Resolve the configured (or default) branch tree and return indexable file paths.
 
         Returns (sorted paths, truncated) where `truncated` is True when GitHub
         capped the recursive tree (>100k entries or >7MB), meaning some files
@@ -737,7 +758,7 @@ class GithubConnector(
             )
         assert self.github_client is not None  # for type-checking
         try:
-            git_tree = repo.get_git_tree(repo.default_branch, recursive=True)
+            git_tree = repo.get_git_tree(self._resolve_branch(repo), recursive=True)
             truncated = bool(git_tree.raw_data.get("truncated"))
             if truncated:
                 logger.error(
@@ -756,6 +777,28 @@ class GithubConnector(
         except RateLimitExceededException:
             sleep_after_rate_limit_exception(self.github_client)
             return self._list_indexable_files(repo, attempt_num + 1)
+        except GithubException as e:
+            if e.status == 404 and self.branch:
+                raise ConnectorValidationError(
+                    f"Branch '{self.branch}' not found in repository "
+                    f"{repo.full_name}. Leave the branch setting blank to use "
+                    f"the repository's default branch."
+                ) from e
+
+            error_message = (
+                e.data.get("message") if isinstance(e.data, dict) else e.message
+            )
+            if not (
+                e.status == _GITHUB_EMPTY_REPOSITORY_TREE_STATUS
+                and error_message == _GITHUB_EMPTY_REPOSITORY_TREE_MESSAGE
+            ):
+                raise
+
+            logger.info(
+                "Skipping files for empty repo: %s",
+                repo.full_name,
+            )
+            return [], False
 
     def _fetch_file_content(
         self, repo: Repository.Repository, path: str, attempt_num: int = 0
@@ -767,7 +810,7 @@ class GithubConnector(
             )
         assert self.github_client is not None  # for type-checking
         try:
-            content = repo.get_contents(path, ref=repo.default_branch)
+            content = repo.get_contents(path, ref=self._resolve_branch(repo))
             if isinstance(content, list):
                 raise ValueError(f"Expected a file at {path}, got a directory")
             if content.decoded_content is None:
@@ -795,18 +838,39 @@ class GithubConnector(
         truncation as a failure. Returns True if more file batches remain (the
         caller should return the checkpoint to resume), False once drained.
         """
+        branch = self._resolve_branch(repo)
+        branch_changed = (
+            checkpoint.file_paths is not None and checkpoint.file_paths_branch != branch
+        )
+        if branch_changed:
+            # The cached listing came from a different branch (resumed
+            # checkpoint after a connector edit or default-branch change) —
+            # discard it so paths and content come from the same branch.
+            checkpoint.file_paths = None
+            checkpoint.file_paths_branch = None
+            checkpoint.curr_page = 0
+
         if checkpoint.file_paths is None:
             pushed_at = (
                 repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
             )
-            if start is not None and pushed_at is not None and pushed_at < start:
+            # After a branch change the new branch was never indexed, so the
+            # pushed_at freshness gate must not skip the re-listing.
+            if (
+                not branch_changed
+                and start is not None
+                and pushed_at is not None
+                and pushed_at < start
+            ):
                 # Nothing changed in this repo since the last poll — skip.
                 logger.info("Skipping files for repo %s (pushed_at < start)", repo.name)
                 checkpoint.file_paths = []
+                checkpoint.file_paths_branch = branch
             else:
                 logger.info("Listing files for repo: %s", repo.name)
                 paths, truncated = self._list_indexable_files(repo)
                 checkpoint.file_paths = paths
+                checkpoint.file_paths_branch = branch
                 logger.info(
                     "Found %s indexable files for repo: %s", len(paths), repo.name
                 )
@@ -830,7 +894,7 @@ class GithubConnector(
         checkpoint.curr_page += 1
 
         for path in batch:
-            html_url = f"{repo.html_url}/blob/{repo.default_branch}/{path}"
+            html_url = f"{repo.html_url}/blob/{branch}/{path}"
             if is_slim:
                 yield Document(
                     id=html_url,
@@ -854,7 +918,7 @@ class GithubConnector(
                     )
                     continue
                 yield _convert_file_to_document(
-                    repo, path, content_text, repo_external_access
+                    repo, path, content_text, repo_external_access, branch
                 )
             except Exception as e:
                 error_msg = f"Error converting file {path} to document: {e}"
@@ -942,6 +1006,11 @@ class GithubConnector(
                         source=DocumentSource.GITHUB,
                         semantic_identifier="",
                         metadata={},
+                        doc_created_at=(
+                            pr.created_at.replace(tzinfo=timezone.utc)
+                            if pr.created_at
+                            else None
+                        ),
                     )
                 else:
                     # we iterate backwards in time, so at this point we stop processing prs
@@ -1034,6 +1103,11 @@ class GithubConnector(
                         source=DocumentSource.GITHUB,
                         semantic_identifier="",
                         metadata={},
+                        doc_created_at=(
+                            issue.created_at.replace(tzinfo=timezone.utc)
+                            if issue.created_at
+                            else None
+                        ),
                     )
                 else:
                     # we iterate backwards in time, so at this point we stop processing issues
@@ -1192,7 +1266,9 @@ class GithubConnector(
                 if document is not None:
                     batch.append(
                         SlimDocument(
-                            id=document.id, external_access=document.external_access
+                            id=document.id,
+                            external_access=document.external_access,
+                            doc_created_at=document.doc_created_at,
                         )
                     )
                 if next_checkpoint is not None:
@@ -1283,6 +1359,16 @@ class GithubConnector(
                         f"{self.repo_owner}/{self.repositories}"
                     )
                     test_repo.get_contents("")
+                    if self.branch:
+                        try:
+                            test_repo.get_branch(self.branch)
+                        except GithubException as e:
+                            if e.status == 404:
+                                raise ConnectorValidationError(
+                                    f"Branch '{self.branch}' not found in repository "
+                                    f"{self.repo_owner}/{self.repositories}."
+                                )
+                            raise
             else:
                 # Try to get organization first
                 try:
@@ -1349,8 +1435,13 @@ class GithubConnector(
                     f"Unexpected GitHub error (status={e.status}): {e.data}"
                 )
 
+        except ValidationError:
+            # Let typed validation errors propagate so the API can surface the
+            # real reason instead of collapsing them into a generic 500.
+            raise
+
         except Exception as exc:
-            raise Exception(
+            raise UnexpectedValidationError(
                 f"Unexpected error during GitHub settings validation: {exc}"
             )
 

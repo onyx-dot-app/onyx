@@ -77,6 +77,35 @@ export function parsePacket(raw: unknown): ParsedPacket {
           | null,
       };
 
+    case "connect_app_request": {
+      const externalAppId = p.external_app_id;
+      if (
+        typeof externalAppId !== "number" ||
+        !Number.isSafeInteger(externalAppId) ||
+        externalAppId <= 0
+      ) {
+        return { type: "unknown" };
+      }
+      return {
+        type: "connect_app_request",
+        requestId: (p.request_id ?? "") as string,
+        externalAppId,
+        reason: (p.reason ?? null) as string | null,
+      };
+    }
+
+    case "context_usage":
+      return {
+        type: "context_usage",
+        usedTokens: Number(p.used_tokens ?? p.usedTokens ?? 0),
+      };
+
+    case "compaction":
+      return {
+        type: "compaction",
+        summary: (p.summary ?? null) as string | null,
+      };
+
     case "error":
       return { type: "error", message: (p.message ?? "") as string };
 

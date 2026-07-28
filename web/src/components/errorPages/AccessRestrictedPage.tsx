@@ -5,7 +5,7 @@ import Link from "next/link";
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import { Button } from "@opal/components";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
-import { logout } from "@/lib/user";
+import { logout } from "@/lib/users/svc";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { useLicense } from "@/hooks/useLicense";
 import { useSettings } from "@/lib/settings/hooks";

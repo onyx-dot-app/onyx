@@ -2,26 +2,26 @@
 
 import pytest
 
-from onyx.server.metrics.perm_sync_metrics import DOC_PERM_SYNC_DB_UPDATE_DURATION
-from onyx.server.metrics.perm_sync_metrics import DOC_PERM_SYNC_DOCS_PROCESSED
-from onyx.server.metrics.perm_sync_metrics import DOC_PERM_SYNC_DURATION
-from onyx.server.metrics.perm_sync_metrics import DOC_PERM_SYNC_ERRORS
-from onyx.server.metrics.perm_sync_metrics import GROUP_SYNC_DURATION
-from onyx.server.metrics.perm_sync_metrics import GROUP_SYNC_ERRORS
-from onyx.server.metrics.perm_sync_metrics import GROUP_SYNC_GROUPS_PROCESSED
-from onyx.server.metrics.perm_sync_metrics import GROUP_SYNC_UPSERT_DURATION
-from onyx.server.metrics.perm_sync_metrics import GROUP_SYNC_USERS_PROCESSED
-from onyx.server.metrics.perm_sync_metrics import inc_doc_perm_sync_docs_processed
-from onyx.server.metrics.perm_sync_metrics import inc_doc_perm_sync_errors
-from onyx.server.metrics.perm_sync_metrics import inc_group_sync_errors
-from onyx.server.metrics.perm_sync_metrics import inc_group_sync_groups_processed
-from onyx.server.metrics.perm_sync_metrics import inc_group_sync_users_processed
 from onyx.server.metrics.perm_sync_metrics import (
+    DOC_PERM_SYNC_DB_UPDATE_DURATION,
+    DOC_PERM_SYNC_DOCS_PROCESSED,
+    DOC_PERM_SYNC_DURATION,
+    DOC_PERM_SYNC_ERRORS,
+    GROUP_SYNC_DURATION,
+    GROUP_SYNC_ERRORS,
+    GROUP_SYNC_GROUPS_PROCESSED,
+    GROUP_SYNC_UPSERT_DURATION,
+    GROUP_SYNC_USERS_PROCESSED,
+    inc_doc_perm_sync_docs_processed,
+    inc_doc_perm_sync_errors,
+    inc_group_sync_errors,
+    inc_group_sync_groups_processed,
+    inc_group_sync_users_processed,
     observe_doc_perm_sync_db_update_duration,
+    observe_doc_perm_sync_duration,
+    observe_group_sync_duration,
+    observe_group_sync_upsert_duration,
 )
-from onyx.server.metrics.perm_sync_metrics import observe_doc_perm_sync_duration
-from onyx.server.metrics.perm_sync_metrics import observe_group_sync_duration
-from onyx.server.metrics.perm_sync_metrics import observe_group_sync_upsert_duration
 
 # --- Doc permission sync: overall duration ---
 

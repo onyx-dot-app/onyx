@@ -5,12 +5,10 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -18,8 +16,7 @@ from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -29,9 +26,11 @@ from onyx.server.features.build.interactive_turns.executor import (
     start_interactive_turn_runner,
 )
 from onyx.server.features.build.interactive_turns.models import InteractiveTurnResponse
-from onyx.server.features.build.interactive_turns.state import get_active_turn
-from onyx.server.features.build.interactive_turns.state import get_turn
-from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
+from onyx.server.features.build.interactive_turns.state import (
+    TURN_STATUS_FAILED,
+    get_active_turn,
+    get_turn,
+)
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
 from onyx.utils.logger import setup_logger
@@ -229,6 +228,10 @@ def get_interactive_turn_events(
                         # subscriber queue has gone idle.
                         continue
                     terminal_error_detail = None
+                    # Not redundant with the attach-time force start: a dead
+                    # runner's turn only becomes reclaimable 90s after its last
+                    # heartbeat; claim no-ops while the turn is healthy.
+                    maybe_start_runner()
                 if terminal_error_detail:
                     yield _format_stream_error(terminal_error_detail)
         except GeneratorExit:

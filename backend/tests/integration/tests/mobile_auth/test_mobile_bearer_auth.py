@@ -9,8 +9,7 @@ from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.mobile_auth._helpers import bearer
-from tests.integration.tests.mobile_auth._helpers import mobile_login
+from tests.integration.tests.mobile_auth._helpers import bearer, mobile_login
 
 
 def test_mobile_bearer_login_refresh_logout(admin_user: DATestUser) -> None:

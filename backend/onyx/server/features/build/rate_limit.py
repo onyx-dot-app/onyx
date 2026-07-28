@@ -1,21 +1,19 @@
 """Rate limiting logic for Build Mode."""
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.constants import AuthType
 from onyx.db.models import User
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.server.features.build.configs import CRAFT_PAID_USER_RATE_LIMIT
-from onyx.server.features.build.db.rate_limit import count_user_messages_in_window
-from onyx.server.features.build.db.rate_limit import count_user_messages_total
-from onyx.server.features.build.db.rate_limit import get_oldest_message_timestamp
+from onyx.server.features.build.db.rate_limit import (
+    count_user_messages_in_window,
+    count_user_messages_total,
+    get_oldest_message_timestamp,
+)
 from onyx.server.features.build.subscription_check import is_user_subscribed
 from onyx.server.features.build.utils import CRAFT_HAS_USAGE_LIMITS
 from shared_configs.configs import MULTI_TENANT
@@ -85,7 +83,7 @@ def get_user_rate_limit_status(
     """
     # Rate limits apply only on Onyx Cloud (multi-tenant); all other deployments
     # are unlimited.
-    if not MULTI_TENANT or AUTH_TYPE != AuthType.CLOUD:
+    if not MULTI_TENANT:
         return RateLimitResponse(
             is_limited=False,
             limit_type="weekly",

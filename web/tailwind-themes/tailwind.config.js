@@ -141,7 +141,6 @@ module.exports = {
   ],
   plugins: [
     require("@tailwindcss/typography"),
-    require("@headlessui/tailwindcss"),
     plugin(({ addVariant }) => {
       addVariant("focus-within-nonactive", "&:focus-within:not(:active)");
     }),

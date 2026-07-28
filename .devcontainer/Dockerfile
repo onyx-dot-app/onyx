@@ -13,6 +13,7 @@ FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:cc925e589b7543b910fea57a
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
   ca-certificates \
+  cargo \
   cmake \
   curl \
   default-jre \
@@ -21,11 +22,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   fd-find \
   fzf \
   git \
+  gobject-introspection \
   iproute2 \
   ipset \
   iptables \
   jq \
   less \
+  libayatana-appindicator3-dev \
+  libgirepository1.0-dev \
+  libglib2.0-dev \
+  libgtk-3-dev \
+  libjavascriptcoregtk-4.1-dev \
+  libwebkit2gtk-4.1-dev \
   libxmlsec1-dev \
   make \
   neovim \
@@ -33,10 +41,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   pkg-config \
   postgresql-client \
   ripgrep \
+  rust-clippy \
+  rustfmt \
   socat \
   sudo \
   unzip \
   wget \
+  xdg-utils \
   zsh \
   && install -m 0755 -d /etc/apt/keyrings \
   && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
@@ -54,7 +65,7 @@ RUN ln -sf "$(which fdfind)" /usr/local/bin/fd
 # daily dev uses their own .venv. The apt block above includes the
 # system libraries `uv sync` needs to compile native extensions
 # (cmake, libxmlsec1-dev, pkg-config, postgresql-client).
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9 /uv /uvx /usr/local/bin/
 
 # Install prek (https://github.com/j178/prek) — a fast Rust reimplementation of
 # pre-commit and a drop-in replacement for it. Symlinked to `pre-commit` so the

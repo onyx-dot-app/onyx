@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, type ReactNode } from "react";
+import { useState, useCallback, useRef, type ReactNode } from "react";
 import { Button, Popover } from "@opal/components";
 import { SvgChevronRight, SvgPlus } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
@@ -32,12 +32,17 @@ export interface PlusMenuButtonProps {
   ariaLabel?: string;
 }
 
+// Dwell time before hovering a row swaps away an already-open flyout, so a
+// pointer passing over sibling rows en route to the flyout doesn't collapse it.
+const FLYOUT_SWAP_DELAY_MS = 150;
+
 interface FlyoutRowProps {
   icon: IconFunctionComponent;
   label: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onHoverOpen: () => void;
+  onHoverLeave: () => void;
   children: ReactNode[];
 }
 
@@ -48,6 +53,7 @@ function FlyoutRow({
   open,
   onOpenChange,
   onHoverOpen,
+  onHoverLeave,
   children,
 }: FlyoutRowProps) {
   return (
@@ -57,6 +63,7 @@ function FlyoutRow({
           icon={icon}
           selected={open}
           onPointerEnter={onHoverOpen}
+          onPointerLeave={onHoverLeave}
           rightChildren={<SvgChevronRight className="h-4 w-4 text-text-03" />}
         >
           {label}
@@ -87,16 +94,43 @@ export function PlusMenuButton({
 }: PlusMenuButtonProps) {
   const [open, setOpen] = useState(false);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const pendingSwapRef = useRef<number | null>(null);
+
+  const cancelPendingSwap = useCallback(() => {
+    if (pendingSwapRef.current !== null) {
+      window.clearTimeout(pendingSwapRef.current);
+      pendingSwapRef.current = null;
+    }
+  }, []);
 
   const close = useCallback(() => {
+    cancelPendingSwap();
     setOpen(false);
     setOpenKey(null);
-  }, []);
+  }, [cancelPendingSwap]);
 
   // Functional update keeps sibling open/close events from racing.
   const flyoutOpenChange = useCallback((key: string, next: boolean) => {
     setOpenKey((prev) => (next ? key : prev === key ? null : prev));
   }, []);
+
+  // Opens instantly when no flyout is open; otherwise requires a short dwell
+  // (cancelled on pointer-leave) before swapping or collapsing, so incidental
+  // pass-overs of sibling rows don't yank the open flyout away.
+  const hoverRow = useCallback(
+    (key: string | null) => {
+      cancelPendingSwap();
+      if (openKey === null || openKey === key) {
+        if (key !== null) setOpenKey(key);
+        return;
+      }
+      pendingSwapRef.current = window.setTimeout(() => {
+        pendingSwapRef.current = null;
+        setOpenKey(key);
+      }, FLYOUT_SWAP_DELAY_MS);
+    },
+    [openKey, cancelPendingSwap]
+  );
 
   const menuChildren: ReactNode[] = items.map((item) => {
     if (item === null) return null;
@@ -109,7 +143,8 @@ export function PlusMenuButton({
           label={item.label}
           open={openKey === item.key}
           onOpenChange={(next) => flyoutOpenChange(item.key, next)}
-          onHoverOpen={() => setOpenKey(item.key)}
+          onHoverOpen={() => hoverRow(item.key)}
+          onHoverLeave={cancelPendingSwap}
         >
           {item.flyoutItems.map((sub) => (
             <LineItem
@@ -137,8 +172,9 @@ export function PlusMenuButton({
           item.onSelect?.();
           close();
         }}
-        // Hovering a non-flyout row collapses any open flyout.
-        onPointerEnter={() => setOpenKey(null)}
+        // Hovering a non-flyout row collapses any open flyout (after a dwell).
+        onPointerEnter={() => hoverRow(null)}
+        onPointerLeave={cancelPendingSwap}
       >
         {item.label}
       </LineItem>

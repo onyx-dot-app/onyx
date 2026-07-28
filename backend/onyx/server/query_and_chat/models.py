@@ -3,16 +3,10 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import model_validator
+from pydantic import BaseModel, model_validator
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import SessionType
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SearchDoc
-from onyx.context.search.models import Tag
+from onyx.configs.constants import DocumentSource, MessageType, SessionType
+from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
@@ -31,6 +25,7 @@ class MessageOrigin(str, Enum):
     SLACKBOT = "slackbot"
     WIDGET = "widget"
     DISCORDBOT = "discordbot"
+    MOBILE = "mobile"
     UNKNOWN = "unknown"
     UNSET = "unset"
 
@@ -72,6 +67,11 @@ class UpdateChatSessionThreadRequest(BaseModel):
 class UpdateChatSessionTemperatureRequest(BaseModel):
     chat_session_id: UUID
     temperature_override: float
+
+
+class UpdateChatSessionReasoningRequest(BaseModel):
+    chat_session_id: UUID
+    reasoning_effort_override: str | None = None
 
 
 class ChatSessionCreationRequest(BaseModel):
@@ -192,6 +192,7 @@ class ChatSessionDetails(BaseModel):
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None = None
     current_temperature_override: float | None = None
+    current_reasoning_effort_override: str | None = None
 
     @classmethod
     def from_model(cls, model: ChatSession) -> "ChatSessionDetails":
@@ -204,6 +205,7 @@ class ChatSessionDetails(BaseModel):
             shared_status=model.shared_status,
             current_alternate_model=model.current_alternate_model,
             current_temperature_override=model.temperature_override,
+            current_reasoning_effort_override=model.reasoning_effort_override,
         )
 
 
@@ -265,6 +267,7 @@ class ChatSessionDetailResponse(BaseModel):
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None
     current_temperature_override: float | None
+    current_reasoning_effort_override: str | None
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
@@ -290,6 +293,7 @@ class ChatSessionSummary(BaseModel):
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None = None
     current_temperature_override: float | None = None
+    current_reasoning_effort_override: str | None = None
 
 
 class ChatSessionGroup(BaseModel):

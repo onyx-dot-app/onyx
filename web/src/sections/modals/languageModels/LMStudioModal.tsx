@@ -2,7 +2,7 @@
 
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider } from "@opal/layouts";
+import { InputDivider, toast } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import {
   LLMProviderFormProps,
@@ -27,7 +27,6 @@ import {
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
 import { fetchModels } from "@/lib/languageModels/svc";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -59,7 +58,7 @@ function LMStudioModalInternals({
       api_base: formikProps.values.api_base,
       custom_config: apiKey ? { LM_STUDIO_API_KEY: apiKey } : {},
       api_key_changed: apiKey !== initialApiKey,
-      name: existingLlmProvider?.name ?? undefined,
+      id: existingLlmProvider?.id ?? undefined,
     });
     if (data.error) {
       throw new Error(data.error);
@@ -121,6 +120,7 @@ export default function LMStudioModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
@@ -168,9 +168,11 @@ export default function LMStudioModal({
         };
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.LM_STUDIO,
           values: submitValues,
           initialValues,

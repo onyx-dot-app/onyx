@@ -4,31 +4,37 @@ from typing import cast
 
 from rapidfuzz.fuzz import ratio
 from redis.lock import Lock as RedisLock
-from sqlalchemy import func
-from sqlalchemy import text
+from sqlalchemy import func, text
 
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.kg_configs import KG_CLUSTERING_RETRIEVE_THRESHOLD
-from onyx.configs.kg_configs import KG_CLUSTERING_THRESHOLD
+from onyx.configs.kg_configs import (
+    KG_CLUSTERING_RETRIEVE_THRESHOLD,
+    KG_CLUSTERING_THRESHOLD,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.entities import KGEntity
-from onyx.db.entities import KGEntityExtractionStaging
-from onyx.db.entities import merge_entities
-from onyx.db.entities import transfer_entity
-from onyx.db.kg_config import get_kg_config_settings
-from onyx.db.kg_config import validate_kg_settings
-from onyx.db.models import Document
-from onyx.db.models import KGEntityType
-from onyx.db.models import KGRelationshipExtractionStaging
-from onyx.db.models import KGRelationshipTypeExtractionStaging
-from onyx.db.relationships import transfer_relationship
-from onyx.db.relationships import transfer_relationship_type
-from onyx.db.relationships import upsert_relationship
-from onyx.db.relationships import upsert_relationship_type
+from onyx.db.entities import (
+    KGEntity,
+    KGEntityExtractionStaging,
+    merge_entities,
+    transfer_entity,
+)
+from onyx.db.kg_config import get_kg_config_settings, validate_kg_settings
+from onyx.db.models import (
+    Document,
+    KGEntityType,
+    KGRelationshipExtractionStaging,
+    KGRelationshipTypeExtractionStaging,
+)
+from onyx.db.relationships import (
+    transfer_relationship,
+    transfer_relationship_type,
+    upsert_relationship,
+    upsert_relationship_type,
+)
 from onyx.document_index.vespa.kg_interactions import (
     get_kg_vespa_info_update_requests_for_document,
+    update_kg_chunks_vespa_info,
 )
-from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.models import KGGroundingType
 from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.kg.utils.lock_utils import extend_lock

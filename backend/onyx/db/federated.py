@@ -3,16 +3,16 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import DocumentSet
-from onyx.db.models import FederatedConnector
-from onyx.db.models import FederatedConnector__DocumentSet
-from onyx.db.models import FederatedConnectorOAuthToken
+from onyx.db.models import (
+    DocumentSet,
+    FederatedConnector,
+    FederatedConnector__DocumentSet,
+    FederatedConnectorOAuthToken,
+)
 from onyx.federated_connectors.factory import get_federated_connector
 from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger

@@ -7,17 +7,21 @@ from typing import Any
 
 from onyx.utils.platform_utils import is_running_in_container
 from onyx.utils.tenant import get_tenant_id_short_string
-from shared_configs.configs import DEV_LOGGING_ENABLED
-from shared_configs.configs import JSON_LOGGING
-from shared_configs.configs import LOG_FILE_NAME
-from shared_configs.configs import LOG_LEVEL
-from shared_configs.configs import LOG_TO_FILE
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import SLACK_CHANNEL_ID
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
-from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
+from shared_configs.configs import (
+    DEV_LOGGING_ENABLED,
+    JSON_LOGGING,
+    LOG_FILE_NAME,
+    LOG_LEVEL,
+    LOG_TO_FILE,
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    SLACK_CHANNEL_ID,
+)
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    INDEX_ATTEMPT_INFO_CONTEXTVAR,
+    ONYX_REQUEST_ID_CONTEXTVAR,
+)
 
 logging.addLevelName(logging.INFO + 5, "NOTICE")
 
@@ -272,23 +276,34 @@ def _add_file_handlers(logger: logging.Logger, formatter: logging.Formatter) -> 
             if is_containerized
             else f"./log/{LOG_FILE_NAME}_{level}.log"
         )
-        # Ensure the log directory exists
-        log_dir = os.path.dirname(file_name)
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir, exist_ok=True)
+        try:
+            # Ensure the log directory exists
+            log_dir = os.path.dirname(file_name)
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
 
-        # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
-        if DEV_LOGGING_ENABLED and os.path.exists(file_name):
-            try:
-                open(file_name, "w").close()  # Truncate the file
-            except Exception:
-                pass  # Ignore errors, just proceed with normal logging
+            # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
+            if DEV_LOGGING_ENABLED and os.path.exists(file_name):
+                try:
+                    open(file_name, "w").close()  # Truncate the file
+                except Exception:
+                    pass  # Ignore errors, just proceed with normal logging
 
-        file_handler = RotatingFileHandler(
-            file_name,
-            maxBytes=25 * 1024 * 1024,  # 25 MB
-            backupCount=5,  # Keep 5 backup files
-        )
+            file_handler = RotatingFileHandler(
+                file_name,
+                maxBytes=25 * 1024 * 1024,  # 25 MB
+                backupCount=5,  # Keep 5 backup files
+            )
+        except OSError:
+            # The log location isn't writable by this process — e.g. a nonroot
+            # container whose mounted /var/log/onyx volume is owned by another UID.
+            # Fall back to the stdout handler instead of crashing at import time.
+            logger.warning(
+                "Cannot write log files under %s; falling back to stdout logging.",
+                os.path.dirname(file_name),
+            )
+            return
+
         file_handler.setLevel(get_log_level_from_str(level))
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)

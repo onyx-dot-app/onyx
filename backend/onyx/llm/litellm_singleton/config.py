@@ -15,7 +15,7 @@ def configure_litellm_settings() -> None:
     litellm.telemetry = False  # ty: ignore[invalid-assignment]
     litellm.modify_params = True
     litellm.add_function_to_prompt = False
-    litellm.suppress_debug_info = True  # ty: ignore[invalid-assignment]
+    litellm.suppress_debug_info = True
 
 
 # TODO: We might not need to register ollama_chat in addition to ollama but let's just do it for good measure for now.

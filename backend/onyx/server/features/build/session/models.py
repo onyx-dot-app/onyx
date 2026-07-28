@@ -1,20 +1,20 @@
 from datetime import datetime
-from typing import Any
-from typing import TYPE_CHECKING
-from typing import Union
+from typing import TYPE_CHECKING, Any, Union
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
-from onyx.db.enums import ArtifactType
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.enums import SharingScope
+from onyx.db.enums import (
+    ArtifactType,
+    BuildSessionStatus,
+    SandboxStatus,
+    SessionOrigin,
+    SharingScope,
+)
+from onyx.server.features.build.db.build_session import session_runtime_stale
 
 if TYPE_CHECKING:
-    from onyx.db.models import BuildSession
-    from onyx.db.models import Sandbox
+    from onyx.db.models import BuildSession, Sandbox
 
 
 # ===== Session Models =====
@@ -22,9 +22,6 @@ class SessionCreateRequest(BaseModel):
     """Request to create a new build session."""
 
     name: str | None = None  # Optional session name
-    # LLM selection from user's cookie
-    llm_provider_type: str | None = None  # Provider type (e.g., "anthropic", "openai")
-    llm_model_name: str | None = None  # Model name (e.g., "claude-opus-4-5")
     # Skip Next.js dev server startup. Used by integration tests that don't
     # exercise the webapp proxy and don't want to pay the ~20s startup wait.
     headless: bool = False
@@ -64,6 +61,12 @@ class SandboxResponse(BaseModel):
             created_at=sandbox.created_at,
             last_heartbeat=sandbox.last_heartbeat,
         )
+
+
+class SandboxStatusResponse(BaseModel):
+    """Lightweight sandbox status for the frontend sleep poll."""
+
+    status: SandboxStatus | None
 
 
 class ArtifactResponse(BaseModel):
@@ -109,6 +112,7 @@ class SessionResponse(BaseModel):
     origin: SessionOrigin
     agent_provider: str | None
     agent_model: str | None
+    skills_stale: bool
 
     @classmethod
     def from_model(
@@ -135,7 +139,12 @@ class SessionResponse(BaseModel):
             origin=session.origin,
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
+            skills_stale=session_runtime_stale(session, sandbox),
         )
+
+
+class SessionSkillsStateResponse(BaseModel):
+    skills_stale: bool
 
 
 class DetailedSessionResponse(SessionResponse):
@@ -186,6 +195,7 @@ class MessageRequest(BaseModel):
     client_request_id: str | None = None
     # Per-message model override from the composer; both set together.
     provider: str | None = None
+    provider_id: int | None = None
     model: str | None = None
 
 
@@ -259,3 +269,17 @@ class PptxPreviewResponse(BaseModel):
     slide_count: int
     slide_paths: list[str]  # Relative paths to slide JPEGs within session workspace
     cached: bool  # Whether result was served from cache
+
+
+# ===== Snapshot Models =====
+class SnapshotResponse(BaseModel):
+    """Response describing a created session snapshot."""
+
+    storage_path: str
+    size_bytes: int
+
+
+class OpencodeHistorySnapshotResponse(BaseModel):
+    """Response for an opencode history snapshot attempt."""
+
+    created: bool

@@ -1,6 +1,5 @@
 from collections.abc import Generator
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,16 +11,16 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import AccountType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import PublicExternalUserGroup
-from onyx.db.models import User
-from onyx.db.models import User__ExternalUserGroupId
-from onyx.db.models import UserRole
+from onyx.db.enums import AccessType, AccountType, ConnectorCredentialPairStatus
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    PublicExternalUserGroup,
+    User,
+    User__ExternalUserGroupId,
+    UserRole,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import create_test_user
 

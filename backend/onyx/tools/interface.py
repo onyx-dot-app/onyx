@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import abc
-from typing import Any
-from typing import Generic
-from typing import TypeVar
+from typing import Any, Generic, TypeVar
 
 from sqlalchemy.orm import Session
 

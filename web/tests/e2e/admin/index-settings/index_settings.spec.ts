@@ -329,29 +329,25 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
     });
   }
 
-  test("toggling contextual retrieval stages a change and enables Apply & Re-index", async ({
+  test("toggling contextual retrieval without a model stages the change but blocks Apply & Re-index", async ({
     page,
   }) => {
-    let setNewSettingsCalled = false;
-
-    await page.route(SET_NEW_SETTINGS_API, async (route) => {
-      setNewSettingsCalled = true;
-      await route.fulfill({ status: 200, body: JSON.stringify({}) });
-    });
-
     await navigateToIndexSettings(page);
 
     const toggle = page.getByRole("switch", { name: /contextual retrieval/i });
     await expect(toggle).toBeVisible({ timeout: 10000 });
     await toggle.click();
 
-    // Any settings change (including non-model changes) always requires a full re-index
+    // Contextual Retrieval on with no model must stage the change but block the
+    // re-index — the port re-embeds via the LLM and would fail without one.
+    await expect(
+      page.getByText(/Select a Contextual Retrieval LLM/i)
+    ).toBeVisible({ timeout: 5000 });
+
+    // Apply & Re-index renders only when dirty, so its presence proves the change staged.
     const applyButton = page.getByRole("button", { name: "Apply & Re-index" });
     await expect(applyButton).toBeVisible({ timeout: 5000 });
-    await expect(applyButton).toBeEnabled();
-    await applyButton.click();
-
-    await expect.poll(() => setNewSettingsCalled, { timeout: 5000 }).toBe(true);
+    await expect(applyButton).toBeDisabled();
   });
 });
 

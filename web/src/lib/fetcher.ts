@@ -14,6 +14,20 @@ export class RedirectError extends FetchError {
   }
 }
 
+/** Extract the backend error `detail` from a failed Response, falling back
+ * to `fallback` when the body isn't JSON or carries no detail. */
+export async function parseErrorDetail(
+  res: Response,
+  fallback: string
+): Promise<string> {
+  try {
+    const body = await res.json();
+    return body?.detail ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 const DEFAULT_AUTH_ERROR_MSG =
   "An error occurred while fetching the data, related to the user's authentication status.";
 

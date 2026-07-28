@@ -56,7 +56,7 @@ spec:
       - name: {{ .Values.indexCapability.name }}
         image: "{{ .Values.indexCapability.image.repository }}:{{ .Values.indexCapability.image.tag | default .Values.global.version }}"
         imagePullPolicy: {{ .Values.global.pullPolicy }}
-        command: [ {{ include "onyx.customCACerts.commandPrefix" . }}"uvicorn", "model_server.main:app", "--host", "{{ .Values.global.host }}", "--port", "{{ .Values.indexCapability.containerPorts.server }}", "--limit-concurrency", "{{ .Values.indexCapability.limitConcurrency }}" ]
+        command: [ "uvicorn", "model_server.main:app", "--host", "{{ .Values.global.host }}", "--port", "{{ .Values.indexCapability.containerPorts.server }}", "--limit-concurrency", "{{ .Values.indexCapability.limitConcurrency }}" ]
         ports:
         - name: model-server
           containerPort: {{ .Values.indexCapability.containerPorts.server }}
@@ -68,7 +68,7 @@ spec:
           - name: INDEXING_ONLY
             value: "{{ default "True" .Values.indexCapability.indexingOnly }}"
           {{- include "onyx.envSecrets" . | nindent 10}}
-          {{- with include "onyx.customCACerts.env" . }}
+          {{- with include "onyx.customCACerts.modelServerEnv" . }}
           {{- . | nindent 10 }}
           {{- end }}
           {{- with .Values.indexCapability.extraEnv }}
@@ -94,7 +94,7 @@ spec:
         livenessProbe:
           {{- toYaml . | nindent 10 }}
         {{- end }}
-        {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.indexCapability.volumeMounts) }}
+        {{- with include "onyx.modelServer.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.indexCapability.volumeMounts) }}
         {{- . | nindent 8 }}
         {{- end }}
       {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.indexCapability.volumes) }}

@@ -1,8 +1,7 @@
 import copy
 import os
 from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import msal
@@ -13,30 +12,38 @@ from office365.teams.channels.channel import Channel
 from office365.teams.team import Team
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
 from onyx.connectors.microsoft_graph_env import resolve_microsoft_environment
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    EntityFailure,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
 from onyx.connectors.teams.models import Message
-from onyx.connectors.teams.utils import execute_query_with_retry
-from onyx.connectors.teams.utils import fetch_expert_infos
-from onyx.connectors.teams.utils import fetch_external_access
-from onyx.connectors.teams.utils import fetch_messages
-from onyx.connectors.teams.utils import fetch_replies
+from onyx.connectors.teams.utils import (
+    execute_query_with_retry,
+    fetch_expert_infos,
+    fetch_external_access,
+    fetch_messages,
+    fetch_replies,
+)
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -327,6 +334,8 @@ class TeamsConnector(
                         SlimDocument(
                             id=message.id,
                             external_access=external_access,
+                            # NOTE: doc_created_at population not yet verified against live data
+                            doc_created_at=message.created_date_time,
                         )
                     )
 
@@ -488,6 +497,8 @@ def _convert_thread_to_document(
         source=DocumentSource.TEAMS,
         semantic_identifier=semantic_string,
         title="",  # teams threads don't really have a "title"
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=top_message.created_date_time,
         doc_updated_at=most_recent_message_datetime,
         primary_owners=expert_infos,
         metadata={},

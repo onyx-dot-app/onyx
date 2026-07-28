@@ -43,11 +43,12 @@ ingress:
 Network access alone isn't enough: snapshot POSTs are **signed**
 (`SidecarClient._signed_headers` → `get_push_key_pair`), so the worker also needs
 `ONYX_SANDBOX_PUSH_PRIVATE_KEY`. With the default `sandboxPushSecret.allPods=false`
-that key is emitted only via `onyx.envSecretsRestricted`, so `celery-worker-heavy`
-must include that block (as `api-server` and `celery-worker-scheduled-tasks` do) —
-otherwise `get_push_key_pair` raises before the request is even sent. Both the
-allow-list rule and the restricted secret must point at whatever worker runs the
-`sandbox` queue.
+that key is emitted only through the purpose-specific auth helper, so
+`celery-worker-heavy` must opt into `auth.sandboxPushSecret` explicitly (as
+`api-server` and `celery-worker-scheduled-tasks` do). Otherwise
+`get_push_key_pair` raises before the request is even sent. Both the allow-list
+rule and the restricted secret must point at whatever worker runs the `sandbox`
+queue.
 
 If a cluster enforces NetworkPolicy and the worker that runs the `sandbox` queue is
 not in this allow-list, snapshot creates connect-time-out

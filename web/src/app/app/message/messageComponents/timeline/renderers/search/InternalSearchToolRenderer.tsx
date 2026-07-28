@@ -9,6 +9,7 @@ import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
 import { SearchChipList, SourceInfo } from "./SearchChipList";
 import {
+  formatSearchHeader,
   constructCurrentSearchState,
   INITIAL_QUERIES_TO_SHOW,
   QUERIES_PER_EXPANSION,
@@ -61,7 +62,8 @@ export const InternalSearchToolRenderer: MessageRenderer<
   children,
 }) => {
   const searchState = constructCurrentSearchState(packets);
-  const { queries, results, isComplete } = searchState;
+  const { queries, results, sourceFilters, timeFilter, isComplete } =
+    searchState;
 
   const isCompact = renderType === RenderType.COMPACT;
   const isHighlight = renderType === RenderType.HIGHLIGHT;
@@ -69,7 +71,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
 
   const hasResults = results.length > 0;
 
-  const queriesHeader = "Searching internal documents";
+  const queriesHeader = formatSearchHeader(sourceFilters, timeFilter);
 
   if (queries.length === 0) {
     return children([

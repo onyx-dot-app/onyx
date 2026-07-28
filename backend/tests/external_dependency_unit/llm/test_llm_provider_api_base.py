@@ -11,26 +11,28 @@ also need to control the MULTI_TENANT setting via patching.
 """
 
 from collections.abc import Generator
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import (
+    fetch_existing_llm_provider,
+    remove_llm_provider,
+    upsert_llm_provider,
+)
 from onyx.db.models import UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
-from onyx.server.manage.llm.api import _mask_string
-from onyx.server.manage.llm.api import put_llm_provider
+from onyx.server.manage.llm.api import _mask_string, put_llm_provider
 from onyx.server.manage.llm.api import test_llm_configuration as run_llm_config_test
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    LLMProviderView,
+    ModelConfigurationUpsertRequest,
+)
 from onyx.server.manage.llm.models import TestLLMRequest as LLMTestRequest
 from tests.external_dependency_unit.mock_llm import LLM
 
@@ -105,7 +107,7 @@ class TestLLMProviderChanges:
                     put_llm_provider(
                         llm_provider_upsert_request=update_request,
                         is_creation=False,
-                        _=_create_mock_admin(),
+                        user=_create_mock_admin(),
                         db_session=db_session,
                     )
 
@@ -140,7 +142,7 @@ class TestLLMProviderChanges:
                 result = put_llm_provider(
                     llm_provider_upsert_request=update_request,
                     is_creation=False,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -174,7 +176,7 @@ class TestLLMProviderChanges:
                 result = put_llm_provider(
                     llm_provider_upsert_request=update_request,
                     is_creation=False,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -205,7 +207,7 @@ class TestLLMProviderChanges:
                 result = put_llm_provider(
                     llm_provider_upsert_request=update_request,
                     is_creation=False,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -241,7 +243,7 @@ class TestLLMProviderChanges:
                     put_llm_provider(
                         llm_provider_upsert_request=update_request,
                         is_creation=False,
-                        _=_create_mock_admin(),
+                        user=_create_mock_admin(),
                         db_session=db_session,
                     )
 
@@ -276,7 +278,7 @@ class TestLLMProviderChanges:
                 result = put_llm_provider(
                     llm_provider_upsert_request=update_request,
                     is_creation=False,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -306,7 +308,7 @@ class TestLLMProviderChanges:
                 result = put_llm_provider(
                     llm_provider_upsert_request=create_request,
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -344,7 +346,7 @@ class TestLLMProviderChanges:
                     put_llm_provider(
                         llm_provider_upsert_request=update_request,
                         is_creation=False,
-                        _=_create_mock_admin(),
+                        user=_create_mock_admin(),
                         db_session=db_session,
                     )
 
@@ -380,7 +382,7 @@ class TestLLMProviderChanges:
                     put_llm_provider(
                         llm_provider_upsert_request=update_request,
                         is_creation=False,
-                        _=_create_mock_admin(),
+                        user=_create_mock_admin(),
                         db_session=db_session,
                     )
 
@@ -422,7 +424,7 @@ class TestLLMProviderChanges:
                 result = put_llm_provider(
                     llm_provider_upsert_request=update_request,
                     is_creation=False,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -457,7 +459,7 @@ class TestLLMProviderChanges:
                 result = put_llm_provider(
                     llm_provider_upsert_request=update_request,
                     is_creation=False,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -495,7 +497,7 @@ class TestLLMProviderChanges:
                 result = put_llm_provider(
                     llm_provider_upsert_request=update_request,
                     is_creation=False,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -558,7 +560,7 @@ def test_upload_with_custom_config_then_change(
                     is_auto_mode=False,
                 ),
                 is_creation=True,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -593,7 +595,7 @@ def test_upload_with_custom_config_then_change(
                     is_auto_mode=False,
                 ),
                 is_creation=False,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -646,7 +648,7 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
                 is_auto_mode=False,
             ),
             is_creation=True,
-            _=_create_mock_admin(),
+            user=_create_mock_admin(),
             db_session=db_session,
         )
 
@@ -672,7 +674,7 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
                     is_auto_mode=False,
                 ),
                 is_creation=False,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -722,7 +724,7 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
                 is_auto_mode=False,
             ),
             is_creation=True,
-            _=_create_mock_admin(),
+            user=_create_mock_admin(),
             db_session=db_session,
         )
 
@@ -793,7 +795,7 @@ def test_vertex_workload_identity_provider_create(
                 is_auto_mode=False,
             ),
             is_creation=True,
-            _=_create_mock_admin(),
+            user=_create_mock_admin(),
             db_session=db_session,
         )
 
@@ -857,7 +859,7 @@ def test_vertex_workload_identity_rejects_missing_project(
                     is_auto_mode=False,
                 ),
                 is_creation=True,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
         assert excinfo.value.error_code == OnyxErrorCode.VALIDATION_ERROR
@@ -900,7 +902,7 @@ def test_vertex_service_account_backwards_compat_routes_credentials(
                 is_auto_mode=False,
             ),
             is_creation=True,
-            _=_create_mock_admin(),
+            user=_create_mock_admin(),
             db_session=db_session,
         )
 

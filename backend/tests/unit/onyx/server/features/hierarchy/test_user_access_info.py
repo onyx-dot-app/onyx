@@ -3,8 +3,7 @@
 These tests mock all database operations and don't require a real database.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from sqlalchemy.orm import Session
 

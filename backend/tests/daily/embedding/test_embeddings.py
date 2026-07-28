@@ -1,8 +1,10 @@
 import pytest
-from tenacity import retry
-from tenacity import retry_if_exception_type
-from tenacity import stop_after_attempt
-from tenacity import wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from shared_configs.enums import EmbedTextType
@@ -85,6 +87,31 @@ def local_nomic_embedding_model() -> EmbeddingModel:
 def test_local_nomic_embedding(local_nomic_embedding_model: EmbeddingModel) -> None:
     _run_embeddings(VALID_SAMPLE, local_nomic_embedding_model, 768)
     _run_embeddings(TOO_LONG_SAMPLE, local_nomic_embedding_model, 768)
+
+
+@pytest.fixture
+def local_e5_small_embedding_model() -> EmbeddingModel:
+    # Unlike nomic (pre-baked into the image), e5-small is not in the image, so the
+    # first request forces the model server to download it from HuggingFace at
+    # runtime -- exercising the outbound-TLS path that the custom-CA bundle governs.
+    return EmbeddingModel(
+        server_host="localhost",
+        server_port=9000,
+        model_name="intfloat/e5-small-v2",
+        normalize=True,
+        query_prefix="query: ",
+        passage_prefix="passage: ",
+        api_key=None,
+        provider_type=None,
+        api_url=None,
+    )
+
+
+def test_local_download_embedding(
+    local_e5_small_embedding_model: EmbeddingModel,
+) -> None:
+    _run_embeddings(VALID_SAMPLE, local_e5_small_embedding_model, 384)
+    _run_embeddings(TOO_LONG_SAMPLE, local_e5_small_embedding_model, 384)
 
 
 @pytest.fixture

@@ -4,20 +4,20 @@ Tests the thread and reply context building logic with mocked Discord API.
 """
 
 from typing import Any
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
 
 from onyx.onyxbot.discord.constants import MAX_CONTEXT_MESSAGES
-from onyx.onyxbot.discord.handle_message import _build_conversation_context
-from onyx.onyxbot.discord.handle_message import _build_reply_chain_context
-from onyx.onyxbot.discord.handle_message import _build_thread_context
-from onyx.onyxbot.discord.handle_message import _format_messages_as_context
-from onyx.onyxbot.discord.handle_message import format_message_content
-from tests.unit.onyx.onyxbot.discord.conftest import AsyncIteratorMock
-from tests.unit.onyx.onyxbot.discord.conftest import mock_message
+from onyx.onyxbot.discord.handle_message import (
+    _build_conversation_context,
+    _build_reply_chain_context,
+    _build_thread_context,
+    _format_messages_as_context,
+    format_message_content,
+)
+from tests.unit.onyx.onyxbot.discord.conftest import AsyncIteratorMock, mock_message
 
 
 class TestThreadContextBuilder:

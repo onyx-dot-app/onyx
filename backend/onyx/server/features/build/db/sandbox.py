@@ -3,23 +3,13 @@
 import datetime
 from uuid import UUID
 
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import PatType
-from onyx.db.enums import Permission
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import BuildSession
-from onyx.db.models import PersonalAccessToken
-from onyx.db.models import Sandbox
-from onyx.db.models import Snapshot
-from onyx.db.models import User
-from onyx.db.pat import create_pat
-from onyx.db.pat import revoke_pat
+from onyx.db.enums import BuildSessionStatus, PatType, Permission, SandboxStatus
+from onyx.db.models import BuildSession, PersonalAccessToken, Sandbox, Snapshot, User
+from onyx.db.pat import create_pat, revoke_pat
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -45,7 +35,11 @@ def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str
 
     if sandbox.encrypted_pat and len(existing_craft_pats) == 1:
         raw_token = sandbox.encrypted_pat.get_value(apply_mask=False)
-        if hash_pat(raw_token) == existing_craft_pats[0].hashed_token:
+        existing = existing_craft_pats[0]
+        # Re-mint if the stored PAT's scopes drifted from the current role scope
+        if hash_pat(raw_token) == existing.hashed_token and existing.scopes == [
+            Permission.CRAFT_SANDBOX.value
+        ]:
             return raw_token
 
     for pat in existing_craft_pats:
@@ -57,7 +51,7 @@ def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str
         name=f"craft-{user.id}",
         expiration_days=_PAT_EXPIRATION_DAYS,
         pat_type=PatType.CRAFT,
-        scopes=[Permission.READ_SEARCH],
+        scopes=[Permission.CRAFT_SANDBOX],
     )
 
     sandbox.encrypted_pat = raw_token  # ty: ignore[invalid-assignment]
@@ -101,6 +95,53 @@ def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     return db_session.execute(stmt).scalar_one_or_none()
 
 
+def set_sandbox_skills_hashes__no_commit(
+    db_session: Session,
+    skills_hashes: dict[UUID, str],
+) -> None:
+    """Record the skill runtime state successfully synchronized to each sandbox."""
+    if not skills_hashes:
+        return
+    sandboxes = db_session.scalars(
+        select(Sandbox).where(Sandbox.id.in_(skills_hashes))
+    ).all()
+    for sandbox in sandboxes:
+        sandbox.skills_hash = skills_hashes[sandbox.id]
+    db_session.flush()
+
+
+def set_sandbox_mcp_config_hashes__no_commit(
+    db_session: Session,
+    mcp_config_hashes: dict[UUID, str],
+) -> None:
+    """Record each sandbox's current craft MCP fingerprint. Tracked separately
+    from ``skills_hash`` so an MCP change doesn't ride the skill-file push."""
+    if not mcp_config_hashes:
+        return
+    sandboxes = db_session.scalars(
+        select(Sandbox).where(Sandbox.id.in_(mcp_config_hashes))
+    ).all()
+    for sandbox in sandboxes:
+        sandbox.mcp_config_hash = mcp_config_hashes[sandbox.id]
+    db_session.flush()
+
+
+def lock_sandbox_skills_hashes(
+    db_session: Session,
+    sandbox_ids: set[UUID],
+) -> dict[UUID, str | None]:
+    """Lock sandboxes while their managed skill files and hashes are updated."""
+    if not sandbox_ids:
+        return {}
+    rows = db_session.execute(
+        select(Sandbox.id, Sandbox.skills_hash)
+        .where(Sandbox.id.in_(sandbox_ids))
+        .order_by(Sandbox.id)
+        .with_for_update()
+    )
+    return {sandbox_id: skills_hash for sandbox_id, skills_hash in rows}
+
+
 def update_sandbox_status__no_commit(
     db_session: Session,
     sandbox_id: UUID,
@@ -130,13 +171,13 @@ def update_sandbox_status__no_commit(
 
 
 def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
-    """Update sandbox last_heartbeat to now."""
+    """Update the heartbeat without committing the caller's transaction."""
     sandbox = get_sandbox_by_id(db_session, sandbox_id)
     if not sandbox:
         raise ValueError(f"Sandbox {sandbox_id} not found")
 
     sandbox.last_heartbeat = datetime.datetime.now(datetime.timezone.utc)
-    db_session.commit()
+    db_session.flush()
     return sandbox
 
 
@@ -229,6 +270,11 @@ def get_snapshots_for_session(db_session: Session, session_id: UUID) -> list[Sna
         .order_by(Snapshot.created_at.desc())
     )
     return list(db_session.execute(stmt).scalars().all())
+
+
+def delete_snapshot__no_commit(db_session: Session, snapshot: Snapshot) -> None:
+    """Delete a snapshot row. Caller owns the transaction boundary."""
+    db_session.delete(snapshot)
 
 
 def delete_snapshot(db_session: Session, snapshot_id: UUID) -> bool:

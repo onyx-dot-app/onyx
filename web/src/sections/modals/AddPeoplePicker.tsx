@@ -5,11 +5,13 @@ import { Button, LineItemButton, Tag, Text } from "@opal/components";
 import { SvgUser, SvgUsers, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { PersonaSharePermission } from "@/lib/agents/types";
-import { MinimalUserSnapshot } from "@/lib/types";
-import { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
+import type { MinimalUserSnapshot } from "@/lib/types";
+import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import { SharePermissionMenu } from "@/sections/modals/SharePermissionMenu";
-import { PERMISSION_OPTIONS } from "@/sections/modals/shareAccessConstants";
+import {
+  PERMISSION_OPTIONS,
+  type ShareAccessPermission,
+} from "@/sections/modals/shareAccessConstants";
 
 interface Suggestion {
   id: string;
@@ -27,9 +29,9 @@ export interface AddPeoplePickerProps {
   onAddUser: (user: MinimalUserSnapshot) => void;
   onRemoveGroup: (groupId: number) => void;
   onRemoveUser: (userId: string) => void;
-  onStagedPermissionChange: (permission: PersonaSharePermission) => void;
+  onStagedPermissionChange: (permission: ShareAccessPermission) => void;
   stagedGroups: MinimalUserGroupSnapshot[];
-  stagedPermission: PersonaSharePermission;
+  stagedPermission: ShareAccessPermission;
   stagedUsers: MinimalUserSnapshot[];
   users: MinimalUserSnapshot[];
 }

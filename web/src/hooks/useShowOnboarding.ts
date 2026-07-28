@@ -9,7 +9,7 @@ import {
   OnboardingState,
   OnboardingStep,
 } from "@/interfaces/onboarding";
-import { updateUserPersonalization } from "@/lib/userSettings";
+import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { MinimalAgent } from "@/lib/agents/types";
 import { useLLMProviders } from "@/lib/languageModels/hooks";

@@ -5,8 +5,7 @@ from collections.abc import Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.models import StandardAnswer
-from onyx.db.models import StandardAnswerCategory
+from onyx.db.models import StandardAnswer, StandardAnswerCategory
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

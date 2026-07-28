@@ -10,9 +10,7 @@ jest.mock("@/api/config", () => ({
   getBaseUrl: () => mockBaseUrl,
 }));
 
-// expo-secure-store is mocked centrally (__mocks__/expo-secure-store.ts, auto-
-// applied) and reset before each test (jest.setup.ts), so there's no inline mock
-// or store-clearing boilerplate here.
+// expo-secure-store is auto-mocked (__mocks__/expo-secure-store.ts) and reset per test (jest.setup.ts).
 const mockSetItemAsync = SecureStore.setItemAsync as unknown as Mock<
   (
     key: string,

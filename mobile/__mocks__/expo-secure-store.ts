@@ -1,19 +1,9 @@
-// Manual Jest mock for expo-secure-store.
-//
-// expo-secure-store is a node module, so Jest applies this mock AUTOMATICALLY to
-// every test (the file sits adjacent to node_modules) — no `jest.mock(...)` call
-// is needed in individual test files. It mirrors the keychain's get/set/delete
-// semantics with an in-memory Map. (MMKV needs no equivalent: react-native-mmkv
-// v4 self-mocks under Jest via its own `isTest()` check.)
-//
-// `__resetSecureStore()` clears the backing store between tests; it is wired into
-// a global `beforeEach` in jest.setup.ts, so tests start with an empty keychain.
+// Auto-applied to every test (node module manual mock); keychain semantics over an in-memory Map.
 import { jest } from "@jest/globals";
 
 const store = new Map<string, string>();
 
-// Keychain-accessibility constant. The real value is an enum number, but the mock
-// ignores the options arg entirely, so a readable sentinel is all that's needed.
+// Readable sentinel; the mock ignores the options arg.
 export const WHEN_UNLOCKED_THIS_DEVICE_ONLY = "WHEN_UNLOCKED_THIS_DEVICE_ONLY";
 
 export const getItemAsync = jest.fn(
@@ -35,7 +25,7 @@ export const deleteItemAsync = jest.fn(
   },
 );
 
-// Test-only helper (not part of the real module): wipe the in-memory keychain.
+// Test-only helper: wipe the in-memory keychain.
 export function __resetSecureStore(): void {
   store.clear();
 }

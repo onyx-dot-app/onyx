@@ -1,38 +1,38 @@
 import httpx
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
-from onyx.db.constants import UNSET
-from onyx.db.constants import UnsetType
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.constants import UNSET, UnsetType
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
-from onyx.db.hook import create_hook__no_commit
-from onyx.db.hook import delete_hook__no_commit
-from onyx.db.hook import get_hook_by_id
-from onyx.db.hook import get_hook_execution_logs
-from onyx.db.hook import get_hooks
-from onyx.db.hook import update_hook__no_commit
+from onyx.db.hook import (
+    create_hook__no_commit,
+    delete_hook__no_commit,
+    get_hook_by_id,
+    get_hook_execution_logs,
+    get_hooks,
+    update_hook__no_commit,
+)
 from onyx.db.models import Hook
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.api_dependencies import require_hook_enabled
-from onyx.hooks.models import HookCreateRequest
-from onyx.hooks.models import HookExecutionRecord
-from onyx.hooks.models import HookPointMetaResponse
-from onyx.hooks.models import HookResponse
-from onyx.hooks.models import HookUpdateRequest
-from onyx.hooks.models import HookValidateResponse
-from onyx.hooks.models import HookValidateStatus
-from onyx.hooks.registry import get_all_specs
-from onyx.hooks.registry import get_hook_point_spec
+from onyx.hooks.models import (
+    HookCreateRequest,
+    HookExecutionRecord,
+    HookPointMetaResponse,
+    HookResponse,
+    HookUpdateRequest,
+    HookValidateResponse,
+    HookValidateStatus,
+)
+from onyx.hooks.registry import get_all_specs, get_hook_point_spec
+from onyx.server.security.models import outbound_ssrf_params
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException
-from onyx.utils.url import validate_outbound_http_url
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 
@@ -44,11 +44,29 @@ logger = setup_logger()
 def _check_ssrf_safety(endpoint_url: str) -> None:
     """Raise OnyxError if endpoint_url could be used for SSRF.
 
-    Delegates to validate_outbound_http_url with https_only=True.
+    Strictness follows the admin ``SSRF Protection`` setting, matching how MCP
+    and OAuth endpoints treat it: at the VALIDATE_* levels private/internal
+    targets are blocked; ``allow_private_network`` opens RFC1918 LAN hosts
+    (self-hosted deployments calling a cluster-internal hook service) while
+    loopback and cloud-metadata stay blocked; ``disabled`` also opens loopback.
+    ``https_only`` is unconditional at every level.
+
+    Validation runs at configuration time only; delivery trusts the stored URL
+    (see ``post_json_to_endpoint``). HTTPS certificate verification does not
+    prevent a validated hostname from later resolving to a private address;
+    preventing DNS rebinding requires validating again at delivery time.
+
     Uses BAD_GATEWAY so the frontend maps the error to the Endpoint URL field.
     """
+    params = outbound_ssrf_params(get_security_settings().ssrf_protection_level)
     try:
-        validate_outbound_http_url(endpoint_url, https_only=True)
+        validate_outbound_http_url(
+            endpoint_url,
+            https_only=True,
+            allow_private_network=params.allow_private_network,
+            block_loopback_and_link_local=params.block_loopback_and_link_local,
+            block_link_local_only=params.block_link_local_only,
+        )
     except (SSRFException, ValueError) as e:
         raise OnyxError(OnyxErrorCode.BAD_GATEWAY, str(e))
 

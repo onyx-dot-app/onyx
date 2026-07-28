@@ -48,6 +48,26 @@ export const GLOBAL_DEFAULT_LLM_OPTION: LLMOption = {
 };
 
 // ---------------------------------------------------------------------------
+// llmOptionKey
+// ---------------------------------------------------------------------------
+
+/**
+ * Stable identity key for a selectable model. Prefers the unique model
+ * configuration id; the provider + model name fallback can collide when two
+ * providers expose a model with the same name, so it is only used for
+ * options that were never persisted (no id).
+ */
+export function llmOptionKey(option: {
+  provider: string;
+  modelName: string;
+  modelConfigurationId?: number | null;
+}): string {
+  return option.modelConfigurationId != null
+    ? `mc:${option.modelConfigurationId}`
+    : `${option.provider}:${option.modelName}`;
+}
+
+// ---------------------------------------------------------------------------
 // buildLlmOptions
 // ---------------------------------------------------------------------------
 
@@ -97,6 +117,26 @@ export function buildLlmOptions(
 }
 
 // ---------------------------------------------------------------------------
+// buildModelProviderLookup
+// ---------------------------------------------------------------------------
+
+/**
+ * Model identifier → provider slug map for icon resolution. Indexes by both
+ * raw model name ("gpt-4.1") and display name ("GPT-4.1") so it resolves for
+ * both live streaming and history reload, where only one of the two is known.
+ */
+export function buildModelProviderLookup(
+  llmProviders: LLMProviderDescriptor[] | undefined
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const opt of buildLlmOptions(llmProviders)) {
+    map.set(opt.modelName, opt.provider);
+    map.set(opt.displayName, opt.provider);
+  }
+  return map;
+}
+
+// ---------------------------------------------------------------------------
 // groupLlmOptions
 // ---------------------------------------------------------------------------
 
@@ -124,9 +164,8 @@ export function groupLlmOptions(
     if (!groups.has(groupKey)) {
       let displayName: string;
       if (isAggregator && option.vendor) {
-        const vendorDisplayName =
-          option.vendor.charAt(0).toUpperCase() + option.vendor.slice(1);
-        displayName = `${option.providerDisplayName}/${vendorDisplayName}`;
+        // vendor arrives display-cased from the backend (e.g. "OpenAI", "xAI")
+        displayName = `${option.providerDisplayName}/${option.vendor}`;
       } else {
         displayName = option.providerDisplayName;
       }

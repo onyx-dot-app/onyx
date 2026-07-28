@@ -16,6 +16,7 @@ export enum NotificationType {
   // SvgBullhorn
   RELEASE_NOTES = "release_notes",
   FEATURE_ANNOUNCEMENT = "feature_announcement",
+  SYSTEM_ANNOUNCEMENT = "system_announcement",
 }
 
 export interface Notification {

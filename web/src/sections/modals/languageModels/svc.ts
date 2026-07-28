@@ -1,6 +1,6 @@
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import isEqual from "lodash/isEqual";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";
 import {
