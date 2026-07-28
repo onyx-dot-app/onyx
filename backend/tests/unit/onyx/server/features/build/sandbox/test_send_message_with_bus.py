@@ -37,6 +37,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     Error,
     PromptResponse,
 )
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.opencode import serve_client
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
 from onyx.server.features.build.sandbox.opencode.serve_client import (
@@ -120,6 +121,7 @@ def _run_send_message(
     model_id: str | None = None,
     timeout: float = 5.0,
     absolute_timeout: float | None = None,
+    attachments: list[PromptAttachment] | None = None,
 ) -> tuple[list[Any], threading.Thread]:
     """Start ``send_message`` on a background thread, returning the
     collected events list (populated as the generator yields)."""
@@ -132,6 +134,7 @@ def _run_send_message(
             directory=_DIRECTORY,
             model_provider=model_provider,
             model_id=model_id,
+            attachments=attachments,
             timeout=timeout,
             absolute_timeout=absolute_timeout,
         ):
@@ -448,6 +451,48 @@ def test_send_message_omits_model_when_only_one_arg_supplied(
         t.join(timeout=3.0)
 
     assert "model" not in posted_bodies[0]
+
+
+def test_send_message_posts_native_image_file_parts(bus: PodEventBus) -> None:
+    posted_bodies: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/prompt_async"):
+            posted_bodies.append(httpx.Response(200, content=request.content).json())
+        return httpx.Response(204)
+
+    client = _make_client(bus, httpx.MockTransport(handler))
+    events, thread = _run_send_message(
+        client,
+        attachments=[
+            PromptAttachment(
+                name="reference image.png",
+                path="attachments/reference image.png",
+                mime_type="image/png",
+            )
+        ],
+    )
+    try:
+        assert _wait_for(lambda: len(posted_bodies) == 1)
+        _dispatch_session_idle(bus)
+        assert _wait_for(
+            lambda: any(isinstance(event, PromptResponse) for event in events)
+        )
+    finally:
+        thread.join(timeout=3.0)
+
+    assert posted_bodies[0]["parts"] == [
+        {"type": "text", "text": "hello"},
+        {
+            "type": "file",
+            "mime": "image/png",
+            "filename": "reference image.png",
+            "url": (
+                "file:///workspace/sessions/test-session/"
+                "attachments/reference%20image.png"
+            ),
+        },
+    ]
 
 
 # ---------------------------------------------------------------------------

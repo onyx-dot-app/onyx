@@ -13,6 +13,7 @@ import pytest
 from onyx.db.models import BuildSession
 from onyx.server.features.build.packets import CompactionPacket, ContextUsagePacket
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
+from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.session import streaming
 from onyx.server.features.build.session.streaming import BuildStreamingState
 
@@ -30,6 +31,7 @@ class _FakeStreamingSandboxManager:
         session_id: UUID,
         user_message_content: str,
         *,
+        attachments: list[PromptAttachment] | None = None,
         opencode_session_id: str | None = None,
         agent_provider: str | None = None,
         agent_model: str | None = None,
@@ -42,6 +44,7 @@ class _FakeStreamingSandboxManager:
             "sandbox_id": sandbox_id,
             "session_id": session_id,
             "user_message_content": user_message_content,
+            "attachments": attachments,
             "opencode_session_id": opencode_session_id,
             "agent_provider": agent_provider,
             "agent_model": agent_model,
