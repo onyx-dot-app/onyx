@@ -49,6 +49,102 @@ jobs:
       - run: uv publish
         working-directory: cli
 
+  github-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to create the GitHub release and upload archives
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # full history + tags for the previous-release changelog range
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: "1.26.4"
+          cache: false
+
+      # ldflags follow the contract of hatch_build.py: `main.version` carries
+      # the `v` prefix and `main.commit` the full SHA. Unlike the wheel builds
+      # (which keep the symbol table so govulncheck can scan them), these
+      # standalone binaries are fully stripped.
+      - name: Build release archives
+        env:
+          TAG: ${{ github.ref_name }}
+        working-directory: cli
+        run: |
+          version="${TAG#cli/}"
+          mkdir -p dist
+          for goos in linux darwin windows; do
+            for goarch in amd64 arm64; do
+              binary="onyx-cli"
+              if [ "$goos" = "windows" ]; then
+                binary="onyx-cli.exe"
+              fi
+              GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -trimpath \
+                -ldflags="-s -w -X main.version=${version} -X main.commit=${GITHUB_SHA}" \
+                -o "$binary"
+              archive="onyx-cli_${version#v}_${goos}_${goarch}"
+              if [ "$goos" = "windows" ]; then
+                zip -q "dist/${archive}.zip" "$binary" README.md
+              else
+                tar -czf "dist/${archive}.tar.gz" "$binary" README.md
+              fi
+              rm "$binary"
+            done
+          done
+          cd dist && sha256sum -- *.tar.gz *.zip > "onyx-cli_${version#v}_checksums.txt"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Nearest cli/v* tag in the ancestry, not the highest by version:
+          # version-sorting would pick a newer tag as "previous" when releasing
+          # a backport, corrupting the changelog range. Empty on the first release.
+          prev_tag="$(git describe --tags --abbrev=0 --match='cli/v*' "${TAG}^" 2>/dev/null || true)"
+          {
+            echo "## Changes"
+            if [ -n "$prev_tag" ]; then
+              git log --no-merges --pretty='format:* %s (%h)' "${prev_tag}..${TAG}" -- cli/
+            else
+              git log --no-merges --pretty='format:* %s (%h)' "${TAG}" -- cli/
+            fi
+            echo
+          } > "${RUNNER_TEMP}/release-notes.md"
+
+          release_args=(--latest=false)
+          if [[ ! "$TAG" =~ ^cli/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            release_args+=(--prerelease)
+          fi
+
+          # Create and upload separately so a rerun can heal a partial release:
+          # creation is skipped when the release already exists, and --clobber
+          # replaces any assets left behind by a failed upload.
+          #
+          # Existence must be checked via the list endpoint: a draft release
+          # (e.g. notes drafted in the UI ahead of the tag) doesn't create the
+          # git tag until published, so tag-based lookups like `gh release view`
+          # return 404 for it and a blind create would produce a duplicate
+          # release (see the same lookup in deployment.yml). If the tag only has
+          # a draft, publish it instead of creating over it.
+          release_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n 1)"
+          if [ -z "$release_id" ]; then
+            gh release create "$TAG" \
+              --verify-tag \
+              --title "onyx-cli ${TAG#cli/}" \
+              --notes-file "${RUNNER_TEMP}/release-notes.md" \
+              "${release_args[@]}"
+          elif [ "$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" --jq .draft)" = "true" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+              -F draft=false -f make_latest=false >/dev/null
+          fi
+          gh release upload "$TAG" --clobber \
+            cli/dist/*.tar.gz cli/dist/*.zip cli/dist/*_checksums.txt
+
   docker-amd64:
     runs-on:
       - runs-on
