@@ -94,7 +94,7 @@ export default function CreateRateLimitModal({
                 "budget-required",
                 "Set a token budget and/or a cost budget",
                 (value, context) =>
-                  value != null || context.parent.cost_budget_dollars !== ""
+                  value != null || context.parent.cost_budget_dollars != null
               ),
             cost_budget_dollars: Yup.number()
               // Empty (no cost budget) is allowed; a 0 would make the gate fire

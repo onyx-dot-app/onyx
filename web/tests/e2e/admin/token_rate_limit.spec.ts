@@ -43,25 +43,7 @@ test.describe("usage budget blocks chat", () => {
 
     const chat = new ChatPage(page);
     await chat.goto();
-
-    // 2) Usage accrues server-side and the gate reads the recorded total before
-    //    each request, so the first turn starts at 0 and it takes a few turns to
-    //    cross the budget. Stop as soon as the banner appears.
-    const banner = page.getByText(/you've reached the usage budget/i);
-    for (let turn = 0; turn < 8 && !(await banner.isVisible()); turn++) {
-      await chat.inputBar.fill(`write a few sentences about topic ${turn}`);
-      await chat.inputBar.send();
-      await Promise.race([
-        banner.waitFor({ state: "visible", timeout: 45_000 }).catch(() => {}),
-        chat
-          .aiMessage(turn)
-          .waitFor({ state: "visible", timeout: 45_000 })
-          .catch(() => {}),
-      ]);
-    }
-
-    // 3) The structured 429 renders as a friendly, scope-aware banner.
-    await expect(banner).toBeVisible();
-    await expect(page.getByText(/your account/i)).toBeVisible();
+    await chat.sendUntilUsageLimit(8);
+    await chat.expectAccountUsageLimit();
   });
 });

@@ -1,5 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
+import { AdminUsagePage } from "@tests/e2e/pages/AdminUsagePage";
 
 /**
  * Admin per-user usage table + Reset. Real e2e (no mocking): the admin sends a
@@ -18,15 +19,8 @@ test.describe("admin per-user usage table + reset", () => {
     await chat.inputBar.send();
     await chat.aiMessage(0).waitFor({ state: "visible", timeout: 60_000 });
 
-    // 2) The admin's usage now appears in the per-user table.
-    await page.goto("/admin/performance/usage");
-    const row = page.locator('[data-testid^="usage-row-"]').first();
-    await expect(row).toBeVisible({ timeout: 15_000 });
-
-    // 3) Reset clears the user's current-window usage (toast confirms).
-    await row.getByRole("button", { name: "Reset" }).click();
-    await expect(page.getByText(/reset usage for/i)).toBeVisible({
-      timeout: 10_000,
-    });
+    const usage = new AdminUsagePage(page);
+    await usage.goto();
+    await usage.resetFirstUser();
   });
 });

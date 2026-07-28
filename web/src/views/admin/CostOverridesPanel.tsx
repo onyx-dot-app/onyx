@@ -42,7 +42,10 @@ function parseRate(raw: string): number | null {
 }
 
 function formatRate(value: number): string {
-  return `$${value.toFixed(2)}`;
+  return `$${value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 20,
+  })}`;
 }
 
 // Shared add/edit form for the idempotent upsert.

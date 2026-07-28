@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR from "swr";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";

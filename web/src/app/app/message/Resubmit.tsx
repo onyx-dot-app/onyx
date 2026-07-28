@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { Button } from "@opal/components";
@@ -9,13 +9,10 @@ import {
   RATE_LIMITED_ERROR_CODE,
 } from "@/app/app/interfaces";
 
-// Turn a 429's reset_at / retry_after_seconds into a human-friendly sentence.
-// Returns null if neither field is present (banner falls back to the detail).
-function formatRateLimitReset(details: RateLimitDetails): string | null {
-  const resetMs = resolveResetMs(details);
-  if (resetMs === null) return null;
+const COUNTDOWN_TICK_MS = 1_000;
 
-  const remainingMs = resetMs - Date.now();
+function formatRateLimitReset(resetMs: number, nowMs: number): string {
+  const remainingMs = resetMs - nowMs;
   if (remainingMs <= 0) return "You can try again now.";
 
   const plural = (n: number, unit: string) =>
@@ -44,15 +41,60 @@ function formatRateLimitReset(details: RateLimitDetails): string | null {
   return `Resets in ${relative} (${at}).`;
 }
 
-function resolveResetMs(details: RateLimitDetails): number | null {
-  if (details.reset_at) {
-    const parsed = Date.parse(details.reset_at);
+function resolveResetMs(
+  resetAt?: string,
+  retryAfterSeconds?: number
+): number | null {
+  if (resetAt) {
+    const parsed = Date.parse(resetAt);
     if (!Number.isNaN(parsed)) return parsed;
   }
-  if (typeof details.retry_after_seconds === "number") {
-    return Date.now() + details.retry_after_seconds * 1000;
+  if (typeof retryAfterSeconds === "number") {
+    return Date.now() + retryAfterSeconds * 1_000;
   }
   return null;
+}
+
+interface RateLimitBannerProps {
+  error: string;
+  errorCode: string;
+  details: RateLimitDetails;
+}
+
+function RateLimitBanner({ error, errorCode, details }: RateLimitBannerProps) {
+  const [nowMs, setNowMs] = useState(Date.now());
+  const resetMs = useMemo(
+    () => resolveResetMs(details.reset_at, details.retry_after_seconds),
+    [details.reset_at, details.retry_after_seconds]
+  );
+
+  useEffect(() => {
+    if (resetMs === null) return;
+
+    setNowMs(Date.now());
+    const interval = window.setInterval(
+      () => setNowMs(Date.now()),
+      COUNTDOWN_TICK_MS
+    );
+    return () => window.clearInterval(interval);
+  }, [resetMs]);
+
+  const resetLine =
+    resetMs === null ? null : formatRateLimitReset(resetMs, nowMs);
+  return (
+    <div className="text-red-700 mt-4 text-sm my-auto">
+      <Alert variant="broken">
+        {getErrorIcon(errorCode)}
+        <AlertTitle>{getErrorTitle(errorCode)}</AlertTitle>
+        <AlertDescription className="flex flex-col gap-y-1">
+          <span>{error || "You've reached your usage limit."}</span>
+          {resetLine && (
+            <span className="text-xs text-muted-foreground">{resetLine}</span>
+          )}
+        </AlertDescription>
+      </Alert>
+    </div>
+  );
 }
 
 interface ResubmitProps {
@@ -87,23 +129,13 @@ export const ErrorBanner = ({
 }) => {
   const [isStackTraceExpanded, setIsStackTraceExpanded] = useState(false);
 
-  // Usage rate-limit (429): a focused banner with a reset time and no
-  // Regenerate affordance — retrying would just re-trip the same limit.
   if (errorCode === RATE_LIMITED_ERROR_CODE) {
-    const resetLine = formatRateLimitReset((details as RateLimitDetails) ?? {});
     return (
-      <div className="text-red-700 mt-4 text-sm my-auto">
-        <Alert variant="broken">
-          {getErrorIcon(errorCode)}
-          <AlertTitle>{getErrorTitle(errorCode)}</AlertTitle>
-          <AlertDescription className="flex flex-col gap-y-1">
-            <span>{error || "You've reached your usage limit."}</span>
-            {resetLine && (
-              <span className="text-xs text-muted-foreground">{resetLine}</span>
-            )}
-          </AlertDescription>
-        </Alert>
-      </div>
+      <RateLimitBanner
+        error={error}
+        errorCode={errorCode}
+        details={(details as RateLimitDetails) ?? {}}
+      />
     );
   }
 

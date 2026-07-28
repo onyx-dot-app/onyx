@@ -228,14 +228,15 @@ async function saveTokenLimits(
 ): Promise<void> {
   const validLimits: ValidTokenLimit[] = limits
     .map((l) => {
-      const tokenBudget =
-        l.tokenBudget != null && l.tokenBudget > 0 ? l.tokenBudget : null;
-      const cents =
+      const costBudgetCents =
         l.costBudgetDollars != null
           ? Math.round(l.costBudgetDollars * 100)
           : null;
-      const costBudgetCents = cents != null && cents > 0 ? cents : null;
-      return { tokenBudget, periodDays: l.periodDays, costBudgetCents };
+      return {
+        tokenBudget: l.tokenBudget,
+        periodDays: l.periodDays,
+        costBudgetCents,
+      };
     })
     .filter(
       (l): l is ValidTokenLimit =>

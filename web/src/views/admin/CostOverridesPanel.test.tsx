@@ -11,7 +11,7 @@ const costOverrides: CostOverride[] = [
   {
     model: "shared-model",
     provider: "openai",
-    input_cost_per_mtok: 1,
+    input_cost_per_mtok: 0.001,
     output_cost_per_mtok: 2,
     cache_read_cost_per_mtok: null,
     updated_at: null,
@@ -87,7 +87,7 @@ describe("CostOverridesPanel", () => {
   test("distinguishes the same model under different providers", () => {
     render(<CostOverridesPanel />);
 
-    expect(screen.getByText(/OpenAI · In \$1.00/)).toBeInTheDocument();
+    expect(screen.getByText(/OpenAI · In \$0.001/)).toBeInTheDocument();
     expect(screen.getByText(/Anthropic · In \$3.00/)).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
