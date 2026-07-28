@@ -255,7 +255,7 @@ class SessionManager:
             session.mcp_config_hash = sandbox.mcp_config_hash
             self._db_session.flush()
 
-    def _session_llm_config(
+    def session_llm_config(
         self, session: BuildSession, user: User
     ) -> CraftLLMProviderConfig:
         """Resolve the LLM config a session's opencode.json should carry from
@@ -270,7 +270,7 @@ class SessionManager:
         session: BuildSession,
         user: User,
     ) -> None:
-        llm_config = self._session_llm_config(session, user)
+        llm_config = self.session_llm_config(session, user)
         mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
         expected = json.dumps(
             build_provider_opencode_config(
@@ -384,7 +384,7 @@ class SessionManager:
 
             if sandbox.status == SandboxStatus.RUNNING:
                 try:
-                    llm_config = self._session_llm_config(session, user)
+                    llm_config = self.session_llm_config(session, user)
                     mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
                     # Rewrite the per-session opencode.json (provider catalog +
                     # current MCP set) and AGENTS.md BEFORE disposing so the

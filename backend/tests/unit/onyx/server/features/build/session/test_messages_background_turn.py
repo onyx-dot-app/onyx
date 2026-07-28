@@ -17,6 +17,7 @@ from onyx.server.features.build.session import messages as messages_api
 from onyx.server.features.build.session.models import (
     MessageAttachment,
     MessageRequest,
+    SubagentMessageRequest,
 )
 from tests.unit.fakes import FakeCache
 
@@ -76,7 +77,18 @@ def _patch_skill_state(
     monkeypatch.setattr(messages_api, "session_runtime_stale", lambda *_: stale)
 
 
-def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("supports_image_input", "expected_prompt_attachment_paths"),
+    [
+        (True, ["attachments/reference.png"]),
+        (False, []),
+    ],
+)
+def test_send_message_starts_background_turn(
+    monkeypatch: pytest.MonkeyPatch,
+    supports_image_input: bool,
+    expected_prompt_attachment_paths: list[str],
+) -> None:
     cache = FakeCache()
     session_id = uuid4()
     user_id = uuid4()
@@ -103,6 +115,23 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(
+        messages_api.SessionManager,
+        "session_llm_config",
+        lambda *_: SimpleNamespace(
+            model_name="17/gpt-5-mini",
+            models=[
+                SimpleNamespace(
+                    id="17/gpt-5-mini",
+                    capabilities=SimpleNamespace(
+                        input_modalities=(
+                            ("text", "image") if supports_image_input else ("text",)
+                        )
+                    ),
+                )
+            ],
+        ),
+    )
     monkeypatch.setattr(
         messages_api,
         "create_message",
@@ -164,11 +193,27 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
     assert db_session.commits == 1
     turn = get_turn(cache, UUID(response.turn_id))
     assert turn is not None
-    assert [attachment.path for attachment in turn.attachments] == [
-        "attachments/reference.png"
-    ]
+    assert [
+        attachment.path for attachment in turn.attachments
+    ] == expected_prompt_attachment_paths
     start_runner.assert_called_once()
     assert str(start_runner.call_args.args[0]) == response.turn_id
+
+
+def test_subagent_message_request_rejects_attachments() -> None:
+    with pytest.raises(ValidationError):
+        SubagentMessageRequest.model_validate(
+            {
+                "content": "inspect this",
+                "attachments": [
+                    {
+                        "name": "reference.png",
+                        "path": "attachments/reference.png",
+                        "mime_type": "image/png",
+                    }
+                ],
+            }
+        )
 
 
 def test_send_message_preserves_legacy_provider_selection(

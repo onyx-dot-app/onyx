@@ -8,6 +8,7 @@ import {
   Artifact,
   ArtifactType,
   BuildMessage,
+  BuildMessageAttachment,
   FileSystemEntry,
   SessionHistoryItem,
   SessionOrigin,
@@ -26,11 +27,7 @@ import {
   type SubagentTurn,
 } from "@/app/craft/types/displayTypes";
 
-import {
-  QueuedMessage,
-  MAX_QUEUED_MESSAGES,
-  EMPTY_QUEUED_MESSAGES,
-} from "@/app/app/interfaces";
+import { MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 
 import {
   createSession as apiCreateSession,
@@ -556,6 +553,14 @@ let provisioningPromise: Promise<string | null> | null = null;
 // Monotonic id for queued messages (kept out of Zustand state for simplicity).
 let nextQueuedMessageId = 1;
 
+interface CraftQueuedMessage {
+  id: number;
+  text: string;
+  attachments: BuildMessageAttachment[];
+}
+
+const EMPTY_CRAFT_QUEUED_MESSAGES: readonly CraftQueuedMessage[] = [];
+
 /** File preview tab data */
 export interface FilePreviewTab {
   path: string;
@@ -607,7 +612,7 @@ export interface BuildSessionData {
    * Messages typed while a response is streaming. Auto-sent FIFO once the
    * current run finishes (see the auto-send effect in BuildChatPanel).
    */
-  queuedMessages: QueuedMessage[];
+  queuedMessages: CraftQueuedMessage[];
   /**
    * True between an interrupt request and the turn actually terminating. Drives
    * the "stopping…" affordance; cleared by each terminal stream handler (and on
@@ -734,7 +739,11 @@ interface BuildSessionStore {
   clearStreamItems: (sessionId: string) => void;
 
   // Actions - Queued Messages
-  enqueueMessage: (sessionId: string, text: string) => void;
+  enqueueMessage: (
+    sessionId: string,
+    text: string,
+    attachments: BuildMessageAttachment[]
+  ) => void;
   removeQueuedMessage: (sessionId: string, index: number) => void;
 
   // Actions - Abort Control
@@ -1380,7 +1389,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // Queued Messages
   // ===========================================================================
 
-  enqueueMessage: (sessionId: string, text: string) => {
+  enqueueMessage: (
+    sessionId: string,
+    text: string,
+    attachments: BuildMessageAttachment[]
+  ) => {
     set((state) => {
       const session = state.sessions.get(sessionId);
       if (!session || session.queuedMessages.length >= MAX_QUEUED_MESSAGES) {
@@ -1390,7 +1403,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         ...session,
         queuedMessages: [
           ...session.queuedMessages,
-          { id: nextQueuedMessageId++, text },
+          { id: nextQueuedMessageId++, text, attachments },
         ],
         lastAccessed: new Date(),
       };
@@ -2710,9 +2723,10 @@ export const usePreProvisionedSessionId = () =>
 export const useQueuedMessages = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return EMPTY_QUEUED_MESSAGES;
+    if (!currentSessionId) return EMPTY_CRAFT_QUEUED_MESSAGES;
     return (
-      sessions.get(currentSessionId)?.queuedMessages ?? EMPTY_QUEUED_MESSAGES
+      sessions.get(currentSessionId)?.queuedMessages ??
+      EMPTY_CRAFT_QUEUED_MESSAGES
     );
   });
 

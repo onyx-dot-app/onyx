@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from onyx.configs.constants import MessageType
 from onyx.db.enums import (
@@ -220,6 +220,14 @@ class MessageRequest(BaseModel):
     provider: str | None = None
     provider_id: int | None = None
     model: str | None = None
+
+
+class SubagentMessageRequest(BaseModel):
+    """A subagent follow-up does not support native file prompt parts."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str
 
 
 class MessageInterruptResponse(BaseModel):

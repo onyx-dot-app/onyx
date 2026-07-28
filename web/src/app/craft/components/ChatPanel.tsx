@@ -444,10 +444,10 @@ export default function BuildChatPanel({
     setShowScrollButton(false);
   }, [sessionId]);
 
-  const handleSubmit = useCallback(
+  const sendMessage = useCallback(
     async (
       message: string,
-      files: BuildFile[],
+      attachments: BuildMessageAttachment[],
       modelOverride?: BuildLlmSelection | null
     ) => {
       if (limits?.isLimited) {
@@ -463,7 +463,6 @@ export default function BuildChatPanel({
       track(AnalyticsEvent.SENT_CRAFT_MESSAGE);
 
       const chosen = modelOverride ?? selectedModel;
-      const attachments = toMessageAttachments(files);
 
       if (hasSession && sessionId) {
         // Existing session flow
@@ -578,13 +577,24 @@ export default function BuildChatPanel({
     ]
   );
 
+  const handleSubmit = useCallback(
+    (
+      message: string,
+      files: BuildFile[],
+      modelOverride?: BuildLlmSelection | null
+    ) => sendMessage(message, toMessageAttachments(files), modelOverride),
+    [sendMessage]
+  );
+
   const handleInterrupt = useCallback(() => {
     if (sessionId) void interruptStreaming(sessionId);
   }, [sessionId, interruptStreaming]);
 
   const handleQueueMessage = useCallback(
-    (text: string) => {
-      if (sessionId) enqueueMessage(sessionId, text);
+    (text: string, files: BuildFile[]) => {
+      if (sessionId) {
+        enqueueMessage(sessionId, text, toMessageAttachments(files));
+      }
     },
     [sessionId, enqueueMessage]
   );
@@ -623,7 +633,7 @@ export default function BuildChatPanel({
       const next = queuedMessages[0];
       if (next) {
         removeQueuedMessage(sessionId, 0);
-        void handleSubmit(next.text, []);
+        void sendMessage(next.text, next.attachments);
       }
     }
   }, [
@@ -633,7 +643,7 @@ export default function BuildChatPanel({
     sessionError,
     isLimited,
     queuedMessages,
-    handleSubmit,
+    sendMessage,
     removeQueuedMessage,
   ]);
 
