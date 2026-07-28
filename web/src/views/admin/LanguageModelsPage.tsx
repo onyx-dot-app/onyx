@@ -73,6 +73,7 @@ const PROVIDER_GROUPS: ProviderGroup[] = [
     providerNames: [
       LLMProviderName.OPENROUTER,
       LLMProviderName.LITELLM_PROXY,
+      LLMProviderName.PORTKEY,
       LLMProviderName.NEBIUS_TOKENFACTORY,
       LLMProviderName.BIFROST,
     ],

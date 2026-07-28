@@ -16,11 +16,14 @@ from fastapi import Request
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import KV_PASSWORD_AUTH_ENABLED_KEY
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import SecuritySettings as SecuritySettingsRow
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.security import api as security_api
 from onyx.server.security import store as security_store
 from onyx.server.security.api import put_security_settings_endpoint
@@ -70,6 +73,21 @@ def _delete_security_settings_row() -> None:
         session.commit()
 
 
+def _load_password_auth_kv() -> Any:
+    """Raw KV value for the kill switch, or "missing" when the key is absent."""
+    try:
+        return get_kv_store().load(KV_PASSWORD_AUTH_ENABLED_KEY, refresh_cache=True)
+    except KvKeyNotFoundError:
+        return "missing"
+
+
+def _delete_password_auth_kv() -> None:
+    try:
+        get_kv_store().delete(KV_PASSWORD_AUTH_ENABLED_KEY)
+    except KvKeyNotFoundError:
+        pass
+
+
 @pytest.fixture(autouse=True)
 def _clean_db_and_cache(
     db_session: Session,  # noqa: ARG001 — requested for side-effect (SQL engine init)
@@ -80,8 +98,10 @@ def _clean_db_and_cache(
     import time as _time
 
     _install_cache_for_test(ttl=10.0, timer=_time.monotonic)
+    _delete_password_auth_kv()
     yield
     _delete_security_settings_row()
+    _delete_password_auth_kv()
     invalidate_security_cache(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
 
@@ -332,3 +352,72 @@ def test_apply_patch_strips_operator_locked_in_multi_tenant(
     )
 
     assert _load_row_as_dict() == {"user_directory_admin_only": True}
+
+
+# -----------------------------------------------------------------------------
+# Password auth kill switch: KV-backed (never a row column) and unable to
+# strand the instance. The guard keys on the global enabled-provider count, so
+# the count source is patched rather than relying on the shared DB's rows.
+# -----------------------------------------------------------------------------
+
+
+def _patch_enabled_providers(
+    monkeypatch: pytest.MonkeyPatch, providers: list[object]
+) -> None:
+    monkeypatch.setattr(
+        security_store,
+        "fetch_sso_providers",
+        lambda *_a, **_kw: providers,
+    )
+
+
+def test_put_rejects_disabling_auth_with_no_enabled_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lockout guard: with no SSO fallback, turning off password auth would
+    lock everyone out, so the save is refused and nothing persists."""
+    _patch_enabled_providers(monkeypatch, [])
+
+    with pytest.raises(OnyxError) as exc_info:
+        _put({"password_auth_enabled": False})
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+    assert _load_row_as_dict() is None
+    assert _load_password_auth_kv() == "missing"
+
+
+def test_put_allows_disabling_auth_with_enabled_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The override persists in the KV store, never as a row column."""
+    _patch_enabled_providers(monkeypatch, [object()])
+
+    result = _put({"password_auth_enabled": False})
+    assert result.password_auth_enabled is False
+    assert _load_password_auth_kv() is False
+    assert _load_row_as_dict() == {}
+
+
+def test_put_explicit_null_clears_kill_switch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Clearing the override restores the env default (enabled)."""
+    _patch_enabled_providers(monkeypatch, [object()])
+    _put({"password_auth_enabled": False})
+
+    result = _put({"password_auth_enabled": None})
+    assert result.password_auth_enabled is True
+    assert _load_password_auth_kv() is None
+
+
+def test_put_rejects_kill_switch_in_multi_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The kill switch only applies to single-tenant deployments. In
+    multi-tenant it would silently never enforce, so the write is refused."""
+    monkeypatch.setattr(security_api, "MULTI_TENANT", True)
+
+    with pytest.raises(OnyxError) as exc_info:
+        _put({"password_auth_enabled": False})
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+    assert _load_row_as_dict() is None
+    assert _load_password_auth_kv() == "missing"

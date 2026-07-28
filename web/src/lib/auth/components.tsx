@@ -400,6 +400,9 @@ export function EmailPasswordForm({
         errorMsg = "Invalid email or password";
       } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
         errorMsg = "Create an account to set a password";
+      } else if (errorDetail === "PASSWORD_LOGIN_DISABLED") {
+        errorMsg =
+          "Password login is turned off. Sign in with your identity provider.";
       } else if (typeof errorDetail === "string") {
         errorMsg = errorDetail;
       }

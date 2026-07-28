@@ -6,6 +6,9 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      # The shipped image; the Dockerfile's default (last) stage is the dev variant
+      # with debugging tools (published with a -dev tag suffix).
+      target: runtime
     command: >
       /bin/sh -c "
       alembic -n schema_private upgrade head &&
@@ -140,6 +143,9 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      # The shipped image; the Dockerfile's default (last) stage is the dev variant
+      # with debugging tools (published with a -dev tag suffix).
+      target: runtime
     command: >
       /bin/sh -c "
       if [ -f /etc/ssl/certs/custom-ca.crt ]; then
@@ -310,6 +316,7 @@ services:
   #   build:
   #     context: ../../backend
   #     dockerfile: Dockerfile
+  #     target: runtime
   #   command: >
   #     /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED:-}\" != \"true\" ]; then
   #       echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';

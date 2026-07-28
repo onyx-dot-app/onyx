@@ -137,7 +137,11 @@ class LLMProviderView(LLMProvider):
     def from_model(
         cls,
         llm_provider_model: "LLMProviderModel",
+        include_api_key: bool = True,
     ) -> "LLMProviderView":
+        # ``include_api_key=False`` skips the decrypt + credential-access audit
+        # for callers that only need catalog metadata (e.g. the Craft gateway
+        # model list, which never uses the real key — the proxy injects it).
         # Safely get groups - handle detached instance case
         try:
             groups = [group.id for group in llm_provider_model.groups]
@@ -153,7 +157,7 @@ class LLMProviderView(LLMProvider):
         provider = llm_provider_model.provider
 
         api_key: str | None = None
-        if llm_provider_model.api_key:
+        if include_api_key and llm_provider_model.api_key:
             # NOTE: this decrypts the stored LLM provider key (chat hot path).
             # No user is in scope here, so attribution relies on
             # request_id / client_ip context. Audit is best-effort and never
@@ -651,6 +655,22 @@ class OpenAICompatibleModelsRequest(BaseModel):
 
 class OpenAICompatibleFinalModelResponse(BaseModel):
     name: str  # Model ID (e.g. "meta-llama/Llama-3-8B-Instruct")
+    display_name: str  # Human-readable name from API
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+
+
+# Portkey dynamic models fetch
+class PortkeyModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class PortkeyFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "gpt-4o", "claude-sonnet-5")
     display_name: str  # Human-readable name from API
     max_input_tokens: int | None
     supports_image_input: bool

@@ -566,6 +566,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # Check for disposable emails FIRST so obvious throwaway domains are
         # rejected before hitting Google's siteverify API. Cheap local check.
         security_settings = get_security_settings()
+
+        if safe and not MULTI_TENANT and not security_settings.password_auth_enabled:
+            raise OnyxError(
+                OnyxErrorCode.REGISTRATION_DISABLED,
+                "Password signup is disabled. Sign in through your SSO provider.",
+            )
+
         try:
             verify_email_domain(
                 user_create.email,
@@ -1327,6 +1334,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 outcome,
                 actor=AuditActor(email=email),
             )
+
+        if not MULTI_TENANT and not get_security_settings().password_auth_enabled:
+            _audit_login_failure(AuditOutcome.DENIED)
+            raise BasicAuthenticationError(detail="PASSWORD_LOGIN_DISABLED")
 
         tenant_id: str | None = None
         try:
@@ -2309,7 +2320,7 @@ class OAuth2AuthorizeResponse(BaseModel):
 
 
 def generate_state_token(
-    data: Dict[str, str],
+    data: Dict[str, Any],
     secret: SecretType,
     lifetime_seconds: int = STATE_TOKEN_LIFETIME_SECONDS,
 ) -> str:
@@ -2344,7 +2355,7 @@ def decode_and_validate_oauth_state(
     state_secret: SecretType,
     csrf_token_cookie_name: str = CSRF_TOKEN_COOKIE_NAME,
     expected_provider_name: str | None = None,
-) -> Dict[str, str]:
+) -> Dict[str, Any]:
     """Decode the signed OAuth state and enforce the CSRF double-submit.
     Optionally bind the flow to a provider so a state minted for one provider
     cannot be replayed on another provider's callback."""

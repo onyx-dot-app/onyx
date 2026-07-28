@@ -449,6 +449,9 @@ ANTHROPIC_MODELS_OMITTING_SAMPLING_PARAMS = [
     "claude-sonnet-5",
     "claude-sonnet-5@20260203",
     "claude-5-sonnet",
+    "claude-opus-5",
+    "claude-opus-5@20260101",
+    "claude-5-opus",
 ]
 
 
@@ -475,6 +478,37 @@ def test_omits_temperature_for_no_sampling_params_models(model_name: str) -> Non
         assert "temperature" not in kwargs
 
 
+def test_claude_only_in_deployment_name_omits_temperature_and_reasons() -> None:
+    # Custom providers (e.g. Azure AI Foundry) may carry the model identity only
+    # in the deployment alias — the string actually sent to LiteLLM — while
+    # model_name is an opaque label. Detection must consider both, including for
+    # the reasoning path: model_is_reasoning_model is deliberately NOT patched
+    # here, since the litellm registry can't know the opaque alias — adaptive
+    # thinking must be inferred from the Claude version alone.
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name="foundry-deploy-1",
+        deployment_name="claude-opus-5",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name="foundry-deploy-1",
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "temperature" not in kwargs
+        assert kwargs["thinking"] == {"type": "adaptive"}
+        assert kwargs["output_config"] == {"effort": "high"}
+
+
 @pytest.mark.parametrize(
     "model_name",
     [
@@ -486,6 +520,8 @@ def test_omits_temperature_for_no_sampling_params_models(model_name: str) -> Non
         "claude-5-mythos",
         "claude-sonnet-5",
         "claude-5-sonnet",
+        "claude-opus-5",
+        "claude-5-opus",
     ],
 )
 @pytest.mark.parametrize(
@@ -590,6 +626,8 @@ def test_keeps_temperature_for_older_sonnet_models(model_name: str) -> None:
         ("claude-5-fable", (5, 0)),
         ("claude-mythos-5", (5, 0)),
         ("claude-5-mythos", (5, 0)),
+        ("claude-opus-5", (5, 0)),
+        ("claude-5-opus", (5, 0)),
         # Date/snapshot suffixes stripped
         ("claude-opus-4-8@20260101", (4, 8)),
         ("claude-sonnet-5@20260203", (5, 0)),
@@ -1058,8 +1096,11 @@ def test_openai_model_stream_uses_httphandler_client(
         assert isinstance(kwargs["client"], HTTPHandler)
 
 
-def test_anthropic_model_passes_no_client() -> None:
-    """Test that non-OpenAI models (Anthropic) don't get a client passed."""
+def test_anthropic_model_passes_isolated_client() -> None:
+    """Anthropic gets a per-call HTTPHandler so abandoned streams can't deadlock
+    litellm's shared module_level_client pool (see _uses_isolated_client)."""
+    from litellm import HTTPHandler
+
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
@@ -1089,7 +1130,7 @@ def test_anthropic_model_passes_no_client() -> None:
 
         mock_completion.assert_called_once()
         kwargs = mock_completion.call_args.kwargs
-        assert kwargs["client"] is None
+        assert isinstance(kwargs["client"], HTTPHandler)
 
 
 def test_bedrock_model_passes_no_client() -> None:

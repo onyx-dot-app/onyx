@@ -8,6 +8,8 @@
 
 import type {
   CustomSkill,
+  GitHubSkillsImportResult,
+  GitHubSkillsPreview,
   Skill,
   SkillBundleContents,
   SkillEditableDetail,
@@ -44,11 +46,40 @@ async function handle<T>(res: Response): Promise<T> {
 // Mutations
 // ---------------------------------------------------------------------------
 
+export async function previewGitHubSkills(
+  repository: string
+): Promise<GitHubSkillsPreview> {
+  const res = await fetch("/api/skills/github/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repository }),
+  });
+  return handle<GitHubSkillsPreview>(res);
+}
+
+export async function importGitHubSkills(
+  preview: Pick<GitHubSkillsPreview, "repository" | "revision" | "subpath">,
+  paths: string[]
+): Promise<GitHubSkillsImportResult> {
+  const res = await fetch("/api/skills/github/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      repository: preview.repository,
+      revision: preview.revision,
+      subpath: preview.subpath,
+      paths,
+    }),
+  });
+  return handle<GitHubSkillsImportResult>(res);
+}
+
 export interface CreateCustomSkillInput {
   name: string;
   description: string;
   instructions_markdown: string;
   auto_enable?: boolean;
+  external_app_id?: number;
 }
 
 export async function createCustomSkillFromEditor(
@@ -60,6 +91,9 @@ export async function createCustomSkillFromEditor(
   form.append("description", input.description);
   form.append("instructions_markdown", input.instructions_markdown);
   form.append("auto_enable", String(input.auto_enable ?? true));
+  if (input.external_app_id !== undefined) {
+    form.append("external_app_id", String(input.external_app_id));
+  }
   if (upload) form.append("upload", upload);
 
   const res = await fetch("/api/skills/custom/editor", {

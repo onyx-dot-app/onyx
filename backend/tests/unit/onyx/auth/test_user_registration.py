@@ -8,17 +8,20 @@ Tests cover:
 4. Case-insensitive email matching for existing user checks
 """
 
-from types import TracebackType
+from types import SimpleNamespace, TracebackType
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import exceptions
 
 from onyx.auth.schemas import UserCreate, UserRole
 from onyx.auth.users import UserManager
 from onyx.db.enums import AccountType
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.utils import BasicAuthenticationError
 
 # Note: Only async test methods are marked with @pytest.mark.asyncio individually
 # to avoid warnings on synchronous tests
@@ -740,3 +743,175 @@ class TestOAuthPlaceholderPromotion:
             )
 
         cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_not_awaited()
+
+
+class TestPasswordAuthKillSwitch:
+    """Password auth off refuses the public register route (``safe=True``) and
+    password login, single-tenant only. SAML/JWT provisioning uses the default
+    ``safe=False`` and OAuth bypasses create(), so SSO users are still created
+    through their provider, and SSO login never reaches authenticate().
+    """
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_signup_disabled_blocks_public_registration(
+        self,
+        mock_get_settings: MagicMock,
+        mock_user_create: UserCreate,
+    ) -> None:
+        mock_get_settings.return_value = SimpleNamespace(
+            password_auth_enabled=False, valid_email_domains=()
+        )
+        user_manager = UserManager(MagicMock())
+
+        with pytest.raises(OnyxError) as exc:
+            await user_manager.create(mock_user_create, safe=True)
+
+        assert exc.value.error_code is OnyxErrorCode.REGISTRATION_DISABLED
+        assert exc.value.status_code == 403
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.is_disposable_email", return_value=False)
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_signup_disabled_allows_sso_provisioning(
+        self,
+        mock_get_settings: MagicMock,
+        mock_verify_domain: MagicMock,
+        mock_is_disposable: MagicMock,  # noqa: ARG002
+        mock_user_create: UserCreate,
+    ) -> None:
+        """SSO-driven create() (safe=False) must NOT be blocked when signup is
+        off, otherwise SAML/JWT can never onboard a new user."""
+        mock_get_settings.return_value = SimpleNamespace(
+            password_auth_enabled=False, valid_email_domains=()
+        )
+        user_manager = UserManager(MagicMock())
+        _mock_user_manager_methods(user_manager)
+
+        try:
+            await user_manager.create(mock_user_create, safe=False)
+        except OnyxError as e:
+            assert e.error_code is not OnyxErrorCode.REGISTRATION_DISABLED
+        except Exception:
+            pass
+
+        # The guard let it through into domain validation instead of blocking.
+        mock_verify_domain.assert_called_once_with(
+            mock_user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
+        )
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.is_disposable_email", return_value=False)
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_signup_enabled_passes_the_guard(
+        self,
+        mock_get_settings: MagicMock,
+        mock_verify_domain: MagicMock,
+        mock_is_disposable: MagicMock,  # noqa: ARG002
+        mock_user_create: UserCreate,
+    ) -> None:
+        """With signup on, the public route proceeds past the guard."""
+        mock_get_settings.return_value = SimpleNamespace(
+            password_auth_enabled=True, valid_email_domains=()
+        )
+        user_manager = UserManager(MagicMock())
+        _mock_user_manager_methods(user_manager)
+
+        try:
+            await user_manager.create(mock_user_create, safe=True)
+        except Exception:
+            pass
+
+        mock_verify_domain.assert_called_once_with(
+            mock_user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
+        )
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.MULTI_TENANT", True)
+    @patch("onyx.auth.users.is_disposable_email", return_value=False)
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_multi_tenant_never_blocks_signup(
+        self,
+        mock_get_settings: MagicMock,
+        mock_verify_domain: MagicMock,
+        mock_is_disposable: MagicMock,  # noqa: ARG002
+        mock_user_create: UserCreate,
+    ) -> None:
+        """Multi-tenant reads ambient settings here, so the gate must not fire
+        even when the value says signup is off."""
+        mock_get_settings.return_value = SimpleNamespace(
+            password_auth_enabled=False, valid_email_domains=()
+        )
+        user_manager = UserManager(MagicMock())
+        _mock_user_manager_methods(user_manager)
+
+        try:
+            await user_manager.create(mock_user_create, safe=True)
+        except OnyxError as e:
+            assert e.error_code is not OnyxErrorCode.REGISTRATION_DISABLED
+        except Exception:
+            pass
+
+        mock_verify_domain.assert_called_once_with(
+            mock_user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
+        )
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.emit_audit_event")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_login_disabled_raises_before_tenant_lookup(
+        self,
+        mock_get_settings: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_emit_audit: MagicMock,  # noqa: ARG002
+    ) -> None:
+        mock_get_settings.return_value = SimpleNamespace(password_auth_enabled=False)
+        user_manager = UserManager(MagicMock())
+        credentials = OAuth2PasswordRequestForm(
+            username="user@example.com", password="pw"
+        )
+
+        with pytest.raises(BasicAuthenticationError) as exc:
+            await user_manager.authenticate(credentials)
+
+        assert exc.value.status_code == 403
+        assert exc.value.detail == "PASSWORD_LOGIN_DISABLED"
+        mock_fetch_ee.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.MULTI_TENANT", True)
+    @patch("onyx.auth.users.emit_audit_event")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_security_settings")
+    async def test_multi_tenant_never_blocks_login(
+        self,
+        mock_get_settings: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_emit_audit: MagicMock,  # noqa: ARG002
+    ) -> None:
+        """Multi-tenant reads ambient settings here, so the gate must not fire
+        and authentication proceeds to the tenant lookup."""
+        mock_get_settings.return_value = SimpleNamespace(password_auth_enabled=False)
+        user_manager = UserManager(MagicMock())
+        credentials = OAuth2PasswordRequestForm(
+            username="user@example.com", password="pw"
+        )
+
+        try:
+            await user_manager.authenticate(credentials)
+        except BasicAuthenticationError as e:
+            assert e.detail != "PASSWORD_LOGIN_DISABLED"
+        except Exception:
+            pass
+
+        mock_fetch_ee.assert_called()

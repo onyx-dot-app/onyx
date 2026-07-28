@@ -45,3 +45,9 @@ downloaded during the initial setup. Feel free to edit the .env file to customiz
 located near the top of the file.
 
 IMAGE_TAG is the version of Onyx to run. It is recommended to leave it as latest to get all updates with each redeployment.
+
+Every image publishes a `-dev` twin for each of its tags (e.g. `latest-dev`, `v1.2.3-dev`), so a single
+`IMAGE_TAG=latest-dev` selects the dev variant of the whole deployment. Today only the backend image actually differs:
+its `-dev` twin adds interactive debugging tools (vim, nano, curl, ps, psql) that the default image leaves out to stay
+minimal. The web-server, model-server, and sandbox `-dev` tags are identical to their plain counterparts and exist so
+that one version string covers every image.

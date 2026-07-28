@@ -39,6 +39,7 @@ from onyx.server.features.build.interactive_turns.state import (
     get_turn_for_request,
 )
 from onyx.server.features.build.session.errors import RateLimitError
+from onyx.server.features.build.session.llm_config import GatewaySelection
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.models import (
     MessageInterruptResponse,
@@ -146,7 +147,11 @@ def send_message(
         check_token_rate_limits(user)
 
         turn_index = count_user_messages(session_id, db_session)
-        if request.provider and request.model:
+        if request.provider_id is not None and request.model:
+            session.agent_provider, session.agent_model = GatewaySelection(
+                request.provider_id, request.model
+            ).to_columns()
+        elif request.provider and request.model:
             session.agent_provider = request.provider
             session.agent_model = request.model
         create_message(

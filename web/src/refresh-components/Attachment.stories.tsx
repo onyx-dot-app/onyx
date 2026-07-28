@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import Attachment from "./Attachment";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 

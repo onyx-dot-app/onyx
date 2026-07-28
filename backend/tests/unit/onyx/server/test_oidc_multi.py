@@ -54,6 +54,8 @@ def test_resolve_oidc_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
         **_OIDC_CONFIG,
         "legacy_callback": False,
         "require_verified_email": False,
+        "pkce_enabled": False,
+        "scopes": [],
     }
 
 
@@ -67,7 +69,12 @@ def test_resolve_google_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
         oidc_multi, "fetch_sso_provider_by_name", lambda **_kw: provider
     )
     _resolved, config = oidc_multi._resolve_oidc_provider(_DB, "google")
-    assert config == {**_GOOGLE_CONFIG, "legacy_callback": False}
+    assert config == {
+        **_GOOGLE_CONFIG,
+        "legacy_callback": False,
+        "pkce_enabled": False,
+        "scopes": [],
+    }
 
 
 def test_resolve_fail_closed_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -162,7 +169,12 @@ def test_decode_state_accepts_valid() -> None:
     state = generate_state_token(
         {"next_url": "/", "provider_name": "okta", CSRF_TOKEN_KEY: csrf}, _TEST_SECRET
     )
-    request = cast(Any, SimpleNamespace(cookies={CSRF_TOKEN_COOKIE_NAME: csrf}))
+    request = cast(
+        Any,
+        SimpleNamespace(
+            cookies={CSRF_TOKEN_COOKIE_NAME: csrf}, state=SimpleNamespace()
+        ),
+    )
     data = decode_and_validate_oauth_state(
         request=request,
         state_value=state,
@@ -193,7 +205,12 @@ def test_decode_state_rejects_wrong_provider() -> None:
     state = generate_state_token(
         {"next_url": "/", "provider_name": "okta", CSRF_TOKEN_KEY: csrf}, _TEST_SECRET
     )
-    request = cast(Any, SimpleNamespace(cookies={CSRF_TOKEN_COOKIE_NAME: csrf}))
+    request = cast(
+        Any,
+        SimpleNamespace(
+            cookies={CSRF_TOKEN_COOKIE_NAME: csrf}, state=SimpleNamespace()
+        ),
+    )
     with pytest.raises(OnyxError):
         decode_and_validate_oauth_state(
             request=request,
@@ -358,7 +375,12 @@ def test_fixed_callback_rejects_state_without_provider(
     monkeypatch.setattr(oidc_multi, "USER_AUTH_SECRET", _TEST_SECRET)
     csrf = generate_csrf_token()
     state = generate_state_token({"next_url": "/", CSRF_TOKEN_KEY: csrf}, _TEST_SECRET)
-    request = cast(Any, SimpleNamespace(cookies={CSRF_TOKEN_COOKIE_NAME: csrf}))
+    request = cast(
+        Any,
+        SimpleNamespace(
+            cookies={CSRF_TOKEN_COOKIE_NAME: csrf}, state=SimpleNamespace()
+        ),
+    )
     with pytest.raises(OnyxError):
         asyncio.run(
             oidc_multi.oidc_login_callback(
@@ -371,3 +393,114 @@ def test_fixed_callback_rejects_state_without_provider(
                 user_manager=cast(Any, None),
             )
         )
+
+
+def test_validate_config_pkce_and_scopes_on_oauth_types() -> None:
+    from onyx.db.sso_provider import validate_sso_config
+
+    oidc = validate_sso_config(
+        SSOProviderType.OIDC,
+        {**_OIDC_CONFIG, "pkce_enabled": True, "scopes": ["openid", "email"]},
+    )
+    assert oidc["pkce_enabled"] is True
+    assert oidc["scopes"] == ["openid", "email"]
+    google = validate_sso_config(
+        SSOProviderType.GOOGLE_OAUTH,
+        {**_GOOGLE_CONFIG, "pkce_enabled": True, "scopes": ["openid"]},
+    )
+    assert google["pkce_enabled"] is True
+    # SAML has no OAuth flow, so the fields are invalid there.
+    with pytest.raises(ValueError):
+        validate_sso_config(
+            SSOProviderType.SAML,
+            {
+                "idp_entity_id": "e",
+                "idp_sso_url": "https://idp/sso",
+                "idp_x509_cert": "cert",
+                "sp_entity_id": "sp",
+                "pkce_enabled": True,
+            },
+        )
+
+
+def test_pkce_row_true_sufficient_env_can_force_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(oidc_multi, "OIDC_PKCE_ENABLED", False)
+    assert oidc_multi._pkce_enabled({"pkce_enabled": True}) is True
+    assert oidc_multi._pkce_enabled({"pkce_enabled": False}) is False
+    assert oidc_multi._pkce_enabled({}) is False
+    # The deployment-wide env flag still forces PKCE on while it exists.
+    monkeypatch.setattr(oidc_multi, "OIDC_PKCE_ENABLED", True)
+    assert oidc_multi._pkce_enabled({"pkce_enabled": False}) is True
+
+
+def test_build_client_scopes_row_over_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_openid(
+        _client_id: str,
+        _client_secret: str,
+        _config_url: str,
+        *,
+        base_scopes: list[str],
+        **_kwargs: Any,
+    ) -> Any:
+        captured["scopes"] = base_scopes
+        return SimpleNamespace(base_scopes=base_scopes)
+
+    monkeypatch.setattr(oidc_multi, "VerifiedEmailOpenID", _fake_openid)
+    monkeypatch.setattr(oidc_multi, "OIDC_SCOPE_OVERRIDE", ["env-scope"])
+
+    # Row scopes win over the env override.
+    oidc_multi._build_client(
+        _provider(), {**_OIDC_CONFIG, "scopes": ["openid", "profile"]}
+    )
+    assert captured["scopes"] == ["openid", "profile", "offline_access"]
+
+    # Empty row scopes fall back to the env override.
+    oidc_multi._build_client(_provider(), {**_OIDC_CONFIG, "scopes": []})
+    assert captured["scopes"] == ["env-scope", "offline_access"]
+
+
+def test_build_client_google_scopes_row_over_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(oidc_multi, "GOOGLE_OAUTH_SCOPE_OVERRIDE", ["env-scope"])
+    provider = _provider(name="google", provider_type=SSOProviderType.GOOGLE_OAUTH)
+
+    client = oidc_multi._build_client(
+        provider, {**_GOOGLE_CONFIG, "scopes": ["openid", "email"]}
+    )
+    assert client.base_scopes == ["openid", "email"]
+
+    client = oidc_multi._build_client(provider, {**_GOOGLE_CONFIG, "scopes": []})
+    assert client.base_scopes == ["env-scope"]
+
+
+def test_state_pins_pkce_mode() -> None:
+    # The callback must honor the mode the authorize leg minted, not the
+    # row's current setting, so mid-flow provider edits cannot break logins.
+    csrf = generate_csrf_token()
+    state = generate_state_token(
+        {
+            "next_url": "/",
+            "provider_name": "okta",
+            "pkce": True,
+            CSRF_TOKEN_KEY: csrf,
+        },
+        _TEST_SECRET,
+    )
+    request = cast(
+        Any,
+        SimpleNamespace(
+            cookies={CSRF_TOKEN_COOKIE_NAME: csrf}, state=SimpleNamespace()
+        ),
+    )
+    data = decode_and_validate_oauth_state(
+        request=request,
+        state_value=state,
+        state_secret=_TEST_SECRET,
+        expected_provider_name="okta",
+    )
+    assert data["pkce"] is True

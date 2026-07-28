@@ -22,7 +22,6 @@ from onyx.server.features.build.sandbox.kubernetes import (
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 
 _STALE_PW = "stale-password"
@@ -112,12 +111,6 @@ def test_reuse_existing_pod_clears_stale_tombstone() -> None:
             sandbox_id=sandbox_id,
             user_id=uuid4(),
             tenant_id="public",
-            llm_config=LLMProviderConfig(
-                provider="openai",
-                model_name="gpt-5-mini",
-                api_key="sk-test",
-                api_base=None,
-            ),
             onyx_pat="pat-test",
         )
 

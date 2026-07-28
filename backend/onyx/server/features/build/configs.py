@@ -80,14 +80,7 @@ ENABLE_BROWSER = os.environ.get("ENABLE_BROWSER", "true").lower() == "true"
 SANDBOX_PUSH_PRIVATE_KEY = os.environ.get("ONYX_SANDBOX_PUSH_PRIVATE_KEY", "")
 
 
-# Provider types Craft supports. The recommended models per type come from the
-# shared recommended-models config (served via /build/recommended-models).
-BUILD_MODE_ALLOWED_PROVIDER_TYPES = ["anthropic", "openai", "openrouter"]
-
-# apiKey sentinel for a supported provider the org hasn't configured. We register
-# every supported provider so a cross-provider override never hits "model not
-# found"; an unconfigured one fails closed instead (proxy 403 / upstream 401).
-BUILD_MODE_NOT_CONFIGURED_API_KEY = "onyx-provider-not-configured"
+ONYX_GATEWAY_PROVIDER_ID = "onyx"
 
 # Dev/debug-only: exposes an SSE endpoint that tails the sandbox pod's
 # opencode-serve container logs. Never enable in prod — the logs include LLM I/O

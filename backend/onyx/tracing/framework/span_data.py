@@ -102,6 +102,7 @@ class GenerationSpanData(SpanData):
         "usage",
         "time_to_first_action_seconds",
         "tools",
+        "request_params",
     )
 
     def __init__(
@@ -115,6 +116,7 @@ class GenerationSpanData(SpanData):
         usage: dict[str, Any] | None = None,
         time_to_first_action_seconds: float | None = None,
         tools: Sequence[Mapping[str, Any]] | None = None,
+        request_params: Mapping[str, Any] | None = None,
     ):
         if image_count is not None and image_count < 1:
             raise ValueError("image_count must be positive")
@@ -127,6 +129,7 @@ class GenerationSpanData(SpanData):
         self.usage = usage
         self.time_to_first_action_seconds = time_to_first_action_seconds
         self.tools = tools
+        self.request_params = request_params
 
     @property
     def type(self) -> str:
@@ -144,4 +147,5 @@ class GenerationSpanData(SpanData):
             "usage": self.usage,
             "time_to_first_action_seconds": self.time_to_first_action_seconds,
             "tools": self.tools,
+            "request_params": self.request_params,
         }

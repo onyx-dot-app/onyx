@@ -23,7 +23,8 @@
 #    - Replace env_file with explicit environment variables
 #
 # 4. AUTHENTICATION:
-#    - Select an authentication method like Basic, Google OAuth, OIDC, or SAML
+#    - Email/password auth works out of the box. SSO (Google, OIDC, SAML) is
+#      configured from the admin panel: Admin Panel > Organization > SSO Providers
 #
 # 5. CA CERTIFICATES:
 #    - Uncomment custom CA certificate volumes if needed
@@ -43,6 +44,9 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      # The shipped image; the Dockerfile's default (last) stage is the dev variant
+      # with debugging tools (published with a -dev tag suffix).
+      target: runtime
     command: >
       /bin/sh -c "alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
@@ -122,6 +126,9 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      # The shipped image; the Dockerfile's default (last) stage is the dev variant
+      # with debugging tools (published with a -dev tag suffix).
+      target: runtime
     command: >
       /bin/sh -c "
       if [ -f /etc/ssl/certs/custom-ca.crt ]; then
@@ -226,6 +233,7 @@ services:
   #   build:
   #     context: ../../backend
   #     dockerfile: Dockerfile
+  #     target: runtime
   #   command: >
   #     /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED:-}\" != \"true\" ]; then
   #       echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';

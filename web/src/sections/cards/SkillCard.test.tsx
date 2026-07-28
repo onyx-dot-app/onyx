@@ -20,6 +20,7 @@ function builtIn(
     enabled: true,
     can_toggle: false,
     is_available: true,
+    external_app: null,
     ...overrides,
   };
 }
@@ -59,6 +60,7 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     can_toggle: skill.can_toggle,
     author_email: skill.author_email,
     is_personal: true,
+    external_app: skill.external_app,
   };
 }
 

@@ -1,7 +1,7 @@
 from typing import List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import column, desc, func, select
+from sqlalchemy import ColumnElement, column, desc, func, select
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql.expression import ColumnClause
 
@@ -15,7 +15,6 @@ def search_chat_sessions(
     page: int = 1,
     page_size: int = 10,
     include_deleted: bool = False,
-    include_onyxbot_flows: bool = False,
 ) -> Tuple[List[ChatSession], bool]:
     """
     Fast full-text search on ChatSession + ChatMessage using tsvectors.
@@ -32,14 +31,13 @@ def search_chat_sessions(
     if not query or not query.strip():
         stmt = (
             select(ChatSession)
+            .where(ChatSession.onyxbot_flow.is_(False))
             .order_by(desc(ChatSession.time_created))
             .offset(offset_val)
             .limit(page_size + 1)
         )
         if user_id is not None:
             stmt = stmt.where(ChatSession.user_id == user_id)
-        if not include_onyxbot_flows:
-            stmt = stmt.where(ChatSession.onyxbot_flow.is_(False))
         if not include_deleted:
             stmt = stmt.where(ChatSession.deleted.is_(False))
 
@@ -55,11 +53,9 @@ def search_chat_sessions(
     # Otherwise, proceed with full-text search
     query = query.strip()
 
-    base_conditions = []
+    base_conditions: list[ColumnElement[bool]] = [ChatSession.onyxbot_flow.is_(False)]
     if user_id is not None:
         base_conditions.append(ChatSession.user_id == user_id)
-    if not include_onyxbot_flows:
-        base_conditions.append(ChatSession.onyxbot_flow.is_(False))
     if not include_deleted:
         base_conditions.append(ChatSession.deleted.is_(False))
 

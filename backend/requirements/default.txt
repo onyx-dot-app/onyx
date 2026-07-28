@@ -688,6 +688,7 @@ defusedxml==0.7.1 \
     # via
     #   jira
     #   markitdown
+    #   nltk
 deprecated==1.3.1 \
     --hash=sha256:597bfef186b6f60181535a29fbe44865ce137a5079f295b479886c82729d5f3f \
     --hash=sha256:b1b50e0ff0c1fddaa5708a2c6b0a6588bb09b892825ab2b214ac9ea9d92a5223
@@ -921,9 +922,9 @@ gitdb==4.0.12 \
     --hash=sha256:5ef71f855d191a3326fcfbc0d5da835f26b13fbcba60c32c21091c349ffdb571 \
     --hash=sha256:67073e15955400952c6565cc3e707c554a4eea2e428946f7a4c162fab9bd9bcf
     # via gitpython
-gitpython==3.1.52 \
-    --hash=sha256:79a36ee1f83523214a3f72d56cf1c4e490d577dc61af77e43dfe5862bd9da01a \
-    --hash=sha256:de0a8ad86274c6e75ae8b37dd055ba68f19818c813108642263227b20775b48e
+gitpython==3.1.54 \
+    --hash=sha256:53f2085e24a2cda300eed7c3fc5f1559ae289634b725e98acaf4791940247aa0 \
+    --hash=sha256:b90d7b3d9bc0238681d24369130826f0dcdb0ceaa45db67cf1d4ffa4c302dedf
     # via braintrust
 google-api-core==2.28.1 \
     --hash=sha256:2b405df02d68e68ce0fbc138559e6036559e685159d148ae5861013dc201baf8 \
@@ -1141,9 +1142,9 @@ httpcore==1.0.9 \
     # via
     #   httpx
     #   unstructured-client
-httplib2==0.31.0 \
-    --hash=sha256:ac7ab497c50975147d4f7b1ade44becc7df2f8954d42b38b3d69c515f531135c \
-    --hash=sha256:b9cd78abea9b4e43a7714c6e0f8b6b8561a6fc1e95d5dbd367f5bf0ef35f5d24
+httplib2==0.32.0 \
+    --hash=sha256:48a0ef30a42db65d8f3399045e1d09ab0ba66e3b9efc360d07f80ea55d286025 \
+    --hash=sha256:dc6705cacdf3fb0a2aba7629fa33c90fd93e30035db0c157325826be177e4816
     # via
     #   google-api-python-client
     #   google-auth-httplib2
@@ -1169,9 +1170,9 @@ httpx-sse==0.4.3 \
     --hash=sha256:0ac1c9fe3c0afad2e0ebb25a934a59f4c7823b60792691f779fad2c5568830fc \
     --hash=sha256:9b1ed0127459a66014aec3c56bebd93da3c1bc8bb6618c8082039a44889a755d
     # via mcp
-hubspot-api-client==11.1.0 \
-    --hash=sha256:0c49e2c2f511a56d249c6890d2dfdd62afd04f66edc69a591e8348e28804634b \
-    --hash=sha256:93ed914f1cd4dad67bacf26b8a1ec8506847483fa801cb2bddd4b2d887d0f825
+hubspot-api-client==12.0.0 \
+    --hash=sha256:5426627ff808fdf259d5b5e4791667a323a2a82d36a834e7e43ec8e8f021aa08 \
+    --hash=sha256:ddfc60f3a80565dd5bf7fc7554d0d2dabad37926f547436158258772f1a04e69
 huggingface-hub==0.36.2 \
     --hash=sha256:1934304d2fb224f8afa3b87007d58501acfda9215b334eed53072dd5e815ff7a \
     --hash=sha256:48f0c8eac16145dfce371e9d2d7772854a4f591bcb56c9cf548accf531d54270
@@ -1734,9 +1735,9 @@ mypy-extensions==1.0.0 \
 nest-asyncio==1.6.0 \
     --hash=sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe \
     --hash=sha256:87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c
-nltk==3.9.4 \
-    --hash=sha256:ed03bc098a40481310320808b2db712d95d13ca65b27372f8a403949c8b523d0 \
-    --hash=sha256:f2fa301c3a12718ce4a0e9305c5675299da5ad9e26068218b69d692fda84828f
+nltk==3.10.0 \
+    --hash=sha256:4fbac1d98203cbcd1b5d94a2877fb822300072d80604a5e7fae49d2c5f84e8c1 \
+    --hash=sha256:54ff84d4916d3ef127e8953bee0023f6a6b320b75d634a19e06ef056d3d244bf
     # via unstructured
 numpy==2.4.1 \
     --hash=sha256:178de8f87948163d98a4c9ab5bee4ce6519ca918926ec8df195af582de28544d \
@@ -2050,9 +2051,9 @@ prometheus-client==0.23.1 \
     # via
     #   onyx
     #   prometheus-fastapi-instrumentator
-prometheus-fastapi-instrumentator==8.0.0 \
-    --hash=sha256:c31ed192db077e75467b28b2fe5055362517f53369b798cb8dac9ff85f3f1c38 \
-    --hash=sha256:e3c967c402124dfe81cf5aad35208d9f96db5452c6cb752350d9358ca0a96198
+prometheus-fastapi-instrumentator==8.0.2 \
+    --hash=sha256:3c252e748151768a7aefd66824a04a870144f71de48a67aed211749a9ca2a548 \
+    --hash=sha256:746002ec1e2c58b93f61444e1d104de959a9463a6a3f1c8909ac3757e16c3866
     # via onyx
 prompt-toolkit==3.0.52 \
     --hash=sha256:28cde192929c8e7321de85de1ddbe736f1375148b02f2e17edd840042b1be855 \

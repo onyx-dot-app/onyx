@@ -1,10 +1,10 @@
 import type { StorybookConfig } from "@storybook/react-vite";
-import path from "path";
+import path, { dirname } from "path";
 import { fileURLToPath } from "url";
 
 // Node 24 type-strips this file as ESM (no `__dirname`); older toolchains
 // transpile it to CJS (no `import.meta.url` shim), so support both.
-const dirname =
+const configDir =
   typeof __dirname !== "undefined"
     ? __dirname
     : path.dirname(fileURLToPath(import.meta.url));
@@ -17,15 +17,16 @@ const config: StorybookConfig = {
     "../src/sections/**/*.stories.@(ts|tsx)",
     "../src/app/craft/**/*.stories.@(ts|tsx)",
   ],
-  addons: ["@storybook/addon-essentials", "@storybook/addon-themes"],
+  addons: [
+    getAbsolutePath("@storybook/addon-themes"),
+    getAbsolutePath("@storybook/addon-mcp"),
+    getAbsolutePath("@storybook/addon-docs"),
+  ],
   framework: {
-    name: "@storybook/react-vite",
+    name: getAbsolutePath("@storybook/react-vite"),
     options: {},
   },
   staticDirs: ["../public"],
-  docs: {
-    autodocs: "tag",
-  },
   typescript: {
     reactDocgen: "react-docgen-typescript",
   },
@@ -33,18 +34,18 @@ const config: StorybookConfig = {
     config.resolve = config.resolve ?? {};
     config.resolve.alias = {
       ...config.resolve.alias,
-      "@": path.resolve(dirname, "../src"),
-      "@opal": path.resolve(dirname, "../lib/opal/src"),
-      "@public": path.resolve(dirname, "../public"),
+      "@": path.resolve(configDir, "../src"),
+      "@opal": path.resolve(configDir, "../lib/opal/src"),
+      "@public": path.resolve(configDir, "../public"),
       // Next.js module stubs for Vite
-      "next/link": path.resolve(dirname, "mocks/next-link.tsx"),
-      "next/navigation": path.resolve(dirname, "mocks/next-navigation.tsx"),
-      "next/image": path.resolve(dirname, "mocks/next-image.tsx"),
+      "next/link": path.resolve(configDir, "mocks/next-link.tsx"),
+      "next/navigation": path.resolve(configDir, "mocks/next-navigation.tsx"),
+      "next/image": path.resolve(configDir, "mocks/next-image.tsx"),
     };
 
     // Process CSS with Tailwind via PostCSS
     config.css = config.css ?? {};
-    config.css.postcss = path.resolve(dirname, "..");
+    config.css.postcss = path.resolve(configDir, "..");
 
     // Provide `process.env` for modules that reference it at the top level
     // (e.g. src/lib/constants.ts). Vite doesn't polyfill Node globals.
@@ -58,3 +59,7 @@ const config: StorybookConfig = {
 };
 
 export default config;
+
+function getAbsolutePath(value: string): any {
+  return dirname(fileURLToPath(import.meta.resolve(`${value}/package.json`)));
+}

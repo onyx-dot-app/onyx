@@ -1,6 +1,7 @@
 import {
   createCustomExternalApp,
   disconnectUserFromApp,
+  updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
 
 describe("createCustomExternalApp", () => {
@@ -26,9 +27,6 @@ describe("createCustomExternalApp", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
-    const request = jest.mocked(global.fetch).mock.calls[0]![1]!;
-    expect(request.body).not.toBeInstanceOf(FormData);
-    expect(String(request.body)).not.toContain("bundle");
   });
 
   it("disconnects through the credential deletion endpoint", async () => {
@@ -38,5 +36,21 @@ describe("createCustomExternalApp", () => {
       "/api/build/apps/17/credentials",
       { method: "DELETE" }
     );
+  });
+
+  it("sends one complete custom-skill association replacement", async () => {
+    await updateExternalApp(17, {
+      name: "Acme CRM",
+      associated_skill_ids: ["skill-a", "skill-b"],
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/build/admin/apps/17", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Acme CRM",
+        associated_skill_ids: ["skill-a", "skill-b"],
+      }),
+    });
   });
 });

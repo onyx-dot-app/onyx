@@ -78,7 +78,12 @@ export default async function Page(props: PageProps) {
 
   return (
     <div className="flex flex-col ">
-      <AuthFlowContainer authState="login">
+      {/* Kill switch off: omit authState so the signup footer drops. */}
+      <AuthFlowContainer
+        authState={
+          authTypeMetadata?.passwordAuthEnabled !== false ? "login" : undefined
+        }
+      >
         <LoginPage
           authUrl={authUrl}
           authTypeMetadata={authTypeMetadata}

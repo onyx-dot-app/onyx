@@ -25,6 +25,7 @@ import {
   SvgSimpleLoader,
   SvgUploadCloud,
 } from "@opal/icons";
+import { SvgGithub } from "@opal/logos";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -33,6 +34,7 @@ import SkillCard, {
   type SkillCardItem,
 } from "@/sections/cards/SkillCard";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
+import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
@@ -53,6 +55,7 @@ export default function SkillsPage() {
   const { data, error, isLoading, refresh } = useUserSkills();
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [githubImportOpen, setGitHubImportOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [previewTarget, setPreviewTarget] = useState<SkillCardItem | null>(
     null
@@ -204,6 +207,7 @@ export default function SkillsPage() {
         can_toggle: b.can_toggle,
         is_available: b.is_available,
         unavailable_reason: b.unavailable_reason,
+        external_app: b.external_app,
       }));
     const customItems: SkillCardItem[] = data.customs
       .filter((c): c is CustomSkill => c.source === "custom")
@@ -217,6 +221,7 @@ export default function SkillsPage() {
         is_personal: c.is_personal && c.user_permission === "OWNER",
         enabled: optimisticEnabledById.get(c.id) ?? c.enabled,
         can_toggle: c.can_toggle,
+        external_app: c.external_app,
       }));
     // Group order: built-in, then custom (org-wide), then personal; alphabetical within each group.
     const groupRank = (item: SkillCardItem): number => {
@@ -237,11 +242,8 @@ export default function SkillsPage() {
   const focusedAppName = useMemo(() => {
     if (focusedExternalAppId === null) return null;
     for (const item of items) {
-      if (
-        item.source === "custom" &&
-        item.skill.external_app?.external_app_id === focusedExternalAppId
-      ) {
-        return item.skill.external_app.name;
+      if (item.external_app?.external_app_id === focusedExternalAppId) {
+        return item.external_app.name;
       }
     }
     return null;
@@ -262,9 +264,7 @@ export default function SkillsPage() {
     return items.filter(
       (item) =>
         (focusedAppName === null ||
-          (item.source === "custom" &&
-            item.skill.external_app?.external_app_id ===
-              focusedExternalAppId)) &&
+          item.external_app?.external_app_id === focusedExternalAppId) &&
         (!q ||
           item.name.toLowerCase().includes(q) ||
           item.description.toLowerCase().includes(q))
@@ -313,6 +313,17 @@ export default function SkillsPage() {
                   }}
                 >
                   Upload a skill
+                </LineItem>
+                <LineItem
+                  icon={SvgGithub}
+                  description="Import one or more skills from a repository."
+                  wrapDescription
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    setGitHubImportOpen(true);
+                  }}
+                >
+                  Import from GitHub
                 </LineItem>
               </Popover.Menu>
             </Popover.Content>
@@ -411,6 +422,21 @@ export default function SkillsPage() {
           router.push(`/craft/v1/skills/new?draft=${draftId}` as Route);
         }}
       />
+
+      {githubImportOpen && (
+        <ImportSkillsFromGitHubModal
+          open
+          onClose={() => setGitHubImportOpen(false)}
+          onImported={() => {
+            void refresh().catch((refreshError: unknown) => {
+              console.error(
+                "Failed to refresh skills after GitHub import",
+                refreshError
+              );
+            });
+          }}
+        />
+      )}
 
       <SkillPreviewModal
         open={previewTarget !== null}

@@ -50,9 +50,15 @@ async function handleSamlCallback(
   }
 
   const response = await fetch(url.toString(), fetchOptions);
-  const setCookieHeader = response.headers.get("set-cookie");
 
-  if (!setCookieHeader) {
+  // Error responses can carry a Set-Cookie too, so status is the success
+  // signal, not cookie presence.
+  if (!response.ok) {
+    return authErrorRedirect(request, response, SEE_OTHER_REDIRECT_STATUS);
+  }
+
+  const setCookieHeaders = response.headers.getSetCookie();
+  if (setCookieHeaders.length === 0) {
     return authErrorRedirect(request, response, SEE_OTHER_REDIRECT_STATUS);
   }
 
@@ -63,7 +69,11 @@ async function handleSamlCallback(
     new URL(redirectDestination, getDomain(request)),
     SEE_OTHER_REDIRECT_STATUS
   );
-  redirectResponse.headers.set("set-cookie", setCookieHeader);
+  // Re-emit each Set-Cookie separately. Comma-joining would let one cookie's
+  // attributes bleed into another's.
+  for (const cookie of setCookieHeaders) {
+    redirectResponse.headers.append("set-cookie", cookie);
+  }
   return redirectResponse;
 }
 

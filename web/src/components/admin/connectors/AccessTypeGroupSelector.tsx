@@ -83,7 +83,7 @@ export function AccessTypeGroupSelector({
   ]);
 
   if (userGroupsIsLoading) {
-    return <div>Loading...</div>;
+    return null;
   }
   if (!businessTier) {
     return null;

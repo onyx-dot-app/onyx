@@ -11,31 +11,34 @@ from onyx.db.enums import SandboxStatus
 FileSet: TypeAlias = dict[str, bytes]
 
 
-class LLMProviderConfig(BaseModel):
-    """LLM provider configuration for sandbox provisioning.
+class GatewayModelConfig(BaseModel):
+    id: str
+    display_name: str
+    supports_reasoning: bool = False
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
 
-    Passed to SandboxManager.provision() to configure the LLM.
-    """
 
+class CraftLLMProviderConfig(BaseModel):
     provider: str
     model_name: str
     api_key: str | None
     api_base: str | None
+    display_name: str | None = None
+    models: list[GatewayModelConfig] | None = None
 
 
 class CraftMCPServerConfig(BaseModel):
     """A craft-enabled MCP server resolved for opencode `mcp` emission (URL only;
     the proxy injects credentials). ``key`` is the opencode server id.
 
-    ``server_id`` and ``authenticated`` are not emitted into ``opencode.json``;
-    they feed the per-session runtime hash so a hot reload fires when the server
-    set / tools change or the user (dis)connects credentials."""
+    ``server_id`` is not emitted into ``opencode.json``; it feeds the per-session
+    runtime hash so a hot reload fires when the server set or tools change."""
 
     key: str
     url: str
     disabled_tools: tuple[str, ...] = ()
     server_id: int
-    authenticated: bool = False
 
 
 class SandboxInfo(BaseModel):

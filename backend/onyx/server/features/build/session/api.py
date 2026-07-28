@@ -40,7 +40,7 @@ from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.sandbox.util.mcp_config import (
-    write_session_mcp_config,
+    resolve_craft_mcp_servers,
 )
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.locks import (
@@ -131,8 +131,6 @@ def create_session(
             session_manager = SessionManager(db_session)
             build_session = session_manager.get_or_create_empty_session(
                 user.id,
-                llm_provider_type=request.llm_provider_type,
-                llm_model_name=request.llm_model_name,
                 headless=request.headless,
             )
             sandbox = get_sandbox_by_user_id(db_session, user.id)
@@ -421,7 +419,7 @@ def restore_session(
                 db_session.commit()
                 db_session.refresh(sandbox)
 
-        llm_config, all_llm_configs = SessionManager(db_session).build_llm_configs(user)
+        llm_config = SessionManager(db_session).build_llm_configs(user)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
             mark_sandbox_provisioning(db_session, sandbox)
@@ -435,7 +433,6 @@ def restore_session(
                 user,
                 user.id,
                 tenant_id,
-                all_llm_configs,
             )
             db_session.commit()
 
@@ -471,9 +468,7 @@ def restore_session(
                             nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
                             connectable_apps_section=connectable_apps_section,
-                        )
-                        write_session_mcp_config(
-                            sandbox_manager, db_session, user, sandbox.id, session_id
+                            mcp_servers=resolve_craft_mcp_servers(db_session, user),
                         )
                         session.status = BuildSessionStatus.ACTIVE
                         session.skills_hash = sandbox.skills_hash
@@ -493,9 +488,7 @@ def restore_session(
                         llm_config=llm_config,
                         nextjs_port=session.nextjs_port,
                         connectable_apps_section=connectable_apps_section,
-                    )
-                    write_session_mcp_config(
-                        sandbox_manager, db_session, user, sandbox.id, session_id
+                        mcp_servers=resolve_craft_mcp_servers(db_session, user),
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     session.skills_hash = sandbox.skills_hash

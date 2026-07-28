@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import PayloadView from "@/app/craft/components/approvals/PayloadView";
 
 const meta: Meta<typeof PayloadView> = {

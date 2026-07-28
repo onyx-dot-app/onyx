@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import SimplePopover from "./SimplePopover";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";

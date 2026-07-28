@@ -131,6 +131,7 @@ async def get_auth_type(response: Response) -> AuthConfigResponse:
         password_require_special_char=security.password_require_special_char,
         has_users=has_users,
         oauth_enabled=OAUTH_ENABLED,
+        password_auth_enabled=security.password_auth_enabled,
         sso_providers=await run_in_threadpool(_fetch_sso_provider_options),
     )
 

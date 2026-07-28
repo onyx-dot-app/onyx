@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import SvgSimpleLoader from "@opal/icons/simple-loader";
 
 const meta: Meta<typeof SvgSimpleLoader> = {

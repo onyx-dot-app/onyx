@@ -90,6 +90,7 @@ def _run_turn_with_events(
     *,
     reclaimed: bool = False,
     prompt_slot: "_FakePromptSlot | None" = None,
+    session_missing: bool = False,
 ) -> SimpleNamespace:
     cache = FakeCache()
     db_session = _FakeDbSession()
@@ -117,6 +118,18 @@ def _run_turn_with_events(
         def ensure_sandbox_running(self, user_id_arg: UUID) -> SimpleNamespace:
             assert user_id_arg == user_id
             return SimpleNamespace(id=sandbox_id)
+
+        def get_session(
+            self, session_id_arg: UUID, user_id_arg: UUID
+        ) -> SimpleNamespace | None:
+            assert session_id_arg == session_id
+            assert user_id_arg == user_id
+            if session_missing:
+                return None
+            return SimpleNamespace(id=session_id)
+
+        def reconcile_session_llm_config(self, *args: object) -> None:
+            del args
 
         def prompt_slot(
             self,
@@ -173,7 +186,9 @@ def _run_turn_with_events(
         lambda: _fake_db_scope(db_session),
     )
     monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
-    monkeypatch.setattr(executor, "update_session_activity", lambda *_: None)
+    monkeypatch.setattr(
+        executor, "fetch_user_by_id", lambda *_: SimpleNamespace(id=user_id)
+    )
     monkeypatch.setattr(executor, "is_interrupt_requested", lambda *_: False)
     monkeypatch.setattr(executor, "clear_interrupt", lambda *_: None)
 
@@ -220,6 +235,18 @@ def test_runner_succeeds_on_prompt_response(monkeypatch: pytest.MonkeyPatch) -> 
     assert result.prompt_slot.exited
     assert result.prompt_slot.extend_calls == 1
     assert result.db_session.rollbacks == 0
+
+
+def test_runner_fails_turn_when_session_deleted_mid_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompt_response = PromptResponse.model_validate({"stopReason": "end_turn"})
+
+    result = _run_turn_with_events(monkeypatch, [prompt_response], session_missing=True)
+
+    finished = get_turn(result.cache, result.turn.turn_id)
+    assert finished is not None
+    assert finished.status == TURN_STATUS_FAILED
 
 
 def test_runner_fails_turn_on_sandbox_error(
@@ -365,6 +392,16 @@ def test_ownership_recheck_after_slot_acquire(
             assert user_id_arg == user_id
             return SimpleNamespace(id=sandbox_id)
 
+        def get_session(
+            self, session_id_arg: UUID, user_id_arg: UUID
+        ) -> SimpleNamespace:
+            assert session_id_arg == session_id
+            assert user_id_arg == user_id
+            return SimpleNamespace(id=session_id)
+
+        def reconcile_session_llm_config(self, *args: object) -> None:
+            del args
+
         def prompt_slot(
             self,
             sandbox_id_arg: UUID,
@@ -401,7 +438,9 @@ def test_ownership_recheck_after_slot_acquire(
         lambda: _fake_db_scope(db_session),
     )
     monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
-    monkeypatch.setattr(executor, "update_session_activity", lambda *_: None)
+    monkeypatch.setattr(
+        executor, "fetch_user_by_id", lambda *_: SimpleNamespace(id=user_id)
+    )
     monkeypatch.setattr(executor, "is_interrupt_requested", lambda *_: False)
     monkeypatch.setattr(executor, "clear_interrupt", lambda *_: None)
 
@@ -475,6 +514,16 @@ def test_prompt_slot_busy_does_not_finish_reclaimed_turn(
             assert user_id_arg == user_id
             return SimpleNamespace(id=sandbox_id)
 
+        def get_session(
+            self, session_id_arg: UUID, user_id_arg: UUID
+        ) -> SimpleNamespace:
+            assert session_id_arg == session_id
+            assert user_id_arg == user_id
+            return SimpleNamespace(id=session_id)
+
+        def reconcile_session_llm_config(self, *args: object) -> None:
+            del args
+
         def prompt_slot(
             self,
             sandbox_id_arg: UUID,
@@ -493,6 +542,9 @@ def test_prompt_slot_busy_does_not_finish_reclaimed_turn(
         lambda: _fake_db_scope(db_session),
     )
     monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
+    monkeypatch.setattr(
+        executor, "fetch_user_by_id", lambda *_: SimpleNamespace(id=user_id)
+    )
 
     executor.run_claimed_interactive_build_turn(claimed, budget_seconds=30)
 
@@ -539,6 +591,16 @@ def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
             assert user_id_arg == user_id
             return SimpleNamespace(id=sandbox_id)
 
+        def get_session(
+            self, session_id_arg: UUID, user_id_arg: UUID
+        ) -> SimpleNamespace:
+            assert session_id_arg == session_id
+            assert user_id_arg == user_id
+            return SimpleNamespace(id=session_id)
+
+        def reconcile_session_llm_config(self, *args: object) -> None:
+            del args
+
         def prompt_slot(
             self,
             sandbox_id_arg: UUID,
@@ -580,7 +642,9 @@ def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
         lambda: _fake_db_scope(db_session),
     )
     monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
-    monkeypatch.setattr(executor, "update_session_activity", lambda *_: None)
+    monkeypatch.setattr(
+        executor, "fetch_user_by_id", lambda *_: SimpleNamespace(id=user_id)
+    )
     monkeypatch.setattr(executor, "is_interrupt_requested", lambda *_: False)
     monkeypatch.setattr(
         executor,
@@ -707,6 +771,16 @@ def _run_turn_with_batches(
             assert user_id_arg == user_id
             return SimpleNamespace(id=sandbox_id)
 
+        def get_session(
+            self, session_id_arg: UUID, user_id_arg: UUID
+        ) -> SimpleNamespace:
+            assert session_id_arg == session_id
+            assert user_id_arg == user_id
+            return SimpleNamespace(id=session_id)
+
+        def reconcile_session_llm_config(self, *args: object) -> None:
+            del args
+
         def prompt_slot(
             self,
             sandbox_id_arg: UUID,
@@ -753,7 +827,9 @@ def _run_turn_with_batches(
         lambda: _fake_db_scope(db_session),
     )
     monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
-    monkeypatch.setattr(executor, "update_session_activity", lambda *_: None)
+    monkeypatch.setattr(
+        executor, "fetch_user_by_id", lambda *_: SimpleNamespace(id=user_id)
+    )
     monkeypatch.setattr(executor, "is_interrupt_requested", lambda *_: False)
     monkeypatch.setattr(executor, "clear_interrupt", lambda *_: None)
 

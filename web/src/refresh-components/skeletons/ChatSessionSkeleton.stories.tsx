@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import ChatSessionSkeleton from "./ChatSessionSkeleton";
 
 const meta: Meta<typeof ChatSessionSkeleton> = {

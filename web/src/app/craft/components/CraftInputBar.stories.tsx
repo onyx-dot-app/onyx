@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SWRConfig } from "swr";
 import { UserProvider } from "@/providers/UserProvider";
 import { UploadFilesProvider } from "@/app/craft/contexts/UploadFilesContext";

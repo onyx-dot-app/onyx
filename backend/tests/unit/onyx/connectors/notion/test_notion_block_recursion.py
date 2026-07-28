@@ -80,7 +80,9 @@ class TestDeepNesting:
         connector.workspace_id = "ws-1"
 
         def fake_read_blocks(
-            base_block_id: str, _containing_page_id: str | None = None
+            base_block_id: str,
+            _containing_page_id: str | None = None,
+            is_slim: bool = False,  # noqa: ARG001
         ) -> BlockReadOutput:
             level = int(base_block_id.rsplit("-", 1)[1])
             next_level = level + 1

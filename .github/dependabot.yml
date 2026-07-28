@@ -22,6 +22,8 @@ updates:
       - "jmelahman"
     labels:
       - "dependabot:python"
+    ignore:
+      - dependency-name: "types-*"
   - package-ecosystem: "bun"
     directory: "/"
     schedule:

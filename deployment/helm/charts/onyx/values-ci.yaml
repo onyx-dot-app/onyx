@@ -123,9 +123,15 @@ webserver:
 
 api:
   replicaCount: 1
-  # The workflow runs `alembic upgrade head` once after Postgres is reachable.
-  # Keep API startup from racing that centralized migration step.
-  runStartupMigrations: false
+  runStartupMigrations: true
+  # The API port opens only after startup migrations finish and Uvicorn starts.
+  # This makes rollout status a reliable migration-completion barrier.
+  readinessProbe:
+    tcpSocket:
+      port: api-server-port
+    periodSeconds: 2
+    timeoutSeconds: 1
+    failureThreshold: 180
   resources:
     requests:
       cpu: 250m

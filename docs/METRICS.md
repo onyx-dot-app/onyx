@@ -23,9 +23,9 @@ Use `prometheus_client` types directly at module level:
 from prometheus_client import Counter
 
 _my_counter = Counter(
-    "onyx_my_counter_total",          # Always prefix with onyx_
+    "onyx_my_counter_total",  # Always prefix with onyx_
     "Human-readable description",
-    ["label_a", "label_b"],           # Keep label cardinality low
+    ["label_a", "label_b"],  # Keep label cardinality low
 )
 ```
 
@@ -45,6 +45,7 @@ If your metric needs to run on every HTTP request, write a callback and register
 ```python
 # metrics/my_metric.py
 from prometheus_fastapi_instrumentator.metrics import Info
+
 
 def my_metric_callback(info: Info) -> None:
     _my_counter.labels(label_a=info.method, label_b=info.modified_handler).inc()
@@ -312,6 +313,7 @@ from onyx.server.metrics.celery_task_metrics import (
     on_celery_task_rejected,
 )
 
+
 @signals.task_prerun.connect
 def on_task_prerun(sender, task_id, task, args, kwargs, **kwds):
     app_base.on_task_prerun(sender, task_id, task, args, kwargs, **kwds)
@@ -324,6 +326,7 @@ Do the same for `task_postrun`, `task_retry`, `task_revoked`, and `task_rejected
 
 ```python
 from onyx.server.metrics.metrics_server import start_metrics_server
+
 
 @worker_ready.connect
 def on_worker_ready(sender, **kwargs):
