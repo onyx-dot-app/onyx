@@ -4,8 +4,8 @@
 #!#   docker-compose.prod.yml                (variant: prod)
 #!#   docker-compose.prod-no-letsencrypt.yml (variant: no-letsencrypt)
 #!# Edit THIS file, then regenerate with:
-#!#   python3 deployment/docker_compose/generate_compose.py --write
-#!# Directive reference: see the docstring in generate_compose.py.
+#!#   ods generate-compose --write
+#!# Directive reference: run `ods generate-compose --help`.
 #!# ===========================================================================
 #!for default
 # =============================================================================

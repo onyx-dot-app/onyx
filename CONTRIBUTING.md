@@ -319,8 +319,8 @@ docker compose up -d --build
 
 > **Note:** `docker-compose.yml`, `docker-compose.prod.yml` and
 > `docker-compose.prod-no-letsencrypt.yml` are generated from `docker-compose.template.yml`
-> (enforced by the `docker-compose-sync` pre-commit hook) — edit the template, not the
-> generated files. See `deployment/docker_compose/README.md`.
+> by `ods generate-compose` (enforced by the `docker-compose-sync` pre-commit hook) — edit
+> the template, not the generated files. See `deployment/docker_compose/README.md`.
 
 ---
 
