@@ -47,8 +47,6 @@ from onyx.server.gateway.models import (
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.span_data import GenerationSpanData
-from onyx.tracing.framework.spans import Span
 from onyx.tracing.llm_utils import (
     llm_generation_span,
     record_llm_response,
@@ -211,14 +209,6 @@ def _emit_stream_error(
     _put_stream_item(out, "data: [DONE]\n\n", cancelled)
 
 
-def _set_span_error(
-    span: Span[GenerationSpanData] | None,
-    exc: Exception,
-) -> None:
-    if span is not None:
-        span.set_error({"message": f"{type(exc).__name__}: {exc}", "data": None})
-
-
 def _stream_worker(
     llm: LLM,
     flow: LLMFlow,
@@ -240,7 +230,6 @@ def _stream_worker(
         final_usage: Usage | None = None
         tool_call_buffer: dict[int, ChatCompletionDeltaToolCall] = {}
         sent_role = False
-        sent_data_frame = False
         upstream: Iterator[ModelResponseStream] | None = None
         try:
             upstream = llm.stream(
@@ -270,70 +259,32 @@ def _stream_worker(
                     out, f"data: {json.dumps(payload.to_wire())}\n\n", cancelled
                 ):
                     break
-                sent_data_frame = True
             else:
                 _put_stream_item(out, "data: [DONE]\n\n", cancelled)
         except LLMStreamingToolUseUnsupportedError as exc:
-            if sent_data_frame or not tools:
-                _set_span_error(span, exc)
-                logger.exception(
-                    "LLM gateway stream tool-use mismatch cannot fallback for model %s",
-                    model,
+            if span is not None:
+                span.set_error(
+                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
                 )
-                _emit_stream_error(
-                    out,
-                    cancelled,
-                    message="The upstream LLM request failed.",
-                    error_type="upstream_error",
-                )
-                return
-
-            logger.info(
-                "LLM gateway falling back to non-streaming tool request for model %s",
+            logger.warning(
+                "Model %s does not support streaming tool use required by Craft: %s",
                 model,
+                exc,
             )
-            try:
-                response = llm.invoke_nonstream(
-                    prompt=messages,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    structured_response_format=structured_response_format,
-                    max_tokens=max_tokens,
-                    reasoning_effort=reasoning_effort,
-                )
-            except Exception as fallback_exc:
-                _set_span_error(span, fallback_exc)
-                logger.exception(
-                    "LLM gateway non-stream fallback failed for model %s",
-                    model,
-                )
-                _emit_stream_error(
-                    out,
-                    cancelled,
-                    message="The upstream LLM request failed.",
-                    error_type="upstream_error",
-                )
-                return
-            if response.choice.message.content:
-                accumulated_content.append(response.choice.message.content)
-            if response.choice.message.reasoning_content:
-                accumulated_reasoning.append(response.choice.message.reasoning_content)
-            if response.usage:
-                final_usage = response.usage
-            for index, tool_call in enumerate(response.choice.message.tool_calls or []):
-                tool_call_buffer[index] = ChatCompletionDeltaToolCall(
-                    id=tool_call.id,
-                    index=index,
-                    type=tool_call.type,
-                    function=tool_call.function,
-                )
-            payload = ChatCompletionChunk.from_model_response(response, model)
-            if _put_stream_item(
-                out, f"data: {json.dumps(payload.to_wire())}\n\n", cancelled
-            ):
-                _put_stream_item(out, "data: [DONE]\n\n", cancelled)
+            _emit_stream_error(
+                out,
+                cancelled,
+                message=(
+                    "This model does not support streaming tool use, which is "
+                    "required by Craft. Please choose a different model."
+                ),
+                error_type="unsupported_model",
+            )
         except LLMRateLimitError as exc:
-            _set_span_error(span, exc)
+            if span is not None:
+                span.set_error(
+                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
+                )
             logger.exception("LLM gateway stream rate limited for model %s", model)
             # The HTTP status is already sent; surface the failure in-band the
             # way OpenAI-compatible servers do so the client fails the turn.
@@ -344,7 +295,10 @@ def _stream_worker(
                 error_type="rate_limit_error",
             )
         except LLMTimeoutError as exc:
-            _set_span_error(span, exc)
+            if span is not None:
+                span.set_error(
+                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
+                )
             logger.exception("LLM gateway stream timed out for model %s", model)
             _emit_stream_error(
                 out,
@@ -353,7 +307,10 @@ def _stream_worker(
                 error_type="timeout_error",
             )
         except Exception as exc:
-            _set_span_error(span, exc)
+            if span is not None:
+                span.set_error(
+                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
+                )
             logger.exception("LLM gateway stream failed for model %s", model)
             _emit_stream_error(
                 out,
@@ -497,7 +454,8 @@ def handle_chat_completion(
                 "The selected model did not respond in time.",
             ) from e
         except Exception as e:
-            _set_span_error(span, e)
+            if span is not None:
+                span.set_error({"message": f"{type(e).__name__}: {e}", "data": None})
             logger.exception("LLM gateway invoke failed for model %s", request.model)
             raise OnyxError(
                 OnyxErrorCode.BAD_GATEWAY,

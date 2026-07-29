@@ -1085,53 +1085,6 @@ class LitellmLLM(LLM):
             if client is not None:
                 client.close()
 
-    def invoke_nonstream(
-        self,
-        prompt: LanguageModelInput,
-        tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
-        structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
-        max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
-        user_identity: LLMUserIdentity | None = None,
-    ) -> ModelResponse:
-        from litellm import HTTPHandler
-        from litellm import ModelResponse as LiteLLMModelResponse
-
-        from onyx.llm.model_response import from_litellm_model_response
-
-        client = None
-        if self._uses_isolated_client():
-            client = HTTPHandler(timeout=timeout_override or self._timeout)
-
-        try:
-            response = cast(
-                LiteLLMModelResponse,
-                self._completion(
-                    prompt=prompt,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    stream=False,
-                    structured_response_format=structured_response_format,
-                    timeout_override=timeout_override,
-                    max_tokens=max_tokens,
-                    parallel_tool_calls=True,
-                    reasoning_effort=reasoning_effort,
-                    user_identity=user_identity,
-                    client=client,
-                ),
-            )
-
-            model_response = from_litellm_model_response(response)
-            if model_response.usage:
-                self._track_llm_cost(model_response.usage)
-
-            return model_response
-        finally:
-            if client is not None:
-                client.close()
-
     def stream(
         self,
         prompt: LanguageModelInput,

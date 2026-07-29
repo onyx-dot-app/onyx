@@ -34,19 +34,18 @@ class LLMConfig(BaseModel):
 class LLM(abc.ABC):
     """Abstract base for every LLM backend used by Onyx.
 
-    Concrete subclasses have their ``invoke``, ``invoke_nonstream``, and
-    ``stream`` methods auto-wrapped (via ``__init_subclass__`` below) with a
-    fallback braintrust ``generation_span``. This guarantees that every LLM
-    call — from any call site, including future subclasses — is captured in
-    braintrust without per-callsite instrumentation. Callers that explicitly
-    wrap their calls with ``llm_generation_span`` are unaffected: the fallback
-    detects the outer span and no-ops.
+    Concrete subclasses have their ``invoke`` and ``stream`` methods
+    auto-wrapped (via ``__init_subclass__`` below) with a fallback braintrust
+    ``generation_span``. This guarantees that every LLM call — from any call
+    site, including future subclasses — is captured in braintrust without
+    per-callsite instrumentation. Callers that explicitly wrap their calls
+    with ``llm_generation_span`` are unaffected: the fallback detects the
+    outer span and no-ops.
     """
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         cls._wrap_method_if_defined("invoke", wrap_invoke)
-        cls._wrap_method_if_defined("invoke_nonstream", wrap_invoke)
         cls._wrap_method_if_defined("stream", wrap_stream)
 
     @classmethod
@@ -72,19 +71,6 @@ class LLM(abc.ABC):
         raise NotImplementedError
 
     def invoke(
-        self,
-        prompt: LanguageModelInput,
-        tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
-        structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
-        max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
-        user_identity: LLMUserIdentity | None = None,
-    ) -> "ModelResponse":
-        raise NotImplementedError
-
-    def invoke_nonstream(
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,

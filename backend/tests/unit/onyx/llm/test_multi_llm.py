@@ -513,40 +513,6 @@ def test_generic_streaming_bad_request_is_not_classified(
             list(default_multi_llm.stream(_hi_prompt(), tools=_bash_tool()))
 
 
-def test_invoke_nonstream_uses_true_nonstream_transport_and_tracks_usage(
-    default_multi_llm: LitellmLLM,
-) -> None:
-    response = litellm.ModelResponse(
-        id="chatcmpl-nonstream",
-        created=1784578000,
-        model="gpt-3.5-turbo",
-        choices=[
-            {
-                "index": 0,
-                "finish_reason": "stop",
-                "message": {"role": "assistant", "content": "done"},
-            }
-        ],
-        usage={"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7},
-    )
-    tools = _bash_tool()
-
-    with (
-        patch("litellm.completion", return_value=response) as mock_completion,
-        patch.object(default_multi_llm, "_track_llm_cost") as track_cost,
-    ):
-        result = default_multi_llm.invoke_nonstream(_hi_prompt(), tools=tools)
-
-    assert result.choice.message.content == "done"
-    assert result.usage is not None
-    track_cost.assert_called_once_with(result.usage)
-    kwargs = mock_completion.call_args.kwargs
-    assert kwargs["stream"] is False
-    assert kwargs["tools"] == tools
-    assert "stream_options" not in kwargs
-    assert kwargs["parallel_tool_calls"] is True
-
-
 ANTHROPIC_MODELS_OMITTING_SAMPLING_PARAMS = [
     "claude-opus-4-7",
     "claude-opus-4-7@20260101",
