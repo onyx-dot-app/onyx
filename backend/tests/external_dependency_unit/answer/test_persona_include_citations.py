@@ -29,14 +29,15 @@ from onyx.chat import process_message
 from onyx.db.chat import create_chat_session
 from onyx.db.persona import upsert_persona
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    CitationInfo,
+    Packet,
+)
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.answer.stream_test_utils import tokenise
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.mock_llm import LLMAnswerResponse
-from tests.external_dependency_unit.mock_llm import use_mock_llm
+from tests.external_dependency_unit.mock_llm import LLMAnswerResponse, use_mock_llm
 
 
 @pytest.mark.parametrize(

@@ -10,14 +10,12 @@ full multi-cycle loop (which is brittle to set up).
 """
 
 from contextlib import contextmanager
-from typing import Any
-from typing import Iterator
+from typing import Any, Iterator
 from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.chat.citation_processor import CitationMode
-from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.citation_processor import CitationMode, DynamicCitationProcessor
 from onyx.chat.models import LlmStepResult
 from onyx.deep_research import dr_loop
 
@@ -52,7 +50,9 @@ def test_generate_final_report_citation_mode(
 
     # Isolate the decision point: skip tracing, history construction, and the LLM call.
     monkeypatch.setattr(dr_loop, "run_llm_step", fake_run_llm_step)
-    monkeypatch.setattr(dr_loop, "construct_message_history", lambda *a, **k: [])
+    monkeypatch.setattr(
+        dr_loop, "construct_message_history", lambda *_args, **_kwargs: []
+    )
     monkeypatch.setattr(dr_loop, "function_span", _noop_span)
 
     llm = MagicMock()

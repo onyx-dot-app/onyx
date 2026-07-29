@@ -16,10 +16,11 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
-from tests.integration.common_utils.test_file_utils import create_test_image
-from tests.integration.common_utils.test_file_utils import create_test_pdf
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_file_utils import (
+    create_test_image,
+    create_test_pdf,
+)
+from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
 
 _DUMMY_OPENAI_API_KEY = "sk-mock-chat-file-upload-tests"
 _MOCK_ANSWER = "I can see the attachment."
