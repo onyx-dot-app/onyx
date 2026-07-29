@@ -1654,6 +1654,34 @@ sandboxPod:
       value: sandbox
       effect: NoSchedule
 
+# -- Pre-pull the sandbox image onto the sandbox node pool (DaemonSet), so a
+# user's first sandbox on a node doesn't pay the image pull (~31s measured).
+# Image and pull policy are shared with the sandbox-pod PodTemplate; scheduling
+# follows sandboxPod above. Only rendered when configMap.ENABLE_CRAFT is true.
+#
+# Costs ~3.3 GB of unreclaimable disk per sandbox node, on the same disk as the
+# sandbox workspaces. Disable on nodes without that headroom. Pin global.version
+# to an immutable tag when using this: a mutable tag like `latest` gets held at
+# whichever digest the node pulled first.
+sandboxImagePrepull:
+  enabled: true
+  resources:
+    cpu: 10m
+    memory: 32Mi
+    ephemeralStorage: 64Mi
+  # Below cluster-autoscaler's expendable-pods cutoff (-10), so a pending
+  # prepuller is never itself a reason to scale up.
+  priorityClass:
+    create: true
+    value: -11
+  # Set to use an existing PriorityClass instead; skips creating the one above.
+  # create: false with this left empty is a valid opt-out, but drops the pod to
+  # the cluster default priority, where it competes with sandbox pods.
+  priorityClassName: ""
+  # Nodes that repull at once on a tag bump. Raise to warm a large pool faster,
+  # at the cost of a thundering herd against the registry.
+  updateMaxUnavailable: "25%"
+
 # -- Sandbox egress proxy.
 sandboxProxy:
   # Allow IPv6 (::/0 minus link-local/IMDS) egress from the proxy. OFF by default: the AWS

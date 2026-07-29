@@ -122,33 +122,174 @@ so the prod image still has it but dev/CI images can opt out.
 
 ## Cold pulls vs. image warming — decision and roadmap
 
-**Current state: we accept cold image pulls on freshly-scheduled nodes.**
+**Current state: we pre-pull the sandbox image onto the sandbox node
+pool with a DaemonSet.** Chart: `sandboxImagePrepull` in `values.yaml`,
+template `sandbox-image-prepuller.yaml`. On by default when
+`ENABLE_CRAFT` is set.
 
-The first sandbox pod scheduled to a new node pays the registry-pull cost
-(~3–6 s for the trimmed image at typical AZ-local bandwidth; see the
-benchmark below). Every subsequent pod on that node hits warm-start
-(~900 ms) until the kubelet GCs the image.
+This section previously recorded the opposite decision — that we accept
+cold pulls — on an estimate of ~3–6 s per pull from AZ-local bandwidth.
+Measurement contradicted it. Evicting `onyxdotapp/sandbox:latest` from a
+kind node and timing `crictl pull` (1070 MB compressed, 34 MB/s
+effective) gave:
 
-### What we considered and rejected
+| | pull | create → Ready |
+|---|---|---|
+| cold pull | **31.4 s** | 32.6 s |
+| blobs cached, image record dropped | 1.4 s | 3.3 s |
 
-A DaemonSet (`sandbox-image-warmer`) that runs the sandbox image with
-`sleep infinity` on every node in the `onyx.app/workload=sandbox` pool.
-The kubelet won't GC images that are referenced by a running pod, so
-this pins the layers on disk indefinitely and every real sandbox pod
-sees warm-start latency.
+~5x the old estimate, which had assumed a same-region registry. The
+realistic case is a self-hosted install pulling Docker Hub over its own
+link.
 
-Rejected because the cost (an always-on pod per node, more Helm
-template surface, another workload to monitor) outweighs the win for
-our current scale and image size. The warmer also doesn't help the
-*first* pod on a freshly-autoscaled node — the warmer pod itself still
-has to pull before it can pin anything.
+It also isn't only latency. That cost lands inside the 90 s budget
+`_wait_for_pod_ip` shares with the opencode-history restore, so on a
+slower link the download alone blows the deadline and provisioning
+*fails* with `Timeout waiting for sandbox pod ... to be assigned an IP`
+— or succeeds and starves the restore. Nodes lack the image whenever
+they're new, whenever no sandbox has landed on them yet, after a tag
+bump, or after kubelet image GC reclaims it.
 
-### Optimal solution if cold pulls ever become painful
+### Why the DaemonSet is shaped the way it is
+
+Each of these fails *silently* if changed — the DaemonSet reports Ready
+while sandboxes go on cold-pulling, and the only symptom is the slow
+provisioning the feature was meant to remove. There are render-time
+tests for all of them in
+`backend/tests/unit/onyx/server/features/build/sandbox/test_sandbox_image_prepuller.py`.
+
+Those tests need `helm` and the chart's subchart tarballs, which are
+gitignored, so they skip in the `backend/tests/unit` lane and no CI lane
+currently supplies both. Until one does they are a local guard — run
+them (after `helm dependency build deployment/helm/charts/onyx`) when
+you touch these templates, and don't assume CI caught a drift for you.
+
+- **A DaemonSet, not a one-shot pre-pull Job.** The kubelet only exempts
+  images referenced by a *running* pod from image GC. A Job pulls and
+  exits, leaving the layers evictable (default
+  `imageGCHighThresholdPercent` 85%) with nothing to signal it. A
+  long-lived pod pins them, and a DaemonSet also covers nodes that join
+  after install.
+- **The image ref *and pull policy* are shared with the sandbox
+  PodTemplate**, via the `onyx.sandboxImage` /
+  `onyx.sandboxImagePullPolicy` helpers. A drifted tag pins layers nobody
+  uses while every sandbox still cold-pulls. The pull policy is part of
+  that, not a detail: pinning the prepuller to `IfNotPresent` while the
+  sandbox pods run `Always` reproduces the same drift one level down —
+  on a mutable tag the sandboxes fetch the new digest and the prepuller
+  keeps the old one resident and GC-exempt.
+- **Scheduling mirrors `sandboxPod`** (nodeSelector + tolerations), or
+  it warms the wrong pool.
+- **Pull credentials come from the sandbox ServiceAccount only**, the
+  same single route the sandbox PodTemplate uses. See "Private
+  registries" below for why the chart-wide `.Values.imagePullSecrets`
+  is not an option here.
+- **Priority `-11`, `preemptionPolicy: Never`.** Strictly below
+  cluster-autoscaler's default `--expendable-pods-priority-cutoff` of
+  -10, so a pending prepuller is never itself read as demand for a new
+  node — at exactly -10 it is *not* expendable. It also sits below a
+  sandbox pod, so one can preempt it; a sandbox running on the node pins
+  the image itself, making the prepuller redundant exactly when it would
+  compete. Don't over-read the preemption half: the prepuller holds 10m
+  CPU / 32Mi, so evicting it will not unblock a sandbox that wants 1000m
+  / 2Gi. It mainly guarantees the prepuller is never the *reason* for a
+  scale-up. This does *not* reorder disk-pressure eviction — kubelet
+  ranks "exceeds ephemeral-storage request" ahead of priority, and
+  evicting the prepuller frees ~0 bytes anyway. Setting
+  `priorityClass.create: false` without also setting `priorityClassName`
+  is a supported opt-out (for clusters where PriorityClasses are managed
+  centrally) but forfeits all of the above: the pod falls to the cluster
+  default priority and competes with sandbox pods. Point
+  `priorityClassName` at an existing low-priority class instead.
+- **A portable idle loop**, not `sleep infinity` — a GNU coreutils
+  extension that dies on busybox/alpine. A CrashLooping prepuller unpins
+  the image.
+- **Labelled `component: sandbox-image-prepuller`**, not
+  `component: sandbox`, which is the selector for the sandbox
+  NetworkPolicies — *and* given its own deny-all NetworkPolicy as a
+  result. Staying out of that selector also leaves it out of the sandbox
+  default-deny, which would otherwise make the prepuller the one
+  unrestricted pod in the sandbox namespace, running the sandbox image.
+  It needs no network: the pull is the kubelet's, not the pod's.
+
+Pin `global.version` (or `configMap.SANDBOX_CONTAINER_IMAGE`) to an
+immutable tag when running the prepuller. Holding a mutable tag like
+`latest` keeps whichever digest a node pulled first resident and
+GC-exempt: the DaemonSet spec doesn't change when the tag is repointed,
+so nothing restarts the pod to re-resolve it, and the image GC pass that
+used to let the node drift back to a fresh `latest` no longer runs on
+it. Under `pullPolicy: Always` the restart does re-resolve, which is why
+the policy is shared rather than hardcoded.
+
+### Private registries
+
+Relevant only if you mirror the sandbox image into your own registry;
+the default `onyxdotapp/sandbox` on Docker Hub is public and needs no
+credentials.
+
+**Attach the pull secret to the sandbox ServiceAccount. Chart-level
+`imagePullSecrets` will not work for sandbox workloads.** Both the
+prepuller and the sandbox pods run in `SANDBOX_NAMESPACE`
+(`onyx-sandboxes` by default), while `.Values.imagePullSecrets` names
+secrets in the *release* namespace — and a kubelet resolves an
+imagePullSecret in the pod's own namespace. Listing those names on a
+sandbox-namespace pod points at secrets that do not exist there.
+
+Both the namespace and the account name are configurable, and both pods
+follow whatever the configMap sets — patching the default `sandbox`
+account on a deployment that overrode `SANDBOX_SERVICE_ACCOUNT_NAME`
+leaves the real account uncredentialed and every pull failing:
+
+```bash
+# Chart defaults. Override to match configMap.SANDBOX_NAMESPACE and
+# configMap.SANDBOX_SERVICE_ACCOUNT_NAME if your deployment sets them.
+SANDBOX_NS=onyx-sandboxes
+SANDBOX_SA=sandbox
+
+kubectl -n "$SANDBOX_NS" create secret docker-registry regcred \
+  --docker-server=... --docker-username=... --docker-password=...
+kubectl -n "$SANDBOX_NS" patch serviceaccount "$SANDBOX_SA" \
+  -p '{"imagePullSecrets":[{"name":"regcred"}]}'
+
+# Confirm it took, on the account the pods actually use.
+kubectl -n "$SANDBOX_NS" get sa "$SANDBOX_SA" -o jsonpath='{.imagePullSecrets}'
+```
+
+This is also why the prepuller renders no `imagePullSecrets` block. An
+earlier revision gave the prepuller the chart-wide secrets and left the
+PodTemplate on the SA alone, which is the worst arrangement available:
+on a cluster where the release-namespace secret name happens to also
+exist in the sandbox namespace, the prepuller goes Ready and warms an
+image the sandbox pods still cannot pull. One route for both, and a
+render test asserts neither pod spec carries the block.
+
+### What it costs, and when to turn it off
+
+The sandbox image is ~3.3 GB extracted and becomes **unreclaimable** on
+every sandbox node, on the same disk as the sandbox workspaces
+(`workspace` emptyDir, 50Gi sizeLimit). Disk pressure that image GC used
+to absorb now resolves by evicting pods instead. Set
+`sandboxImagePrepull.enabled: false` when either applies:
+
+- Single-node / fixed tiny deployments: the image stays resident anyway
+  and nothing evicts it, so the DaemonSet is pure overhead.
+- Nodes without headroom for 3.3 GB on top of the workspace
+  ephemeral-storage limits.
+
+### What it does not fix
+
+Autoscale-up. Node boot (60–120 s) dominates the pull there, and the
+DaemonSet lands on the new node simultaneously with the sandbox that
+triggered the scale-out, so that pod may still cold-start.
+
+### Next step, when autoscale-up cold starts start hurting
 
 **Bake the sandbox image into the node image** (AMI on AWS / custom
 node image on GCP/Azure). The autoscaler boots nodes that already have
 the layers on disk — zero runtime workload, zero cold pulls, works
-even for the very first pod on a brand-new node.
+even for the very first pod on a brand-new node. This is the piece the
+prepuller can't cover; lazy pull (GKE Image Streaming, SOCI) is the
+other option.
 
 Sketch:
 
@@ -162,18 +303,16 @@ Sketch:
    pulling for that version).
 
 Tradeoff: adds a build pipeline keyed to sandbox image versions, and
-re-baking takes ~10–20 min per cloud. Worth it once cold-pull latency
-is measurably hurting users, not before.
+re-baking takes ~10–20 min per cloud.
 
 ### Trigger to revisit
 
-Bring this section back up if any of:
-- The sandbox image grows materially past ~1 GB compressed (cold pulls
-  start climbing past ~10 s).
+Pick up node-image baking if either of:
 - The sandbox node pool starts churning frequently (autoscale events
-  measured in minutes, not hours).
-- Product surface shows cold-pull spinups dominating a measurable
-  fraction of "open sandbox" latency p95.
+  measured in minutes, not hours), so scale-out cold starts — which the
+  prepuller does not fix — become common rather than incidental.
+- Product surface shows cold-pull spinups still dominating a measurable
+  fraction of "open sandbox" latency p95 with the prepuller deployed.
 
 ## Recorded benchmark — 2026-05-21
 
@@ -199,11 +338,13 @@ install` any of those on demand if a skill needs them.
 Caveats:
 
 - **Cold p50 is dominated by `kind load`'s tar-shuffle overhead**, not by
-  actual container start. In prod the equivalent op is a registry pull,
-  which at typical AZ-local bandwidth (150–300 MB/s) translates to
-  roughly 3–6 s for a 700 MB manifest, less for the noskills variant.
-  Treat the *delta* between images as meaningful, the *absolute* cold
-  number as transport overhead.
+  actual container start. Treat the *delta* between images as meaningful,
+  the *absolute* cold number as transport overhead.
+- This row originally extrapolated the prod registry pull at 3–6 s from
+  150–300 MB/s AZ-local bandwidth. **That was wrong** — see the measured
+  31.4 s in "Cold pulls vs. image warming" above. The estimate assumed a
+  same-region registry; the realistic case is a self-hosted install
+  pulling Docker Hub over its own link (34 MB/s effective, measured).
 - Warm spinup is essentially image-size-insensitive (~900 ms regardless)
   because layers are already extracted in the kubelet. Once a node has
   pulled the image once, every subsequent pod sees warm-start latency.

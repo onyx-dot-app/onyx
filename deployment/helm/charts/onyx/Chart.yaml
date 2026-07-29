@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.5
+version: 0.8.6
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,11 +16,12 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: Documented that every Onyx image now publishes a -dev twin for each
-        of its tags, so a -dev suffixed global.version (e.g. v1.2.3-dev) selects the dev
-        variant of the whole deployment — including the backend image that carries the
-        debugging tools the opt-in tooling.pgInto helper needs.
+    - kind: added
+      description: Pre-pull the Craft sandbox image onto the sandbox node pool with a
+        DaemonSet, so a user's first sandbox on a node doesn't pay the ~31s image pull.
+        Rendered only when configMap.ENABLE_CRAFT is true; disable with
+        sandboxImagePrepull.enabled=false. Costs ~3.3 GB of unreclaimable disk per
+        sandbox node.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
