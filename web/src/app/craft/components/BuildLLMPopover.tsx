@@ -46,9 +46,8 @@ function modelDisplayName(model: ModelConfiguration): string {
   return model.effectiveDisplayName || model.display_name || model.name;
 }
 
-// Mirrors the main app's `groupLlmOptions`: aggregator providers (Bedrock,
-// OpenRouter, ...) get one group per hosted vendor. Keyed by provider id rather
-// than name so two providers sharing a display name stay distinct.
+// Keyed by provider id, unlike the main app's `groupLlmOptions`, so two
+// providers sharing a display name stay distinct.
 function craftGroupKey(
   providerId: number,
   providerKey: string,
@@ -88,7 +87,6 @@ export function BuildLLMPopover({
           providerKey: provider.provider,
           groupKey,
           providerName: provider.name ?? "",
-          // vendor arrives display-cased from the backend (e.g. "OpenAI", "xAI")
           groupDisplayName:
             groupKey === String(provider.id)
               ? providerDisplayName
@@ -148,8 +146,8 @@ export function BuildLLMPopover({
       provider?.model_configurations.find(
         (model) => model.name === currentSelection.modelName
       )?.vendor || null;
-    // Prefer the live provider slug so this key is derived from the same source
-    // as the group keys above; a persisted selection can carry a stale one.
+    // Must use the same slug source as the group keys above; a persisted
+    // selection can carry a stale one.
     return craftGroupKey(
       currentSelection.providerId,
       provider?.provider ?? currentSelection.provider,

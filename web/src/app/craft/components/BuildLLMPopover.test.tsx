@@ -106,7 +106,6 @@ describe("BuildLLMPopover aggregator vendors", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
 
-    // Groups are sorted by display name, so Meta precedes OpenAI precedes ZAI.
     expect(
       screen.getAllByText(/^Amazon Bedrock\//).map((label) => label.textContent)
     ).toEqual([
@@ -122,7 +121,6 @@ describe("BuildLLMPopover aggregator vendors", () => {
     expect(screen.getByText("Llama 3 70B")).toBeInTheDocument();
     expect(screen.queryByText("GLM 4.6")).not.toBeInTheDocument();
 
-    // The vendor split is display-only: the emitted selection stays per-model.
     fireEvent.click(screen.getByRole("button", { name: /Llama 3 70B/ }));
     expect(onSelectionChange).toHaveBeenCalledWith({
       providerId: 21,
