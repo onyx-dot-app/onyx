@@ -1,10 +1,14 @@
 from datetime import datetime
 from typing import Any
 
+import pytest
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
 )
+from litellm.exceptions import BadRequestError
+from litellm.litellm_core_utils import exception_mapping_utils
 from litellm.litellm_core_utils.litellm_logging import Logging
+from litellm.llms.bedrock.common_utils import BedrockError
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
 from litellm.types.utils import ModelResponse
@@ -15,9 +19,43 @@ from openai.types.responses.response_reasoning_item import (
     Summary,
 )
 
-from onyx.llm.litellm_singleton.monkey_patches import apply_monkey_patches
+from onyx.llm.litellm_singleton.monkey_patches import (
+    apply_monkey_patches,
+    get_litellm_streaming_tool_use_unsupported_error_type,
+)
 
 _UNSET = object()
+
+
+def _map_bedrock_error(message: str) -> None:
+    exception_mapping_utils.exception_type(
+        model="us.meta.llama3-1-70b-instruct-v1:0",
+        original_exception=BedrockError(status_code=400, message=message),
+        custom_llm_provider="bedrock",
+    )
+
+
+def test_bedrock_streaming_tool_rejection_uses_typed_error() -> None:
+    message = (
+        """b'{"message":"This model doesn\\'t support tool use in streaming mode."}'"""
+    )
+
+    error_type = get_litellm_streaming_tool_use_unsupported_error_type()
+    with pytest.raises(error_type) as exc_info:
+        _map_bedrock_error(message)
+
+    assert exc_info.value.llm_provider == "bedrock"
+    assert exc_info.value.body == {
+        "message": "This model doesn't support tool use in streaming mode."
+    }
+
+
+def test_bedrock_unrelated_bad_request_uses_original_mapper() -> None:
+    with pytest.raises(BadRequestError) as exc_info:
+        _map_bedrock_error("""b'{"message":"Malformed input request"}'""")
+
+    error_type = get_litellm_streaming_tool_use_unsupported_error_type()
+    assert not isinstance(exc_info.value, error_type)
 
 
 def _create_iterator() -> OllamaChatCompletionResponseIterator:

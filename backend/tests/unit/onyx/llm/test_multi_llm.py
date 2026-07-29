@@ -14,6 +14,9 @@ import onyx.llm.models
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.litellm_singleton.monkey_patches import (
+    get_litellm_streaming_tool_use_unsupported_error_type,
+)
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_response import ModelResponse, ModelResponseStream
 from onyx.llm.models import (
@@ -444,12 +447,15 @@ def _hi_prompt() -> LanguageModelInput:
     return [UserMessage(content="Hi")]
 
 
-def test_streaming_tool_use_unsupported_bad_request_is_classified(
+def test_streaming_tool_use_unsupported_typed_error_is_translated(
     default_multi_llm: LitellmLLM,
 ) -> None:
+    error_type = get_litellm_streaming_tool_use_unsupported_error_type()
     with patch("litellm.completion") as mock_completion:
-        mock_completion.side_effect = _bad_request(
-            "This model doesn't support tool use in streaming mode."
+        mock_completion.side_effect = error_type(
+            message="This model doesn't support tool use in streaming mode.",
+            model="m",
+            llm_provider="bedrock",
         )
 
         with pytest.raises(LLMStreamingToolUseUnsupportedError):
@@ -470,12 +476,15 @@ def test_tool_use_unsupported_bad_request_requires_streaming_tools(
     tools: list[dict[str, Any]] | None,
     stream: bool,
 ) -> None:
+    error_type = get_litellm_streaming_tool_use_unsupported_error_type()
     with patch("litellm.completion") as mock_completion:
-        mock_completion.side_effect = _bad_request(
-            "This model doesn't support tool use in streaming mode."
+        mock_completion.side_effect = error_type(
+            message="This model doesn't support tool use in streaming mode.",
+            model="m",
+            llm_provider="bedrock",
         )
 
-        with pytest.raises(BadRequestError):
+        with pytest.raises(error_type):
             default_multi_llm._completion(
                 prompt=_hi_prompt(),
                 tools=tools,
@@ -488,11 +497,12 @@ def test_tool_use_unsupported_bad_request_requires_streaming_tools(
 @pytest.mark.parametrize(
     "message",
     [
+        "This model doesn't support tool use in streaming mode.",
         "prompt is too long",
         "upstream provider rejected tools because they are not supported",
     ],
 )
-def test_streaming_bad_request_without_full_tool_mismatch_is_not_classified(
+def test_generic_streaming_bad_request_is_not_classified(
     default_multi_llm: LitellmLLM,
     message: str,
 ) -> None:

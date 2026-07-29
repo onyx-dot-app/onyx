@@ -57,11 +57,24 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
          setattr in v1.93.0. Our patch rebuilds the response via model_construct so the
          original ResponseAPIUsage object is preserved. Handles ResponseCompletedEvent,
          ResponseIncompleteEvent, and ResponseFailedEvent (matching upstream).
+
+7. Bedrock Streaming Tool Rejection (_patch_bedrock_streaming_tool_error):
+   - LiteLLM reads a rejected streaming response as bytes, stringifies it, and maps the
+     result to a generic BadRequestError without preserving the JSON body
+   - Our patch decodes the Bedrock body and raises a semantic error for the specific
+     streaming-plus-tools capability rejection
+   STATUS: STILL NEEDED - LiteLLM v1.93.0 exposes only a generic BadRequestError whose
+           body is None.
 """
 
+from __future__ import annotations
+
+import ast
+import json
 import time
 import uuid
-from typing import Any, List, Optional, cast
+from functools import lru_cache
+from typing import TYPE_CHECKING, Any, List, Optional, cast
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
@@ -71,10 +84,94 @@ from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponse
 from litellm.llms.ollama.common_utils import OllamaError
 from litellm.types.utils import ChatCompletionUsageBlock, ModelResponseStream
 
+if TYPE_CHECKING:
+    from litellm.exceptions import BadRequestError
+
 # Original upstream chunk_parser, saved before any patching for fallback use
 _original_responses_chunk_parser = (
     OpenAiResponsesToChatCompletionStreamIterator.chunk_parser
 )
+
+_BEDROCK_STREAMING_TOOL_USE_UNSUPPORTED_MESSAGE = (
+    "This model doesn't support tool use in streaming mode."
+)
+
+
+@lru_cache(maxsize=1)
+def get_litellm_streaming_tool_use_unsupported_error_type() -> type[BadRequestError]:
+    from litellm.exceptions import BadRequestError
+
+    class LiteLLMStreamingToolUseUnsupportedError(BadRequestError):
+        """Raised when a provider rejects using tools over a streaming transport."""
+
+    return LiteLLMStreamingToolUseUnsupportedError
+
+
+def _parse_bedrock_error_body(message: str) -> dict[str, Any] | None:
+    raw_body: str | bytes = message
+    if message.startswith(("b'", 'b"')):
+        try:
+            bytes_body = ast.literal_eval(message)
+        except (SyntaxError, ValueError):
+            return None
+        if not isinstance(bytes_body, bytes):
+            return None
+        raw_body = bytes_body
+
+    try:
+        body = json.loads(raw_body)
+    except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+        return None
+    return body if isinstance(body, dict) else None
+
+
+def _patch_bedrock_streaming_tool_error() -> None:
+    from litellm.litellm_core_utils import exception_mapping_utils
+
+    original_mapper = exception_mapping_utils._map_bedrock_exception
+    if getattr(original_mapper, "_onyx_streaming_tool_error_patch", False):
+        return
+
+    def _patched_map_bedrock_exception(
+        *,
+        model: str,
+        original_exception: Any,
+        custom_llm_provider: str,
+        error_str: str,
+        exception_type: str,
+        exception_provider: str,
+        extra_information: str,
+    ) -> None:
+        body = _parse_bedrock_error_body(str(original_exception.message))
+        if (
+            body is not None
+            and body.get("message") == _BEDROCK_STREAMING_TOOL_USE_UNSUPPORTED_MESSAGE
+        ):
+            error_type = get_litellm_streaming_tool_use_unsupported_error_type()
+            raise error_type(
+                message=_BEDROCK_STREAMING_TOOL_USE_UNSUPPORTED_MESSAGE,
+                model=model,
+                llm_provider=custom_llm_provider,
+                response=getattr(original_exception, "response", None),
+                body=body,
+            )
+
+        original_mapper(
+            model=model,
+            original_exception=original_exception,
+            custom_llm_provider=custom_llm_provider,
+            error_str=error_str,
+            exception_type=exception_type,
+            exception_provider=exception_provider,
+            extra_information=extra_information,
+        )
+
+    _patched_map_bedrock_exception._onyx_streaming_tool_error_patch = (  # ty: ignore[unresolved-attribute]
+        True
+    )
+    exception_mapping_utils._map_bedrock_exception = (  # ty: ignore[invalid-assignment]
+        _patched_map_bedrock_exception
+    )
 
 
 def _patch_ollama_chunk_parser() -> None:
@@ -588,6 +685,7 @@ def apply_monkey_patches() -> None:
     Apply all necessary monkey patches to LiteLLM for compatibility.
 
     This includes:
+    - Mapping Bedrock's streaming tool rejection to a semantic exception
     - Patching OllamaChatCompletionResponseIterator.chunk_parser for streaming content
     - Patching chunk_parser for reasoning summary newline insertion between sections
     - Patching LiteLLMResponsesTransformationHandler.transform_response for non-streaming responses
@@ -595,6 +693,7 @@ def apply_monkey_patches() -> None:
     - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
     - Patching Logging._get_assembled_streaming_response to avoid mutating original response
     """
+    _patch_bedrock_streaming_tool_error()
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
     _patch_openai_responses_transform_response()

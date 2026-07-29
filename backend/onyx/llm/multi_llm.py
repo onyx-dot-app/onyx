@@ -149,22 +149,6 @@ class LLMStreamingToolUseUnsupportedError(Exception):
     """
 
 
-def _is_streaming_tool_use_unsupported_error(error: Exception) -> bool:
-    message = " ".join(str(error).lower().split())
-    names_tool_use = (
-        "tool use" in message or "tool calling" in message or "tools" in message
-    )
-    names_streaming = re.search(r"\bstreaming\b", message) is not None
-    names_unsupported = (
-        "doesn't support" in message
-        or "does not support" in message
-        or "do not support" in message
-        or "not support" in message
-        or "unsupported" in message
-    )
-    return names_tool_use and names_streaming and names_unsupported
-
-
 def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     """Convert Pydantic message models to dictionaries for LiteLLM.
 
@@ -589,6 +573,13 @@ class LitellmLLM(LLM):
         from litellm.exceptions import BadRequestError, RateLimitError, Timeout
 
         from onyx.llm.litellm_singleton import litellm
+        from onyx.llm.litellm_singleton.monkey_patches import (
+            get_litellm_streaming_tool_use_unsupported_error_type,
+        )
+
+        streaming_tool_error_type = (
+            get_litellm_streaming_tool_use_unsupported_error_type()
+        )
 
         #########################
         # Flags that modify the final arguments
@@ -948,7 +939,7 @@ class LitellmLLM(LLM):
                 try:
                     return _call_litellm(opts)
                 except BadRequestError as e:
-                    if stream and tools and _is_streaming_tool_use_unsupported_error(e):
+                    if stream and tools and isinstance(e, streaming_tool_error_type):
                         raise LLMStreamingToolUseUnsupportedError(e) from e
                     if i == len(attempts) - 1:
                         raise
