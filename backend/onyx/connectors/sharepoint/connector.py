@@ -1963,10 +1963,10 @@ class SharepointConnector(
         params: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Make an authenticated GET request to the Graph API with retry."""
-        access_token = self._get_graph_access_token()
-        headers = {"Authorization": f"Bearer {access_token}"}
-
         for attempt in range(GRAPH_API_MAX_RETRIES + 1):
+            # Tokens can expire during long traversals — re-acquire per attempt.
+            access_token = self._get_graph_access_token()
+            headers = {"Authorization": f"Bearer {access_token}"}
             try:
                 response = requests.get(
                     url,
@@ -1976,37 +1976,31 @@ class SharepointConnector(
                 )
                 if response.status_code in GRAPH_API_RETRYABLE_STATUSES:
                     if attempt < GRAPH_API_MAX_RETRIES:
-                        parsed_retry_after = parse_retry_after_seconds(
-                            response.headers.get("Retry-After")
+                        wait = _backoff_seconds(
+                            attempt, response.headers.get("Retry-After")
                         )
-                        retry_after = (
-                            parsed_retry_after
-                            if parsed_retry_after is not None
-                            else float(2**attempt)
-                        )
-                        wait = min(retry_after, 60)
                         logger.warning(
-                            "Graph API %s on attempt %s, retrying in %ss: %s",
+                            "Graph API %s on attempt %s, retrying in %.1fs: %s",
                             response.status_code,
                             attempt + 1,
                             wait,
                             url,
                         )
                         time.sleep(wait)
-                        # Re-acquire token in case it expired during a long traversal
-                        access_token = self._get_graph_access_token()
-                        headers = {"Authorization": f"Bearer {access_token}"}
                         continue
                 _log_and_raise_for_status(response)
+                # ValueError covers the empty/non-JSON 2xx bodies Graph
+                # intermittently returns under load.
                 return response.json()
-            except (requests.ConnectionError, requests.Timeout):
+            except TRANSIENT_TRANSPORT_EXCEPTIONS + (ValueError,) as e:
                 if attempt < GRAPH_API_MAX_RETRIES:
-                    wait = min(2**attempt, 60)
+                    wait = _backoff_seconds(attempt, retry_after=None)
                     logger.warning(
-                        "Graph API connection error on attempt %s, retrying in %ss: %s",
+                        "Graph API transient error on attempt %s, retrying in %.1fs: %s (%r)",
                         attempt + 1,
                         wait,
                         url,
+                        e,
                     )
                     time.sleep(wait)
                     continue
