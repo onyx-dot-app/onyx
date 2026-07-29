@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.6
+version: 0.8.7
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,12 +16,15 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: Pre-pull the Craft sandbox image onto the sandbox node pool with a
-        DaemonSet, so a user's first sandbox on a node doesn't pay the ~31s image pull.
-        Rendered only when configMap.ENABLE_CRAFT is true; disable with
-        sandboxImagePrepull.enabled=false. Costs ~3.3 GB of unreclaimable disk per
-        sandbox node.
+    - kind: fixed
+      description: Fixed "helm upgrade" failing with 'PriorityClass ... value: Forbidden;
+        may not be changed in an update' after the sandbox image prepuller landed in
+        0.8.6. PriorityClass.value is immutable and helm upgrade patches, so the
+        prepuller no longer ships a PriorityClass at all; it was buying very little.
+        Upgrading from 0.8.6 deletes it, and the prepuller runs at the cluster default
+        priority — set sandboxImagePrepull.priorityClassName to an existing class to
+        keep it preemptible. Running pods are unaffected, because pod priority is
+        resolved at admission. The chart now renders no cluster-scoped objects.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

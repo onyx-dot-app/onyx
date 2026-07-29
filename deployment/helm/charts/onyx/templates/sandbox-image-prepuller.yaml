@@ -2,8 +2,8 @@
 Pre-pulls the sandbox image onto every node in the sandbox pool so a user's
 first sandbox there doesn't pay the pull. See docs/craft/sandbox/image-and-spinup.md.
 
-Defaults are resolved field by field, NOT with `merge`: sprig's merge treats
-`false` and `0` as empty, so `create: false` and `value: 0` would be overwritten.
+This template renders NAMESPACED objects only. It deliberately no longer ships a
+PriorityClass; see the docs above before adding one back.
 */}}
 {{- $prepull := .Values.sandboxImagePrepull | default dict }}
 {{- $res := $prepull.resources | default dict }}
@@ -11,11 +11,6 @@ Defaults are resolved field by field, NOT with `merge`: sprig's merge treats
 {{- $mem := $res.memory | default "32Mi" }}
 {{- $eph := $res.ephemeralStorage | default "64Mi" }}
 {{- $maxUnavailable := $prepull.updateMaxUnavailable | default "25%" }}
-{{- $pc := $prepull.priorityClass | default dict }}
-{{- $pcCreate := true }}
-{{- if hasKey $pc "create" }}{{- $pcCreate = $pc.create }}{{- end }}
-{{- $pcValue := -11 }}
-{{- if hasKey $pc "value" }}{{- $pcValue = $pc.value }}{{- end }}
 {{- if and (eq (include "onyx.craftEnabled" .) "true") $prepull.enabled }}
 {{- $cm := .Values.configMap }}
 {{- $sandboxNs := $cm.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
@@ -23,29 +18,6 @@ Defaults are resolved field by field, NOT with `merge`: sprig's merge treats
 {{- $image := include "onyx.sandboxImage" . }}
 {{- $pullPolicy := include "onyx.sandboxImagePullPolicy" . }}
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
-{{- /* PriorityClass is cluster-scoped, so the name includes the release
-namespace. Same trunc+hash shape as the RBAC names in sandbox-rbac.yaml. */}}
-{{- $pcBase := printf "%s-%s" (include "onyx.fullname" .) .Release.Namespace }}
-{{- if gt (len $pcBase) 47 }}
-{{- $pcBase = printf "%s-%s" ($pcBase | trunc 38 | trimSuffix "-") (sha256sum $pcBase | trunc 8) }}
-{{- end }}
-{{- $pcName := $prepull.priorityClassName | default (ternary (printf "%s-sandbox-image-prepuller" $pcBase) "" $pcCreate) }}
-{{- if and $pcCreate (not $prepull.priorityClassName) }}
-apiVersion: scheduling.k8s.io/v1
-kind: PriorityClass
-metadata:
-  name: {{ $pcName }}
-  labels:
-    {{- include "onyx.labels" . | nindent 4 }}
-    app.kubernetes.io/component: sandbox-image-prepuller
-value: {{ $pcValue }}
-globalDefault: false
-description: >-
-  Sandbox image prepuller. Below cluster-autoscaler's expendable cutoff (-10) so
-  it never justifies a scale-up, and below a sandbox pod so one can preempt it.
-preemptionPolicy: Never
----
-{{- end }}
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -77,7 +49,9 @@ spec:
         {{- (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox")) | toYaml | nindent 8 }}
       tolerations:
         {{- (index $sandboxPod "tolerations" | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule"))) | toYaml | nindent 8 }}
-      {{- with $pcName }}
+      {{- /* Opt-in only, and it must be a class that already exists: the chart
+      creates none. Unset means the cluster default priority. */}}
+      {{- with $prepull.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}
       {{- /* Pull credentials come from the sandbox SA only, same as the
