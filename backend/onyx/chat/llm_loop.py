@@ -43,6 +43,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
 from onyx.db.models import Persona
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
 from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.models import ReasoningEffort
@@ -81,7 +82,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-class EmptyLLMResponseError(RuntimeError):
+class EmptyLLMResponseError(ClassifiedLLMError):
     """Raised when the streamed LLM response completes without a usable answer."""
 
     def __init__(
@@ -95,13 +96,14 @@ class EmptyLLMResponseError(RuntimeError):
         is_retryable: bool = True,
         finish_reason: str | None = None,
     ) -> None:
-        super().__init__(client_error_msg)
+        super().__init__(
+            client_error_msg=client_error_msg,
+            error_code=error_code,
+            is_retryable=is_retryable,
+        )
         self.provider = provider
         self.model = model
         self.tool_choice = tool_choice
-        self.client_error_msg = client_error_msg
-        self.error_code = error_code
-        self.is_retryable = is_retryable
         self.finish_reason = finish_reason
 
 

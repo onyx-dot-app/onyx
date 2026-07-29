@@ -1060,6 +1060,23 @@ _CANCEL_POLL_INTERVAL_S: Final[float] = 0.05
 _FENCE_REFRESH_INTERVAL_S: Final[float] = 60.0
 
 
+def _model_error_details(
+    error: Exception,
+    llm: LLM,
+    model_index: int,
+) -> dict[str, str | int | None]:
+    details: dict[str, str | int | None] = {
+        "model": llm.config.model_name,
+        "provider": llm.config.model_provider,
+        "model_index": model_index,
+    }
+    if isinstance(error, EmptyLLMResponseError):
+        details["tool_choice"] = error.tool_choice.value
+        details["finish_reason"] = error.finish_reason
+
+    return details
+
+
 def _run_models(
     setup: ChatTurnSetup,
     user: User,
@@ -1434,11 +1451,7 @@ def _run_models(
                             stack_trace=stack_trace,
                             error_code=info.error_code,
                             is_retryable=info.is_retryable,
-                            details={
-                                "model": model_llm.config.model_name,
-                                "provider": model_llm.config.model_provider,
-                                "model_index": model_idx,
-                            },
+                            details=_model_error_details(item, model_llm, model_idx),
                         )
                     )
                 elif isinstance(item, Packet):
