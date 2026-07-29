@@ -1,6 +1,9 @@
 // Package ui renders the interactive installer as a single live wizard: a
-// persistent Bubble Tea program with a step rail, an active pane for
-// questions and progress, and a final summary card. The deploy orchestration
+// full-screen (alt-screen) Bubble Tea program with a step rail, an active
+// pane for questions and progress, and a final summary card. The alt screen
+// is discarded when the program exits, so the wizard re-prints whatever the
+// user still needs (the summary card, or the notes after an abort) to the
+// normal screen where it survives in scrollback. The deploy orchestration
 // falls back to plain line output when a real TTY isn't driving the run, so
 // CI logs and --no-prompt behavior stay stable.
 package ui
@@ -8,6 +11,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -84,6 +88,7 @@ type (
 )
 
 type wizModel struct {
+	title   string
 	version string
 	stage   int
 	answers []answerMsg
@@ -100,8 +105,9 @@ type wizModel struct {
 	frame                int
 	services             []ServiceRow
 
-	card    []string
-	aborted bool
+	card     []string
+	aborted  bool
+	userQuit bool // aborted by a key press, not programmatically
 }
 
 func tick() tea.Cmd {
@@ -187,7 +193,7 @@ func (m wizModel) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc", "q":
 			m.sel.reply <- -1
 			m.sel = nil
-			m.aborted = true
+			m.aborted, m.userQuit = true, true
 			return m, tea.Quit
 		}
 		return m, nil
@@ -204,7 +210,7 @@ func (m wizModel) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			m.inp.reply <- nil
 			m.inp = nil
-			m.aborted = true
+			m.aborted, m.userQuit = true, true
 			return m, tea.Quit
 		case "backspace":
 			if len(m.typed) > 0 {
@@ -218,35 +224,31 @@ func (m wizModel) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if s == "ctrl+c" {
-		m.aborted = true
+		m.aborted, m.userQuit = true, true
 		return m, tea.Quit
 	}
 	return m, nil
 }
 
-func (m wizModel) View() tea.View {
-	if m.card != nil {
-		return tea.NewView(cardBox.Render(strings.Join(m.card, "\n")) + "\n")
-	}
-	if m.aborted {
-		// Leave the guidance in scrollback instead of wiping the screen —
-		// the notes are exactly what the user needs after a failure.
-		var b strings.Builder
-		for _, n := range m.notes {
-			switch n.level {
-			case "ok":
-				b.WriteString(okStyle.Render("✓ ") + n.text + "\n")
-			case "warn":
-				b.WriteString(warnSt.Render("⚠ ") + n.text + "\n")
-			case "err":
-				b.WriteString(errSt.Render("✗ ") + n.text + "\n")
-			default:
-				b.WriteString("  " + n.text + "\n")
-			}
+// renderNote styles one note line (shared by the live view and the
+// post-exit tail).
+func renderNote(n noteMsg, live bool) string {
+	switch n.level {
+	case "ok":
+		return okStyle.Render("✓ ") + n.text
+	case "warn":
+		return warnSt.Render("⚠ ") + n.text
+	case "err":
+		return errSt.Render("✗ ") + n.text
+	default:
+		if live {
+			return dim.Render("  " + n.text)
 		}
-		return tea.NewView(b.String())
+		return "  " + n.text
 	}
+}
 
+func (m wizModel) View() tea.View {
 	// Left rail: stages + recorded answers.
 	var rail []string
 	for i, name := range stageNames {
@@ -309,46 +311,63 @@ func (m wizModel) View() tea.View {
 		paneBox.Render(strings.Join(pane, "\n")))
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s\n\n", accent.Render("🚀 Onyx Installer"), dim.Render(m.version))
+	fmt.Fprintf(&b, "\n %s %s\n\n", accent.Render("🚀 "+m.title), dim.Render(m.version))
 	b.WriteString(body + "\n")
 	for _, n := range m.notes {
-		switch n.level {
-		case "ok":
-			b.WriteString(okStyle.Render("✓ ") + n.text + "\n")
-		case "warn":
-			b.WriteString(warnSt.Render("⚠ ") + n.text + "\n")
-		case "err":
-			b.WriteString(errSt.Render("✗ ") + n.text + "\n")
-		default:
-			b.WriteString(dim.Render("  "+n.text) + "\n")
-		}
+		b.WriteString(renderNote(n, true) + "\n")
 	}
-	b.WriteString(dim.Render("↑/↓ move · enter confirm · ctrl+c quit"))
-	return tea.NewView(b.String())
+	b.WriteString("\n" + dim.Render(" ↑/↓ move · enter confirm · ctrl+c quit"))
+
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	v.WindowTitle = m.title
+	return v
 }
 
 // Wizard drives the model from the orchestration goroutine.
 type Wizard struct {
 	prog *tea.Program
 	done chan struct{}
+	out  io.Writer
 }
 
-// StartWizard launches the inline wizard program. onAbort fires when the
-// user quits the wizard (ctrl+c/esc) so the orchestration can cancel any
-// in-flight work — without it, killing the UI would leave compose running.
-func StartWizard(version string, onAbort func()) *Wizard {
+// StartWizard launches the full-screen wizard program. onAbort fires only
+// when the user quits the wizard (ctrl+c/esc) so the orchestration can
+// cancel any in-flight work — without it, killing the UI would leave
+// compose running. A programmatic Abort (teardown before plain output) must
+// NOT fire it, or real failures get misreported as cancellations.
+func StartWizard(out io.Writer, title, version string, onAbort func()) *Wizard {
 	w := &Wizard{
-		prog: tea.NewProgram(wizModel{version: version}),
+		prog: tea.NewProgram(wizModel{title: title, version: version}),
 		done: make(chan struct{}),
+		out:  out,
 	}
 	go func() {
 		m, _ := w.prog.Run()
+		wm, ok := m.(wizModel)
+		if ok {
+			w.printTail(wm)
+		}
 		close(w.done)
-		if wm, ok := m.(wizModel); ok && wm.aborted && onAbort != nil {
+		if ok && wm.userQuit && onAbort != nil {
 			onAbort()
 		}
 	}()
 	return w
+}
+
+// printTail re-prints what the discarded alt screen was showing to the
+// normal screen, where it survives in scrollback: the summary card when the
+// run finished, otherwise the accumulated notes — exactly what the user
+// needs after an abort or failure.
+func (w *Wizard) printTail(m wizModel) {
+	if m.card != nil {
+		fmt.Fprintln(w.out, cardBox.Render(strings.Join(m.card, "\n")))
+		return
+	}
+	for _, n := range m.notes {
+		fmt.Fprintln(w.out, renderNote(n, false))
+	}
 }
 
 // Select asks an arrow-key question and blocks for the answer.
@@ -401,13 +420,16 @@ func (w *Wizard) Suspend(fn func() error) error {
 	return fn()
 }
 
-// Finish renders the summary card as the final scrollback view and exits.
+// Finish exits the wizard and prints the summary card to the normal screen.
+// It blocks until the card has been written, so callers can keep printing
+// plain output right after.
 func (w *Wizard) Finish(lines ...string) {
 	w.prog.Send(finishMsg(lines))
-	w.prog.Wait()
+	<-w.done
 }
 
-// Abort tears the wizard down (no-op after Finish).
+// Abort tears the wizard down (no-op after Finish), leaving the accumulated
+// notes on the normal screen. It blocks until they have been written.
 func (w *Wizard) Abort() {
 	select {
 	case <-w.done:
@@ -415,7 +437,7 @@ func (w *Wizard) Abort() {
 	default:
 	}
 	w.prog.Send(abortMsg{})
-	w.prog.Wait()
+	<-w.done
 }
 
 // Accent styles a string for emphasis outside the wizard (plain summaries).

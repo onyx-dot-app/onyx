@@ -180,7 +180,7 @@ func (in *installer) confirmOverwriteEdited(destRel string) (bool, error) {
 		in.warnf("Keeping it. Re-run with --force to overwrite (a backup is made).")
 		return false, nil
 	}
-	return in.prompt.Confirm(fmt.Sprintf("Overwrite %s? A backup will be kept. (y/N) ", destRel), false)
+	return in.confirmYN(fmt.Sprintf("Overwrite %s? A backup will be kept.", destRel), false)
 }
 
 // backupFile snapshots dest before an overwrite, versioned so repeated

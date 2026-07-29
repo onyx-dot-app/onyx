@@ -22,8 +22,9 @@ Only the IMAGE_TAG line (plus SANDBOX_BACKEND when Craft is enabled) is
 rewritten in .env — every other setting, including your edits, is preserved.
 Managed files (compose, overlays, nginx config) are refreshed to match the
 target version; files you hand-edited are kept unless you confirm the
-overwrite (or pass --force), and a backup is made first. Services must be
-stopped (onyx-cli deploy stop).`,
+overwrite (or pass --force), and a backup is made first. The running
+services keep serving while images download and are then recreated on the
+new version.`,
 		Example: `  onyx-cli deploy upgrade
   onyx-cli deploy upgrade --tag v4.4.6
   onyx-cli deploy upgrade --tag v4.4.6 --no-prompt --force`,

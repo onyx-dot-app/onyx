@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -122,7 +123,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	}
 
 	if in.fancy() {
-		in.wiz = ui.StartWizard(in.deps.CLIVersion, in.cancel)
+		in.wiz = ui.StartWizard(in.deps.IOS.Out, "Onyx Installer", in.deps.CLIVersion, in.cancel)
 		defer in.wiz.Abort()
 	}
 
@@ -256,10 +257,11 @@ func (in *installer) runInstall(ctx context.Context) error {
 	}
 
 	var effectiveTag string
+	var hostPort int
 	if rerun {
-		effectiveTag, err = in.reconfigureExistingEnv(envPath, updateTag)
+		effectiveTag, hostPort, err = in.reconfigureExistingEnv(envPath, updateTag)
 	} else {
-		effectiveTag, err = in.createFreshEnv(envPath, initialTag)
+		effectiveTag, hostPort, err = in.createFreshEnv(envPath, initialTag)
 	}
 	if err != nil {
 		return err
@@ -279,10 +281,6 @@ func (in *installer) runInstall(ctx context.Context) error {
 		in.ensureCraftResources(ctx)
 	}
 
-	hostPort := resources.FindAvailablePort(3000)
-	if hostPort != 3000 {
-		in.infof("Port 3000 is in use — using %d", hostPort)
-	}
 	in.successf("Configuration ready at %s (version %s)", in.root.Dir, effectiveTag)
 
 	// ---- Phases 2 + 3: pull and start ----
@@ -533,14 +531,22 @@ func (in *installer) checkComposeVersion(ctx context.Context) error {
 }
 
 // createFreshEnv writes deployment/.env from env.template with the chosen
-// tag, generated secrets, and mode adjustments.
-func (in *installer) createFreshEnv(envPath, tag string) (string, error) {
+// tag, generated secrets, port, and mode adjustments.
+func (in *installer) createFreshEnv(envPath, tag string) (string, int, error) {
 	template, err := os.ReadFile(filepath.Join(in.root.Dir, "deployment", "env.template"))
 	if err != nil {
-		return "", fmt.Errorf("failed to read env.template: %w", err)
+		return "", 0, fmt.Errorf("failed to read env.template: %w", err)
 	}
 	env := string(template)
 	env = SetVar(env, "IMAGE_TAG", tag)
+
+	// Recorded in .env so reruns and upgrades reuse the same port instead of
+	// re-scanning (which would collide with the deployment's own binding).
+	hostPort := resources.FindAvailablePort(3000)
+	if hostPort != 3000 {
+		in.infof("Port 3000 is in use — using %d", hostPort)
+	}
+	env = SetVar(env, "HOST_PORT", strconv.Itoa(hostPort))
 
 	if in.lite {
 		// MinIO never starts in lite mode and the overlay forces the
@@ -569,21 +575,33 @@ func (in *installer) createFreshEnv(envPath, tag string) (string, error) {
 	}
 
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
-		return "", fmt.Errorf("failed to write .env: %w", err)
+		return "", 0, fmt.Errorf("failed to write .env: %w", err)
 	}
 	in.successf(".env created (auth secret and MinIO credentials generated) — customize it any time")
-	return tag, nil
+	return tag, hostPort, nil
 }
 
 // reconfigureExistingEnv applies the rerun decision: restart keeps .env
 // untouched except craft/lite alignment; a non-empty updateTag rewrites
 // IMAGE_TAG (and nothing else).
-func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, error) {
+func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, int, error) {
 	existing, err := os.ReadFile(envPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read %s: %w", envPath, err)
+		return "", 0, fmt.Errorf("failed to read %s: %w", envPath, err)
 	}
 	env := string(existing)
+
+	// Keep the port the deployment already uses; scan only for installs that
+	// predate HOST_PORT recording (services are stopped on this path, so the
+	// scan can't collide with our own binding).
+	hostPort, perr := strconv.Atoi(Var(env, "HOST_PORT"))
+	if perr != nil {
+		hostPort = resources.FindAvailablePort(3000)
+		if hostPort != 3000 {
+			in.infof("Port 3000 is in use — using %d", hostPort)
+		}
+		env = SetVar(env, "HOST_PORT", strconv.Itoa(hostPort))
+	}
 
 	if updateTag != "" && updateTag != Var(env, "IMAGE_TAG") {
 		env = SetVar(env, "IMAGE_TAG", updateTag)
@@ -614,9 +632,9 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 	}
 
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
-		return "", fmt.Errorf("failed to write .env: %w", err)
+		return "", 0, fmt.Errorf("failed to write .env: %w", err)
 	}
-	return effectiveTag, nil
+	return effectiveTag, hostPort, nil
 }
 
 // guardServicesStopped handles reconfiguring while containers are up:

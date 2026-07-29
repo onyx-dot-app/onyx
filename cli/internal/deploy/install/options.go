@@ -66,9 +66,6 @@ type installer struct {
 	wiz      *ui.Wizard // live wizard when the fancy renderer drives the run
 	cancel   func()     // cancels in-flight work when the wizard is quit
 	rootless bool       // daemon runs rootless (limits what compose can grant)
-
-	// step counter for the "=== title - Step N/M ===" headers.
-	step, totalSteps int
 }
 
 func newInstaller(deps Deps, opts Options) *installer {
@@ -120,11 +117,6 @@ func (in *installer) plainf(format string, args ...any) {
 		return
 	}
 	fmt.Fprintf(in.deps.IOS.Out, format+"\n", args...)
-}
-
-func (in *installer) stepf(title string) {
-	in.step++
-	fmt.Fprintf(in.deps.IOS.Out, "\n=== %s - Step %d/%d ===\n\n", title, in.step, in.totalSteps)
 }
 
 // fancy reports whether the interactive renderer drives this run (never
@@ -186,7 +178,11 @@ func (in *installer) confirmYN(question string, defaultYes bool) (bool, error) {
 		idx, err := in.wiz.Select(question, []ui.Option{{Label: "Yes"}, {Label: "No"}}, def)
 		return idx == 0, err
 	}
-	return in.prompt.Confirm(question+" ", defaultYes)
+	hint := " (y/N) "
+	if defaultYes {
+		hint = " (Y/n) "
+	}
+	return in.prompt.Confirm(question+hint, defaultYes)
 }
 
 // phase prints a plain phase header (the wizard's rail replaces it when the

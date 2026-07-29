@@ -2,16 +2,18 @@ package install
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/deployfiles"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/paths"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/release"
-	"github.com/onyx-dot-app/onyx/cli/internal/deploy/resources"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/state"
+	"github.com/onyx-dot-app/onyx/cli/internal/deploy/ui"
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/version"
 )
@@ -21,9 +23,15 @@ import (
 // SANDBOX_BACKEND when Craft is enabled) is rewritten in .env; managed files
 // are refreshed to the target tag with user edits preserved via the manifest.
 func RunUpgrade(ctx context.Context, deps Deps, opts Options) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	in := newInstaller(deps, opts)
-	in.totalSteps = 4
-	return in.runUpgrade(ctx)
+	in.cancel = cancel
+	err := in.runUpgrade(ctx)
+	if errors.Is(err, ui.ErrAborted) || (err != nil && ctx.Err() != nil) {
+		return exitcodes.New(exitcodes.General, "upgrade cancelled")
+	}
+	return err
 }
 
 func (in *installer) runUpgrade(ctx context.Context) error {
@@ -36,6 +44,12 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	if !paths.IsInstall(in.root.Dir) {
 		return exitcodes.Newf(exitcodes.NotAvailable,
 			"no Onyx deployment found at %s — run `onyx-cli deploy install` first", in.root.Dir)
+	}
+
+	// Upgrades share the install wizard (dry runs stay line-oriented).
+	if in.fancy() && !in.opts.DryRun {
+		in.wiz = ui.StartWizard(in.deps.IOS.Out, "Onyx Upgrade", in.deps.CLIVersion, in.cancel)
+		defer in.wiz.Abort()
 	}
 
 	manifest, err := state.Load(in.root.Dir)
@@ -65,10 +79,24 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel))
 	in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
 		in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
+	if in.wiz != nil {
+		mode := "Standard"
+		if in.lite {
+			mode = "Lite"
+		}
+		if in.craft {
+			mode = "Std+Craft"
+		}
+		in.wiz.Answer("Mode", mode)
+		in.wiz.Answer("From", installedTag)
+	}
 
 	targetTag, err := in.resolveUpgradeTag(ctx, installedTag)
 	if err != nil {
 		return err
+	}
+	if in.wiz != nil {
+		in.wiz.Answer("To", targetTag)
 	}
 
 	if err := in.downgradeGuard(installedTag, targetTag); err != nil {
@@ -92,14 +120,12 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	if err := in.resolveDockerProblems(ctx, in.gatherPreflight(ctx)); err != nil {
 		return err
 	}
-	// Upgrading inherently restarts the deployment, and stopping loses no
-	// data — do it automatically instead of bouncing the user to another
-	// command.
-	if err := in.guardServicesStopped(ctx, true); err != nil {
-		return err
-	}
+	// The running services are deliberately NOT stopped here: `up` recreates
+	// any container whose image or config changed, so the old version keeps
+	// serving while images download, and a failed pull leaves it running
+	// instead of a stopped half-upgraded stack.
 
-	in.stepf("Updating configuration")
+	in.phase("Updating configuration")
 	in.infof("Updating configuration for version %s...", targetTag)
 	env = SetVar(env, "IMAGE_TAG", targetTag)
 	if in.craft {
@@ -109,6 +135,14 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		backend := sandboxBackendForTag(targetTag)
 		env = SetVarUncomment(env, "SANDBOX_BACKEND", backend)
 		in.successf("Aligned SANDBOX_BACKEND=%s with image tag %s", backend, targetTag)
+	}
+	// Reuse the port the deployment already runs on — scanning for a free
+	// one here would collide with our own still-running nginx and silently
+	// move Onyx to another port.
+	hostPort, perr := strconv.Atoi(Var(env, "HOST_PORT"))
+	if perr != nil {
+		hostPort = 3000
+		env = SetVar(env, "HOST_PORT", "3000")
 	}
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
 		return fmt.Errorf("failed to write .env: %w", err)
@@ -129,7 +163,6 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.ensureCraftResources(ctx)
 	}
 
-	hostPort := resources.FindAvailablePort(3000)
 	if err := in.pullAndStart(ctx, targetTag, hostPort); err != nil {
 		return err
 	}
@@ -152,13 +185,31 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		return err
 	}
 
-	in.stepf("Upgrade Complete!")
+	in.printUpgradeSuccess(hostPort, installedTag, targetTag)
+	return nil
+}
+
+// printUpgradeSuccess mirrors printSuccess: a summary card when the wizard
+// drives the run, plain lines otherwise.
+func (in *installer) printUpgradeSuccess(hostPort int, from, to string) {
+	url := fmt.Sprintf("http://localhost:%d", hostPort)
+	headline := fmt.Sprintf("Onyx upgraded: %s → %s", from, to)
+	if in.wiz != nil {
+		in.wiz.Stage(ui.StageDone)
+		in.wiz.Finish(
+			"🎉 "+headline,
+			"",
+			"Access Onyx at: "+ui.Accent(url),
+			"Check service health with: onyx-cli deploy status",
+		)
+		in.wiz = nil
+		return
+	}
 	in.plainf("")
-	in.successf("Onyx upgraded: %s → %s", installedTag, targetTag)
-	in.infof("Access Onyx at: http://localhost:%d", hostPort)
+	in.successf("%s", headline)
+	in.infof("Access Onyx at: %s", url)
 	in.infof("Check service health with: onyx-cli deploy status")
 	in.plainf("")
-	return nil
 }
 
 // resolveUpgradeTag picks the target: --tag, or the latest app release
@@ -174,16 +225,10 @@ func (in *installer) resolveUpgradeTag(ctx context.Context, installedTag string)
 	} else {
 		in.warnf("Could not determine latest Onyx release — falling back to edge")
 	}
-	if in.prompt.AssumeDefaults {
-		return defaultTag, nil
+	if in.wiz == nil && !in.prompt.AssumeDefaults {
+		in.infof("Currently installed: %s", installedTag)
 	}
-	in.infof("Currently installed: %s", installedTag)
-	tag, err := in.prompt.Ask(fmt.Sprintf("Enter tag to upgrade to [default: %s]: ", defaultTag), defaultTag)
-	if err != nil {
-		return "", err
-	}
-	in.plainf("")
-	return tag, nil
+	return in.askString("Version to upgrade to", defaultTag)
 }
 
 // downgradeGuard warns when both tags parse as semver and the target is
@@ -203,7 +248,7 @@ func (in *installer) downgradeGuard(installedTag, targetTag string) error {
 		return exitcodes.New(exitcodes.BadRequest,
 			"refusing to downgrade non-interactively — re-run with --force to override")
 	}
-	ok, err := in.prompt.Confirm("Downgrade anyway? (y/N) ", false)
+	ok, err := in.confirmYN("Downgrade anyway?", false)
 	if err != nil {
 		return err
 	}

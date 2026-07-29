@@ -131,9 +131,19 @@ func TestUpgradeRequiresExistingInstall(t *testing.T) {
 	}
 }
 
-func TestUpgradeAutoStopsRunningServices(t *testing.T) {
+func TestUpgradeRecreatesWithoutStopping(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.0.0")
+
+	// Give the fixture a non-default recorded port, as a user might have.
+	envPath := filepath.Join(root, "deployment", ".env")
+	env, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(envPath, []byte(SetVar(string(env), "HOST_PORT", "8080")), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	running := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
 		if strings.Contains(argv(c), "ps -q") {
@@ -142,20 +152,22 @@ func TestUpgradeAutoStopsRunningServices(t *testing.T) {
 		return healthyDockerHandler(c)
 	}}
 	deps := testDeps(t, running, notFoundServer(t))
-	err := RunUpgrade(context.Background(), deps, Options{
+	err = RunUpgrade(context.Background(), deps, Options{
 		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
 	})
 	if err != nil {
-		t.Fatalf("upgrade must auto-stop running services: %v", err)
+		t.Fatalf("upgrade must proceed with services running: %v", err)
 	}
-	stopped := false
 	for _, c := range running.calls {
 		if strings.HasSuffix(argv(c), " stop") {
-			stopped = true
+			t.Error("upgrade must not stop services — up recreates them with less downtime")
 		}
 	}
-	if !stopped {
-		t.Error("compose stop never ran before the upgrade")
+	// The old stack keeps its port: no re-scan, the recorded value is reused.
+	for _, c := range running.calls {
+		if strings.Contains(argv(c), " up ") && c.Env["HOST_PORT"] != "8080" {
+			t.Errorf("up ran with HOST_PORT=%q, want the recorded 8080", c.Env["HOST_PORT"])
+		}
 	}
 }
 
