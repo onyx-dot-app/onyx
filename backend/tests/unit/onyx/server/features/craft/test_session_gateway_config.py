@@ -275,7 +275,7 @@ def test_gateway_config_preserves_explicit_context_override() -> None:
     }
 
 
-def test_unknown_model_renders_explicit_fallback_with_input_budget() -> None:
+def test_unknown_model_omits_unverified_token_limits() -> None:
     provider = _provider(
         7,
         "custom",
@@ -290,13 +290,8 @@ def test_unknown_model_renders_explicit_fallback_with_input_budget() -> None:
 
     assert gateway_config is not None
     opencode_config = build_provider_opencode_config(gateway_config)
-    assert opencode_config["provider"]["onyx"]["models"]["7/unknown-model"][
-        "limit"
-    ] == {
-        "context": 32_000,
-        "input": 32_000,
-        "output": 32_000,
-    }
+    model_config = opencode_config["provider"]["onyx"]["models"]["7/unknown-model"]
+    assert "limit" not in model_config
 
 
 def test_small_input_override_does_not_reduce_provider_output() -> None:
