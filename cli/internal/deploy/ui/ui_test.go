@@ -18,12 +18,12 @@ func sampleModels() map[string]wizModel {
 			title:   "Onyx Installer",
 			version: "v0.1.0",
 			stage:   StageConfigure,
-			answers: []answerMsg{{"Version", "v4.4.6"}},
 			sel: &askSelectMsg{
-				title: "Onyx is already running. Applying this configuration restarts its services.",
+				title: "How should Onyx be deployed?",
 				opts: []Option{
-					{Label: "Continue", Hint: "keeps serving while images download; each service restarts once, at the end"},
-					{Label: "Cancel", Hint: "leave everything running"},
+					{Label: "Lite", Hint: "chat, tools, uploads, projects — no vector search (recommended)"},
+					{Label: "Standard", Hint: "full search, connectors, and RAG"},
+					{Label: "Standard + Craft", Hint: "adds AI web-app building (binds the docker socket)"},
 				},
 			},
 			notes: []noteMsg{{"ok", "Deployment files are up to date"}},
@@ -191,7 +191,7 @@ func TestNarrowViewKeepsOptionHints(t *testing.T) {
 	m := sampleModels()["question"]
 	m.width, m.height = 44, 20
 	content := m.View().Content
-	if !strings.Contains(content, "restarts once") {
+	if !strings.Contains(content, "vector search") {
 		t.Errorf("hint text was dropped at 44 columns:\n%s", content)
 	}
 	if !strings.Contains(content, "Step 1/4") {

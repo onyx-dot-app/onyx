@@ -375,6 +375,76 @@ func TestRerunRefusesWhileRunning(t *testing.T) {
 	}
 }
 
+// A rerun over a live deployment asks once. Restart and Upgrade both replace
+// the running services, so the choice is the sign-off — a second "this
+// restarts things, continue?" question would only ask it again.
+func TestRerunAsksOnceAndCancels(t *testing.T) {
+	seed := func(t *testing.T) (string, *fakeRunner) {
+		t.Helper()
+		isolateEnv(t)
+		shimDockerOnPath(t)
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "deployment"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "deployment", ".env"), []byte("IMAGE_TAG=v1.0.0\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		return root, &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+			if strings.Contains(argv(c), "ps -q") {
+				return dockercmd.Result{Stdout: "abc123\n"}, nil // containers up
+			}
+			return healthyDockerHandler(c)
+		}}
+	}
+	interactive := func(deps Deps, answer string) Deps {
+		deps.IOS = &iostreams.IOStreams{
+			In:          strings.NewReader(answer + "\n"),
+			Out:         &bytes.Buffer{},
+			ErrOut:      &bytes.Buffer{},
+			IsStdinTTY:  true,
+			IsStdoutTTY: true,
+		}
+		return deps
+	}
+
+	// Cancel (option 3) leaves the deployment alone.
+	root, runner := seed(t)
+	deps := interactive(testDeps(t, runner, notFoundServer(t)), "3")
+	err := RunInstall(context.Background(), deps, Options{Dir: root, NoWait: true, Local: true})
+	if err == nil || !strings.Contains(err.Error(), "services left running") {
+		t.Fatalf("err = %v, want the run cancelled with the services untouched", err)
+	}
+	for _, c := range runner.calls {
+		if strings.Contains(argv(c), "up -d") || strings.Contains(argv(c), " pull") {
+			t.Errorf("cancelled run still touched the deployment: %s", argv(c))
+		}
+	}
+
+	// Restart (option 1) proceeds, having asked nothing else.
+	root, runner = seed(t)
+	deps = interactive(testDeps(t, runner, notFoundServer(t)), "1")
+	if err := RunInstall(context.Background(), deps, Options{Dir: root, NoWait: true, Local: true}); err != nil {
+		t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+	out := outBuf(deps).String()
+	if n := strings.Count(out, "What would you like to do?"); n != 1 {
+		t.Errorf("the rerun question was asked %d times:\n%s", n, out)
+	}
+	if strings.Contains(out, "Continue") {
+		t.Errorf("restarting was confirmed twice:\n%s", out)
+	}
+	var up string
+	for _, c := range runner.calls {
+		if strings.Contains(argv(c), "up -d") {
+			up = argv(c)
+		}
+	}
+	if !strings.Contains(up, "--force-recreate") {
+		t.Errorf("up must replace the running containers: %s", up)
+	}
+}
+
 // A rerun over a running deployment never stops anything up front: the
 // containers keep serving while the images download and `up --force-recreate`
 // replaces them at the end.

@@ -172,7 +172,8 @@ func (in *installer) runInstall(ctx context.Context) error {
 		// Read the published port off the running deployment: installs
 		// predating HOST_PORT recording have it nowhere else.
 		in.observedPort = in.runningHostPort(ctx)
-		if err := in.confirmRecreate(ctx, in.opts.Force && in.prompt.AssumeDefaults); err != nil {
+		running, err := in.guardRunningServices(ctx)
+		if err != nil {
 			return err
 		}
 		// The mode never changes implicitly on a rerun: the recorded mode
@@ -186,21 +187,41 @@ func (in *installer) runInstall(ctx context.Context) error {
 			in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
 
 		if pinnedTag != "" {
+			// --tag already answers the question below.
 			updateTag = pinnedTag
 		} else if !in.prompt.AssumeDefaults {
-			choice, err := in.selectOne("This deployment already exists. What would you like to do?",
+			// This is also where a live deployment is signed off on: the
+			// choices restart it either way, so a separate "you know this
+			// restarts things" confirmation would only ask it twice.
+			title, restartHint, cancelHint :=
+				"This deployment already exists. What would you like to do?",
+				"keep the current configuration",
+				"leave the deployment as it is"
+			if running {
+				title, cancelHint = "Onyx is already running here. What would you like to do?",
+					"leave everything running"
+			}
+			choice, err := in.selectOne(title,
 				[]ui.Option{
-					{Label: "Restart", Hint: "keep the current configuration"},
+					{Label: "Restart", Hint: restartHint},
 					{Label: "Upgrade", Hint: "move to a newer Onyx version"},
+					{Label: "Cancel", Hint: cancelHint},
 				}, 0)
 			if err != nil {
 				return err
 			}
-			if choice == 1 {
+			switch choice {
+			case 1:
 				updateTag, err = in.askVersion(ctx, "Version to deploy", getLatestTag())
 				if err != nil {
 					return err
 				}
+			case 2:
+				if running {
+					return exitcodes.New(exitcodes.General,
+						"cancelled — services left running (stop them with `onyx-cli deploy stop`)")
+				}
+				return exitcodes.New(exitcodes.General, "cancelled")
 			}
 			if in.wiz != nil {
 				if updateTag != "" {
@@ -210,6 +231,12 @@ func (in *installer) runInstall(ctx context.Context) error {
 					in.wiz.Answer("Action", "Restart")
 				}
 			}
+		}
+		if running {
+			// Said once, whichever way the decision was reached: the run is
+			// about to sit on `pull` for a while, and this is what stops that
+			// looking like downtime.
+			in.infof("Onyx keeps serving while the images download; each service is replaced once, at the end")
 		}
 	} else {
 		if err := in.askModeQuestion(); err != nil {
@@ -784,46 +811,28 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 	return effectiveTag, hostPort, nil
 }
 
-// confirmRecreate gets sign-off for reconfiguring a deployment whose services
-// are up, before anything on disk changes. Nothing is stopped here: the answer
-// is remembered and handed to `up` as --force-recreate, so the current version
-// keeps serving while the images download and each container is replaced only
-// once its replacement is ready. Non-interactive runs refuse with the remedy in
-// the error itself (install.sh printed "./install.sh --shutdown", which doesn't
-// exist after curl|bash).
-func (in *installer) confirmRecreate(ctx context.Context, assumeYes bool) error {
+// guardRunningServices reports whether the deployment's services are up, and
+// settles what that means for a scripted run: reconfiguring a live deployment
+// needs --force, and the refusal carries the remedy (install.sh printed
+// "./install.sh --shutdown", which doesn't exist after curl|bash). Interactive
+// runs are asked instead, by the rerun question — that is where Cancel lives.
+//
+// Nothing is stopped either way: running services are handed to `up` as
+// --force-recreate, so the current version keeps serving while the images
+// download and each container is replaced only once its replacement is ready.
+func (in *installer) guardRunningServices(ctx context.Context) (bool, error) {
 	files := in.composeFileNames(true)
 	cmd := in.compose.Command(in.deploymentDir(), stopFallbackEnv(), files, "ps", "-q")
 	res, err := in.deps.Runner.Run(ctx, cmd)
 	if err != nil || strings.TrimSpace(res.Stdout) == "" {
-		return nil
+		return false, nil
 	}
-
-	if assumeYes {
-		in.infof("Onyx is running — its services will be recreated with the new configuration.")
-		in.forceRecreate = true
-		return nil
-	}
-
-	if in.prompt.AssumeDefaults {
-		return exitcodes.New(exitcodes.General,
+	if in.prompt.AssumeDefaults && !in.opts.Force {
+		return true, exitcodes.New(exitcodes.General,
 			"Onyx services are running — pass --force to recreate them with the new configuration, or stop them first with `onyx-cli deploy stop`")
 	}
-
-	choice, err := in.selectOne("Onyx is already running. Applying this configuration restarts its services.",
-		[]ui.Option{
-			{Label: "Continue", Hint: "keeps serving while images download; each service restarts once, at the end"},
-			{Label: "Cancel", Hint: "leave everything running"},
-		}, 0)
-	if err != nil {
-		return err
-	}
-	if choice != 0 {
-		return exitcodes.New(exitcodes.General,
-			"cancelled — services left running (stop them with `onyx-cli deploy stop`)")
-	}
 	in.forceRecreate = true
-	return nil
+	return true, nil
 }
 
 func (in *installer) ensureCraftResources(ctx context.Context) {

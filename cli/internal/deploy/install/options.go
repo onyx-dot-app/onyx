@@ -74,9 +74,9 @@ type installer struct {
 	// wasLite records that the deployment was in lite mode when the run
 	// started, so a switch to standard can undo lite's .env adjustments.
 	wasLite bool
-	// forceRecreate carries the operator's sign-off to replace containers
-	// that were already running when the run started; `up` gets
-	// --force-recreate so every service ends up on the new configuration.
+	// forceRecreate records that services were already running when the run
+	// started, and that this run may replace them; `up` gets --force-recreate
+	// so every service ends up on the new configuration.
 	forceRecreate bool
 }
 
