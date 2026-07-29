@@ -60,14 +60,14 @@ export function BuildLLMPopover({
 }: BuildLLMPopoverProps) {
   const { user } = useUser();
   const userId = user?.id;
-  const [showRecommendedOnly, setShowRecommendedOnly] = useState(() =>
-    getStoredRecommendedModelsOnly(userId)
-  );
-
-  // The user loads asynchronously; re-read their persisted toggle once known.
-  useEffect(() => {
-    setShowRecommendedOnly(getStoredRecommendedModelsOnly(userId));
-  }, [userId]);
+  // Storage is the source of truth for the toggle (the user id it's keyed by
+  // loads asynchronously, so derive at render); state only tracks an
+  // in-session flip, which also writes through to storage.
+  const [recommendedOnlyFlip, setRecommendedOnlyFlip] = useState<
+    boolean | null
+  >(null);
+  const showRecommendedOnly =
+    recommendedOnlyFlip ?? getStoredRecommendedModelsOnly(userId);
   const [isOpen, setIsOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const selectedItemRef = useRef<HTMLDivElement>(null);
@@ -178,7 +178,7 @@ export function BuildLLMPopover({
 
   const handleRecommendedOnlyChange = useCallback(
     (checked: boolean) => {
-      setShowRecommendedOnly(checked);
+      setRecommendedOnlyFlip(checked);
       setStoredRecommendedModelsOnly(userId, checked);
     },
     [userId]
