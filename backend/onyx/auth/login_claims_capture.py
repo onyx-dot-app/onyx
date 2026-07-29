@@ -92,7 +92,7 @@ async def _resolve_capture_tenant_id(email: str) -> str | None:
     try:
         tenant_id = await asyncio.to_thread(
             fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+                "onyx.db.user_tenant_mapping", "get_tenant_id_for_email", None
             ),
             email,
         )

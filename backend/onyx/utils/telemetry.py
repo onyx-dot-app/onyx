@@ -189,7 +189,7 @@ def mt_cloud_telemetry(
 def _get_tenant_id_for_user_identify(user_email: str) -> str | None:
     try:
         return fetch_versioned_implementation_with_fallback(
-            module="onyx.server.tenants.user_mapping",
+            module="onyx.db.user_tenant_mapping",
             attribute="get_tenant_id_for_email",
             fallback=lambda _email: POSTGRES_DEFAULT_SCHEMA,
         )(user_email)

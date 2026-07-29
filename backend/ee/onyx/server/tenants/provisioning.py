@@ -9,6 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
+from ee.onyx.db.user_tenant_mapping import (
+    add_users_to_tenant,
+    get_tenant_id_for_email,
+    user_owns_a_tenant,
+)
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import (
     TenantByDomainResponse,
@@ -19,11 +24,6 @@ from ee.onyx.server.tenants.schema_management import (
     create_schema_if_not_exists,
     drop_schema,
     run_alembic_migrations,
-)
-from ee.onyx.server.tenants.user_mapping import (
-    add_users_to_tenant,
-    get_tenant_id_for_email,
-    user_owns_a_tenant,
 )
 from onyx.auth.users import exceptions
 from onyx.configs.app_configs import (
