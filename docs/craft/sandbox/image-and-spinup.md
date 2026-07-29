@@ -122,9 +122,11 @@ so the prod image still has it but dev/CI images can opt out.
 
 ## Cold pulls vs. image warming — decision and roadmap
 
-**Current state: we pre-pull the sandbox image onto the sandbox node
-pool with a DaemonSet.** Chart: `sandboxImagePrepull` in `values.yaml`,
-template `sandbox-image-prepuller.yaml`. On by default when
+**Current state: we pre-pull the sandbox image on both backends.**
+Kubernetes uses a DaemonSet over the sandbox node pool
+(`sandboxImagePrepull` in `values.yaml`, template
+`sandbox-image-prepuller.yaml`); Docker uses a compose service plus a
+startup warm — see "Docker" below. Both on by default when
 `ENABLE_CRAFT` is set.
 
 This section previously recorded the opposite decision — that we accept
@@ -262,6 +264,56 @@ Note also that **no CI lane would have caught this**: `ct install` only
 does a fresh install into an empty kind cluster, never an upgrade from
 the previously released chart, so the patch path where immutable-field
 violations live is untested. `ct install --upgrade` would cover it.
+
+### Docker
+
+Same problem, materially easier shape. The Docker backend pulls lazily in
+`DockerSandboxManager._ensure_sandbox_image()`, called from
+`provision()` — so on a host without the image, whoever asks for the
+first sandbox pays the ~1 GB download inside their own request.
+
+Two differences from Kubernetes drive a different fix:
+
+- **One image store, not one per node.** A compose deployment is a single
+  Docker daemon, so a single pull serves `api_server`, `background`, and
+  every sandbox container. There is no per-node fan-out to arrange, and
+  no `maxUnavailable` to tune.
+- **Docker never garbage-collects images.** kubelet reclaims them at
+  `imageGCHighThresholdPercent`, which is why the Kubernetes fix needs a
+  *running* pod to pin the layers. Docker only removes images on an
+  explicit `docker image prune`. Pinning is therefore a bonus here, not
+  the point.
+
+So the fix is just "pull at deploy time instead of at request time", in
+two layers:
+
+1. **A `sandbox-image-prepull` service in
+   `docker-compose.craft.yml`.** This is the real fix. Declaring the
+   image as a service puts it on the normal compose lifecycle:
+   `docker compose pull` fetches it alongside the Onyx images, and
+   `install.sh` already runs that before `up`, inside the step that
+   already warns "this may take several minutes".
+
+   It idles rather than exiting, for two reasons. `install.sh` runs
+   `docker compose up --wait` by default, which waits for services to be
+   *running* — a one-shot that exits would fail the install. And a live
+   container keeps the image out of `docker image prune -a`. The image's
+   own `ENTRYPOINT` (`/workspace/entrypoint.sh`) starts the agent, so the
+   entrypoint is overridden with the same portable idle loop the
+   Kubernetes prepuller uses.
+
+2. **A background warm at api_server startup**
+   (`sandbox/prewarm.py`). Covers what compose doesn't reach: bare
+   `docker`, dev runs, and hosts where the image was pruned after
+   install. Deliberately a daemon thread that swallows everything — a
+   warm is an optimisation, so it must not delay readiness behind a
+   registry download or break startup when the socket is missing. On
+   failure the lazy pull in `provision()` stays the fallback and reports
+   the error against the request it belongs to.
+
+The `background` worker also provisions (waking `SLEEPING` sandboxes via
+`scheduled_tasks/executor.py`) and needs no warm of its own: it shares
+the host's image store, so whatever pulled first covers it.
 
 ### Private registries
 

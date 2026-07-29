@@ -686,7 +686,15 @@ class DockerSandboxManager(SandboxManager):
             self._compose_project,
         )
 
+    def prewarm(self) -> None:
+        self._ensure_sandbox_image()
+
     def _ensure_sandbox_image(self) -> None:
+        """Pull the sandbox image unless it is already local.
+
+        Idempotent and thread-safe, so provision() and prewarm() can both call
+        it without coordinating.
+        """
         with self._image_check_lock:
             if self._image_checked:
                 return

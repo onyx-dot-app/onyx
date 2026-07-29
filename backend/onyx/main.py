@@ -78,6 +78,7 @@ from onyx.server.documents.targeted_reindex import router as targeted_reindex_ro
 from onyx.server.features.admin_banner.api import admin_router as admin_banner_router
 from onyx.server.features.build.api import admin_router as build_admin_router
 from onyx.server.features.build.api import router as build_router
+from onyx.server.features.build.configs import ENABLE_CRAFT
 from onyx.server.features.build.webapp_proxy import public_build_router
 from onyx.server.features.default_assistant.api import (
     router as default_assistant_router,
@@ -313,8 +314,6 @@ def validate_no_vector_db_settings() -> None:
             "mode when disabling the vector database."
         )
 
-    from onyx.server.features.build.configs import ENABLE_CRAFT
-
     if ENABLE_CRAFT:
         raise RuntimeError(
             "DISABLE_VECTOR_DB cannot be used with ENABLE_CRAFT. "
@@ -430,6 +429,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
         recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA)
         start_periodic_poller(POSTGRES_DEFAULT_SCHEMA)
+
+    if ENABLE_CRAFT:
+        from onyx.server.features.build.setup import setup_craft
+
+        setup_craft()
 
     yield
 

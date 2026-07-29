@@ -844,3 +844,67 @@ def test_proxy_kwargs_requires_ca_volume() -> None:
             sandbox_proxy_host="sandbox-proxy",
             proxy_ca_volume_name=None,
         )
+
+
+def _craft_compose_services() -> dict:
+    compose_path = REPO_ROOT / "deployment/docker_compose/docker-compose.craft.yml"
+    return yaml.safe_load(compose_path.read_text())["services"]
+
+
+def test_compose_prepulls_the_sandbox_image() -> None:
+    """The prepull service must reference the *same* image ref the sandbox
+    containers use.
+
+    A drifted ref is the worst outcome available: compose pulls and holds an
+    image nobody runs while every first sandbox still cold-pulls, and the stack
+    looks healthy throughout. The only symptom is the slow provision the service
+    was added to remove.
+    """
+    services = _craft_compose_services()
+    prepull_image = services["sandbox-image-prepull"]["image"]
+
+    for service_name in ("api_server", "background"):
+        assert (
+            f"SANDBOX_CONTAINER_IMAGE={prepull_image}"
+            in services[service_name]["environment"]
+        )
+
+
+def test_compose_prepull_does_not_run_the_agent() -> None:
+    """The image's own ENTRYPOINT (/workspace/entrypoint.sh) starts the agent, so
+    the prepull must override entrypoint rather than command, and idle portably —
+    `sleep infinity` is a GNU coreutils extension."""
+    prepull = _craft_compose_services()["sandbox-image-prepull"]
+    assert prepull["entrypoint"] == ["sh", "-c", "while :; do sleep 86400; done"]
+
+
+def test_compose_prepull_stays_running() -> None:
+    """install.sh runs `docker compose up --wait` by default, which waits for
+    services to be running — a one-shot that exits would fail the install. It
+    also keeps the image out of `docker image prune -a`."""
+    prepull = _craft_compose_services()["sandbox-image-prepull"]
+    assert prepull["restart"] == "unless-stopped"
+
+
+def test_compose_prepull_is_inert() -> None:
+    """It exists only to hold an image: no docker socket (root-equivalent on the
+    host), no sandbox bridge, no writable filesystem, no capabilities."""
+    prepull = _craft_compose_services()["sandbox-image-prepull"]
+
+    assert prepull["network_mode"] == "none"
+    assert "networks" not in prepull
+    assert "volumes" not in prepull
+    assert prepull["read_only"] is True
+    assert prepull["cap_drop"] == ["ALL"]
+    assert "no-new-privileges:true" in prepull["security_opt"]
+
+
+def test_embedded_craft_compose_copy_is_in_sync() -> None:
+    """onyx-cli go:embeds a byte-identical copy (go:embed can't reach outside
+    the cli module). See tools/ods/internal/deployfilessync."""
+    source = REPO_ROOT / "deployment/docker_compose/docker-compose.craft.yml"
+    embedded = (
+        REPO_ROOT
+        / "cli/internal/deploy/deployfiles/embedded/docker_compose/docker-compose.craft.yml"
+    )
+    assert embedded.read_text() == source.read_text()

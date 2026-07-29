@@ -127,6 +127,31 @@ services:
         max-size: "50m"
         max-file: "6"
 
+  # Makes `docker compose pull` fetch the sandbox image, so the first sandbox
+  # doesn't pay the ~1 GB download inside its provision request.
+  sandbox-image-prepull:
+    # Must match api_server/background's SANDBOX_CONTAINER_IMAGE; warming a
+    # different ref still leaves every sandbox cold-pulling, and looks healthy.
+    image: ${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:${IMAGE_TAG:-latest}}
+    # The image's ENTRYPOINT starts the agent, so replace it with an idle loop.
+    # `sleep infinity` is a GNU extension; this is portable.
+    entrypoint: ["sh", "-c", "while :; do sleep 86400; done"]
+    # Must stay running: install.sh runs `docker compose up --wait`, which a
+    # container that exits would fail.
+    restart: unless-stopped
+    network_mode: none
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "1"
+
 networks:
   # Pre-created by install.sh --include-craft.
   onyx_craft_sandbox:
