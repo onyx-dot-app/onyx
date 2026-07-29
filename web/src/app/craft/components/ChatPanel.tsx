@@ -43,10 +43,11 @@ import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import {
   BuildLlmSelection,
-  getDefaultLlmSelection,
   hasSupportedCraftProvider,
   resolveSessionLlmSelection,
 } from "@/app/craft/onboarding/constants";
+import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
+import { useUser } from "@/providers/UserProvider";
 import ScheduledRunBanner, {
   useScheduledRunContext,
 } from "@/app/craft/components/ScheduledRunBanner";
@@ -126,7 +127,9 @@ export default function BuildChatPanel({
   // exists (the model picker stays enabled so admins can connect from it).
   const hasProvider = hasSupportedCraftProvider(llmProviders);
   // Picker shows the session's stored model unless the user picks another.
-  // The pick is keyed by session so it can't leak across sessions.
+  // The pick is keyed by session so it can't leak across sessions; only when
+  // neither exists does the user's persisted preference (or the recommended
+  // default) apply.
   const sessionModel = useMemo<BuildLlmSelection | null>(
     () =>
       resolveSessionLlmSelection(
@@ -139,10 +142,14 @@ export default function BuildChatPanel({
   const [modelBySession, setModelBySession] = useState<
     Record<string, BuildLlmSelection>
   >({});
-  const selectedModel =
-    (sessionId ? modelBySession[sessionId] : undefined) ??
-    sessionModel ??
-    getDefaultLlmSelection(llmProviders);
+  const { user } = useUser();
+  const selectedModel = useMemo(
+    () =>
+      (sessionId ? modelBySession[sessionId] : undefined) ??
+      sessionModel ??
+      getPreferredLlmSelection(user?.id, llmProviders),
+    [sessionId, modelBySession, sessionModel, user?.id, llmProviders]
+  );
 
   const contextUsage = useMemo(() => {
     const usage = session?.contextUsage;

@@ -13,6 +13,12 @@ import {
   craftProviderDisplayName,
   isCraftRecommendedModel,
 } from "@/app/craft/onboarding/constants";
+import {
+  getStoredRecommendedModelsOnly,
+  setStoredLlmSelection,
+  setStoredRecommendedModelsOnly,
+} from "@/app/craft/utils/llmPreferences";
+import { useUser } from "@/providers/UserProvider";
 import { getModelIcon } from "@/lib/languageModels";
 import { Section } from "@/layouts/general-layouts";
 import {
@@ -52,7 +58,16 @@ export function BuildLLMPopover({
   children,
   disabled = false,
 }: BuildLLMPopoverProps) {
-  const [showRecommendedOnly, setShowRecommendedOnly] = useState(true);
+  const { user } = useUser();
+  const userId = user?.id;
+  const [showRecommendedOnly, setShowRecommendedOnly] = useState(() =>
+    getStoredRecommendedModelsOnly(userId)
+  );
+
+  // The user loads asynchronously; re-read their persisted toggle once known.
+  useEffect(() => {
+    setShowRecommendedOnly(getStoredRecommendedModelsOnly(userId));
+  }, [userId]);
   const [isOpen, setIsOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const selectedItemRef = useRef<HTMLDivElement>(null);
@@ -62,8 +77,17 @@ export function BuildLLMPopover({
     const options: ModelOption[] = [];
 
     llmProviders?.forEach((provider) => {
+      // Recommended-only still lists the active model so the current pick
+      // (e.g. restored from a stored preference) is never invisible.
+      const isCurrent = (model: ModelConfiguration): boolean =>
+        currentSelection?.providerId === provider.id &&
+        currentSelection.modelName === model.name;
       const models = showRecommendedOnly
-        ? provider.model_configurations.filter(isCraftRecommendedModel)
+        ? provider.model_configurations.filter(
+            (model) =>
+              model.is_visible &&
+              (isCraftRecommendedModel(model) || isCurrent(model))
+          )
         : provider.model_configurations.filter((model) => model.is_visible);
       models.forEach((model) => {
         options.push({
@@ -80,7 +104,7 @@ export function BuildLLMPopover({
     });
 
     return options;
-  }, [showRecommendedOnly, llmProviders]);
+  }, [showRecommendedOnly, llmProviders, currentSelection]);
 
   // Group options by provider
   const groupedOptions = useMemo(() => {
@@ -152,17 +176,27 @@ export function BuildLLMPopover({
     setExpandedGroups(value);
   };
 
+  const handleRecommendedOnlyChange = useCallback(
+    (checked: boolean) => {
+      setShowRecommendedOnly(checked);
+      setStoredRecommendedModelsOnly(userId, checked);
+    },
+    [userId]
+  );
+
   const applySelection = useCallback(
     (option: ModelOption) => {
-      onSelectionChange({
+      const selection: BuildLlmSelection = {
         providerId: option.providerId,
         providerName: option.providerName,
         provider: option.providerKey,
         modelName: option.modelName,
-      });
+      };
+      setStoredLlmSelection(userId, selection);
+      onSelectionChange(selection);
       setIsOpen(false);
     },
-    [onSelectionChange]
+    [userId, onSelectionChange]
   );
 
   const handlePopoverOpenChange = (open: boolean) => {
@@ -219,7 +253,7 @@ export function BuildLLMPopover({
               </Text>
               <Switch
                 checked={showRecommendedOnly}
-                onCheckedChange={setShowRecommendedOnly}
+                onCheckedChange={handleRecommendedOnlyChange}
               />
             </div>
 
