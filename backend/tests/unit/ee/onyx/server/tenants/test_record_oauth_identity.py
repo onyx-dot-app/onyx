@@ -1,6 +1,5 @@
-"""Guards that `record_oauth_identity` only touches the mapping tables on cloud
-and never re-links a subject that already belongs to another mapping, and that
-invitation flows move subject links only with the authenticated user.
+"""Guards the mapping-table writers: cloud-only sessions, link-once semantics
+for subjects, and identity movement through rename and invitation flows.
 
 The `public.user_tenant_mapping*` tables are created by the `alembic_tenants`
 tree, which only multi-tenant deployments run. Opening a session against them
@@ -17,6 +16,7 @@ from ee.onyx.db.user_tenant_mapping import (
     accept_user_invite,
     approve_user_invite,
     record_oauth_identity,
+    rekey_user_mapping_email,
 )
 
 _MAPPING_MODULE = "ee.onyx.db.user_tenant_mapping"
@@ -108,6 +108,162 @@ def test_repeat_login_for_the_linked_mapping_is_idempotent() -> None:
     )
 
     db_session = session_ctx.return_value.__enter__.return_value
+    db_session.commit.assert_called_once()
+
+
+def test_rekey_resolves_the_mapping_by_oauth_subject() -> None:
+    with (
+        patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
+        patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
+    ):
+        db_session = session_ctx.return_value.__enter__.return_value
+        mapping = SimpleNamespace(
+            email="old@example.com", tenant_id="tenant_abc", active=True
+        )
+        locked_query = db_session.query.return_value.filter.return_value.with_for_update.return_value
+        locked_query.all.return_value = [mapping]
+        locked_query.one_or_none.return_value = None
+        rekey_user_mapping_email(
+            new_email="New@Example.com",
+            tenant_id="tenant_abc",
+            oauth_identities=[("google", "sub-123")],
+        )
+
+    assert mapping.email == "new@example.com"
+    db_session.commit.assert_called_once()
+
+
+def test_rekey_moves_links_off_every_mapping_it_deletes() -> None:
+    """A second provider can be linked to a different mapping row in the same
+    tenant. That row is deleted here, so its link must move first or ON DELETE
+    CASCADE strands the subject and the next login provisions a new tenant."""
+    with (
+        patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
+        patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
+    ):
+        db_session = session_ctx.return_value.__enter__.return_value
+        survivor = SimpleNamespace(
+            email="old@example.com", tenant_id="tenant_abc", active=True
+        )
+        doomed = SimpleNamespace(
+            email="other@example.com", tenant_id="tenant_abc", active=False
+        )
+        github_account = SimpleNamespace(
+            oauth_name="github",
+            account_id="sub-456",
+            email="other@example.com",
+            tenant_id="tenant_abc",
+        )
+        mapping_query = MagicMock()
+        locked_mapping_query = (
+            mapping_query.filter.return_value.with_for_update.return_value
+        )
+        locked_mapping_query.all.return_value = [survivor, doomed]
+        locked_mapping_query.one_or_none.return_value = None
+        account_query = MagicMock()
+        account_query.filter.return_value.with_for_update.return_value.all.return_value = [
+            github_account
+        ]
+        db_session.query.side_effect = [mapping_query, mapping_query, account_query]
+
+        rekey_user_mapping_email(
+            new_email="new@example.com",
+            tenant_id="tenant_abc",
+            oauth_identities=[("google", "sub-123"), ("github", "sub-456")],
+        )
+
+    assert (github_account.email, github_account.tenant_id) == (
+        "new@example.com",
+        "tenant_abc",
+    )
+    db_session.flush.assert_called_once_with()
+    db_session.delete.assert_called_once_with(doomed)
+    db_session.commit.assert_called_once()
+
+
+def test_rekey_accepts_a_different_linked_provider_identity() -> None:
+    """The row may have been linked by the first provider rather than the one
+    used for this login, so ownership must match any linked subject."""
+    with (
+        patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
+        patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
+    ):
+        db_session = session_ctx.return_value.__enter__.return_value
+        mapping = SimpleNamespace(
+            email="old@example.com", tenant_id="tenant_abc", active=True
+        )
+        locked_query = db_session.query.return_value.filter.return_value.with_for_update.return_value
+        locked_query.all.return_value = [mapping]
+        locked_query.one_or_none.return_value = None
+        rekey_user_mapping_email(
+            new_email="new@example.com",
+            tenant_id="tenant_abc",
+            oauth_identities=[("oidc", "sub-999")],
+        )
+
+    assert mapping.email == "new@example.com"
+    ownership_filter = db_session.query.return_value.filter.call_args_list[0].args[-1]
+    sql = str(
+        ownership_filter.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "user_tenant_mapping_oauth_account" in sql
+    assert "oidc" in sql
+    assert "sub-999" in sql
+    db_session.commit.assert_called_once()
+
+
+def test_rekey_merges_an_existing_destination_row() -> None:
+    with (
+        patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
+        patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
+    ):
+        db_session = session_ctx.return_value.__enter__.return_value
+        source = SimpleNamespace(
+            email="old@example.com", tenant_id="tenant_abc", active=True
+        )
+        destination = SimpleNamespace(
+            email="new@example.com", tenant_id="tenant_abc", active=False
+        )
+        google_account = SimpleNamespace(
+            oauth_name="google",
+            account_id="sub-123",
+            email="old@example.com",
+            tenant_id="tenant_abc",
+        )
+        github_account = SimpleNamespace(
+            oauth_name="github",
+            account_id="sub-456",
+            email="old@example.com",
+            tenant_id="tenant_abc",
+        )
+        mapping_query = MagicMock()
+        locked_mapping_query = (
+            mapping_query.filter.return_value.with_for_update.return_value
+        )
+        locked_mapping_query.all.return_value = [source]
+        locked_mapping_query.one_or_none.return_value = destination
+        account_query = MagicMock()
+        account_query.filter.return_value.with_for_update.return_value.all.return_value = [
+            google_account,
+            github_account,
+        ]
+        db_session.query.side_effect = [mapping_query, mapping_query, account_query]
+
+        rekey_user_mapping_email(
+            new_email="new@example.com",
+            tenant_id="tenant_abc",
+            oauth_identities=[("google", "sub-123")],
+        )
+
+    assert destination.active is True
+    assert {
+        (account.email, account.tenant_id)
+        for account in (google_account, github_account)
+    } == {("new@example.com", "tenant_abc")}
+    db_session.flush.assert_called_once_with()
+    db_session.delete.assert_called_once_with(source)
     db_session.commit.assert_called_once()
 
 

@@ -244,6 +244,101 @@ def _association_ownership_filter(
     )
 
 
+def rekey_user_mapping_email(
+    new_email: str,
+    tenant_id: str,
+    oauth_identities: Sequence[tuple[str, str]],
+) -> None:
+    """Collapse this tenant's membership rows for the user's linked subjects
+    onto their new address, keeping one row and deleting the rest.
+
+    Otherwise a row keeps routing the old address and leaves the new one
+    unmapped, which is the state that provisions a second tenant.
+
+    Ownership is matched by any linked subject, since the provider used for
+    this login may not be the one that linked the row. Subject links are moved
+    to the surviving row before the others are deleted.
+
+    No-op outside multi-tenant, where the mapping tables are not provisioned.
+    """
+    if not MULTI_TENANT:
+        return
+
+    identities = list(dict.fromkeys(oauth_identities))
+    if not identities:
+        logger.warning("No linked OAuth identity to rekey in tenant %s", tenant_id)
+        return
+
+    normalized_new_email = new_email.lower()
+    with get_catalog_session() as db_session:
+        matched_mappings = (
+            db_session.query(UserTenantMapping)
+            .filter(
+                UserTenantMapping.tenant_id == tenant_id,
+                _association_ownership_filter(identities),
+            )
+            .with_for_update()
+            .all()
+        )
+        if not matched_mappings:
+            logger.warning("No mapping row to rekey in tenant %s", tenant_id)
+            return
+
+        destination = (
+            db_session.query(UserTenantMapping)
+            .filter(
+                UserTenantMapping.tenant_id == tenant_id,
+                UserTenantMapping.email == normalized_new_email,
+            )
+            .with_for_update()
+            .one_or_none()
+        )
+        identity_source = next(
+            (mapping for mapping in matched_mappings if mapping.active),
+            matched_mappings[0],
+        )
+
+        if destination is None:
+            destination = identity_source
+            destination.email = normalized_new_email
+
+        source_mappings = [
+            mapping for mapping in matched_mappings if mapping is not destination
+        ]
+        if source_mappings:
+            association_accounts = (
+                db_session.query(UserTenantMappingOAuthAccount)
+                .filter(
+                    tuple_(
+                        UserTenantMappingOAuthAccount.email,
+                        UserTenantMappingOAuthAccount.tenant_id,
+                    ).in_(
+                        [
+                            (mapping.email, mapping.tenant_id)
+                            for mapping in source_mappings
+                        ]
+                    )
+                )
+                .with_for_update()
+                .all()
+            )
+            for account in association_accounts:
+                account.email = destination.email
+                account.tenant_id = destination.tenant_id
+
+            # Move association FKs before their source mappings are deleted,
+            # or ON DELETE CASCADE takes the links with them.
+            db_session.flush()
+
+        destination.active = destination.active or any(
+            mapping.active for mapping in matched_mappings
+        )
+        for mapping in source_mappings:
+            db_session.delete(mapping)
+
+        db_session.commit()
+
+
 def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     """
     Add users to a tenant. If a user has an active mapping elsewhere,
@@ -252,7 +347,7 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     Calls ``enforce_cloud_seat_limit`` before inserting any new active
     mapping so Stripe auto-billing fails the request closed on decline.
     """
-    unique_emails = set(emails)
+    unique_emails = {email.lower() for email in emails}
     if not unique_emails:
         return
 
@@ -331,12 +426,13 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
 
 
 def remove_users_from_tenant(emails: list[str], tenant_id: str) -> None:
+    normalized_emails = [email.lower() for email in emails]
     with get_catalog_session() as db_session:
         try:
             mappings_to_delete = (
                 db_session.query(UserTenantMapping)
                 .filter(
-                    UserTenantMapping.email.in_(emails),
+                    UserTenantMapping.email.in_(normalized_emails),
                     UserTenantMapping.tenant_id == tenant_id,
                 )
                 .all()
@@ -572,6 +668,7 @@ def deny_user_invite(email: str, tenant_id: str) -> None:
     Deny an invitation to join a tenant.
     This removes the user's mapping to the tenant.
     """
+    email = email.lower()
     with get_catalog_session() as db_session:
         # Delete the mapping for this user and tenant
         result = (
@@ -652,6 +749,7 @@ def get_tenant_invitation(email: str) -> TenantSnapshot | None:
     """
     Get the first tenant invitation for this user
     """
+    email = email.lower()
     with get_catalog_session() as db_session:
         # Get the first tenant invitation for this user
         invitation = (
