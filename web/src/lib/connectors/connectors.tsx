@@ -826,6 +826,16 @@ export const connectorConfigs: Record<
           "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed.",
         optional: true,
       },
+      {
+        type: "checkbox",
+        query: "Include custom fields?",
+        label: "Include Custom Fields",
+        name: "include_custom_fields",
+        description:
+          "Index the values of your Jira custom fields (rich text fields, select lists, sprints, ...) along with each issue's description. Enable this when your issues keep important details in custom fields. Turning this on changes the indexed content of every issue, so they will be re-indexed on the next run.",
+        optional: true,
+        default: false,
+      },
     ],
     advanced_values: [],
   },
@@ -2147,6 +2157,7 @@ export interface JiraConfig {
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;
+  include_custom_fields?: boolean;
 }
 
 export interface SalesforceConfig {

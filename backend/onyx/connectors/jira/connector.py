@@ -38,13 +38,18 @@ from onyx.connectors.interfaces import (
     SlimConnectorWithPermSync,
 )
 from onyx.connectors.jira.access import get_project_permissions
+from onyx.connectors.jira.adf import extract_text_from_adf
+from onyx.connectors.jira.custom_fields import (
+    JiraFieldMetadata,
+    get_custom_field_metadata,
+    render_issue_custom_fields,
+)
 from onyx.connectors.jira.utils import (
     JIRA_CLOUD_API_VERSION,
     best_effort_basic_expert_info,
     best_effort_get_field_from_issue,
     build_jira_client,
     build_jira_url,
-    extract_text_from_adf,
     get_comment_strs,
 )
 from onyx.connectors.models import (
@@ -389,12 +394,20 @@ def _perform_jql_search_v2(
             raise RuntimeError(f"Found Jira object not of type Issue: {issue}")
 
 
+def _build_ticket_content(
+    description: str, custom_field_text: str, comment_lines: list[str]
+) -> str:
+    body = f"{description}\n{custom_field_text}" if custom_field_text else description
+    return f"{body}\n" + "\n".join(comment_lines)
+
+
 def process_jira_issue(
     jira_base_url: str,
     issue: Issue,
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    custom_field_metadata: dict[str, JiraFieldMetadata] | None = None,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -415,18 +428,31 @@ def process_jira_issue(
         issue=issue,
         comment_email_blacklist=comment_email_blacklist,
     )
-    ticket_content = f"{description}\n" + "\n".join(
-        [f"Comment: {comment}" for comment in comments if comment]
-    )
+    comment_lines = [f"Comment: {comment}" for comment in comments if comment]
+    ticket_content = _build_ticket_content(description, "", comment_lines)
 
     # Check ticket size
-    if len(ticket_content.encode("utf-8")) > JIRA_CONNECTOR_MAX_TICKET_SIZE:
+    base_content_size = len(ticket_content.encode("utf-8"))
+    if base_content_size > JIRA_CONNECTOR_MAX_TICKET_SIZE:
         logger.info(
             "Skipping %s because it exceeds the maximum size of %s bytes.",
             issue.key,
             JIRA_CONNECTOR_MAX_TICKET_SIZE,
         )
         return None
+
+    if custom_field_metadata:
+        # Custom fields get whatever room is left under the size limit, so that
+        # the extra content can never push an otherwise indexable ticket over it.
+        # The reserved byte accounts for the separator _build_ticket_content adds.
+        custom_field_text = render_issue_custom_fields(
+            issue=issue,
+            custom_field_metadata=custom_field_metadata,
+            max_bytes=JIRA_CONNECTOR_MAX_TICKET_SIZE - base_content_size - 1,
+        )
+        ticket_content = _build_ticket_content(
+            description, custom_field_text, comment_lines
+        )
 
     page_url = build_jira_url(jira_base_url, issue.key)
 
@@ -533,6 +559,10 @@ class JiraConnector(
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
         scoped_token: bool = False,
+        # Index the values of the issue's custom fields alongside its description.
+        # Off by default so that enabling it is an explicit choice for an existing
+        # connector, since it changes the indexed content of every issue.
+        include_custom_fields: bool = False,
     ) -> None:
         self.batch_size = batch_size
 
@@ -546,9 +576,13 @@ class JiraConnector(
         self.labels_to_skip = set(labels_to_skip)
         self.jql_query = jql_query
         self.scoped_token = scoped_token
+        self.include_custom_fields = include_custom_fields
         self._jira_client: JIRA | None = None
         # Cache project permissions to avoid fetching them repeatedly across runs
         self._project_permissions_cache: dict[str, Any] = {}
+        # Custom field definitions are the same for the whole instance; resolved
+        # on first use and reused for every issue afterwards.
+        self._custom_field_metadata: dict[str, JiraFieldMetadata] | None = None
 
     @property
     def comment_email_blacklist(self) -> tuple:
@@ -589,6 +623,16 @@ class JiraConnector(
                 add_prefix=add_prefix,
             )
         return self._project_permissions_cache[cache_key]
+
+    def _get_custom_field_metadata_for_indexing(
+        self,
+    ) -> dict[str, JiraFieldMetadata] | None:
+        """Custom field definitions, or None when custom field indexing is off."""
+        if not self.include_custom_fields:
+            return None
+        if self._custom_field_metadata is None:
+            self._custom_field_metadata = get_custom_field_metadata(self.jira_client)
+        return self._custom_field_metadata
 
     def _is_epic(self, issue: Issue) -> bool:
         """Check if issue is an Epic."""
@@ -804,6 +848,9 @@ class JiraConnector(
             ids_done=new_checkpoint.ids_done,
         ):
             issue_key = issue.key
+            # Resolved outside the per-issue error handling: failing to read the
+            # field definitions is a problem with the run, not with one issue.
+            custom_field_metadata = self._get_custom_field_metadata_for_indexing()
             try:
                 # Get project info for hierarchy
                 project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
@@ -843,6 +890,7 @@ class JiraConnector(
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    custom_field_metadata=custom_field_metadata,
                 ):
                     # Add permission information to the document if requested
                     if include_permissions:
@@ -1135,6 +1183,8 @@ if __name__ == "__main__":
         jira_base_url=os.environ["JIRA_BASE_URL"],
         project_key=os.environ.get("JIRA_PROJECT_KEY"),
         comment_email_blacklist=[],
+        include_custom_fields=os.environ.get("JIRA_INCLUDE_CUSTOM_FIELDS", "").lower()
+        == "true",
     )
 
     connector.load_credentials(
