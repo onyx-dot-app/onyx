@@ -809,14 +809,8 @@ def test_code_block_plaintext_added(
 def test_bare_fence_labeling_does_not_corrupt_other_fences(
     mock_search_docs: CitationMapping,  # noqa: ARG001
 ) -> None:
-    """Labeling a bare fence must not rewrite other fences in the same
-    buffered segment (regression: replace() turned the closing fence into
-    ```plaintext, opening a spurious block, and ```bash into
-    ```plaintextbash).
-
-    The segment must hold a bare fence, its closing fence, AND a labeled
-    fence at the moment the labeling branch fires (odd fence count so
-    in_code_block is True)."""
+    """Labeling a bare fence must leave the segment's other fences untouched
+    (the first token buffers three fences at labeling time)."""
     processor = DynamicCitationProcessor()
 
     tokens: list[str | None] = [
@@ -825,11 +819,8 @@ def test_bare_fence_labeling_does_not_corrupt_other_fences(
     ]
     output, _ = process_tokens(processor, tokens)
 
-    # Only the bare opening fence gets the plaintext label.
     assert output.count("```plaintext") == 1
-    # The closing fence of the first block stays bare.
     assert "x\n```\nB:" in output
-    # The labeled fence is untouched.
     assert "```plaintextbash" not in output
     assert "```bash" in output
 
