@@ -533,9 +533,12 @@ func (in *installer) askVersion(ctx context.Context, title, def string) (string,
 	}
 }
 
-// askModeQuestion is the single merged deployment-mode select (mode and
-// Craft in one question). Lite stays the default for new installs, matching
-// install.sh's interactive and --no-prompt behavior.
+// askModeQuestion is the deployment-mode select. Lite stays the default for
+// new installs, matching install.sh's interactive and --no-prompt behavior.
+// Craft is deliberately not offered here: it is reachable with
+// --include-craft, and installs it the same way, but it binds the docker
+// socket and is not yet something to put in front of someone who has not
+// gone looking for it.
 func (in *installer) askModeQuestion() error {
 	if in.opts.Lite {
 		in.infof("Deployment mode: Lite (set via --lite flag)")
@@ -548,15 +551,13 @@ func (in *installer) askModeQuestion() error {
 		[]ui.Option{
 			{Label: "Lite", Hint: "chat, tools, uploads, projects — no vector search (recommended)"},
 			{Label: "Standard", Hint: "full search, connectors, and RAG"},
-			{Label: "Standard + Craft", Hint: "adds AI web-app building (binds the docker socket)"},
 		}, 0)
 	if err != nil {
 		return err
 	}
 	in.lite = choice == 0
-	in.craft = choice == 2
 	if in.wiz != nil {
-		in.wiz.Answer("Mode", []string{"Lite", "Standard", "Std+Craft"}[choice])
+		in.wiz.Answer("Mode", []string{"Lite", "Standard"}[choice])
 	}
 	return nil
 }
@@ -1114,11 +1115,12 @@ func (in *installer) explainIncompleteStart(tag, prevTag string) {
 	case prevTag == "":
 		in.warnf("Keep %s: it holds the secrets any volumes created just now were initialized with.",
 			filepath.Join("deployment", ".env"))
-		in.infof("Fix the problem above and re-run `onyx-cli deploy install`, or start clean with `onyx-cli deploy uninstall`.")
+		in.infof("Fix the problem above and re-run %s, or start clean with %s.",
+			in.paint.Accent("onyx-cli deploy install"), in.paint.Accent("onyx-cli deploy uninstall"))
 	case prevTag != tag:
 		in.warnf("Partially deployed: services that started are on %s, the rest are still on %s.", tag, prevTag)
-		in.infof("`.env` stays on %s so a re-run finishes the move; to go back, run `onyx-cli deploy upgrade --tag %s`.",
-			tag, prevTag)
+		in.infof("`.env` stays on %s so a re-run finishes the move; to go back, run %s.",
+			tag, in.paint.Accent(fmt.Sprintf("onyx-cli deploy upgrade --tag %s", prevTag)))
 	}
 }
 
@@ -1250,9 +1252,10 @@ func (in *installer) printFailureDiagnosis(output string) {
 		in.plainf("")
 		in.warnf("This looks like a ulimit failure: the OpenSearch index container requests unlimited memlock, which rootless Docker (and some hosts) can't grant.")
 		in.infof("Fix one of these ways, then re-run:")
-		in.plainf("  • Raise the daemon limits: systemctl --user edit docker → [Service] LimitMEMLOCK=infinity, LimitNOFILE=1048576 → systemctl --user restart docker")
-		in.plainf("    (OpenSearch may also need: sudo sysctl -w vm.max_map_count=262144)")
-		in.plainf("  • Or deploy Lite mode (no OpenSearch): onyx-cli deploy install --lite")
+		in.plainf("  • Raise the daemon limits: %s → [Service] LimitMEMLOCK=infinity, LimitNOFILE=1048576 → %s",
+			in.paint.Accent("systemctl --user edit docker"), in.paint.Accent("systemctl --user restart docker"))
+		in.plainf("    (OpenSearch may also need: %s)", in.paint.Accent("sudo sysctl -w vm.max_map_count=262144"))
+		in.plainf("  • Or deploy Lite mode (no OpenSearch): %s", in.paint.Accent("onyx-cli deploy install --lite"))
 		return
 	}
 	if strings.Contains(lower, "address already in use") || strings.Contains(lower, "port is already allocated") {
@@ -1320,7 +1323,7 @@ func (in *installer) printSuccess(ctx context.Context, hostPort int) {
 	url := fmt.Sprintf("http://localhost:%d", hostPort)
 	headline := "Onyx is ready  →  " + ui.Accent(url)
 	if in.opts.NoWait {
-		headline = "Onyx containers started (still initializing — check: onyx-cli deploy status)"
+		headline = "Onyx containers started (still initializing — check: " + ui.Accent("onyx-cli deploy status") + ")"
 	}
 	lines := []string{
 		headline,

@@ -77,7 +77,7 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 		for _, alt := range in.root.Ambiguous {
 			in.infof("(another install exists at %s — pass --dir to inspect it)", alt)
 		}
-		in.infof("Install one with: onyx-cli deploy install")
+		in.infof("Install one with: %s", in.paint.Accent("onyx-cli deploy install"))
 		return exitcodes.New(exitcodes.NotAvailable, "not installed")
 	}
 	st.Installed = true
@@ -128,7 +128,7 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 	in.plainf("  Version (running):  %s", in.orUnknown(st.RunningTag))
 	if drift(st.ManifestTag, st.EnvTag, st.RunningTag) {
 		in.warnf("Version drift detected — the manifest, .env, and running containers disagree.")
-		in.infof("A restart applies .env: onyx-cli deploy stop && onyx-cli deploy install")
+		in.infof("A restart applies .env: %s", in.paint.Accent("onyx-cli deploy stop && onyx-cli deploy install"))
 	}
 	in.plainf("")
 	if len(st.Services) == 0 {

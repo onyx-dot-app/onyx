@@ -757,6 +757,32 @@ func TestInstallPullFailureRemovesFreshEnv(t *testing.T) {
 	}
 }
 
+// Craft binds the docker socket, so it is something to opt into rather than
+// something to be shown. --include-craft still installs it; the mode question
+// must not put it in front of someone who didn't ask.
+func TestModeQuestionDoesNotOfferCraft(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	deps.IOS.IsStdinTTY, deps.IOS.IsStdoutTTY = true, true
+	deps.IOS.In = bytes.NewBufferString(strings.Repeat("\n", 8)) // accept every default
+
+	if err := RunInstall(context.Background(), deps, Options{
+		Dir: t.TempDir(), NoWait: true, Local: true,
+	}); err != nil {
+		t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+	out := outBuf(deps).String()
+	_, asked, found := strings.Cut(out, "Deployment mode")
+	if !found {
+		t.Fatalf("the mode question was never asked:\n%s", out)
+	}
+	options, _, _ := strings.Cut(asked, "Choose an option")
+	if strings.Contains(options, "Craft") {
+		t.Errorf("the mode question still offers Craft:%s", options)
+	}
+}
+
 // Leaving lite mode has to undo lite's .env adjustments, or the "standard"
 // deployment keeps storing files in Postgres and never starts MinIO.
 func TestInstallRestoresStandardFileStoreWhenLeavingLite(t *testing.T) {

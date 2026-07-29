@@ -42,7 +42,7 @@ func (in *installer) runStop(ctx context.Context) error {
 	}
 	in.successf("Onyx containers stopped (paused)")
 	in.plainf("")
-	in.infof("Start them again with: onyx-cli deploy install")
+	in.infof("Start them again with: %s", in.paint.Accent("onyx-cli deploy install"))
 	return nil
 }
 

@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -93,8 +94,8 @@ func (in *installer) runUninstall(ctx context.Context) error {
 					"containers or volumes are still present — %s was left in place so you can retry; pass --force to delete it anyway",
 					in.root.Dir)
 			}
-			in.warnf("Deleting %s anyway (--force) — clean up leftovers with `docker compose -p %s down -v`",
-				in.root.Dir, dockercmd.ProjectName)
+			in.warnf("Deleting %s anyway (--force) — clean up leftovers with %s",
+				in.root.Dir, in.paint.Accent(fmt.Sprintf("docker compose -p %s down -v", dockercmd.ProjectName)))
 		} else {
 			in.successf("Onyx containers and volumes removed")
 		}
