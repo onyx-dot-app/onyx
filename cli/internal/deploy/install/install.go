@@ -335,7 +335,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		in.rollbackEnv(envPath, prevEnv)
 		return err
 	}
-	if err := in.startServices(ctx, effectiveTag, hostPort); err != nil {
+	if err := in.startServices(ctx, effectiveTag, Var(string(prevEnv), "IMAGE_TAG"), hostPort); err != nil {
 		return err
 	}
 
@@ -882,7 +882,10 @@ func (in *installer) pullImages(ctx context.Context, tag string, hostPort int) e
 	return nil
 }
 
-func (in *installer) startServices(ctx context.Context, tag string, hostPort int) error {
+// startServices brings the stack up. prevTag is the version .env carried
+// before this run ("" on a fresh install), used only to explain what a failed
+// start left behind.
+func (in *installer) startServices(ctx context.Context, tag, prevTag string, hostPort int) error {
 	env := in.composeRunEnv(tag, hostPort)
 	files := in.composeFileNames(false)
 	dir := in.deploymentDir()
@@ -904,10 +907,31 @@ func (in *installer) startServices(ctx context.Context, tag string, hostPort int
 		in.infof("Check the logs of any unhealthy service:")
 		in.plainf("  onyx-cli deploy status")
 		in.plainf("  (cd %q && docker compose %s logs <service>)", dir, strings.Join(fileArgs(files), " "))
+		in.explainIncompleteStart(tag, prevTag)
 		in.infof("If the issue persists, please contact: founders@onyx.app")
 		return exitcodes.Newf(exitcodes.General, "docker compose up failed: %v", err)
 	}
 	return nil
+}
+
+// explainIncompleteStart says what a half-finished `up` left behind. Unlike a
+// failed pull, .env is deliberately NOT reverted here: containers that did
+// come up are running the new images, so putting the old version back would
+// deploy older code over data the new one may already have migrated, and on a
+// fresh install .env holds the secrets the volumes were just initialized with.
+// The manifest still records the previously deployed version, so `deploy
+// status` reports the split rather than claiming the move succeeded.
+func (in *installer) explainIncompleteStart(tag, prevTag string) {
+	switch {
+	case prevTag == "":
+		in.warnf("Keep %s: it holds the secrets any volumes created just now were initialized with.",
+			filepath.Join("deployment", ".env"))
+		in.infof("Fix the problem above and re-run `onyx-cli deploy install`, or start clean with `onyx-cli deploy uninstall`.")
+	case prevTag != tag:
+		in.warnf("Partially deployed: services that started are on %s, the rest are still on %s.", tag, prevTag)
+		in.infof("`.env` stays on %s so a re-run finishes the move; to go back, run `onyx-cli deploy upgrade --tag %s`.",
+			tag, prevTag)
+	}
 }
 
 // rollbackEnv restores .env to its pre-run content after a failed pull, so a

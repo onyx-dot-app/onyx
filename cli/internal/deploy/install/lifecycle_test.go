@@ -108,6 +108,36 @@ func TestUninstallRefusesUnrecognizedDir(t *testing.T) {
 	}
 }
 
+// Markers are not authorization: a deployment/ under $HOME makes $HOME look
+// like an install, and uninstall removes the root recursively.
+func TestUninstallRefusesBroadRootWithMarkers(t *testing.T) {
+	isolateEnv(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	// A real deployment, but installed straight into the home directory.
+	if err := os.MkdirAll(filepath.Join(home, "deployment"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "deployment", ".env"), []byte("IMAGE_TAG=v4.0.0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	keep := filepath.Join(home, "taxes.pdf")
+	if err := os.WriteFile(keep, []byte("mine"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := testDeps(t, runner, notFoundServer(t))
+	err := RunUninstall(context.Background(), deps, Options{Dir: home, Force: true})
+	if err == nil || !strings.Contains(err.Error(), "refusing to delete everything under") {
+		t.Fatalf("err = %v, want a refusal", err)
+	}
+	if _, statErr := os.Stat(keep); statErr != nil {
+		t.Fatal("refused uninstall deleted the home directory")
+	}
+}
+
 // Removing the directory after a failed teardown would strand the containers
 // and volumes with nothing left describing them.
 func TestUninstallKeepsFilesWhenTeardownFails(t *testing.T) {

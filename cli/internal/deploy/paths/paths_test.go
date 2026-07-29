@@ -131,3 +131,33 @@ func TestIsInstallEnvMarker(t *testing.T) {
 		t.Fatal(".env marker should count as an install")
 	}
 }
+
+// Install markers say a directory holds a deployment; they say nothing about
+// what else it holds. Since uninstall removes the root recursively, roots
+// whose contents can't be written off wholesale are refused separately.
+func TestCheckDeletableRefusesBroadRoots(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir on Windows
+
+	for _, dir := range []string{
+		string(os.PathSeparator),
+		home,
+		filepath.Dir(home), // contains the home directory
+		filepath.Join(string(os.PathSeparator), "usr"),
+	} {
+		if err := CheckDeletable(dir); err == nil {
+			t.Errorf("CheckDeletable(%q) allowed a recursive delete", dir)
+		}
+	}
+
+	for _, dir := range []string{
+		filepath.Join(home, ".config", "onyx"),
+		filepath.Join(home, "onyx_data"),
+		t.TempDir(),
+	} {
+		if err := CheckDeletable(dir); err != nil {
+			t.Errorf("CheckDeletable(%q) = %v, want a deployment directory to be deletable", dir, err)
+		}
+	}
+}

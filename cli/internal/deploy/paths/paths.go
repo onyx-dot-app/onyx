@@ -5,8 +5,10 @@
 package paths
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Source records how the install root was chosen.
@@ -68,6 +70,54 @@ func IsInstall(dir string) bool {
 		}
 	}
 	return false
+}
+
+// CheckDeletable reports whether dir is specific enough to be removed
+// recursively. The install root is named freely by --dir, ONYX_DEPLOYMENT_DIR
+// and the legacy INSTALL_PREFIX, and uninstall removes it with os.RemoveAll,
+// so deployment markers alone are not enough to authorize the delete: a stray
+// deployment/.env anywhere under a home directory would mark it, and the
+// markers say nothing about how much else lives under the same root.
+//
+// Refused are the filesystem (or volume) root, the user's home directory,
+// anything containing it, and top-level directories like /usr or /home. A
+// deployment that really does live in one of those is removed by hand — the
+// error says so.
+func CheckDeletable(dir string) error {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("cannot resolve %s: %w", dir, err)
+	}
+	abs = resolveSymlinks(abs)
+
+	if abs == filepath.Dir(abs) {
+		return fmt.Errorf("%s is the filesystem root", abs)
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		switch home = resolveSymlinks(home); {
+		case abs == home:
+			return fmt.Errorf("%s is your home directory", abs)
+		case strings.HasPrefix(home, abs+string(os.PathSeparator)):
+			return fmt.Errorf("%s contains your home directory", abs)
+		}
+	}
+	// Two segments below the root ("/opt/onyx", not "/opt") is the line
+	// between a deployment directory and a directory deployments live in.
+	rest := strings.Trim(strings.TrimPrefix(abs, filepath.VolumeName(abs)), string(os.PathSeparator))
+	if len(strings.Split(rest, string(os.PathSeparator))) < 2 {
+		return fmt.Errorf("%s is a top-level directory", abs)
+	}
+	return nil
+}
+
+// resolveSymlinks canonicalizes p when it can, so a symlinked home directory
+// (macOS /tmp, /var, container mounts) still compares equal to the paths
+// derived from it.
+func resolveSymlinks(p string) string {
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return filepath.Clean(resolved)
+	}
+	return filepath.Clean(p)
 }
 
 // Resolve picks the install root. Precedence: --dir flag, ONYX_DEPLOYMENT_DIR,

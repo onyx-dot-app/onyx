@@ -195,7 +195,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.rollbackEnv(envPath, envBytes)
 		return err
 	}
-	if err := in.startServices(ctx, targetTag, hostPort); err != nil {
+	if err := in.startServices(ctx, targetTag, installedTag, hostPort); err != nil {
 		return err
 	}
 

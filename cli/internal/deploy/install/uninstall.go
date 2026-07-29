@@ -32,12 +32,19 @@ func (in *installer) runUninstall(ctx context.Context) error {
 		return nil
 	}
 	// The directory is about to be removed recursively, and --dir,
-	// ONYX_DEPLOYMENT_DIR and the legacy INSTALL_PREFIX all name it freely: a
-	// broad path like /home must not be taken at its word.
+	// ONYX_DEPLOYMENT_DIR and the legacy INSTALL_PREFIX all name it freely, so
+	// it has to both look like a deployment and be a directory whose entire
+	// contents can be written off. Markers alone don't settle the second
+	// question: a deployment/ under $HOME marks $HOME.
 	if !paths.IsInstall(in.root.Dir) && !state.Exists(in.root.Dir) {
 		return exitcodes.Newf(exitcodes.BadRequest,
 			"%s doesn't look like an Onyx deployment (no deployment/docker-compose.yml, deployment/.env or %s) — refusing to delete it",
 			in.root.Dir, state.FileName)
+	}
+	if err := paths.CheckDeletable(in.root.Dir); err != nil {
+		return exitcodes.Newf(exitcodes.BadRequest,
+			"refusing to delete everything under %s: %v — point --dir at the deployment directory itself, or remove it by hand if Onyx really lives there",
+			in.root.Dir, err)
 	}
 
 	in.plainf("")

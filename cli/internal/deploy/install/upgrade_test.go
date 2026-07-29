@@ -283,3 +283,44 @@ func TestUpgradePullFailureRollsBackEnv(t *testing.T) {
 		t.Errorf("manifest tag = %q after failed pull, want v4.0.0", m.InstalledTag)
 	}
 }
+
+// A failed start is not a failed pull: containers that came up are already on
+// the new images, so .env stays on the target (reverting it would put the old
+// version back over data the new one may have migrated). The manifest still
+// records what was last deployed successfully, and the user is told both.
+func TestUpgradeStartFailureKeepsTargetAndExplains(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	failUp := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		if strings.Contains(argv(c), "up -d") {
+			return dockercmd.Result{}, errors.New("container onyx-index-1 is unhealthy")
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, failUp, notFoundServer(t))
+	err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	})
+	if err == nil {
+		t.Fatal("upgrade must fail when the start fails")
+	}
+
+	env, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+	if got := Var(string(env), "IMAGE_TAG"); got != "v4.2.0" {
+		t.Errorf("IMAGE_TAG = %q after a failed start, want the target v4.2.0 kept", got)
+	}
+	m, merr := state.Load(root)
+	if merr != nil || m == nil {
+		t.Fatalf("manifest: %+v, %v", m, merr)
+	}
+	if m.InstalledTag != "v4.0.0" {
+		t.Errorf("manifest tag = %q, want the last version that actually started", m.InstalledTag)
+	}
+	out := outBuf(deps).String()
+	for _, want := range []string{"Partially deployed", "deploy upgrade --tag v4.0.0"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+}
