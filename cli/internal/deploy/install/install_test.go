@@ -445,25 +445,41 @@ func TestUserEditedFileOverwrittenWithForceAndBackedUp(t *testing.T) {
 	}
 }
 
+// A dry run must run no commands and touch no disk, whether or not docker is
+// around: with docker absent it must not need it, and with docker present it
+// must not go probing it (a background preflight that outlives the command
+// would make the promise a matter of timing).
 func TestDryRunHasNoSideEffects(t *testing.T) {
-	isolateEnv(t)
-	// No docker shim: dry-run must not even need docker.
-	runner := &fakeRunner{}
-	deps := testDeps(t, runner, notFoundServer(t))
-	root := filepath.Join(t.TempDir(), "never-created")
+	for _, tc := range []struct {
+		name         string
+		dockerOnPath bool
+	}{
+		{"docker absent", false},
+		{"docker present", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			isolateEnv(t)
+			if tc.dockerOnPath {
+				shimDockerOnPath(t)
+			}
+			runner := &fakeRunner{handler: healthyDockerHandler}
+			deps := testDeps(t, runner, notFoundServer(t))
+			root := filepath.Join(t.TempDir(), "never-created")
 
-	err := RunInstall(context.Background(), deps, Options{DryRun: true, Tag: "v1.0.0", Dir: root})
-	if err != nil {
-		t.Fatalf("RunInstall: %v", err)
-	}
-	if len(runner.calls) != 0 {
-		t.Errorf("dry-run executed commands: %v", runner.calls)
-	}
-	if _, err := os.Stat(root); !os.IsNotExist(err) {
-		t.Error("dry-run created the install dir")
-	}
-	if !strings.Contains(outBuf(deps).String(), "Dry run complete") {
-		t.Errorf("output:\n%s", outBuf(deps).String())
+			err := RunInstall(context.Background(), deps, Options{DryRun: true, Tag: "v1.0.0", Dir: root})
+			if err != nil {
+				t.Fatalf("RunInstall: %v", err)
+			}
+			if len(runner.calls) != 0 {
+				t.Errorf("dry-run executed commands: %v", runner.calls)
+			}
+			if _, err := os.Stat(root); !os.IsNotExist(err) {
+				t.Error("dry-run created the install dir")
+			}
+			if !strings.Contains(outBuf(deps).String(), "Dry run complete") {
+				t.Errorf("output:\n%s", outBuf(deps).String())
+			}
+		})
 	}
 }
 

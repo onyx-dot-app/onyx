@@ -111,8 +111,6 @@ func (in *installer) runInstall(ctx context.Context) error {
 			tagCh <- tagLookup{tag: tag, err: err}
 		}
 	}()
-	preCh := make(chan preflight, 1)
-	go func() { preCh <- in.gatherPreflight(ctx) }()
 
 	// tagCh delivers exactly one value; latestTag memoizes it so every
 	// consumer (question defaults, initialTag) can read it safely. The
@@ -135,6 +133,12 @@ func (in *installer) runInstall(ctx context.Context) error {
 		in.printPlan(getLatestTag())
 		return nil
 	}
+
+	// Started only past the dry-run exit: a dry run inspects nothing about
+	// the host, and leaving docker probes running after the command returns
+	// makes its "no side effects" promise depend on timing.
+	preCh := make(chan preflight, 1)
+	go func() { preCh <- in.gatherPreflight(ctx) }()
 
 	manifest, err := state.Load(in.root.Dir)
 	if err != nil {
