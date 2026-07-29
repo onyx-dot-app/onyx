@@ -21,6 +21,7 @@ type Options struct {
 	IncludeCraft bool
 	Tag          string
 	Local        bool
+	Offline      bool
 	NoPrompt     bool
 	DryRun       bool
 	Verbose      bool
@@ -137,6 +138,13 @@ func (in *installer) failf(format string, args ...any) {
 		return
 	}
 	fmt.Fprintf(in.deps.IOS.Out, in.paint.Err("✗ ")+format+"\n", args...)
+}
+
+// localFiles reports whether config files come from disk and the embedded
+// copies rather than GitHub. --offline implies it: a run that promises to
+// touch no network cannot go and fetch them.
+func (in *installer) localFiles() bool {
+	return in.opts.Local || in.opts.Offline
 }
 
 // dirArg repeats the --dir this run was given, so a command the output

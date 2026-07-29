@@ -106,6 +106,11 @@ func (in *installer) runInstall(ctx context.Context) error {
 	tagCh := make(chan tagLookup, 1)
 	go func() {
 		switch {
+		case in.opts.Offline && pinnedTag == "":
+			// Deliberately not "edge": offline, the only deployable versions
+			// are the ones whose images are already here. errOffline routes
+			// this through the same fallback an unreachable GitHub takes.
+			tagCh <- tagLookup{err: errOffline}
 		case in.opts.Local:
 			tagCh <- tagLookup{tag: "edge"}
 		case pinnedTag != "":
@@ -125,8 +130,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		if latestTag == "" {
 			got := <-tagCh
 			if got.err != nil {
-				in.warnf("Could not determine latest Onyx release — falling back to main / edge")
-				got.tag = "edge"
+				got.tag = in.unreachableTagFallback(ctx)
 			}
 			latestTag = got.tag
 		}
@@ -301,7 +305,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		}
 	}
 	initialRef := ""
-	if !in.opts.Local {
+	if !in.localFiles() {
 		initialRef = release.ConfigRef(initialTag)
 	}
 	fetcher := &fileFetcher{in: in}
@@ -340,7 +344,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	// Pinned tags want config files from their own ref so compose matches
 	// the images; re-materialize when the effective tag needs another ref.
 	configRef := release.ConfigRef(effectiveTag)
-	if !in.opts.Local && configRef != initialRef {
+	if !in.localFiles() && configRef != initialRef {
 		in.infof("Fetching config files matching %s...", configRef)
 		if err := in.materializeFiles(ctx, configRef, managedFiles(in.lite, in.craft), manifest, fetcher); err != nil {
 			// .env already names this version and nothing has been deployed
@@ -414,7 +418,7 @@ func (in *installer) validateTag(ctx context.Context, tag string) (string, error
 		in.infof("Using %s (Onyx versions are v-prefixed)", normalized)
 	}
 	// A dry run writes nothing and pulls nothing, so it stays offline.
-	if !checkable || in.opts.Local || in.opts.DryRun {
+	if !checkable || in.localFiles() || in.opts.DryRun {
 		return normalized, nil
 	}
 
@@ -435,6 +439,77 @@ func (in *installer) validateTag(ctx context.Context, tag string) (string, error
 	}
 	return "", exitcodes.Newf(exitcodes.BadRequest,
 		"version %s not found — Onyx releases look like v4.4.6 (https://github.com/onyx-dot-app/onyx/releases)", normalized)
+}
+
+// appImage is the one image every deployment runs whatever its mode, so the
+// tags present for it are the versions this host could deploy right now.
+const appImage = "onyxdotapp/onyx-backend"
+
+// errOffline stands in for the release lookup --offline never makes, so the
+// one place that turns a failed lookup into an offered version handles both.
+var errOffline = errors.New("offline")
+
+// latestAppTag is the release lookup, skipped outright when --offline says
+// the network is not there to be asked.
+func (in *installer) latestAppTag(ctx context.Context) (string, error) {
+	if in.opts.Offline {
+		return "", errOffline
+	}
+	return in.deps.Release.LatestAppTag(ctx)
+}
+
+// unreachableTagFallback picks the version to offer when the latest release
+// could not be looked up. A host that already has released images can still
+// install from them, and offering one is what makes that possible: edge is a
+// floating tag, so choosing it commits the run to another trip to the
+// registry — the one thing an absent network guarantees will fail.
+func (in *installer) unreachableTagFallback(ctx context.Context) string {
+	why := "Could not reach GitHub"
+	if in.opts.Offline {
+		why = "Offline"
+	}
+	if local := in.localAppTag(ctx); local != "" {
+		in.warnf("%s — offering %s, whose images are already on this host", why, local)
+		return local
+	}
+	if in.opts.Offline {
+		// edge may well be here too; it just isn't a version, so it can't be
+		// compared with anything or verified as the one that was meant.
+		in.warnf("%s — no released Onyx images on this host, offering edge", why)
+	} else {
+		in.warnf("Could not determine latest Onyx release — falling back to main / edge")
+	}
+	return "edge"
+}
+
+// localAppTag returns the newest released version already pulled on this
+// host, or "" when there is none. Only released versions count: a floating
+// tag on disk is a copy of whatever main was that day, and deploying it pulls
+// again regardless.
+func (in *installer) localAppTag(ctx context.Context) string {
+	if !dockercmd.Installed() {
+		return ""
+	}
+	in.docker.RefreshSudo(ctx)
+	res, err := in.deps.Runner.Run(ctx, in.docker.Command(nil, "images", "--format", "{{.Tag}}", appImage))
+	if err != nil {
+		return ""
+	}
+	best, bestVer := "", version.Semver{}
+	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
+		tag := strings.TrimSpace(line)
+		if !release.IsImmutableTag(tag) {
+			continue
+		}
+		ver, ok := version.Parse(tag)
+		if !ok {
+			continue
+		}
+		if best == "" || bestVer.LessThan(ver) {
+			best, bestVer = tag, ver
+		}
+	}
+	return best
 }
 
 // askVersion asks for a deployment version and validates the answer;
@@ -860,6 +935,9 @@ func (in *installer) composeRunEnv(tag string, hostPort int) map[string]string {
 }
 
 func (in *installer) pullImages(ctx context.Context, tag string, hostPort int) error {
+	if in.opts.Offline {
+		return in.checkLocalImages(ctx, tag, hostPort)
+	}
 	phase := composePhase{
 		stage: ui.StagePull,
 		title: "Pulling images",
@@ -896,6 +974,44 @@ func (in *installer) pullImages(ctx context.Context, tag string, hostPort int) e
 	return nil
 }
 
+// checkLocalImages replaces the pull when --offline forbids one. It asks
+// compose what the deployment resolves to and names every image this host
+// doesn't have, because `up` would otherwise stop at the first one it misses
+// and report it as a registry error rather than a missing copy. Note that not
+// every image follows IMAGE_TAG: code-interpreter carries its own version
+// line, so it is pinned separately and is the one most often absent.
+func (in *installer) checkLocalImages(ctx context.Context, tag string, hostPort int) error {
+	in.phase("Checking images")
+	cmd := in.compose.Command(in.deploymentDir(), in.composeRunEnv(tag, hostPort),
+		in.composeFileNames(false), "config", "--images")
+	res, err := in.deps.Runner.Run(ctx, cmd)
+	if err != nil {
+		// No list to check against. `up --pull never` still refuses to reach a
+		// registry, so let it be the one to object.
+		return nil
+	}
+	var missing []string
+	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
+		image := strings.TrimSpace(line)
+		if image == "" {
+			continue
+		}
+		if _, ierr := in.deps.Runner.Run(ctx, in.docker.Command(nil, "image", "inspect", image)); ierr != nil {
+			missing = append(missing, image)
+		}
+	}
+	if len(missing) == 0 {
+		in.successf("Every image this deployment needs is already on this host")
+		return nil
+	}
+	for _, image := range missing {
+		in.errorf("Not on this host: %s", image)
+	}
+	return exitcodes.Newf(exitcodes.NotAvailable,
+		"%d image(s) missing — load them with `docker load`, or re-run without --offline to fetch them",
+		len(missing))
+}
+
 // startServices brings the stack up. prevTag is the version .env carried
 // before this run ("" on a fresh install), used only to explain what a failed
 // start left behind.
@@ -907,6 +1023,16 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 	upArgs := []string{"up", "-d"}
 	recreate := true
 	switch {
+	case in.opts.Offline:
+		// Compose consults the registry for any service whose own policy says
+		// to, whatever the tag; --pull never is what makes --offline a promise
+		// rather than a preference. No image can have moved under a name while
+		// the host was offline, so nothing needs recreating for its own sake.
+		upArgs = append(upArgs, "--pull", "never")
+		recreate = in.forceRecreate
+		if recreate {
+			upArgs = append(upArgs, "--force-recreate")
+		}
 	case release.IsFloatingTag(tag):
 		// A floating tag names a moving image: the digest changes under the
 		// same name, so neither the pull nor the recreate can be skipped.
@@ -1264,7 +1390,7 @@ func (in *installer) starPrompt(ctx context.Context) {
 // askStarQuestion asks while the UI is still live (the wizard closes on
 // Finish, so callers ask first and run the API call after).
 func (in *installer) askStarQuestion() bool {
-	if in.prompt.AssumeDefaults {
+	if in.prompt.AssumeDefaults || in.opts.Offline {
 		return false
 	}
 	if _, err := exec.LookPath("gh"); err != nil {

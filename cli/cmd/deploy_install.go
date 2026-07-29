@@ -55,6 +55,7 @@ every prompt, including Lite mode).`,
 	cmd.Flags().BoolVar(&opts.IncludeCraft, "include-craft", false, "Enable Onyx Craft (AI-powered web app building)")
 	cmd.Flags().StringVar(&opts.Tag, "tag", "", "Image tag to deploy (default: the latest Onyx release)")
 	cmd.Flags().BoolVar(&opts.Local, "local", false, "Use existing config files on disk instead of downloading")
+	cmd.Flags().BoolVar(&opts.Offline, "offline", false, "Deploy from the images already on this host and contact no network (implies --local)")
 	cmd.Flags().BoolVar(&opts.NoPrompt, "no-prompt", false, "Run non-interactively with defaults (for CI/automation)")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Show what would be done without making changes")
 	cmd.Flags().BoolVar(&opts.Verbose, "verbose", false, "Show detailed output for debugging")

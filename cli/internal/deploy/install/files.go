@@ -90,7 +90,7 @@ func (in *installer) materializeFiles(
 			return fmt.Errorf("failed to read %s: %w", f.DestRel, err)
 		}
 
-		if in.opts.Local {
+		if in.localFiles() {
 			if exists {
 				in.successf("Using existing %s", f.DestRel)
 				if err := manifest.RecordFile(root, f.DestRel, onDisk); err != nil {
@@ -105,7 +105,7 @@ func (in *installer) materializeFiles(
 
 		var want []byte
 		source := "embedded"
-		if !in.opts.Local {
+		if !in.localFiles() {
 			want, source, err = fetcher.content(ctx, ref, f)
 		} else {
 			want, err = f.Content()

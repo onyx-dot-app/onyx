@@ -127,7 +127,11 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	if in.opts.DryRun {
 		in.infof("Dry run mode — showing what would happen:")
 		in.plainf("  • Install root: %s (%s)", in.root.Dir, in.root.Source)
-		in.plainf("  • Upgrade: %s → %s (config ref: %s)", installedTag, targetTag, release.ConfigRef(targetTag))
+		if in.localFiles() {
+			in.plainf("  • Upgrade: %s → %s (config files: existing on disk, embedded copies for gaps)", installedTag, targetTag)
+		} else {
+			in.plainf("  • Upgrade: %s → %s (config ref: %s)", installedTag, targetTag, release.ConfigRef(targetTag))
+		}
 		in.plainf("  • Lite mode: %t, Craft: %t", in.lite, in.craft)
 		in.plainf("")
 		in.successf("Dry run complete (no changes made)")
@@ -151,7 +155,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	// succeeded. Otherwise a refresh or a save that fails here leaves the
 	// deployment claiming a version it has not so much as pulled.
 	configRef := ""
-	if !in.opts.Local {
+	if !in.localFiles() {
 		configRef = release.ConfigRef(targetTag)
 		in.infof("Refreshing config files to match %s...", configRef)
 	}
@@ -257,11 +261,11 @@ func (in *installer) resolveUpgradeTag(ctx context.Context, installedTag, pinned
 	if pinnedTag != "" {
 		return pinnedTag, nil
 	}
-	defaultTag := "edge"
-	if tag, err := in.deps.Release.LatestAppTag(ctx); err == nil {
+	defaultTag := ""
+	if tag, err := in.latestAppTag(ctx); err == nil {
 		defaultTag = tag
 	} else {
-		in.warnf("Could not determine latest Onyx release — falling back to edge")
+		defaultTag = in.unreachableTagFallback(ctx)
 	}
 	if in.wiz == nil && !in.prompt.AssumeDefaults {
 		in.infof("Currently installed: %s", installedTag)

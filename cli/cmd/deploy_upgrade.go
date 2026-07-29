@@ -41,6 +41,7 @@ new version.`,
 	cmd.Flags().StringVar(&opts.Tag, "tag", "", "Image tag to upgrade to (default: the latest Onyx release)")
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "Overwrite hand-edited managed files and allow downgrades")
 	cmd.Flags().BoolVar(&opts.Local, "local", false, "Use existing config files on disk instead of downloading")
+	cmd.Flags().BoolVar(&opts.Offline, "offline", false, "Upgrade to a version already on this host and contact no network (implies --local)")
 	cmd.Flags().BoolVar(&opts.NoPrompt, "no-prompt", false, "Run non-interactively with defaults")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Show what would be done without making changes")
 	cmd.Flags().BoolVar(&opts.Verbose, "verbose", false, "Show detailed output for debugging")

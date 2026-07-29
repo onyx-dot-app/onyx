@@ -15,9 +15,13 @@ func (in *installer) printPlan(defaultTag string) {
 	in.plainf("  • Lite mode: %t", in.lite)
 	in.plainf("  • Include Craft: %t", in.craft)
 	in.plainf("  • OS: %s/%s (WSL: %t)", runtime.GOOS, runtime.GOARCH, dockercmd.IsWSL())
-	if in.opts.Local {
+	switch {
+	case in.opts.Offline:
+		in.plainf("  • Default image tag: %s (from the images on this host)", defaultTag)
+		in.plainf("  • Config files: existing files on disk, embedded copies for gaps (--offline)")
+	case in.opts.Local:
 		in.plainf("  • Config files: existing files on disk, embedded copies for gaps (--local)")
-	} else {
+	default:
 		in.plainf("  • Default image tag: %s (config ref: %s)", defaultTag, release.ConfigRef(defaultTag))
 	}
 	in.plainf("")

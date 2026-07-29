@@ -75,7 +75,7 @@ func TestInstallOnyxIsAnAlias(t *testing.T) {
 		t.Fatalf("Use = %q", alias.Use)
 	}
 	// Same flag surface as deploy install.
-	for _, name := range []string{"lite", "include-craft", "tag", "local", "no-prompt", "dry-run", "verbose", "no-wait", "dir", "force"} {
+	for _, name := range []string{"lite", "include-craft", "tag", "local", "offline", "no-prompt", "dry-run", "verbose", "no-wait", "dir", "force"} {
 		if alias.Flags().Lookup(name) == nil {
 			t.Errorf("alias missing --%s", name)
 		}
