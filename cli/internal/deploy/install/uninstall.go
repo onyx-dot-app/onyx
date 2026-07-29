@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
-	"github.com/onyx-dot-app/onyx/cli/internal/deploy/dockercmd"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/paths"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/state"
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
@@ -76,8 +74,8 @@ func (in *installer) runUninstall(ctx context.Context) error {
 		}
 	}
 
-	composeFile := filepath.Join(in.deploymentDir(), "docker-compose.yml")
-	if _, err := os.Stat(composeFile); err == nil {
+	if in.hasComposeFile() {
+		in.resolveProjectFromDisk()
 		if err := in.attachDockerCompose(ctx); err != nil {
 			return err
 		}
@@ -95,7 +93,7 @@ func (in *installer) runUninstall(ctx context.Context) error {
 					in.root.Dir)
 			}
 			in.warnf("Deleting %s anyway (--force) — clean up leftovers with %s",
-				in.root.Dir, in.paint.Accent(fmt.Sprintf("docker compose -p %s down -v", dockercmd.ProjectName)))
+				in.root.Dir, in.paint.Accent(fmt.Sprintf("docker compose -p %s down -v", in.projectName())))
 		} else {
 			in.successf("Onyx containers and volumes removed")
 		}

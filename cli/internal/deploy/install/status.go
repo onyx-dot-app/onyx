@@ -82,24 +82,34 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 	}
 	st.Installed = true
 
-	if manifest, err := state.Load(in.root.Dir); err != nil {
+	manifest, err := state.Load(in.root.Dir)
+	if err != nil {
 		in.warnf("%v", err)
 	} else if manifest != nil {
 		st.ManifestTag = manifest.InstalledTag
 		st.Mode = string(manifest.Mode)
 		st.IncludeCraft = manifest.IncludeCraft
 	}
+	in.resolveProject(manifest)
 	if env, err := os.ReadFile(filepath.Join(in.deploymentDir(), ".env")); err == nil {
 		st.EnvTag = Var(string(env), "IMAGE_TAG")
 	}
 	if st.Mode == "" {
-		st.Mode = "standard"
-		if in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel)) {
-			st.Mode = "lite"
+		st.Mode = string(state.ModeStandard)
+		switch {
+		case in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel)):
+			st.Mode = string(state.ModeLite)
+		case in.overlayOnDisk(filepath.Base(deployfiles.ProdCompose.DestRel)):
+			st.Mode = string(state.ModeProd)
 		}
 	}
 
 	st.Services, st.RunningTag, st.AccessURL = in.inspectContainers(ctx)
+	// Prod publishes 80/443 behind a real domain; the port-derived localhost
+	// URL is not where anyone reaches it.
+	if st.Mode == string(state.ModeProd) {
+		st.AccessURL = in.prodAccessURL()
+	}
 	in.addFailureFacts(ctx, st.Services)
 
 	up, unhealthy := 0, 0
@@ -174,15 +184,15 @@ func (in *installer) emitStatus(st Status, code exitcodes.Code) error {
 }
 
 // inspectContainers lists the project's containers via the compose project
-// label (the project name is pinned to "onyx" in the compose file, so this
-// works regardless of directory names or which overlays are active).
+// label (pinned in the compose file, or the recorded/--project override), so
+// this works regardless of directory names or which overlays are active.
 func (in *installer) inspectContainers(ctx context.Context) (services []Service, runningTag, accessURL string) {
 	if !dockercmd.Installed() {
 		return nil, "", ""
 	}
 	in.docker.RefreshSudo(ctx)
 	cmd := in.docker.Command(nil, "ps", "-a",
-		"--filter", "label=com.docker.compose.project="+dockercmd.ProjectName,
+		"--filter", "label=com.docker.compose.project="+in.projectName(),
 		"--format", `{{.Names}}	{{.Image}}	{{.Status}}	{{.Ports}}	{{.Label "com.docker.compose.service"}}`)
 	res, err := in.deps.Runner.Run(ctx, cmd)
 	if err != nil {

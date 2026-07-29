@@ -14,14 +14,29 @@ import (
 )
 
 // managedFiles returns the files for the selected mode: the base set plus the
-// overlays that apply.
-func managedFiles(lite, craft bool) []deployfiles.File {
-	files := []deployfiles.File{
-		deployfiles.Compose,
-		deployfiles.EnvTemplate,
-		deployfiles.Readme,
-		deployfiles.NginxAppConf,
-		deployfiles.NginxRunScript,
+// overlays that apply. Prod swaps in its own set — the standalone prod
+// compose file and the prod env/nginx templates — and deliberately leaves
+// out the README: prod installs are typically adopted in place (sometimes
+// inside a checked-out source tree), and dropping a README into someone's
+// root is not adoption.
+func managedFiles(prod, lite, craft bool) []deployfiles.File {
+	var files []deployfiles.File
+	if prod {
+		files = []deployfiles.File{
+			deployfiles.ProdCompose,
+			deployfiles.EnvProdTemplate,
+			deployfiles.EnvNginxTemplate,
+			deployfiles.NginxAppConfProd,
+			deployfiles.NginxRunScript,
+		}
+	} else {
+		files = []deployfiles.File{
+			deployfiles.Compose,
+			deployfiles.EnvTemplate,
+			deployfiles.Readme,
+			deployfiles.NginxAppConf,
+			deployfiles.NginxRunScript,
+		}
 	}
 	if lite {
 		files = append(files, deployfiles.LiteOverlay)

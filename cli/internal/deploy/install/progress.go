@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/onyx-dot-app/onyx/cli/internal/deploy/dockercmd"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/ui"
 	"github.com/onyx-dot-app/onyx/cli/internal/version"
 )
@@ -356,7 +355,10 @@ type startProgress struct {
 	// waitHealth records that `up --wait` is in play, so a started container
 	// is only halfway there: compose follows it with a health check.
 	waitHealth bool
-	states     map[string]string
+	// project is the compose project name, stripped off container names so
+	// the checklist shows services rather than full container names.
+	project string
+	states  map[string]string
 	// reported records that the event stream has produced a checklist. The
 	// health poll runs alongside as a backstop and reads this to know whether
 	// compose is saying anything, so it is written and read from two
@@ -364,10 +366,11 @@ type startProgress struct {
 	reported atomic.Bool
 }
 
-func newStartProgress(services func([]ui.ServiceRow), extra func(string), waitHealth bool) *startProgress {
+func newStartProgress(services func([]ui.ServiceRow), extra func(string), waitHealth bool, project string) *startProgress {
 	return &startProgress{
 		checklist:  checklist{services: services, extra: extra},
 		waitHealth: waitHealth,
+		project:    project,
 		states:     map[string]string{},
 	}
 }
@@ -386,7 +389,7 @@ func (p *startProgress) line(s string) {
 	if _, ok := startPhases[word]; !ok {
 		return
 	}
-	name = shortContainerName(name)
+	name = shortContainerName(name, p.project)
 	known, created := p.track(name)
 	if !known {
 		return
@@ -472,6 +475,8 @@ type healthWatch struct {
 	// makes a service still on its original container unfinished rather than
 	// already up.
 	recreate bool
+	// project is the compose project name, stripped off container names.
+	project string
 }
 
 // watchRows renders `docker ps` output ("<name>\t<id>\t<status>" per line) as
@@ -488,7 +493,7 @@ func watchRows(psOutput string, w healthWatch) (rows []ui.ServiceRow, ready int)
 		if len(parts) != 3 {
 			continue
 		}
-		name, id, status := shortContainerName(parts[0]), parts[1], parts[2]
+		name, id, status := shortContainerName(parts[0], w.project), parts[1], parts[2]
 		seen[name] = true
 		if w.recreate && w.before[name] == id {
 			// Still the old container: up and serving, but this run is not
@@ -614,8 +619,8 @@ var composeObjects = map[string]struct{}{
 
 // shortContainerName trims the parts of a compose container name every row
 // would repeat: the project prefix and the replica index.
-func shortContainerName(name string) string {
-	name = strings.TrimPrefix(name, dockercmd.ProjectName+"-")
+func shortContainerName(name, project string) string {
+	name = strings.TrimPrefix(name, project+"-")
 	if i := strings.LastIndexByte(name, '-'); i > 0 && isDigits(name[i+1:]) {
 		name = name[:i]
 	}

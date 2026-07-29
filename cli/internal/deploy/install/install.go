@@ -70,6 +70,7 @@ func RunInstall(ctx context.Context, deps Deps, opts Options) error {
 	in.cancel = cancel
 	in.lite = opts.Lite
 	in.craft = opts.IncludeCraft
+	in.prod = opts.Prod
 	err := in.runInstall(ctx)
 	if errors.Is(err, ui.ErrAborted) || (err != nil && ctx.Err() != nil) {
 		return exitcodes.New(exitcodes.General, "installation cancelled")
@@ -82,11 +83,24 @@ func (in *installer) runInstall(ctx context.Context) error {
 		return exitcodes.New(exitcodes.BadRequest,
 			"--lite and --include-craft cannot be used together: Craft requires services (OpenSearch, Redis, background workers) that lite mode disables")
 	}
+	if in.opts.Prod && in.opts.Lite {
+		return exitcodes.New(exitcodes.BadRequest,
+			"--prod and --lite cannot be used together: they select conflicting compose files")
+	}
 
 	in.root = paths.Resolve(in.opts.Dir)
 	envPath := filepath.Join(in.deploymentDir(), ".env")
 	_, envErr := os.Stat(envPath)
 	rerun := envErr == nil
+
+	// Prod deployments are adopted or restarted, never created here: a fresh
+	// one needs a filled-in .env, a .env.nginx naming the domain, and TLS
+	// material from init-letsencrypt.sh before compose can as much as render.
+	if in.opts.Prod && !rerun {
+		return exitcodes.Newf(exitcodes.BadRequest,
+			"no deployment/.env at %s — prod mode manages an existing production deployment; set one up per deployment/docker_compose/docker-compose.prod.yml first, then adopt it with `onyx-cli deploy upgrade --prod --dir %s`",
+			in.root.Dir, in.root.Dir)
+	}
 
 	// --tag is checked before anything else runs: a typo must fail here, not
 	// minutes later as a pull error with the bad version already on disk.
@@ -156,6 +170,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	if manifest == nil {
 		manifest = &state.Manifest{}
 	}
+	in.resolveProject(manifest)
 
 	if in.fancy() {
 		in.wiz = ui.StartWizard(in.deps.IOS.Out, "Onyx Installer", in.deps.CLIVersion, in.cancel)
@@ -184,9 +199,15 @@ func (in *installer) runInstall(ctx context.Context) error {
 		// (or the overlays on disk) wins unless --lite/--include-craft say
 		// otherwise. (install.sh re-asked every run, so a --no-prompt rerun
 		// silently flipped standard installs to lite.)
+		in.prod = in.opts.Prod || manifest.Mode == state.ModeProd ||
+			in.overlayOnDisk(filepath.Base(deployfiles.ProdCompose.DestRel))
+		if in.prod && in.opts.Lite {
+			return exitcodes.New(exitcodes.BadRequest,
+				"this is a prod deployment — --lite cannot be applied to it")
+		}
 		in.wasLite = manifest.Mode == state.ModeLite ||
 			in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel))
-		in.lite = in.opts.Lite || (!in.opts.IncludeCraft && in.wasLite)
+		in.lite = !in.prod && (in.opts.Lite || (!in.opts.IncludeCraft && in.wasLite))
 		in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
 			in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
 
@@ -309,7 +330,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		initialRef = release.ConfigRef(initialTag)
 	}
 	fetcher := &fileFetcher{in: in}
-	if err := in.materializeFiles(ctx, initialRef, managedFiles(in.lite, in.craft), manifest, fetcher); err != nil {
+	if err := in.materializeFiles(ctx, initialRef, managedFiles(in.prod, in.lite, in.craft), manifest, fetcher); err != nil {
 		return err
 	}
 	if !in.lite {
@@ -346,7 +367,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	configRef := release.ConfigRef(effectiveTag)
 	if !in.localFiles() && configRef != initialRef {
 		in.infof("Fetching config files matching %s...", configRef)
-		if err := in.materializeFiles(ctx, configRef, managedFiles(in.lite, in.craft), manifest, fetcher); err != nil {
+		if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.craft), manifest, fetcher); err != nil {
 			// .env already names this version and nothing has been deployed
 			// yet, so it is put back for the same reason a failed pull does:
 			// a version that never ran must not be left recorded as the
@@ -383,9 +404,13 @@ func (in *installer) runInstall(ctx context.Context) error {
 	manifest.InstalledTag = effectiveTag
 	manifest.CLIVersion = in.deps.CLIVersion
 	manifest.Mode = state.ModeStandard
-	if in.lite {
+	switch {
+	case in.lite:
 		manifest.Mode = state.ModeLite
+	case in.prod:
+		manifest.Mode = state.ModeProd
 	}
+	in.recordProject(manifest)
 	manifest.IncludeCraft = in.craft
 	if !hadManifest || manifest.InstalledAt.IsZero() {
 		manifest.InstalledAt = now
@@ -619,6 +644,9 @@ func (in *installer) resolveDockerProblems(ctx context.Context, pre preflight) e
 	}
 
 	in.compose = dockercmd.DetectCompose(ctx, in.docker)
+	if in.compose != nil {
+		in.compose.Project = in.projectName()
+	}
 	if in.compose == nil && linuxLike {
 		in.infof("Docker Compose is required but not installed.")
 		ok, err := in.confirmYN("Install the Docker Compose plugin?", true)
@@ -637,6 +665,7 @@ func (in *installer) resolveDockerProblems(ctx context.Context, pre preflight) e
 		if in.compose == nil {
 			return exitcodes.New(exitcodes.General, "Docker Compose plugin installed but not detected.\n  Visit: https://docs.docker.com/compose/install/")
 		}
+		in.compose.Project = in.projectName()
 		in.successf("Docker Compose plugin installed")
 	}
 	if in.compose == nil {
@@ -822,19 +851,25 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 	// publishing, and only a deployment that was never up gets a fresh scan
 	// (services are stopped on this path, so the scan can't collide with our
 	// own binding — but it would silently move a running deployment).
-	hostPort, perr := strconv.Atoi(Var(env, "HOST_PORT"))
-	if perr != nil {
-		switch {
-		case in.observedPort != 0:
-			hostPort = in.observedPort
-			in.infof("Recording the port this deployment already uses (%d) in .env", hostPort)
-		default:
-			hostPort = resources.FindAvailablePort(3000)
-			if hostPort != 3000 {
-				in.infof("Port 3000 is in use — using %d", hostPort)
+	// Prod ignores HOST_PORT entirely: docker-compose.prod.yml publishes
+	// 80/443 outright.
+	hostPort := 0
+	if !in.prod {
+		var perr error
+		hostPort, perr = strconv.Atoi(Var(env, "HOST_PORT"))
+		if perr != nil {
+			switch {
+			case in.observedPort != 0:
+				hostPort = in.observedPort
+				in.infof("Recording the port this deployment already uses (%d) in .env", hostPort)
+			default:
+				hostPort = resources.FindAvailablePort(3000)
+				if hostPort != 3000 {
+					in.infof("Port 3000 is in use — using %d", hostPort)
+				}
 			}
+			env = SetVar(env, "HOST_PORT", strconv.Itoa(hostPort))
 		}
-		env = SetVar(env, "HOST_PORT", strconv.Itoa(hostPort))
 	}
 
 	if updateTag != "" && updateTag != Var(env, "IMAGE_TAG") {
@@ -929,10 +964,13 @@ func (in *installer) ensureCraftResources(ctx context.Context) {
 }
 
 func (in *installer) composeRunEnv(tag string, hostPort int) map[string]string {
-	return map[string]string{
-		"HOST_PORT": fmt.Sprintf("%d", hostPort),
-		"IMAGE_TAG": tag,
+	env := map[string]string{"IMAGE_TAG": tag}
+	// Prod has no HOST_PORT: docker-compose.prod.yml publishes 80/443
+	// outright, so passing one would only suggest it does something.
+	if !in.prod {
+		env["HOST_PORT"] = fmt.Sprintf("%d", hostPort)
 	}
+	return env
 }
 
 func (in *installer) pullImages(ctx context.Context, tag string, hostPort int) error {
@@ -1063,7 +1101,7 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 	if wait && in.wiz != nil && !in.opts.Verbose {
 		// Watch container states so the wizard shows something while
 		// `up --wait` blocks (it is silent for as long as that takes).
-		phase.watch = &healthWatch{before: in.runningContainers(ctx), recreate: recreate}
+		phase.watch = &healthWatch{before: in.runningContainers(ctx), recreate: recreate, project: in.projectName()}
 	}
 	if mode := in.progressMode(ctx); mode != "" {
 		// Compose's own event stream names every transition, which is more than
@@ -1072,7 +1110,7 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 		// swallowed by a wrapper) would otherwise leave the longest phase of
 		// the run with nothing on screen at all.
 		phase.args = append([]string{"--progress", mode}, upArgs...)
-		start := newStartProgress(in.wiz.Services, in.wiz.TaskExtra, wait)
+		start := newStartProgress(in.wiz.Services, in.wiz.TaskExtra, wait, in.projectName())
 		phase.onLine = start.line
 		if phase.watch != nil {
 			phase.watch.quiet = func() bool { return !start.reporting() }
@@ -1296,7 +1334,7 @@ func (in *installer) pollServiceHealth(ctx context.Context, wiz *ui.Wizard, w he
 // psCommand lists the deployment's running containers in the given format.
 func (in *installer) psCommand(format string) dockercmd.Command {
 	return in.docker.Command(nil, "ps",
-		"--filter", "label=com.docker.compose.project="+dockercmd.ProjectName,
+		"--filter", "label=com.docker.compose.project="+in.projectName(),
 		"--format", format)
 }
 
@@ -1313,7 +1351,7 @@ func (in *installer) runningContainers(ctx context.Context) map[string]string {
 	before := map[string]string{}
 	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
 		if name, id, ok := strings.Cut(line, "\t"); ok {
-			before[shortContainerName(name)] = id
+			before[shortContainerName(name, in.projectName())] = id
 		}
 	}
 	return before
@@ -1321,14 +1359,22 @@ func (in *installer) runningContainers(ctx context.Context) map[string]string {
 
 func (in *installer) printSuccess(ctx context.Context, hostPort int) {
 	url := fmt.Sprintf("http://localhost:%d", hostPort)
-	headline := "Onyx is ready  →  " + ui.Accent(url)
+	if in.prod {
+		url = in.prodAccessURL()
+	}
+	headline := "Onyx is ready"
+	if url != "" {
+		headline += "  →  " + ui.Accent(url)
+	}
 	if in.opts.NoWait {
 		headline = "Onyx containers started (still initializing — check: " + ui.Accent("onyx-cli deploy status") + ")"
 	}
-	lines := []string{
-		headline,
-		"",
-		"First signup becomes the admin account: " + url + "/auth/signup",
+	lines := []string{headline}
+	if !in.prod {
+		// Prod deployments have their auth configured already; the signup
+		// pointer belongs to first-run installs.
+		lines = append(lines, "",
+			"First signup becomes the admin account: "+url+"/auth/signup")
 	}
 	if in.lite {
 		lines = append(lines, "",
@@ -1357,6 +1403,31 @@ func (in *installer) printSuccess(ctx context.Context, hostPort int) {
 	in.plainf("")
 	in.infof("For help or issues, contact: founders@onyx.app")
 	in.starPrompt(ctx)
+}
+
+// prodAccessURL reads the deployment's public URL off .env.nginx, or "" when
+// no DOMAIN is recorded there. Prod publishes 80/443 under a real domain, so
+// "http://localhost:<port>" would name a URL that serves nothing.
+func (in *installer) prodAccessURL() string {
+	data, err := os.ReadFile(filepath.Join(in.deploymentDir(), ".env.nginx"))
+	if err != nil {
+		return ""
+	}
+	if domain := Var(string(data), "DOMAIN"); domain != "" {
+		return "https://" + domain
+	}
+	return ""
+}
+
+// recordProject stores the compose project in the manifest when it differs
+// from the default; the default stays implicit so existing manifests don't
+// all gain a field that repeats a constant.
+func (in *installer) recordProject(manifest *state.Manifest) {
+	if in.project != dockercmd.DefaultProjectName {
+		manifest.Project = in.project
+	} else {
+		manifest.Project = ""
+	}
 }
 
 // manageLines closes a summary card with the verbs that come after the
@@ -1416,14 +1487,24 @@ func (in *installer) starRepo(ctx context.Context) {
 	}
 }
 
-// composeFileNames returns the -f list. With autoDetect, previously
-// downloaded overlays are picked up from disk so users don't have to repeat
-// --lite/--include-craft for lifecycle commands (install.sh's
+// composeFileNames returns the -f list. Prod deployments run the standalone
+// docker-compose.prod.yml on its own; every other mode stacks overlays on
+// docker-compose.yml. With autoDetect, previously downloaded files are
+// picked up from disk so users don't have to repeat
+// --lite/--prod/--include-craft for lifecycle commands (install.sh's
 // build_compose_file_args true).
 func (in *installer) composeFileNames(autoDetect bool) []string {
+	prodName := filepath.Base(deployfiles.ProdCompose.DestRel)
+	craftName := filepath.Base(deployfiles.CraftOverlay.DestRel)
+	if in.prod || (autoDetect && in.overlayOnDisk(prodName)) {
+		files := []string{prodName}
+		if in.craft || (autoDetect && in.overlayOnDisk(craftName)) {
+			files = append(files, craftName)
+		}
+		return files
+	}
 	files := []string{"docker-compose.yml"}
 	liteName := filepath.Base(deployfiles.LiteOverlay.DestRel)
-	craftName := filepath.Base(deployfiles.CraftOverlay.DestRel)
 	if in.lite || (autoDetect && in.overlayOnDisk(liteName)) {
 		files = append(files, liteName)
 	}
@@ -1440,6 +1521,14 @@ func (in *installer) overlayOnDisk(name string) bool {
 
 func (in *installer) deploymentDir() string {
 	return filepath.Join(in.root.Dir, "deployment")
+}
+
+// hasComposeFile reports whether the deployment dir carries a compose file
+// the lifecycle verbs can drive: the base file, or the standalone prod file
+// (prod roots managed by the CLI have no docker-compose.yml).
+func (in *installer) hasComposeFile() bool {
+	return in.overlayOnDisk("docker-compose.yml") ||
+		in.overlayOnDisk(filepath.Base(deployfiles.ProdCompose.DestRel))
 }
 
 // stopFallbackEnv supplies safe defaults for compose invocations that may run

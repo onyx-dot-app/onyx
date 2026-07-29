@@ -34,6 +34,7 @@ func (in *installer) runLogs(ctx context.Context, l LogOptions) error {
 		}
 		return exitcodes.New(exitcodes.NotAvailable, "not installed")
 	}
+	in.resolveProjectFromDisk()
 	if err := in.attachDockerCompose(ctx); err != nil {
 		return err
 	}

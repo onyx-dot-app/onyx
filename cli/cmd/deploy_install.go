@@ -53,6 +53,8 @@ every prompt, including Lite mode).`,
 	// Flag names match install.sh so bootstrap passthrough keeps working.
 	cmd.Flags().BoolVar(&opts.Lite, "lite", false, "Deploy Onyx Lite (no OpenSearch, Redis, or model servers)")
 	cmd.Flags().BoolVar(&opts.IncludeCraft, "include-craft", false, "Enable Onyx Craft (AI-powered web app building)")
+	cmd.Flags().BoolVar(&opts.Prod, "prod", false, "Restart an existing prod deployment (the standalone docker-compose.prod.yml); fresh prod installs are not created here")
+	cmd.Flags().StringVar(&opts.Project, "project", "", `Docker compose project name (default: recorded in the manifest, else "onyx")`)
 	cmd.Flags().StringVar(&opts.Tag, "tag", "", "Image tag to deploy (default: the latest Onyx release)")
 	cmd.Flags().BoolVar(&opts.Local, "local", false, "Use existing config files on disk instead of downloading")
 	cmd.Flags().BoolVar(&opts.Offline, "offline", false, "Deploy from the images already on this host and contact no network (implies --local)")

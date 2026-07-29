@@ -57,12 +57,13 @@ func DefaultDir() string {
 	return filepath.Join(home, ".config", "onyx")
 }
 
-// IsInstall reports whether dir contains an Onyx deployment: either the
-// compose file or a .env under deployment/ (the markers install.sh itself
-// checks before operating on a directory).
+// IsInstall reports whether dir contains an Onyx deployment: a compose file
+// (the base one, or the standalone prod file) or a .env under deployment/
+// (the markers install.sh itself checks before operating on a directory).
 func IsInstall(dir string) bool {
 	for _, marker := range []string{
 		filepath.Join(dir, "deployment", "docker-compose.yml"),
+		filepath.Join(dir, "deployment", "docker-compose.prod.yml"),
 		filepath.Join(dir, "deployment", ".env"),
 	} {
 		if _, err := os.Stat(marker); err == nil {

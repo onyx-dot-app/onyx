@@ -93,7 +93,7 @@ func TestUpgradeRefusesDowngradeNonInteractively(t *testing.T) {
 	err := RunUpgrade(context.Background(), deps, Options{
 		NoPrompt: true, Tag: "v4.0.0", Dir: root, NoWait: true,
 	})
-	if err == nil || !strings.Contains(err.Error(), "--force") {
+	if err == nil || !strings.Contains(err.Error(), "--allow-downgrade") {
 		t.Fatalf("err = %v, want downgrade refusal", err)
 	}
 
@@ -104,13 +104,13 @@ func TestUpgradeRefusesDowngradeNonInteractively(t *testing.T) {
 	}
 }
 
-func TestUpgradeDowngradeAllowedWithForce(t *testing.T) {
+func TestUpgradeDowngradeAllowedWithAllowDowngrade(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.2.0")
 
 	deps := testDeps(t, runner, notFoundServer(t))
 	err := RunUpgrade(context.Background(), deps, Options{
-		NoPrompt: true, Tag: "v4.0.0", Dir: root, NoWait: true, Force: true,
+		NoPrompt: true, Tag: "v4.0.0", Dir: root, NoWait: true, AllowDowngrade: true,
 	})
 	if err != nil {
 		t.Fatalf("RunUpgrade: %v\noutput:\n%s", err, outBuf(deps).String())
@@ -118,6 +118,21 @@ func TestUpgradeDowngradeAllowedWithForce(t *testing.T) {
 	env, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
 	if Var(string(env), "IMAGE_TAG") != "v4.0.0" {
 		t.Errorf("IMAGE_TAG = %q", Var(string(env), "IMAGE_TAG"))
+	}
+}
+
+// Force alone no longer implies a downgrade: the two consents are separate,
+// so a scripted rollback doesn't have to opt into overwriting edited files.
+func TestUpgradeForceAloneDoesNotAllowDowngrade(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.2.0")
+
+	deps := testDeps(t, runner, notFoundServer(t))
+	err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.0.0", Dir: root, NoWait: true, Force: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "--allow-downgrade") {
+		t.Fatalf("err = %v, want downgrade refusal despite --force", err)
 	}
 }
 

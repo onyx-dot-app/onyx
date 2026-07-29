@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/deployfiles"
+	"github.com/onyx-dot-app/onyx/cli/internal/deploy/dockercmd"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/paths"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/release"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/state"
@@ -91,17 +92,31 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	}
 
 	// The deployment mode never changes on upgrade; recover it from the
-	// manifest or the overlays on disk.
-	in.lite = manifest.Mode == state.ModeLite ||
-		in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel))
+	// manifest or the overlays on disk. --prod only asserts what is already
+	// there (first adoption has no manifest to say so) — converting a
+	// deployment that is recorded as something else is refused, because prod
+	// needs TLS material and env files an upgrade cannot conjure.
+	if in.opts.Prod && manifest.Mode != "" && manifest.Mode != state.ModeProd {
+		return exitcodes.Newf(exitcodes.BadRequest,
+			"this deployment is recorded as %s — upgrade cannot convert it to prod", manifest.Mode)
+	}
+	in.prod = in.opts.Prod || manifest.Mode == state.ModeProd ||
+		in.overlayOnDisk(filepath.Base(deployfiles.ProdCompose.DestRel))
+	in.lite = !in.prod && (manifest.Mode == state.ModeLite ||
+		in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel)))
 	in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
 		in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
+	in.resolveProject(manifest)
 	if in.wiz != nil {
 		mode := "Standard"
-		if in.lite {
+		switch {
+		case in.lite:
 			mode = "Lite"
-		}
-		if in.craft {
+		case in.prod && in.craft:
+			mode = "Prod+Craft"
+		case in.prod:
+			mode = "Prod"
+		case in.craft:
 			mode = "Std+Craft"
 		}
 		in.wiz.Answer("Mode", mode)
@@ -136,7 +151,10 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		if in.craft {
 			craftNote = ", Craft: true"
 		}
-		in.plainf("  • Lite mode: %t%s", in.lite, craftNote)
+		in.plainf("  • Mode: %s%s", in.modeName(), craftNote)
+		if in.project != dockercmd.DefaultProjectName {
+			in.plainf("  • Compose project: %s", in.project)
+		}
 		in.plainf("")
 		in.successf("Dry run complete (no changes made)")
 		return nil
@@ -145,7 +163,12 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	if err := in.resolveDockerProblems(ctx, in.gatherPreflight(ctx)); err != nil {
 		return err
 	}
-	in.observedPort = in.runningHostPort(ctx)
+	if err := in.checkComposeVersion(ctx); err != nil {
+		return err
+	}
+	if !in.prod {
+		in.observedPort = in.runningHostPort(ctx)
+	}
 	// The running services are deliberately NOT stopped here: `up` recreates
 	// any container whose image or config changed, so the old version keeps
 	// serving while images download, and a failed pull leaves it running
@@ -164,7 +187,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.infof("Refreshing config files to match %s...", configRef)
 	}
 	fetcher := &fileFetcher{in: in}
-	if err := in.materializeFiles(ctx, configRef, managedFiles(in.lite, in.craft), manifest, fetcher); err != nil {
+	if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.craft), manifest, fetcher); err != nil {
 		return err
 	}
 
@@ -193,12 +216,17 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	// here would collide with our own still-running nginx and silently move
 	// Onyx to another port. Installs created by install.sh never recorded
 	// HOST_PORT, so fall back to the port they are publishing right now.
-	hostPort, perr := strconv.Atoi(Var(env, "HOST_PORT"))
-	if perr != nil {
-		if hostPort = in.observedPort; hostPort == 0 {
-			hostPort = 3000
+	// Prod skips all of it: the overlay publishes 80/443, HOST_PORT unread.
+	hostPort := 0
+	if !in.prod {
+		var perr error
+		hostPort, perr = strconv.Atoi(Var(env, "HOST_PORT"))
+		if perr != nil {
+			if hostPort = in.observedPort; hostPort == 0 {
+				hostPort = 3000
+			}
+			env = SetVar(env, "HOST_PORT", strconv.Itoa(hostPort))
 		}
-		env = SetVar(env, "HOST_PORT", strconv.Itoa(hostPort))
 	}
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
 		return fmt.Errorf("failed to write .env: %w", err)
@@ -218,10 +246,14 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	manifest.CLIVersion = in.deps.CLIVersion
 	if manifest.Mode == "" {
 		manifest.Mode = state.ModeStandard
-		if in.lite {
+		switch {
+		case in.lite:
 			manifest.Mode = state.ModeLite
+		case in.prod:
+			manifest.Mode = state.ModeProd
 		}
 	}
+	in.recordProject(manifest)
 	manifest.IncludeCraft = in.craft
 	if !hadManifest || manifest.InstalledAt.IsZero() {
 		manifest.InstalledAt = now
@@ -241,8 +273,15 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 // drives the run, plain lines otherwise.
 func (in *installer) printUpgradeSuccess(hostPort int, from, to string) {
 	url := fmt.Sprintf("http://localhost:%d", hostPort)
+	if in.prod {
+		url = in.prodAccessURL()
+	}
 	headline := fmt.Sprintf("Onyx upgraded: %s → %s", from, to)
-	tail := append([]string{"Access Onyx at: " + ui.Accent(url), ""}, manageLines()...)
+	var tail []string
+	if url != "" {
+		tail = []string{"Access Onyx at: " + ui.Accent(url), ""}
+	}
+	tail = append(tail, manageLines()...)
 	if in.wiz != nil {
 		in.wiz.Stage(ui.StageComplete)
 		in.wiz.Finish(append([]string{"🎉 " + headline, ""}, tail...)...)
@@ -286,13 +325,13 @@ func (in *installer) downgradeGuard(installedTag, targetTag string) error {
 		return nil
 	}
 	in.warnf("Target %s is OLDER than the installed %s. Downgrades are not supported by Onyx and may corrupt data written by newer schema versions.", targetTag, installedTag)
-	if in.opts.Force {
-		in.infof("Proceeding anyway (--force).")
+	if in.opts.AllowDowngrade {
+		in.infof("Proceeding anyway (--allow-downgrade).")
 		return nil
 	}
 	if in.prompt.AssumeDefaults {
 		return exitcodes.New(exitcodes.BadRequest,
-			"refusing to downgrade non-interactively — re-run with --force to override")
+			"refusing to downgrade non-interactively — re-run with --allow-downgrade to override")
 	}
 	ok, err := in.confirmYN("Downgrade anyway?", false)
 	if err != nil {

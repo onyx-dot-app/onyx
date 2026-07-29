@@ -85,8 +85,8 @@ template or the generated files, so a stray edit to a generated file gets revert
 commit.
 
 onyx-cli embeds copies of the guided-install deployment files (the generated
-`docker-compose.yml`, the lite/craft overlays, `env.template`, the nginx config, and this README)
-under `cli/internal/deploy/deployfiles/embedded/`. The same `ods generate-compose --write` run
+`docker-compose.yml` and `docker-compose.prod.yml`, the lite/craft overlays, the env templates,
+the nginx config, and this README) under `cli/internal/deploy/deployfiles/embedded/`. The same `ods generate-compose --write` run
 refreshes them after rendering the variants, and a drift test in the cli module (`go test ./...`)
 gates staleness. If you change any of those files, re-run the generator and commit the refreshed
 embedded copies.

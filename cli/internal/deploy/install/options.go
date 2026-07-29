@@ -10,6 +10,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/paths"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/prompt"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/release"
+	"github.com/onyx-dot-app/onyx/cli/internal/deploy/state"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/ui"
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 )
@@ -19,6 +20,7 @@ import (
 type Options struct {
 	Lite         bool
 	IncludeCraft bool
+	Prod         bool
 	Tag          string
 	Local        bool
 	Offline      bool
@@ -27,7 +29,14 @@ type Options struct {
 	Verbose      bool
 	NoWait       bool
 	Dir          string
-	Force        bool
+	// Project overrides the docker compose project name (default: the one
+	// recorded in the manifest, else "onyx").
+	Project string
+	Force   bool
+	// AllowDowngrade proceeds when the target version is older than the
+	// installed one. Deliberately separate from Force: a scripted rollback
+	// must not also have to opt into overwriting hand-edited files.
+	AllowDowngrade bool
 }
 
 // Deps carries the injectable collaborators (fakes in tests).
@@ -65,6 +74,8 @@ type installer struct {
 	root     paths.InstallRoot
 	lite     bool
 	craft    bool
+	prod     bool
+	project  string     // compose project name every docker/compose call uses
 	wiz      *ui.Wizard // live wizard when the fancy renderer drives the run
 	cancel   func()     // cancels in-flight work when the wizard is quit
 	rootless bool       // daemon runs rootless (limits what compose can grant)
@@ -138,6 +149,55 @@ func (in *installer) failf(format string, args ...any) {
 		return
 	}
 	fmt.Fprintf(in.deps.IOS.Out, in.paint.Err("✗ ")+format+"\n", args...)
+}
+
+// resolveProject settles the compose project name for this run: the --project
+// flag, then the name recorded in the manifest (nil is fine), then the
+// default pinned in docker-compose.yml. Mirrored onto the compose handle when
+// one is already attached; attach points set it for the other order.
+func (in *installer) resolveProject(manifest *state.Manifest) {
+	switch {
+	case in.opts.Project != "":
+		in.project = in.opts.Project
+	case manifest != nil && manifest.Project != "":
+		in.project = manifest.Project
+	default:
+		in.project = dockercmd.DefaultProjectName
+	}
+	if in.compose != nil {
+		in.compose.Project = in.project
+	}
+}
+
+// projectName is the compose project this run operates on, safe to call
+// before resolveProject has run.
+func (in *installer) projectName() string {
+	if in.project != "" {
+		return in.project
+	}
+	return dockercmd.DefaultProjectName
+}
+
+// resolveProjectFromDisk resolves the project for verbs that don't otherwise
+// load the manifest (stop, logs, uninstall). A manifest that can't be read
+// resolves to the defaults rather than blocking a verb that may be the fix.
+func (in *installer) resolveProjectFromDisk() {
+	manifest, err := state.Load(in.root.Dir)
+	if err != nil {
+		in.warnf("%v", err)
+	}
+	in.resolveProject(manifest)
+}
+
+// modeName names the resolved deployment mode the way the manifest records it.
+func (in *installer) modeName() string {
+	switch {
+	case in.prod:
+		return string(state.ModeProd)
+	case in.lite:
+		return string(state.ModeLite)
+	}
+	return string(state.ModeStandard)
 }
 
 // localFiles reports whether config files come from disk and the embedded
