@@ -958,8 +958,8 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 			// it had already brought up, which is worth saying before the run
 			// reports itself cancelled.
 			in.infof("Services that already started are still running:")
-			in.cmdf("onyx-cli deploy status")
-			in.cmdf("onyx-cli deploy stop")
+			in.cmdf("onyx-cli deploy status%s", in.dirArg())
+			in.cmdf("onyx-cli deploy stop%s", in.dirArg())
 			return err
 		}
 		in.infof("Current container status:")
@@ -967,8 +967,8 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 		ps.Stdout, ps.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
 		_, _ = in.deps.Runner.Run(ctx, ps)
 		in.infof("Check the logs of any unhealthy service:")
-		in.cmdf("onyx-cli deploy status")
-		in.cmdf("(cd %q && docker compose %s logs <service>)", dir, strings.Join(fileArgs(files), " "))
+		in.cmdf("onyx-cli deploy status%s", in.dirArg())
+		in.cmdf("onyx-cli deploy logs%s <service>", in.dirArg())
 		in.explainIncompleteStart(tag, prevTag)
 		in.infof("If the issue persists, please contact: founders@onyx.app")
 		return exitcodes.Newf(exitcodes.General, "docker compose up failed: %v", err)
@@ -1317,12 +1317,4 @@ func (in *installer) deploymentDir() string {
 // before .env is known-good (install.sh uses the same pair for shutdown).
 func stopFallbackEnv() map[string]string {
 	return map[string]string{"HOST_PORT": "3000", "IMAGE_TAG": "edge"}
-}
-
-func fileArgs(files []string) []string {
-	args := make([]string, 0, 2*len(files))
-	for _, f := range files {
-		args = append(args, "-f", f)
-	}
-	return args
 }

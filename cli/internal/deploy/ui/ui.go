@@ -39,9 +39,41 @@ var (
 // with (internal/tui), so being asked something looks the same across the CLI.
 const promptMark = "◉ "
 
+// Color reports whether styled output belongs on this stream: stdout is a
+// terminal and the environment hasn't opted out of color. Piped or redirected
+// output stays plain, so `deploy status | grep` sees what it printed.
+func Color(ios *iostreams.IOStreams) bool {
+	return ios.IsStdoutTTY && os.Getenv("TERM") != "dumb" && os.Getenv("NO_COLOR") == ""
+}
+
 // Enabled reports whether the wizard should drive this run.
 func Enabled(ios *iostreams.IOStreams) bool {
-	return ios.IsInteractive() && os.Getenv("TERM") != "dumb" && os.Getenv("NO_COLOR") == ""
+	return ios.IsStdinTTY && Color(ios)
+}
+
+// Painter styles line-oriented output — the plain renderer the non-wizard
+// verbs (status, stop, uninstall) print through. Its zero value paints
+// nothing, so callers can hold one unconditionally and let it decide.
+type Painter struct{ on bool }
+
+// NewPainter returns a Painter that colors only when ios can take it.
+func NewPainter(ios *iostreams.IOStreams) Painter { return Painter{on: Color(ios)} }
+
+func (p Painter) Ok(s string) string   { return p.render(okStyle, s) }
+func (p Painter) Warn(s string) string { return p.render(warnSt, s) }
+func (p Painter) Err(s string) string  { return p.render(errSt, s) }
+func (p Painter) Dim(s string) string  { return p.render(dim, s) }
+
+// Accent marks the thing to act on — a URL, or a command meant to be typed
+// next. It is the same cyan the wizard's summary card uses, and it earns its
+// place by being rare: a line that highlights everything highlights nothing.
+func (p Painter) Accent(s string) string { return p.render(accent, s) }
+
+func (p Painter) render(st lipgloss.Style, s string) string {
+	if !p.on || s == "" {
+		return s
+	}
+	return st.Render(s)
 }
 
 // ErrAborted is returned when the user cancels (ctrl+c / esc / q).

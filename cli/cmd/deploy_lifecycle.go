@@ -60,6 +60,38 @@ healthy, 9 when no install exists, 1 when stopped or degraded.`,
 	return cmd
 }
 
+func newDeployLogsCmd(ios *iostreams.IOStreams) *cobra.Command {
+	return newDeployLogsCmdWithDeps(ios, nil)
+}
+
+func newDeployLogsCmdWithDeps(ios *iostreams.IOStreams, deps *install.Deps) *cobra.Command {
+	opts := install.Options{}
+	logOpts := install.LogOptions{}
+	cmd := &cobra.Command{
+		Use:   "logs [service...]",
+		Short: "Show the logs of the deployment's containers",
+		Long: `Show the logs of a deployment's services, with no need to find the
+deployment directory or remember which compose overlays it uses.
+
+Name the services to narrow the output ("onyx-cli deploy logs api_server"),
+which is what "onyx-cli deploy status" suggests for a service in trouble.`,
+		Args: cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			d := install.NewDeps(ios, fullVersion())
+			if deps != nil {
+				d = *deps
+			}
+			logOpts.Services = args
+			return install.RunLogs(cmd.Context(), d, opts, logOpts)
+		},
+	}
+	cmd.Flags().StringVar(&opts.Dir, "dir", "", "Deployment directory (default: auto-detected)")
+	cmd.Flags().BoolVarP(&logOpts.Follow, "follow", "f", false, "Keep printing new log lines")
+	cmd.Flags().StringVar(&logOpts.Tail, "tail", "200", `Lines to show from the end of each log ("all" for everything)`)
+	cmd.Flags().StringVar(&logOpts.Since, "since", "", "Only logs since this point (e.g. 10m, 2h, or a timestamp)")
+	return cmd
+}
+
 func newDeployUninstallCmd(ios *iostreams.IOStreams) *cobra.Command {
 	return newDeployUninstallCmdWithDeps(ios, nil)
 }

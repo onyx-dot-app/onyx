@@ -6,8 +6,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/dockercmd"
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
@@ -311,6 +314,220 @@ func TestStatusJSON(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("JSON missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// The status list is read by eye, so a container that needs attention has to
+// look different from one that doesn't.
+func TestStatusColorsUnhealthyContainers(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("NO_COLOR", "")
+	deps := testDeps(t, &fakeRunner{}, notFoundServer(t))
+	deps.IOS.IsStdoutTTY = true
+	in := newInstaller(deps, Options{})
+
+	// The verdict and the state carry the color; the elapsed time stays out
+	// of the way.
+	up := "Up 2 hours (healthy)"
+	cases := map[string]string{
+		up:                                in.paint.Dim("Up 2 hours ") + in.paint.Ok("(healthy)"),
+		"Up 2 hours":                      in.paint.Dim("Up 2 hours"),
+		"Up 3 seconds (unhealthy)":        in.paint.Dim("Up 3 seconds ") + in.paint.Err("(unhealthy)"),
+		"Exited (137) 1 minute ago":       in.paint.Err("Exited (137)") + in.paint.Dim(" 1 minute ago"),
+		"Up 3 seconds (health: starting)": in.paint.Dim("Up 3 seconds ") + in.paint.Warn("(health: starting)"),
+		// A container that keeps restarting is crash-looping, not starting.
+		"Restarting (1) 2 seconds ago": in.paint.Err("Restarting (1)") + in.paint.Dim(" 2 seconds ago"),
+		"Created":                      in.paint.Warn("Created"),
+	}
+	for status, want := range cases {
+		if got := in.paintStatus(status); got != want {
+			t.Errorf("paintStatus(%q) = %q, want %q", status, got, want)
+		}
+		if plain := ansi.Strip(in.paintStatus(status)); plain != status {
+			t.Errorf("styling changed the text: %q became %q", status, plain)
+		}
+	}
+	if in.paintStatus(up) == in.paintStatus("Up 3 seconds (unhealthy)") {
+		t.Error("healthy and unhealthy containers render alike")
+	}
+
+	// Color isn't the only signal: the mark says the same thing to a pipe.
+	marks := map[string]string{
+		up:                         "✓",
+		"Up 3 seconds (unhealthy)": "✗",
+		"Exited (0) 1 minute ago":  "✗",
+		"Created":                  "⚠",
+	}
+	for status, want := range marks {
+		if got := severityOf(status).mark(); got != want {
+			t.Errorf("mark for %q = %q, want %q", status, got, want)
+		}
+	}
+
+	// Redirected output carries no escapes, so `deploy status > file` and the
+	// tests below keep reading plain text.
+	plain := newInstaller(testDeps(t, &fakeRunner{}, notFoundServer(t)), Options{})
+	if got := plain.paintStatus("Up 3 seconds (unhealthy)"); got != "Up 3 seconds (unhealthy)" {
+		t.Errorf("non-terminal status should stay plain, got %q", got)
+	}
+}
+
+// A container that keeps dying is the worst state on the board and the one
+// `docker ps` explains least: "Restarting" says nothing about how many times
+// or why. Status has to supply both, and name the command that shows the rest.
+func TestStatusExplainsCrashLoop(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.2.0")
+
+	psOut := "onyx-nginx-1\tnginx:1.25.5-alpine\tUp 2 hours\t0.0.0.0:3000->80/tcp\tnginx\n" +
+		"onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tRestarting (255) 13 seconds ago\t\tapi_server\n"
+	inspectOut := `{"name":"/onyx-api_server-1","restarts":18,"exit":255,"oom":false,"error":"","health":null}`
+	statusRunner := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		switch {
+		case strings.Contains(argv(c), "ps -a"):
+			return dockercmd.Result{Stdout: psOut}, nil
+		case strings.Contains(argv(c), "inspect"):
+			return dockercmd.Result{Stdout: inspectOut}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	shimDockerOnPath(t)
+	deps := testDeps(t, statusRunner, notFoundServer(t))
+	err := RunStatus(context.Background(), deps, Options{Dir: root}, false)
+	if err == nil || !strings.Contains(err.Error(), "partially stopped") {
+		t.Fatalf("err = %v, want a degraded exit", err)
+	}
+
+	out := outBuf(deps).String()
+	for _, want := range []string{
+		"18 restarts",
+		"api_server has restarted 18 times (exit 255)",
+		"crash-looping",
+		// The hint names the compose service, which is what logs takes, not
+		// the container that happens to run it — and repeats the --dir this
+		// run was given, so it works verbatim.
+		"onyx-cli deploy logs --dir " + strconv.Quote(root) + " api_server\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+
+	// Only containers in trouble are inspected: a healthy one has nothing to
+	// explain and shouldn't cost a round-trip.
+	for _, c := range statusRunner.calls {
+		if strings.Contains(argv(c), "inspect") && strings.Contains(argv(c), "nginx") {
+			t.Errorf("healthy container inspected: %s", argv(c))
+		}
+	}
+}
+
+// A container compose created but never started is not running and not
+// crash-looping. The verdict counts it either way, so the explanation under
+// the verdict has to account for it too.
+func TestStatusExplainsEveryContainerItCounted(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.2.0")
+
+	psOut := "onyx-nginx-1\tnginx:1.25.5-alpine\tCreated\t\tnginx\n" +
+		"onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 2 hours (healthy)\t\tapi_server\n" +
+		"onyx-code-interpreter-1\tonyxdotapp/onyx-backend:v4.2.0\tExited (0) 6 seconds ago\t\tcode-interpreter\n"
+	inspectOut := `{"name":"/onyx-nginx-1","restarts":0,"exit":0,"oom":false,"error":"","health":null}` + "\n" +
+		`{"name":"/onyx-code-interpreter-1","restarts":0,"exit":0,"oom":false,"error":"","health":null}`
+	statusRunner := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		switch {
+		case strings.Contains(argv(c), "ps -a"):
+			return dockercmd.Result{Stdout: psOut}, nil
+		case strings.Contains(argv(c), "inspect"):
+			return dockercmd.Result{Stdout: inspectOut}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	shimDockerOnPath(t)
+	deps := testDeps(t, statusRunner, notFoundServer(t))
+	if err := RunStatus(context.Background(), deps, Options{Dir: root}, false); err == nil {
+		t.Fatal("expected a degraded exit")
+	}
+
+	out := outBuf(deps).String()
+	for _, want := range []string{
+		"2 of 3 containers are not running",
+		"nginx was created but never started",
+		"code-interpreter is not running (exit 0",
+		"logs --dir " + strconv.Quote(root) + " nginx code-interpreter\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+	// The healthy service is neither counted nor explained.
+	if strings.Contains(out, "api_server is") || strings.Contains(out, "logs api_server") {
+		t.Errorf("healthy service dragged into the failure report:\n%s", out)
+	}
+}
+
+// The hint is the one line in the report the reader is meant to act on, so
+// the command carries the accent and the words around it don't.
+func TestFailureHintHighlightsTheCommand(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("NO_COLOR", "")
+	deps := testDeps(t, &fakeRunner{}, notFoundServer(t))
+	deps.IOS.IsStdoutTTY = true
+	in := newInstaller(deps, Options{})
+	in.explainFailures([]Service{{
+		Name:      "onyx-api_server-1",
+		Service:   "api_server",
+		Status:    "Restarting (255) 13 seconds ago",
+		Diagnosis: "is crash-looping",
+	}}, notRunning)
+
+	out := outBuf(deps).String()
+	if !strings.Contains(out, in.paint.Accent("onyx-cli deploy logs api_server")) {
+		t.Errorf("the command to run isn't highlighted:\n%q", out)
+	}
+	if strings.Contains(out, in.paint.Accent("See why")) {
+		t.Errorf("the label is highlighted too, so nothing stands out:\n%q", out)
+	}
+	if plain := ansi.Strip(out); !strings.Contains(plain, "See why: onyx-cli deploy logs api_server\n") {
+		t.Errorf("styling changed the text:\n%q", plain)
+	}
+}
+
+// The reason `deploy logs` exists: triage shouldn't begin with finding the
+// deployment directory and remembering which overlays it was installed with.
+func TestLogsRunsAgainstTheDetectedOverlays(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0") // lite install: overlay on disk
+
+	logRunner := &fakeRunner{handler: healthyDockerHandler}
+	deps := testDeps(t, logRunner, notFoundServer(t))
+	logOpts := LogOptions{Services: []string{"api_server"}, Tail: "200"}
+	if err := RunLogs(context.Background(), deps, Options{Dir: root}, logOpts); err != nil {
+		t.Fatalf("RunLogs: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+
+	var logs string
+	for _, c := range logRunner.calls {
+		if strings.Contains(argv(c), " logs") {
+			logs = argv(c)
+		}
+	}
+	if logs == "" {
+		t.Fatal("compose logs never ran")
+	}
+	for _, want := range []string{"-f docker-compose.onyx-lite.yml", "logs --tail 200 api_server"} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("compose logs missing %q: %s", want, logs)
+		}
+	}
+}
+
+func TestLogsWithoutAnInstall(t *testing.T) {
+	isolateEnv(t)
+	deps := testDeps(t, &fakeRunner{}, notFoundServer(t))
+	err := RunLogs(context.Background(), deps, Options{Dir: filepath.Join(t.TempDir(), "none")}, LogOptions{})
+	if err == nil || !strings.Contains(err.Error(), "not installed") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

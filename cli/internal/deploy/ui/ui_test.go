@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 )
 
 // sampleModels covers the panes that carry the widest content: a question with
@@ -234,5 +236,35 @@ func TestNarrowViewKeepsOptionHints(t *testing.T) {
 	}
 	if !strings.Contains(content, "Step 1/4") {
 		t.Errorf("the rail should collapse to a step line below %d columns:\n%s", minTwoColumn, content)
+	}
+}
+
+// A Painter colors only what the stream can show: styled on a terminal,
+// untouched when the output is piped or the environment opts out.
+func TestPainterFollowsTheStream(t *testing.T) {
+	tty := &iostreams.IOStreams{Out: &bytes.Buffer{}, IsStdoutTTY: true}
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("NO_COLOR", "")
+
+	p := NewPainter(tty)
+	for _, styled := range []string{p.Ok("up"), p.Warn("up"), p.Err("up"), p.Dim("up")} {
+		if styled == "up" {
+			t.Error("a terminal stream should be colored")
+		}
+		if ansi.Strip(styled) != "up" {
+			t.Errorf("styling changed the text: %q", ansi.Strip(styled))
+		}
+	}
+	if p.Ok("up") == p.Err("up") {
+		t.Error("healthy and failed states must not look the same")
+	}
+
+	piped := NewPainter(&iostreams.IOStreams{Out: &bytes.Buffer{}})
+	if got := piped.Err("up"); got != "up" {
+		t.Errorf("piped output should stay plain, got %q", got)
+	}
+	t.Setenv("NO_COLOR", "1")
+	if got := NewPainter(tty).Err("up"); got != "up" {
+		t.Errorf("NO_COLOR should stay plain, got %q", got)
 	}
 }

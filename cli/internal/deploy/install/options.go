@@ -58,6 +58,7 @@ type installer struct {
 	prompt  *prompt.Prompter
 	docker  *dockercmd.Docker
 	compose *dockercmd.Compose
+	paint   ui.Painter
 
 	// Resolved during the run.
 	root     paths.InstallRoot
@@ -86,17 +87,20 @@ func newInstaller(deps Deps, opts Options) *installer {
 		opts:   opts,
 		prompt: prompt.New(deps.IOS, opts.NoPrompt),
 		docker: dockercmd.NewDocker(deps.Runner),
+		paint:  ui.NewPainter(deps.IOS),
 	}
 }
 
-// Output helpers mirroring install.sh's prefixes (plain text, no color).
+// Output helpers mirroring install.sh's prefixes. Only the mark is colored,
+// the way the wizard colors its notes, so the text stays readable on any
+// background and unstyled when the output isn't a terminal.
 
 func (in *installer) successf(format string, args ...any) {
 	if in.wiz != nil {
 		in.wiz.Note("ok", fmt.Sprintf(format, args...))
 		return
 	}
-	fmt.Fprintf(in.deps.IOS.Out, "✓ "+format+"\n", args...)
+	fmt.Fprintf(in.deps.IOS.Out, in.paint.Ok("✓ ")+format+"\n", args...)
 }
 
 func (in *installer) infof(format string, args ...any) {
@@ -104,7 +108,7 @@ func (in *installer) infof(format string, args ...any) {
 		in.wiz.Note("", fmt.Sprintf(format, args...))
 		return
 	}
-	fmt.Fprintf(in.deps.IOS.Out, "ℹ "+format+"\n", args...)
+	fmt.Fprintf(in.deps.IOS.Out, in.paint.Dim("ℹ ")+format+"\n", args...)
 }
 
 func (in *installer) warnf(format string, args ...any) {
@@ -112,7 +116,7 @@ func (in *installer) warnf(format string, args ...any) {
 		in.wiz.Note("warn", fmt.Sprintf(format, args...))
 		return
 	}
-	fmt.Fprintf(in.deps.IOS.Out, "⚠ "+format+"\n", args...)
+	fmt.Fprintf(in.deps.IOS.Out, in.paint.Warn("⚠ ")+format+"\n", args...)
 }
 
 func (in *installer) errorf(format string, args ...any) {
@@ -120,7 +124,28 @@ func (in *installer) errorf(format string, args ...any) {
 		in.wiz.Note("err", fmt.Sprintf(format, args...))
 		return
 	}
-	fmt.Fprintf(in.deps.IOS.ErrOut, "✗ "+format+"\n", args...)
+	fmt.Fprintf(in.deps.IOS.ErrOut, in.paint.Err("✗ ")+format+"\n", args...)
+}
+
+// failf is errorf's report-side twin: the same mark, but on stdout, for a
+// verb whose failure IS the output that was asked for (status), where
+// splitting the verdict from the list it explains would leave both halves
+// unreadable on their own.
+func (in *installer) failf(format string, args ...any) {
+	if in.wiz != nil {
+		in.wiz.Note("err", fmt.Sprintf(format, args...))
+		return
+	}
+	fmt.Fprintf(in.deps.IOS.Out, in.paint.Err("✗ ")+format+"\n", args...)
+}
+
+// dirArg repeats the --dir this run was given, so a command the output
+// suggests still points at the same deployment when it isn't the default one.
+func (in *installer) dirArg() string {
+	if in.opts.Dir == "" {
+		return ""
+	}
+	return fmt.Sprintf(" --dir %q", in.opts.Dir)
 }
 
 func (in *installer) plainf(format string, args ...any) {
