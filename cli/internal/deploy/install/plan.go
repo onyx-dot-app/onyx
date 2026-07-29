@@ -13,7 +13,9 @@ func (in *installer) printPlan(defaultTag string) {
 	in.infof("Dry run mode — showing what would happen:")
 	in.plainf("  • Install root: %s (%s)", in.root.Dir, in.root.Source)
 	in.plainf("  • Lite mode: %t", in.lite)
-	in.plainf("  • Include Craft: %t", in.craft)
+	if in.craft {
+		in.plainf("  • Include Craft: true")
+	}
 	in.plainf("  • OS: %s/%s (WSL: %t)", runtime.GOOS, runtime.GOARCH, dockercmd.IsWSL())
 	switch {
 	case in.opts.Offline:

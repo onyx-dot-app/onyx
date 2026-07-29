@@ -132,7 +132,11 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		} else {
 			in.plainf("  • Upgrade: %s → %s (config ref: %s)", installedTag, targetTag, release.ConfigRef(targetTag))
 		}
-		in.plainf("  • Lite mode: %t, Craft: %t", in.lite, in.craft)
+		craftNote := ""
+		if in.craft {
+			craftNote = ", Craft: true"
+		}
+		in.plainf("  • Lite mode: %t%s", in.lite, craftNote)
 		in.plainf("")
 		in.successf("Dry run complete (no changes made)")
 		return nil

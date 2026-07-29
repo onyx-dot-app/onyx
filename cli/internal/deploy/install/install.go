@@ -533,9 +533,12 @@ func (in *installer) askVersion(ctx context.Context, title, def string) (string,
 	}
 }
 
-// askModeQuestion is the single merged deployment-mode select (mode and
-// Craft in one question). Lite stays the default for new installs, matching
-// install.sh's interactive and --no-prompt behavior.
+// askModeQuestion is the deployment-mode select. Lite stays the default for
+// new installs, matching install.sh's interactive and --no-prompt behavior.
+// Craft is deliberately not offered here: it is reachable with
+// --include-craft, and installs it the same way, but it binds the docker
+// socket and is not yet something to put in front of someone who has not
+// gone looking for it.
 func (in *installer) askModeQuestion() error {
 	if in.opts.Lite {
 		in.infof("Deployment mode: Lite (set via --lite flag)")
@@ -548,15 +551,13 @@ func (in *installer) askModeQuestion() error {
 		[]ui.Option{
 			{Label: "Lite", Hint: "chat, tools, uploads, projects — no vector search (recommended)"},
 			{Label: "Standard", Hint: "full search, connectors, and RAG"},
-			{Label: "Standard + Craft", Hint: "adds AI web-app building (binds the docker socket)"},
 		}, 0)
 	if err != nil {
 		return err
 	}
 	in.lite = choice == 0
-	in.craft = choice == 2
 	if in.wiz != nil {
-		in.wiz.Answer("Mode", []string{"Lite", "Standard", "Std+Craft"}[choice])
+		in.wiz.Answer("Mode", []string{"Lite", "Standard"}[choice])
 	}
 	return nil
 }
