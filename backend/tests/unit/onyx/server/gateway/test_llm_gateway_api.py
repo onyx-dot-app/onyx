@@ -28,12 +28,18 @@ from onyx.llm.model_response import (
     Usage,
 )
 from onyx.llm.models import (
+    AssistantMessage,
     ChatCompletionMessage,
+    ImageContentPart,
+    ImageUrlDetail,
     ReasoningEffort,
     SystemMessage,
+    TextContentPart,
+    ToolCall,
     ToolChoiceOptions,
     UserMessage,
 )
+from onyx.llm.models import FunctionCall as ToolFunctionCall
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build.craft_gateway import is_craft_gateway_request
@@ -348,6 +354,48 @@ def test_prepare_messages_uses_no_cacheable_prefix_for_single_message() -> None:
 
     assert process_prompt.call_args.kwargs["cacheable_prefix"] is None
     assert process_prompt.call_args.kwargs["suffix"] == messages
+
+
+def test_drop_empty_text() -> None:
+    tool_call = ToolCall(
+        id="call_1", function=ToolFunctionCall(name="bash", arguments="{}")
+    )
+    image_part = ImageContentPart(image_url=ImageUrlDetail(url="https://x/y.png"))
+    messages: list[ChatCompletionMessage] = [
+        SystemMessage(content="instructions"),
+        UserMessage(content="build me an app"),
+        AssistantMessage(content="", tool_calls=[tool_call]),
+        AssistantMessage(content="  "),
+        UserMessage(content=" "),
+        UserMessage(content=[TextContentPart(text=""), image_part]),
+    ]
+
+    result = [
+        message
+        for message in map(gateway_api._drop_empty_text, messages)
+        if message is not None
+    ]
+
+    assert result == [
+        SystemMessage(content="instructions"),
+        UserMessage(content="build me an app"),
+        AssistantMessage(content=None, tool_calls=[tool_call]),
+        UserMessage(content=[image_part]),
+    ]
+
+
+def test_prepare_messages_rejects_all_empty_messages() -> None:
+    llm = _ConfigOnlyLLM(
+        LLMConfig(
+            model_provider="anthropic",
+            model_name="claude-sonnet",
+            temperature=0,
+            max_input_tokens=200_000,
+        )
+    )
+    with pytest.raises(OnyxError) as exc_info:
+        gateway_api._prepare_messages(llm, [{"role": "user", "content": ""}])
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
 
 
 def test_prepare_messages_rejects_invalid_messages() -> None:
