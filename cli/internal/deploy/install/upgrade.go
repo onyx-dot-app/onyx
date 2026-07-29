@@ -147,7 +147,11 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		} else {
 			in.plainf("  • Upgrade: %s → %s (config ref: %s)", installedTag, targetTag, release.ConfigRef(targetTag))
 		}
-		in.plainf("  • Mode: %s, Craft: %t", in.modeName(), in.craft)
+		craftNote := ""
+		if in.craft {
+			craftNote = ", Craft: true"
+		}
+		in.plainf("  • Mode: %s%s", in.modeName(), craftNote)
 		if in.project != dockercmd.DefaultProjectName {
 			in.plainf("  • Compose project: %s", in.project)
 		}

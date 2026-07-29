@@ -506,6 +506,7 @@ class LLMProviderResponse(BaseModel, Generic[T]):
     providers: list[T]
     default_text: DefaultModel | None = None
     default_vision: DefaultModel | None = None
+    default_chat_naming: DefaultModel | None = None
 
     @classmethod
     def from_models(
@@ -513,11 +514,13 @@ class LLMProviderResponse(BaseModel, Generic[T]):
         providers: list[T],
         default_text: DefaultModel | None = None,
         default_vision: DefaultModel | None = None,
+        default_chat_naming: DefaultModel | None = None,
     ) -> LLMProviderResponse[T]:
         return cls(
             providers=providers,
             default_text=default_text,
             default_vision=default_vision,
+            default_chat_naming=default_chat_naming,
         )
 
 

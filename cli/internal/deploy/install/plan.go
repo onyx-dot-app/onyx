@@ -13,7 +13,9 @@ func (in *installer) printPlan(defaultTag string) {
 	in.infof("Dry run mode — showing what would happen:")
 	in.plainf("  • Install root: %s (%s)", in.root.Dir, in.root.Source)
 	in.plainf("  • Mode: %s", in.modeName())
-	in.plainf("  • Include Craft: %t", in.craft)
+	if in.craft {
+		in.plainf("  • Include Craft: true")
+	}
 	if in.opts.Project != "" {
 		in.plainf("  • Compose project: %s", in.opts.Project)
 	}

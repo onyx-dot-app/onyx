@@ -139,6 +139,7 @@ export function useLLMProviders(agentId?: number) {
     llmProviders: data?.providers,
     defaultText: data?.default_text ?? null,
     defaultVision: data?.default_vision ?? null,
+    defaultChatNaming: data?.default_chat_naming ?? null,
     isLoading: !error && !data,
     error,
     refetch: mutate as unknown as () => Promise<
@@ -203,6 +204,7 @@ export function useAdminLLMProviders() {
     llmProviders: data?.providers,
     defaultText: data?.default_text ?? null,
     defaultVision: data?.default_vision ?? null,
+    defaultChatNaming: data?.default_chat_naming ?? null,
     isLoading: !error && !data,
     error,
     refetch: mutate,
