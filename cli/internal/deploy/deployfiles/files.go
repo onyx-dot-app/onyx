@@ -56,7 +56,9 @@ var (
 		DestRel:   "deployment/docker-compose.craft.yml",
 		Mode:      0644,
 	}
-	ProdOverlay = File{
+	// ProdCompose is the standalone production compose file: run on its own
+	// (not stacked on Compose), it is the complete prod stack with TLS.
+	ProdCompose = File{
 		EmbedPath: "embedded/docker_compose/docker-compose.prod.yml",
 		RepoPath:  "deployment/docker_compose/docker-compose.prod.yml",
 		DestRel:   "deployment/docker-compose.prod.yml",
@@ -111,7 +113,7 @@ var All = []File{
 	Compose,
 	LiteOverlay,
 	CraftOverlay,
-	ProdOverlay,
+	ProdCompose,
 	EnvTemplate,
 	EnvProdTemplate,
 	EnvNginxTemplate,

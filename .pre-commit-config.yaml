@@ -67,11 +67,10 @@ repos:
       - id: uv-run
         alias: docker-compose-sync
         name: sync docker compose files from template
-        # Regenerates docker-compose.yml / docker-compose.prod-no-letsencrypt.yml
-        # from docker-compose.template.yml (docker-compose.prod.yml is a
-        # hand-maintained overlay, not generated), then refreshes the copies of
-        # the guided-install deployment files that onyx-cli embeds
-        # (cli/internal/deploy/deployfiles/embedded/).
+        # Regenerates docker-compose.yml / docker-compose.prod.yml /
+        # docker-compose.prod-no-letsencrypt.yml from docker-compose.template.yml,
+        # then refreshes the copies of the guided-install deployment files that
+        # onyx-cli embeds (cli/internal/deploy/deployfiles/embedded/).
         # `ods generate-compose` ships in onyx-devtools (tools/ods); changes to the
         # generator need an ods release before this hook picks them up — until the
         # release that adds the embedded-copy sync, the extra trigger paths below

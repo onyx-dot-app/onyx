@@ -1,7 +1,6 @@
 package install
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,20 +11,19 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/deployfiles"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/release"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/state"
-	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 )
 
 // managedFiles returns the files for the selected mode: the base set plus the
-// overlays that apply. Prod swaps in its own set — the prod overlay, the prod
-// env/nginx templates — and deliberately leaves out the README: prod installs
-// are typically adopted in place (sometimes inside a checked-out source
-// tree), and dropping a README into someone's root is not adoption.
+// overlays that apply. Prod swaps in its own set — the standalone prod
+// compose file and the prod env/nginx templates — and deliberately leaves
+// out the README: prod installs are typically adopted in place (sometimes
+// inside a checked-out source tree), and dropping a README into someone's
+// root is not adoption.
 func managedFiles(prod, lite, craft bool) []deployfiles.File {
 	var files []deployfiles.File
 	if prod {
 		files = []deployfiles.File{
-			deployfiles.Compose,
-			deployfiles.ProdOverlay,
+			deployfiles.ProdCompose,
 			deployfiles.EnvProdTemplate,
 			deployfiles.EnvNginxTemplate,
 			deployfiles.NginxAppConfProd,
@@ -62,22 +60,16 @@ type fileFetcher struct {
 func (ff *fileFetcher) content(ctx context.Context, ref string, f deployfiles.File) ([]byte, string, error) {
 	if ref != "" && !ff.disabled {
 		data, err := ff.in.deps.Release.FetchFile(ctx, ref, f.RepoPath)
-		switch {
-		case err == nil && f.DestRel == deployfiles.ProdOverlay.DestRel && !bytes.Contains(data, []byte("!override")):
-			// Refs cut before docker-compose.prod.yml became an overlay carry
-			// the old standalone file (recognizable by its missing merge
-			// tags); stacking that on docker-compose.yml would re-publish the
-			// dev port on a prod host, so the bundled overlay wins.
-			ff.in.warnf("%s at %s predates the overlay format — using the copy bundled with this CLI", f.RepoPath, ref)
-		case err == nil:
+		if err == nil {
 			return data, ref, nil
+		}
 		// A file missing from a reachable ref (an overlay added after that
 		// release, say) says nothing about the rest: falling back for the
 		// whole set here would quietly mix one version's compose file with
 		// another's overlays and nginx config.
-		case errors.Is(err, release.ErrNotFound):
+		if errors.Is(err, release.ErrNotFound) {
 			ff.in.warnf("%s doesn't exist at %s — using the copy bundled with this CLI, which may not match that version", f.RepoPath, ref)
-		default:
+		} else {
 			ff.disabled = true
 			ff.in.warnf("Could not fetch %s at %s (%v) — using the files bundled with this CLI", f.RepoPath, ref, err)
 		}
@@ -113,17 +105,7 @@ func (in *installer) materializeFiles(
 			return fmt.Errorf("failed to read %s: %w", f.DestRel, err)
 		}
 
-		// A docker-compose.prod.yml that predates the overlay format (the old
-		// standalone file, recognizable by its missing merge tags) cannot be
-		// kept in prod mode, whatever --local says: stacked on
-		// docker-compose.yml it re-publishes the dev HTTP port on a host that
-		// deliberately serves only 80/443. It is not a customization to
-		// preserve — it is replaced (backed up) below or the run stops.
-		legacyProd := in.prod && exists &&
-			f.DestRel == deployfiles.ProdOverlay.DestRel &&
-			!bytes.Contains(onDisk, []byte("!override"))
-
-		if in.localFiles() && !legacyProd {
+		if in.localFiles() {
 			if exists {
 				in.successf("Using existing %s", f.DestRel)
 				if err := manifest.RecordFile(root, f.DestRel, onDisk); err != nil {
@@ -159,23 +141,7 @@ func (in *installer) materializeFiles(
 			if err != nil {
 				return err
 			}
-			switch {
-			case edited && legacyProd:
-				// Keeping it is not an option here, so declining stops the
-				// run instead of continuing into a broken merge.
-				overwrite, err := in.confirmReplaceLegacyProd()
-				if err != nil {
-					return err
-				}
-				if !overwrite {
-					return exitcodes.Newf(exitcodes.BadRequest,
-						"cannot keep the pre-overlay %s in prod mode — re-run with --force to replace it (a backup is kept)",
-						f.DestRel)
-				}
-				if err := in.backupFile(dest, f.DestRel, manifest); err != nil {
-					return err
-				}
-			case edited:
+			if edited {
 				overwrite, err := in.confirmOverwriteEdited(f.DestRel)
 				if err != nil {
 					return err
@@ -225,22 +191,6 @@ func (in *installer) removeOverlayIfPresent(f deployfiles.File, manifest *state.
 	}
 	in.infof("Removed %s (%s)", f.DestRel, reason)
 	return nil
-}
-
-// confirmReplaceLegacyProd gates replacing a docker-compose.prod.yml that
-// predates the overlay format. Unlike other hand-edited files it cannot be
-// kept: prod mode stacks it on docker-compose.yml, and the old standalone
-// file merged onto the base re-publishes the dev HTTP port next to 80/443.
-func (in *installer) confirmReplaceLegacyProd() (bool, error) {
-	in.warnf("%s is the pre-overlay standalone file — stacked on docker-compose.yml it would also publish the dev port (3000) on this host.",
-		deployfiles.ProdOverlay.DestRel)
-	if in.opts.Force {
-		return true, nil
-	}
-	if in.prompt.AssumeDefaults {
-		return false, nil
-	}
-	return in.confirmYN("Replace it with the overlay-format file? A backup will be kept.", true)
 }
 
 // confirmOverwriteEdited gates replacing a file the CLI cannot vouch for:

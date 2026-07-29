@@ -26,10 +26,10 @@ overwrite (or pass --force), and a backup is made first. The running
 services keep serving while images download and are then recreated on the
 new version.
 
-Prod deployments (docker-compose.prod.yml, TLS via certbot) are detected
-from the manifest or the overlay on disk; --prod asserts it for the first
-adoption of an unmanaged deployment. --project targets a stack that runs
-under a compose project name other than "onyx".`,
+Prod deployments (the standalone docker-compose.prod.yml, TLS via certbot)
+are detected from the manifest or the prod compose file on disk; --prod
+asserts it for the first adoption of an unmanaged deployment. --project
+targets a stack that runs under a compose project name other than "onyx".`,
 		Example: `  onyx-cli deploy upgrade
   onyx-cli deploy upgrade --tag v4.4.6
   onyx-cli deploy upgrade --tag v4.4.6 --no-prompt --force
@@ -45,7 +45,7 @@ under a compose project name other than "onyx".`,
 	}
 
 	cmd.Flags().StringVar(&opts.Tag, "tag", "", "Image tag to upgrade to (default: the latest Onyx release)")
-	cmd.Flags().BoolVar(&opts.Prod, "prod", false, "Manage this as a prod deployment (docker-compose.prod.yml overlay)")
+	cmd.Flags().BoolVar(&opts.Prod, "prod", false, "Manage this as a prod deployment (the standalone docker-compose.prod.yml)")
 	cmd.Flags().StringVar(&opts.Project, "project", "", `Docker compose project name (default: recorded in the manifest, else "onyx")`)
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "Overwrite hand-edited managed files (a backup is kept)")
 	cmd.Flags().BoolVar(&opts.AllowDowngrade, "allow-downgrade", false, "Proceed when the target version is older than the installed one")

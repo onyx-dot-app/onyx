@@ -34,11 +34,7 @@ const (
 
 	waitTimeoutSeconds = 600
 	minComposeVersion  = "2.24.0"
-	// prodMinComposeVersion is where the !override / !reset YAML merge tags
-	// the prod overlay uses landed; older compose fails to parse the file, so
-	// prod mode refuses to start a run that is guaranteed to end there.
-	prodMinComposeVersion = "2.24.4"
-	failureLogTail        = 30
+	failureLogTail     = 30
 
 	// s3FilestoreProfile is the COMPOSE_PROFILES entry that runs MinIO: on in
 	// standard mode, off in lite. It is the only entry the CLI owns.
@@ -89,7 +85,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	}
 	if in.opts.Prod && in.opts.Lite {
 		return exitcodes.New(exitcodes.BadRequest,
-			"--prod and --lite cannot be used together: they select conflicting compose overlays")
+			"--prod and --lite cannot be used together: they select conflicting compose files")
 	}
 
 	in.root = paths.Resolve(in.opts.Dir)
@@ -204,7 +200,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		// otherwise. (install.sh re-asked every run, so a --no-prompt rerun
 		// silently flipped standard installs to lite.)
 		in.prod = in.opts.Prod || manifest.Mode == state.ModeProd ||
-			in.overlayOnDisk(filepath.Base(deployfiles.ProdOverlay.DestRel))
+			in.overlayOnDisk(filepath.Base(deployfiles.ProdCompose.DestRel))
 		if in.prod && in.opts.Lite {
 			return exitcodes.New(exitcodes.BadRequest,
 				"this is a prod deployment — --lite cannot be applied to it")
@@ -773,17 +769,6 @@ func (in *installer) checkComposeVersion(ctx context.Context) error {
 		return nil
 	}
 	have, ok := version.Parse(composeVersion)
-	if in.prod {
-		// A hard stop, not a warning: the prod overlay's !override / !reset
-		// tags are a parse error on older compose, so every later phase fails.
-		prodMinimum, _ := version.Parse(prodMinComposeVersion)
-		if ok && have.LessThan(prodMinimum) {
-			return exitcodes.Newf(exitcodes.NotAvailable,
-				"Docker Compose %s is older than %s, which the prod overlay needs (!override/!reset). Upgrade Docker Compose: https://docs.docker.com/compose/install/",
-				composeVersion, prodMinComposeVersion)
-		}
-		return nil
-	}
 	minimum, _ := version.Parse(minComposeVersion)
 	if !ok || !have.LessThan(minimum) {
 		return nil
@@ -866,7 +851,8 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 	// publishing, and only a deployment that was never up gets a fresh scan
 	// (services are stopped on this path, so the scan can't collide with our
 	// own binding — but it would silently move a running deployment).
-	// Prod ignores HOST_PORT entirely: the overlay publishes 80/443.
+	// Prod ignores HOST_PORT entirely: docker-compose.prod.yml publishes
+	// 80/443 outright.
 	hostPort := 0
 	if !in.prod {
 		var perr error
@@ -979,8 +965,8 @@ func (in *installer) ensureCraftResources(ctx context.Context) {
 
 func (in *installer) composeRunEnv(tag string, hostPort int) map[string]string {
 	env := map[string]string{"IMAGE_TAG": tag}
-	// Prod has no HOST_PORT: the overlay overrides the port mappings that
-	// would read it, so passing one would only suggest it does something.
+	// Prod has no HOST_PORT: docker-compose.prod.yml publishes 80/443
+	// outright, so passing one would only suggest it does something.
 	if !in.prod {
 		env["HOST_PORT"] = fmt.Sprintf("%d", hostPort)
 	}
@@ -1501,20 +1487,26 @@ func (in *installer) starRepo(ctx context.Context) {
 	}
 }
 
-// composeFileNames returns the -f list. With autoDetect, previously
-// downloaded overlays are picked up from disk so users don't have to repeat
+// composeFileNames returns the -f list. Prod deployments run the standalone
+// docker-compose.prod.yml on its own; every other mode stacks overlays on
+// docker-compose.yml. With autoDetect, previously downloaded files are
+// picked up from disk so users don't have to repeat
 // --lite/--prod/--include-craft for lifecycle commands (install.sh's
 // build_compose_file_args true).
 func (in *installer) composeFileNames(autoDetect bool) []string {
+	prodName := filepath.Base(deployfiles.ProdCompose.DestRel)
+	craftName := filepath.Base(deployfiles.CraftOverlay.DestRel)
+	if in.prod || (autoDetect && in.overlayOnDisk(prodName)) {
+		files := []string{prodName}
+		if in.craft || (autoDetect && in.overlayOnDisk(craftName)) {
+			files = append(files, craftName)
+		}
+		return files
+	}
 	files := []string{"docker-compose.yml"}
 	liteName := filepath.Base(deployfiles.LiteOverlay.DestRel)
-	prodName := filepath.Base(deployfiles.ProdOverlay.DestRel)
-	craftName := filepath.Base(deployfiles.CraftOverlay.DestRel)
 	if in.lite || (autoDetect && in.overlayOnDisk(liteName)) {
 		files = append(files, liteName)
-	}
-	if in.prod || (autoDetect && in.overlayOnDisk(prodName)) {
-		files = append(files, prodName)
 	}
 	if in.craft || (autoDetect && in.overlayOnDisk(craftName)) {
 		files = append(files, craftName)
@@ -1529,6 +1521,14 @@ func (in *installer) overlayOnDisk(name string) bool {
 
 func (in *installer) deploymentDir() string {
 	return filepath.Join(in.root.Dir, "deployment")
+}
+
+// hasComposeFile reports whether the deployment dir carries a compose file
+// the lifecycle verbs can drive: the base file, or the standalone prod file
+// (prod roots managed by the CLI have no docker-compose.yml).
+func (in *installer) hasComposeFile() bool {
+	return in.overlayOnDisk("docker-compose.yml") ||
+		in.overlayOnDisk(filepath.Base(deployfiles.ProdCompose.DestRel))
 }
 
 // stopFallbackEnv supplies safe defaults for compose invocations that may run

@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-var allVariants = []string{"default", "no-letsencrypt"}
+var allVariants = []string{"default", "prod", "no-letsencrypt"}
 
 func mustRender(t *testing.T, lines []string, variant string) []string {
 	t.Helper()
@@ -42,13 +42,14 @@ func TestPlainLinesFlowToEveryVariant(t *testing.T) {
 func TestForBlockIncludesOnlyListedVariants(t *testing.T) {
 	lines := []string{
 		"a",
-		"#!for no-letsencrypt",
+		"#!for prod,no-letsencrypt",
 		"b",
 		"c",
 		"#!endfor",
 		"d",
 	}
 	assertRender(t, lines, "default", []string{"a", "d"})
+	assertRender(t, lines, "prod", []string{"a", "b", "c", "d"})
 	assertRender(t, lines, "no-letsencrypt", []string{"a", "b", "c", "d"})
 }
 
@@ -57,12 +58,13 @@ func TestAdjacentForBlocksAreMutuallyExclusive(t *testing.T) {
 		"#!for default",
 		"# commented-out service",
 		"#!endfor",
-		"#!for no-letsencrypt",
+		"#!for prod",
 		"active-service:",
 		"#!endfor",
 	}
 	assertRender(t, lines, "default", []string{"# commented-out service"})
-	assertRender(t, lines, "no-letsencrypt", []string{"active-service:"})
+	assertRender(t, lines, "prod", []string{"active-service:"})
+	assertRender(t, lines, "no-letsencrypt", nil)
 }
 
 func TestOnlyAppliesToExactlyOneLine(t *testing.T) {
@@ -73,38 +75,50 @@ func TestOnlyAppliesToExactlyOneLine(t *testing.T) {
 		"b",
 	}
 	assertRender(t, lines, "default", []string{"a", `    profiles: ["s3-filestore"]`, "b"})
-	assertRender(t, lines, "no-letsencrypt", []string{"a", "b"})
+	assertRender(t, lines, "prod", []string{"a", "b"})
 }
 
 func TestValueReplacesLineWithDirectiveIndentation(t *testing.T) {
 	lines := []string{
-		"      #!value no-letsencrypt: - AUTH_TYPE=${AUTH_TYPE:-oidc}",
+		"      #!value prod,no-letsencrypt: - AUTH_TYPE=${AUTH_TYPE:-oidc}",
 		"      - AUTH_TYPE=${AUTH_TYPE:-basic}",
 	}
 	assertRender(t, lines, "default", []string{"      - AUTH_TYPE=${AUTH_TYPE:-basic}"})
+	assertRender(t, lines, "prod", []string{"      - AUTH_TYPE=${AUTH_TYPE:-oidc}"})
 	assertRender(t, lines, "no-letsencrypt", []string{"      - AUTH_TYPE=${AUTH_TYPE:-oidc}"})
+}
+
+func TestValueThreeWayStack(t *testing.T) {
+	lines := []string{
+		"  #!value prod: run prod",
+		"  #!value no-letsencrypt: run no-le",
+		"  run default",
+	}
+	assertRender(t, lines, "default", []string{"  run default"})
+	assertRender(t, lines, "prod", []string{"  run prod"})
+	assertRender(t, lines, "no-letsencrypt", []string{"  run no-le"})
 }
 
 func TestValueTextMayContainColons(t *testing.T) {
 	lines := []string{
-		"  #!value no-letsencrypt: image: onyxdotapp/x:${TAG:-latest}",
+		"  #!value prod: image: onyxdotapp/x:${TAG:-latest}",
 		"  image: fallback",
 	}
-	assertRender(t, lines, "no-letsencrypt", []string{"  image: onyxdotapp/x:${TAG:-latest}"})
+	assertRender(t, lines, "prod", []string{"  image: onyxdotapp/x:${TAG:-latest}"})
 }
 
 func TestDirectivesInsideExcludedForBlockAreConsumed(t *testing.T) {
 	lines := []string{
-		"#!for no-letsencrypt",
-		"  #!only no-letsencrypt",
+		"#!for prod",
+		"  #!only prod",
 		"  a",
-		"  #!value no-letsencrypt: b2",
+		"  #!value prod: b2",
 		"  b",
 		"#!endfor",
 		"c",
 	}
 	assertRender(t, lines, "default", []string{"c"})
-	assertRender(t, lines, "no-letsencrypt", []string{"  a", "  b2", "c"})
+	assertRender(t, lines, "prod", []string{"  a", "  b2", "c"})
 }
 
 func TestTemplateCommentIsStripped(t *testing.T) {
@@ -120,9 +134,9 @@ func TestNoDirectiveEverLeaks(t *testing.T) {
 		"#!for default",
 		"a",
 		"#!endfor",
-		"  #!only no-letsencrypt",
+		"  #!only prod",
 		"  b",
-		"  #!value no-letsencrypt: c2",
+		"  #!value prod: c2",
 		"  c",
 	}
 	for _, variant := range allVariants {
@@ -150,12 +164,12 @@ func assertTemplateError(t *testing.T, lines []string, fragment string) {
 }
 
 func TestUnclosedFor(t *testing.T) {
-	assertTemplateError(t, []string{"#!for no-letsencrypt", "a"}, "unclosed #!for")
+	assertTemplateError(t, []string{"#!for prod", "a"}, "unclosed #!for")
 }
 
 func TestNestedFor(t *testing.T) {
 	assertTemplateError(t,
-		[]string{"#!for no-letsencrypt", "#!for default", "a", "#!endfor", "#!endfor"}, "nested #!for")
+		[]string{"#!for prod", "#!for default", "a", "#!endfor", "#!endfor"}, "nested #!for")
 }
 
 func TestEndforWithoutFor(t *testing.T) {
@@ -164,49 +178,46 @@ func TestEndforWithoutFor(t *testing.T) {
 
 func TestOnlyFollowedByDirective(t *testing.T) {
 	assertTemplateError(t,
-		[]string{"#!only no-letsencrypt", "#!for default", "a", "#!endfor"},
+		[]string{"#!only prod", "#!for default", "a", "#!endfor"},
 		"#!only must be immediately followed by a content line")
 }
 
 func TestOnlyAtEndOfFile(t *testing.T) {
-	assertTemplateError(t, []string{"a", "#!only no-letsencrypt"}, "#!only at end of file")
+	assertTemplateError(t, []string{"a", "#!only prod"}, "#!only at end of file")
 }
 
 func TestValueAtEndOfFile(t *testing.T) {
-	assertTemplateError(t, []string{"a", "#!value no-letsencrypt: x"}, "#!value at end of file")
+	assertTemplateError(t, []string{"a", "#!value prod: x"}, "#!value at end of file")
 }
 
 func TestValueFollowedByNonValueDirective(t *testing.T) {
 	assertTemplateError(t,
-		[]string{"#!value no-letsencrypt: x", "#!for default", "a", "#!endfor"},
+		[]string{"#!value prod: x", "#!for default", "a", "#!endfor"},
 		"#!value must be immediately followed by a content line")
 }
 
 func TestValueDuplicateClaim(t *testing.T) {
 	assertTemplateError(t,
-		[]string{"#!value no-letsencrypt: x", "#!value no-letsencrypt,default: y", "base"},
+		[]string{"#!value prod: x", "#!value prod,no-letsencrypt: y", "base"},
 		"already claimed")
 }
 
 func TestValueCoveringAllVariants(t *testing.T) {
 	assertTemplateError(t,
-		[]string{"#!value no-letsencrypt,default: x", "base"},
+		[]string{"#!value prod,no-letsencrypt,default: x", "base"},
 		"cover every variant")
 }
 
 func TestUnknownVariant(t *testing.T) {
 	assertTemplateError(t, []string{"#!for production", "a", "#!endfor"}, "unknown variant")
-	// prod was retired when docker-compose.prod.yml became a hand-maintained
-	// overlay; a directive still naming it must fail loudly.
-	assertTemplateError(t, []string{"#!for prod", "a", "#!endfor"}, "unknown variant")
 }
 
 func TestVariantListedTwice(t *testing.T) {
-	assertTemplateError(t, []string{"#!only no-letsencrypt,no-letsencrypt", "a"}, "listed twice")
+	assertTemplateError(t, []string{"#!only prod,prod", "a"}, "listed twice")
 }
 
 func TestUnknownDirective(t *testing.T) {
-	assertTemplateError(t, []string{"#!fro no-letsencrypt", "a"}, "unknown template directive")
+	assertTemplateError(t, []string{"#!fro prod", "a"}, "unknown template directive")
 }
 
 func TestMalformedValue(t *testing.T) {
@@ -268,26 +279,6 @@ func TestCheckedInFilesMatchTemplate(t *testing.T) {
 		if string(checkedIn) != results[v.Filename] {
 			t.Errorf("%s does not match %s: run `ods generate-compose --write` and commit the result",
 				v.Filename, TemplateName)
-		}
-	}
-}
-
-// TestProdOverlayIsNotGenerated guards the retirement of the prod variant:
-// docker-compose.prod.yml is a hand-maintained overlay now, and a generator
-// (e.g. a stale released ods) writing the generated-file banner into it means
-// it was clobbered with a rendered standalone file.
-func TestProdOverlayIsNotGenerated(t *testing.T) {
-	dir := filepath.Join("..", "..", "..", "..", "deployment", "docker_compose")
-	data, err := os.ReadFile(filepath.Join(dir, "docker-compose.prod.yml"))
-	if err != nil {
-		t.Fatalf("failed to read docker-compose.prod.yml: %v", err)
-	}
-	if strings.Contains(string(data), BannerLines[1]) {
-		t.Error("docker-compose.prod.yml carries the generated-file banner — it is a hand-maintained overlay and must not be regenerated from the template")
-	}
-	for _, v := range Variants {
-		if v.Filename == "docker-compose.prod.yml" {
-			t.Error("docker-compose.prod.yml must not be a composegen variant")
 		}
 	}
 }

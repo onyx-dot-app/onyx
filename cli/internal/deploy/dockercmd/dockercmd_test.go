@@ -123,8 +123,8 @@ func TestComposeCommandStacksFilesInOrder(t *testing.T) {
 func TestComposeCommandCarriesProject(t *testing.T) {
 	c := &Compose{docker: NewDocker(&fakeRunner{}), Project: "danswer-stack"}
 	cmd := c.Command("/root/deployment", nil,
-		[]string{"docker-compose.yml", "docker-compose.prod.yml"}, "up", "-d")
-	want := "docker compose -p danswer-stack -f docker-compose.yml -f docker-compose.prod.yml up -d"
+		[]string{"docker-compose.prod.yml"}, "up", "-d")
+	want := "docker compose -p danswer-stack -f docker-compose.prod.yml up -d"
 	if got := argv(cmd); got != want {
 		t.Fatalf("argv = %q, want %q", got, want)
 	}

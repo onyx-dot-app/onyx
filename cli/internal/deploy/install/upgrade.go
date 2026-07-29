@@ -101,7 +101,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 			"this deployment is recorded as %s — upgrade cannot convert it to prod", manifest.Mode)
 	}
 	in.prod = in.opts.Prod || manifest.Mode == state.ModeProd ||
-		in.overlayOnDisk(filepath.Base(deployfiles.ProdOverlay.DestRel))
+		in.overlayOnDisk(filepath.Base(deployfiles.ProdCompose.DestRel))
 	in.lite = !in.prod && (manifest.Mode == state.ModeLite ||
 		in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel)))
 	in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||

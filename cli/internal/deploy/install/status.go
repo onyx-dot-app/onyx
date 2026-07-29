@@ -99,7 +99,7 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 		switch {
 		case in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel)):
 			st.Mode = string(state.ModeLite)
-		case in.overlayOnDisk(filepath.Base(deployfiles.ProdOverlay.DestRel)):
+		case in.overlayOnDisk(filepath.Base(deployfiles.ProdCompose.DestRel)):
 			st.Mode = string(state.ModeProd)
 		}
 	}

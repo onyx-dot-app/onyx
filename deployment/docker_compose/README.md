@@ -70,10 +70,10 @@ that one version string covers every image.
 
 ## Maintaining the compose files (contributors)
 
-`docker-compose.yml` and `docker-compose.prod-no-letsencrypt.yml` are generated from the single
-source of truth `docker-compose.template.yml` — do not hand-edit them. To change either, edit the
-template (per-variant differences are expressed with `#!for` / `#!only` / `#!value` directives,
-documented in `ods generate-compose --help`) and regenerate:
+`docker-compose.yml`, `docker-compose.prod.yml` and `docker-compose.prod-no-letsencrypt.yml` are
+generated from the single source of truth `docker-compose.template.yml` — do not hand-edit them.
+To change any of the three, edit the template (per-variant differences are expressed with `#!for` /
+`#!only` / `#!value` directives, documented in `ods generate-compose --help`) and regenerate:
 
 ```
 ods generate-compose --write
@@ -84,14 +84,9 @@ package. The `docker-compose-sync` pre-commit hook runs it automatically for com
 template or the generated files, so a stray edit to a generated file gets reverted on the next
 commit.
 
-`docker-compose.prod.yml` is the exception: it is a hand-maintained overlay on
-`docker-compose.yml` (like the lite and craft overlays), applied with
-`docker compose -f docker-compose.yml -f docker-compose.prod.yml`, and is edited directly. It uses
-the `!override` / `!reset` YAML merge tags, which need Docker Compose v2.24.4+.
-
 onyx-cli embeds copies of the guided-install deployment files (the generated
-`docker-compose.yml`, the lite/craft/prod overlays, the env templates, the nginx config, and this
-README) under `cli/internal/deploy/deployfiles/embedded/`. The same `ods generate-compose --write`
-run refreshes them after rendering the variants, and a drift test in the cli module
-(`go test ./...`) gates staleness. If you change any of those files, re-run the generator and
-commit the refreshed embedded copies.
+`docker-compose.yml` and `docker-compose.prod.yml`, the lite/craft overlays, the env templates,
+the nginx config, and this README) under `cli/internal/deploy/deployfiles/embedded/`. The same `ods generate-compose --write` run
+refreshes them after rendering the variants, and a drift test in the cli module (`go test ./...`)
+gates staleness. If you change any of those files, re-run the generator and commit the refreshed
+embedded copies.

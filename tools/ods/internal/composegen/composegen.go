@@ -1,11 +1,11 @@
 // Package composegen renders the standalone docker compose files
-// (docker-compose.yml and docker-compose.prod-no-letsencrypt.yml) from the
-// shared docker-compose.template.yml. docker-compose.prod.yml is NOT
-// generated: it is a hand-maintained overlay on docker-compose.yml.
+// (docker-compose.yml, docker-compose.prod.yml and
+// docker-compose.prod-no-letsencrypt.yml) from the shared
+// docker-compose.template.yml.
 //
 // Template directives are line comments starting with the sentinel "#!" and
 // are always stripped from the output. <variants> is a comma-separated subset
-// of: default, no-letsencrypt.
+// of: default, prod, no-letsencrypt.
 //
 //	#!for <variants>            include the enclosed lines only for <variants>;
 //	...                         must be closed with #!endfor, no nesting
@@ -39,6 +39,7 @@ type Variant struct {
 // Variants lists the template variants in generation order.
 var Variants = []Variant{
 	{Name: "default", Filename: "docker-compose.yml"},
+	{Name: "prod", Filename: "docker-compose.prod.yml"},
 	{Name: "no-letsencrypt", Filename: "docker-compose.prod-no-letsencrypt.yml"},
 }
 

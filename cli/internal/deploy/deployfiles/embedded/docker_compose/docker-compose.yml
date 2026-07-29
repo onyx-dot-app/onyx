@@ -38,8 +38,7 @@
 #    - Set proper DOMAIN environment variable for nginx
 #    - Configure DNS and SSL certificates
 #
-# For a complete production setup, apply the docker-compose.prod.yml overlay:
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# For a complete production setup, refer to docker-compose.prod.yml
 # =============================================================================
 
 name: onyx

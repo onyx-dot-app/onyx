@@ -2,8 +2,6 @@ package install
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/dockercmd"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/paths"
@@ -19,8 +17,7 @@ func RunStop(ctx context.Context, deps Deps, opts Options) error {
 
 func (in *installer) runStop(ctx context.Context) error {
 	in.root = paths.Resolve(in.opts.Dir)
-	composeFile := filepath.Join(in.deploymentDir(), "docker-compose.yml")
-	if _, err := os.Stat(composeFile); os.IsNotExist(err) {
+	if !in.hasComposeFile() {
 		in.warnf("No Onyx deployment found at %s. Nothing to shut down.", in.root.Dir)
 		return nil
 	}

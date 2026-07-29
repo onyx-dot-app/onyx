@@ -24,17 +24,16 @@ func NewGenerateComposeCommand() *cobra.Command {
 		Short: "Generate the docker compose files from the shared template",
 		Long: `Generate the standalone docker compose files from docker-compose.template.yml.
 
-docker-compose.yml and docker-compose.prod-no-letsencrypt.yml are generated
-files. Edit docker-compose.template.yml instead, then regenerate with:
+docker-compose.yml, docker-compose.prod.yml and
+docker-compose.prod-no-letsencrypt.yml are generated files. Edit
+docker-compose.template.yml instead, then regenerate with:
 
   ods generate-compose --write
 
-docker-compose.prod.yml is NOT generated: it is a hand-maintained overlay on
-docker-compose.yml and is edited directly.
-
 The command also syncs the deployment files that onyx-cli embeds via
-go:embed (the generated docker-compose.yml, the lite/craft/prod overlays,
-the env templates, the nginx config, and the install-root README) into
+go:embed (the generated docker-compose.yml and docker-compose.prod.yml, the
+lite/craft overlays, the env templates, the nginx config, and the
+install-root README) into
 byte-identical copies under cli/internal/deploy/deployfiles/embedded/ —
 go:embed cannot reference files outside the cli module, and the copies must
 always be refreshed together with the generated compose files.
@@ -46,7 +45,7 @@ touching any of the source or output files.
 
 Template directives are line comments starting with the sentinel "#!". They
 are always stripped from the output. <variants> is a comma-separated subset
-of: default, no-letsencrypt (mapping to the two generated files).
+of: default, prod, no-letsencrypt (mapping to the three generated files).
 
   #!for <variants>            include the enclosed lines only for <variants>;
   ...                         must be closed with #!endfor, no nesting

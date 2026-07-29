@@ -13,13 +13,14 @@ import (
 )
 
 // RelPaths lists the synced files relative to <repo>/deployment. They are the
-// exact set the guided installer ships (base compose + lite/craft/prod
-// overlays + env templates + nginx config + install-root README) and are
-// mirrored at the same relative paths under
+// exact set the guided installer ships (base + prod compose files, the
+// lite/craft overlays, env templates, nginx config, install-root README) and
+// are mirrored at the same relative paths under
 // cli/internal/deploy/deployfiles/embedded/.
 //
-// docker-compose.yml is itself generated from docker-compose.template.yml,
-// which is why the sync runs as the second half of `ods generate-compose`.
+// docker-compose.yml and docker-compose.prod.yml are themselves generated
+// from docker-compose.template.yml, which is why the sync runs as the second
+// half of `ods generate-compose`.
 var RelPaths = []string{
 	"docker_compose/docker-compose.yml",
 	"docker_compose/docker-compose.onyx-lite.yml",

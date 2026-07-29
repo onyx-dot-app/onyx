@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/paths"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/state"
@@ -75,8 +74,7 @@ func (in *installer) runUninstall(ctx context.Context) error {
 		}
 	}
 
-	composeFile := filepath.Join(in.deploymentDir(), "docker-compose.yml")
-	if _, err := os.Stat(composeFile); err == nil {
+	if in.hasComposeFile() {
 		in.resolveProjectFromDisk()
 		if err := in.attachDockerCompose(ctx); err != nil {
 			return err
