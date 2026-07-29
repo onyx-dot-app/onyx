@@ -23,7 +23,14 @@ from onyx.llm.model_response import (
     ModelResponseStream,
     Usage,
 )
-from onyx.llm.models import ChatCompletionMessage, ReasoningEffort, ToolChoiceOptions
+from onyx.llm.models import (
+    AssistantMessage,
+    ChatCompletionMessage,
+    ReasoningEffort,
+    TextContentPart,
+    ToolChoiceOptions,
+    UserMessage,
+)
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tracing_wrap import _finalize_tool_calls, _merge_tool_call_delta
@@ -107,6 +114,33 @@ def _parse_reasoning_effort(raw: str | None) -> ReasoningEffort:
         return ReasoningEffort.AUTO
 
 
+def _drop_empty_text(message: ChatCompletionMessage) -> ChatCompletionMessage | None:
+    """Remove empty/whitespace-only text from a message; returns None when the
+    whole message carries no information. Clients routinely send ``content: ""``
+    on assistant tool-call turns, which LiteLLM would rewrite into a visible
+    "[System: Empty message content sanitised ...]" placeholder for Anthropic."""
+    if isinstance(message, AssistantMessage):
+        if isinstance(message.content, str) and not message.content.strip():
+            message = message.model_copy(update={"content": None})
+        if message.content is None and not message.tool_calls:
+            return None
+        return message
+    if isinstance(message, UserMessage):
+        if isinstance(message.content, str):
+            return message if message.content.strip() else None
+        parts = [
+            part
+            for part in message.content
+            if not (isinstance(part, TextContentPart) and not part.text.strip())
+        ]
+        if not parts:
+            return None
+        if len(parts) != len(message.content):
+            message = message.model_copy(update={"content": parts})
+        return message
+    return message
+
+
 def _prepare_messages(
     llm: LLM, raw_messages: list[dict[str, Any]]
 ) -> list[ChatCompletionMessage]:
@@ -116,6 +150,9 @@ def _prepare_messages(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT, f"Invalid messages: {e.error_count()} errors"
         ) from e
+    messages = [
+        message for message in map(_drop_empty_text, messages) if message is not None
+    ]
     if not messages:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "messages must not be empty")
     cacheable_prefix = messages[:-1] or None
