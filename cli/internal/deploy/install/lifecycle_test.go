@@ -138,8 +138,10 @@ func TestStatusHealthyAndDrift(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.2.0")
 
-	psOut := "onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 2 hours (healthy)\t\n" +
-		"onyx-nginx-1\tonyxdotapp/onyx-web-server:v4.2.0\tUp 2 hours\t0.0.0.0:3000->80/tcp\n"
+	// nginx (a stock image, listed first like the real deployment) must not
+	// be mistaken for the running Onyx version.
+	psOut := "onyx-nginx-1\tnginx:1.25.5-alpine\tUp 2 hours\t0.0.0.0:3000->80/tcp\n" +
+		"onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 2 hours (healthy)\t\n"
 	statusRunner := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
 		if strings.Contains(argv(c), "ps -a") {
 			return dockercmd.Result{Stdout: psOut}, nil
@@ -200,7 +202,8 @@ func TestStatusJSON(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.2.0")
 
-	psOut := "onyx-nginx-1\tonyxdotapp/onyx-web-server:v4.2.0\tUp 1 minute\t0.0.0.0:3000->80/tcp\n"
+	psOut := "onyx-nginx-1\tnginx:1.25.5-alpine\tUp 1 minute\t0.0.0.0:3000->80/tcp\n" +
+		"onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 1 minute (healthy)\t\n"
 	statusRunner := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
 		if strings.Contains(argv(c), "ps -a") {
 			return dockercmd.Result{Stdout: psOut}, nil

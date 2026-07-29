@@ -174,7 +174,10 @@ func (in *installer) inspectContainers(ctx context.Context) (services []Service,
 		}
 		svc := Service{Name: parts[0], Image: parts[1], Status: parts[2]}
 		services = append(services, svc)
-		if runningTag == "" && strings.HasPrefix(svc.Status, "Up") {
+		// Only Onyx app images carry the deployment version; infrastructure
+		// containers (nginx, postgres, redis, ...) have their own tags.
+		if runningTag == "" && strings.HasPrefix(svc.Status, "Up") &&
+			strings.Contains(svc.Image, "onyxdotapp/onyx") {
 			if idx := strings.LastIndex(svc.Image, ":"); idx != -1 {
 				runningTag = svc.Image[idx+1:]
 			}
