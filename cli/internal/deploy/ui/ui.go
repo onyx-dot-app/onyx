@@ -18,6 +18,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 )
@@ -48,11 +49,25 @@ type Option struct {
 	Hint  string
 }
 
-// ServiceRow is one container's live state during startup.
+// ServiceRow is one item's live state in a phase checklist (an image being
+// pulled, a container being started). Detail is the short right-aligned note
+// after the name — a download total, or what is happening to the container.
 type ServiceRow struct {
-	Name  string
-	Ready bool
+	Name   string
+	Detail string
+	Ready  bool
 }
+
+// Layout constants. The wizard is two columns when there is room for both;
+// narrower screens drop the rail so the pane keeps the full width.
+const (
+	railWidth    = 22
+	minTwoColumn = 64
+	minPaneInner = 20
+	// Sizes assumed until the first window-size message arrives.
+	defaultWidth  = 80
+	defaultHeight = 24
+)
 
 // Stages of the rail.
 const (
@@ -88,11 +103,12 @@ type (
 )
 
 type wizModel struct {
-	title   string
-	version string
-	stage   int
-	answers []answerMsg
-	notes   []noteMsg
+	title         string
+	version       string
+	stage         int
+	answers       []answerMsg
+	notes         []noteMsg
+	width, height int
 
 	sel    *askSelectMsg
 	cursor int
@@ -121,6 +137,9 @@ func (m wizModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		m.frame++
 		return m, tick()
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		return m, nil
 	case askSelectMsg:
 		m.sel, m.cursor = &msg, msg.def
 		return m, nil
@@ -254,7 +273,73 @@ func renderNote(n noteMsg, live bool) string {
 }
 
 func (m wizModel) View() tea.View {
-	// Left rail: stages + recorded answers.
+	width, height := m.width, m.height
+	if width <= 0 {
+		width = defaultWidth
+	}
+	if height <= 0 {
+		height = defaultHeight
+	}
+	twoColumn := width >= minTwoColumn
+
+	// Pane content width: the box adds a border and a column of padding on
+	// each side, and the rail (when shown) takes the left of the screen.
+	inner := width - 4
+	if twoColumn {
+		inner -= railWidth
+	}
+	inner = max(inner, minPaneInner)
+
+	head := []string{"", " " + truncate(accent.Render("🚀 "+m.title)+" "+dim.Render(m.version), width-1), ""}
+	help := " ↑/↓ move · enter confirm · ctrl+c quit"
+	if !twoColumn {
+		help = " ↑/↓ · enter · ctrl+c"
+	}
+	foot := []string{"", dim.Render(help)}
+	var rail []string
+	if !twoColumn {
+		rail = m.compactRail(width - 1)
+	}
+	notes := make([]string, 0, len(m.notes))
+	for _, n := range m.notes {
+		notes = append(notes, truncate(renderNote(n, true), width-1))
+	}
+
+	// The pane is the only part that can shed content, so it is what gives on
+	// a short screen: everything else here is fixed height (the box adds a
+	// border row above and below).
+	budget := height - len(head) - len(rail) - len(notes) - len(foot) - 2
+	pane := paneBox.Render(strings.Join(m.paneLines(inner, max(budget, 3)), "\n"))
+
+	lines := make([]string, 0, height)
+	lines = append(lines, head...)
+	if twoColumn {
+		lines = append(lines, strings.Split(lipgloss.JoinHorizontal(lipgloss.Top,
+			lipgloss.NewStyle().Width(railWidth).Render(strings.Join(m.railLines(railWidth-1), "\n")),
+			pane), "\n")...)
+	} else {
+		lines = append(lines, rail...)
+		lines = append(lines, strings.Split(pane, "\n")...)
+	}
+
+	// Notes are re-printed on the normal screen when the wizard exits, so a
+	// screen with no room for them loses the least by dropping the oldest.
+	for len(notes) > 0 && len(lines)+len(notes)+len(foot) > height {
+		notes = notes[1:]
+	}
+	lines = append(append(lines, notes...), foot...)
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+
+	v := tea.NewView(strings.Join(lines, "\n"))
+	v.AltScreen = true
+	v.WindowTitle = m.title
+	return v
+}
+
+// railLines renders the left rail: stages, then the answers recorded so far.
+func (m wizModel) railLines(width int) []string {
 	var rail []string
 	for i, name := range stageNames {
 		mark, style := "○", dim
@@ -264,65 +349,173 @@ func (m wizModel) View() tea.View {
 		case i == m.stage:
 			mark, style = accent.Render("●"), railOn
 		}
-		rail = append(rail, fmt.Sprintf(" %s %s", mark, style.Render(name)))
+		rail = append(rail, truncate(fmt.Sprintf(" %s %s", mark, style.Render(name)), width))
 	}
 	rail = append(rail, "")
 	for _, a := range m.answers {
-		rail = append(rail, dim.Render(fmt.Sprintf(" %-8s", a.label))+accent.Render(a.value))
+		rail = append(rail, truncate(dim.Render(fmt.Sprintf(" %-8s", a.label))+accent.Render(a.value), width))
 	}
+	return rail
+}
 
-	// Active pane: question, live task, or quiet.
-	var pane []string
+// compactRail is the narrow-screen stand-in for the rail: the current step and
+// the answers on one line each, above the pane instead of beside it.
+func (m wizModel) compactRail(width int) []string {
+	step := dim.Render(fmt.Sprintf("Step %d/%d", min(m.stage+1, len(stageNames)), len(stageNames)))
+	lines := []string{truncate(" "+step+" "+railOn.Render(stageNames[min(m.stage, len(stageNames)-1)]), width)}
+	if len(m.answers) > 0 {
+		parts := make([]string, 0, len(m.answers))
+		for _, a := range m.answers {
+			parts = append(parts, dim.Render(a.label+" ")+accent.Render(a.value))
+		}
+		lines = append(lines, truncate(" "+strings.Join(parts, dim.Render(" · ")), width))
+	}
+	return lines
+}
+
+// paneLines renders the active pane — a question, the live task, or nothing —
+// within inner columns and at most maxLines rows, dropping the optional parts
+// (hints, checklist rows) rather than running off a short screen.
+func (m wizModel) paneLines(inner, maxLines int) []string {
 	switch {
 	case m.sel != nil:
-		pane = append(pane, accent.Render("? ")+m.sel.title)
-		for i, o := range m.sel.opts {
-			cursor, label := "  ", o.Label
-			if i == m.cursor {
-				cursor, label = accent.Render("› "), accent.Render(o.Label)
-			}
-			line := cursor + label
-			if o.Hint != "" {
-				line += "  " + dim.Render(o.Hint)
-			}
-			pane = append(pane, line)
+		// Shed the optional parts before the options themselves: a question
+		// the user can't see the choices for is worse than a terse one.
+		pane := m.selectPane(inner, true, true)
+		if len(pane) > maxLines {
+			pane = m.selectPane(inner, false, true)
 		}
+		if len(pane) > maxLines {
+			pane = m.selectPane(inner, false, false)
+		}
+		return clip(pane, maxLines)
 	case m.inp != nil:
-		pane = append(pane, accent.Render("? ")+m.inp.title, "  "+m.typed+accent.Render("▏"))
+		return clip(append(wrap(accent.Render("? ")+m.inp.title, inner),
+			truncate("  "+m.typed+accent.Render("▏"), inner)), maxLines)
 	case m.taskActive:
-		line := fmt.Sprintf("%s %s %s", accent.Render(spinners[m.frame%len(spinners)]),
-			m.taskLabel, dim.Render(fmt.Sprintf("(%ds)", int(time.Since(m.taskBegan).Seconds()))))
-		if m.taskExtra != "" {
-			line += " " + dim.Render(m.taskExtra)
-		}
-		pane = append(pane, line)
-		for _, svc := range m.services {
-			mark := dim.Render(spinners[m.frame%len(spinners)])
-			if svc.Ready {
-				mark = okStyle.Render("✓")
-			}
-			pane = append(pane, fmt.Sprintf("  %s %s", mark, svc.Name))
-		}
+		return clip(m.taskPane(inner, maxLines), maxLines)
 	default:
-		pane = append(pane, dim.Render("…"))
+		return []string{dim.Render("…")}
+	}
+}
+
+// selectPane renders the question and its options. hints and a wrapped (as
+// opposed to single-line) title are what it gives up, in that order, when the
+// pane has to get shorter.
+func (m wizModel) selectPane(inner int, hints, wrapTitle bool) []string {
+	title := accent.Render("? ") + m.sel.title
+	pane := []string{truncate(title, inner)}
+	if wrapTitle {
+		pane = wrap(title, inner)
+	}
+	for i, o := range m.sel.opts {
+		cursor, label := "  ", o.Label
+		if i == m.cursor {
+			cursor, label = accent.Render("› "), accent.Render(o.Label)
+		}
+		line := cursor + label
+		if o.Hint == "" || !hints {
+			pane = append(pane, truncate(line, inner))
+			continue
+		}
+		// Keep the hint beside its option while it fits; otherwise it wraps
+		// underneath rather than being cut off.
+		if lipgloss.Width(line)+2+lipgloss.Width(o.Hint) <= inner {
+			pane = append(pane, line+"  "+dim.Render(o.Hint))
+			continue
+		}
+		pane = append(pane, truncate(line, inner))
+		for _, h := range wrap(o.Hint, inner-4) {
+			pane = append(pane, "    "+dim.Render(h))
+		}
+	}
+	return pane
+}
+
+// clip keeps a pane within its row budget, marking what it cut.
+func clip(lines []string, maxLines int) []string {
+	if maxLines < 1 || len(lines) <= maxLines {
+		return lines
+	}
+	return append(lines[:maxLines-1:maxLines-1], dim.Render("  …"))
+}
+
+// taskPane renders the running task and its checklist, within maxLines rows.
+func (m wizModel) taskPane(inner, maxLines int) []string {
+	spin := spinners[m.frame%len(spinners)]
+	head := fmt.Sprintf("%s %s %s", accent.Render(spin), m.taskLabel,
+		dim.Render(fmt.Sprintf("(%ds)", int(time.Since(m.taskBegan).Seconds()))))
+	var pane []string
+	switch {
+	case m.taskExtra == "":
+		pane = []string{truncate(head, inner)}
+	case lipgloss.Width(head)+1+lipgloss.Width(m.taskExtra) <= inner:
+		pane = []string{head + " " + dim.Render(m.taskExtra)}
+	default:
+		pane = []string{truncate(head, inner), truncate("  "+dim.Render(m.taskExtra), inner)}
 	}
 
-	body := lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().Width(22).Render(strings.Join(rail, "\n")),
-		paneBox.Render(strings.Join(pane, "\n")))
-
-	var b strings.Builder
-	fmt.Fprintf(&b, "\n %s %s\n\n", accent.Render("🚀 "+m.title), dim.Render(m.version))
-	b.WriteString(body + "\n")
-	for _, n := range m.notes {
-		b.WriteString(renderNote(n, true) + "\n")
+	rows := m.services
+	// One row is held back for the "… n more" line whenever some are cut.
+	if room := maxLines - len(pane); len(rows) > room {
+		rows = rows[:max(room-1, 0)]
 	}
-	b.WriteString("\n" + dim.Render(" ↑/↓ move · enter confirm · ctrl+c quit"))
+	for _, svc := range rows {
+		mark := dim.Render(spin)
+		if svc.Ready {
+			mark = okStyle.Render("✓")
+		}
+		line := fmt.Sprintf("  %s %s", mark, svc.Name)
+		if detail := fitDetail(svc.Detail, inner-lipgloss.Width(line)-1); detail != "" {
+			// Right-aligned so the figures form a column instead of jittering
+			// with every name length.
+			gap := max(inner-lipgloss.Width(line)-lipgloss.Width(detail), 1)
+			line += strings.Repeat(" ", gap) + dim.Render(detail)
+		}
+		pane = append(pane, truncate(line, inner))
+	}
+	if hidden := len(m.services) - len(rows); hidden > 0 {
+		pane = append(pane, dim.Render(fmt.Sprintf("  … %d more", hidden)))
+	}
+	return pane
+}
 
-	v := tea.NewView(b.String())
-	v.AltScreen = true
-	v.WindowTitle = m.title
-	return v
+// fitDetail shortens a checklist note to the room left on its row. Notes are
+// written most-significant-part first and separated by a double space
+// ("62%" then "310.4 MB / 500.1 MB"), so shedding trailing parts keeps the
+// figure worth reading; a note that still doesn't fit is dropped rather than
+// truncated into a unit-less number.
+func fitDetail(detail string, room int) string {
+	if detail == "" || room < 1 {
+		return ""
+	}
+	if lipgloss.Width(detail) <= room {
+		return detail
+	}
+	parts := strings.Split(detail, "  ")
+	for len(parts) > 1 {
+		parts = parts[:len(parts)-1]
+		if s := strings.TrimSpace(strings.Join(parts, "  ")); lipgloss.Width(s) <= room {
+			return s
+		}
+	}
+	return ""
+}
+
+// truncate/wrap are the width guards for every line the wizard prints; both
+// are ANSI-aware, and both refuse widths x/ansi would treat as "no limit".
+func truncate(s string, width int) string {
+	if width < 1 {
+		return ""
+	}
+	return ansi.TruncateWc(s, width, "…")
+}
+
+func wrap(s string, width int) []string {
+	if width < 1 {
+		return []string{}
+	}
+	return strings.Split(ansi.WrapWc(s, width, " -/"), "\n")
 }
 
 // Wizard drives the model from the orchestration goroutine.
@@ -362,12 +555,20 @@ func StartWizard(out io.Writer, title, version string, onAbort func()) *Wizard {
 // run finished, otherwise the accumulated notes — exactly what the user
 // needs after an abort or failure.
 func (w *Wizard) printTail(m wizModel) {
+	width := m.width
+	if width <= 0 {
+		width = defaultWidth
+	}
 	if m.card != nil {
-		fmt.Fprintln(w.out, cardBox.Render(strings.Join(m.card, "\n")))
+		var lines []string
+		for _, l := range m.card {
+			lines = append(lines, wrap(l, max(width-6, minPaneInner))...)
+		}
+		fmt.Fprintln(w.out, cardBox.Render(strings.Join(lines, "\n")))
 		return
 	}
 	for _, n := range m.notes {
-		fmt.Fprintln(w.out, renderNote(n, false))
+		fmt.Fprintln(w.out, truncate(renderNote(n, false), width))
 	}
 }
 

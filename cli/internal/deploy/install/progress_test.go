@@ -1,0 +1,136 @@
+package install
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/onyx-dot-app/onyx/cli/internal/deploy/ui"
+)
+
+// checklistSink collects what a tracker would push to the wizard.
+type checklistSink struct {
+	rows  []ui.ServiceRow
+	extra string
+}
+
+func (s *checklistSink) hooks() (func([]ui.ServiceRow), func(string)) {
+	return func(r []ui.ServiceRow) { s.rows = r }, func(e string) { s.extra = e }
+}
+
+// render flattens the checklist the way the pane shows it, so assertions read
+// like the screen: "name state" per row, ✓ for finished.
+func (s *checklistSink) render() string {
+	out := make([]string, 0, len(s.rows))
+	for _, r := range s.rows {
+		mark := " "
+		if r.Ready {
+			mark = "✓"
+		}
+		row := mark + r.Name
+		if r.Detail != "" {
+			row += " " + r.Detail
+		}
+		out = append(out, row)
+	}
+	return strings.Join(out, ",")
+}
+
+// Plain progress carries no counters, so the pull checklist is just which
+// images are done. Layer events (hex ids) are noise at this level.
+func TestPullProgressPlainTracksImages(t *testing.T) {
+	var sink checklistSink
+	p := newPullProgress(sink.hooks())
+	w := &lineWriter{emit: p.line}
+	if _, err := w.Write([]byte(" backend Pulling \n relational_db Pulling \n 9d8e18e5f8e4 Pulling fs layer \n" +
+		" 9d8e18e5f8e4 Downloading [====>   ]  5.5MB/50MB\n 9d8e18e5f8e4 Waiting \n cache Skipped ")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write([]byte("- Image is already present locally\n backend Pulled \n")); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := sink.render(); got != "✓backend, relational_db,✓cache" {
+		t.Errorf("rows = %q", got)
+	}
+	if sink.extra != "2/3 images" {
+		t.Errorf("extra = %q", sink.extra)
+	}
+}
+
+// json progress adds per-layer byte counters, which the checklist sums into
+// per-image download progress.
+func TestPullProgressReportsDownloadedBytes(t *testing.T) {
+	var sink checklistSink
+	p := newPullProgress(sink.hooks())
+	for _, line := range []string{
+		`{"id":"backend","text":"Pulling"}`,
+		`{"id":"5f8e4a1b2c3d","parent_id":"backend","text":"Downloading","current":524288,"total":2097152,"percent":25}`,
+		`{"id":"9d8e18e5f8e4","parent_id":"backend","text":"Downloading","current":1048576,"total":1048576,"percent":100}`,
+		// Completed layers report no counters at all: the total must not drop.
+		`{"id":"9d8e18e5f8e4","parent_id":"backend","text":"Download complete","percent":100}`,
+		// Extraction reports the uncompressed size — not a download.
+		`{"id":"9d8e18e5f8e4","parent_id":"backend","text":"Extracting","current":4194304,"total":8388608}`,
+		`{"id":"relational_db","text":"Pulling"}`,
+	} {
+		p.line(line)
+	}
+	p.publish() // byte updates are rate-limited; render what has accumulated
+
+	if got := sink.render(); got != " backend 50%  1.6 MB / 3.1 MB, relational_db" {
+		t.Errorf("rows = %q", got)
+	}
+	if sink.extra != "0/2 images · 1.6 MB / 3.1 MB" {
+		t.Errorf("extra = %q", sink.extra)
+	}
+}
+
+// The start checklist has to say which container is being replaced and which
+// is coming up: with --force-recreate both happen, and `docker ps` alone can't
+// tell them apart.
+func TestStartProgressSeparatesStoppingFromStarting(t *testing.T) {
+	var sink checklistSink
+	services, extra := sink.hooks()
+	p := newStartProgress(services, extra, true)
+
+	for _, line := range []string{
+		`{"id":"Network onyx_default","status":"Created"}`,
+		`{"id":"Container onyx-relational_db-1","status":"Running"}`,
+		`{"id":"Container onyx-api_server-1","status":"Recreate"}`,
+		`{"id":"Container onyx-api_server-1","status":"Recreated"}`,
+		`{"id":"Container onyx-api_server-1","status":"Starting"}`,
+		`{"id":"Container onyx-api_server-1","status":"Started"}`,
+		`{"id":"Container onyx-relational_db-1","status":"Waiting"}`,
+		`{"id":"Container onyx-relational_db-1","status":"Healthy"}`,
+	} {
+		p.line(line)
+	}
+	p.publish()
+
+	// --wait is in play, so a started container is not done until healthy.
+	if got := sink.render(); got != "✓relational_db healthy, api_server started" {
+		t.Errorf("rows = %q", got)
+	}
+	if sink.extra != "1/2 ready" {
+		t.Errorf("extra = %q", sink.extra)
+	}
+}
+
+// Plain progress names containers the same way, just space-separated.
+func TestStartProgressPlainLines(t *testing.T) {
+	var sink checklistSink
+	services, extra := sink.hooks()
+	p := newStartProgress(services, extra, false)
+	w := &lineWriter{emit: p.line}
+	if _, err := w.Write([]byte(" Volume \"onyx_db_volume\"  Created\n Container onyx-cache-1  Recreate\n" +
+		" Container onyx-cache-1  Recreated\n Container onyx-cache-1  Started\n")); err != nil {
+		t.Fatal(err)
+	}
+
+	// No --wait: started is as far as this run goes.
+	if got := sink.render(); got != "✓cache started" {
+		t.Errorf("rows = %q", got)
+	}
+	if sink.extra != "1/1 ready" {
+		t.Errorf("extra = %q", sink.extra)
+	}
+}

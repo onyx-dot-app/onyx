@@ -60,7 +60,7 @@ every prompt, including Lite mode).`,
 	cmd.Flags().BoolVar(&opts.Verbose, "verbose", false, "Show detailed output for debugging")
 	cmd.Flags().BoolVar(&opts.NoWait, "no-wait", false, "Return as soon as containers are started (skip health waiting)")
 	cmd.Flags().StringVar(&opts.Dir, "dir", "", "Deployment directory (default: ~/.config/onyx, or an existing ./onyx_data)")
-	cmd.Flags().BoolVar(&opts.Force, "force", false, "Overwrite hand-edited managed files (a backup is kept)")
+	cmd.Flags().BoolVar(&opts.Force, "force", false, "Overwrite hand-edited managed files (a backup is kept) and recreate running services")
 
 	// Retired install.sh mode flags: recognized so saved one-liners get a
 	// redirect message instead of a raw unknown-flag error.

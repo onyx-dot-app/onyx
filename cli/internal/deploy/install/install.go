@@ -165,11 +165,10 @@ func (in *installer) runInstall(ctx context.Context) error {
 		if err := in.resolveDockerProblems(ctx, pre); err != nil {
 			return err
 		}
-		// Read the published port while the deployment is still up: installs
-		// predating HOST_PORT recording have it nowhere else, and once the
-		// guard stops the containers docker no longer reports it.
+		// Read the published port off the running deployment: installs
+		// predating HOST_PORT recording have it nowhere else.
 		in.observedPort = in.runningHostPort(ctx)
-		if err := in.guardServicesStopped(ctx, in.opts.Force && in.prompt.AssumeDefaults); err != nil {
+		if err := in.confirmRecreate(ctx, in.opts.Force && in.prompt.AssumeDefaults); err != nil {
 			return err
 		}
 		// The mode never changes implicitly on a rerun: the recorded mode
@@ -770,11 +769,14 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 	return effectiveTag, hostPort, nil
 }
 
-// guardServicesStopped handles reconfiguring while containers are up:
-// interactive runs offer to stop them right here; non-interactive runs
-// refuse with the remedy in the error itself (install.sh printed
-// "./install.sh --shutdown", which doesn't exist after curl|bash).
-func (in *installer) guardServicesStopped(ctx context.Context, autoStop bool) error {
+// confirmRecreate gets sign-off for reconfiguring a deployment whose services
+// are up, before anything on disk changes. Nothing is stopped here: the answer
+// is remembered and handed to `up` as --force-recreate, so the current version
+// keeps serving while the images download and each container is replaced only
+// once its replacement is ready. Non-interactive runs refuse with the remedy in
+// the error itself (install.sh printed "./install.sh --shutdown", which doesn't
+// exist after curl|bash).
+func (in *installer) confirmRecreate(ctx context.Context, assumeYes bool) error {
 	files := in.composeFileNames(true)
 	cmd := in.compose.Command(in.deploymentDir(), stopFallbackEnv(), files, "ps", "-q")
 	res, err := in.deps.Runner.Run(ctx, cmd)
@@ -782,19 +784,20 @@ func (in *installer) guardServicesStopped(ctx context.Context, autoStop bool) er
 		return nil
 	}
 
-	if autoStop {
-		in.infof("Stopping the running services first (they restart at the end)...")
-		return in.stopRunningServices(ctx, files)
+	if assumeYes {
+		in.infof("Onyx is running — its services will be recreated with the new configuration.")
+		in.forceRecreate = true
+		return nil
 	}
 
 	if in.prompt.AssumeDefaults {
 		return exitcodes.New(exitcodes.General,
-			"Onyx services are running — stop them first with `onyx-cli deploy stop` (or pass --force to stop them automatically), then re-run")
+			"Onyx services are running — pass --force to recreate them with the new configuration, or stop them first with `onyx-cli deploy stop`")
 	}
 
-	choice, err := in.selectOne("Onyx is already running. Reconfiguring needs the services stopped.",
+	choice, err := in.selectOne("Onyx is already running. Applying this configuration restarts its services.",
 		[]ui.Option{
-			{Label: "Stop and continue", Hint: "pause the containers (no data loss), then proceed"},
+			{Label: "Continue", Hint: "keeps serving while images download; each service restarts once, at the end"},
 			{Label: "Cancel", Hint: "leave everything running"},
 		}, 0)
 	if err != nil {
@@ -804,20 +807,7 @@ func (in *installer) guardServicesStopped(ctx context.Context, autoStop bool) er
 		return exitcodes.New(exitcodes.General,
 			"cancelled — services left running (stop them with `onyx-cli deploy stop`)")
 	}
-
-	in.infof("Stopping Onyx services...")
-	return in.stopRunningServices(ctx, files)
-}
-
-func (in *installer) stopRunningServices(ctx context.Context, files []string) error {
-	stop := in.compose.Command(in.deploymentDir(), stopFallbackEnv(), files, "stop")
-	if in.wiz == nil {
-		stop.Stdout, stop.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
-	}
-	if _, err := in.deps.Runner.Run(ctx, stop); err != nil {
-		return exitcodes.Newf(exitcodes.General, "failed to stop the running services: %v", err)
-	}
-	in.successf("Services stopped")
+	in.forceRecreate = true
 	return nil
 }
 
@@ -846,36 +836,26 @@ func (in *installer) composeRunEnv(tag string, hostPort int) map[string]string {
 }
 
 func (in *installer) pullImages(ctx context.Context, tag string, hostPort int) error {
-	env := in.composeRunEnv(tag, hostPort)
-	files := in.composeFileNames(false)
-	dir := in.deploymentDir()
-
-	if in.wiz != nil {
-		// Compose's own progress renderer (parallel per-layer bars) beats
-		// anything a spinner can convey: hand it the raw terminal for the
-		// pull, then resume the wizard.
-		in.wiz.Stage(ui.StagePull)
-		began := time.Now()
-		pull := in.compose.Command(dir, env, files, "pull")
-		pull.Stdout, pull.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
-		err := in.wiz.Suspend(func() error {
-			_, err := in.deps.Runner.Run(ctx, pull)
-			return err
-		})
-		if err != nil {
-			in.errorf("Pulling images failed")
-			in.infof("Check your internet connection and re-run. If the issue persists: founders@onyx.app")
-			return exitcodes.Newf(exitcodes.General, "docker compose pull failed: %v", err)
-		}
-		in.wiz.Note("ok", fmt.Sprintf("Pulling images (%ds)", int(time.Since(began).Seconds())))
-		return nil
+	phase := composePhase{
+		stage: ui.StagePull,
+		title: "Pulling images",
+		dir:   in.deploymentDir(),
+		env:   in.composeRunEnv(tag, hostPort),
+		files: in.composeFileNames(false),
+		args:  []string{"pull"},
 	}
-
-	pullArgs := []string{"pull"}
-	if !in.opts.Verbose {
-		pullArgs = append(pullArgs, "--quiet")
+	mode := in.progressMode(ctx)
+	switch {
+	case mode != "":
+		// The pull drives the wizard's own checklist, so the full-screen view
+		// survives the phase instead of being released to compose's renderer.
+		phase.args = append([]string{"--progress", mode}, phase.args...)
+		phase.onLine = newPullProgress(in.wiz.Services, in.wiz.TaskExtra).line
+		defer in.wiz.Services(nil)
+	case !in.opts.Verbose:
+		phase.args = append(phase.args, "--quiet")
 	}
-	if err := in.runComposePhase(ctx, ui.StagePull, "Pulling images", dir, env, files, pullArgs, false); err != nil {
+	if err := in.runComposePhase(ctx, phase); err != nil {
 		in.infof("Check your internet connection and re-run. If the issue persists: founders@onyx.app")
 		return exitcodes.Newf(exitcodes.General, "docker compose pull failed: %v", err)
 	}
@@ -891,15 +871,41 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 	dir := in.deploymentDir()
 
 	upArgs := []string{"up", "-d"}
-	if release.IsFloatingTag(tag) {
+	switch {
+	case release.IsFloatingTag(tag):
+		// A floating tag names a moving image: the digest changes under the
+		// same name, so neither the pull nor the recreate can be skipped.
 		upArgs = append(upArgs, "--pull", "always", "--force-recreate")
+	case in.forceRecreate:
+		// Services were up when the run started and the operator signed off
+		// on replacing them; compose would otherwise leave containers whose
+		// config it considers unchanged running the old image.
+		upArgs = append(upArgs, "--force-recreate")
 	}
-	poll := false
-	if !in.opts.NoWait {
+	wait := !in.opts.NoWait
+	if wait {
 		upArgs = append(upArgs, "--wait", "--wait-timeout", fmt.Sprintf("%d", waitTimeoutSeconds))
-		poll = true
 	}
-	if err := in.runComposePhase(ctx, ui.StageStart, "Starting services", dir, env, files, upArgs, poll); err != nil {
+	phase := composePhase{
+		stage: ui.StageStart,
+		title: "Starting services",
+		dir:   dir,
+		env:   env,
+		files: files,
+		args:  upArgs,
+		// Poll container health so the wizard shows something while
+		// `up --wait` blocks (it is silent for as long as that takes).
+		poll: wait,
+	}
+	if mode := in.progressMode(ctx); mode != "" {
+		// Compose's own event stream says what is happening to each container
+		// — the poll can only see that the outgoing container is still up.
+		phase.args = append([]string{"--progress", mode}, upArgs...)
+		phase.onLine = newStartProgress(in.wiz.Services, in.wiz.TaskExtra, wait).line
+		phase.poll = false
+		defer in.wiz.Services(nil)
+	}
+	if err := in.runComposePhase(ctx, phase); err != nil {
 		in.infof("Current container status:")
 		ps := in.compose.Command(dir, env, files, "ps")
 		ps.Stdout, ps.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
@@ -976,41 +982,56 @@ func (in *installer) runningHostPort(ctx context.Context) int {
 	return 0
 }
 
+// composePhase describes one long compose invocation shown as a single phase.
+type composePhase struct {
+	stage int
+	title string
+	dir   string
+	env   map[string]string
+	files []string
+	args  []string
+	// poll watches container health while the command runs (`up --wait` is
+	// silent for as long as it takes everything to come up).
+	poll bool
+	// onLine receives each output line while the wizard drives the run, for
+	// phases whose progress can be read off the command's own output.
+	onLine func(string)
+}
+
 // runComposePhase runs one long compose command as a visible phase: a rail
 // stage with a live task (and per-service checklist) in the wizard, streamed
 // output otherwise. On failure only the log tail is shown.
-func (in *installer) runComposePhase(
-	ctx context.Context,
-	stage int,
-	title, dir string,
-	env map[string]string,
-	files, args []string,
-	poll bool,
-) error {
-	cmd := in.compose.Command(dir, env, files, args...)
+func (in *installer) runComposePhase(ctx context.Context, p composePhase) error {
+	cmd := in.compose.Command(p.dir, p.env, p.files, p.args...)
 
 	if in.wiz == nil || in.opts.Verbose {
-		in.phase(title)
+		in.phase(p.title)
 		var seen bytes.Buffer
 		cmd.Stdout = io.MultiWriter(in.deps.IOS.Out, &seen)
 		cmd.Stderr = io.MultiWriter(in.deps.IOS.ErrOut, &seen)
 		_, err := in.deps.Runner.Run(ctx, cmd)
 		if err == nil {
-			in.successf("%s complete", title)
+			in.successf("%s complete", p.title)
 		} else {
-			in.errorf("%s failed", title)
+			in.errorf("%s failed", p.title)
 			in.printFailureDiagnosis(seen.String())
 		}
 		return err
 	}
 
-	in.wiz.Stage(stage)
-	in.wiz.TaskStart(title)
+	in.wiz.Stage(p.stage)
+	in.wiz.TaskStart(p.title)
 	var captured bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &captured, &captured
+	// One writer for both streams: os/exec then serializes the copies, which
+	// is what lets onLine run without a lock.
+	var sink io.Writer = &captured
+	if p.onLine != nil {
+		sink = io.MultiWriter(&captured, &lineWriter{emit: p.onLine})
+	}
+	cmd.Stdout, cmd.Stderr = sink, sink
 
 	stop := make(chan struct{})
-	if poll {
+	if p.poll {
 		go in.pollServiceHealth(stop)
 	}
 	_, err := in.deps.Runner.Run(ctx, cmd)

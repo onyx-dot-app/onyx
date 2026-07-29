@@ -325,8 +325,60 @@ func TestRerunRefusesWhileRunning(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected refusal while services are running")
 	}
-	if !strings.Contains(err.Error(), "onyx-cli deploy stop") {
-		t.Errorf("guard error must carry the remedy: %v", err)
+	if !strings.Contains(err.Error(), "--force") || !strings.Contains(err.Error(), "onyx-cli deploy stop") {
+		t.Errorf("guard error must carry both remedies: %v", err)
+	}
+}
+
+// A rerun over a running deployment never stops anything up front: the
+// containers keep serving while the images download and `up --force-recreate`
+// replaces them at the end.
+func TestRerunForceRecreatesInsteadOfStopping(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "deployment"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "deployment", ".env"), []byte("IMAGE_TAG=v1.0.0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		if strings.Contains(argv(c), "ps -q") {
+			return dockercmd.Result{Stdout: "abc123\n"}, nil // containers up
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, runner, notFoundServer(t))
+
+	err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true,
+		Force:    true,
+		Dir:      root,
+		Tag:      "v1.0.0",
+		NoWait:   true,
+		Local:    true,
+	})
+	if err != nil {
+		t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+
+	var up string
+	for _, c := range runner.calls {
+		a := argv(c)
+		if strings.Contains(a, "compose") && strings.HasSuffix(a, " stop") {
+			t.Errorf("services were stopped: %s", a)
+		}
+		if strings.Contains(a, "up -d") {
+			up = a
+		}
+	}
+	if up == "" {
+		t.Fatal("compose up never ran")
+	}
+	if !strings.Contains(up, "--force-recreate") {
+		t.Errorf("up must recreate the running containers: %s", up)
 	}
 }
 
