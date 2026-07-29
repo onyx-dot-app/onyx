@@ -31,6 +31,7 @@ type Mode string
 const (
 	ModeStandard Mode = "standard"
 	ModeLite     Mode = "lite"
+	ModeProd     Mode = "prod"
 )
 
 // FileEntry records one managed file as last written by the CLI.
@@ -40,14 +41,18 @@ type FileEntry struct {
 
 // Manifest is the persisted install state.
 type Manifest struct {
-	SchemaVersion int                  `json:"schema_version"`
-	InstalledTag  string               `json:"installed_tag"`
-	CLIVersion    string               `json:"cli_version"`
-	Mode          Mode                 `json:"mode"`
-	IncludeCraft  bool                 `json:"include_craft"`
-	Files         map[string]FileEntry `json:"files"` // keyed by DestRel
-	InstalledAt   time.Time            `json:"installed_at"`
-	UpdatedAt     time.Time            `json:"updated_at"`
+	SchemaVersion int    `json:"schema_version"`
+	InstalledTag  string `json:"installed_tag"`
+	CLIVersion    string `json:"cli_version"`
+	Mode          Mode   `json:"mode"`
+	IncludeCraft  bool   `json:"include_craft"`
+	// Project is the docker compose project name, when it differs from the
+	// default pinned in docker-compose.yml (adopted deployments created under
+	// another name keep it — renaming would strand their volumes).
+	Project     string               `json:"project,omitempty"`
+	Files       map[string]FileEntry `json:"files"` // keyed by DestRel
+	InstalledAt time.Time            `json:"installed_at"`
+	UpdatedAt   time.Time            `json:"updated_at"`
 }
 
 // Path returns the manifest location for an install root.

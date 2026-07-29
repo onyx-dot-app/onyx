@@ -1,6 +1,7 @@
 package install
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,14 +15,29 @@ import (
 )
 
 // managedFiles returns the files for the selected mode: the base set plus the
-// overlays that apply.
-func managedFiles(lite, craft bool) []deployfiles.File {
-	files := []deployfiles.File{
-		deployfiles.Compose,
-		deployfiles.EnvTemplate,
-		deployfiles.Readme,
-		deployfiles.NginxAppConf,
-		deployfiles.NginxRunScript,
+// overlays that apply. Prod swaps in its own set — the prod overlay, the prod
+// env/nginx templates — and deliberately leaves out the README: prod installs
+// are typically adopted in place (sometimes inside a checked-out source
+// tree), and dropping a README into someone's root is not adoption.
+func managedFiles(prod, lite, craft bool) []deployfiles.File {
+	var files []deployfiles.File
+	if prod {
+		files = []deployfiles.File{
+			deployfiles.Compose,
+			deployfiles.ProdOverlay,
+			deployfiles.EnvProdTemplate,
+			deployfiles.EnvNginxTemplate,
+			deployfiles.NginxAppConfProd,
+			deployfiles.NginxRunScript,
+		}
+	} else {
+		files = []deployfiles.File{
+			deployfiles.Compose,
+			deployfiles.EnvTemplate,
+			deployfiles.Readme,
+			deployfiles.NginxAppConf,
+			deployfiles.NginxRunScript,
+		}
 	}
 	if lite {
 		files = append(files, deployfiles.LiteOverlay)
@@ -45,16 +61,22 @@ type fileFetcher struct {
 func (ff *fileFetcher) content(ctx context.Context, ref string, f deployfiles.File) ([]byte, string, error) {
 	if ref != "" && !ff.disabled {
 		data, err := ff.in.deps.Release.FetchFile(ctx, ref, f.RepoPath)
-		if err == nil {
+		switch {
+		case err == nil && f.DestRel == deployfiles.ProdOverlay.DestRel && !bytes.Contains(data, []byte("!override")):
+			// Refs cut before docker-compose.prod.yml became an overlay carry
+			// the old standalone file (recognizable by its missing merge
+			// tags); stacking that on docker-compose.yml would re-publish the
+			// dev port on a prod host, so the bundled overlay wins.
+			ff.in.warnf("%s at %s predates the overlay format — using the copy bundled with this CLI", f.RepoPath, ref)
+		case err == nil:
 			return data, ref, nil
-		}
 		// A file missing from a reachable ref (an overlay added after that
 		// release, say) says nothing about the rest: falling back for the
 		// whole set here would quietly mix one version's compose file with
 		// another's overlays and nginx config.
-		if errors.Is(err, release.ErrNotFound) {
+		case errors.Is(err, release.ErrNotFound):
 			ff.in.warnf("%s doesn't exist at %s — using the copy bundled with this CLI, which may not match that version", f.RepoPath, ref)
-		} else {
+		default:
 			ff.disabled = true
 			ff.in.warnf("Could not fetch %s at %s (%v) — using the files bundled with this CLI", f.RepoPath, ref, err)
 		}

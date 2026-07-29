@@ -24,6 +24,7 @@ func (in *installer) runStop(ctx context.Context) error {
 		in.warnf("No Onyx deployment found at %s. Nothing to shut down.", in.root.Dir)
 		return nil
 	}
+	in.resolveProjectFromDisk()
 
 	if err := in.attachDockerCompose(ctx); err != nil {
 		return err
@@ -60,5 +61,6 @@ func (in *installer) attachDockerCompose(ctx context.Context) error {
 	if in.compose == nil {
 		return exitcodes.New(exitcodes.General, "Docker Compose not found.\n  Visit: https://docs.docker.com/compose/install/")
 	}
+	in.compose.Project = in.projectName()
 	return nil
 }

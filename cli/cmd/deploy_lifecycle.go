@@ -27,6 +27,7 @@ Start them again with: onyx-cli deploy install`,
 		},
 	}
 	cmd.Flags().StringVar(&opts.Dir, "dir", "", "Deployment directory (default: auto-detected)")
+	cmd.Flags().StringVar(&opts.Project, "project", "", `Docker compose project name (default: recorded in the manifest, else "onyx")`)
 	return cmd
 }
 
@@ -56,6 +57,7 @@ healthy, 9 when no install exists, 1 when stopped or degraded.`,
 		},
 	}
 	cmd.Flags().StringVar(&opts.Dir, "dir", "", "Deployment directory (default: auto-detected)")
+	cmd.Flags().StringVar(&opts.Project, "project", "", `Docker compose project name (default: recorded in the manifest, else "onyx")`)
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output machine-readable JSON")
 	return cmd
 }
@@ -86,6 +88,7 @@ which is what "onyx-cli deploy status" suggests for a service in trouble.`,
 		},
 	}
 	cmd.Flags().StringVar(&opts.Dir, "dir", "", "Deployment directory (default: auto-detected)")
+	cmd.Flags().StringVar(&opts.Project, "project", "", `Docker compose project name (default: recorded in the manifest, else "onyx")`)
 	cmd.Flags().BoolVarP(&logOpts.Follow, "follow", "f", false, "Keep printing new log lines")
 	cmd.Flags().StringVar(&logOpts.Tail, "tail", "200", `Lines to show from the end of each log ("all" for everything)`)
 	cmd.Flags().StringVar(&logOpts.Since, "since", "", "Only logs since this point (e.g. 10m, 2h, or a timestamp)")
@@ -115,6 +118,7 @@ type DELETE to confirm; non-interactive runs require --force.`,
 		},
 	}
 	cmd.Flags().StringVar(&opts.Dir, "dir", "", "Deployment directory (default: auto-detected)")
+	cmd.Flags().StringVar(&opts.Project, "project", "", `Docker compose project name (default: recorded in the manifest, else "onyx")`)
 	cmd.Flags().BoolVar(&opts.Force, "force", false, "Skip the confirmation (for scripted teardown)")
 	return cmd
 }

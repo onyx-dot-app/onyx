@@ -1,8 +1,9 @@
 #!# ===========================================================================
 #!# SOURCE TEMPLATE for the generated compose files:
 #!#   docker-compose.yml                     (variant: default)
-#!#   docker-compose.prod.yml                (variant: prod)
 #!#   docker-compose.prod-no-letsencrypt.yml (variant: no-letsencrypt)
+#!# docker-compose.prod.yml is NOT generated: it is a hand-maintained overlay
+#!# on docker-compose.yml (kept small enough to review as a delta).
 #!# Edit THIS file, then regenerate with:
 #!#   ods generate-compose --write
 #!# Directive reference: run `ods generate-compose --help`.
@@ -43,7 +44,8 @@
 #    - Set proper DOMAIN environment variable for nginx
 #    - Configure DNS and SSL certificates
 #
-# For a complete production setup, refer to docker-compose.prod.yml
+# For a complete production setup, apply the docker-compose.prod.yml overlay:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 # =============================================================================
 #!endfor
 
@@ -91,7 +93,7 @@ services:
     #!endfor
     environment:
       # Auth Settings
-      #!value prod,no-letsencrypt: - AUTH_TYPE=${AUTH_TYPE:-oidc}
+      #!value no-letsencrypt: - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - AUTH_TYPE=${AUTH_TYPE:-basic}
       #!only default
       - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
@@ -101,7 +103,7 @@ services:
       - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - CODE_INTERPRETER_BASE_URL=${CODE_INTERPRETER_BASE_URL:-http://code-interpreter:8000}
-      #!for prod,no-letsencrypt
+      #!for no-letsencrypt
       - USE_IAM_AUTH=${USE_IAM_AUTH}
       - AWS_REGION_NAME=${AWS_REGION_NAME-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
@@ -109,16 +111,16 @@ services:
       # MinIO configuration
       #!endfor
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
-      #!value prod,no-letsencrypt: - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
+      #!value no-letsencrypt: - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
-      #!value prod,no-letsencrypt: - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
+      #!value no-letsencrypt: - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
       #!for default
       # Onyx Craft configuration (disabled by default, set ENABLE_CRAFT=true in .env to enable)
       # Use --include-craft with install script, or manually set in .env file
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
       #!endfor
-    #!value prod,no-letsencrypt: # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
+    #!value no-letsencrypt: # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -181,7 +183,7 @@ services:
         condition: service_started
     restart: unless-stopped
     environment:
-      #!for prod,no-letsencrypt
+      #!for no-letsencrypt
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       #!endfor
       #!only default
@@ -192,7 +194,7 @@ services:
       - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
-      #!for prod,no-letsencrypt
+      #!for no-letsencrypt
       - USE_IAM_AUTH=${USE_IAM_AUTH}
       - AWS_REGION_NAME=${AWS_REGION_NAME-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
@@ -200,9 +202,9 @@ services:
       # MinIO configuration
       #!endfor
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
-      #!value prod,no-letsencrypt: - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
+      #!value no-letsencrypt: - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
-      #!value prod,no-letsencrypt: - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
+      #!value no-letsencrypt: - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
       - DISCORD_BOT_INVOKE_CHAR=${DISCORD_BOT_INVOKE_CHAR:-!}
@@ -213,7 +215,7 @@ services:
       # Onyx Craft configuration (set up automatically on container startup)
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
       #!endfor
-    #!value prod,no-letsencrypt: # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
+    #!value no-letsencrypt: # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -229,7 +231,7 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
-    #!value prod,no-letsencrypt: # Uncomment the following lines if you need to include a custom CA certificate
+    #!value no-letsencrypt: # Uncomment the following lines if you need to include a custom CA certificate
     # PRODUCTION: Uncomment the following lines if you need to include a custom CA certificate
     # This section enables the use of a custom CA certificate
     # If present, the custom CA certificate is mounted as a volume
@@ -341,7 +343,7 @@ services:
         required: false
     #!endfor
     restart: unless-stopped
-    #!for prod,no-letsencrypt
+    #!for no-letsencrypt
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       # Set to debug to get more fine-grained logs
@@ -393,10 +395,10 @@ services:
     #!endfor
     restart: unless-stopped
     environment:
-      #!only prod,no-letsencrypt
+      #!only no-letsencrypt
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - INDEXING_ONLY=True
-      #!for prod,no-letsencrypt
+      #!for no-letsencrypt
       # Set to debug to get more fine-grained logs
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-1}
@@ -445,7 +447,7 @@ services:
     # ports:
     #   - "5432:5432"
     #!endfor
-    #!for prod,no-letsencrypt
+    #!for no-letsencrypt
     # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
     #!endfor
     healthcheck:
@@ -515,7 +517,7 @@ services:
       - path: .env
         required: false
     #!endfor
-    #!for prod,no-letsencrypt
+    #!for no-letsencrypt
     env_file:
       - .env.nginx
     #!endfor
@@ -527,19 +529,15 @@ services:
       - NGINX_PROXY_SEND_TIMEOUT=${NGINX_PROXY_SEND_TIMEOUT:-300}
       - NGINX_PROXY_READ_TIMEOUT=${NGINX_PROXY_READ_TIMEOUT:-300}
     ports:
-      #!value prod,no-letsencrypt: - "80:80"
+      #!value no-letsencrypt: - "80:80"
       - "${HOST_PORT_80:-80}:80"
-      #!value prod,no-letsencrypt: - "443:443"
+      #!value no-letsencrypt: - "443:443"
       - "${HOST_PORT:-3000}:80" # allow for localhost:3000 usage, since that is the norm
     volumes:
       # Mount templates read-only; the startup command copies them into
       # the writable /etc/nginx/conf.d/ inside the container.  This avoids
       # "Permission denied" errors on Windows Docker bind mounts.
       - ../data/nginx:/nginx-templates:ro
-      #!for prod
-      - ../data/certbot/conf:/etc/letsencrypt
-      - ../data/certbot/www:/var/www/certbot
-      #!endfor
       #!for no-letsencrypt
       - ../data/sslcerts:/etc/nginx/sslcerts
       #!endfor
@@ -564,7 +562,6 @@ services:
       && cp -a /nginx-templates/. /etc/nginx/conf.d/
       && sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
       && chmod +x /tmp/run-nginx.sh
-      #!value prod: && /tmp/run-nginx.sh app.conf.template.prod"
       #!value no-letsencrypt: && /tmp/run-nginx.sh app.conf.template.no-letsencrypt"
       && /tmp/run-nginx.sh app.conf.template"
     healthcheck:
@@ -582,22 +579,6 @@ services:
       retries: 5
       start_period: 30s
 
-  #!for prod
-  # follows https://pentacent.medium.com/nginx-and-lets-encrypt-with-docker-in-less-than-5-minutes-b4b8a60d3a71
-  certbot:
-    image: certbot/certbot
-    restart: unless-stopped
-    volumes:
-      - ../data/certbot/conf:/etc/letsencrypt
-      - ../data/certbot/www:/var/www/certbot
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "6"
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-
-  #!endfor
   cache:
     image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/redis:7.4-alpine
     restart: unless-stopped
@@ -637,9 +618,9 @@ services:
         required: false
     #!endfor
     environment:
-      #!value prod,no-letsencrypt: MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set a strong value in .env, not minioadmin}
+      #!value no-letsencrypt: MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set a strong value in .env, not minioadmin}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      #!value prod,no-letsencrypt: MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set a strong value in .env, not minioadmin}
+      #!value no-letsencrypt: MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set a strong value in .env, not minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
       #!only default
       # Note: we've seen the default bucket creation logic not work in some cases

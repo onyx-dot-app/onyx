@@ -149,7 +149,7 @@ func TestFailureTailRendersEvents(t *testing.T) {
 func TestStartProgressSeparatesStoppingFromStarting(t *testing.T) {
 	var sink checklistSink
 	services, extra := sink.hooks()
-	p := newStartProgress(services, extra, true)
+	p := newStartProgress(services, extra, true, "onyx")
 
 	for _, line := range []string{
 		`{"id":"Network onyx_default","status":"Created"}`,
@@ -179,7 +179,7 @@ func TestStartProgressSeparatesStoppingFromStarting(t *testing.T) {
 func TestStartProgressBacksOffOnceComposeSpeaks(t *testing.T) {
 	var sink checklistSink
 	services, extra := sink.hooks()
-	p := newStartProgress(services, extra, true)
+	p := newStartProgress(services, extra, true, "onyx")
 
 	// Networks and volumes are not the rollout: until a container is named,
 	// the checklist is still empty and the poll is what fills it.
@@ -219,6 +219,7 @@ func TestWatchRowsTellsReplacedFromPending(t *testing.T) {
 			"inference_model": "dddd4444",
 		},
 		recreate: true,
+		project:  "onyx",
 	}
 	// background's container is gone from the list: it is between the two.
 	ps := strings.Join([]string{
@@ -250,7 +251,7 @@ func TestWatchRowsTellsReplacedFromPending(t *testing.T) {
 func TestStartProgressPlainLines(t *testing.T) {
 	var sink checklistSink
 	services, extra := sink.hooks()
-	p := newStartProgress(services, extra, false)
+	p := newStartProgress(services, extra, false, "onyx")
 	w := &lineWriter{emit: p.line}
 	if _, err := w.Write([]byte(" Volume \"onyx_db_volume\"  Created\n Container onyx-cache-1  Recreate\n" +
 		" Container onyx-cache-1  Recreated\n Container onyx-cache-1  Started\n")); err != nil {

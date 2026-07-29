@@ -4,17 +4,24 @@ import (
 	"context"
 )
 
-// ProjectName is the compose project Onyx deployments run under, pinned by
-// `name: onyx` in docker-compose.yml. Containers and volumes carry it as a
-// label, which is what makes an install root movable and what lets docker
-// find the stack without the compose files.
-const ProjectName = "onyx"
+// DefaultProjectName is the compose project new Onyx deployments run under,
+// pinned by `name: onyx` in docker-compose.yml. Containers and volumes carry
+// the project as a label, which is what makes an install root movable and
+// what lets docker find the stack without the compose files. Adopted
+// deployments may run under another name (compose prefixes named volumes with
+// the project, so renaming one would strand its data); the CLI records theirs
+// in the manifest and passes it as -p.
+const DefaultProjectName = "onyx"
 
 // Compose invokes docker compose (plugin) or docker-compose (standalone),
 // whichever is available, through the Docker sudo wrapper.
 type Compose struct {
 	docker     *Docker
 	standalone bool
+
+	// Project is passed as `-p` on every invocation when set, overriding the
+	// `name:` pinned in the compose file.
+	Project string
 }
 
 // DetectCompose finds a usable compose command, preferring the plugin
@@ -57,15 +64,18 @@ func (c *Compose) Version(ctx context.Context) string {
 }
 
 // Command builds a compose invocation in dir: `[sudo env K=V] docker compose
-// -f <file>... <args>` (or docker-compose). Env riding rules follow
-// Docker.Command.
+// [-p <project>] -f <file>... <args>` (or docker-compose). Env riding rules
+// follow Docker.Command.
 func (c *Compose) Command(dir string, env map[string]string, composeFiles []string, args ...string) Command {
-	full := make([]string, 0, 2+2*len(composeFiles)+len(args))
+	full := make([]string, 0, 4+2*len(composeFiles)+len(args))
 	name := "docker"
 	if c.standalone {
 		name = "docker-compose"
 	} else {
 		full = append(full, "compose")
+	}
+	if c.Project != "" {
+		full = append(full, "-p", c.Project)
 	}
 	for _, f := range composeFiles {
 		full = append(full, "-f", f)
