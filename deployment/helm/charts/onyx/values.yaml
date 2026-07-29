@@ -1675,6 +1675,8 @@ sandboxImagePrepull:
     create: true
     value: -11
   # Set to use an existing PriorityClass instead; skips creating the one above.
+  # create: false with this left empty is a valid opt-out, but drops the pod to
+  # the cluster default priority, where it competes with sandbox pods.
   priorityClassName: ""
   # Nodes that repull at once on a tag bump. Raise to warm a large pool faster,
   # at the cost of a thundering herd against the registry.

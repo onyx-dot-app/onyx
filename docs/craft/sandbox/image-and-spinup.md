@@ -195,7 +195,12 @@ you touch these templates, and don't assume CI caught a drift for you.
   / 2Gi. It mainly guarantees the prepuller is never the *reason* for a
   scale-up. This does *not* reorder disk-pressure eviction — kubelet
   ranks "exceeds ephemeral-storage request" ahead of priority, and
-  evicting the prepuller frees ~0 bytes anyway.
+  evicting the prepuller frees ~0 bytes anyway. Setting
+  `priorityClass.create: false` without also setting `priorityClassName`
+  is a supported opt-out (for clusters where PriorityClasses are managed
+  centrally) but forfeits all of the above: the pod falls to the cluster
+  default priority and competes with sandbox pods. Point
+  `priorityClassName` at an existing low-priority class instead.
 - **A portable idle loop**, not `sleep infinity` — a GNU coreutils
   extension that dies on busybox/alpine. A CrashLooping prepuller unpins
   the image.
