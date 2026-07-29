@@ -447,6 +447,38 @@ def test_manager_falls_back_to_recommendation_when_configured_default_not_visibl
     assert config.model_name == "7/bedrock-pro"
 
 
+def test_selection_outranks_configured_default() -> None:
+    """A session's own pick must survive an org default pointing elsewhere —
+    reversing these two would silently move every existing session's model."""
+    anthropic = _provider(3, "anthropic", [_model("claude-sonnet-5")])
+    bedrock = _provider(7, "bedrock", [_model("bedrock-pro")])
+
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
+        config = llm_config.build_onyx_gateway_config(
+            [anthropic, bedrock],
+            llm_config.GatewaySelection(7, "bedrock-pro"),
+            llm_config.GatewaySelection(3, "claude-sonnet-5"),
+        )
+
+    assert config is not None
+    assert config.model_name == "7/bedrock-pro"
+
+
+def test_stale_selection_falls_through_to_configured_default() -> None:
+    anthropic = _provider(3, "anthropic", [_model("claude-sonnet-5")])
+    bedrock = _provider(7, "bedrock", [_model("bedrock-pro")])
+
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
+        config = llm_config.build_onyx_gateway_config(
+            [anthropic, bedrock],
+            llm_config.GatewaySelection(7, "retired-model"),
+            llm_config.GatewaySelection(3, "claude-sonnet-5"),
+        )
+
+    assert config is not None
+    assert config.model_name == "3/claude-sonnet-5"
+
+
 def _gateway_config() -> CraftLLMProviderConfig:
     return CraftLLMProviderConfig(
         provider="onyx",
