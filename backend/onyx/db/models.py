@@ -5829,8 +5829,8 @@ class UserUsage(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     # No index=True: uq_user_usage_dims (user_id-first) covers user-only lookups.
-    user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
 
     window_start: Mapped[datetime.datetime] = mapped_column(
