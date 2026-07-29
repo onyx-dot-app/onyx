@@ -181,6 +181,9 @@ RUN cd /workspace/templates/outputs/web && \
 USER root
 
 ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
+# Onyx provides an explicit gateway provider and model catalog, so OpenCode
+# does not need to refresh the generic models.dev catalog at runtime.
+ENV OPENCODE_DISABLE_MODELS_FETCH=1
 
 COPY --exclude=__pycache__ sandbox_daemon/ /workspace/sandbox_daemon/
 COPY entrypoint.sh /workspace/entrypoint.sh
