@@ -478,7 +478,7 @@ def _generate_or_fallback_chat_session_name(
             llm_override=llm_override,
             additional_headers=extract_headers(
                 request.headers, LITELLM_PASS_THROUGH_HEADERS
-            )
+            ),
         )
         with get_session_with_current_tenant() as db_session:
             check_llm_cost_limit_for_provider(
