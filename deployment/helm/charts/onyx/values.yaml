@@ -1660,23 +1660,25 @@ sandboxPod:
 # follows sandboxPod above. Only rendered when configMap.ENABLE_CRAFT is true.
 #
 # Costs ~3.3 GB of unreclaimable disk per sandbox node, on the same disk as the
-# sandbox workspaces. Disable on nodes without that headroom.
+# sandbox workspaces. Disable on nodes without that headroom. Pin global.version
+# to an immutable tag when using this: a mutable tag like `latest` gets held at
+# whichever digest the node pulled first.
 sandboxImagePrepull:
   enabled: true
   resources:
     cpu: 10m
     memory: 32Mi
     ephemeralStorage: 64Mi
-  # Negative so a pending sandbox pod preempts the prepuller rather than failing
-  # to schedule and triggering a needless scale-up.
+  # Below cluster-autoscaler's expendable-pods cutoff (-10), so a pending
+  # prepuller is never itself a reason to scale up.
   priorityClass:
     create: true
-    value: -10
+    value: -11
   # Set to use an existing PriorityClass instead; skips creating the one above.
   priorityClassName: ""
-  # Nodes that repull at once on a tag bump. Lower on large pools to avoid a
-  # thundering herd against the registry.
-  updateMaxUnavailable: "100%"
+  # Nodes that repull at once on a tag bump. Raise to warm a large pool faster,
+  # at the cost of a thundering herd against the registry.
+  updateMaxUnavailable: "25%"
 
 # -- Sandbox egress proxy.
 sandboxProxy:

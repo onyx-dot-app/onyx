@@ -158,30 +158,92 @@ provisioning the feature was meant to remove. There are render-time
 tests for all of them in
 `backend/tests/unit/onyx/server/features/build/sandbox/test_sandbox_image_prepuller.py`.
 
+Those tests need `helm` and the chart's subchart tarballs, which are
+gitignored, so they skip in the `backend/tests/unit` lane and no CI lane
+currently supplies both. Until one does they are a local guard — run
+them (after `helm dependency build deployment/helm/charts/onyx`) when
+you touch these templates, and don't assume CI caught a drift for you.
+
 - **A DaemonSet, not a one-shot pre-pull Job.** The kubelet only exempts
   images referenced by a *running* pod from image GC. A Job pulls and
   exits, leaving the layers evictable (default
   `imageGCHighThresholdPercent` 85%) with nothing to signal it. A
   long-lived pod pins them, and a DaemonSet also covers nodes that join
   after install.
-- **The image ref is shared with the sandbox PodTemplate**, via the
-  `onyx.sandboxImage` / `onyx.sandboxImagePullPolicy` helpers. A drifted
-  tag pins layers nobody uses while every sandbox still cold-pulls.
+- **The image ref *and pull policy* are shared with the sandbox
+  PodTemplate**, via the `onyx.sandboxImage` /
+  `onyx.sandboxImagePullPolicy` helpers. A drifted tag pins layers nobody
+  uses while every sandbox still cold-pulls. The pull policy is part of
+  that, not a detail: pinning the prepuller to `IfNotPresent` while the
+  sandbox pods run `Always` reproduces the same drift one level down —
+  on a mutable tag the sandboxes fetch the new digest and the prepuller
+  keeps the old one resident and GC-exempt.
 - **Scheduling mirrors `sandboxPod`** (nodeSelector + tolerations), or
   it warms the wrong pool.
-- **Negative priority** (`-10`, `preemptionPolicy: Never`) so a pending
-  sandbox preempts the prepuller rather than failing to schedule and
-  triggering a needless scale-up. Safe: a sandbox running on the node
-  pins the image itself, so the prepuller is redundant exactly when it
-  would compete. This does *not* reorder disk-pressure eviction —
-  kubelet ranks "exceeds ephemeral-storage request" ahead of priority,
-  and evicting the prepuller frees ~0 bytes anyway.
+- **Pull credentials come from the sandbox ServiceAccount only**, the
+  same single route the sandbox PodTemplate uses. See "Private
+  registries" below for why the chart-wide `.Values.imagePullSecrets`
+  is not an option here.
+- **Priority `-11`, `preemptionPolicy: Never`.** Strictly below
+  cluster-autoscaler's default `--expendable-pods-priority-cutoff` of
+  -10, so a pending prepuller is never itself read as demand for a new
+  node — at exactly -10 it is *not* expendable. It also sits below a
+  sandbox pod, so one can preempt it; a sandbox running on the node pins
+  the image itself, making the prepuller redundant exactly when it would
+  compete. Don't over-read the preemption half: the prepuller holds 10m
+  CPU / 32Mi, so evicting it will not unblock a sandbox that wants 1000m
+  / 2Gi. It mainly guarantees the prepuller is never the *reason* for a
+  scale-up. This does *not* reorder disk-pressure eviction — kubelet
+  ranks "exceeds ephemeral-storage request" ahead of priority, and
+  evicting the prepuller frees ~0 bytes anyway.
 - **A portable idle loop**, not `sleep infinity` — a GNU coreutils
   extension that dies on busybox/alpine. A CrashLooping prepuller unpins
   the image.
 - **Labelled `component: sandbox-image-prepuller`**, not
   `component: sandbox`, which is the selector for the sandbox
-  NetworkPolicies.
+  NetworkPolicies — *and* given its own deny-all NetworkPolicy as a
+  result. Staying out of that selector also leaves it out of the sandbox
+  default-deny, which would otherwise make the prepuller the one
+  unrestricted pod in the sandbox namespace, running the sandbox image.
+  It needs no network: the pull is the kubelet's, not the pod's.
+
+Pin `global.version` (or `configMap.SANDBOX_CONTAINER_IMAGE`) to an
+immutable tag when running the prepuller. Holding a mutable tag like
+`latest` keeps whichever digest a node pulled first resident and
+GC-exempt: the DaemonSet spec doesn't change when the tag is repointed,
+so nothing restarts the pod to re-resolve it, and the image GC pass that
+used to let the node drift back to a fresh `latest` no longer runs on
+it. Under `pullPolicy: Always` the restart does re-resolve, which is why
+the policy is shared rather than hardcoded.
+
+### Private registries
+
+Relevant only if you mirror the sandbox image into your own registry;
+the default `onyxdotapp/sandbox` on Docker Hub is public and needs no
+credentials.
+
+**Attach the pull secret to the sandbox ServiceAccount. Chart-level
+`imagePullSecrets` will not work for sandbox workloads.** Both the
+prepuller and the sandbox pods run in `SANDBOX_NAMESPACE`
+(`onyx-sandboxes` by default), while `.Values.imagePullSecrets` names
+secrets in the *release* namespace — and a kubelet resolves an
+imagePullSecret in the pod's own namespace. Listing those names on a
+sandbox-namespace pod points at secrets that do not exist there.
+
+```bash
+kubectl -n onyx-sandboxes create secret docker-registry regcred \
+  --docker-server=... --docker-username=... --docker-password=...
+kubectl -n onyx-sandboxes patch serviceaccount sandbox \
+  -p '{"imagePullSecrets":[{"name":"regcred"}]}'
+```
+
+This is also why the prepuller renders no `imagePullSecrets` block. An
+earlier revision gave the prepuller the chart-wide secrets and left the
+PodTemplate on the SA alone, which is the worst arrangement available:
+on a cluster where the release-namespace secret name happens to also
+exist in the sandbox namespace, the prepuller goes Ready and warms an
+image the sandbox pods still cannot pull. One route for both, and a
+render test asserts neither pod spec carries the block.
 
 ### What it costs, and when to turn it off
 
