@@ -65,8 +65,9 @@ const (
 	minTwoColumn = 64
 	minPaneInner = 20
 	// paneChrome is what the pane's box costs horizontally: a border column
-	// and a padding column on each side.
+	// and a padding column on each side. The summary card pads wider.
 	paneChrome = 4
+	cardChrome = 6
 	// Sizes assumed until the first window-size message arrives.
 	defaultWidth  = 80
 	defaultHeight = 24
@@ -571,11 +572,15 @@ func (w *Wizard) printTail(m wizModel) {
 		width = defaultWidth
 	}
 	if m.card != nil {
+		// Sized to the terminal for the same reason the pane is: a card that
+		// takes its width from its longest line ends up narrower than the run
+		// it is summarizing, which reads as the layout coming apart at the end.
+		inner := max(width-cardChrome, minPaneInner)
 		var lines []string
 		for _, l := range m.card {
-			lines = append(lines, wrap(l, max(width-6, minPaneInner))...)
+			lines = append(lines, wrap(l, inner)...)
 		}
-		fmt.Fprintln(w.out, cardBox.Render(strings.Join(lines, "\n")))
+		fmt.Fprintln(w.out, cardBox.Width(inner+cardChrome).Render(strings.Join(lines, "\n")))
 		return
 	}
 	for _, n := range m.notes {

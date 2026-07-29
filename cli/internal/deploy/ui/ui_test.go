@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"time"
@@ -67,6 +68,48 @@ func TestViewFitsTerminalWidth(t *testing.T) {
 			}
 		}
 	}
+}
+
+// The boxes are as wide as the terminal, whatever is in them: one that takes
+// its width from its longest line makes the layout look like it shrinks
+// whenever a phase has less to say.
+func TestBoxesFillTerminalWidth(t *testing.T) {
+	sizes := []int{64, 80, 100, 120}
+	for name, base := range sampleModels() {
+		for _, w := range sizes {
+			m := base
+			m.width, m.height = w, 30
+			if got := borderWidth(m.View().Content); got != w {
+				t.Errorf("%s at %d columns: pane border is %d wide", name, w, got)
+			}
+		}
+	}
+
+	// The summary card is printed to the normal screen after the wizard is
+	// gone, and has to line up with what it just replaced.
+	for _, w := range sizes {
+		var buf bytes.Buffer
+		wiz := &Wizard{out: &buf}
+		wiz.printTail(wizModel{width: w, card: []string{
+			"🎉 Onyx is ready  →  http://localhost:3000",
+			"",
+			"Manage:  onyx-cli deploy status · stop · upgrade · uninstall",
+		}})
+		if got := borderWidth(buf.String()); got != w {
+			t.Errorf("summary card at %d columns: border is %d wide", w, got)
+		}
+	}
+}
+
+// borderWidth is the display width of the first box-drawing line in content,
+// or 0 when there is none.
+func borderWidth(content string) int {
+	for _, line := range strings.Split(content, "\n") {
+		if strings.Contains(line, "╭") {
+			return ansi.StringWidthWc(line)
+		}
+	}
+	return 0
 }
 
 // A download note that no longer fits sheds whole parts: cutting it mid-figure
