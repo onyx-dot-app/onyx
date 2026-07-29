@@ -7,8 +7,7 @@ from typing import Any
 
 import pytest
 
-from onyx.db.external_app import resolve_masked_credentials
-from onyx.db.external_app import validate_auth_template
+from onyx.db.external_app import resolve_masked_credentials, validate_auth_template
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.encryption import mask_string
 from onyx.utils.sensitive import SensitiveValue

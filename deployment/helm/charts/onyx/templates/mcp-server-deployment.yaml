@@ -103,6 +103,7 @@ spec:
             - name: API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS
               value: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort }}"
             {{- include "onyx.envSecrets" . | nindent 12 }}
+            {{- include "onyx.metricsAuthEnv" . | nindent 12 }}
             {{- with include "onyx.customCACerts.env" . }}
             {{- . | nindent 12 }}
             {{- end }}

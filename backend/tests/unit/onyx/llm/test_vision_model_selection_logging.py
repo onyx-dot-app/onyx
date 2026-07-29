@@ -7,8 +7,7 @@ Verifies that operators get clear feedback about:
 3. When no vision-capable model exists at all
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.llm.factory import get_default_llm_with_vision
 

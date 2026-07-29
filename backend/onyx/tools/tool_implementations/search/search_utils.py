@@ -2,21 +2,24 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import TypeVar
 
-from onyx.context.search.models import ContextExpansionType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
+from onyx.context.search.models import (
+    ContextExpansionType,
+    IndexFilters,
+    InferenceChunk,
+    InferenceSection,
+)
 from onyx.context.search.utils import inference_section_from_chunks
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentSectionRequest
+from onyx.document_index.interfaces_new import DocumentIndex, DocumentSectionRequest
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
 )
 from onyx.llm.interfaces import LLM
 from onyx.prompts.prompt_utils import clean_up_source
 from onyx.secondary_llm_flows.document_filter import classify_section_relevance
-from onyx.tools.tool_implementations.search.constants import FULL_DOC_NUM_CHUNKS_AROUND
-from onyx.tools.tool_implementations.search.constants import RRF_K_VALUE
+from onyx.tools.tool_implementations.search.constants import (
+    FULL_DOC_NUM_CHUNKS_AROUND,
+    RRF_K_VALUE,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

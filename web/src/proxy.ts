@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
-  AuthType,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
-  SERVER_SIDE_ONLY__AUTH_TYPE,
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
 } from "./lib/constants";
 
@@ -112,6 +110,7 @@ const EE_ROUTES = [
   "/admin/theme",
   "/admin/performance/custom-analytics",
   "/admin/standard-answer",
+  "/admin/export-logs",
   "/agents/stats",
 ];
 

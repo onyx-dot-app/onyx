@@ -1,6 +1,6 @@
 "use client";
 
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { moveChatSession } from "@/lib/projects/svc";
 import type { MoveOperationParams } from "@/lib/sidebar/utils";
 

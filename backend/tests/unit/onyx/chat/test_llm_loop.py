@@ -5,24 +5,26 @@ from unittest.mock import Mock
 
 import pytest
 
-from onyx.chat.llm_loop import _build_empty_llm_response_error
-from onyx.chat.llm_loop import _try_fallback_tool_extraction
-from onyx.chat.llm_loop import construct_message_history
-from onyx.chat.llm_loop import EmptyLLMResponseError
-from onyx.chat.llm_loop import select_reminder_text
-from onyx.chat.models import ChatLoadedFile
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import ContextFileMetadata
-from onyx.chat.models import ExtractedContextFiles
-from onyx.chat.models import FileToolMetadata
-from onyx.chat.models import LlmStepResult
-from onyx.chat.models import ToolCallSimple
+from onyx.chat.llm_loop import (
+    EmptyLLMResponseError,
+    _build_empty_llm_response_error,
+    _try_fallback_tool_extraction,
+    construct_message_history,
+    select_reminder_text,
+)
+from onyx.chat.models import (
+    ChatLoadedFile,
+    ChatMessageSimple,
+    ContextFileMetadata,
+    ExtractedContextFiles,
+    FileToolMetadata,
+    LlmStepResult,
+    ToolCallSimple,
+)
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
-from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
+from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
+from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import ToolCallKickoff
 

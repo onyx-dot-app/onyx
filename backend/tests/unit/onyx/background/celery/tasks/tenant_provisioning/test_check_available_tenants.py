@@ -15,8 +15,6 @@ import pytest
 
 from ee.onyx.background.celery.tasks.tenant_provisioning.tasks import (
     _MAX_TENANTS_PER_RUN,
-)
-from ee.onyx.background.celery.tasks.tenant_provisioning.tasks import (
     check_available_tenants,
 )
 

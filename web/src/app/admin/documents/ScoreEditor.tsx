@@ -1,4 +1,4 @@
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { updateBoost } from "./lib";
 import { EditableValue } from "@/components/EditableValue";
 

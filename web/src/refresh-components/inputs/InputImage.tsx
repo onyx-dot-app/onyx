@@ -63,13 +63,13 @@ const inputImageClasses = {
         "bg-background-neutral-00",
         "border-solid",
         "border-2",
-        "border-action-link-05",
+        "border-action-selection-05",
       ],
       disabled: [
         "bg-background-neutral-00",
         "border-solid",
         "border-2",
-        "border-action-link-05",
+        "border-action-selection-05",
         "opacity-50",
         "cursor-not-allowed",
       ],
@@ -91,8 +91,8 @@ const inputImageClasses = {
       disabled: [],
     },
     dragActive: {
-      enabled: ["stroke-action-link-05"],
-      disabled: ["stroke-action-link-05"],
+      enabled: ["stroke-action-selection-05"],
+      disabled: ["stroke-action-selection-05"],
     },
   },
 } as const;
@@ -217,8 +217,8 @@ export default function InputImage({
 
           {/* Drag overlay indicator */}
           {isDragActive && (
-            <div className="absolute inset-0 bg-action-link-05/10 flex items-center justify-center rounded-full pointer-events-none">
-              <SvgPlus className="w-8 h-8 stroke-action-link-05" />
+            <div className="absolute inset-0 bg-action-selection-05/10 flex items-center justify-center rounded-full pointer-events-none">
+              <SvgPlus className="w-8 h-8 stroke-action-selection-05" />
             </div>
           )}
 

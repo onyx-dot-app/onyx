@@ -5,30 +5,12 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { AccountType, UserStatus } from "@/lib/types";
-import type { UserRole, InvitedUserSnapshot } from "@/lib/types";
+import { UserStatus } from "@/lib/types";
+import type { InvitedUserSnapshot } from "@/lib/types";
 import type {
+  FullUserSnapshot,
   UserRow,
-  UserGroupInfo,
 } from "@/views/admin/UsersPage/interfaces";
-
-// ---------------------------------------------------------------------------
-// Backend response shape (GET /manage/users/accepted/all)
-// ---------------------------------------------------------------------------
-
-interface FullUserSnapshot {
-  id: string;
-  email: string;
-  role: UserRole;
-  account_type: AccountType;
-  is_active: boolean;
-  password_configured: boolean;
-  personal_name: string | null;
-  created_at: string;
-  updated_at: string;
-  groups: UserGroupInfo[];
-  is_scim_synced: boolean;
-}
 
 // ---------------------------------------------------------------------------
 // Converters
@@ -42,6 +24,7 @@ function toUserRow(snapshot: FullUserSnapshot): UserRow {
     status: snapshot.is_active ? UserStatus.ACTIVE : UserStatus.INACTIVE,
     is_active: snapshot.is_active,
     is_scim_synced: snapshot.is_scim_synced,
+    craft_enabled: snapshot.craft_enabled,
     personal_name: snapshot.personal_name,
     created_at: snapshot.created_at,
     updated_at: snapshot.updated_at,
@@ -60,6 +43,7 @@ function emailToUserRow(
     status,
     is_active: false,
     is_scim_synced: false,
+    craft_enabled: null,
     personal_name: null,
     created_at: null,
     updated_at: null,

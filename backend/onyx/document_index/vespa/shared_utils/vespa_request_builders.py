@@ -1,21 +1,21 @@
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.document_index.vespa.internal_types import VespaChunkRequest
-from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
-from onyx.document_index.vespa_constants import CHUNK_ID
-from onyx.document_index.vespa_constants import DOC_UPDATED_AT
-from onyx.document_index.vespa_constants import DOCUMENT_ID
-from onyx.document_index.vespa_constants import DOCUMENT_SETS
-from onyx.document_index.vespa_constants import HIDDEN
-from onyx.document_index.vespa_constants import METADATA_LIST
-from onyx.document_index.vespa_constants import PERSONAS
-from onyx.document_index.vespa_constants import SOURCE_TYPE
-from onyx.document_index.vespa_constants import TENANT_ID
-from onyx.document_index.vespa_constants import USER_PROJECT
+from onyx.document_index.vespa_constants import (
+    ACCESS_CONTROL_LIST,
+    CHUNK_ID,
+    DOC_UPDATED_AT,
+    DOCUMENT_ID,
+    DOCUMENT_SETS,
+    HIDDEN,
+    METADATA_LIST,
+    PERSONAS,
+    SOURCE_TYPE,
+    TENANT_ID,
+    USER_PROJECT,
+)
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -242,10 +242,15 @@ def build_vespa_filters(
     elif len(knowledge_scope_parts) == 1:
         filter_parts.append(knowledge_scope_parts[0])
 
-    # Time filter
+    # Vespa only indexes doc_updated_at: created_at_range is dropped (widens
+    # rather than narrows).
+    updated_at_range = filters.updated_at_range
     _append(
         filter_parts,
-        _build_time_filter(filters.time_cutoff, filters.time_cutoff_upper),
+        _build_time_filter(
+            updated_at_range.start if updated_at_range else None,
+            updated_at_range.end if updated_at_range else None,
+        ),
     )
 
     # # Knowledge Graph Filters

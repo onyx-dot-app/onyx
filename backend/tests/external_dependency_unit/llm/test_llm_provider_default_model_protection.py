@@ -11,15 +11,19 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import update_default_vision_provider
-from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import (
+    fetch_existing_llm_provider,
+    remove_llm_provider,
+    update_default_provider,
+    update_default_vision_provider,
+    upsert_llm_provider,
+)
 from onyx.llm.constants import LlmProviderNames
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    LLMProviderView,
+    ModelConfigurationUpsertRequest,
+)
 
 
 def _create_test_provider(

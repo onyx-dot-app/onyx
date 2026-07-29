@@ -11,19 +11,18 @@ Tests cover:
 """
 
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    DocumentSource,
+    TextSection,
+)
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.indexing_pipeline import _embed_chunks_to_store
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import DocAwareChunk
-from onyx.indexing.models import IndexChunk
+from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
 
 
 def _make_doc(doc_id: str) -> Document:

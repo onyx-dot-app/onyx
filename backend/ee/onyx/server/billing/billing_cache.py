@@ -24,8 +24,7 @@ from pydantic import ValidationError
 from redis.exceptions import RedisError
 
 from ee.onyx.server.tenants.billing import fetch_billing_information
-from ee.onyx.server.tenants.models import BillingInformation
-from ee.onyx.server.tenants.models import SubscriptionStatusResponse
+from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
 from onyx.configs.app_configs import BILLING_CACHE_TTL_SECONDS
 from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.utils.logger import setup_logger

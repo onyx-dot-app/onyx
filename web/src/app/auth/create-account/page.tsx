@@ -34,7 +34,7 @@ export default function Page() {
           Have an account with a different email?{" "}
           <Link
             href="/auth/login"
-            className="text-action-link-05 hover:underline"
+            className="text-action-selection-05 hover:underline"
           >
             Sign in
           </Link>

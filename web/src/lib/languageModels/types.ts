@@ -1,4 +1,16 @@
 import type { OnboardingActions } from "@/interfaces/onboarding";
+import type { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
+
+/**
+ * Per-session reasoning-effort override. Mirrors the backend ReasoningEffort
+ * enum minus "auto", since no override (null) already means auto.
+ */
+export type ReasoningEffortOverride =
+  | "off"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
 
 export interface ModelConfiguration {
   id?: number;
@@ -44,8 +56,11 @@ export enum LLMProviderName {
   BIFROST = "bifrost",
   OPENAI_COMPATIBLE = "openai_compatible",
   NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
+  PORTKEY = "portkey",
   CUSTOM = "custom",
 }
+
+export type PortkeyApiMode = "chat_completions" | "responses" | "messages";
 
 export interface SimpleKnownModel {
   name: string;
@@ -141,6 +156,8 @@ export interface LLMProviderFormProps {
   onOpenChange?: (open: boolean) => void;
   /** Called after successful provider creation/update. */
   onSuccess?: () => void | Promise<void>;
+  /** Overrides the analytics source derived from the variant. */
+  analyticsSource?: LLMProviderConfiguredSource;
 
   // Onboarding-specific (only when variant === "onboarding")
   onboardingActions?: OnboardingActions;
@@ -229,6 +246,21 @@ export interface NebiusTokenfactoryModelResponse {
   country_code: string | null;
   requests_per_minute: number | null;
   supported_features: string[];
+}
+
+export interface PortkeyFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_id?: number;
+  signal?: AbortSignal;
+}
+
+export interface PortkeyModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
 }
 
 export interface VertexAIFetchParams {

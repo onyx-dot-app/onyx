@@ -7,22 +7,21 @@ from pydantic import BaseModel
 
 from onyx.cache.interface import CacheBackend
 from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.models import ChatLoadedFile
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import ExtractedContextFiles
-from onyx.chat.models import FileToolMetadata
-from onyx.chat.models import SearchParams
+from onyx.chat.models import (
+    ChatLoadedFile,
+    ChatMessageSimple,
+    ExtractedContextFiles,
+    FileToolMetadata,
+    SearchParams,
+)
 from onyx.context.search.models import SearchDoc
 from onyx.db.memory import UserMemoryContext
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
-from onyx.db.models import Persona
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMUserIdentity
+from onyx.db.models import ChatMessage, ChatSession, Persona
+from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.tools.models import ChatFile
-from onyx.tools.models import ToolCallInfo
+from onyx.tools.models import ChatFile, ToolCallInfo
 
 # Type alias for search doc deduplication key
 # Simple key: just document_id (str)
@@ -205,6 +204,7 @@ class ChatTurnSetup:
     # Processing-fence value and stream-buffer key — single source for the run id
     processing_run_id: int
     reserved_token_count: int
+    reasoning_effort: ReasoningEffort
     search_params: SearchParams
     all_injected_file_metadata: dict[str, FileToolMetadata]
     available_files: AvailableFiles

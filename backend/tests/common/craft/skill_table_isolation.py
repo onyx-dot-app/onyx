@@ -5,24 +5,27 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import class_mapper
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, class_mapper
 
-from onyx.db.models import ExternalApp
-from onyx.db.models import ExternalAppPolicy
-from onyx.db.models import ExternalAppUserCredential
-from onyx.db.models import Skill
-from onyx.db.models import Skill__User
-from onyx.db.models import Skill__UserGroup
+from onyx.db.models import (
+    ExternalApp,
+    ExternalAppUserCredential,
+    GatedActionPolicy,
+    GatedApp,
+    Skill,
+    Skill__User,
+    Skill__UserGroup,
+)
 
 # Parent -> child order (FKs all point child -> parent). Restore/insert in this
 # order; delete in reverse so FK constraints stay satisfied.
 _SKILL_ISOLATION_MODELS: tuple[type[Any], ...] = (
     Skill,
     ExternalApp,
+    GatedApp,
     Skill__User,
     Skill__UserGroup,
-    ExternalAppPolicy,
+    GatedActionPolicy,
     ExternalAppUserCredential,
 )
 

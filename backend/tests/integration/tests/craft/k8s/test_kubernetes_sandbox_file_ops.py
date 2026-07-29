@@ -9,9 +9,11 @@ import httpx
 import pytest
 from kubernetes import client
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import (
+    SANDBOX_BACKEND,
+    SANDBOX_NAMESPACE,
+    SandboxBackend,
+)
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -19,12 +21,14 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client as http_client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.craft.k8s.k8s_fixtures import OwnedLivePod
-from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
-from tests.integration.tests.craft.k8s.k8s_fixtures import PoolSession
-from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
-from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
-from tests.integration.tests.craft.k8s.k8s_fixtures import wait_until_healthy
+from tests.integration.tests.craft.k8s.k8s_fixtures import (
+    OwnedLivePod,
+    PoolSession,
+    SandboxHandle,
+    pod_exec,
+    wait_for_pod_deletion,
+    wait_until_healthy,
+)
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
@@ -272,6 +276,10 @@ class TestUploadFile:
         )
         assert section_marker in after_first, (
             "first upload must inject the attachments section into AGENTS.md"
+        )
+        assert "## Skills" not in after_first
+        assert after_first.index(section_marker) < after_first.index(
+            "## Connectable apps"
         )
 
         BuildSessionManager.upload_file(

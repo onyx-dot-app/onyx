@@ -51,7 +51,7 @@ env:
   SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:ci"
   # Read by api_server on boot; Sandbox containers call back via this URL on the
   # compose bridge.
-  SANDBOX_API_SERVER_URL: "http://api_server:8080"
+  ONYX_SERVER_URL: "http://api_server:8080"
 
 jobs:
   changes:
@@ -73,7 +73,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
@@ -152,10 +152,14 @@ jobs:
             # on (ENABLE_BROWSER defaults true) — chromium is lighter than the
             # skill bundle and keeps the CI image consistent with prod.
             extra_build_args: "ENABLE_SKILLS=false"
+            target: ""
           - image: backend
             context: ./backend
             file: ./backend/Dockerfile
             extra_build_args: ""
+            # The production image; the backend Dockerfile's default (last) stage is the
+            # dev variant.
+            target: runtime
     runs-on:
       - runs-on
       - runner=8cpu-linux-x64
@@ -167,7 +171,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -180,13 +184,15 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Build and push ${{ matrix.image }} image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
+          # Empty target means the Dockerfile's default (last) stage.
+          target: ${{ matrix.target }}
           platforms: linux/amd64
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
@@ -220,7 +226,7 @@ jobs:
       DISABLE_TELEMETRY: "true"
 
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0

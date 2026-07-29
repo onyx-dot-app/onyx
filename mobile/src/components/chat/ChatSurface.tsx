@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import Animated, {
   FadeIn,
@@ -22,12 +21,12 @@ import { deriveFocus, type ChatFocus } from "@/chat/chatFocus";
 import { useChatController } from "@/hooks/useChatController";
 import { useChatSessionController } from "@/hooks/useChatSessionController";
 import { useLiveAgent } from "@/hooks/useLiveAgent";
+import { useComposerDraft } from "@/hooks/useComposerDraft";
 
 const TRANSITION_MS = 150;
 
-// Persistent chat surface: one absolute overlay mounted in (app)/_layout, morphed in place
-// by route → focus so the header/composer never remount. null on non-chat routes (the Stack
-// screen shows through). See docs/mobile-chat/06-unified-chat-surface.md.
+// Persistent overlay mounted in (app)/_layout: morphed in place by route→focus so
+// header/composer never remount; null on non-chat routes (the Stack shows through).
 export function ChatSurface() {
   const pathname = usePathname();
   const focus = deriveFocus(pathname);
@@ -39,8 +38,8 @@ export function ChatSurface() {
   );
 }
 
-// Never keyed/remounted across new↔chat↔project — only `focus` changes, so the
-// chrome/composer persist and the body cross-fades.
+// Never remounted across new↔chat↔project — only `focus` changes, so chrome/composer
+// persist and the body cross-fades.
 function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   const sessionId = focus.kind === "chat" ? focus.sessionId : null;
   const projectId = focus.kind === "project" ? focus.projectId : null;
@@ -57,8 +56,8 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
 
   // Landing: agent from the route param. Existing session: its creation-time persona wins.
   const parsedAgentId = agentIdParam != null ? Number(agentIdParam) : NaN;
-  // Only a real agent id (non-negative integer) is honored; a bogus deep-link param
-  // (Infinity, float, negative) falls back to the default persona.
+  // Only a non-negative integer id is honored; a bogus deep-link param (Infinity/float/negative)
+  // falls back to the default persona.
   const selectedAgentId =
     Number.isInteger(parsedAgentId) && parsedAgentId >= 0
       ? parsedAgentId
@@ -70,16 +69,17 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
     : (liveAgent?.id ?? selectedAgentId ?? DEFAULT_AGENT_ID);
   const isDefaultAgent = personaId === DEFAULT_AGENT_ID;
 
-  const { messages, chatState, input, setInput, submit, stop, isHydrating } =
-    useChatController(sessionId, personaId, projectId);
+  const { messages, chatState, submit, stop, isHydrating } = useChatController(
+    sessionId,
+    personaId,
+    projectId,
+  );
   // re-attaches to an in-flight run when opened cold
   useChatSessionController(sessionId);
 
-  // The composer is one persistent instance across every focus; clear any unsent draft
-  // when the target conversation changes so it can't be sent into the wrong session.
-  useEffect(() => {
-    setInput("");
-  }, [sessionId, projectId, setInput]);
+  // Per-conversation draft, keyed so navigation restores it and it can't leak across the
+  // persistent composer.
+  const draft = useComposerDraft(`${sessionId ?? "new"}:${projectId ?? ""}`);
 
   const { data: details, isLoading } = useProjectDetails(projectId);
   const { agents } = useAgents();
@@ -93,16 +93,26 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
         : UNNAMED_CHAT
       : undefined;
 
+  // Gate on hasBlockingFiles so a still-uploading file can't be sent; a starter keeps the text
+  // (consumeAttachments), a send clears both.
+  const sendWithAttachments = (message?: string) => {
+    if (draft.hasBlockingFiles) return;
+    submit(
+      message ?? draft.text,
+      draft.descriptors,
+      message == null ? draft.consume : draft.consumeAttachments,
+    );
+  };
+
   const composer = (
     <Animated.View layout={LinearTransition.duration(TRANSITION_MS)}>
       <InputBar
-        value={input}
-        onChangeText={setInput}
-        onSend={() => {
-          void submit();
-        }}
+        value={draft.text}
+        onChangeText={draft.setText}
+        onSend={() => sendWithAttachments()}
         onStop={stop}
         chatState={chatState}
+        attachments={draft}
       />
     </Animated.View>
   );
@@ -161,9 +171,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
           <ChatEmptyState
             agent={liveAgent}
             isDefaultAgent={isDefaultAgent}
-            onStarterSelect={(message) => {
-              void submit(message);
-            }}
+            onStarterSelect={sendWithAttachments}
           />
         </Animated.View>
       ) : (
@@ -173,7 +181,11 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
           exiting={FadeOut.duration(TRANSITION_MS)}
           className="flex-1"
         >
-          <MessageList messages={messages} />
+          <MessageList
+            key={sessionId ?? "new"}
+            messages={messages}
+            agent={liveAgent}
+          />
         </Animated.View>
       )}
     </ChatScreen>

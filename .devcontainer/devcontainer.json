@@ -1,6 +1,6 @@
 {
   "name": "Onyx Dev Sandbox",
-  "image": "onyxdotapp/onyx-devcontainer@sha256:e63a35c635b513c47547de7655e0c0dd8caf2232fa0981c82af6223072a22e01",
+  "image": "onyxdotapp/onyx-devcontainer@sha256:0f0427a8339696e4a0f469c7179f5bcae281054a9b098a6f45ec4ceaf46e61fb",
   "runArgs": [
     "--cap-add=NET_ADMIN",
     "--cap-add=NET_RAW",
@@ -26,6 +26,7 @@
     "ONYX_DEVCONTAINER_FIREWALL": "${localEnv:ONYX_DEVCONTAINER_FIREWALL}",
     "OPENSEARCH_HOST": "opensearch",
     "POSTGRES_HOST": "relational_db",
+    "POSTGRES_PASSWORD": "${localEnv:POSTGRES_PASSWORD:password}",
     "REDIS_HOST": "cache",
     "S3_ENDPOINT_URL": "http://minio:9000",
     "SSH_AUTH_SOCK": "/tmp/ssh-agent.sock",

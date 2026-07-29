@@ -11,15 +11,16 @@ import httpx
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.build.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.users import create_or_login_admin
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
-from tests.integration.common_utils.http_client import RetryingTransport
-from tests.integration.common_utils.http_client import set_test_client
+from tests.integration.common_utils.http_client import (
+    RetryingTransport,
+    set_test_client,
+)
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.k8s.k8s_fixtures import suite_sandbox_ids

@@ -4,19 +4,18 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import QAFeedbackType
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SearchDoc
+from onyx.configs.constants import MessageType, QAFeedbackType
+from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.db.enums import AccessType
-from onyx.server.documents.models import DocumentSource
-from onyx.server.documents.models import IndexAttemptSnapshot
-from onyx.server.documents.models import IndexingStatus
-from onyx.server.documents.models import InputType
+from onyx.server.documents.models import (
+    DocumentSource,
+    IndexAttemptSnapshot,
+    IndexingStatus,
+    InputType,
+)
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 
 """

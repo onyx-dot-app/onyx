@@ -68,8 +68,10 @@ export function useTimelineHeader(
       } else if (searchState.isInternetSearch) {
         headerText = "Searching the web";
       } else {
-        // A source filter overrides the header with the connector(s).
-        headerText = formatSearchHeader(searchState.sourceFilters);
+        headerText = formatSearchHeader(
+          searchState.sourceFilters,
+          searchState.timeFilter
+        );
       }
       return { headerText, hasPackets, userStopped };
     }

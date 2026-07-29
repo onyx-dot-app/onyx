@@ -5,61 +5,67 @@ from typing import Any
 from opensearchpy.helpers.errors import BulkIndexError
 
 from onyx.access.models import DocumentAccess
-from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
-from onyx.configs.app_configs import VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import PUBLIC_DOC_PAT
+from onyx.configs.app_configs import (
+    MAX_CHUNKS_PER_DOC_BATCH,
+    VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT,
+)
+from onyx.configs.constants import PUBLIC_DOC_PAT, OnyxRedisLocks
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
 from onyx.connectors.models import convert_metadata_list_of_strings_to_dict
 from onyx.context.search.enums import QueryType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.models import (
+    IndexFilters,
+    InferenceChunk,
+    InferenceChunkUncleaned,
+)
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.models import DocumentSource
-from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.chunk_content_enrichment import (
+    cleanup_content_for_chunks,
     generate_enriched_content_for_chunk_text,
 )
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentInsertionRecord
-from onyx.document_index.interfaces_new import DocumentSectionRequest
-from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
-from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
-from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.client import OpenSearchClient
-from onyx.document_index.opensearch.client import OpenSearchDocumentMissingError
-from onyx.document_index.opensearch.client import OpenSearchIndexClient
-from onyx.document_index.opensearch.client import SearchHit
+from onyx.document_index.interfaces_new import (
+    DocumentIndex,
+    DocumentInsertionRecord,
+    DocumentSectionRequest,
+    IndexingMetadata,
+    MetadataUpdateRequest,
+    SecondaryIndexDocumentMissingError,
+    TenantState,
+)
+from onyx.document_index.opensearch.client import (
+    OpenSearchClient,
+    OpenSearchDocumentMissingError,
+    OpenSearchIndexClient,
+    SearchHit,
+)
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
-from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
-from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
-from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
-from onyx.document_index.opensearch.schema import DocumentChunk
-from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
-from onyx.document_index.opensearch.schema import DocumentSchema
-from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
-from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
-from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
-from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
-from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
-from onyx.document_index.opensearch.search import DocumentQuery
+from onyx.document_index.opensearch.schema import (
+    ACCESS_CONTROL_LIST_FIELD_NAME,
+    CONTENT_FIELD_NAME,
+    CREATED_AT_FIELD_NAME,
+    DOCUMENT_SETS_FIELD_NAME,
+    GLOBAL_BOOST_FIELD_NAME,
+    HIDDEN_FIELD_NAME,
+    PERSONAS_FIELD_NAME,
+    USER_PROJECTS_FIELD_NAME,
+    DocumentChunk,
+    DocumentChunkWithoutVectors,
+    DocumentSchema,
+    get_opensearch_doc_chunk_id,
+)
 from onyx.document_index.opensearch.search import (
+    DocumentQuery,
     get_min_max_normalization_pipeline_name_and_config,
-)
-from onyx.document_index.opensearch.search import (
     get_normalization_pipeline_name_and_config,
-)
-from onyx.document_index.opensearch.search import (
     get_zscore_normalization_pipeline_name_and_config,
 )
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import Document
+from onyx.indexing.models import DocMetadataAwareIndexChunk, Document
 from onyx.redis.lock_context import redis_shared_lock
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 from shared_configs.configs import MULTI_TENANT
@@ -70,6 +76,10 @@ logger = setup_logger(__name__)
 
 VERIFY_INDEX_LOCK_TTL_S = 60
 VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
+
+# Batch size for the orphan sweep's delete-by-query terms filter — well under the
+# OpenSearch terms cap (65536) so a large mid-port purge can't build an oversized query.
+_PORT_ORPHAN_DELETE_BATCH_SIZE = 1000
 
 
 # Per-process cache of indices we've already verified/created/applied the
@@ -219,6 +229,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         metadata_list=filtered_metadata_list,
         metadata_suffix=filtered_metadata_suffix,
         last_updated=chunk.source_document.doc_updated_at,
+        created_at=chunk.source_document.doc_created_at,
         public=chunk.access.is_public,
         access_control_list=generate_opensearch_filtered_access_control_list(
             chunk.access
@@ -533,6 +544,27 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return self._client.delete_by_query(query_body)
 
+    def delete_port_written_chunks(self, document_ids: list[str]) -> int:
+        """Delete only port-written chunks (written_by_port=true) for the given docs.
+
+        Used by the orphan sweep to remove a doc a create-only port copy resurrected,
+        without touching a legitimately re-added doc (whose forward-written chunks are
+        unmarked). Dedups and batches the ids under the OpenSearch terms cap so a large
+        mid-port purge can't build an oversized terms query. Returns chunks deleted.
+        """
+        unique_ids = list(dict.fromkeys(document_ids))
+        if not unique_ids:
+            return 0
+        deleted = 0
+        for i in range(0, len(unique_ids), _PORT_ORPHAN_DELETE_BATCH_SIZE):
+            batch = unique_ids[i : i + _PORT_ORPHAN_DELETE_BATCH_SIZE]
+            query_body = DocumentQuery.delete_port_written_chunks_query(
+                document_ids=batch,
+                tenant_state=self._tenant_state,
+            )
+            deleted += self._client.delete_by_query(query_body)
+        return deleted
+
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],
@@ -598,6 +630,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
             if update_request.persona_ids is not None:
                 properties_to_update[PERSONAS_FIELD_NAME] = list(
                     update_request.persona_ids
+                )
+            if update_request.created_at is not None:
+                # Stored as epoch seconds
+                properties_to_update[CREATED_AT_FIELD_NAME] = int(
+                    datetime_to_utc(update_request.created_at).timestamp()
                 )
 
             if not properties_to_update:

@@ -5,9 +5,8 @@ import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import type { BuildMessage } from "@/app/craft/types/streamingTypes";
 import type { StreamItem } from "@/app/craft/types/displayTypes";
 
-jest.mock("@/refresh-components/Logo", () => ({
-  __esModule: true,
-  default: () => <div data-testid="onyx-logo" />,
+jest.mock("@/lib/app/components", () => ({
+  Logo: () => <div data-testid="onyx-logo" />,
 }));
 
 jest.mock("@/components/chat/MinimalMarkdown", () => ({
@@ -54,6 +53,7 @@ function renderList(props: {
   return render(
     <TooltipProvider>
       <BuildMessageList
+        sessionId="session-1"
         messages={props.messages ?? []}
         streamItems={props.streamItems ?? []}
         isStreaming={props.isStreaming}
@@ -88,6 +88,33 @@ const savedAssistantMessage: BuildMessage = {
 };
 
 describe("BuildMessageList thinking visibility", () => {
+  it("renders image attachments on user messages", () => {
+    renderList({
+      messages: [
+        {
+          id: "user-1",
+          type: "user",
+          content: "Use this image",
+          timestamp: new Date("2026-01-01T00:00:00Z"),
+          attachments: [
+            {
+              name: "reference image.png",
+              path: "attachments/reference image.png",
+              mimeType: "image/png",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      screen.getByRole("img", { name: "reference image.png" })
+    ).toHaveAttribute(
+      "src",
+      "/api/build/sessions/session-1/artifacts/attachments/reference%20image.png"
+    );
+  });
+
   it("shows restored thought packets as collapsed thinking rows", () => {
     renderList({ messages: [savedAssistantMessage] });
 

@@ -22,6 +22,7 @@ export function getNotificationIcon(
 
     case NotificationType.RELEASE_NOTES:
     case NotificationType.FEATURE_ANNOUNCEMENT:
+    case NotificationType.SYSTEM_ANNOUNCEMENT:
       return SvgBullhorn;
 
     default:

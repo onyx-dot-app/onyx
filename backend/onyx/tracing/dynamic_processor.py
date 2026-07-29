@@ -16,10 +16,12 @@ from onyx.configs.app_configs import TRACING_CONFIG_CACHE_TTL_SECONDS
 from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
-from onyx.tracing.provider_config import BraintrustConfig
-from onyx.tracing.provider_config import EffectiveTracingConfig
-from onyx.tracing.provider_config import LangfuseConfig
-from onyx.tracing.provider_config import resolve_effective_tracing_config
+from onyx.tracing.provider_config import (
+    BraintrustConfig,
+    EffectiveTracingConfig,
+    LangfuseConfig,
+    resolve_effective_tracing_config,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -1,11 +1,9 @@
 """Tests for user file ACL computation, including shared persona access."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-from onyx.access.access import collect_user_file_access
-from onyx.access.access import get_access_for_user_files_impl
+from onyx.access.access import collect_user_file_access, get_access_for_user_files_impl
 from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import PUBLIC_DOC_PAT
 

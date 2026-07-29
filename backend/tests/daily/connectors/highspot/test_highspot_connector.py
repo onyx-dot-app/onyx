@@ -3,15 +3,13 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.highspot.connector import HighspotConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import Document, HierarchyNode
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(

@@ -1,7 +1,6 @@
 from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.constants import RETURN_SEPARATOR
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.models import InferenceChunk, InferenceChunkUncleaned
 from onyx.indexing.models import DocAwareChunk
 
 

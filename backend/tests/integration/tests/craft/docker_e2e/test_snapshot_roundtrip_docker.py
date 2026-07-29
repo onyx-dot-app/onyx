@@ -12,8 +12,7 @@ from __future__ import annotations
 
 import datetime
 import time
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
@@ -21,22 +20,19 @@ from sqlalchemy import select
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     OPENCODE_DATA_DIR,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     SANDBOX_EXEC_USER,
-)
-from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     SESSIONS_ROOT,
 )
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.craft.docker_e2e.conftest import DockerExec
-from tests.integration.tests.craft.docker_e2e.conftest import ProvisionSandbox
+from tests.integration.tests.craft.docker_e2e.conftest import (
+    DockerExec,
+    ProvisionSandbox,
+)
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.DOCKER,

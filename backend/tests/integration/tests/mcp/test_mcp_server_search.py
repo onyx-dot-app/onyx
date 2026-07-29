@@ -5,15 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from collections.abc import Awaitable
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
-from mcp.types import CallToolResult
-from mcp.types import TextContent
+from mcp.types import CallToolResult, TextContent
 from pydantic import AnyUrl
 
 from onyx.db.enums import AccessType

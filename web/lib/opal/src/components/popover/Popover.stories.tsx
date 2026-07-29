@@ -1,5 +1,5 @@
 import React from "react";
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Popover, Button } from "@opal/components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 

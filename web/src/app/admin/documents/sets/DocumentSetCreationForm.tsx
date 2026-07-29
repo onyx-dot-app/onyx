@@ -4,7 +4,7 @@ import { Form, Formik } from "formik";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import * as Yup from "yup";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import {
   createDocumentSet,
   updateDocumentSet,

@@ -6,7 +6,11 @@ import { getBaseUrl } from "@/api/config";
 import { getToken } from "@/api/auth/tokenStore";
 import { createNdjsonBuffer } from "@/chat/ndjson";
 import { FileDescriptor } from "@/chat/interfaces";
-import { MessageResponseIDInfo, Packet } from "@/chat/streamingModels";
+import {
+  MessageResponseIDInfo,
+  Packet,
+  StreamingError,
+} from "@/chat/streamingModels";
 
 type ExpoResponse = Awaited<ReturnType<typeof expoFetch>>;
 
@@ -32,7 +36,7 @@ export class StreamHttpError extends Error {
 }
 
 // The wire mixes wrapped packets ({placement, obj}) with root control objects; discriminate by field, not `type`.
-export type StreamEvent = Packet | MessageResponseIDInfo;
+export type StreamEvent = Packet | MessageResponseIDInfo | StreamingError;
 
 export function isPacket(event: StreamEvent): event is Packet {
   return "obj" in event && "placement" in event;
@@ -42,6 +46,13 @@ export function isMessageIdInfo(
   event: StreamEvent,
 ): event is MessageResponseIDInfo {
   return "user_message_id" in event;
+}
+
+// Root-level StreamingError: a top-level `error` string, not a wrapped packet (mirrors web's error check).
+export function isStreamError(event: StreamEvent): event is StreamingError {
+  return (
+    "error" in event && typeof (event as StreamingError).error === "string"
+  );
 }
 
 // Heartbeats come wrapped or at root; drop both.

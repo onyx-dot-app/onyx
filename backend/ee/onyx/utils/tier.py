@@ -15,29 +15,23 @@ naturally resolves back to BUSINESS without waiting on a webhook.
 
 from __future__ import annotations
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import requests
 from redis.exceptions import RedisError
-from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
-from ee.onyx.db.license import get_cached_license_metadata
-from ee.onyx.db.license import refresh_license_cache
+from ee.onyx.db.license import get_cached_license_metadata, refresh_license_cache
 from ee.onyx.server.license.models import CustomerTier
 from ee.onyx.server.tenants.billing import fetch_billing_information
-from ee.onyx.server.tenants.models import BillingInformation
-from ee.onyx.server.tenants.models import SubscriptionStatusResponse
-from ee.onyx.server.tenants.tier_management import get_cached_tier
-from ee.onyx.server.tenants.tier_management import update_tenant_tier
+from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
+from ee.onyx.server.tenants.tier_management import get_cached_tier, update_tenant_tier
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.settings.models import ApplicationStatus
-from onyx.server.settings.models import Tier
+from onyx.server.settings.models import ApplicationStatus, Tier
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
@@ -212,4 +206,18 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
         raise OnyxError(
             OnyxErrorCode.FEATURE_NOT_AVAILABLE,
             "Auto-sync access requires the Business or Enterprise plan.",
+        )
+
+
+def require_business_tier_for_multi_sso() -> None:
+    """Gate a second simultaneously enabled SSO provider to Business or
+    above. A single enabled provider works at every tier.
+    LICENSE_ENFORCEMENT_ENABLED=False passes, matching the sync-access
+    guard."""
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        return
+    if not tier_at_least(get_tier(), Tier.BUSINESS):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Multiple enabled SSO providers require the Business or Enterprise plan.",
         )

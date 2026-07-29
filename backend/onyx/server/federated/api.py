@@ -2,11 +2,7 @@ import json
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Request
-from fastapi import Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -17,32 +13,40 @@ from onyx.db.enums import Permission
 from onyx.db.federated import (
     create_federated_connector as db_create_federated_connector,
 )
-from onyx.db.federated import delete_federated_connector
-from onyx.db.federated import fetch_all_federated_connectors
-from onyx.db.federated import fetch_federated_connector_by_id
-from onyx.db.federated import update_federated_connector
-from onyx.db.federated import update_federated_connector_oauth_token
-from onyx.db.federated import validate_federated_connector_credentials
+from onyx.db.federated import (
+    delete_federated_connector,
+    fetch_all_federated_connectors,
+    fetch_federated_connector_by_id,
+    update_federated_connector,
+    update_federated_connector_oauth_token,
+    validate_federated_connector_credentials,
+)
 from onyx.db.models import User
-from onyx.federated_connectors.factory import get_federated_connector
-from onyx.federated_connectors.factory import get_federated_connector_cls
+from onyx.federated_connectors.factory import (
+    get_federated_connector,
+    get_federated_connector_cls,
+)
 from onyx.federated_connectors.interfaces import FederatedConnector
-from onyx.federated_connectors.oauth_utils import add_state_to_oauth_url
-from onyx.federated_connectors.oauth_utils import generate_oauth_state
-from onyx.federated_connectors.oauth_utils import get_oauth_callback_uri
-from onyx.federated_connectors.oauth_utils import verify_oauth_state
-from onyx.server.federated.models import AuthorizeUrlResponse
-from onyx.server.federated.models import ConfigurationSchemaResponse
-from onyx.server.federated.models import CredentialSchemaResponse
-from onyx.server.federated.models import EntitySpecResponse
-from onyx.server.federated.models import FederatedConnectorCredentials
-from onyx.server.federated.models import FederatedConnectorDetail
-from onyx.server.federated.models import FederatedConnectorRequest
-from onyx.server.federated.models import FederatedConnectorResponse
-from onyx.server.federated.models import FederatedConnectorStatus
-from onyx.server.federated.models import FederatedConnectorUpdateRequest
-from onyx.server.federated.models import OAuthCallbackResult
-from onyx.server.federated.models import UserOAuthStatus
+from onyx.federated_connectors.oauth_utils import (
+    add_state_to_oauth_url,
+    generate_oauth_state,
+    get_oauth_callback_uri,
+    verify_oauth_state,
+)
+from onyx.server.federated.models import (
+    AuthorizeUrlResponse,
+    ConfigurationSchemaResponse,
+    CredentialSchemaResponse,
+    EntitySpecResponse,
+    FederatedConnectorCredentials,
+    FederatedConnectorDetail,
+    FederatedConnectorRequest,
+    FederatedConnectorResponse,
+    FederatedConnectorStatus,
+    FederatedConnectorUpdateRequest,
+    OAuthCallbackResult,
+    UserOAuthStatus,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

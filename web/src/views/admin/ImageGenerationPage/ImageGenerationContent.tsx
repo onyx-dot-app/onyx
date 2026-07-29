@@ -3,8 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { toast } from "@/hooks/useToast";
+import { useCreateModal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
@@ -21,10 +20,10 @@ import {
   unsetDefaultImageGenerationConfig,
   deleteImageGenerationConfig,
 } from "@/views/admin/ImageGenerationPage/svc";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Button, MessageCard, Text } from "@opal/components";
-import { Content } from "@opal/layouts";
+import { Content, toast } from "@opal/layouts";
 import { SvgSlash, SvgUnplug } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { getImageGenForm } from "@/views/admin/ImageGenerationPage/forms";
@@ -68,6 +67,17 @@ export default function ImageGenerationContent() {
   const connectedProviderIds = useMemo(() => {
     return new Set(configs.map((c) => c.image_provider_id));
   }, [configs]);
+
+  // Deprecated models stay visible only for admins who already connected them,
+  // so they can still disconnect or switch away.
+  const visibleGroups = useMemo(() => {
+    return IMAGE_PROVIDER_GROUPS.map((group) => ({
+      ...group,
+      providers: group.providers.filter(
+        (p) => !p.deprecated || connectedProviderIds.has(p.image_provider_id)
+      ),
+    })).filter((g) => g.providers.length > 0);
+  }, [connectedProviderIds]);
 
   const defaultConfig = useMemo(() => {
     return configs.find((c) => c.is_default);
@@ -218,7 +228,7 @@ export default function ImageGenerationContent() {
         )}
 
         {/* Provider Groups */}
-        {IMAGE_PROVIDER_GROUPS.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.name} className="flex flex-col gap-2">
             <Content title={group.name} sizePreset="secondary" variant="body" />
             {group.providers.map((provider) => {

@@ -1,23 +1,24 @@
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 import requests
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
 from onyx.utils.retry_wrapper import retry_builder
 
 CLICKUP_API_BASE_URL = "https://api.clickup.com/api/v2"
@@ -119,8 +120,14 @@ class ClickupConnector(LoadConnector, PollConnector):
                     semantic_identifier=task["name"],
                     doc_updated_at=(
                         datetime.fromtimestamp(
-                            round(float(task["date_updated"]) / 1000, 3)
-                        ).replace(tzinfo=timezone.utc)
+                            round(float(task["date_updated"]) / 1000, 3),
+                            tz=timezone.utc,
+                        )
+                    ),
+                    # NOTE: doc_created_at population not yet verified against live data
+                    doc_created_at=datetime.fromtimestamp(
+                        round(float(task["date_created"]) / 1000, 3),
+                        tz=timezone.utc,
                     ),
                     primary_owners=[
                         BasicExpertInfo(

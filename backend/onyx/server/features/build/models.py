@@ -7,3 +7,7 @@ class UploadResponse(BaseModel):
     filename: str  # Sanitized filename
     path: str  # Relative path in sandbox (e.g., "attachments/doc.pdf")
     size_bytes: int  # File size in bytes
+
+
+class BaseInstructionsResponse(BaseModel):
+    content: str

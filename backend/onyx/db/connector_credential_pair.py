@@ -3,35 +3,32 @@ from enum import Enum
 from typing import TypeVarTuple
 
 from fastapi import HTTPException
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import exists
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from sqlalchemy import Select, delete, desc, exists, func, select, update
+from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.credentials import fetch_credential_by_id
-from onyx.db.credentials import fetch_credential_by_id_for_user
+from onyx.db.credentials import fetch_credential_by_id, fetch_credential_by_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import ProcessingMode
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexingStatus
-from onyx.db.models import SearchSettings
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.models import UserRole
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    IndexingMode,
+    ProcessingMode,
+)
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    IndexAttempt,
+    IndexingStatus,
+    SearchSettings,
+    User,
+    User__UserGroup,
+    UserGroup__ConnectorCredentialPair,
+    UserRole,
+)
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -39,11 +36,95 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 logger = setup_logger()
 
 R = TypeVarTuple("R")
+_CONNECTOR_STATE_QUERY_TIMEOUT = "7s"
 
 
 class ConnectorType(str, Enum):
     STANDARD = "standard"
     USER_FILE = "user_file"
+
+
+class ConnectorStateSnapshot(BaseModel):
+    cc_pair_id: int
+    cc_pair_name: str
+    status: ConnectorCredentialPairStatus
+    last_successful_index_time: datetime | None
+    last_pruned: datetime | None
+    last_time_perm_sync: datetime | None
+    last_time_external_group_sync: datetime | None
+    total_docs_indexed: int
+    access_type: AccessType
+    indexing_trigger: IndexingMode | None
+    auto_sync_enabled: bool
+    in_repeated_error_state: bool
+    source: DocumentSource
+    credential_id: int
+
+
+def get_connector_state_snapshots(
+    db_session: Session,
+) -> list[ConnectorStateSnapshot]:
+    db_session.execute(
+        select(
+            func.set_config("statement_timeout", _CONNECTOR_STATE_QUERY_TIMEOUT, True)
+        )
+    )
+    rows = db_session.execute(
+        select(
+            ConnectorCredentialPair.id,
+            ConnectorCredentialPair.name,
+            ConnectorCredentialPair.status,
+            ConnectorCredentialPair.last_successful_index_time,
+            ConnectorCredentialPair.last_pruned,
+            ConnectorCredentialPair.last_time_perm_sync,
+            ConnectorCredentialPair.last_time_external_group_sync,
+            ConnectorCredentialPair.total_docs_indexed,
+            ConnectorCredentialPair.access_type,
+            ConnectorCredentialPair.indexing_trigger,
+            ConnectorCredentialPair.auto_sync_options,
+            ConnectorCredentialPair.in_repeated_error_state,
+            Connector.source,
+            Credential.id,
+        )
+        .join(ConnectorCredentialPair.connector)
+        .join(ConnectorCredentialPair.credential)
+        .where(ConnectorCredentialPair.id != DEFAULT_CC_PAIR_ID)
+    ).all()
+
+    return [
+        ConnectorStateSnapshot(
+            cc_pair_id=cc_pair_id,
+            cc_pair_name=cc_pair_name,
+            status=status,
+            last_successful_index_time=last_successful_index_time,
+            last_pruned=last_pruned,
+            last_time_perm_sync=last_time_perm_sync,
+            last_time_external_group_sync=last_time_external_group_sync,
+            total_docs_indexed=total_docs_indexed or 0,
+            access_type=access_type,
+            indexing_trigger=indexing_trigger,
+            auto_sync_enabled=bool(auto_sync_options),
+            in_repeated_error_state=in_repeated_error_state,
+            source=source,
+            credential_id=credential_id,
+        )
+        for (
+            cc_pair_id,
+            cc_pair_name,
+            status,
+            last_successful_index_time,
+            last_pruned,
+            last_time_perm_sync,
+            last_time_external_group_sync,
+            total_docs_indexed,
+            access_type,
+            indexing_trigger,
+            auto_sync_options,
+            in_repeated_error_state,
+            source,
+            credential_id,
+        ) in rows
+    ]
 
 
 def _add_user_filters(

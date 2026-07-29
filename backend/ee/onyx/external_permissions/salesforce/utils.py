@@ -2,6 +2,7 @@ from simple_salesforce import Salesforce
 from simple_salesforce.format import format_soql
 from sqlalchemy.orm import Session
 
+from ee.onyx.external_permissions.utils import credential_json
 from onyx.db.document import get_cc_pairs_for_document
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -30,15 +31,11 @@ def get_any_salesforce_client_for_doc_id(
     if client is None:
         cc_pairs = get_cc_pairs_for_document(db_session, doc_id)
         first_cc_pair = cc_pairs[0]
-        credential_json = (
-            first_cc_pair.credential.credential_json.get_value(apply_mask=False)
-            if first_cc_pair.credential.credential_json
-            else {}
-        )
+        creds = credential_json(first_cc_pair)
         client = Salesforce(
-            username=credential_json["sf_username"],
-            password=credential_json["sf_password"],
-            security_token=credential_json["sf_security_token"],
+            username=creds["sf_username"],
+            password=creds["sf_password"],
+            security_token=creds["sf_security_token"],
         )
         _TENANT_SALESFORCE_CLIENT[tenant_id] = client
     return client

@@ -1,23 +1,22 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any
-from typing import Generic
-from typing import TYPE_CHECKING
-from typing import TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.db.enums import LLMModelFlowType
-from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import litellm_thinks_model_supports_image_input
-from onyx.llm.utils import model_is_reasoning_model
-from onyx.server.manage.llm.utils import DYNAMIC_LLM_PROVIDERS
-from onyx.server.manage.llm.utils import extract_vendor_from_model_name
-from onyx.server.manage.llm.utils import filter_model_configurations
-from onyx.server.manage.llm.utils import is_reasoning_model
+from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
+from onyx.llm.model_capabilities import (
+    get_max_input_tokens,
+    litellm_thinks_model_supports_image_input,
+    model_is_reasoning_model,
+)
+from onyx.server.manage.llm.utils import (
+    extract_vendor_from_model_name,
+    filter_model_configurations,
+    is_reasoning_model,
+)
 
 if TYPE_CHECKING:
     from onyx.db.models import LLMProvider as LLMProviderModel
@@ -74,8 +73,6 @@ class LLMProviderDescriptor(BaseModel):
     ) -> "LLMProviderDescriptor":
         from onyx.llm.well_known_providers.llm_provider_options import (
             fetch_default_model_for_provider,
-        )
-        from onyx.llm.well_known_providers.llm_provider_options import (
             get_provider_display_name,
         )
 
@@ -140,7 +137,11 @@ class LLMProviderView(LLMProvider):
     def from_model(
         cls,
         llm_provider_model: "LLMProviderModel",
+        include_api_key: bool = True,
     ) -> "LLMProviderView":
+        # ``include_api_key=False`` skips the decrypt + credential-access audit
+        # for callers that only need catalog metadata (e.g. the Craft gateway
+        # model list, which never uses the real key — the proxy injects it).
         # Safely get groups - handle detached instance case
         try:
             groups = [group.id for group in llm_provider_model.groups]
@@ -156,7 +157,7 @@ class LLMProviderView(LLMProvider):
         provider = llm_provider_model.provider
 
         api_key: str | None = None
-        if llm_provider_model.api_key:
+        if include_api_key and llm_provider_model.api_key:
             # NOTE: this decrypts the stored LLM provider key (chat hot path).
             # No user is in scope here, so attribution relies on
             # request_id / client_ip context. Audit is best-effort and never
@@ -224,6 +225,10 @@ class ModelConfigurationView(BaseModel):
     name: str
     is_visible: bool
     max_input_tokens: int | None = None
+    # The persisted override/source value, before static-provider capability
+    # enrichment. Internal consumers use this to distinguish an intentional
+    # limit from a fallback inferred from the display model name.
+    configured_max_input_tokens: int | None = Field(default=None, exclude=True)
     supports_image_input: bool
     supports_reasoning: bool = False
     # True when this is the provider's recommended default model.
@@ -257,6 +262,7 @@ class ModelConfigurationView(BaseModel):
                 name=model_configuration_model.name,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
+                configured_max_input_tokens=model_configuration_model.max_input_tokens,
                 # Dynamic/custom-config providers under-report vision; fall back
                 # to the LiteLLM cost map when no VISION flow is stored.
                 supports_image_input=(
@@ -266,12 +272,15 @@ class ModelConfigurationView(BaseModel):
                         model_configuration_model.name, provider_name
                     )
                 ),
-                # Prefer the stored REASONING flow; fall back to a substring
-                # heuristic on model name/display name for legacy rows that
-                # were saved before the flow existed.
+                # Prefer the stored REASONING flow; fall back to the LiteLLM
+                # cost map, then a substring heuristic on model name/display
+                # name for models LiteLLM doesn't know.
                 supports_reasoning=(
                     LLMModelFlowType.REASONING
                     in model_configuration_model.llm_model_flow_types
+                    or model_is_reasoning_model(
+                        model_configuration_model.name, provider_name
+                    )
                     or is_reasoning_model(
                         model_configuration_model.name,
                         model_configuration_model.display_name or "",
@@ -313,6 +322,7 @@ class ModelConfigurationView(BaseModel):
                     model_provider=provider_name,
                 )
             ),
+            configured_max_input_tokens=model_configuration_model.max_input_tokens,
             supports_image_input=(
                 True
                 if LLMModelFlowType.VISION
@@ -651,6 +661,22 @@ class OpenAICompatibleModelsRequest(BaseModel):
 
 class OpenAICompatibleFinalModelResponse(BaseModel):
     name: str  # Model ID (e.g. "meta-llama/Llama-3-8B-Instruct")
+    display_name: str  # Human-readable name from API
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+
+
+# Portkey dynamic models fetch
+class PortkeyModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class PortkeyFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "gpt-4o", "claude-sonnet-5")
     display_name: str  # Human-readable name from API
     max_input_tokens: int | None
     supports_image_input: bool

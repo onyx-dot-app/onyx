@@ -1,10 +1,13 @@
-from onyx.configs.app_configs import EXT_APP_GOOGLE_CALENDAR_CLIENT_ID
-from onyx.configs.app_configs import EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.actions import ExternalAppAction
-from onyx.external_apps.providers.actions import RestRoute
+from onyx.configs.app_configs import (
+    EXT_APP_GOOGLE_CALENDAR_CLIENT_ID,
+    EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET,
+)
+from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.external_apps.providers.actions import (
+    EndpointSpec,
+    ExternalAppAction,
+    RestRoute,
+)
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_base import GoogleOAuthProvider
 
@@ -82,9 +85,6 @@ class GoogleCalendarProvider(GoogleOAuthProvider, OnyxManagedExtApp):
         app_name="Google Calendar",
         scope="https://www.googleapis.com/auth/calendar",
         upstream_url_patterns=["https://www\\.googleapis\\.com/calendar/.*"],
-        description=(
-            "Read and create events on your Google Calendar from inside Onyx Craft."
-        ),
         google_api_name="Google Calendar API",
         endpoint_catalog=_ENDPOINTS,
     )

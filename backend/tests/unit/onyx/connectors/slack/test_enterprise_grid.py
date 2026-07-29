@@ -4,23 +4,23 @@ These tests exercise the Grid-specific code paths added to the Slack connector
 using a mocked Slack ``WebClient``. They do not hit the real Slack API.
 """
 
-from typing import Any
-from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 from slack_sdk.errors import SlackApiError
 
-from onyx.connectors.slack.connector import _channel_team_id
-from onyx.connectors.slack.connector import _channel_to_hierarchy_node
-from onyx.connectors.slack.connector import channel_team_ids
-from onyx.connectors.slack.connector import fetch_team_url
-from onyx.connectors.slack.connector import get_channels_across_teams
-from onyx.connectors.slack.connector import list_grid_team_ids
-from onyx.connectors.slack.connector import SlackConnector
-from onyx.connectors.slack.models import ChannelType
-from onyx.connectors.slack.models import MessageType
+from onyx.connectors.slack.connector import (
+    SlackConnector,
+    _channel_team_id,
+    _channel_to_hierarchy_node,
+    _WorkspaceMetadata,
+    channel_team_ids,
+    fetch_team_url,
+    get_channels_across_teams,
+    list_grid_team_ids,
+)
+from onyx.connectors.slack.models import ChannelType, MessageType
 from onyx.connectors.slack.utils import get_message_link
 
 
@@ -116,7 +116,7 @@ class TestFetchTeamUrl:
     def test_returns_none_when_url_missing(self) -> None:
         client = MagicMock()
         client.team_info.return_value = MagicMock(
-            get=lambda key, default=None: ({} if key == "team" else default)
+            get=lambda key, default=None: {} if key == "team" else default
         )
         assert fetch_team_url(client, "T1") is None
 
@@ -297,10 +297,12 @@ class TestSlackConnectorGridProperties:
         team_id_to_user_emails: dict[str, set[str]],
     ) -> SlackConnector:
         c = SlackConnector(channels=None, use_redis=False)
-        c._is_grid = is_grid
-        c._team_ids = team_ids
-        c._team_id_to_url = team_id_to_url
-        c._team_id_to_user_emails = team_id_to_user_emails
+        c._workspace_metadata = _WorkspaceMetadata(
+            is_grid=is_grid,
+            team_ids=team_ids,
+            team_id_to_url=team_id_to_url,
+            team_id_to_user_emails=team_id_to_user_emails,
+        )
         return c
 
     def test_grid_properties_return_underlying_fields_on_grid(self) -> None:

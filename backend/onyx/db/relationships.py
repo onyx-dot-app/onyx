@@ -6,19 +6,23 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 import onyx.db.document as dbdocument
-from onyx.db.models import KGEntity
-from onyx.db.models import KGEntityExtractionStaging
-from onyx.db.models import KGRelationship
-from onyx.db.models import KGRelationshipExtractionStaging
-from onyx.db.models import KGRelationshipType
-from onyx.db.models import KGRelationshipTypeExtractionStaging
-from onyx.db.models import KGStage
-from onyx.kg.utils.formatting_utils import extract_relationship_type_id
-from onyx.kg.utils.formatting_utils import format_relationship_id
-from onyx.kg.utils.formatting_utils import get_entity_type
-from onyx.kg.utils.formatting_utils import make_relationship_id
-from onyx.kg.utils.formatting_utils import make_relationship_type_id
-from onyx.kg.utils.formatting_utils import split_relationship_id
+from onyx.db.models import (
+    KGEntity,
+    KGEntityExtractionStaging,
+    KGRelationship,
+    KGRelationshipExtractionStaging,
+    KGRelationshipType,
+    KGRelationshipTypeExtractionStaging,
+    KGStage,
+)
+from onyx.kg.utils.formatting_utils import (
+    extract_relationship_type_id,
+    format_relationship_id,
+    get_entity_type,
+    make_relationship_id,
+    make_relationship_type_id,
+    split_relationship_id,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

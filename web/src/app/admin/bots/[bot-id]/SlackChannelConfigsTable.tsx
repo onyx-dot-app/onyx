@@ -1,7 +1,7 @@
 "use client";
 
 import { PageSelector } from "@/components/PageSelector";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { SvgEdit } from "@opal/icons";
 import { SlackChannelConfig } from "@/lib/types";
 import {

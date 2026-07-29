@@ -1,16 +1,14 @@
 # These are helper objects for tracking the keys we need to write in redis
 import json
 import threading
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from celery import Celery
 from redis import Redis
 
 from onyx.background.celery.configs.base import CELERY_SEPARATOR
 from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
+from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS, OnyxCeleryPriority
 
 _broker_client: Redis | None = None
 _broker_url: str | None = None
@@ -214,9 +212,7 @@ def celery_inspect_get_reserved(worker_names: list[str], app: Celery) -> set[str
     inspect = app.control.inspect(destination=worker_names)
 
     # get the list of reserved tasks
-    reserved_tasks: dict[str, list] | None = (  # ty: ignore[invalid-assignment]
-        inspect.reserved()
-    )
+    reserved_tasks: dict[str, list] | None = inspect.reserved()
     if reserved_tasks:
         for _, task_list in reserved_tasks.items():
             for task in task_list:
@@ -237,9 +233,7 @@ def celery_inspect_get_active(worker_names: list[str], app: Celery) -> set[str]:
     inspect = app.control.inspect(destination=worker_names)
 
     # get the list of reserved tasks
-    active_tasks: dict[str, list] | None = (  # ty: ignore[invalid-assignment]
-        inspect.active()
-    )
+    active_tasks: dict[str, list] | None = inspect.active()
     if active_tasks:
         for _, task_list in active_tasks.items():
             for task in task_list:

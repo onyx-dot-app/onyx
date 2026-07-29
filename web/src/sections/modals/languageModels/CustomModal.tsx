@@ -31,13 +31,13 @@ import Text from "@/refresh-components/texts/Text";
 import { Button, Card, EmptyMessageCard } from "@opal/components";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import { markdown } from "@opal/utils";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import {
   Content,
   InputDivider,
   InputPadder,
   InputVertical,
+  toast,
 } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 
@@ -241,6 +241,7 @@ export default function CustomModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
@@ -339,9 +340,11 @@ export default function CustomModal({
         const customConfig = keyValueListToDict(values.custom_config_list);
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: (values as Record<string, unknown>).provider as string,
           values: {
             ...values,

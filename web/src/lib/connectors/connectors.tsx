@@ -142,6 +142,23 @@ export interface ConnectionConfiguration {
   ) => boolean;
 }
 
+// Shared "Include Attachments" checkbox. Pair with an `include_attachments`
+// kwarg on the backend connector; see backend/onyx/connectors/README.md for
+// the convention, including how to pick the default.
+export function buildIncludeAttachmentsOption(
+  defaultValue: boolean
+): BooleanOption {
+  return {
+    type: "checkbox",
+    query: "Include attachments?",
+    label: "Include Attachments",
+    name: "include_attachments",
+    description:
+      "Enable processing of page attachments including images and documents",
+    default: defaultValue,
+  };
+}
+
 export const connectorConfigs: Record<
   ConfigurableSources,
   ConnectionConfiguration
@@ -180,6 +197,53 @@ export const connectorConfigs: Record<
       },
     ],
     overrideDefaultFreq: 60 * 60 * 24,
+  },
+  lumapps: {
+    description: "Configure LumApps connector",
+    values: [
+      {
+        type: "text",
+        label: "API Base URL (cell host)",
+        name: "base_url",
+        optional: false,
+        description:
+          "Your LumApps cell/API host, e.g. https://go-cell-005.api.lumapps.com (not the docs site api.lumapps.com).",
+      },
+      {
+        type: "text",
+        label: "Organization ID",
+        name: "organization_id",
+        optional: false,
+        description: "Your LumApps organization id (numeric).",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: "Instance (site) IDs",
+        name: "instance_ids",
+        optional: true,
+        description:
+          "Restrict indexing to specific instance/site IDs. Leave empty to index all content visible to the service user.",
+      },
+      {
+        type: "list",
+        label: "Custom Content Type IDs",
+        name: "custom_content_types",
+        optional: true,
+        description:
+          "Restrict to specific custom content type IDs. Leave empty to index all content types.",
+      },
+      {
+        type: "text",
+        label: "Language",
+        name: "lang",
+        optional: true,
+        default: "en",
+        description:
+          "Language used for content title/body and metadata labels (ISO 639-1, e.g. en, fr).",
+      },
+    ],
   },
   github: {
     description: "Configure GitHub connector",
@@ -249,11 +313,21 @@ export const connectorConfigs: Record<
         label: "Include Documents?",
         name: "include_files",
         description:
-          "Index text-based documents (markdown, text, etc.) from the default branch of repositories",
+          "Index text-based documents (markdown, text, etc.) from repositories",
         optional: true,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Enter the branch to index documents from:",
+        label: "Branch",
+        name: "branch",
+        optional: true,
+        description:
+          "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately.",
+      },
+    ],
   },
   testrail: {
     description: "Configure TestRail connector",
@@ -679,6 +753,7 @@ export const connectorConfigs: Record<
         ],
         defaultTab: "space",
       },
+      buildIncludeAttachmentsOption(true),
     ],
     advanced_values: [],
   },
@@ -1053,15 +1128,7 @@ export const connectorConfigs: Record<
           },
         ],
       },
-      {
-        type: "checkbox",
-        query: "Include attachments?",
-        label: "Include Attachments",
-        name: "include_attachments",
-        description:
-          "Enable processing of page attachments including images and documents",
-        default: false,
-      },
+      buildIncludeAttachmentsOption(false),
     ],
     advanced_values: [],
   },
@@ -1375,6 +1442,32 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     description: "Configure Linear connector",
     values: [],
     advanced_values: [],
+  },
+  box: {
+    description: "Configure Box connector",
+    values: [
+      {
+        type: "list",
+        query: "Enter folder IDs or URLs to index:",
+        label: "Folders",
+        name: "folder_ids",
+        description:
+          "Box folder IDs or folder URLs (e.g. https://app.box.com/folder/123456789) to index. " +
+          "Leave empty to index everything visible to the authenticated user.",
+        optional: true,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Include web links:",
+        label: "Include Web Links",
+        name: "include_web_links",
+        description:
+          "Also index Box web links (bookmarks) as lightweight documents.",
+        optional: true,
+      },
+    ],
   },
   dropbox: {
     description: "Configure Dropbox connector",
@@ -1719,6 +1812,20 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
       },
     ],
   },
+  canvas: {
+    description: "Configure Canvas connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Canvas base URL:",
+        label: "Canvas Base URL",
+        name: "canvas_base_url",
+        optional: false,
+        description: "e.g. https://school.instructure.com",
+      },
+    ],
+    advanced_values: [],
+  },
   egnyte: {
     description: "Configure Egnyte connector",
     values: [
@@ -2000,6 +2107,7 @@ export interface GithubConfig {
   include_prs: boolean;
   include_issues: boolean;
   include_files: boolean;
+  branch?: string;
 }
 
 export interface GitlabConfig {
@@ -2007,6 +2115,14 @@ export interface GitlabConfig {
   project_name: string;
   include_mrs: boolean;
   include_issues: boolean;
+}
+
+export interface LumAppsConfig {
+  base_url: string;
+  organization_id: string;
+  instance_ids?: string[];
+  custom_content_types?: string[];
+  lang?: string;
 }
 
 export interface BitbucketConfig {
@@ -2036,6 +2152,7 @@ export interface ConfluenceConfig {
   is_cloud?: boolean;
   index_recursively?: boolean;
   cql_query?: string;
+  include_attachments?: boolean;
 }
 
 export interface JiraConfig {
@@ -2072,6 +2189,10 @@ export interface DiscourseConfig {
 
 export interface AxeroConfig {
   spaces?: string[];
+}
+
+export interface CanvasConfig {
+  canvas_base_url: string;
 }
 
 export interface DrupalWikiConfig {

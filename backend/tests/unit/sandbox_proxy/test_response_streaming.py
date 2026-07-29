@@ -18,14 +18,11 @@ import http.client
 import socket
 import threading
 import time
-from collections.abc import Callable
-from collections.abc import Iterator
-from http.server import BaseHTTPRequestHandler
-from http.server import ThreadingHTTPServer
+from collections.abc import Callable, Iterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from mitmproxy import http as mitm_http
@@ -33,8 +30,7 @@ from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.sandbox_proxy.addons import gate
-from onyx.sandbox_proxy.addons.gate import _IdentityResolver
-from onyx.sandbox_proxy.addons.gate import GateAddon
+from onyx.sandbox_proxy.addons.gate import GateAddon, _IdentityResolver
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator

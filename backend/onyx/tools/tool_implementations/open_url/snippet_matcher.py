@@ -1,11 +1,9 @@
 import unicodedata
 
 from pydantic import BaseModel
-from rapidfuzz import fuzz
-from rapidfuzz import utils
+from rapidfuzz import fuzz, utils
 
-from onyx.utils.text_processing import is_zero_width_char
-from onyx.utils.text_processing import normalize_char
+from onyx.utils.text_processing import is_zero_width_char, normalize_char
 
 
 class SnippetMatchResult(BaseModel):

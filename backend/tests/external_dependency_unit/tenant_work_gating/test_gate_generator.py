@@ -11,8 +11,7 @@ Requires a running Redis instance. Run with::
 """
 
 from collections.abc import Generator
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,8 +19,7 @@ from ee.onyx.background.celery.tasks.cloud import tasks as cloud_tasks
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.redis import redis_tenant_work_gating as twg
 from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_tenant_work_gating import _SET_KEY
-from onyx.redis.redis_tenant_work_gating import mark_tenant_active
+from onyx.redis.redis_tenant_work_gating import _SET_KEY, mark_tenant_active
 
 _TENANT_A = "tenant_aaaa0000-0000-0000-0000-000000000001"
 _TENANT_B = "tenant_bbbb0000-0000-0000-0000-000000000002"

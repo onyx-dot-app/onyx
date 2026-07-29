@@ -8,9 +8,11 @@ import queue
 
 from onyx.chat.emitter import Emitter
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import OverallStop
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.server.query_and_chat.streaming_models import (
+    OverallStop,
+    Packet,
+    ReasoningStart,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers

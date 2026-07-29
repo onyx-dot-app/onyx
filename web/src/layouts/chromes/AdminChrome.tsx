@@ -1,9 +1,9 @@
 "use client";
 
-import { useLayoutEffect } from "react";
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname } from "next/navigation";
 import { useSettings } from "@/lib/settings/hooks";
+import { useAdminDocumentTitle } from "@/lib/app/hooks";
 import { ApplicationStatus } from "@/lib/settings/types";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
@@ -22,12 +22,8 @@ export default function AdminChrome({ children }: AdminChromeProps) {
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
-  const { appName, vectorDbEnabled, isLoading, application_status } =
-    useSettings();
-
-  useLayoutEffect(() => {
-    document.title = `Admin — ${appName}`;
-  }, [pathname, appName]);
+  const { vectorDbEnabled, isLoading, application_status } = useSettings();
+  useAdminDocumentTitle();
 
   // Certain admin panels have their own custom sidebar.
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.

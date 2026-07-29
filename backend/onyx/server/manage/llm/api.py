@@ -1,20 +1,14 @@
 from collections import defaultdict
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import boto3
 import botocore.session
 import httpx
 from botocore.config import Config
-from botocore.exceptions import BotoCoreError
-from botocore.exceptions import ClientError
-from botocore.exceptions import NoCredentialsError
-from botocore.tokens import FrozenAuthToken
-from botocore.tokens import TokenProviderChain
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Query
+from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
+from botocore.tokens import FrozenAuthToken, TokenProviderChain
+from fastapi import APIRouter, Depends, Query
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -22,99 +16,117 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import LLMModelFlowType
-from onyx.db.enums import Permission
-from onyx.db.llm import can_user_access_llm_provider
-from onyx.db.llm import fetch_default_llm_model
-from onyx.db.llm import fetch_default_vision_model
-from onyx.db.llm import fetch_existing_llm_provider_by_id
-from onyx.db.llm import fetch_existing_llm_providers
-from onyx.db.llm import fetch_existing_models
-from onyx.db.llm import fetch_model_configuration_by_id
-from onyx.db.llm import fetch_persona_with_groups
-from onyx.db.llm import fetch_user_group_ids
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import sync_model_configurations
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import update_default_vision_provider
-from onyx.db.llm import upsert_llm_provider
-from onyx.db.llm import validate_persona_ids_exist
-from onyx.db.models import Persona
-from onyx.db.models import User
+from onyx.db.enums import LLMModelFlowType, Permission
+from onyx.db.llm import (
+    can_user_access_llm_provider,
+    fetch_default_llm_model,
+    fetch_default_vision_model,
+    fetch_existing_llm_provider_by_id,
+    fetch_existing_llm_providers,
+    fetch_existing_models,
+    fetch_model_configuration_by_id,
+    fetch_persona_with_groups,
+    fetch_user_group_ids,
+    remove_llm_provider,
+    sync_model_configurations,
+    update_default_provider,
+    update_default_vision_provider,
+    upsert_llm_provider,
+    validate_persona_ids_exist,
+)
+from onyx.db.models import Persona, User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.constants import LlmProviderNames
-from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
-from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
-from onyx.llm.factory import get_default_llm
-from onyx.llm.factory import get_llm
-from onyx.llm.factory import get_max_input_tokens_from_llm_provider
-from onyx.llm.utils import get_bedrock_token_limit
-from onyx.llm.utils import get_llm_contextual_cost
-from onyx.llm.utils import is_sensitive_custom_config_key
-from onyx.llm.utils import litellm_thinks_model_supports_image_input
-from onyx.llm.utils import test_llm
+from onyx.llm.constants import (
+    PROVIDER_DISPLAY_NAMES,
+    WELL_KNOWN_PROVIDER_NAMES,
+    LlmProviderNames,
+)
+from onyx.llm.factory import (
+    get_default_llm,
+    get_llm,
+    get_max_input_tokens_from_llm_provider,
+)
+from onyx.llm.model_capabilities import (
+    get_bedrock_token_limit,
+    litellm_thinks_model_supports_image_input,
+    model_is_reasoning_model,
+)
+from onyx.llm.utils import (
+    get_llm_contextual_cost,
+    is_sensitive_custom_config_key,
+    test_llm,
+)
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
 )
-from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
-from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_SERVICE_ACCOUNT
-from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
-from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
-from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
-from onyx.llm.well_known_providers.llm_provider_options import (
-    fetch_available_well_known_llms,
+from onyx.llm.well_known_providers.constants import (
+    LM_STUDIO_API_KEY_CONFIG_KEY,
+    VERTEX_AUTH_METHOD_KWARG,
+    VERTEX_AUTH_METHOD_SERVICE_ACCOUNT,
+    VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY,
+    VERTEX_CREDENTIALS_FILE_KWARG,
+    VERTEX_PROJECT_KWARG,
 )
 from onyx.llm.well_known_providers.llm_provider_options import (
     WellKnownLLMProviderDescriptor,
+    fetch_available_well_known_llms,
 )
-from onyx.server.manage.llm.models import BedrockFinalModelResponse
-from onyx.server.manage.llm.models import BedrockModelsRequest
-from onyx.server.manage.llm.models import BifrostFinalModelResponse
-from onyx.server.manage.llm.models import BifrostModelsRequest
-from onyx.server.manage.llm.models import CustomProviderOption
-from onyx.server.manage.llm.models import DefaultModel
-from onyx.server.manage.llm.models import LitellmFinalModelResponse
-from onyx.server.manage.llm.models import LitellmModelDetails
-from onyx.server.manage.llm.models import LitellmModelsRequest
-from onyx.server.manage.llm.models import LLMCost
-from onyx.server.manage.llm.models import LLMProviderDescriptor
-from onyx.server.manage.llm.models import LLMProviderResponse
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import LMStudioFinalModelResponse
-from onyx.server.manage.llm.models import LMStudioModelsRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from onyx.server.manage.llm.models import NebiusTokenfactoryFinalModelResponse
-from onyx.server.manage.llm.models import NebiusTokenfactoryModelsRequest
-from onyx.server.manage.llm.models import OllamaFinalModelResponse
-from onyx.server.manage.llm.models import OllamaModelDetails
-from onyx.server.manage.llm.models import OllamaModelsRequest
-from onyx.server.manage.llm.models import OpenAICompatibleFinalModelResponse
-from onyx.server.manage.llm.models import OpenAICompatibleModelsRequest
-from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
-from onyx.server.manage.llm.models import OpenRouterModelDetails
-from onyx.server.manage.llm.models import OpenRouterModelsRequest
-from onyx.server.manage.llm.models import SyncModelEntry
-from onyx.server.manage.llm.models import TestLLMRequest
-from onyx.server.manage.llm.models import VisionProviderResponse
-from onyx.server.manage.llm.provider_cache import cache_provider_listing
-from onyx.server.manage.llm.provider_cache import get_cached_provider_listing
-from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
-from onyx.server.manage.llm.utils import generate_bedrock_display_name
-from onyx.server.manage.llm.utils import generate_ollama_display_name
-from onyx.server.manage.llm.utils import infer_vision_support
-from onyx.server.manage.llm.utils import is_embedding_model
-from onyx.server.manage.llm.utils import is_reasoning_model
-from onyx.server.manage.llm.utils import is_valid_bedrock_model
-from onyx.server.manage.llm.utils import ModelMetadata
-from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
-from onyx.utils.audit import actor_from_user
-from onyx.utils.audit import AuditAction
-from onyx.utils.audit import AuditOutcome
-from onyx.utils.audit import emit_audit_event
+from onyx.server.manage.llm.models import (
+    BedrockFinalModelResponse,
+    BedrockModelsRequest,
+    BifrostFinalModelResponse,
+    BifrostModelsRequest,
+    CustomProviderOption,
+    DefaultModel,
+    LitellmFinalModelResponse,
+    LitellmModelDetails,
+    LitellmModelsRequest,
+    LLMCost,
+    LLMProviderDescriptor,
+    LLMProviderResponse,
+    LLMProviderUpsertRequest,
+    LLMProviderView,
+    LMStudioFinalModelResponse,
+    LMStudioModelsRequest,
+    ModelConfigurationUpsertRequest,
+    NebiusTokenfactoryFinalModelResponse,
+    NebiusTokenfactoryModelsRequest,
+    OllamaFinalModelResponse,
+    OllamaModelDetails,
+    OllamaModelsRequest,
+    OpenAICompatibleFinalModelResponse,
+    OpenAICompatibleModelsRequest,
+    OpenRouterFinalModelResponse,
+    OpenRouterModelDetails,
+    OpenRouterModelsRequest,
+    PortkeyFinalModelResponse,
+    PortkeyModelsRequest,
+    SyncModelEntry,
+    TestLLMRequest,
+    VisionProviderResponse,
+)
+from onyx.server.manage.llm.provider_cache import (
+    cache_provider_listing,
+    get_cached_provider_listing,
+    invalidate_provider_listing_cache,
+)
+from onyx.server.manage.llm.utils import (
+    ModelMetadata,
+    generate_bedrock_display_name,
+    generate_ollama_display_name,
+    is_embedding_model,
+    is_reasoning_model,
+    is_valid_bedrock_model,
+    strip_openrouter_vendor_prefix,
+)
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.encryption import mask_string as mask_with_ellipsis
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -1210,8 +1222,11 @@ def get_bedrock_available_models(
                                 if profile_name
                                 else generate_bedrock_display_name(profile_id)
                             ),
-                            # Infer vision support from known vision models
-                            "supports_image_input": infer_vision_support(profile_id),
+                            "supports_image_input": (
+                                litellm_thinks_model_supports_image_input(
+                                    profile_id, LlmProviderNames.BEDROCK
+                                )
+                            ),
                         }
         except Exception as e:
             logger.warning("Couldn't fetch inference profiles for Bedrock: %s", e)
@@ -1824,7 +1839,12 @@ def get_bifrost_available_models(
                     supports_image_input=litellm_thinks_model_supports_image_input(
                         model_id, LlmProviderNames.BIFROST
                     ),
-                    supports_reasoning=is_reasoning_model(model_id, model_name),
+                    # Reasoning support from the LiteLLM cost map, with the
+                    # substring heuristic covering models LiteLLM doesn't know
+                    supports_reasoning=model_is_reasoning_model(
+                        model_id, LlmProviderNames.BIFROST
+                    )
+                    or is_reasoning_model(model_id, model_name),
                 )
             )
         except Exception as e:
@@ -1960,7 +1980,11 @@ def get_nebius_tokenfactory_available_models(
                 supports_reasoning = "reasoning" in feature_list
             else:
                 feature_list = []
-                supports_reasoning = is_reasoning_model(model_id, display_name)
+                # No feature data from the source; fall back to the LiteLLM
+                # cost map, then the substring heuristic
+                supports_reasoning = model_is_reasoning_model(
+                    model_id, LlmProviderNames.NEBIUS_TOKENFACTORY
+                ) or is_reasoning_model(model_id, display_name)
 
             # Display-only metadata for the model picker.
             regions = model.get("regions") or []
@@ -2061,8 +2085,15 @@ def get_openai_compatible_server_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=infer_vision_support(model_id),
-                    supports_reasoning=is_reasoning_model(model_id, model_name),
+                    supports_image_input=litellm_thinks_model_supports_image_input(
+                        model_id, LlmProviderNames.OPENAI_COMPATIBLE
+                    ),
+                    # Reasoning support from the LiteLLM cost map, with the
+                    # substring heuristic covering models LiteLLM doesn't know
+                    supports_reasoning=model_is_reasoning_model(
+                        model_id, LlmProviderNames.OPENAI_COMPATIBLE
+                    )
+                    or is_reasoning_model(model_id, model_name),
                 )
             )
         except Exception as e:
@@ -2116,3 +2147,109 @@ def _get_openai_compatible_server_response(
         source_name="OpenAI-Compatible",
         api_key=api_key,
     )
+
+
+def _get_portkey_models_response(api_base: str, api_key: str | None = None) -> dict:
+    """Fetch models from a Portkey gateway's /v1/models endpoint.
+
+    Portkey exposes the same OpenAI-shaped /v1/models listing regardless of the
+    selected inference surface (Chat Completions, Responses, or Messages), so the
+    base may arrive as either `https://api.portkey.ai/v1` or `https://api.portkey.ai`.
+    """
+    cleaned_api_base = api_base.strip().rstrip("/")
+    if cleaned_api_base.endswith("/v1"):
+        url = f"{cleaned_api_base}/models"
+    else:
+        url = f"{cleaned_api_base}/v1/models"
+
+    return _get_openai_compatible_models_response(
+        url=url,
+        source_name="Portkey",
+        api_key=api_key,
+    )
+
+
+@admin_router.post("/portkey/available-models")
+def get_portkey_available_models(
+    request: PortkeyModelsRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[PortkeyFinalModelResponse]:
+    """Fetch available models from a Portkey gateway's /v1/models endpoint."""
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, request.api_base, db_session
+    )
+
+    response_json = _get_portkey_models_response(
+        api_base=request.api_base, api_key=api_key
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your Portkey gateway",
+        )
+
+    results: list[PortkeyFinalModelResponse] = []
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            model_name = model.get("name", model_id)
+
+            if not model_id:
+                continue
+
+            # Skip embedding models
+            if is_embedding_model(model_id):
+                continue
+
+            results.append(
+                PortkeyFinalModelResponse(
+                    name=model_id,
+                    display_name=model_name,
+                    max_input_tokens=model.get("context_length"),
+                    supports_image_input=litellm_thinks_model_supports_image_input(
+                        model_id, LlmProviderNames.PORTKEY
+                    ),
+                    # Reasoning support from the LiteLLM cost map, with the
+                    # substring heuristic covering models LiteLLM doesn't know
+                    supports_reasoning=model_is_reasoning_model(
+                        model_id, LlmProviderNames.PORTKEY
+                    )
+                    or is_reasoning_model(model_id, model_name),
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Portkey model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from your Portkey gateway",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="Portkey",
+        )
+
+    return sorted_results

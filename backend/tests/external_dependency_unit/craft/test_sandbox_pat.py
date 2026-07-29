@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -12,20 +10,14 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
-from onyx.db.enums import PatType
-from onyx.db.enums import Permission
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import PersonalAccessToken
-from onyx.db.models import Sandbox
-from onyx.db.models import User
-from onyx.db.pat import create_pat
-from onyx.db.pat import list_user_pats
+from onyx.db.enums import PatType, Permission, SandboxStatus
+from onyx.db.models import PersonalAccessToken, Sandbox, User
+from onyx.db.pat import create_pat, list_user_pats
 from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.common.craft.payloads import default_llm_config
 
 
 @pytest.fixture()
@@ -287,14 +279,11 @@ class TestEnsureSandboxPat:
             KubernetesSandboxManager, "_pod_exists_and_healthy", _no_pod
         )
 
-        llm_config = default_llm_config()
-
         with pytest.raises(ValueError, match="onyx_pat"):
             manager.provision(
                 sandbox_id=uuid4(),
                 user_id=uuid4(),
                 tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-                llm_config=llm_config,
                 onyx_pat="",
             )
 

@@ -30,8 +30,7 @@ import {
 import { fetchBedrockModels } from "@/lib/languageModels/svc";
 import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
-import { toast } from "@/hooks/useToast";
+import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 const AWS_REGION_OPTIONS = [
@@ -259,6 +258,7 @@ export default function BedrockModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
@@ -317,9 +317,11 @@ export default function BedrockModal({
         };
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.BEDROCK,
           values: submitValues,
           initialValues,

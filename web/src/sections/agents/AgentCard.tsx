@@ -25,7 +25,7 @@ import {
   SvgShare,
   SvgUser,
 } from "@opal/icons";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentViewerModal from "@/sections/modals/AgentViewerModal";
 import { CardItemLayout } from "@/layouts/general-layouts";

@@ -6,6 +6,7 @@ from jira import JIRA
 from jira.exceptions import JIRAError
 
 from ee.onyx.db.external_perm import ExternalUserGroup
+from ee.onyx.external_permissions.utils import credential_json
 from onyx.connectors.jira.utils import build_jira_client
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -161,13 +162,8 @@ def jira_group_sync(
     if not jira_base_url:
         raise ValueError("No jira_base_url found in connector config")
 
-    credential_json = (
-        cc_pair.credential.credential_json.get_value(apply_mask=False)
-        if cc_pair.credential.credential_json
-        else {}
-    )
     jira_client = build_jira_client(
-        credentials=credential_json,
+        credentials=credential_json(cc_pair),
         jira_base=jira_base_url,
         scoped_token=scoped_token,
     )

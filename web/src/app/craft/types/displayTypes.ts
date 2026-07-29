@@ -100,7 +100,7 @@ export type StreamItem =
       type: "connect_app_request";
       id: string;
       requestId: string;
-      appSlug: string;
+      externalAppId: number;
       reason: string | null;
     }
   | { type: "compaction"; id: string; summary: string | null }

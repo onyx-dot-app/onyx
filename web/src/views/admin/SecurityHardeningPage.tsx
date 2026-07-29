@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
+import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { toast } from "@/hooks/useToast";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
 import InputChipField, {
   type ChipItem,
@@ -18,6 +18,7 @@ import {
   InputVertical,
   Section,
   SettingsLayouts,
+  toast,
 } from "@opal/layouts";
 import { Card, Switch } from "@opal/components";
 import { markdown } from "@opal/utils";
@@ -41,6 +42,7 @@ interface SecuritySettings {
   track_external_idp_expiry: boolean;
   ssrf_protection_level: SSRFProtectionLevel;
   mask_credential_prefix: boolean;
+  llm_custom_config_env_injection: boolean;
   valid_email_domains: string[];
   password_min_length: number;
   password_max_length: number;
@@ -48,6 +50,7 @@ interface SecuritySettings {
   password_require_lowercase: boolean;
   password_require_digit: boolean;
   password_require_special_char: boolean;
+  password_auth_enabled: boolean;
 }
 
 // Write shape: a partial patch. The backend treats only the keys present in the
@@ -63,6 +66,7 @@ interface ToggleRowProps {
   description?: string | RichStr;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
 }
 
 function ToggleRow({
@@ -70,16 +74,30 @@ function ToggleRow({
   description,
   checked,
   onCheckedChange,
+  disabled,
 }: ToggleRowProps) {
   return (
     <InputHorizontal title={title} description={description} withLabel>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        disabled={disabled}
+      />
     </InputHorizontal>
   );
 }
 
 export default function SecurityHardeningPage() {
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
+  const { authTypeMetadata, isLoading: authTypeLoading } =
+    useAuthTypeMetadata();
+  // The kill switch only enforces on single-tenant deployments, so the
+  // card hides where the backend would refuse the save. The explicit === false
+  // waits for the fetch, metadata is undefined while loading or unreachable.
+  const showPasswordLockdown =
+    !isMultiTenant &&
+    !authTypeLoading &&
+    authTypeMetadata?.multiTenant === false;
 
   const { data: settings, isLoading: settingsLoading } =
     useSWR<SecuritySettings>(
@@ -254,6 +272,17 @@ export default function SecurityHardeningPage() {
                     </InputVertical>
                   )}
                 </>
+              )}
+
+              {showPasswordLockdown && (
+                <ToggleRow
+                  title="Disable Password Login & Signup"
+                  description="Everyone signs in and registers through SSO only. Requires at least one enabled SSO provider."
+                  checked={!draft.password_auth_enabled}
+                  onCheckedChange={(checked) =>
+                    void saveSettings({ password_auth_enabled: !checked })
+                  }
+                />
               )}
             </Section>
           </Card>
@@ -438,18 +467,35 @@ export default function SecurityHardeningPage() {
           </Card>
         </div>
 
-        {/* Network Safety (single-tenant only — SSRF policy is operator-controlled,
-            so it stays env-driven in multi-tenant cloud). */}
-        {!isMultiTenant && (
-          <div className="flex w-full flex-col gap-3">
-            <Content
-              title="Network Safety"
-              sizePreset="main-content"
-              variant="section"
-            />
+        {/* Network Safety. The env-injection toggle is always shown but locked
+            off in multi-tenant cloud; the SSRF policy is single-tenant only
+            (operator-controlled, env-driven in multi-tenant cloud). */}
+        <div className="flex w-full flex-col gap-3">
+          <Content
+            title="Network Safety"
+            sizePreset="main-content"
+            variant="section"
+          />
 
-            <Card border="solid" rounding="lg">
-              <Section>
+          <Card border="solid" rounding="lg">
+            <Section>
+              <ToggleRow
+                title="LLM Environment Variable Injection"
+                description={
+                  isMultiTenant
+                    ? "Custom LLM provider configurations can never set process environment variables on multi-tenant deployments."
+                    : "Allow custom LLM provider configurations to temporarily set process environment variables during calls. Disable to require all provider settings to have a LiteLLM parameter equivalent."
+                }
+                checked={draft.llm_custom_config_env_injection}
+                onCheckedChange={(checked) =>
+                  void saveSettings({
+                    llm_custom_config_env_injection: checked,
+                  })
+                }
+                disabled={isMultiTenant}
+              />
+
+              {!isMultiTenant && (
                 <InputHorizontal
                   title="SSRF Protection"
                   description="Validate outbound requests against private or internal IPs for Server-Side Request Forgery (SSRF) protection."
@@ -498,10 +544,10 @@ export default function SecurityHardeningPage() {
                     </InputSelect>
                   </div>
                 </InputHorizontal>
-              </Section>
-            </Card>
-          </div>
-        )}
+              )}
+            </Section>
+          </Card>
+        </div>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

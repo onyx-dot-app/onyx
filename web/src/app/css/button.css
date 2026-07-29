@@ -195,19 +195,19 @@
    ============================================================================ */
 
 .button-action-primary {
-  background-color: var(--action-link-05);
+  background-color: var(--action-selection-05);
 }
 .button-action-primary:hover {
-  background-color: var(--action-link-04);
+  background-color: var(--action-selection-04);
 }
 .button-action-primary[data-state="transient"] {
-  background-color: var(--action-link-06);
+  background-color: var(--action-selection-06);
 }
 .button-action-primary:active {
-  background-color: var(--action-link-06);
+  background-color: var(--action-selection-06);
 }
 .button-action-primary:disabled {
-  background-color: var(--action-link-02);
+  background-color: var(--action-selection-02);
 }
 
 .button-action-primary-text {
@@ -250,14 +250,14 @@
   color: var(--action-text-link-05) !important;
 }
 .button-action-secondary:disabled .button-action-secondary-text {
-  color: var(--action-link-03) !important;
+  color: var(--action-selection-03) !important;
 }
 
 .button-action-secondary-icon {
   stroke: var(--action-text-link-05);
 }
 .button-action-secondary:disabled .button-action-secondary-icon {
-  stroke: var(--action-link-03);
+  stroke: var(--action-selection-03);
 }
 
 /* ============================================================================
@@ -284,14 +284,14 @@
   color: var(--action-text-link-05) !important;
 }
 .button-action-tertiary:disabled .button-action-tertiary-text {
-  color: var(--action-link-03) !important;
+  color: var(--action-selection-03) !important;
 }
 
 .button-action-tertiary-icon {
   stroke: var(--action-text-link-05);
 }
 .button-action-tertiary:disabled .button-action-tertiary-icon {
-  stroke: var(--action-link-03);
+  stroke: var(--action-selection-03);
 }
 
 /* ============================================================================

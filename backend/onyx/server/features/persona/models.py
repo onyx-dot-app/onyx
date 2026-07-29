@@ -1,19 +1,22 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.enums import HierarchyNodeType
-from onyx.db.enums import PersonaAccessLevel
-from onyx.db.enums import PersonaSharePermission
-from onyx.db.enums import PersonaSharingStatus
-from onyx.db.models import Document
-from onyx.db.models import HierarchyNode
-from onyx.db.models import Persona
-from onyx.db.models import PersonaLabel
-from onyx.db.models import StarterMessage
+from onyx.db.enums import (
+    HierarchyNodeType,
+    PersonaAccessLevel,
+    PersonaSharePermission,
+    PersonaSharingStatus,
+)
+from onyx.db.models import (
+    Document,
+    HierarchyNode,
+    Persona,
+    PersonaLabel,
+    StarterMessage,
+)
 from onyx.db.persona_sharing import derive_persona_sharing_status
 from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.tool.models import ToolSnapshot

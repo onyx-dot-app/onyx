@@ -2,11 +2,8 @@ import base64
 import copy
 import time
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import cast
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import requests
@@ -16,15 +13,19 @@ from urllib3.util import Retry
 
 from onyx.configs.app_configs import GONG_CONNECTOR_START_TIME
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    TextSection,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -353,6 +354,9 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             sections=[TextSection(link=call_metadata["url"], text=transcript_text)],
             source=DocumentSource.GONG,
             semantic_identifier=call_title or "Untitled",
+            doc_created_at=datetime.fromisoformat(call_time_str).astimezone(
+                timezone.utc
+            ),
             doc_updated_at=datetime.fromisoformat(call_time_str).astimezone(
                 timezone.utc
             ),

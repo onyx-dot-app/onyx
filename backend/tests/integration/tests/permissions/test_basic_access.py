@@ -11,8 +11,7 @@ import pytest
 
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
 
 # Representative endpoints that use require_permission(Permission.BASIC_ACCESS).
 # One per major router file to cover breadth without redundancy.

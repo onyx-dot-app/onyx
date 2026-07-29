@@ -2,11 +2,11 @@
 
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
-import { toast } from "@/hooks/useToast";
-import CredentialSection from "@/components/credentials/CredentialSection";
+import { toast } from "@opal/layouts";
+import CredentialSection from "@/lib/credentials/components/CredentialSection";
 import Text from "@/refresh-components/texts/Text";
 import {
   updateConnectorCredentialPairName,

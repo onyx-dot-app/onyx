@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { EmptyMessageCard } from "@opal/components";
 import { SvgActions, SvgServer, SvgSparkle, SvgUsers } from "@opal/icons";
 

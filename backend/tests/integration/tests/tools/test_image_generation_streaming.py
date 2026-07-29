@@ -12,10 +12,12 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     HEARTBEAT_INTERVAL,
 )
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.test_models import DATestImageGenerationConfig
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import ToolName
+from tests.integration.common_utils.test_models import (
+    DATestImageGenerationConfig,
+    DATestLLMProvider,
+    DATestUser,
+    ToolName,
+)
 
 ART_PERSONA_ID = -3
 

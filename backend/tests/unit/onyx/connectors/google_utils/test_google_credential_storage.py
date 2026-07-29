@@ -3,37 +3,36 @@ the app cred from the row, reconstruct it from the row's token blob when
 absent, and restore the PKCE verifier for the callback token exchange."""
 
 import json
-from typing import Any
-from typing import cast
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import KV_CRED_KEY
-from onyx.connectors.google_utils.google_kv import build_service_account_creds
-from onyx.connectors.google_utils.google_kv import get_auth_url
-from onyx.connectors.google_utils.google_kv import update_credential_access_tokens
+from onyx.configs.constants import KV_CRED_KEY, DocumentSource
+from onyx.connectors.google_utils.google_kv import (
+    build_service_account_creds,
+    get_auth_url,
+    update_credential_access_tokens,
+    verify_csrf,
+)
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
-)
-from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
-from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
 from onyx.db.models import User
-from onyx.server.documents.models import GoogleAppCredentials
-from onyx.server.documents.models import GoogleAppWebCredentials
-from onyx.server.documents.models import GoogleServiceAccountKey
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.server.documents.models import (
+    GoogleAppCredentials,
+    GoogleAppWebCredentials,
+    GoogleServiceAccountKey,
+)
 
 
 class _StubCredentialJson:
@@ -109,11 +108,9 @@ def test_get_auth_url_accepts_dict_and_legacy_string(
     )
     stored_state: dict[str, object] = {}
 
-    class _StubKvStore:
-        def store(self, key: str, value: object, encrypt: bool) -> None:
-            stored_state["key"] = key
-            stored_state["value"] = value
-            stored_state["encrypt"] = encrypt
+    def _upsert_encrypted_kv(key: str, value: dict[str, Any]) -> None:
+        stored_state["key"] = key
+        stored_state["value"] = value
 
     class _StubFlow:
         code_verifier: str | None = None
@@ -158,7 +155,8 @@ def test_get_auth_url_accepts_dict_and_legacy_string(
         _update_credential_json,
     )
     monkeypatch.setattr(
-        "onyx.connectors.google_utils.google_kv.get_kv_store", lambda: _StubKvStore()
+        "onyx.connectors.google_utils.google_kv.upsert_encrypted_kv",
+        _upsert_encrypted_kv,
     )
     monkeypatch.setattr(
         "onyx.connectors.google_utils.google_kv.InstalledAppFlow.from_client_config",
@@ -173,11 +171,12 @@ def test_get_auth_url_accepts_dict_and_legacy_string(
     )
 
     assert auth_url.startswith("https://accounts.google.com")
-    assert stored_state["value"] == {
-        "value": "test-state",
-        "code_verifier": "test-verifier",
-    }
-    assert stored_state["encrypt"] is True
+    stored_payload = cast(dict[str, str], stored_state["value"])
+    assert stored_payload["value"] == "test-state"
+    assert stored_payload["code_verifier"] == "test-verifier"
+    # a fresh issued_at bounds the handshake row's lifetime
+    issued_at = datetime.fromisoformat(stored_payload["issued_at"])
+    assert datetime.now(timezone.utc) - issued_at < timedelta(minutes=1)
 
 
 def test_update_credential_access_tokens_restores_pkce_verifier(
@@ -202,10 +201,16 @@ def test_update_credential_access_tokens_restores_pkce_verifier(
         def credentials(self) -> _StubCreds:
             return _StubCreds()
 
-    class _StubKvStore:
-        def load(self, key: str) -> object:
-            assert key == KV_CRED_KEY.format("42")
-            return {"value": "test-state", "code_verifier": "test-verifier"}
+    def _load_encrypted_kv(key: str) -> object:
+        assert key == KV_CRED_KEY.format("42")
+        return {
+            "value": "test-state",
+            "code_verifier": "test-verifier",
+            "issued_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _delete_encrypted_kv(key: str) -> None:
+        captured["deleted_key"] = key
 
     def _fetch_credential_by_id_for_user(
         credential_id: int,
@@ -240,7 +245,12 @@ def test_update_credential_access_tokens_restores_pkce_verifier(
         _fetch_credential_by_id_for_user,
     )
     monkeypatch.setattr(
-        "onyx.connectors.google_utils.google_kv.get_kv_store", lambda: _StubKvStore()
+        "onyx.connectors.google_utils.google_kv.load_encrypted_kv",
+        _load_encrypted_kv,
+    )
+    monkeypatch.setattr(
+        "onyx.connectors.google_utils.google_kv.delete_encrypted_kv",
+        _delete_encrypted_kv,
     )
     monkeypatch.setattr(
         "onyx.connectors.google_utils.google_kv.InstalledAppFlow.from_client_config",
@@ -267,6 +277,7 @@ def test_update_credential_access_tokens_restores_pkce_verifier(
     assert creds is not None
     assert captured["code"] == "auth-code"
     assert captured["code_verifier"] == "test-verifier"
+    assert captured["deleted_key"] == KV_CRED_KEY.format("42")
     assert captured["new_creds_dict"][DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY] == payload
     assert captured["new_creds_dict"][DB_CREDENTIALS_DICT_TOKEN_KEY] == "{}"
     assert (
@@ -296,9 +307,8 @@ def test_get_auth_url_reconstructs_app_cred_from_token_blob(
     )
     captured: dict[str, Any] = {}
 
-    class _StubKvStore:
-        def store(self, key: str, value: object, encrypt: bool) -> None:
-            del key, value, encrypt
+    def _upsert_encrypted_kv(key: str, value: dict[str, Any]) -> None:
+        del key, value
 
     class _StubFlow:
         code_verifier: str | None = None
@@ -346,7 +356,8 @@ def test_get_auth_url_reconstructs_app_cred_from_token_blob(
         _update_credential_json,
     )
     monkeypatch.setattr(
-        "onyx.connectors.google_utils.google_kv.get_kv_store", lambda: _StubKvStore()
+        "onyx.connectors.google_utils.google_kv.upsert_encrypted_kv",
+        _upsert_encrypted_kv,
     )
     monkeypatch.setattr(
         "onyx.connectors.google_utils.google_kv.InstalledAppFlow.from_client_config",
@@ -382,9 +393,8 @@ def test_get_auth_url_uses_app_credential_on_row_without_rewrite(
 ) -> None:
     payload = _make_app_creds().model_dump(mode="json")
 
-    class _StubKvStore:
-        def store(self, key: str, value: object, encrypt: bool) -> None:
-            del key, value, encrypt
+    def _upsert_encrypted_kv(key: str, value: dict[str, Any]) -> None:
+        del key, value
 
     class _StubFlow:
         code_verifier: str | None = None
@@ -429,7 +439,8 @@ def test_get_auth_url_uses_app_credential_on_row_without_rewrite(
         _update_credential_json,
     )
     monkeypatch.setattr(
-        "onyx.connectors.google_utils.google_kv.get_kv_store", lambda: _StubKvStore()
+        "onyx.connectors.google_utils.google_kv.upsert_encrypted_kv",
+        _upsert_encrypted_kv,
     )
     monkeypatch.setattr(
         "onyx.connectors.google_utils.google_kv.InstalledAppFlow.from_client_config",
@@ -483,3 +494,48 @@ def test_get_auth_url_errors_without_app_cred_or_token(monkeypatch: Any) -> None
             cast(User, None),
             cast(Session, None),
         )
+
+
+def test_verify_csrf_rejects_and_drops_expired_state(monkeypatch: Any) -> None:
+    """An unused handshake row past the TTL is deleted and the flow rejected."""
+    deleted: dict[str, str] = {}
+
+    def _load_encrypted_kv(key: str) -> object:
+        assert key == KV_CRED_KEY.format("42")
+        stale = datetime.now(timezone.utc) - timedelta(hours=2)
+        return {"value": "test-state", "issued_at": stale.isoformat()}
+
+    def _delete_encrypted_kv(key: str) -> None:
+        deleted["key"] = key
+
+    monkeypatch.setattr(
+        "onyx.connectors.google_utils.google_kv.load_encrypted_kv",
+        _load_encrypted_kv,
+    )
+    monkeypatch.setattr(
+        "onyx.connectors.google_utils.google_kv.delete_encrypted_kv",
+        _delete_encrypted_kv,
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        verify_csrf(42, "test-state")
+    assert exc_info.value.error_code == OnyxErrorCode.CSRF_FAILURE
+    assert "expired" in exc_info.value.detail
+    assert deleted["key"] == KV_CRED_KEY.format("42")
+
+
+def test_verify_csrf_rejects_missing_state(monkeypatch: Any) -> None:
+    """A consumed or never-started flow raises a rejection, not KvKeyNotFoundError."""
+
+    def _load_encrypted_kv(key: str) -> object:
+        del key
+        raise KvKeyNotFoundError
+
+    monkeypatch.setattr(
+        "onyx.connectors.google_utils.google_kv.load_encrypted_kv",
+        _load_encrypted_kv,
+    )
+    with pytest.raises(OnyxError) as exc_info:
+        verify_csrf(42, "test-state")
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert "No Google authorization flow" in exc_info.value.detail

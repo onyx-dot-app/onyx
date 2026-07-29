@@ -5,8 +5,8 @@ import { SettingsLayouts } from "@opal/layouts";
 import { MessageCard } from "@opal/components";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { FetchError } from "@/lib/fetcher";
-import { PageLoader } from "@/refresh-components/PageLoader";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { PageLoader } from "@opal/layouts";
+import { useCreateModal } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useTracingProviders } from "@/lib/tracing/hooks";
 import {

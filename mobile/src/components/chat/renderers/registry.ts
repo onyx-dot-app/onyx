@@ -2,14 +2,16 @@
 // types in its group.
 import type { ComponentType } from "react";
 
+import { ProcessedMessageState } from "@/chat/messageProcessor";
 import { Packet } from "@/chat/streamingModels";
 
 import { MessageTextRenderer } from "./MessageTextRenderer";
 
 export interface MessageRendererProps {
   packets: Packet[];
-  // message finished (message_end / stop seen)
-  isComplete: boolean;
+  // Processed packet state (citations, documents, completion). `processed.isComplete` is true once
+  // message_end / stop is seen.
+  processed: ProcessedMessageState;
 }
 
 export interface MessageRenderer {

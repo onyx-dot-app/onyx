@@ -7,7 +7,7 @@ import {
   useStandardAnswerCategories,
 } from "@/app/ee/admin/standard-answer/hooks";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 

@@ -19,12 +19,30 @@ const sanitizeSchema = {
   },
 };
 
-const ALLOWED_ELEMENTS = ["p", "br", "a", "strong", "em", "code", "del"];
+const ALLOWED_ELEMENTS = [
+  "p",
+  "br",
+  "a",
+  "strong",
+  "em",
+  "code",
+  "del",
+  "ul",
+  "ol",
+  "li",
+];
 
 const INLINE_COMPONENTS = {
   p: ({ children }: { children?: ReactNode }) => (
     <span className="block">{children}</span>
   ),
+  ul: ({ children }: { children?: ReactNode }) => (
+    <ul className="list-disc pl-3 space-y-0">{children}</ul>
+  ),
+  ol: ({ children }: { children?: ReactNode }) => (
+    <ol className="list-decimal pl-3">{children}</ol>
+  ),
+  li: ({ children }: { children?: ReactNode }) => <li>{children}</li>,
   a: ({ children, href }: { children?: ReactNode; href?: string }) => {
     if (!href) return <>{children}</>;
     // rehype-sanitize has already stripped unsafe hrefs — routing decision only.

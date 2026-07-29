@@ -1,18 +1,17 @@
 import os
-from collections.abc import Iterator
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import update_default_provider, upsert_llm_provider
 from onyx.llm.constants import LlmProviderNames
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 
 # Counter for generating unique file IDs in mock file store
 _mock_file_id_counter = 0

@@ -9,9 +9,7 @@ pattern). Emission itself is covered in tests/unit/onyx/utils/test_audit.py.
 import json
 import logging
 from typing import Any
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.security import OAuth2PasswordRequestForm
@@ -95,6 +93,7 @@ async def test_on_after_forgot_password_emits_event(
 @patch("onyx.auth.users.get_user_count", new_callable=AsyncMock)
 @patch("onyx.auth.users.get_security_settings")
 @patch("onyx.auth.users.verify_email_domain")
+@patch("onyx.auth.users.EMAIL_CONFIGURED", True)
 async def test_on_after_request_verify_emits_event(
     _mock_verify_domain: MagicMock,
     mock_settings: MagicMock,

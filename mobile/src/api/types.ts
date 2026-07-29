@@ -24,11 +24,9 @@ export interface CurrentUser {
   preferences: UserPreferences;
 }
 
-// `cloud` = Google OAuth + basic email/password.
-export type AuthType = "basic" | "google_oauth" | "oidc" | "saml" | "cloud";
-
 export interface AuthTypeMetadata {
-  auth_type: AuthType;
+  // Cloud (multi-tenant) signup provisions a tenant.
+  multi_tenant: boolean;
   requires_verification: boolean;
   anonymous_user_enabled?: boolean | null;
   password_min_length: number;

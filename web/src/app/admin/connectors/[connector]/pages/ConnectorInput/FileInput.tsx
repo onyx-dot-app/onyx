@@ -1,6 +1,6 @@
 import { useField } from "formik";
 import { FileUpload } from "@/components/admin/connectors/FileUpload";
-import CredentialSubText from "@/components/credentials/CredentialFields";
+import CredentialSubText from "@/lib/credentials/components/CredentialFields";
 
 interface FileInputProps {
   name: string;

@@ -4,13 +4,16 @@ import { useRef, useState } from "react";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
 import { useVideoBackgroundToggleClick } from "@/app/craft/components/video-background/useVideoBackgroundToggleClick";
 import Text from "@/refresh-components/texts/Text";
-import Logo from "@/refresh-components/Logo";
+import { Logo } from "@/lib/app/components";
 import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
 import SuggestedPrompts from "@/app/craft/components/SuggestedPrompts";
 import ConnectDataBanner from "@/app/craft/components/ConnectDataBanner";
+import CraftLlmSetup from "@/app/craft/onboarding/components/CraftLlmSetup";
+import CraftLlmLockedState from "@/app/craft/onboarding/components/CraftLlmLockedState";
+import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
 import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 
 interface BuildWelcomeProps {
@@ -39,6 +42,12 @@ export default function BuildWelcome({
     null
   );
   const handleWordmarkClick = useVideoBackgroundToggleClick();
+  const { isAdmin, hasAnyProvider, isLoading } = useOnboarding();
+
+  // Craft can't build without a supported provider: inputs stay gated until
+  // one exists (undefined while loading counts as none), and once provider
+  // state loads, setup (admins) or the locked notice replaces the prompts.
+  const setupPending = !isLoading && !hasAnyProvider;
 
   const handlePromptClick = (promptText: string) => {
     inputBarRef.current?.setMessage(promptText);
@@ -80,6 +89,7 @@ export default function BuildWelcome({
             <ModelPickerButton
               selection={selectedModel}
               onChange={setSelectedModel}
+              disabled={!hasAnyProvider}
             />
           </div>
         </div>
@@ -95,14 +105,23 @@ export default function BuildWelcome({
             isRunning={isRunning}
             placeholder="Analyze my data and create a dashboard..."
             sandboxInitializing={sandboxInitializing}
+            disabled={!hasAnyProvider}
           />
         </div>
       </div>
 
       <div className="row-start-3 min-h-0 w-full flex flex-col items-center">
         <div className="w-full max-w-(--app-page-main-content-width)">
-          <ConnectDataBanner />
-          <SuggestedPrompts onPromptClick={handlePromptClick} />
+          {setupPending ? (
+            <div className="pt-4">
+              {isAdmin ? <CraftLlmSetup /> : <CraftLlmLockedState />}
+            </div>
+          ) : (
+            <>
+              <ConnectDataBanner />
+              <SuggestedPrompts onPromptClick={handlePromptClick} />
+            </>
+          )}
         </div>
       </div>
     </div>

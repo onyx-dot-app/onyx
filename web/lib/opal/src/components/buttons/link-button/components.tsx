@@ -20,6 +20,13 @@ interface LinkButtonProps {
   /** Click handler. When provided without `href`, the component renders as a `<button>`. */
   onClick?: () => void;
 
+  /**
+   * Shows the trailing external-link glyph. Turn off for in-app links and
+   * link-styled actions.
+   * @default true
+   */
+  external?: boolean;
+
   /** Applies disabled styling + suppresses navigation/clicks. */
   disabled?: boolean;
 
@@ -35,8 +42,8 @@ interface LinkButtonProps {
 // ---------------------------------------------------------------------------
 
 /**
- * A bare, anchor-styled link with a trailing external-link glyph. Renders
- * as `<a>` when given `href`, or `<button>` when given `onClick`. Intended
+ * A bare, anchor-styled link with an optional trailing external-link glyph.
+ * Renders as `<a>` when given `href`, or `<button>` when given `onClick`. Intended
  * for inline references — "Pricing", "Docs", etc. — not for interactive
  * surfaces that need hover backgrounds or prominence tiers (use `Button`
  * for those).
@@ -44,7 +51,7 @@ interface LinkButtonProps {
  * Deliberately does NOT use `Interactive.Stateless` / `Interactive.Container`
  * — those come with height/rounding/padding and a colour matrix that are
  * wrong for an inline text link. Styling is kept to: underlined label,
- * small external-link icon, a subtle color shift on hover, and disabled
+ * optional external-link icon, a subtle color shift on hover, and disabled
  * opacity.
  */
 function LinkButton({
@@ -52,6 +59,7 @@ function LinkButton({
   href,
   target,
   onClick,
+  external = true,
   disabled,
   tooltip,
   tooltipSide = "top",
@@ -61,7 +69,11 @@ function LinkButton({
       <span className="opal-link-button-label font-secondary-body">
         {children}
       </span>
-      <SvgExternalLink size={12} />
+      {/* The glyph is aria-hidden, so new-window behavior needs a spoken cue. */}
+      {target === "_blank" && (
+        <span className="sr-only">(opens in new tab)</span>
+      )}
+      {external && <SvgExternalLink size={12} aria-hidden />}
     </>
   );
 

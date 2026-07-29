@@ -76,7 +76,6 @@ export interface ActionPolicyView {
 export interface BuiltInExternalAppDescriptor {
   app_type: ExternalAppType;
   name: string;
-  description: string;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   required_org_credential_fields: OrgCredentialFieldDescriptor[];
@@ -87,23 +86,25 @@ export interface BuiltInExternalAppDescriptor {
 export interface ExternalAppAdminResponse {
   id: number;
   name: string;
-  description: string;
   app_type: ExternalAppType;
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
   enabled: boolean;
   actions: ActionPolicyView[];
+  associated_skills: {
+    id: string;
+    name: string;
+    is_valid: boolean | null;
+  }[];
   // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
-  // admin may only enable/disable + set policies (the UI hides the rest).
+  // admin may only set availability and policies (the UI hides the rest).
   is_onyx_managed: boolean;
 }
 
 export interface ExternalAppUserResponse {
   id: number;
   name: string;
-  description: string;
-  slug: string;
   app_type: ExternalAppType;
   credential_keys: string[];
   credential_values: Record<string, string>;
@@ -114,7 +115,7 @@ export interface ExternalAppUserResponse {
 
 /**
  * Built-in descriptors still available to add. Only one app per `app_type` is
- * allowed (server-enforced via the built-in skill's unique slug), so configured
+ * allowed, so configured
  * types are dropped to avoid a duplicate-resource error. Cloud managed built-ins
  * are pre-provisioned (always configured) and never show here. CUSTOM apps have
  * no descriptor, so they never match and are left untouched.

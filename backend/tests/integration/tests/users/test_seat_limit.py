@@ -4,21 +4,14 @@ Verifies that when a license with a seat limit is active, new user
 creation (registration, invite, reactivation) is blocked with HTTP 402.
 """
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 import redis
 
-from ee.onyx.server.license.models import LicenseMetadata
-from ee.onyx.server.license.models import LicenseSource
-from ee.onyx.server.license.models import PlanType
-from onyx.configs.app_configs import REDIS_DB_NUMBER
-from onyx.configs.app_configs import REDIS_HOST
-from onyx.configs.app_configs import REDIS_PORT
+from ee.onyx.server.license.models import LicenseMetadata, LicenseSource, PlanType
+from onyx.configs.app_configs import REDIS_DB_NUMBER, REDIS_HOST, REDIS_PORT
 from onyx.server.settings.models import ApplicationStatus
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 

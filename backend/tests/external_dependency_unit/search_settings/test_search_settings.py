@@ -1,34 +1,41 @@
 """Tests that search settings with contextual RAG are properly propagated
 to the indexing pipeline's LLM configuration."""
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.context.search.models import SavedSearchSettings
-from onyx.context.search.models import SearchSettingsCreationRequest
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.llm import fetch_default_contextual_rag_model
-from onyx.db.llm import update_default_contextual_model
-from onyx.db.llm import upsert_llm_provider
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexModelStatus
-from onyx.db.models import SearchSettings
-from onyx.db.search_settings import create_search_settings
-from onyx.db.search_settings import update_search_settings
+from onyx.context.search.models import (
+    SavedSearchSettings,
+    SearchSettingsCreationRequest,
+)
+from onyx.db.enums import ConnectorCredentialPairStatus, EmbeddingPrecision
+from onyx.db.llm import (
+    fetch_default_contextual_rag_model,
+    update_default_contextual_model,
+    upsert_llm_provider,
+)
+from onyx.db.models import IndexAttempt, IndexModelStatus, SearchSettings
+from onyx.db.search_settings import create_search_settings, update_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.indexing.indexing_pipeline import IndexingPipelineResult
-from onyx.indexing.indexing_pipeline import run_indexing_pipeline
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from onyx.server.manage.search_settings import set_new_search_settings
-from onyx.server.manage.search_settings import update_saved_search_settings
+from onyx.indexing.indexing_pipeline import (
+    IndexingPipelineResult,
+    run_indexing_pipeline,
+)
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
+from onyx.server.manage.search_settings import (
+    set_new_search_settings,
+    update_saved_search_settings,
+)
 from shared_configs.configs import PRESERVED_SEARCH_FIELDS
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+)
 
 TEST_PROVIDER_NAME = "test-contextual-provider"
 TEST_MODEL_NAME = "test-contextual-model"

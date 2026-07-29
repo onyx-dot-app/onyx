@@ -20,15 +20,13 @@ manager method, so each test must declare the slice of the manager it uses.
 from __future__ import annotations
 
 from collections.abc import Callable
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.models import Sandbox, User
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.errors import SandboxProvisioningError
@@ -54,6 +52,8 @@ def test_creates_sandbox_when_none_exists(
 ) -> None:
     """No sandbox row -> a row is created and provisioned to RUNNING."""
     stub_sandbox_manager.provision_returns = _running_info(uuid4())
+    # Provisioning hydrates managed content (skills + user library) into the pod.
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
 
     result = session_manager_with_stub.ensure_sandbox_running(test_user.id)
     db_session.commit()
@@ -99,6 +99,7 @@ def test_running_but_unhealthy_recovers_via_terminate_then_provision(
     stub_sandbox_manager.health_check_returns = False
     stub_sandbox_manager.terminate_silent = True
     stub_sandbox_manager.provision_returns = _running_info(existing.id)
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
 
     result = session_manager_with_stub.ensure_sandbox_running(test_user.id)
     db_session.commit()
@@ -129,6 +130,7 @@ def test_wakes_dormant_sandbox(
     """SLEEPING / TERMINATED / FAILED -> re-provision the existing row in place."""
     existing = sandbox(user=test_user, status=initial_status)
     stub_sandbox_manager.provision_returns = _running_info(existing.id)
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
 
     result = session_manager_with_stub.ensure_sandbox_running(test_user.id)
     db_session.commit()

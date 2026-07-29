@@ -19,7 +19,8 @@ import SvgEyeClosed from "@/icons/eye-closed";
 import SvgX from "@/icons/x";
 
 // `placeholderTextColor` is a prop, not a style — bridge a class to it via cssInterop.
-const FieldTextInput = cssInterop(RNTextInput, {
+// Exported so other bare TextInputs (e.g. the chat composer) reuse the same bridge.
+export const FieldTextInput = cssInterop(RNTextInput, {
   className: { target: "style" },
   placeholderClassName: {
     target: false,

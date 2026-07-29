@@ -10,7 +10,7 @@ import { Button, Divider, LineItemButton, Text } from "@opal/components";
 import { Content, ContentAction } from "@opal/layouts";
 import AddInstructionModal from "@/sections/modals/AddInstructionModal";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import { FileCard } from "@/sections/cards/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
 import { cn } from "@opal/utils";
@@ -251,7 +251,7 @@ export default function ProjectContextPanel({
                   />
                 )}
                 {isDragActive && (
-                  <div className="pointer-events-none absolute inset-0 rounded-lg border-2 border-dashed border-action-link-05" />
+                  <div className="pointer-events-none absolute inset-0 rounded-lg border-2 border-dashed border-action-selection-05" />
                 )}
               </div>
 
@@ -268,7 +268,7 @@ export default function ProjectContextPanel({
               className={cn(
                 "h-12 rounded-xl border border-dashed flex items-center pl-2",
                 isDragActive
-                  ? "bg-action-link-01 border-action-link-05 text-action-link-05"
+                  ? "bg-action-selection-01 border-action-selection-05 text-action-selection-05"
                   : "border-border-01 text-text-02"
               )}
             >

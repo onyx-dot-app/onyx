@@ -4,7 +4,7 @@
 
 export type SharingScope = "private" | "public_org";
 
-export type SessionOrigin = "INTERACTIVE" | "SCHEDULED";
+export type SessionOrigin = "INTERACTIVE" | "SCHEDULED" | "SLACK";
 
 // =============================================================================
 // Session Error Constants
@@ -77,8 +77,15 @@ export interface BuildMessage {
   content: string;
   timestamp: Date;
   turn_index?: number;
+  attachments?: BuildMessageAttachment[];
   /** Structured sandbox event data (tool calls, thinking, plans) */
   message_metadata?: Record<string, any> | null;
+}
+
+export interface BuildMessageAttachment {
+  name: string;
+  path: string;
+  mimeType: string;
 }
 
 // =============================================================================
@@ -180,6 +187,11 @@ export interface ApiSessionResponse {
   origin: SessionOrigin;
   agent_provider: string | null;
   agent_model: string | null;
+  skills_stale: boolean;
+}
+
+export interface ApiSessionSkillsState {
+  skills_stale: boolean;
 }
 
 export interface ApiDetailedSessionResponse extends ApiSessionResponse {

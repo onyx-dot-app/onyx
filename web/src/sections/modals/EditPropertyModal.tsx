@@ -1,5 +1,5 @@
 import { Formik, Form } from "formik";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { InputVertical } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";

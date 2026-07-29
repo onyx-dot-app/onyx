@@ -1,5 +1,6 @@
 "use client";
 
+import { ReactNode } from "react";
 import { ValidStatuses } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { timeAgo } from "@opal/time";
@@ -16,6 +17,22 @@ import {
 } from "@/app/admin/connector/[ccPairId]/types";
 import { Tooltip } from "@opal/components";
 
+// Wrap a status badge in a hover tooltip carrying its error/reason text, or
+// return the bare badge when there is no message.
+function badgeWithErrorTooltip(
+  icon: ReactNode,
+  errorMsg?: string | null
+): ReactNode {
+  if (!errorMsg) {
+    return icon;
+  }
+  return (
+    <Tooltip tooltip={errorMsg}>
+      <div className="cursor-pointer">{icon}</div>
+    </Tooltip>
+  );
+}
+
 export function IndexAttemptStatus({
   status,
   errorMsg,
@@ -26,20 +43,12 @@ export function IndexAttemptStatus({
   let badge;
 
   if (status === "failed") {
-    const icon = (
+    badge = badgeWithErrorTooltip(
       <Badge variant="destructive" icon={FiAlertTriangle}>
         Failed
-      </Badge>
+      </Badge>,
+      errorMsg
     );
-    if (errorMsg) {
-      badge = (
-        <Tooltip tooltip={errorMsg}>
-          <div className="cursor-pointer">{icon}</div>
-        </Tooltip>
-      );
-    } else {
-      badge = icon;
-    }
   } else if (status === "completed_with_errors") {
     badge = (
       <Badge variant="secondary" icon={FiAlertTriangle}>
@@ -69,6 +78,15 @@ export function IndexAttemptStatus({
       <Badge variant="canceled" icon={FiClock}>
         Canceled
       </Badge>
+    );
+  } else if (status === "interrupted") {
+    // Stopped by infrastructure (deploy / autoscaling), not an error, so it
+    // resumes automatically. Neutral badge with the reason on hover, never red.
+    badge = badgeWithErrorTooltip(
+      <Badge variant="canceled" icon={FiClock}>
+        Interrupted
+      </Badge>,
+      errorMsg
     );
   } else if (status === "invalid") {
     badge = (
@@ -224,6 +242,13 @@ export function CCPairStatus({
       badge = (
         <Badge variant="canceled" icon={FiClock}>
           Canceled
+        </Badge>
+      );
+    } else if (lastIndexAttemptStatus === "interrupted") {
+      // resumes automatically, so it's neutral rather than the green "Indexed"
+      badge = (
+        <Badge variant="canceled" icon={FiClock}>
+          Interrupted
         </Badge>
       );
     } else {

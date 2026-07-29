@@ -57,12 +57,12 @@ const buttonClasses = (transient: boolean | undefined) =>
     action: {
       primary: {
         enabled: [
-          "bg-action-link-05",
-          "hover:bg-action-link-04",
-          transient && "bg-action-link-04",
-          "active:bg-action-link-06",
+          "bg-action-selection-05",
+          "hover:bg-action-selection-04",
+          transient && "bg-action-selection-04",
+          "active:bg-action-selection-06",
         ],
-        disabled: ["bg-action-link-02"],
+        disabled: ["bg-action-selection-02"],
       },
       secondary: {
         enabled: [
@@ -201,39 +201,39 @@ const iconClasses = (transient: boolean | undefined) =>
       },
       secondary: {
         enabled: [
-          "stroke-action-link-05",
-          "group-hover/IconButton:stroke-action-link-05",
-          transient && "stroke-action-link-05",
-          "group-active/IconButton:stroke-action-link-06",
+          "stroke-action-selection-05",
+          "group-hover/IconButton:stroke-action-selection-05",
+          transient && "stroke-action-selection-05",
+          "group-active/IconButton:stroke-action-selection-06",
         ],
-        disabled: ["stroke-action-link-02"],
+        disabled: ["stroke-action-selection-02"],
       },
       tertiary: {
         enabled: [
-          "stroke-action-link-05",
-          "group-hover/IconButton:stroke-action-link-05",
-          transient && "stroke-action-link-05",
-          "group-active/IconButton:stroke-action-link-06",
+          "stroke-action-selection-05",
+          "group-hover/IconButton:stroke-action-selection-05",
+          transient && "stroke-action-selection-05",
+          "group-active/IconButton:stroke-action-selection-06",
         ],
-        disabled: ["stroke-action-link-02"],
+        disabled: ["stroke-action-selection-02"],
       },
       internal: {
         enabled: [
-          "stroke-action-link-05",
-          "group-hover/IconButton:stroke-action-link-05",
-          transient && "stroke-action-link-05",
-          "group-active/IconButton:stroke-action-link-06",
+          "stroke-action-selection-05",
+          "group-hover/IconButton:stroke-action-selection-05",
+          transient && "stroke-action-selection-05",
+          "group-active/IconButton:stroke-action-selection-06",
         ],
-        disabled: ["stroke-action-link-02"],
+        disabled: ["stroke-action-selection-02"],
       },
       small: {
         enabled: [
-          "stroke-action-link-05",
-          "group-hover/IconButton:stroke-action-link-05",
-          transient && "stroke-action-link-05",
-          "group-active/IconButton:stroke-action-link-06",
+          "stroke-action-selection-05",
+          "group-hover/IconButton:stroke-action-selection-05",
+          transient && "stroke-action-selection-05",
+          "group-active/IconButton:stroke-action-selection-06",
         ],
-        disabled: ["stroke-action-link-02"],
+        disabled: ["stroke-action-selection-02"],
       },
     },
     danger: {

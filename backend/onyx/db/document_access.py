@@ -10,22 +10,17 @@ This module provides reusable access filtering logic for documents based on:
 This is a standalone module to avoid circular imports between document.py and persona.py.
 """
 
-from sqlalchemy import and_
-from sqlalchemy import any_
-from sqlalchemy import cast
-from sqlalchemy import or_
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import String
+from sqlalchemy import Select, String, and_, any_, cast, or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Document
-from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    DocumentByConnectorCredentialPair,
+)
 
 
 def apply_document_access_filter(

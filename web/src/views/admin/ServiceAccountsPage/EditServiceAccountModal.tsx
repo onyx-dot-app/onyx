@@ -3,8 +3,8 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { Button, Divider } from "@opal/components";
 import { SvgUsers, SvgLogOut, SvgCheck } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
-import Modal from "@/refresh-components/Modal";
+import { ContentAction, toast } from "@opal/layouts";
+import { Modal } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Popover } from "@opal/components";
@@ -12,7 +12,6 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { ShadowDiv } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { toast } from "@/hooks/useToast";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 import useGroups from "@/hooks/useGroups";
 import {

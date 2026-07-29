@@ -9,12 +9,14 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import Request
 
-from onyx.auth.permissions import ALL_PERMISSIONS
-from onyx.auth.permissions import get_effective_permissions
-from onyx.auth.permissions import IMPLIED_PERMISSIONS
-from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
-from onyx.auth.permissions import require_permission
-from onyx.auth.permissions import resolve_effective_permissions
+from onyx.auth.permissions import (
+    ALL_PERMISSIONS,
+    IMPLIED_PERMISSIONS,
+    NON_TOGGLEABLE_PERMISSIONS,
+    get_effective_permissions,
+    require_permission,
+    resolve_effective_permissions,
+)
 from onyx.auth.users import get_anonymous_user
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -140,7 +142,12 @@ class TestResolveEffectivePermissions:
         """The Craft sandbox PAT may only company-search — it must NOT inherit the
         chat surfaces (the reason it isn't `basic`)."""
         result = resolve_effective_permissions({"craft_sandbox"})
-        assert result == {"craft_sandbox", "read:search", "generate:image"}
+        assert result == {
+            "craft_sandbox",
+            "read:search",
+            "generate:image",
+            "use:llm_gateway",
+        }
         assert "read:chat" not in result
         assert "write:chat" not in result
         assert "basic" not in result
@@ -352,7 +359,7 @@ class TestAnonymousUserPermissions:
 
 class TestApiSurfaceScopeRegistration:
     # Hardcoded spec: the complete implied-only set (4 READ_* capability reads
-    # + 5 API-surface scopes). Equality, not subset, so an accidentally
+    # + 6 API-surface scopes). Equality, not subset, so an accidentally
     # over-broad set (a real capability made un-grantable) is also caught.
     EXPECTED_IMPLIED = {
         "read:connectors",
@@ -363,6 +370,7 @@ class TestApiSurfaceScopeRegistration:
         "read:chat",
         "write:chat",
         "generate:image",
+        "use:llm_gateway",
         "read:admin",
     }
 
@@ -387,4 +395,5 @@ class TestApiSurfaceScopeRegistration:
         assert IMPLIED_PERMISSIONS["craft_sandbox"] == {
             "read:search",
             "generate:image",
+            "use:llm_gateway",
         }

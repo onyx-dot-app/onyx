@@ -3,12 +3,8 @@ from uuid import uuid4
 import pytest
 
 from onyx.auth.schemas import UserRole
-from onyx.db.enums import SkillAccessLevel
-from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Skill
-from onyx.db.models import Skill__User
-from onyx.db.models import Skill__UserGroup
-from onyx.db.models import User
+from onyx.db.enums import SkillAccessLevel, SkillSharePermission
+from onyx.db.models import Skill, Skill__User, Skill__UserGroup, User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import _ensure_can_edit_org_visibility
 from onyx.server.features.skill.response_helpers import user_permission_for_skill
@@ -26,12 +22,10 @@ def _skill(
 ) -> Skill:
     return Skill(
         id=uuid4(),
-        slug=f"skill-{uuid4().hex}",
-        name="Skill",
+        name=f"skill-{uuid4().hex}",
         description="Description",
         author_user_id=author.id,
         public_permission=public_permission if is_public else None,
-        enabled=True,
     )
 
 

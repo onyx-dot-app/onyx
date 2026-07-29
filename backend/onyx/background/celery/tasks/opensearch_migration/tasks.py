@@ -3,47 +3,35 @@
 import time
 import traceback
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.opensearch_migration.constants import (
     FINISHED_VISITING_SLICE_CONTINUATION_TOKEN,
-)
-from onyx.background.celery.tasks.opensearch_migration.constants import (
     GET_VESPA_CHUNKS_PAGE_SIZE,
-)
-from onyx.background.celery.tasks.opensearch_migration.constants import (
     MIGRATION_TASK_LOCK_BLOCKING_TIMEOUT_S,
-)
-from onyx.background.celery.tasks.opensearch_migration.constants import (
     MIGRATION_TASK_LOCK_TIMEOUT_S,
-)
-from onyx.background.celery.tasks.opensearch_migration.constants import (
     MIGRATION_TASK_SOFT_TIME_LIMIT_S,
-)
-from onyx.background.celery.tasks.opensearch_migration.constants import (
     MIGRATION_TASK_TIME_LIMIT_S,
 )
 from onyx.background.celery.tasks.opensearch_migration.transformer import (
     transform_vespa_chunks_to_opensearch_chunks,
 )
-from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
-from onyx.configs.app_configs import VESPA_MIGRATION_REQUEST_TIMEOUT_S
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.app_configs import (
+    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX,
+    VESPA_MIGRATION_REQUEST_TIMEOUT_S,
+)
+from onyx.configs.constants import OnyxCeleryTask, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.opensearch_migration import build_sanitized_to_original_doc_id_mapping
-from onyx.db.opensearch_migration import get_vespa_visit_state
-from onyx.db.opensearch_migration import is_migration_completed
 from onyx.db.opensearch_migration import (
+    build_sanitized_to_original_doc_id_mapping,
+    get_vespa_visit_state,
+    is_migration_completed,
     mark_migration_completed_time_if_not_set_with_commit,
-)
-from onyx.db.opensearch_migration import (
     try_insert_opensearch_tenant_migration_record_with_commit,
+    update_vespa_visit_progress_with_commit,
 )
-from onyx.db.opensearch_migration import update_vespa_visit_progress_with_commit
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (

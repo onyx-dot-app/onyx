@@ -20,7 +20,7 @@ import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/
 import { Credential } from "@/lib/connectors/credentials";
 import { useFederatedConnectors } from "@/lib/hooks";
 import Text from "@/refresh-components/texts/Text";
-import { useToastFromQuery } from "@/hooks/useToast";
+import { useToastFromQuery } from "@opal/layouts";
 
 export default function ConnectorWrapper({
   connector,

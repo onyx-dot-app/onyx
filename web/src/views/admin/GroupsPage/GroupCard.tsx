@@ -4,7 +4,7 @@ import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import type { UserGroup } from "@/lib/types";
 import { SvgChevronRight, SvgUserManage, SvgUsers } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import { Button } from "@opal/components";
@@ -15,7 +15,6 @@ import {
   formatMemberCount,
 } from "./utils";
 import { renameGroup } from "./svc";
-import { toast } from "@/hooks/useToast";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 

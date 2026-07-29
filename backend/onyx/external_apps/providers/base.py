@@ -1,12 +1,9 @@
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import Any
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import requests
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.presentation.payload_decoders import PayloadDecoder
@@ -114,7 +111,6 @@ class AdminDescriptorSpec(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    description: str
     upstream_url_patterns: list[str]
     auth_template: dict[str, str]
     required_org_credential_fields: list[OrgCredentialField]

@@ -52,7 +52,7 @@ import {
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
 import { buildFilters } from "@/lib/search/utils";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import {
   ReadonlyURLSearchParams,
   usePathname,
@@ -875,6 +875,12 @@ export default function useChatController({
       let streamSucceeded = false;
 
       try {
+        // Selection-time override writes are best-effort. Await confirmation
+        // so the backend's session-row read during the send sees the current
+        // selections. A failed write surfaces as a chat error and the next
+        // send re-persists.
+        await llmManager.persistOverrides(currChatSessionId);
+
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
           currentMessageTreeLocal
         );

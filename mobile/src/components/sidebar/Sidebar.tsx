@@ -30,13 +30,13 @@ function SidebarRoot({ children }: SidebarRootProps) {
   const { folded, setFolded } = useSidebar();
   const insets = useSafeAreaInsets();
 
-  // Derived from `folded` so the slide stays state-driven (no effect mutation): 1 = open, 0 = closed.
+  // State-driven so the slide needs no effect mutation; 1 = open, 0 = closed.
   const progress = useDerivedValue(
     () => withTiming(folded ? 0 : 1, { duration: SIDEBAR_ANIM_MS }),
     [folded],
   );
 
-  // Live swipe offset, mutated only in the Pan worklet; layers on `progress` for 1:1 finger tracking.
+  // Live swipe offset (Pan worklet only); layers on progress for 1:1 finger tracking.
   const drag = useSharedValue(0);
 
   const columnStyle = useAnimatedStyle(() => {
@@ -51,7 +51,7 @@ function SidebarRoot({ children }: SidebarRootProps) {
 
   const close = React.useCallback(() => setFolded(true), [setFolded]);
 
-  // Swipe-left-to-close; `activeOffsetX` gates to horizontal so vertical scroll falls through to Body.
+  // activeOffsetX gates to horizontal so vertical scroll falls through to Body.
   const pan = Gesture.Pan()
     .activeOffsetX([-15, 15])
     .onUpdate((e) => {
@@ -70,7 +70,7 @@ function SidebarRoot({ children }: SidebarRootProps) {
         pointerEvents={folded ? "none" : "auto"}
         className="absolute inset-0 z-50"
       >
-        {/* Tap-to-close backdrop. Web's ~1px backdrop-blur is dropped — no mobile token. */}
+        {/* Web's ~1px backdrop-blur is dropped — no mobile token. */}
         <Animated.View style={backdropStyle} className="absolute inset-0">
           <Pressable className="flex-1 bg-mask-03" onPress={close} />
         </Animated.View>
@@ -110,7 +110,7 @@ function SidebarHeader({ logo, children }: SidebarHeaderProps) {
   return (
     <View className="gap-4 pb-2">
       {logoEl != null && (
-        <View className="flex-row items-start justify-between px-2 pt-3">
+        <View className="flex-row items-start justify-between px-8 pt-3">
           {logoEl}
           <Button
             prominence="internal"
@@ -120,7 +120,7 @@ function SidebarHeader({ logo, children }: SidebarHeaderProps) {
           />
         </View>
       )}
-      {children != null && <View className="px-2">{children}</View>}
+      {children != null && <View className="px-8">{children}</View>}
     </View>
   );
 }
@@ -133,7 +133,7 @@ interface SidebarBodyProps {
 function SidebarBody({ children }: SidebarBodyProps) {
   return (
     <ScrollView className="min-h-0 flex-1" showsVerticalScrollIndicator={false}>
-      <View className="gap-2 px-2 pb-8">{children}</View>
+      <View className="gap-2 px-8 pb-8">{children}</View>
     </ScrollView>
   );
 }
@@ -143,7 +143,7 @@ interface SidebarFooterProps {
 }
 
 function SidebarFooter({ children }: SidebarFooterProps) {
-  return <View className="px-2 pt-4">{children}</View>;
+  return <View className="px-8 pt-4">{children}</View>;
 }
 
 interface SidebarSectionProps {

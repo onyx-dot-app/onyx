@@ -1,19 +1,17 @@
 import logging
 import os
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from celery import bootsteps  # ty: ignore[unresolved-import]
-from celery import Celery
-from celery import signals
-from celery import Task
+from celery import (
+    Celery,
+    Task,
+    bootsteps,
+    signals,
+)
 from celery.apps.worker import Worker
 from celery.exceptions import WorkerShutdown
 from celery.result import AsyncResult
-from celery.signals import celeryd_init
-from celery.signals import worker_init
-from celery.signals import worker_ready
-from celery.signals import worker_shutdown
+from celery.signals import celeryd_init, worker_init, worker_ready, worker_shutdown
 from redis.lock import Lock as RedisLock
 
 import onyx.background.celery.apps.app_base as app_base
@@ -21,14 +19,14 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import celery_is_worker_primary
 from onyx.background.celery.tasks.vespa.document_sync import reset_document_sync
 from onyx.configs.app_configs import CELERY_WORKER_PRIMARY_POOL_OVERFLOW
-from onyx.configs.constants import CELERY_PRIMARY_WORKER_LOCK_TIMEOUT
-from onyx.configs.constants import OnyxRedisConstants
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import mark_attempt_canceled
+from onyx.configs.constants import (
+    CELERY_PRIMARY_WORKER_LOCK_TIMEOUT,
+    POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME,
+    OnyxRedisConstants,
+    OnyxRedisLocks,
+)
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.index_attempt import get_index_attempt, mark_attempt_canceled
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
@@ -38,15 +36,16 @@ from onyx.redis.redis_connector_stop import RedisConnectorStop
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
-from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
-from onyx.server.metrics.celery_task_metrics import on_celery_task_prerun
-from onyx.server.metrics.celery_task_metrics import on_celery_task_rejected
-from onyx.server.metrics.celery_task_metrics import on_celery_task_retry
-from onyx.server.metrics.celery_task_metrics import on_celery_task_revoked
+from onyx.server.metrics.celery_task_metrics import (
+    on_celery_task_postrun,
+    on_celery_task_prerun,
+    on_celery_task_rejected,
+    on_celery_task_retry,
+    on_celery_task_revoked,
+)
 from onyx.server.metrics.metrics_server import start_metrics_server
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
 
@@ -281,7 +280,7 @@ class HubPeriodicTask(bootsteps.StartStopStep):
         self.interval = CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 8  # Interval in seconds
         self.task_tref = None
 
-    def start(self, worker: Any) -> None:
+    def start(self, worker: Any) -> None:  # ty: ignore[invalid-method-override]
         if not celery_is_worker_primary(worker):
             return
 
@@ -332,7 +331,7 @@ class HubPeriodicTask(bootsteps.StartStopStep):
         except Exception:
             task_logger.exception("Periodic task failed.")
 
-    def stop(self, worker: Any) -> None:  # noqa: ARG002
+    def stop(self, worker: Any) -> None:  # noqa: ARG002  # ty: ignore[invalid-method-override]
         # Cancel the scheduled task when the worker stops
         if self.task_tref:
             self.task_tref.cancel()

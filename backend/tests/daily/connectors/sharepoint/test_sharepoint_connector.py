@@ -1,21 +1,23 @@
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.sharepoint.connector import SharepointAuthMethod
-from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    ImageSection,
+)
+from onyx.connectors.sharepoint.connector import (
+    SharepointAuthMethod,
+    SharepointConnector,
+)
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.secret_names import TestSecret
@@ -29,6 +31,7 @@ pytestmark = pytest.mark.secrets(
 )
 
 # NOTE: Sharepoint site for tests is "sharepoint-tests"
+SCALE_TEST_SITE_URL = "https://danswerai.sharepoint.com/sites/OnyxTesting2"
 
 
 @dataclass
@@ -169,9 +172,10 @@ def test_sharepoint_connector_all_sites__docs_only(
         "onyx.connectors.sharepoint.connector.store_image_and_create_section",
         mock_store_image,
     ):
-        # Initialize connector with no sites
         connector = SharepointConnector(
-            include_site_pages=False, include_site_documents=True
+            excluded_sites=[SCALE_TEST_SITE_URL],
+            include_site_pages=False,
+            include_site_documents=True,
         )
 
         # Load credentials
@@ -196,9 +200,10 @@ def test_sharepoint_connector_all_sites__pages_only(
         "onyx.connectors.sharepoint.connector.store_image_and_create_section",
         mock_store_image,
     ):
-        # Initialize connector with no docs
         connector = SharepointConnector(
-            include_site_pages=True, include_site_documents=False
+            excluded_sites=[SCALE_TEST_SITE_URL],
+            include_site_pages=True,
+            include_site_documents=False,
         )
 
         # Load credentials

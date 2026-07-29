@@ -11,6 +11,7 @@ pandas
 pdfplumber
 pillow
 pydantic
+python-docx
 python-pptx
 requests
 uvicorn[standard]

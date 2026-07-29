@@ -13,7 +13,7 @@ const EnabledCount = memo(
   ({ name, enabledCount, totalCount }: EnabledCountProps) => {
     return (
       <Text text03 mainUiBody>
-        <Text mainUiBody className="text-action-link-05">
+        <Text mainUiBody className="text-action-selection-05">
           {enabledCount}
         </Text>
         {` of ${totalCount} ${name ?? ""}${

@@ -1,78 +1,131 @@
-import { ActivityIndicator, View } from "react-native";
+import { memo } from "react";
+import { Pressable, View } from "react-native";
 
-import { Button } from "@/components/ui/button";
+import { AttachmentImage } from "@/components/chat/AttachmentImage";
 import { Icon } from "@/components/ui/icon";
+import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import {
   isProcessingStatus,
   UserFileStatus,
   type ProjectFile,
 } from "@/chat/contracts/projects";
-import { extensionOf } from "@/lib/files";
+import { ChatFileType } from "@/chat/interfaces";
+import { attachmentStatusLabel, isFailedFile, isImageName } from "@/lib/files";
+import { cn } from "@/lib/utils";
+import { useUploadProgress } from "@/state/userFileStore";
+import SvgAlertCircle from "@/icons/alert-circle";
 import SvgFileText from "@/icons/file-text";
 import SvgX from "@/icons/x";
 
+const IMAGE_SIZE = 64;
+
+// Mirrors web `shadow-xs` on the remove control.
+const REMOVE_SHADOW = {
+  shadowColor: "#000000",
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.06,
+  shadowRadius: 2,
+  elevation: 1,
+} as const;
+
 interface FileCardProps {
   file: ProjectFile;
-  onRemove?: () => void;
-  progress?: number; // 0..1 while UPLOADING
+  // Omit for a read-only card (a sent message's files).
+  onRemove?: (id: string) => void;
 }
 
-function statusLabel(file: ProjectFile, progress?: number): string {
-  switch (String(file.status).toUpperCase()) {
-    case UserFileStatus.UPLOADING:
-      return progress != null
-        ? `Uploading… ${Math.round(progress * 100)}%`
-        : "Uploading…";
-    case UserFileStatus.PROCESSING:
-      return "Processing…";
-    case UserFileStatus.INDEXING:
-      return "Indexing…";
-    case UserFileStatus.DELETING:
-      return "Deleting…";
-    case UserFileStatus.FAILED:
-      return "Failed";
-    default:
-      // web leaves this blank; "File" avoids a lone filename
-      return extensionOf(file.name) || "File";
+function isImage(file: ProjectFile): boolean {
+  return file.chat_file_type === ChatFileType.IMAGE || isImageName(file.name);
+}
+
+// Memoized + atomic progress selector so a store tick re-renders only this card, not the whole
+// composer strip. Stays removable while INDEXING/FAILED so the user can unblock send.
+export const FileCard = memo(function FileCard({
+  file,
+  onRemove,
+}: FileCardProps) {
+  const progress = useUploadProgress(file.id);
+  const uploading =
+    String(file.status).toUpperCase() === UserFileStatus.UPLOADING;
+  const canRemove = onRemove != null && !uploading;
+
+  if (isImage(file) && !isFailedFile(file)) {
+    return (
+      <View className="relative" testID="file-image-card">
+        <View
+          className="items-center justify-center overflow-hidden rounded-08 border border-border-01"
+          style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }}
+        >
+          {uploading ? (
+            <Spinner size={20} />
+          ) : (
+            <AttachmentImage fileId={file.file_id} size={IMAGE_SIZE} />
+          )}
+        </View>
+        {canRemove ? (
+          // Web reveals this on hover; touch has no hover, so it stays visible.
+          <Pressable
+            onPress={() => onRemove(file.id)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove ${file.name}`}
+            style={[
+              { top: -8, left: -8, width: 16, height: 16, zIndex: 10 },
+              REMOVE_SHADOW,
+            ]}
+            className="absolute items-center justify-center rounded-04 border border-border-01 bg-background-neutral-inverted-01"
+          >
+            <Icon as={SvgX} size={12} className="text-text-inverted-03" />
+          </Pressable>
+        ) : null}
+      </View>
+    );
   }
-}
 
-// Image thumbnails are deferred to PR 8 (auth-image bearer).
-export function FileCard({ file, onRemove, progress }: FileCardProps) {
   const processing = isProcessingStatus(file.status);
-  const deleting =
-    String(file.status).toUpperCase() === UserFileStatus.DELETING;
-  const canRemove = onRemove != null && !processing && !deleting;
-
+  const failed = isFailedFile(file);
   return (
-    <View className="flex-row items-center gap-8 rounded-12 border border-border-01 px-12 py-8">
-      {processing ? (
-        <ActivityIndicator size="small" />
-      ) : (
-        <Icon as={SvgFileText} size={16} className="text-text-02" />
+    <View
+      testID="file-doc-card"
+      className={cn(
+        "max-w-[220px] flex-row items-center gap-8 rounded-12 border px-12 py-8",
+        failed ? "border-status-error-05" : "border-border-01",
       )}
-      <View className="min-w-0 flex-1">
+    >
+      {processing ? (
+        <Spinner size={16} />
+      ) : (
+        <Icon
+          as={failed ? SvgAlertCircle : SvgFileText}
+          size={16}
+          className={failed ? "text-status-error-05" : "text-text-02"}
+        />
+      )}
+      <View className="min-w-0 shrink">
         <Text font="main-ui-body" color="text-04" numberOfLines={1}>
           {file.name}
         </Text>
         <Text
           font="secondary-body"
-          color={processing ? "text-03" : "text-02"}
+          color={
+            failed ? "status-error-05" : processing ? "text-03" : "text-02"
+          }
           numberOfLines={1}
         >
-          {statusLabel(file, progress)}
+          {attachmentStatusLabel(file, progress)}
         </Text>
       </View>
       {canRemove ? (
-        <Button
-          icon={SvgX}
-          prominence="tertiary"
-          size="sm"
+        <Pressable
+          onPress={() => onRemove(file.id)}
+          hitSlop={8}
+          accessibilityRole="button"
           accessibilityLabel={`Remove ${file.name}`}
-          onPress={onRemove}
-        />
+        >
+          <Icon as={SvgX} size={16} className="text-text-03" />
+        </Pressable>
       ) : null}
     </View>
   );
-}
+});

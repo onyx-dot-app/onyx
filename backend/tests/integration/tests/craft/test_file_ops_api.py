@@ -10,8 +10,10 @@ import pytest
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.managers.build_session import BuildSessionManager
-from tests.integration.common_utils.managers.build_session import SessionWithSandbox
+from tests.integration.common_utils.managers.build_session import (
+    BuildSessionManager,
+    SessionWithSandbox,
+)
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.conftest import SharedSession
 
@@ -286,7 +288,14 @@ def test_list_directory_filters_hidden_entries(
     session_id, sandbox_id = _create_session_with_sandbox(admin_user)
     manager = get_sandbox_manager()
 
-    hidden_names = {".venv/keep", "node_modules/keep", "opencode.json", ".env"}
+    hidden_names = {
+        ".venv/keep",
+        "node_modules/keep",
+        "opencode.json",
+        ".env",
+        "nextjs.log",
+        "nextjs.pid",
+    }
     visible_names = {"alpha.txt", "beta.txt"}
 
     for rel in hidden_names | visible_names:
@@ -303,6 +312,8 @@ def test_list_directory_filters_hidden_entries(
     assert "node_modules" not in names
     assert "opencode.json" not in names
     assert ".env" not in names
+    assert "nextjs.log" not in names
+    assert "nextjs.pid" not in names
     assert visible_names <= names
 
 

@@ -1,20 +1,19 @@
 from uuid import uuid4
 
-from sqlalchemy import and_
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import DocumentByConnectorCredentialPair
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import NUM_DOCS
+from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
+from tests.integration.common_utils.constants import API_SERVER_URL, NUM_DOCS
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.api_key import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestCCPair
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import SimpleTestDocument
+from tests.integration.common_utils.test_models import (
+    DATestCCPair,
+    DATestUser,
+    SimpleTestDocument,
+)
 from tests.integration.common_utils.vespa import vespa_fixture
 
 

@@ -1,26 +1,21 @@
-from typing import Any
-from typing import cast
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from urllib.parse import parse_qs
-from urllib.parse import urlparse
+from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import parse_qs, urlparse
 
-from fastapi import FastAPI
-from fastapi import Response
+from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
-from fastapi_users.authentication import AuthenticationBackend
-from fastapi_users.authentication import CookieTransport
+from fastapi_users.authentication import AuthenticationBackend, CookieTransport
 from fastapi_users.jwt import generate_jwt
-from httpx_oauth.oauth2 import BaseOAuth2
-from httpx_oauth.oauth2 import GetAccessTokenError
+from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError
 
-from onyx.auth.users import CSRF_TOKEN_COOKIE_NAME
-from onyx.auth.users import CSRF_TOKEN_KEY
-from onyx.auth.users import get_oauth_router
-from onyx.auth.users import get_pkce_cookie_name
-from onyx.auth.users import PKCE_COOKIE_NAME_PREFIX
-from onyx.auth.users import STATE_TOKEN_AUDIENCE
+from onyx.auth.users import (
+    CSRF_TOKEN_COOKIE_NAME,
+    CSRF_TOKEN_KEY,
+    PKCE_COOKIE_NAME_PREFIX,
+    STATE_TOKEN_AUDIENCE,
+    get_oauth_router,
+    get_pkce_cookie_name,
+)
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 
 

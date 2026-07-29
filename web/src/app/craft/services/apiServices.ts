@@ -9,11 +9,13 @@ import {
   ApiSandboxStatusResponse,
   SessionHistoryItem,
   Artifact,
+  BuildMessageAttachment,
   BuildMessage,
   StreamPacket,
   UsageLimits,
   DirectoryListing,
   SharingScope,
+  ApiSessionSkillsState,
 } from "@/app/craft/types/streamingTypes";
 import {
   ApprovalListResponse,
@@ -21,6 +23,8 @@ import {
   ApprovalView,
 } from "@/app/craft/types/approvals";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
+import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
+import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 
 // =============================================================================
 // API Configuration
@@ -89,8 +93,6 @@ export async function processSSEStream(
 
 export interface CreateSessionOptions {
   name?: string | null;
-  llmProviderType?: string | null;
-  llmModelName?: string | null;
 }
 
 // Pull the backend's human-readable error detail out of a failed response,
@@ -115,8 +117,6 @@ export async function createSession(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: options?.name || null,
-      llm_provider_type: options?.llmProviderType || null,
-      llm_model_name: options?.llmModelName || null,
     }),
   });
 
@@ -128,12 +128,33 @@ export async function createSession(
 }
 
 export async function fetchSession(
-  sessionId: string
+  sessionId: string,
+  options?: { checkWorkspace?: boolean }
 ): Promise<ApiDetailedSessionResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}`);
+  const params = new URLSearchParams();
+  if (options?.checkWorkspace === false) {
+    params.set("check_workspace", "false");
+  }
+  const query = params.size > 0 ? `?${params}` : "";
+  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}${query}`);
 
   if (!res.ok) {
     throw new Error(`Failed to load session: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function reloadSessionSkills(
+  sessionId: string
+): Promise<ApiSessionSkillsState> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/skills/reload`,
+    { method: "POST" }
+  );
+
+  if (!res.ok) {
+    throw new Error(await errorDetail(res, "Failed to reload session"));
   }
 
   return res.json();
@@ -307,6 +328,35 @@ function extractContentFromMetadata(
   return "";
 }
 
+function extractAttachmentsFromMetadata(
+  metadata: Record<string, any> | null | undefined
+): BuildMessageAttachment[] {
+  if (!Array.isArray(metadata?.attachments)) return [];
+
+  return metadata.attachments.flatMap((attachment: unknown) => {
+    if (
+      typeof attachment !== "object" ||
+      attachment === null ||
+      !("name" in attachment) ||
+      !("path" in attachment) ||
+      !("mime_type" in attachment) ||
+      typeof attachment.name !== "string" ||
+      typeof attachment.path !== "string" ||
+      typeof attachment.mime_type !== "string"
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        name: attachment.name,
+        path: attachment.path,
+        mimeType: attachment.mime_type,
+      },
+    ];
+  });
+}
+
 export async function fetchMessages(
   sessionId: string
 ): Promise<BuildMessage[]> {
@@ -323,6 +373,7 @@ export async function fetchMessages(
     turn_index: m.turn_index,
     // Content is stored in message_metadata, not as a separate field
     content: m.content || extractContentFromMetadata(m.message_metadata),
+    attachments: extractAttachmentsFromMetadata(m.message_metadata),
     message_metadata: m.message_metadata,
     timestamp: new Date(m.created_at),
   }));
@@ -347,7 +398,8 @@ export async function createTurn(
   content: string,
   clientRequestId: string,
   signal?: AbortSignal,
-  model?: { provider: string; modelName: string } | null
+  model?: BuildLlmSelection | null,
+  attachments: BuildMessageAttachment[] = []
 ): Promise<ApiInteractiveTurnResponse> {
   const res = await fetch(
     `${BUILD_API_BASE}/sessions/${sessionId}/send-message`,
@@ -357,7 +409,18 @@ export async function createTurn(
       body: JSON.stringify({
         content,
         client_request_id: clientRequestId,
-        ...(model ? { provider: model.provider, model: model.modelName } : {}),
+        attachments: attachments.map((attachment) => ({
+          name: attachment.name,
+          path: attachment.path,
+          mime_type: attachment.mimeType,
+        })),
+        ...(model
+          ? {
+              provider: CRAFT_GATEWAY_PROVIDER,
+              provider_id: model.providerId,
+              model: model.modelName,
+            }
+          : {}),
       }),
       signal,
     }
@@ -512,13 +575,17 @@ export async function fetchDirectoryListing(
 /**
  * Trigger a browser download for a single file from the sandbox.
  */
-export function downloadArtifactFile(sessionId: string, path: string): void {
+export function buildArtifactUrl(sessionId: string, path: string): string {
   const encodedPath = path
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
+  return `${BUILD_API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`;
+}
+
+export function downloadArtifactFile(sessionId: string, path: string): void {
   const link = document.createElement("a");
-  link.href = `${BUILD_API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`;
+  link.href = buildArtifactUrl(sessionId, path);
   link.download = path.split("/").pop() || path;
   document.body.appendChild(link);
   link.click();
@@ -559,15 +626,7 @@ export async function fetchFileContent(
   sessionId: string,
   path: string
 ): Promise<FileContentResponse> {
-  // Encode each path segment individually (spaces, special chars) but preserve slashes
-  const encodedPath = path
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`
-  );
+  const res = await fetch(buildArtifactUrl(sessionId, path));
 
   if (!res.ok) {
     throw new Error(`Failed to fetch file content: ${res.status}`);

@@ -8,10 +8,8 @@ calls, so we can trigger it with lightweight mocks.
 import threading
 import time
 from collections.abc import Generator
-from typing import Any
-from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -24,10 +22,12 @@ from onyx.db.models import ChatMessage
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import ChatHeartbeat
-from onyx.server.query_and_chat.streaming_models import OverallStop
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.server.query_and_chat.streaming_models import (
+    ChatHeartbeat,
+    OverallStop,
+    Packet,
+    ReasoningStart,
+)
 from onyx.utils.variable_functionality import global_version
 
 

@@ -1,10 +1,9 @@
 "use client";
 
-import * as Yup from "yup";
 import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider, InputVertical } from "@opal/layouts";
+import { InputDivider, InputVertical, toast } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
@@ -29,7 +28,6 @@ import {
 } from "@/sections/modals/languageModels/shared";
 import { fetchOllamaModels } from "@/lib/languageModels/svc";
 import { Card, Tabs } from "@opal/components";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { useSettings } from "@/lib/settings/hooks";
@@ -42,9 +40,6 @@ enum Tab {
 
 interface OllamaModalValues extends BaseLLMFormValues {
   api_base: string;
-  custom_config: {
-    OLLAMA_API_KEY?: string;
-  };
 }
 
 interface OllamaModalInternalsProps {
@@ -67,13 +62,13 @@ function OllamaModalInternals({
     () =>
       tab === Tab.TAB_SELF_HOSTED
         ? !formikProps.values.api_base
-        : !formikProps.values.custom_config.OLLAMA_API_KEY,
+        : !formikProps.values.api_key,
     [tab, formikProps]
   );
 
   const handleFetchModels = async (signal?: AbortSignal) => {
     // Only Ollama cloud accepts API key
-    const apiBase = formikProps.values.custom_config?.OLLAMA_API_KEY
+    const apiBase = formikProps.values.api_key
       ? CLOUD_API_BASE
       : formikProps.values.api_base;
     const { models, error } = await fetchOllamaModels({
@@ -126,12 +121,12 @@ function OllamaModalInternals({
 
             <Tabs.Content value={Tab.TAB_CLOUD}>
               <InputVertical
-                withLabel="custom_config.OLLAMA_API_KEY"
+                withLabel="api_key"
                 title="API Key"
                 subDescription="Your Ollama Cloud API key."
               >
                 <PasswordInputTypeInField
-                  name="custom_config.OLLAMA_API_KEY"
+                  name="api_key"
                   placeholder="API Key"
                 />
               </InputVertical>
@@ -169,6 +164,7 @@ export default function OllamaModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
@@ -176,7 +172,7 @@ export default function OllamaModal({
   const defaultApiBase = settings.is_containerized
     ? "http://host.docker.internal:11434"
     : "http://127.0.0.1:11434";
-  const apiKey = existingLlmProvider?.custom_config?.OLLAMA_API_KEY;
+  const apiKey = existingLlmProvider?.api_key;
   const defaultTab =
     existingLlmProvider && !!apiKey ? Tab.TAB_CLOUD : Tab.TAB_SELF_HOSTED;
   const [tab, setTab] = useState<Tab>(defaultTab);
@@ -190,23 +186,13 @@ export default function OllamaModal({
       existingLlmProvider
     ),
     api_base: existingLlmProvider?.api_base ?? defaultApiBase,
-    custom_config: {
-      OLLAMA_API_KEY: apiKey,
-    },
   } as OllamaModalValues;
 
   const validationSchema = useMemo(
     () =>
       buildValidationSchema(isOnboarding, {
         apiBase: tab === Tab.TAB_SELF_HOSTED,
-        extra:
-          tab === Tab.TAB_CLOUD
-            ? {
-                custom_config: Yup.object({
-                  OLLAMA_API_KEY: Yup.string().required("API Key is required"),
-                }),
-              }
-            : undefined,
+        apiKey: tab === Tab.TAB_CLOUD,
       }),
     [tab, isOnboarding]
   );
@@ -219,25 +205,18 @@ export default function OllamaModal({
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
-        const filteredCustomConfig = Object.fromEntries(
-          Object.entries(values.custom_config || {}).filter(([, v]) => v !== "")
-        );
-
         const submitValues = {
           ...values,
-          api_base: filteredCustomConfig.OLLAMA_API_KEY
-            ? CLOUD_API_BASE
-            : values.api_base,
-          custom_config:
-            Object.keys(filteredCustomConfig).length > 0
-              ? filteredCustomConfig
-              : undefined,
+          // Ollama Cloud is reached via a fixed base URL; the API key implies it.
+          api_base: values.api_key ? CLOUD_API_BASE : values.api_base,
         };
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.OLLAMA_CHAT,
           values: submitValues,
           initialValues,

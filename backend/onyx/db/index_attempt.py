@@ -1,34 +1,28 @@
 from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import TypeVarTuple
 
-from sqlalchemy import and_
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import func
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, and_, delete, desc, func, select, update
+from sqlalchemy.orm import Session, joinedload
 
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptError
-from onyx.db.models import SearchSettings
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    IndexingStatus,
+    IndexModelStatus,
+)
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    IndexAttemptError,
+    SearchSettings,
+)
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
 
 logger = setup_logger()
 
@@ -460,6 +454,57 @@ def mark_attempt_failed(
             data={
                 "index_attempt_id": index_attempt_id,
                 "status": IndexingStatus.FAILED.value,
+                "cc_pair_id": attempt.connector_credential_pair_id,
+            },
+        )
+        # Stale counter keys left by a failed cleanup() are harmless: the monitor
+        # skips attempts that are already in a terminal state before reading Redis.
+        try:
+            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+        except Exception:
+            logger.debug(
+                "Failed to clean up docprocessing counters for attempt %s",
+                index_attempt_id,
+                exc_info=True,
+            )
+    except Exception:
+        db_session.rollback()
+        raise
+
+
+def mark_attempt_interrupted(
+    index_attempt_id: int,
+    db_session: Session,
+    reason: str = "Unknown",
+) -> None:
+    """Terminal-but-resumable: worker stopped mid-run by infrastructure, not by an
+    error. Distinct from FAILED (so it doesn't trip the repeated-error auto-pause)
+    and from CANCELED (so the UI doesn't imply a user did it)."""
+    try:
+        attempt = db_session.execute(
+            select(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+        ).scalar_one()
+
+        # Re-check under the lock: another writer (e.g. the subprocess finishing
+        # SUCCESS) may have set a terminal status between the caller's pre-check
+        # and this lock. Don't overwrite it.
+        if attempt.status.is_terminal():
+            return
+
+        if not attempt.time_started:
+            attempt.time_started = datetime.now(timezone.utc)
+        attempt.status = IndexingStatus.INTERRUPTED
+        attempt.error_msg = reason
+        attempt.celery_task_id = None
+        db_session.commit()
+
+        optional_telemetry(
+            record_type=RecordType.INDEX_ATTEMPT_STATUS,
+            data={
+                "index_attempt_id": index_attempt_id,
+                "status": IndexingStatus.INTERRUPTED.value,
                 "cc_pair_id": attempt.connector_credential_pair_id,
             },
         )

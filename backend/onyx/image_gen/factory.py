@@ -1,7 +1,9 @@
 from enum import Enum
 
-from onyx.image_gen.interfaces import ImageGenerationProvider
-from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
+from onyx.image_gen.interfaces import (
+    ImageGenerationProvider,
+    ImageGenerationProviderCredentials,
+)
 from onyx.image_gen.providers.azure_img_gen import AzureImageGenerationProvider
 from onyx.image_gen.providers.openai_img_gen import OpenAIImageGenerationProvider
 from onyx.image_gen.providers.vertex_img_gen import VertexImageGenerationProvider

@@ -4,17 +4,17 @@ SessionManager is the main entry point for build session lifecycle management.
 It orchestrates session CRUD, message handling, artifact management, and file system access.
 """
 
+import contextlib
 import hashlib
 import io
+import json
 import mimetypes
+import threading
 import uuid
 import zipfile
-from collections.abc import Callable
-from collections.abc import Generator
-from contextlib import AbstractContextManager
-from contextlib import nullcontext
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator
+from contextlib import AbstractContextManager, nullcontext
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -24,57 +24,86 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.models import BuildMessage
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.enums import SandboxStatus, SessionOrigin
+from onyx.db.external_app import get_connectable_apps_for_user
+from onyx.db.llm import fetch_all_accessible_llm_providers
+from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
-from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
-from onyx.server.features.build.db.build_session import allocate_nextjs_port
-from onyx.server.features.build.db.build_session import create_build_session__no_commit
-from onyx.server.features.build.db.build_session import delete_build_session__no_commit
-from onyx.server.features.build.db.build_session import (
-    fetch_all_supported_build_llm_providers,
+from onyx.server.features.build.configs import (
+    MAX_TOTAL_UPLOAD_SIZE_BYTES,
+    MAX_UPLOAD_FILES_PER_SESSION,
+    OPENCODE_DISABLED_TOOLS,
+    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
 )
-from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.build_session import get_empty_session_for_user
-from onyx.server.features.build.db.build_session import get_session_messages
-from onyx.server.features.build.db.build_session import get_user_build_sessions
-from onyx.server.features.build.db.build_session import update_session_activity
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import get_snapshots_for_session
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.db.build_session import (
+    allocate_nextjs_port,
+    create_build_session__no_commit,
+    delete_build_session__no_commit,
+    get_build_session,
+    get_empty_session_for_user,
+    get_session_messages,
+    get_user_build_sessions,
+    session_runtime_stale,
+    update_session_activity,
+)
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_by_user_id,
+    get_snapshots_for_session,
+    update_sandbox_heartbeat,
+)
 from onyx.server.features.build.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.models import DirectoryListing
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
+    DirectoryListing,
+    FilesystemEntry,
+    PromptAttachment,
+)
+from onyx.server.features.build.sandbox.serve_transport import (
+    PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+    PromptSlot,
+)
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
-from onyx.server.features.build.sandbox.user_library import hydrate_user_library
-from onyx.server.features.build.session import sandbox_lifecycle as _sandbox
+from onyx.server.features.build.sandbox.util.agent_instructions import (
+    build_connectable_apps_list,
+)
+from onyx.server.features.build.sandbox.util.mcp_config import (
+    resolve_craft_mcp_servers,
+)
+from onyx.server.features.build.sandbox.util.opencode_config import (
+    build_provider_opencode_config,
+)
 from onyx.server.features.build.session import streaming as _streaming
-from onyx.server.features.build.session.errors import RateLimitError
-from onyx.server.features.build.session.errors import UploadLimitExceededError
+from onyx.server.features.build.session.errors import (
+    RateLimitError,
+    UploadLimitExceededError,
+)
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
-from onyx.server.features.build.session.llm_config import get_all_build_mode_llm_configs
-from onyx.server.features.build.session.llm_config import select_default_llm_config
+from onyx.server.features.build.session.llm_config import (
+    AgentSelection,
+    build_onyx_gateway_config,
+    parse_agent_selection,
+)
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.naming import generate_session_name
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    ProvisioningPolicy,
+    ensure_sandbox_ready,
+    hydrate_managed_content,
+)
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.skills.push import build_user_skills_payload
-from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+_DISPOSE_PENDING_TTL_SECONDS = 24 * 3600
 
 
 # Hidden directories/files to filter from listings
@@ -88,6 +117,8 @@ HIDDEN_PATTERNS = {
     "opencode.json",
     ".env",
     ".gitignore",
+    "nextjs.log",
+    "nextjs.pid",
 }
 
 
@@ -165,21 +196,18 @@ class SessionManager:
     def build_llm_configs(
         self,
         user: User,
-        requested_provider_type: str | None = None,
-        requested_model_name: str | None = None,
-    ) -> tuple[LLMProviderConfig, list[LLMProviderConfig]]:
-        """Single access-scoped fetch → (default config, all pre-registered
-        configs). ``configs[0]`` is the default. Used at provision time so the
-        default and the cross-provider override list share one DB read.
-
-        Raises:
-            OnyxError: If no accessible supported provider is configured.
-        """
-        providers = fetch_all_supported_build_llm_providers(self._db_session, user)
-        default = select_default_llm_config(
-            providers, requested_provider_type, requested_model_name
+        selection: AgentSelection | None = None,
+    ) -> CraftLLMProviderConfig:
+        gateway_config = build_onyx_gateway_config(
+            fetch_all_accessible_llm_providers(self._db_session, user),
+            selection,
         )
-        return default, get_all_build_mode_llm_configs(providers, default)
+        if gateway_config is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "No accessible LLM provider with a visible model is configured.",
+            )
+        return gateway_config
 
     # =========================================================================
     # Session CRUD Operations
@@ -199,35 +227,16 @@ class SessionManager:
         """
         return get_user_build_sessions(user_id, self._db_session)
 
-    def _hydrate_skills(
-        self, sandbox_id: UUID, user: User, files: FileSet | None = None
-    ) -> None:
-        try:
-            hydrate_sandbox_skills(sandbox_id, user, self._db_session, files=files)
-        except Exception:
-            logger.warning(
-                "Failed to push skills to sandbox %s", sandbox_id, exc_info=True
-            )
-
-    def _hydrate_user_library(self, sandbox_id: UUID, user_id: UUID) -> None:
-        try:
-            hydrate_user_library(sandbox_id, user_id, self._db_session)
-        except Exception:
-            logger.warning(
-                "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
-            )
-
     def _prewarm_opencode_session(
-        self, sandbox_id: UUID, session: BuildSession
+        self, sandbox: Sandbox, session: BuildSession
     ) -> None:
-        """Mint and persist the opencode-serve session before the first prompt.
+        """Mint and persist the OpenCode session before the first prompt.
 
         The caller owns the surrounding transaction. This keeps the empty Craft
-        session's frontend-ready state aligned with the agent runtime being
-        ready to accept the first user message.
+        session's runtime ID and acknowledged skills generation aligned.
         """
         opencode_session_id = self._sandbox_manager.ensure_opencode_session(
-            sandbox_id=sandbox_id,
+            sandbox_id=sandbox.id,
             session_id=session.id,
             opencode_session_id=session.opencode_session_id,
         )
@@ -242,7 +251,177 @@ class SessionManager:
                 session.id,
             )
             session.opencode_session_id = opencode_session_id
+            session.skills_hash = sandbox.skills_hash
+            session.mcp_config_hash = sandbox.mcp_config_hash
             self._db_session.flush()
+
+    def session_llm_config(
+        self, session: BuildSession, user: User
+    ) -> CraftLLMProviderConfig:
+        """Resolve the LLM config a session's opencode.json should carry from
+        its persisted provider/model selection (falling back to the gateway
+        default when the selection is unset or no longer accessible)."""
+        selection = parse_agent_selection(session.agent_provider, session.agent_model)
+        return self.build_llm_configs(user, selection)
+
+    def reconcile_session_llm_config(
+        self,
+        sandbox: Sandbox,
+        session: BuildSession,
+        user: User,
+    ) -> None:
+        llm_config = self.session_llm_config(session, user)
+        mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
+        expected = json.dumps(
+            build_provider_opencode_config(
+                llm_config,
+                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                mcp_servers=mcp_servers,
+                session_id=str(session.id),
+            )
+        )
+
+        try:
+            current = self._sandbox_manager.read_file(
+                sandbox.id, session.id, "opencode.json"
+            ).decode()
+        except (UnicodeDecodeError, ValueError):
+            current = None
+        except RuntimeError:
+            # Transient exec/API failure while merely checking; assume stale
+            # and regenerate defensively rather than failing the turn.
+            logger.warning(
+                "Could not read opencode.json for session %s; regenerating",
+                session.id,
+            )
+            current = None
+
+        cache = get_cache_backend()
+        dispose_pending_key = f"craft:llm_config_dispose_pending:{session.id}"
+        if current == expected:
+            # A matching file does NOT prove the running opencode instance
+            # picked it up: a prior reconcile may have written the file and
+            # then failed the dispose. Retry the dispose while the marker is
+            # set, else the instance stays on the old config until pod death.
+            if (
+                session.opencode_session_id is not None
+                and cache.get(dispose_pending_key) is not None
+            ):
+                self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
+            cache.delete(dispose_pending_key)
+            if (
+                session.agent_provider != llm_config.provider
+                or session.agent_model != llm_config.model_name
+            ):
+                session.agent_provider = llm_config.provider
+                session.agent_model = llm_config.model_name
+                self._db_session.flush()
+            return
+
+        # Set the dispose-pending marker BEFORE writing the config: if we crash
+        # after the write but before the dispose, the file will already match on
+        # the next reconcile, so the marker is the only thing that tells it to
+        # retry the missed dispose. Setting it after the write leaves that exact
+        # window uncovered.
+        cache.set(dispose_pending_key, "1", ex=_DISPOSE_PENDING_TTL_SECONDS)
+        self._sandbox_manager.regenerate_session_config(
+            sandbox_id=sandbox.id,
+            session_id=session.id,
+            agent_provider=llm_config.provider,
+            agent_model=llm_config.model_name,
+            nextjs_port=session.nextjs_port,
+            connectable_apps_section=build_connectable_apps_list(
+                get_connectable_apps_for_user(self._db_session, user)
+            ),
+            user_name=user.personal_name,
+            llm_config=llm_config,
+            mcp_servers=mcp_servers,
+        )
+        if session.opencode_session_id is not None:
+            self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
+        cache.delete(dispose_pending_key)
+        session.agent_provider = llm_config.provider
+        session.agent_model = llm_config.model_name
+        self._db_session.flush()
+
+    def reload_session_skills(self, session_id: UUID, user: User) -> bool:
+        """Reload one runtime and report whether its skills remain stale."""
+        session = get_build_session(session_id, user.id, self._db_session)
+        if session is None:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+
+        sandbox = get_sandbox_by_user_id(self._db_session, user.id)
+        if sandbox is None or not session_runtime_stale(session, sandbox):
+            return False
+
+        skills_hash = sandbox.skills_hash
+        mcp_config_hash = sandbox.mcp_config_hash
+        if sandbox.status == SandboxStatus.PROVISIONING:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "Wait for the sandbox to finish starting before reloading skills.",
+            )
+
+        update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
+
+        prompt_slot = (
+            self._sandbox_manager.prompt_slot(
+                sandbox.id,
+                session_id,
+                acquire_timeout=0.1,
+                fail_open=False,
+            )
+            if sandbox.status == SandboxStatus.RUNNING
+            else nullcontext(PromptSlot(acquired=True))
+        )
+        with prompt_slot as slot:
+            if not slot.acquired:
+                raise OnyxError(
+                    OnyxErrorCode.CONFLICT,
+                    "Wait for the current turn to finish before reloading skills.",
+                )
+
+            if sandbox.status == SandboxStatus.RUNNING:
+                try:
+                    llm_config = self.session_llm_config(session, user)
+                    mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
+                    # Rewrite the per-session opencode.json (provider catalog +
+                    # current MCP set) and AGENTS.md BEFORE disposing so the
+                    # fresh instance re-reads the current config.
+                    self._sandbox_manager.regenerate_session_config(
+                        sandbox_id=sandbox.id,
+                        session_id=session_id,
+                        agent_provider=session.agent_provider,
+                        agent_model=session.agent_model,
+                        nextjs_port=session.nextjs_port,
+                        connectable_apps_section=build_connectable_apps_list(
+                            get_connectable_apps_for_user(self._db_session, user)
+                        ),
+                        user_name=user.personal_name,
+                        llm_config=llm_config,
+                        mcp_servers=mcp_servers,
+                    )
+                    if session.opencode_session_id is not None:
+                        self._sandbox_manager.dispose_opencode_instance(
+                            sandbox.id, session_id
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to refresh skills for session %s",
+                        session_id,
+                        exc_info=True,
+                    )
+                    raise OnyxError(
+                        OnyxErrorCode.BAD_GATEWAY,
+                        "Failed to reload session.",
+                    ) from exc
+
+            session.skills_hash = skills_hash
+            session.mcp_config_hash = mcp_config_hash
+            self._db_session.flush()
+            self._db_session.refresh(sandbox)
+            return session_runtime_stale(session, sandbox)
 
     def ensure_sandbox_running(
         self,
@@ -284,23 +463,20 @@ class SessionManager:
         user = fetch_user_by_id(self._db_session, user_id)
         if user is None:
             raise ValueError(f"User {user_id} not found")
-        _, all_llm_configs = self.build_llm_configs(user)
-        return _sandbox.ensure_sandbox_ready(
+        sandbox = ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
             user_id,
-            all_llm_configs,
-            policy=_sandbox.ProvisioningPolicy.POLL,
+            policy=ProvisioningPolicy.POLL,
             provisioning_wait_seconds=provisioning_wait_seconds,
             user=user,
         )
+        return sandbox
 
     def create_session__no_commit(
         self,
         user_id: UUID,
         name: str | None = None,
-        llm_provider_type: str | None = None,
-        llm_model_name: str | None = None,
         origin: SessionOrigin = SessionOrigin.INTERACTIVE,
         headless: bool = False,
     ) -> BuildSession:
@@ -314,11 +490,9 @@ class SessionManager:
         Args:
             user_id: The user ID
             name: Optional session name
-            llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
-            llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
             origin: Provenance of the session. INTERACTIVE (default) sessions
-                appear in the Craft sidebar; SCHEDULED sessions (created by
-                the scheduled-tasks executor) are excluded.
+                appear in the Craft sidebar; SCHEDULED (scheduled-tasks
+                executor) and SLACK (Slack bot) sessions are excluded.
 
         Returns:
             The created BuildSession model
@@ -332,18 +506,15 @@ class SessionManager:
         if not user:
             raise ValueError(f"User {user_id} not found")
 
-        # Resolve the default + all pre-registered provider configs in one read.
-        llm_config, all_llm_configs = self.build_llm_configs(
-            user, llm_provider_type, llm_model_name
-        )
+        llm_config = self.build_llm_configs(user)
 
         # Allocate port for this session (per-session port allocation).
         # Both LOCAL and KUBERNETES backends use the same port allocation
-        # strategy. Skipped for SCHEDULED sessions: scheduled-task fires
-        # are headless, never attach a preview, and pile up so fast they'd
-        # exhaust the [3010, 3100) range on a busy tenant.
+        # strategy. Skipped for non-interactive origins (SCHEDULED, SLACK):
+        # those sessions are headless, never attach a preview, and pile up
+        # fast enough to exhaust the [3010, 3100) range on a busy tenant.
         nextjs_port: int | None
-        if origin == SessionOrigin.SCHEDULED or headless:
+        if origin != SessionOrigin.INTERACTIVE or headless:
             nextjs_port = None
         else:
             nextjs_port = allocate_nextjs_port(self._db_session)
@@ -371,12 +542,11 @@ class SessionManager:
         # afford to wait through a concurrent provisioner, so we use the
         # FAIL policy (raise RuntimeError if another request is mid-
         # provision).
-        sandbox = _sandbox.ensure_sandbox_ready(
+        sandbox = ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
             user_id,
-            all_llm_configs,
-            policy=_sandbox.ProvisioningPolicy.FAIL,
+            policy=ProvisioningPolicy.FAIL,
             user=user,
         )
 
@@ -386,22 +556,27 @@ class SessionManager:
         )
         user_name = user.personal_name
 
-        skills_section, connectable_apps_section, skills_files = (
-            build_user_skills_payload(user, self._db_session)
+        connectable_apps_section, skills_files = build_user_skills_payload(
+            user, self._db_session
         )
-
+        hydrate_managed_content(
+            self._sandbox_manager,
+            sandbox.id,
+            user,
+            self._db_session,
+            connectable_apps_section=connectable_apps_section,
+            skills_files=skills_files,
+        )
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
             session_id=build_session.id,
             llm_config=llm_config,
             nextjs_port=nextjs_port,
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
+            mcp_servers=resolve_craft_mcp_servers(self._db_session, user),
         )
-        self._hydrate_skills(sandbox.id, user, files=skills_files)
-        self._hydrate_user_library(sandbox.id, user_id)
-        self._prewarm_opencode_session(sandbox.id, build_session)
+        self._prewarm_opencode_session(sandbox, build_session)
 
         logger.info(
             "Successfully created session %s with workspace in sandbox %s",
@@ -414,8 +589,6 @@ class SessionManager:
     def get_or_create_empty_session(
         self,
         user_id: UUID,
-        llm_provider_type: str | None = None,
-        llm_model_name: str | None = None,
         headless: bool = False,
     ) -> BuildSession:
         """Get existing empty session or create a new one with provisioned sandbox.
@@ -428,9 +601,6 @@ class SessionManager:
 
         Args:
             user_id: The user ID
-            llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
-            llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
-
         Returns:
             BuildSession (existing empty or newly created)
 
@@ -462,9 +632,11 @@ class SessionManager:
                     if user is None:
                         logger.warning("Cannot push skills: user %s not found", user_id)
                     else:
-                        self._hydrate_skills(sandbox.id, user)
-                    self._hydrate_user_library(sandbox.id, user_id)
-                    self._prewarm_opencode_session(sandbox.id, existing)
+                        hydrate_managed_content(
+                            self._sandbox_manager, sandbox.id, user, self._db_session
+                        )
+                        self.reconcile_session_llm_config(sandbox, existing, user)
+                    self._prewarm_opencode_session(sandbox, existing)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,
@@ -497,8 +669,6 @@ class SessionManager:
 
         return self.create_session__no_commit(
             user_id=user_id,
-            llm_provider_type=llm_provider_type,
-            llm_model_name=llm_model_name,
             headless=headless,
         )
 
@@ -609,20 +779,38 @@ class SessionManager:
 
         # Get user's sandbox to clean up session workspace
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        prompt_slot_cm: AbstractContextManager[bool]
+        prompt_slot_cm: AbstractContextManager[PromptSlot]
         if sandbox and sandbox.status.is_active():
             prompt_slot_cm = self._sandbox_manager.prompt_slot(sandbox.id, session_id)
         else:
-            prompt_slot_cm = nullcontext(True)
+            prompt_slot_cm = nullcontext(PromptSlot(acquired=True))
 
-        with prompt_slot_cm as acquired_prompt_slot:
-            if not acquired_prompt_slot:
+        with prompt_slot_cm as slot, contextlib.ExitStack() as cleanup:
+            if not slot.acquired:
                 raise OnyxError(
                     OnyxErrorCode.CONFLICT,
                     "This session is busy with an active turn. Try again when it finishes.",
                 )
 
+            # Workspace/snapshot cleanup below can outlast one lease.
+            slot_renewal_stop = threading.Event()
+            cleanup.callback(slot_renewal_stop.set)
+            start_thread_with_context(
+                target=slot.keep_alive,
+                name=f"delete-slot-renewal-{session_id}",
+                daemon=True,
+                args=(slot_renewal_stop, PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS),
+            )
+
+            def ensure_prompt_slot_owned() -> None:
+                if slot.lost:
+                    raise OnyxError(
+                        OnyxErrorCode.CONFLICT,
+                        "Session cleanup lost exclusive access. Try again.",
+                    )
+
             if sandbox and sandbox.status.is_active():
+                ensure_prompt_slot_owned()
                 if session.opencode_session_id:
                     try:
                         deleted_from_opencode = (
@@ -648,6 +836,8 @@ class SessionManager:
                             e,
                         )
 
+                ensure_prompt_slot_owned()
+
                 # Clean up session workspace (but don't terminate sandbox)
                 try:
                     self._sandbox_manager.cleanup_session_workspace(
@@ -663,14 +853,20 @@ class SessionManager:
                     # Log but don't fail - session can still be deleted even if
                     # workspace cleanup fails (e.g., if pod is already terminated)
                     logger.warning(
-                        "Failed to cleanup session workspace %s: %s", session_id, e
+                        "Failed to cleanup session workspace %s: %s",
+                        session_id,
+                        e,
+                        exc_info=True,
                     )
+
+                ensure_prompt_slot_owned()
 
             # Delete snapshot files from FileStore before removing DB records
             snapshots = get_snapshots_for_session(self._db_session, session_id)
             if snapshots:
                 snapshot_manager = SnapshotManager(get_default_file_store())
                 for snapshot in snapshots:
+                    ensure_prompt_slot_owned()
                     try:
                         snapshot_manager.delete_snapshot(snapshot.storage_path)
                     except Exception as e:
@@ -681,6 +877,7 @@ class SessionManager:
                         )
 
             # Delete session (uses flush, caller commits)
+            ensure_prompt_slot_owned()
             return delete_build_session__no_commit(
                 session_id, user_id, self._db_session
             )
@@ -731,18 +928,28 @@ class SessionManager:
     def interrupt_message(self, session_id: UUID, user_id: UUID) -> bool:
         """Interrupt the in-flight agent turn for a session.
 
-        Sets the interrupt fence and returns. The active stream's consume loop
-        polls the fence (~1/s) and self-terminates — aborting opencode and
-        emitting its own ``PromptResponse`` rather than waiting on a
-        ``session.idle`` that may never arrive after an abort. A flag-based
-        approach (vs. a direct abort) is safe to call at any point in the turn
-        lifecycle, including before the stream has started consuming events.
+        Two complementary signals: the interrupt fence covers the whole turn
+        lifecycle (a turn that hasn't POSTed its prompt yet cancels at the
+        fence check; the runner's consume loop polls it ~1/s and records the
+        turn CANCELLED), and a direct best-effort abort to opencode stops the
+        sandbox-side work even when no live runner is polling the fence
+        (dead/blocked runner, other replica).
         """
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
 
         request_interrupt(session_id, get_cache_backend())
+
+        if session.opencode_session_id:
+            sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+            if sandbox is not None and sandbox.status.is_active():
+                start_thread_with_context(
+                    target=self._sandbox_manager.abort_opencode_session,
+                    name=f"interrupt-abort-{session_id}",
+                    daemon=True,
+                    args=(sandbox.id, session_id, session.opencode_session_id),
+                )
         return True
 
     def subscribe_to_existing_session_events(
@@ -807,15 +1014,21 @@ class SessionManager:
         self,
         sandbox_id: UUID,
         session_id: UUID,
-    ) -> AbstractContextManager[bool]:
-        return self._sandbox_manager.prompt_slot(sandbox_id, session_id)
+        acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+    ) -> AbstractContextManager[PromptSlot]:
+        return self._sandbox_manager.prompt_slot(
+            sandbox_id, session_id, acquire_timeout=acquire_timeout
+        )
 
     def yield_sandbox_events(
         self,
         sandbox_id: UUID,
         session_id: UUID,
         user_message_content: str,
+        attachments: list[PromptAttachment] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
+        should_abort_on_teardown: Callable[[], bool] | None = None,
+        turn_timeout_seconds: float | None = None,
     ) -> Generator[Any, None, None]:
         build_session = _streaming.load_turn_session(
             self._db_session, self._sandbox_manager, sandbox_id, session_id
@@ -828,10 +1041,13 @@ class SessionManager:
             sandbox_id,
             session_id,
             user_message_content,
+            attachments=attachments,
             opencode_session_id=build_session.opencode_session_id,
             agent_provider=build_session.agent_provider,
             agent_model=build_session.agent_model,
             should_interrupt=should_interrupt,
+            should_abort_on_teardown=should_abort_on_teardown,
+            turn_timeout_seconds=turn_timeout_seconds,
         )
 
     def merge_events_with_announces(
@@ -1184,7 +1400,9 @@ class SessionManager:
             webapp_url = f"{WEB_DOMAIN}/api/build/sessions/{session_id}/webapp"
 
             # Quick health check: can the API server reach the NextJS dev server?
-            ready = self._check_nextjs_ready(sandbox.id, session.nextjs_port)
+            ready = self._check_nextjs_ready(
+                sandbox.id, session_id, session.nextjs_port
+            )
 
         return {
             "has_webapp": session.nextjs_port is not None,
@@ -1194,21 +1412,29 @@ class SessionManager:
             "sharing_scope": session.sharing_scope,
         }
 
-    def _check_nextjs_ready(self, sandbox_id: UUID, port: int) -> bool:
+    def _check_nextjs_ready(
+        self, sandbox_id: UUID, session_id: UUID, port: int
+    ) -> bool:
         """Check if the NextJS dev server is responding.
 
-        Does a quick HTTP GET to the sandbox's internal URL with a short timeout.
-        Returns True if the server responds with any status code, False on timeout
-        or connection error.
+        Probes a basePath-scoped dev-asset path with a short timeout: probing
+        outside the basePath renders a spurious 404 page on every poll, and
+        probing the app page itself would report not-ready whenever generated
+        app code 500s (the iframe's error overlay is the right surface for
+        that). A missing /_next/static asset returns a plain 404 without
+        executing app code, so any response means the server is up.
         """
         try:
             sandbox_manager = get_sandbox_manager()
             internal_url = sandbox_manager.get_webapp_url(sandbox_id, port)
+            probe_url = (
+                f"{internal_url}/api/build/sessions/{session_id}/webapp"
+                "/_next/static/onyx-ready-probe.js"
+            )
             with httpx.Client(timeout=2.0) as client:
-                resp = client.get(internal_url)
-                # Any response (even 500) means the server is up
-                return resp.status_code < 500
-        except (httpx.TimeoutException, httpx.ConnectError, Exception):
+                client.get(probe_url)
+            return True
+        except Exception:
             return False
 
     def download_webapp_zip(
@@ -1431,6 +1657,7 @@ class SessionManager:
 
         # Update heartbeat - file upload is user activity that keeps sandbox alive
         update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
 
         return relative_path, len(content)
 
@@ -1469,5 +1696,6 @@ class SessionManager:
             # SandboxManager already logs the deletion details
             # Update heartbeat - file deletion is user activity that keeps sandbox alive
             update_sandbox_heartbeat(self._db_session, sandbox.id)
+            self._db_session.commit()
 
         return deleted

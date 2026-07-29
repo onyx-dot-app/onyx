@@ -24,6 +24,12 @@ def main() -> None:
 
     run_server()
 
+    # uvicorn.run() only returns once the server has stopped serving, so treat any
+    # return here as a failure: exit non-zero so `restart: on-failure` (compose) and
+    # `restartPolicy: OnFailure` (k8s) bring the container back. A bare return would
+    # exit 0 and silently suppress the restart.
+    sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

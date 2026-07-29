@@ -6,7 +6,7 @@ import { OnyxDocument } from "@/lib/search/interfaces";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { Checkbox } from "@opal/components";
 import { updateHiddenStatus } from "../lib";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { ScoreSection } from "../ScoreEditor";
 import { useRouter } from "next/navigation";
