@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/dockercmd"
@@ -351,6 +352,11 @@ type startProgress struct {
 	// is only halfway there: compose follows it with a health check.
 	waitHealth bool
 	states     map[string]string
+	// reported records that the event stream has produced a checklist. The
+	// health poll runs alongside as a backstop and reads this to know whether
+	// compose is saying anything, so it is written and read from two
+	// goroutines.
+	reported atomic.Bool
 }
 
 func newStartProgress(services func([]ui.ServiceRow), extra func(string), waitHealth bool) *startProgress {
@@ -399,7 +405,12 @@ func (p *startProgress) publish() {
 	}
 	p.services(rows)
 	p.extra(fmt.Sprintf("%d/%d ready", done, len(rows)))
+	p.reported.Store(true)
 }
+
+// reporting reports whether compose's output has described the rollout. Until
+// it has, the checklist has to come from somewhere else.
+func (p *startProgress) reporting() bool { return p.reported.Load() }
 
 // ready reports whether a container has reached its final state for this run.
 func (p *startProgress) ready(word string) bool {
@@ -439,6 +450,23 @@ var startPhases = map[string]string{
 	"Skipped":    "skipped",
 	"Error":      "failed",
 	"Restarting": "restarting",
+}
+
+// healthDetail says what a container is doing, read off `docker ps` status
+// text. It answers in the same words the event stream uses, so a checklist
+// reads the same whichever of the two filled it in.
+func healthDetail(status string) string {
+	switch {
+	case strings.Contains(status, "(healthy)"):
+		return "healthy"
+	case strings.Contains(status, "(unhealthy)"):
+		return "unhealthy"
+	case strings.Contains(status, "(health: starting)"), strings.Contains(status, "(starting)"):
+		return "waiting for health"
+	case strings.HasPrefix(status, "Up"):
+		return "running"
+	}
+	return strings.ToLower(firstWord(status))
 }
 
 // decodeEvent reads one progress line in either format. plain prints the

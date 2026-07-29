@@ -64,6 +64,9 @@ const (
 	railWidth    = 22
 	minTwoColumn = 64
 	minPaneInner = 20
+	// paneChrome is what the pane's box costs horizontally: a border column
+	// and a padding column on each side.
+	paneChrome = 4
 	// Sizes assumed until the first window-size message arrives.
 	defaultWidth  = 80
 	defaultHeight = 24
@@ -75,6 +78,10 @@ const (
 	StagePull
 	StageStart
 	StageDone
+	// StageComplete is past the last stage: the rail shows every entry as
+	// finished. It is what the run is in while anything is still on screen
+	// after the work itself is over.
+	StageComplete
 )
 
 var stageNames = []string{"Configure", "Pull", "Start", "Done"}
@@ -282,9 +289,9 @@ func (m wizModel) View() tea.View {
 	}
 	twoColumn := width >= minTwoColumn
 
-	// Pane content width: the box adds a border and a column of padding on
-	// each side, and the rail (when shown) takes the left of the screen.
-	inner := width - 4
+	// Pane content width: the box costs paneChrome, and the rail (when shown)
+	// takes the left of the screen.
+	inner := width - paneChrome
 	if twoColumn {
 		inner -= railWidth
 	}
@@ -309,7 +316,11 @@ func (m wizModel) View() tea.View {
 	// a short screen: everything else here is fixed height (the box adds a
 	// border row above and below).
 	budget := height - len(head) - len(rail) - len(notes) - len(foot) - 2
-	pane := paneBox.Render(strings.Join(m.paneLines(inner, max(budget, 3)), "\n"))
+	// The box is told its width rather than left to hug its content: a border
+	// that moves with the longest line makes the pane look like it shrinks
+	// whenever a phase has less to say, and leaves the screen's right edge
+	// ragged. Width is the outer size, so the chrome is added back here.
+	pane := paneBox.Width(inner + paneChrome).Render(strings.Join(m.paneLines(inner, max(budget, 3)), "\n"))
 
 	lines := make([]string, 0, height)
 	lines = append(lines, head...)

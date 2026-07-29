@@ -174,6 +174,39 @@ func TestStartProgressSeparatesStoppingFromStarting(t *testing.T) {
 	}
 }
 
+// The health poll runs behind the event stream, so it has to know when the
+// stream has taken over — and say the same things while it hasn't.
+func TestStartProgressBacksOffOnceComposeSpeaks(t *testing.T) {
+	var sink checklistSink
+	services, extra := sink.hooks()
+	p := newStartProgress(services, extra, true)
+
+	// Networks and volumes are not the rollout: until a container is named,
+	// the checklist is still empty and the poll is what fills it.
+	p.line(`{"id":"Network onyx_default","status":"Created"}`)
+	if p.reporting() {
+		t.Error("a network event is not a per-service report")
+	}
+	p.line(`{"id":"Container onyx-api_server-1","status":"Starting"}`)
+	if !p.reporting() {
+		t.Error("a container event should hand the checklist to the event stream")
+	}
+
+	// Whichever side fills the checklist, a row reads the same.
+	for _, tc := range []struct{ status, want string }{
+		{"Up 2 minutes (healthy)", "healthy"},
+		{"Up 3 seconds (health: starting)", "waiting for health"},
+		{"Up 9 minutes (unhealthy)", "unhealthy"},
+		{"Up About an hour", "running"},
+		{"Restarting (1) 4 seconds ago", "restarting"},
+		{"Exited (0) 1 minute ago", "exited"},
+	} {
+		if got := healthDetail(tc.status); got != tc.want {
+			t.Errorf("healthDetail(%q) = %q, want %q", tc.status, got, tc.want)
+		}
+	}
+}
+
 // Plain progress names containers the same way, just space-separated.
 func TestStartProgressPlainLines(t *testing.T) {
 	var sink checklistSink

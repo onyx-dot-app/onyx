@@ -227,7 +227,7 @@ func (in *installer) printUpgradeSuccess(hostPort int, from, to string) {
 	url := fmt.Sprintf("http://localhost:%d", hostPort)
 	headline := fmt.Sprintf("Onyx upgraded: %s → %s", from, to)
 	if in.wiz != nil {
-		in.wiz.Stage(ui.StageDone)
+		in.wiz.Stage(ui.StageComplete)
 		in.wiz.Finish(
 			"🎉 "+headline,
 			"",
