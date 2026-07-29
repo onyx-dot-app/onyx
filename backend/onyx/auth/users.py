@@ -108,12 +108,16 @@ from onyx.configs.constants import (
     ANONYMOUS_USER_COOKIE_NAME,
     ANONYMOUS_USER_EMAIL,
     ANONYMOUS_USER_UUID,
+    CELERY_DOCUMENT_SYNC_TASK_EXPIRES,
     DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
     DANSWER_API_KEY_PREFIX,
     FASTAPI_USERS_AUTH_COOKIE_NAME,
     PASSWORD_SPECIAL_CHARS,
     UNNAMED_KEY_PLACEHOLDER,
     MilestoneRecordType,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
     OnyxRedisLocks,
 )
 from onyx.db.api_key import fetch_user_for_api_key
@@ -137,7 +141,9 @@ from onyx.db.models import AccessToken, OAuthAccount, Persona, User
 from onyx.db.pat import resolve_pat
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
+    build_email_reconcile_update,
     get_user_by_email,
+    get_user_by_oauth_account,
     is_limited_user,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -333,9 +339,44 @@ def verify_email_is_invited(email: str) -> None:
     )
 
 
-def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
+def repair_user_email_acls(
+    user_id: uuid.UUID, old_email: str, new_email: str, tenant_id: str
+) -> None:
+    """Queue the indexed-ACL rewrite for a user who just changed address.
+
+    Deliberately not awaited on the login path: `User.prior_emails` already
+    keeps their access intact, so this only needs to land eventually.
+    """
+    from onyx.background.celery.versioned_apps.client import app as client_app
+
+    client_app.send_task(
+        OnyxCeleryTask.REPAIR_USER_EMAIL_ACLS_TASK,
+        kwargs=dict(
+            user_id=str(user_id),
+            old_email=old_email,
+            new_email=new_email,
+            tenant_id=tenant_id,
+        ),
+        queue=OnyxCeleryQueues.VESPA_METADATA_SYNC,
+        priority=OnyxCeleryPriority.MEDIUM,
+        expires=CELERY_DOCUMENT_SYNC_TASK_EXPIRES,
+        ignore_result=True,
+    )
+
+
+def verify_email_in_whitelist(
+    email: str,
+    tenant_id: str,
+    oauth_name: str | None = None,
+    account_id: str | None = None,
+) -> None:
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         user = get_user_by_email(email, db_session)
+        if user is None and oauth_name and account_id:
+            # A linked OAuth account is proof of membership. The address may
+            # have changed at the provider since they joined.
+            user = get_user_by_oauth_account(oauth_name, account_id, db_session)
+
         # A permission-sync placeholder is not a member: appearing in a
         # connector's ACLs must not satisfy invite-only, so the invite check
         # applies until the person actually joins.
@@ -901,6 +942,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             email=account_email,
             referral_source=referral_source,
             request=request,
+            oauth_name=oauth_name,
+            account_id=account_id,
         )
 
         if not tenant_id:
@@ -911,7 +954,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         async with get_async_session_context_manager(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-            verify_email_in_whitelist(account_email, tenant_id)
+            verify_email_in_whitelist(account_email, tenant_id, oauth_name, account_id)
             oauth_security_settings = get_security_settings()
             effective_valid_email_domains = (
                 allowed_email_domains_override
@@ -1008,6 +1051,29 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                                 existing_oauth_account,  # ty: ignore[invalid-argument-type]
                                 oauth_account_dict,
                             )
+
+            # Keyed on the stored email rather than the one the IdP just sent:
+            # that is the address this user's membership row is filed under.
+            fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.user_mapping", "record_oauth_identity", None
+            )(user.email, tenant_id, oauth_name, account_id)
+
+            # The provider is authoritative for the address, so adopt it when it
+            # has moved. Runs in every deployment: single-tenant reaches the
+            # right user by subject and so hits this with a stale email too.
+            email_update = build_email_reconcile_update(user, account_email)
+            if email_update:
+                replaced_email = user.email
+                user = await self.user_db.update(user, update_dict=email_update)
+                fetch_ee_implementation_or_noop(
+                    "onyx.server.tenants.user_mapping", "rekey_user_mapping_email", None
+                )(replaced_email, account_email, tenant_id)
+                repair_user_email_acls(
+                    user_id=user.id,
+                    old_email=replaced_email,
+                    new_email=account_email,
+                    tenant_id=tenant_id,
+                )
 
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
@@ -2432,12 +2498,11 @@ async def complete_login_flow(
 
     next_url = sanitize_next_url(state_data.get("next_url"))
     referral_source = state_data.get("referral_source", None)
-    try:
-        tenant_id = fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
-        )(account_email)
-    except exceptions.UserNotExists:
-        tenant_id = None
+    # Drives the new_team redirect below, so it shares oauth_callback's resolver
+    # rather than restating the order. Disagreeing greets a returning user as new.
+    tenant_id = fetch_ee_implementation_or_noop(
+        "onyx.server.tenants.user_mapping", "resolve_tenant_id", None
+    )(account_email, oauth_client.name, account_id)
 
     request.state.referral_source = referral_source
 

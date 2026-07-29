@@ -337,6 +337,66 @@ def get_user_by_email(email: str, db_session: Session) -> User | None:
     return user
 
 
+def get_user_by_oauth_account(
+    oauth_name: str, account_id: str, db_session: Session
+) -> User | None:
+    """Find a user by the IdP subject their account is linked to.
+
+    Survives a rename at the provider, unlike the email lookup.
+    """
+    return (
+        db_session.query(User)
+        .join(
+            OAuthAccount,
+            OAuthAccount.user_id == User.id,  # ty: ignore[invalid-argument-type]
+        )
+        .filter(
+            OAuthAccount.oauth_name == oauth_name,  # ty: ignore[invalid-argument-type]
+            OAuthAccount.account_id == account_id,  # ty: ignore[invalid-argument-type]
+        )
+        .first()
+    )
+
+
+def build_email_reconcile_update(user: User, new_email: str) -> dict[str, Any] | None:
+    """Fields that move `user` onto `new_email`, or None when they already match
+    case-insensitively.
+
+    The replaced address is kept in `prior_emails` because indexed document ACLs
+    still match on it.
+    """
+    if user.email.lower() == new_email.lower():
+        return None
+
+    prior_emails = user.prior_emails
+    if user.email not in prior_emails:
+        # Rebuilt rather than appended: ARRAY columns are not mutation-tracked,
+        # so an in-place append would never be persisted.
+        prior_emails = [*prior_emails, user.email]
+
+    return {"email": new_email, "prior_emails": prior_emails}
+
+
+def expire_prior_emails(
+    user_id: UUID, expired_emails: list[str], db_session: Session
+) -> None:
+    """Drop addresses whose document ACLs have been rewritten.
+
+    Each entry is a live grant, so an address must only be expired once nothing
+    in the index still matches on it.
+    """
+    user = fetch_user_by_id(db_session, user_id)
+    if user is None:
+        return
+
+    remaining = [email for email in user.prior_emails if email not in expired_emails]
+    if remaining == user.prior_emails:
+        return
+
+    user.prior_emails = remaining
+    db_session.commit()
+
+
 def fetch_user_by_id(db_session: Session, user_id: UUID) -> User | None:
     return (
         db_session.query(User)

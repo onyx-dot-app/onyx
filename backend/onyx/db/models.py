@@ -338,6 +338,14 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         Boolean, nullable=True, default=None
     )
 
+    # Addresses this user previously authenticated under. Indexed documents keep
+    # whichever address permission sync last wrote, so an entry bridges access
+    # until the ACL rewrite lands. Every entry is a live grant, dropped via
+    # `expire_prior_emails`.
+    prior_emails: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
+    )
+
     """
     Preferences probably should be in a separate table at some point, but for now
     putting here for simpicity
@@ -5371,6 +5379,12 @@ class UserTenantMapping(PublicBase):
     email: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Copy of this user's `OAuthAccount` subject, which survives an email change
+    # at the provider. Null whenever it isn't known, so resolution must still
+    # fall back to email. Widths mirror the source columns.
+    oauth_name: Mapped[str | None] = mapped_column(String(length=100), nullable=True)
+    account_id: Mapped[str | None] = mapped_column(String(length=320), nullable=True)
 
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:  # noqa: ARG002

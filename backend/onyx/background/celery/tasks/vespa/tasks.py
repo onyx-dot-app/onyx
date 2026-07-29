@@ -3,6 +3,7 @@ from collections.abc import Callable
 from datetime import datetime
 from http import HTTPStatus
 from typing import Any, cast
+from uuid import UUID
 
 import httpx
 from celery import Celery, Task, shared_task
@@ -35,9 +36,11 @@ from onyx.configs.constants import (
 )
 from onyx.db.document import (
     document_has_indexable_cc_pair,
+    documents_pending_sync,
     get_document,
     mark_document_as_synced,
     mark_document_synced_secondary_pending,
+    swap_document_acl_email,
 )
 from onyx.db.document_set import (
     delete_document_set,
@@ -56,6 +59,7 @@ from onyx.db.sync_record import (
     insert_sync_record,
     update_sync_record_status,
 )
+from onyx.db.users import expire_prior_emails
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces_new import (
     MetadataUpdateRequest,
@@ -638,3 +642,44 @@ def document_index_metadata_sync_task(
         )
 
     return completion_status == OnyxCeleryTaskCompletionStatus.SUCCEEDED
+
+
+@shared_task(
+    name=OnyxCeleryTask.REPAIR_USER_EMAIL_ACLS_TASK,
+    ignore_result=True,
+    soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
+    time_limit=LIGHT_TIME_LIMIT,
+    max_retries=10,
+    bind=True,
+)
+def repair_user_email_acls_task(
+    self: Task,
+    *,
+    user_id: str,
+    old_email: str,
+    new_email: str,
+    tenant_id: str,
+) -> int:
+    """Move one user's ACLs onto their new address, then drop the bridge.
+
+    Rewriting Postgres only bumps `last_modified`; the metadata sync sweep is
+    what carries the change into the index. Until that lands the index still
+    matches on the old address, so the `User.prior_emails` grant has to outlive
+    it - hence the retry rather than expiring inline.
+    """
+    with get_session_with_current_tenant() as db_session:
+        document_ids = swap_document_acl_email(old_email, new_email, db_session)
+        pending = documents_pending_sync(document_ids, db_session)
+
+    if pending:
+        # Bounded by max_retries. The swap above is idempotent, so a re-run
+        # that finds nothing left to rewrite still reaches the expiry below.
+        raise self.retry(countdown=60)
+
+    with get_session_with_current_tenant() as db_session:
+        expire_prior_emails(UUID(user_id), [old_email], db_session)
+
+    task_logger.info(
+        f"repair_user_email_acls_task: docs={len(document_ids)} tenant={tenant_id}"
+    )
+    return len(document_ids)

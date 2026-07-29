@@ -43,6 +43,7 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
     DocumentByConnectorCredentialPair,
+    HierarchyNode,
     KGEntity,
     KGRelationship,
     User,
@@ -1028,6 +1029,61 @@ def backfill_docs_created_at__no_commit(
             continue
         document.doc_created_at = new_created_at
         document.last_modified = now
+
+
+def swap_document_acl_email(
+    old_email: str, new_email: str, db_session: Session
+) -> list[str]:
+    """Rewrite `old_email` to `new_email` in the ACLs carrying it.
+
+    Covers `HierarchyNode` as well as `Document`: both hold the same external
+    permission fields. Returns the touched document ids, bumped so the metadata
+    sync sweep picks them up. Re-running is a no-op once nothing matches.
+
+    Unindexed ACL column, so this is one pass over each table per rename.
+    """
+    now = datetime.now(timezone.utc)
+
+    def _swap(emails: list[str] | None) -> list[str]:
+        return [new_email if email == old_email else email for email in emails or []]
+
+    nodes = (
+        db_session.query(HierarchyNode)
+        .filter(HierarchyNode.external_user_emails.contains([old_email]))
+        .all()
+    )
+    for node in nodes:
+        node.external_user_emails = _swap(node.external_user_emails)
+
+    documents = (
+        db_session.query(DbDocument)
+        .filter(DbDocument.external_user_emails.contains([old_email]))
+        .all()
+    )
+    for document in documents:
+        document.external_user_emails = _swap(document.external_user_emails)
+        document.last_modified = now
+
+    db_session.commit()
+    return [document.id for document in documents]
+
+
+def documents_pending_sync(document_ids: list[str], db_session: Session) -> bool:
+    """Whether any of these documents still owe the index an update."""
+    if not document_ids:
+        return False
+
+    return db_session.query(
+        db_session.query(DbDocument)
+        .filter(
+            DbDocument.id.in_(document_ids),
+            or_(
+                DbDocument.last_modified > DbDocument.last_synced,
+                DbDocument.last_synced.is_(None),
+            ),
+        )
+        .exists()
+    ).scalar()
 
 
 def update_docs_last_modified__no_commit(

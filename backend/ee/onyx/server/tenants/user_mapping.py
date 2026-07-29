@@ -23,40 +23,80 @@ logger = setup_logger()
 def get_tenant_id_for_email(email: str) -> str:
     if not MULTI_TENANT:
         return POSTGRES_DEFAULT_SCHEMA
-    # Implement logic to get tenant_id from the mapping table
-    try:
-        with get_session_with_shared_schema() as db_session:
-            # First try to get an active tenant
+
+    with get_session_with_shared_schema() as db_session:
+        # First try to get an active tenant
+        result = db_session.execute(
+            select(UserTenantMapping).where(
+                UserTenantMapping.email == email,
+                UserTenantMapping.active == True,  # noqa: E712
+            )
+        )
+        mapping = result.scalar_one_or_none()
+        tenant_id = mapping.tenant_id if mapping else None
+
+        # If no active tenant found, try to get the first inactive one
+        if tenant_id is None:
             result = db_session.execute(
                 select(UserTenantMapping).where(
                     UserTenantMapping.email == email,
-                    UserTenantMapping.active == True,  # noqa: E712
+                    UserTenantMapping.active == False,  # noqa: E712
                 )
             )
-            mapping = result.scalar_one_or_none()
-            tenant_id = mapping.tenant_id if mapping else None
-
-            # If no active tenant found, try to get the first inactive one
-            if tenant_id is None:
-                result = db_session.execute(
-                    select(UserTenantMapping).where(
-                        UserTenantMapping.email == email,
-                        UserTenantMapping.active == False,  # noqa: E712
-                    )
-                )
-                mapping = result.scalar_one_or_none()
-                if mapping:
-                    # Mark this mapping as active
-                    mapping.active = True
-                    db_session.commit()
-                    tenant_id = mapping.tenant_id
-    except Exception as e:
-        logger.exception("Error getting tenant id for email %s: %s", email, e)
-        raise exceptions.UserNotExists()
+            mapping = result.scalars().first()
+            if mapping:
+                # Mark this mapping as active
+                mapping.active = True
+                db_session.commit()
+                tenant_id = mapping.tenant_id
 
     if tenant_id is None:
         raise exceptions.UserNotExists()
     return tenant_id
+
+
+def resolve_tenant_id(
+    email: str, oauth_name: str | None = None, account_id: str | None = None
+) -> str | None:
+    """Tenant this login belongs to, or None when it maps nowhere.
+
+    Subject before email: only the subject survives an address change at the
+    provider. Email remains the fallback for password logins and for rows with
+    no subject stamped.
+    """
+    if oauth_name and account_id:
+        tenant_id = get_tenant_id_for_oauth_account(oauth_name, account_id)
+        if tenant_id:
+            return tenant_id
+
+    try:
+        return get_tenant_id_for_email(email)
+    except exceptions.UserNotExists:
+        return None
+
+
+def get_tenant_id_for_oauth_account(oauth_name: str, account_id: str) -> str | None:
+    """Tenant for an IdP subject, or None when it maps nowhere.
+
+    Returns the default schema outside multi-tenant, matching its siblings.
+    """
+    if not MULTI_TENANT:
+        return POSTGRES_DEFAULT_SCHEMA
+
+    with get_session_with_shared_schema() as db_session:
+        mapping = (
+            db_session.execute(
+                select(UserTenantMapping).where(
+                    UserTenantMapping.oauth_name == oauth_name,
+                    UserTenantMapping.account_id == account_id,
+                    UserTenantMapping.active == True,  # noqa: E712
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+    return mapping.tenant_id if mapping else None
 
 
 def user_owns_a_tenant(email: str) -> bool:
@@ -67,6 +107,59 @@ def user_owns_a_tenant(email: str) -> bool:
             .first()
         )
         return result is not None
+
+
+def record_oauth_identity(
+    email: str, tenant_id: str, oauth_name: str, account_id: str
+) -> None:
+    """Stamp the IdP subject onto this user's mapping row so resolution survives
+    an address change at the provider.
+
+    Holds one provider at a time, so resolution still falls back to email for
+    whichever one is not stamped.
+
+    No-op outside multi-tenant, where the mapping table is not provisioned.
+    """
+    if not MULTI_TENANT:
+        return
+
+    with get_session_with_shared_schema() as db_session:
+        db_session.query(UserTenantMapping).filter(
+            UserTenantMapping.email == email.lower(),
+            UserTenantMapping.tenant_id == tenant_id,
+        ).update({"oauth_name": oauth_name, "account_id": account_id})
+        db_session.commit()
+
+
+def rekey_user_mapping_email(old_email: str, new_email: str, tenant_id: str) -> None:
+    """Move this tenant's membership row onto the user's new address.
+
+    Otherwise the row keeps routing the old address and leaves the new one
+    unmapped, which is the state that provisions a second tenant.
+
+    Lowercases explicitly: a bulk update bypasses the column's `@validates`
+    hook, and every read of this table assumes lowercase.
+
+    No-op outside multi-tenant, where the mapping table is not provisioned.
+    """
+    if not MULTI_TENANT:
+        return
+
+    with get_session_with_shared_schema() as db_session:
+        updated = (
+            db_session.query(UserTenantMapping)
+            .filter(
+                UserTenantMapping.email == old_email.lower(),
+                UserTenantMapping.tenant_id == tenant_id,
+            )
+            .update({"email": new_email.lower()})
+        )
+        db_session.commit()
+
+    if not updated:
+        logger.warning(
+            "No mapping row to rekey for %s in tenant %s", old_email, tenant_id
+        )
 
 
 def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:

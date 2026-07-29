@@ -121,10 +121,16 @@ def _get_acl_for_user(
     matches one entry in the returned set.
 
     Anonymous users only have access to public documents.
+
+    Prior addresses are included because indexed documents still carry whichever
+    address permission sync last wrote. Entries are live grants, see
+    `User.prior_emails`.
     """
     if user.is_anonymous:
         return {PUBLIC_DOC_PAT}
-    return {prefix_user_email(user.email), PUBLIC_DOC_PAT}
+
+    emails = [user.email, *user.prior_emails]
+    return {prefix_user_email(email) for email in emails} | {PUBLIC_DOC_PAT}
 
 
 def get_acl_for_user(user: User, db_session: Session | None = None) -> set[str]:
