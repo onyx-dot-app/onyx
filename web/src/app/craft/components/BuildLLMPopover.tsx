@@ -14,6 +14,7 @@ import {
   isCraftRecommendedModel,
 } from "@/app/craft/onboarding/constants";
 import { getModelIcon } from "@/lib/languageModels";
+import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 import { Section } from "@/layouts/general-layouts";
 import {
   Accordion,
@@ -35,7 +36,7 @@ interface ModelOption {
   providerKey: string;
   groupKey: string;
   providerName: string;
-  providerDisplayName: string;
+  groupDisplayName: string;
   modelName: string;
   displayName: string;
   isRecommended: boolean;
@@ -43,6 +44,19 @@ interface ModelOption {
 
 function modelDisplayName(model: ModelConfiguration): string {
   return model.effectiveDisplayName || model.display_name || model.name;
+}
+
+// Mirrors the main app's `groupLlmOptions`: aggregator providers (Bedrock,
+// OpenRouter, ...) get one group per hosted vendor. Keyed by provider id rather
+// than name so two providers sharing a display name stay distinct.
+function craftGroupKey(
+  providerId: number,
+  providerKey: string,
+  vendor: string | null
+): string {
+  return AGGREGATOR_PROVIDERS.has(providerKey.toLowerCase()) && vendor
+    ? `${providerId}/${vendor.toLowerCase()}`
+    : String(providerId);
 }
 
 export function BuildLLMPopover({
@@ -65,13 +79,20 @@ export function BuildLLMPopover({
       const models = showRecommendedOnly
         ? provider.model_configurations.filter(isCraftRecommendedModel)
         : provider.model_configurations.filter((model) => model.is_visible);
+      const providerDisplayName = craftProviderDisplayName(provider);
       models.forEach((model) => {
+        const vendor = model.vendor || null;
+        const groupKey = craftGroupKey(provider.id, provider.provider, vendor);
         options.push({
           providerId: provider.id,
           providerKey: provider.provider,
-          groupKey: String(provider.id),
+          groupKey,
           providerName: provider.name ?? "",
-          providerDisplayName: craftProviderDisplayName(provider),
+          // vendor arrives display-cased from the backend (e.g. "OpenAI", "xAI")
+          groupDisplayName:
+            groupKey === String(provider.id)
+              ? providerDisplayName
+              : `${providerDisplayName}/${vendor}`,
           modelName: model.name,
           displayName: modelDisplayName(model),
           isRecommended: isCraftRecommendedModel(model),
@@ -101,7 +122,7 @@ export function BuildLLMPopover({
         groups.set(groupKey, {
           groupKey,
           providerKey: option.providerKey,
-          displayName: option.providerDisplayName,
+          displayName: option.groupDisplayName,
           options: [],
         });
       }
@@ -120,8 +141,21 @@ export function BuildLLMPopover({
   // Determine current group for auto-expand
   const currentGroupKey = useMemo(() => {
     if (!currentSelection) return "";
-    return String(currentSelection.providerId);
-  }, [currentSelection]);
+    const provider = llmProviders?.find(
+      (candidate) => candidate.id === currentSelection.providerId
+    );
+    const vendor =
+      provider?.model_configurations.find(
+        (model) => model.name === currentSelection.modelName
+      )?.vendor || null;
+    // Prefer the live provider slug so this key is derived from the same source
+    // as the group keys above; a persisted selection can carry a stale one.
+    return craftGroupKey(
+      currentSelection.providerId,
+      provider?.provider ?? currentSelection.provider,
+      vendor
+    );
+  }, [currentSelection, llmProviders]);
 
   // Track expanded groups
   const [expandedGroups, setExpandedGroups] = useState<string[]>([
