@@ -1,6 +1,7 @@
 """Discord bot message handling and response logic."""
 
 import asyncio
+from collections import Counter
 
 import discord
 from pydantic import BaseModel
@@ -12,7 +13,9 @@ from onyx.db.discord_bot import (
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import DiscordChannelConfig, DiscordGuildConfig
+from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.onyxbot.discord.api_client import OnyxAPIClient
+from onyx.onyxbot.discord.attachments import collect_attachments
 from onyx.onyxbot.discord.constants import (
     MAX_CONTEXT_MESSAGES,
     MAX_MESSAGE_LENGTH,
@@ -180,6 +183,13 @@ async def process_chat_message(
         # Build conversation context
         context = await _build_conversation_context(message, bot_user)
 
+        # Forward any pasted images / PDFs so the agent gets them with the text
+        file_descriptors, unavailable_files = await _prepare_attachments(
+            message=message,
+            api_key=api_key,
+            api_client=api_client,
+        )
+
         # Prepare full message content
         parts = []
         if context:
@@ -191,11 +201,13 @@ async def process_chat_message(
             f"Current message from @{message.author.display_name}: {format_message_content(message)}"
         )
 
-        # Send to API
-        response = await api_client.send_chat_message(
-            message="\n\n".join(parts),
+        response = await _request_answer(
+            api_client=api_client,
             api_key=api_key,
             persona_id=persona_id,
+            parts=parts,
+            file_descriptors=file_descriptors,
+            unavailable_files=unavailable_files,
         )
 
         # Format response with citations
@@ -215,6 +227,136 @@ async def process_chat_message(
     except Exception as e:
         logger.exception("Error processing chat message: %s", e)
         await send_error_response(message, bot_user)
+
+
+def _build_message_text(parts: list[str], unavailable_files: list[str]) -> str:
+    """Join the message parts, naming any attachments the agent won't see."""
+    if not unavailable_files:
+        return "\n\n".join(parts)
+
+    return "\n\n".join(
+        parts
+        + [
+            "Note: these attachments could not be read and are not "
+            f"available to you: {', '.join(unavailable_files)}"
+        ]
+    )
+
+
+def _is_image(descriptor: FileDescriptor) -> bool:
+    return descriptor.get("type") == ChatFileType.IMAGE
+
+
+async def _request_answer(
+    api_client: OnyxAPIClient,
+    api_key: str,
+    persona_id: int | None,
+    parts: list[str],
+    file_descriptors: list[FileDescriptor],
+    unavailable_files: list[str],
+) -> ChatFullResponse:
+    """Ask Onyx for an answer, retrying without the images if they can't be used.
+
+    Not every model accepts image input, and a provider-side rejection would
+    otherwise turn an answerable question into an error reply. Retrying without
+    them degrades to the behaviour from before images were forwarded at all, and
+    tells the agent what it is missing. Documents are kept on the retry — their
+    text is injected into the prompt, so no model can refuse them. Only retried
+    when the first attempt produced no answer at all, so a partial answer with a
+    warning is never thrown away.
+    """
+    images = [descriptor for descriptor in file_descriptors if _is_image(descriptor)]
+
+    if not images:
+        # Nothing the model can refuse outright, so there is no lighter request
+        # to fall back to.
+        return await api_client.send_chat_message(
+            message=_build_message_text(parts, unavailable_files),
+            api_key=api_key,
+            persona_id=persona_id,
+            file_descriptors=file_descriptors,
+        )
+
+    failure: str | None
+    try:
+        response = await api_client.send_chat_message(
+            message=_build_message_text(parts, unavailable_files),
+            api_key=api_key,
+            persona_id=persona_id,
+            file_descriptors=file_descriptors,
+        )
+        if response.answer.strip() or not response.error_msg:
+            return response
+        failure = response.error_msg
+    except APIError as e:
+        failure = str(e)
+
+    logger.warning(
+        "Chat request with %s image(s) failed (%s); retrying without them",
+        len(images),
+        failure,
+    )
+
+    return await api_client.send_chat_message(
+        message=_build_message_text(
+            parts,
+            unavailable_files
+            + [descriptor.get("name") or "image" for descriptor in images],
+        ),
+        api_key=api_key,
+        persona_id=persona_id,
+        file_descriptors=[
+            descriptor for descriptor in file_descriptors if not _is_image(descriptor)
+        ],
+    )
+
+
+async def _prepare_attachments(
+    message: discord.Message,
+    api_key: str,
+    api_client: OnyxAPIClient,
+) -> tuple[list[FileDescriptor], list[str]]:
+    """Download attachments posted with the message and upload them to Onyx.
+
+    Returns the descriptors to attach to the chat request plus the filenames of
+    attachments that couldn't be included. Failing to forward them never fails
+    the message: the agent answers on the text and is told what it is missing.
+    """
+    collected = await collect_attachments(message)
+    if not collected.files:
+        return [], collected.skipped_filenames
+
+    try:
+        file_descriptors = await api_client.upload_chat_files(
+            files=collected.files,
+            api_key=api_key,
+        )
+    except APIError as e:
+        logger.error("Failed to upload %s attachment(s): %s", len(collected.files), e)
+        return [], collected.skipped_filenames + [
+            file.filename for file in collected.files
+        ]
+
+    # The server can reject individual files (e.g. an unreadable or
+    # password-protected PDF, or one over its token limit); those are absent from
+    # the descriptors it returns. Counted rather than set-matched because pasted
+    # screenshots routinely share the name "image.png".
+    uploaded_counts = Counter(descriptor.get("name") for descriptor in file_descriptors)
+    rejected_names: list[str] = []
+    for file in collected.files:
+        if uploaded_counts[file.filename] > 0:
+            uploaded_counts[file.filename] -= 1
+        else:
+            rejected_names.append(file.filename)
+
+    logger.info(
+        "Attached %s file(s) to Discord message %s (%s unavailable)",
+        len(file_descriptors),
+        message.id,
+        len(collected.skipped_filenames) + len(rejected_names),
+    )
+
+    return file_descriptors, collected.skipped_filenames + rejected_names
 
 
 async def _build_conversation_context(
@@ -397,7 +539,9 @@ def _format_messages_as_context(
 
     return (
         "You are a Discord bot named OnyxBot.\n"
-        'Always assume that [user] is the same as the "Current message" author.'
+        'Always assume that [user] is the same as the "Current message" author.\n'
+        "Attachments named in the conversation history are not available to you; "
+        "only attachments on the current message are.\n"
         "Conversation history:\n"
         "---\n" + "\n".join(formatted) + "\n---"
     )
@@ -409,7 +553,12 @@ def _format_messages_as_context(
 
 
 def format_message_content(message: discord.Message) -> str:
-    """Format message content with readable mentions."""
+    """Format message content with readable mentions and attachment markers.
+
+    Attachments are named inline because a Discord message can consist of
+    nothing but a pasted screenshot — without a marker such a message would read
+    as empty text to the agent.
+    """
     content = message.content
 
     for user in message.mentions:
@@ -421,6 +570,12 @@ def format_message_content(message: discord.Message) -> str:
 
     for channel in message.channel_mentions:
         content = content.replace(f"<#{channel.id}>", f"#{channel.name}")
+
+    markers = [
+        f"[attachment: {attachment.filename}]" for attachment in message.attachments
+    ]
+    if markers:
+        content = " ".join([content.strip(), *markers]).strip()
 
     return content
 

@@ -59,6 +59,7 @@ def mock_api_client() -> MagicMock:
     mock_response.error_msg = None
 
     client.send_chat_message = AsyncMock(return_value=mock_response)
+    client.upload_chat_files = AsyncMock(return_value=[])
     client.health_check = AsyncMock(return_value=True)
     return client
 
@@ -124,6 +125,7 @@ def mock_discord_message(mock_discord_guild: MagicMock) -> MagicMock:
     msg.role_mentions = []
     msg.channel_mentions = []
     msg.reference = None
+    msg.attachments = []
     msg.add_reaction = AsyncMock()
     msg.remove_reaction = AsyncMock()
     msg.reply = AsyncMock()

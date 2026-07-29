@@ -10,7 +10,9 @@ import aiohttp
 import pytest
 
 from onyx.chat.models import ChatFullResponse
+from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.onyxbot.discord.api_client import OnyxAPIClient
+from onyx.onyxbot.discord.attachments import MessageAttachment
 from onyx.onyxbot.discord.constants import API_REQUEST_TIMEOUT
 from onyx.onyxbot.discord.exceptions import (
     APIConnectionError,
@@ -257,6 +259,274 @@ class TestSendChatMessage:
             await client.send_chat_message("Hello", "api_key")
 
         assert exc_info.value.status_code == 500
+
+
+class TestUploadChatFiles:
+    """Tests for upload_chat_files functionality."""
+
+    @staticmethod
+    def _image(filename: str = "shot.png") -> MessageAttachment:
+        return MessageAttachment(
+            filename=filename, content_type="image/png", data=b"png-bytes"
+        )
+
+    @staticmethod
+    def _pdf(filename: str = "report.pdf") -> MessageAttachment:
+        return MessageAttachment(
+            filename=filename, content_type="application/pdf", data=b"%PDF-1.7"
+        )
+
+    @pytest.mark.asyncio
+    async def test_upload_not_initialized(self) -> None:
+        """upload_chat_files() before initialize() raises APIConnectionError."""
+        client = OnyxAPIClient()
+
+        with pytest.raises(APIConnectionError) as exc_info:
+            await client.upload_chat_files([self._image()], "api_key")
+
+        assert "not initialized" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_no_files_skips_request(self) -> None:
+        """Uploading nothing makes no HTTP call."""
+        client = OnyxAPIClient()
+        mock_session = MagicMock()
+        client._session = mock_session
+
+        assert await client.upload_chat_files([], "api_key") == []
+        mock_session.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_upload_posts_multipart_to_chat_file(self) -> None:
+        """Files are posted as multipart form data with the bearer token."""
+        client = OnyxAPIClient()
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(
+            return_value={
+                "files": [
+                    {
+                        "id": "file-store-id",
+                        "type": "image",
+                        "name": "shot.png",
+                        "user_file_id": "user-file-id",
+                    }
+                ],
+                "rejected_files": [],
+            }
+        )
+
+        mock_session = MagicMock()
+        mock_post = MagicMock(
+            return_value=MockAsyncContextManager(return_value=mock_response)
+        )
+        mock_session.post = mock_post
+        client._session = mock_session
+
+        descriptors = await client.upload_chat_files([self._image()], "api_key_123")
+
+        assert descriptors == [
+            {
+                "id": "file-store-id",
+                "type": ChatFileType.IMAGE,
+                "name": "shot.png",
+                "user_file_id": "user-file-id",
+            }
+        ]
+
+        url = mock_post.call_args.args[0]
+        assert url.endswith("/chat/file")
+        kwargs = mock_post.call_args.kwargs
+        assert isinstance(kwargs["data"], aiohttp.FormData)
+        # Content-Type is left to aiohttp so the multipart boundary matches.
+        assert kwargs["headers"] == {"Authorization": "Bearer api_key_123"}
+
+    @pytest.mark.asyncio
+    async def test_pdf_comes_back_as_a_document_descriptor(self) -> None:
+        """PDFs are classified server-side as documents, not images."""
+        client = OnyxAPIClient()
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(
+            return_value={
+                "files": [
+                    {
+                        "id": "file-store-id",
+                        "type": "document",
+                        "name": "report.pdf",
+                        "user_file_id": "user-file-id",
+                    }
+                ],
+                "rejected_files": [],
+            }
+        )
+
+        mock_session = MagicMock()
+        mock_session.post = MagicMock(
+            return_value=MockAsyncContextManager(return_value=mock_response)
+        )
+        client._session = mock_session
+
+        descriptors = await client.upload_chat_files([self._pdf()], "api_key")
+
+        assert descriptors == [
+            {
+                "id": "file-store-id",
+                "type": ChatFileType.DOC,
+                "name": "report.pdf",
+                "user_file_id": "user-file-id",
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_rejected_files_are_omitted(self) -> None:
+        """Server-side rejections come back empty-handed, not as an error."""
+        client = OnyxAPIClient()
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(
+            return_value={
+                "files": [],
+                "rejected_files": [{"filename": "huge.png", "reason": "too large"}],
+            }
+        )
+
+        mock_session = MagicMock()
+        mock_session.post = MagicMock(
+            return_value=MockAsyncContextManager(return_value=mock_response)
+        )
+        client._session = mock_session
+
+        assert await client.upload_chat_files([self._image("huge.png")], "key") == []
+
+    @pytest.mark.asyncio
+    async def test_upload_403_error(self) -> None:
+        """A key without chat scope raises APIResponseError with 403."""
+        client = OnyxAPIClient()
+
+        mock_response = MagicMock()
+        mock_response.status = 403
+
+        mock_session = MagicMock()
+        mock_session.post = MagicMock(
+            return_value=MockAsyncContextManager(return_value=mock_response)
+        )
+        client._session = mock_session
+
+        with pytest.raises(APIResponseError) as exc_info:
+            await client.upload_chat_files([self._image()], "key")
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_upload_timeout(self) -> None:
+        """Request timeout raises APITimeoutError."""
+        client = OnyxAPIClient()
+
+        mock_session = MagicMock()
+        mock_session.post = MagicMock(
+            return_value=MockAsyncContextManager(
+                enter_side_effect=TimeoutError("Timeout")
+            )
+        )
+        client._session = mock_session
+
+        with pytest.raises(APITimeoutError):
+            await client.upload_chat_files([self._image()], "key")
+
+    @pytest.mark.asyncio
+    async def test_upload_connection_error(self) -> None:
+        """Network failure raises APIConnectionError."""
+        client = OnyxAPIClient()
+
+        mock_session = MagicMock()
+        mock_session.post = MagicMock(
+            return_value=MockAsyncContextManager(
+                enter_side_effect=aiohttp.ClientConnectorError(
+                    MagicMock(), OSError("Connection refused")
+                )
+            )
+        )
+        client._session = mock_session
+
+        with pytest.raises(APIConnectionError):
+            await client.upload_chat_files([self._image()], "key")
+
+
+class TestSendChatMessageFileDescriptors:
+    """file_descriptors must reach the send-chat-message payload."""
+
+    @pytest.mark.asyncio
+    async def test_descriptors_are_included_in_payload(self) -> None:
+        client = OnyxAPIClient()
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(
+            return_value={"answer": "ok", "citations": [], "error_msg": None}
+        )
+
+        mock_session = MagicMock()
+        mock_post = MagicMock(
+            return_value=MockAsyncContextManager(return_value=mock_response)
+        )
+        mock_session.post = mock_post
+        client._session = mock_session
+
+        descriptor = FileDescriptor(
+            id="file-store-id",
+            type=ChatFileType.IMAGE,
+            name="shot.png",
+            user_file_id="user-file-id",
+        )
+
+        with patch.object(
+            ChatFullResponse,
+            "model_validate",
+            return_value=MagicMock(answer="ok", error_msg=None),
+        ):
+            await client.send_chat_message(
+                "Hello", "api_key", file_descriptors=[descriptor]
+            )
+
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload["file_descriptors"] == [
+            {
+                "id": "file-store-id",
+                "type": "image",
+                "name": "shot.png",
+                "user_file_id": "user-file-id",
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_payload_defaults_to_no_files(self) -> None:
+        client = OnyxAPIClient()
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(
+            return_value={"answer": "ok", "citations": [], "error_msg": None}
+        )
+
+        mock_session = MagicMock()
+        mock_post = MagicMock(
+            return_value=MockAsyncContextManager(return_value=mock_response)
+        )
+        mock_session.post = mock_post
+        client._session = mock_session
+
+        with patch.object(
+            ChatFullResponse,
+            "model_validate",
+            return_value=MagicMock(answer="ok", error_msg=None),
+        ):
+            await client.send_chat_message("Hello", "api_key")
+
+        assert mock_post.call_args.kwargs["json"]["file_descriptors"] == []
 
 
 class TestHealthCheck:
