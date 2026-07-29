@@ -5,7 +5,17 @@ from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -36,7 +46,7 @@ from onyx.chat.process_message import (
 from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import set_fence
 from onyx.chat.stream_buffer import has_stream_buffer, read_stream_chunks
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.app_configs import DISABLE_VECTOR_DB, WEB_DOMAIN
 from onyx.configs.chat_configs import (
     CHAT_HEARTBEAT_INTERVAL_S,
     CHAT_RESUME_POLL_INTERVAL_S,
@@ -64,11 +74,13 @@ from onyx.db.enums import Permission
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
 from onyx.db.models import ChatMessage, ChatSessionSharedStatus, Persona, User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.projects import upload_files_to_user_files_with_indexing
 from onyx.db.usage import UsageType, increment_usage
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.models import FileDescriptor
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.models import (
@@ -85,10 +97,13 @@ from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
 from onyx.server.query_and_chat.chat_utils import (
     is_spreadsheet_mime_type,
+    mime_type_to_chat_file_type,
     parse_spreadsheet_for_preview,
 )
 from onyx.server.query_and_chat.models import (
     ChatFeedbackRequest,
+    ChatFileRejection,
+    ChatFileUploadResponse,
     ChatMessageIdentifier,
     ChatRenameRequest,
     ChatSearchResponse,
@@ -964,6 +979,47 @@ def seed_chat_from_slack(
 
     return SeedChatFromSlackResponse(
         redirect_url=f"{WEB_DOMAIN}/chat?chatId={new_chat_session.id}"
+    )
+
+
+@router.post("/file", tags=PUBLIC_API_TAGS)
+def upload_chat_files(
+    bg_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> ChatFileUploadResponse:
+    """Upload files to attach to a subsequent chat message.
+
+    Same server-side handling as `POST /user/projects/file/upload`, but gated on
+    the chat scope so chat-only clients (e.g. the Discord bot's service account,
+    or a `write:chat` PAT) can attach files without being granted the broader
+    `basic` permission. Uploaded files are owned by the calling user and are not
+    linked to any project.
+    """
+    result = upload_files_to_user_files_with_indexing(
+        files=files,
+        project_id=None,
+        user=user,
+        temp_id_map=None,
+        db_session=db_session,
+        background_tasks=bg_tasks if DISABLE_VECTOR_DB else None,
+    )
+
+    return ChatFileUploadResponse(
+        files=[
+            FileDescriptor(
+                id=user_file.file_id,
+                type=mime_type_to_chat_file_type(user_file.content_type),
+                name=user_file.name,
+                user_file_id=str(user_file.id),
+            )
+            for user_file in result.user_files
+        ],
+        rejected_files=[
+            ChatFileRejection(filename=rejected.filename, reason=rejected.reason)
+            for rejected in result.rejected_files
+        ],
     )
 
 

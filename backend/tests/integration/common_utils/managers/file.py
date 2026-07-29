@@ -2,6 +2,8 @@ import io
 import mimetypes
 from typing import IO, List, Tuple, cast
 
+import httpx
+
 from onyx.file_store.models import FileDescriptor
 from onyx.server.documents.models import FileUploadResponse
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -54,6 +56,33 @@ class FileManager:
                 }
             )
         return file_descriptors, ""
+
+    @staticmethod
+    def upload_chat_files(
+        files: List[Tuple[str, IO]],
+        headers: dict[str, str],
+    ) -> "httpx.Response":
+        """Upload files via the chat-scoped `POST /chat/file` endpoint.
+
+        Takes raw headers rather than a `DATestUser` so chat-scoped API keys
+        (e.g. the Discord bot's service account) can be exercised. Returns the
+        raw response so callers can assert on status codes.
+        """
+        # Content-Type must be left to httpx so the multipart boundary matches.
+        headers = {k: v for k, v in headers.items() if k.lower() != "content-type"}
+
+        files_param = []
+        for filename, file_obj in files:
+            mime_type, _ = mimetypes.guess_type(filename)
+            if mime_type is None:
+                mime_type = "application/octet-stream"
+            files_param.append(("files", (filename, file_obj, mime_type)))
+
+        return client.post(
+            f"{API_SERVER_URL}/chat/file",
+            files=files_param,
+            headers=headers,
+        )
 
     @staticmethod
     def fetch_uploaded_file(

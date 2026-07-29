@@ -166,6 +166,25 @@ class ChatMessageIdentifier(BaseModel):
     message_id: int
 
 
+class ChatFileRejection(BaseModel):
+    """A file that could not be accepted, with a human-readable reason."""
+
+    filename: str
+    reason: str
+
+
+class ChatFileUploadResponse(BaseModel):
+    """Result of uploading files intended for a chat message.
+
+    `files` can be passed straight through as `SendMessageRequest.file_descriptors`.
+    Rejections are reported per-file rather than failing the whole upload, so a
+    caller attaching several files still gets the ones that were accepted.
+    """
+
+    files: list[FileDescriptor]
+    rejected_files: list[ChatFileRejection]
+
+
 class ChatRenameRequest(BaseModel):
     chat_session_id: UUID
     name: str | None = None
