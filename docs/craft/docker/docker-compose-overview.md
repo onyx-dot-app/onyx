@@ -136,6 +136,19 @@ cd ~/onyx_data/deployment
 docker compose -f docker-compose.yml -f docker-compose.craft.yml up -d
 ```
 
+The sandbox image is not a compose service — the api_server creates sandbox
+containers from it directly — so `compose pull` doesn't fetch it. Pull it
+yourself when bringing the stack up by hand, or the first sandbox pays the
+~1 GB download inside its provisioning request:
+
+```bash
+docker pull "onyxdotapp/sandbox:${IMAGE_TAG:-latest}"
+```
+
+`install.sh --include-craft` does this for you. Skipping it is not fatal —
+`DockerSandboxManager` pulls on demand — it just moves the wait onto the first
+user.
+
 The compose file references the `onyx_craft_sandbox` network as
 `external: true`. The installer creates it *only on the fresh-install
 path*. If you're updating an existing install with `--include-craft`,
