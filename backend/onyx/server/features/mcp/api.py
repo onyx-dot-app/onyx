@@ -242,17 +242,21 @@ def _resolve_oauth_credentials(
     """
     resolved_id = request_client_id
     if not request_client_id_changed:
-        resolved_id = (
-            existing_client.client_id if existing_client else request_client_id
-        )
+        # A real (unmasked) value still wins without the flag — clients that
+        # predate the changed flags send only the edited value.
+        if existing_client and not (
+            request_client_id and not is_masked_credential(request_client_id)
+        ):
+            resolved_id = existing_client.client_id
     elif resolved_id:
         reject_masked_credentials({"oauth_client_id": resolved_id})
 
     resolved_secret = request_client_secret
     if not request_client_secret_changed:
-        resolved_secret = (
-            existing_client.client_secret if existing_client else request_client_secret
-        )
+        if existing_client and not (
+            request_client_secret and not is_masked_credential(request_client_secret)
+        ):
+            resolved_secret = existing_client.client_secret
     elif resolved_secret:
         reject_masked_credentials({"oauth_client_secret": resolved_secret})
 
@@ -278,7 +282,13 @@ def _resolve_admin_credentials(
             and existing_user_credentials
             and key in existing_user_credentials
         ):
-            resolved[key] = existing_user_credentials[key]
+            # Clients that predate the changed flags never set them, so a
+            # real (unmasked) value that differs from storage is still an
+            # edit and must win; only masked/absent replays reuse storage.
+            if request_value and not is_masked_credential(request_value):
+                resolved[key] = request_value
+            else:
+                resolved[key] = existing_user_credentials[key]
             continue
         if request_value:
             reject_masked_credentials({key: request_value})
@@ -1083,17 +1093,41 @@ def save_user_credentials(
 
     email = user.email
 
+    # The credentials modal seeds its inputs with masked stored values, so an
+    # edit of one field replays the untouched fields as masked literals.
+    # Resolve those against the user's stored substitutions; reject any mask
+    # that has no stored counterpart rather than persisting it as a real value.
+    existing_user_creds: dict[str, str] = {}
+    existing_user_config = get_user_connection_config(server_id, email, db_session)
+    if existing_user_config:
+        existing_user_dict = extract_connection_data(
+            existing_user_config, apply_mask=False
+        )
+        existing_user_creds = existing_user_dict.get(HEADER_SUBSTITUTIONS) or {}
+    credentials: dict[str, str] = {
+        field: (
+            existing_user_creds[field]
+            if is_masked_credential(value) and field in existing_user_creds
+            else value
+        )
+        for field, value in request.credentials.items()
+    }
+    try:
+        reject_masked_credentials(credentials)
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+
     # Get the authentication template for this server
     auth_template = get_server_auth_template(server_id, db_session)
     if not auth_template:
         # Fallback to simple API key storage for servers without templates
-        if "api_key" not in request.credentials:
+        if "api_key" not in credentials:
             raise HTTPException(
                 status_code=400,
                 detail="No authentication template found and no api_key provided",
             )
         config_data = MCPConnectionData(
-            headers={"Authorization": f"Bearer {request.credentials['api_key']}"},
+            headers={"Authorization": f"Bearer {credentials['api_key']}"},
         )
     else:
         # Render via the shared helper so user + auto (`{user_email}`)
@@ -1105,10 +1139,8 @@ def save_user_credentials(
             )
             template = MCPAuthTemplate(headers=auth_template_dict.get("headers", {}))
             config_data = MCPConnectionData(
-                headers=_build_headers_from_template(
-                    template, request.credentials, email
-                ),
-                header_substitutions=request.credentials,
+                headers=_build_headers_from_template(template, credentials, email),
+                header_substitutions=credentials,
             )
             for oauth_field_key in MCPOAuthKeys:
                 field_key: Literal[
@@ -2000,6 +2032,20 @@ def _upsert_mcp_server(
                     OnyxErrorCode.INVALID_INPUT,
                     "A shared API token is required for admin-managed API-token servers.",
                 )
+            # Value-based change detection: clients that predate the
+            # `api_token_changed` flag send only the new token, so the flag
+            # alone can't be trusted to gate the config rewrite.
+            existing_shared_token: str | None = None
+            if mcp_server.admin_connection_config:
+                try:
+                    existing_shared_token = _extract_shared_api_token(
+                        existing_admin_config_dict
+                    )
+                except OnyxError:
+                    existing_shared_token = None
+            shared_api_token_value_changed = request.api_token != existing_shared_token
+        else:
+            shared_api_token_value_changed = False
         if (
             request.auth_type == MCPAuthenticationType.API_TOKEN
             and request.auth_performer == MCPAuthenticationPerformer.PER_USER
@@ -2082,7 +2128,9 @@ def _upsert_mcp_server(
                     or shared_api_token_template_changed
                     or (
                         request.auth_performer == MCPAuthenticationPerformer.ADMIN
-                        and request.api_token_changed
+                        and (
+                            request.api_token_changed or shared_api_token_value_changed
+                        )
                     )
                     or api_token_scheme_changed
                 )
