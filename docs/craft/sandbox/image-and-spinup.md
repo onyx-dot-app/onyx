@@ -230,11 +230,24 @@ secrets in the *release* namespace — and a kubelet resolves an
 imagePullSecret in the pod's own namespace. Listing those names on a
 sandbox-namespace pod points at secrets that do not exist there.
 
+Both the namespace and the account name are configurable, and both pods
+follow whatever the configMap sets — patching the default `sandbox`
+account on a deployment that overrode `SANDBOX_SERVICE_ACCOUNT_NAME`
+leaves the real account uncredentialed and every pull failing:
+
 ```bash
-kubectl -n onyx-sandboxes create secret docker-registry regcred \
+# Chart defaults. Override to match configMap.SANDBOX_NAMESPACE and
+# configMap.SANDBOX_SERVICE_ACCOUNT_NAME if your deployment sets them.
+SANDBOX_NS=onyx-sandboxes
+SANDBOX_SA=sandbox
+
+kubectl -n "$SANDBOX_NS" create secret docker-registry regcred \
   --docker-server=... --docker-username=... --docker-password=...
-kubectl -n onyx-sandboxes patch serviceaccount sandbox \
+kubectl -n "$SANDBOX_NS" patch serviceaccount "$SANDBOX_SA" \
   -p '{"imagePullSecrets":[{"name":"regcred"}]}'
+
+# Confirm it took, on the account the pods actually use.
+kubectl -n "$SANDBOX_NS" get sa "$SANDBOX_SA" -o jsonpath='{.imagePullSecrets}'
 ```
 
 This is also why the prepuller renders no `imagePullSecrets` block. An
