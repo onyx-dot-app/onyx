@@ -144,6 +144,33 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	// instead of a stopped half-upgraded stack.
 
 	in.phase("Updating configuration")
+
+	// Config files and the manifest are written before .env, and not the other
+	// way round: .env is what names the deployment's version, so it must not
+	// name the target until everything else that can still fail on disk has
+	// succeeded. Otherwise a refresh or a save that fails here leaves the
+	// deployment claiming a version it has not so much as pulled.
+	configRef := ""
+	if !in.opts.Local {
+		configRef = release.ConfigRef(targetTag)
+		in.infof("Refreshing config files to match %s...", configRef)
+	}
+	fetcher := &fileFetcher{in: in}
+	if err := in.materializeFiles(ctx, configRef, managedFiles(in.lite, in.craft), manifest, fetcher); err != nil {
+		return err
+	}
+
+	if in.craft {
+		in.ensureCraftResources(ctx)
+	}
+
+	// Persist the manifest's file records now: if the pull fails, the next
+	// run must still know the freshly materialized files were CLI-written,
+	// not hand-edited. InstalledTag advances only after a successful start.
+	if err := manifest.Save(in.root.Dir); err != nil {
+		return err
+	}
+
 	in.infof("Updating configuration for version %s...", targetTag)
 	env = SetVar(env, "IMAGE_TAG", targetTag)
 	if in.craft {
@@ -170,27 +197,6 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	}
 	in.successf("Updated IMAGE_TAG to %s in .env file (all other settings preserved)", targetTag)
 
-	configRef := ""
-	if !in.opts.Local {
-		configRef = release.ConfigRef(targetTag)
-		in.infof("Refreshing config files to match %s...", configRef)
-	}
-	fetcher := &fileFetcher{in: in}
-	if err := in.materializeFiles(ctx, configRef, managedFiles(in.lite, in.craft), manifest, fetcher); err != nil {
-		return err
-	}
-
-	if in.craft {
-		in.ensureCraftResources(ctx)
-	}
-
-	// Persist the manifest's file records now: if the pull fails, the next
-	// run must still know the freshly materialized files were CLI-written,
-	// not hand-edited. InstalledTag advances only after a successful start.
-	if err := manifest.Save(in.root.Dir); err != nil {
-		return err
-	}
-
 	if err := in.pullImages(ctx, targetTag, hostPort); err != nil {
 		in.rollbackEnv(envPath, envBytes)
 		return err
@@ -214,7 +220,9 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	}
 	manifest.UpdatedAt = now
 	if err := manifest.Save(in.root.Dir); err != nil {
-		return err
+		// The services are already up on the target: say what did happen, or
+		// the error reads as an upgrade that never took place.
+		return fmt.Errorf("upgraded to %s, but recording it in %s failed: %w", targetTag, state.FileName, err)
 	}
 
 	in.printUpgradeSuccess(hostPort, installedTag, targetTag)

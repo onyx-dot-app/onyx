@@ -324,3 +324,47 @@ func TestUpgradeStartFailureKeepsTargetAndExplains(t *testing.T) {
 		}
 	}
 }
+
+// Everything that can fail on disk happens before .env is rewritten, so a
+// refresh that fails leaves the deployment naming the version it is actually
+// running — not one it never pulled.
+func TestUpgradeConfigFailureLeavesVersionAlone(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	// A managed file the refresh cannot get at: reading it fails outright.
+	readme := filepath.Join(root, "README.md")
+	if err := os.Remove(readme); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(readme, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	upgradeRunner := &fakeRunner{handler: healthyDockerHandler}
+	deps := testDeps(t, upgradeRunner, rawServer(t, "# compose at v4.2.0\nname: onyx\n"))
+	err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	})
+	if err == nil {
+		t.Fatalf("upgrade must fail when a managed file can't be refreshed\noutput:\n%s", outBuf(deps).String())
+	}
+
+	env, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+	if got := Var(string(env), "IMAGE_TAG"); got != "v4.0.0" {
+		t.Errorf("IMAGE_TAG = %q after a failed config refresh, want the running v4.0.0", got)
+	}
+	m, merr := state.Load(root)
+	if merr != nil || m == nil {
+		t.Fatalf("manifest: %+v, %v", m, merr)
+	}
+	if m.InstalledTag != "v4.0.0" {
+		t.Errorf("manifest tag = %q after a failed config refresh, want v4.0.0", m.InstalledTag)
+	}
+	// Nothing should have been deployed either.
+	for _, c := range upgradeRunner.calls {
+		if line := argv(c); strings.Contains(line, " pull") || strings.Contains(line, "up -d") {
+			t.Errorf("deployed despite the failure: %s", line)
+		}
+	}
+}

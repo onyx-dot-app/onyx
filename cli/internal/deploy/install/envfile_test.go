@@ -78,3 +78,32 @@ func TestSandboxBackendForTag(t *testing.T) {
 		}
 	}
 }
+
+// COMPOSE_PROFILES is shared: the CLI owns the s3-filestore entry, the user
+// owns the rest, so mode switches edit one entry rather than the value.
+func TestProfileListEditsOneEntry(t *testing.T) {
+	cases := []struct{ list, without, with string }{
+		{"s3-filestore", "", "s3-filestore"},
+		{"s3-filestore,monitoring", "monitoring", "s3-filestore,monitoring"},
+		{"monitoring,s3-filestore,gpu", "monitoring,gpu", "monitoring,s3-filestore,gpu"},
+		{"monitoring", "monitoring", "monitoring,s3-filestore"},
+		{"", "", "s3-filestore"},
+		// Hand-written values are not always tidy.
+		{" monitoring , s3-filestore ", "monitoring", " monitoring , s3-filestore "},
+		{"monitoring,,gpu", "monitoring,gpu", "monitoring,gpu,s3-filestore"},
+	}
+	for _, tc := range cases {
+		if got := withoutProfile(tc.list, s3FilestoreProfile); got != tc.without {
+			t.Errorf("withoutProfile(%q) = %q, want %q", tc.list, got, tc.without)
+		}
+		if got := withProfile(tc.list, s3FilestoreProfile); got != tc.with {
+			t.Errorf("withProfile(%q) = %q, want %q", tc.list, got, tc.with)
+		}
+		if hasProfile(tc.without, s3FilestoreProfile) {
+			t.Errorf("withoutProfile(%q) still activates %s", tc.list, s3FilestoreProfile)
+		}
+		if !hasProfile(tc.with, s3FilestoreProfile) {
+			t.Errorf("withProfile(%q) does not activate %s", tc.list, s3FilestoreProfile)
+		}
+	}
+}

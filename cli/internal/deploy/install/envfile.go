@@ -1,6 +1,7 @@
 package install
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -47,6 +48,41 @@ func Var(content, key string) string {
 		}
 	}
 	return ""
+}
+
+// COMPOSE_PROFILES is a list, and only one of its entries belongs to the
+// deployment mode (s3-filestore, which runs MinIO). The rest are the user's,
+// so mode changes add and drop that one entry instead of rewriting the value.
+
+// hasProfile reports whether a COMPOSE_PROFILES value activates profile.
+func hasProfile(list, profile string) bool {
+	return slices.Contains(profileList(list), profile)
+}
+
+// withoutProfile drops profile, keeping every other entry in its order.
+func withoutProfile(list, profile string) string {
+	kept := slices.DeleteFunc(profileList(list), func(p string) bool { return p == profile })
+	return strings.Join(kept, ",")
+}
+
+// withProfile appends profile, leaving a list that already has it untouched.
+func withProfile(list, profile string) string {
+	if hasProfile(list, profile) {
+		return list
+	}
+	return strings.Join(append(profileList(list), profile), ",")
+}
+
+// profileList splits a COMPOSE_PROFILES value, dropping blanks left by an
+// empty value or a stray comma.
+func profileList(list string) []string {
+	var out []string
+	for _, p := range strings.Split(list, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func matchesKey(line, key string, matchCommented bool) bool {

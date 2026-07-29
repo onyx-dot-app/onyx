@@ -35,6 +35,10 @@ const (
 	waitTimeoutSeconds = 600
 	minComposeVersion  = "2.24.0"
 	failureLogTail     = 30
+
+	// s3FilestoreProfile is the COMPOSE_PROFILES entry that runs MinIO: on in
+	// standard mode, off in lite. It is the only entry the CLI owns.
+	s3FilestoreProfile = "s3-filestore"
 )
 
 // preflight carries the environment facts gathered concurrently while the
@@ -312,6 +316,11 @@ func (in *installer) runInstall(ctx context.Context) error {
 	if !in.opts.Local && configRef != initialRef {
 		in.infof("Fetching config files matching %s...", configRef)
 		if err := in.materializeFiles(ctx, configRef, managedFiles(in.lite, in.craft), manifest, fetcher); err != nil {
+			// .env already names this version and nothing has been deployed
+			// yet, so it is put back for the same reason a failed pull does:
+			// a version that never ran must not be left recorded as the
+			// deployment's current one.
+			in.rollbackEnv(envPath, prevEnv)
 			return err
 		}
 	}
@@ -326,6 +335,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	// run must still know the freshly materialized files were CLI-written,
 	// not hand-edited. InstalledTag advances only after a successful start.
 	if err := manifest.Save(in.root.Dir); err != nil {
+		in.rollbackEnv(envPath, prevEnv)
 		return err
 	}
 
@@ -351,7 +361,9 @@ func (in *installer) runInstall(ctx context.Context) error {
 	}
 	manifest.UpdatedAt = now
 	if err := manifest.Save(in.root.Dir); err != nil {
-		return err
+		// The deployment is already up on this version: say what did happen,
+		// or the error reads as an install that never took place.
+		return fmt.Errorf("deployed %s, but recording it in %s failed: %w", effectiveTag, state.FileName, err)
 	}
 
 	in.printSuccess(ctx, hostPort)
@@ -662,7 +674,7 @@ func (in *installer) createFreshEnv(envPath, tag string) (string, int, error) {
 	if in.lite {
 		// MinIO never starts in lite mode and the overlay forces the
 		// postgres file store at runtime; align .env so it isn't misleading.
-		env = SetVar(env, "COMPOSE_PROFILES", "")
+		env = SetVar(env, "COMPOSE_PROFILES", withoutProfile(Var(env, "COMPOSE_PROFILES"), s3FilestoreProfile))
 		env = SetVar(env, "FILE_STORE_BACKEND", "postgres")
 	}
 
@@ -744,23 +756,26 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 	}
 
 	// Lite mode on an existing .env: the template ships with s3-filestore
-	// enabled; clear it so MinIO doesn't start.
-	if in.lite && strings.Contains(Var(env, "COMPOSE_PROFILES"), "s3-filestore") {
-		env = SetVar(env, "COMPOSE_PROFILES", "")
-		in.successf("Cleared COMPOSE_PROFILES for lite mode")
+	// enabled; drop that entry so MinIO doesn't start. Only that entry — any
+	// other profile in the list was turned on by the user, and clearing the
+	// whole value would switch their services off with no way to name them
+	// again on the way back.
+	if in.lite && hasProfile(Var(env, "COMPOSE_PROFILES"), s3FilestoreProfile) {
+		env = SetVar(env, "COMPOSE_PROFILES", withoutProfile(Var(env, "COMPOSE_PROFILES"), s3FilestoreProfile))
+		in.successf("Dropped %s from COMPOSE_PROFILES for lite mode", s3FilestoreProfile)
 	}
 	// Leaving lite behind: undo those same adjustments, or the "standard"
 	// deployment keeps lite's storage behaviour with MinIO never starting.
-	// Values the user has since changed to something else are left alone.
+	// The rest of the profile list, and a file store the user has since
+	// pointed somewhere else, are left as they are.
 	if !in.lite && in.wasLite {
-		if Var(env, "COMPOSE_PROFILES") == "" {
-			env = SetVar(env, "COMPOSE_PROFILES", "s3-filestore")
-		}
+		env = SetVar(env, "COMPOSE_PROFILES", withProfile(Var(env, "COMPOSE_PROFILES"), s3FilestoreProfile))
 		if Var(env, "FILE_STORE_BACKEND") == "postgres" {
 			env = SetVar(env, "FILE_STORE_BACKEND", "s3")
 			in.warnf("Files stored while in lite mode live in Postgres; standard mode reads the MinIO store, so they won't be listed until you switch back.")
 		}
-		in.successf("Restored the standard file store (COMPOSE_PROFILES=s3-filestore, FILE_STORE_BACKEND=s3)")
+		in.successf("Restored the standard file store (COMPOSE_PROFILES=%s, FILE_STORE_BACKEND=%s)",
+			Var(env, "COMPOSE_PROFILES"), Var(env, "FILE_STORE_BACKEND"))
 	}
 
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {

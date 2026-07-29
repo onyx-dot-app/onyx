@@ -717,6 +717,62 @@ func TestInstallRestoresStandardFileStoreWhenLeavingLite(t *testing.T) {
 	}
 }
 
+// COMPOSE_PROFILES is a list the CLI shares with the user: switching modes
+// owns the s3-filestore entry and nothing else. Clearing the list would stop
+// services the CLI never started, and it could not name them again on the way
+// back.
+func TestInstallModeSwitchKeepsUserProfiles(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0") // lite
+	envPath := filepath.Join(root, "deployment", ".env")
+
+	// Make it a standard deployment carrying a profile of the user's.
+	env, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envStr := SetVar(string(env), "COMPOSE_PROFILES", "s3-filestore,my-monitoring")
+	envStr = SetVar(envStr, "FILE_STORE_BACKEND", "s3")
+	if err := os.WriteFile(envPath, []byte(envStr), 0600); err != nil {
+		t.Fatal(err)
+	}
+	m, err := state.Load(root)
+	if err != nil || m == nil {
+		t.Fatalf("manifest: %+v, %v", m, err)
+	}
+	m.Mode = state.ModeStandard
+	if err := m.Save(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(root, "deployment", "docker-compose.onyx-lite.yml")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Into lite: only the entry the CLI put there goes.
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	if err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, Lite: true, Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("switch to lite: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+	env, _ = os.ReadFile(envPath)
+	if got := Var(string(env), "COMPOSE_PROFILES"); got != "my-monitoring" {
+		t.Errorf("COMPOSE_PROFILES = %q in lite mode, want the user's profile kept", got)
+	}
+
+	// And back out: s3-filestore returns alongside it.
+	deps = testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	if err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, IncludeCraft: true, Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("switch back to standard: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+	env, _ = os.ReadFile(envPath)
+	if got := Var(string(env), "COMPOSE_PROFILES"); got != "my-monitoring,s3-filestore" {
+		t.Errorf("COMPOSE_PROFILES = %q leaving lite, want both profiles", got)
+	}
+}
+
 // A file that a pinned ref simply doesn't carry must not take the rest of the
 // deployment with it: the files that do exist at that ref still come from it.
 func TestInstallMissingFileAtRefDoesNotDisableFetching(t *testing.T) {
