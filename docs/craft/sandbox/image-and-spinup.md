@@ -156,13 +156,15 @@ Each of these fails *silently* if changed — the DaemonSet reports Ready
 while sandboxes go on cold-pulling, and the only symptom is the slow
 provisioning the feature was meant to remove. There are render-time
 tests for all of them in
-`backend/tests/unit/onyx/server/features/build/sandbox/test_sandbox_image_prepuller.py`.
+`backend/tests/external_dependency_unit/craft_helm/test_sandbox_image_prepuller.py`.
 
-Those tests need `helm` and the chart's subchart tarballs, which are
-gitignored, so they skip in the `backend/tests/unit` lane and no CI lane
-currently supplies both. Until one does they are a local guard — run
-them (after `helm dependency build deployment/helm/charts/onyx`) when
-you touch these templates, and don't assume CI caught a drift for you.
+They live in the `craft_helm` shard, next to `test_pod_spec.py`, because
+that is the lane which installs `helm` and runs `helm dependency build`
+(see `pr-external-dependency-unit-tests.yml`, triggered on
+`deployment/helm/**`). Chart-render tests belong there and nowhere else:
+under `backend/tests/unit` they have no helm, and a directory named
+`build` is additionally skipped by pytest's default `norecursedirs`, so
+they would never even be collected.
 
 - **A DaemonSet, not a one-shot pre-pull Job.** The kubelet only exempts
   images referenced by a *running* pod from image GC. A Job pulls and
@@ -184,23 +186,10 @@ you touch these templates, and don't assume CI caught a drift for you.
   same single route the sandbox PodTemplate uses. See "Private
   registries" below for why the chart-wide `.Values.imagePullSecrets`
   is not an option here.
-- **Priority `-11`, `preemptionPolicy: Never`.** Strictly below
-  cluster-autoscaler's default `--expendable-pods-priority-cutoff` of
-  -10, so a pending prepuller is never itself read as demand for a new
-  node — at exactly -10 it is *not* expendable. It also sits below a
-  sandbox pod, so one can preempt it; a sandbox running on the node pins
-  the image itself, making the prepuller redundant exactly when it would
-  compete. Don't over-read the preemption half: the prepuller holds 10m
-  CPU / 32Mi, so evicting it will not unblock a sandbox that wants 1000m
-  / 2Gi. It mainly guarantees the prepuller is never the *reason* for a
-  scale-up. This does *not* reorder disk-pressure eviction — kubelet
-  ranks "exceeds ephemeral-storage request" ahead of priority, and
-  evicting the prepuller frees ~0 bytes anyway. Setting
-  `priorityClass.create: false` without also setting `priorityClassName`
-  is a supported opt-out (for clusters where PriorityClasses are managed
-  centrally) but forfeits all of the above: the pod falls to the cluster
-  default priority and competes with sandbox pods. Point
-  `priorityClassName` at an existing low-priority class instead.
+- **No PriorityClass, and no cluster-scoped objects at all.** See
+  "Why there is no PriorityClass" below before adding one back.
+  `sandboxImagePrepull.priorityClassName` names an *existing* class for
+  operators who want the prepuller preemptible; the chart creates none.
 - **A portable idle loop**, not `sleep infinity` — a GNU coreutils
   extension that dies on busybox/alpine. A CrashLooping prepuller unpins
   the image.
@@ -220,6 +209,59 @@ so nothing restarts the pod to re-resolve it, and the image GC pass that
 used to let the node drift back to a fresh `latest` no longer runs on
 it. Under `pullPolicy: Always` the restart does re-resolve, which is why
 the policy is shared rather than hardcoded.
+
+### Why there is no PriorityClass
+
+The prepuller originally created one, at value -10, so a pending sandbox
+pod could preempt it rather than fail to schedule behind a do-nothing
+pod. **It broke deploys and has been removed. Don't add it back without
+reading this.**
+
+A follow-up changed the default to -11 — on the argument that -10 is
+exactly cluster-autoscaler's default `--expendable-pods-priority-cutoff`
+and the cutoff is exclusive — while keeping the object's name. Every
+cluster already holding the class then failed to upgrade:
+
+```
+Error: UPGRADE FAILED: cannot patch "onyx-onyx-sandbox-image-prepuller"
+with kind PriorityClass: ... value: Forbidden: may not be changed in an
+update.
+```
+
+Two Kubernetes facts collide there. `PriorityClass.value` is immutable —
+priority is resolved once at pod admission and copied into
+`pod.spec.priority`, so the class's value must not drift afterwards. And
+`helm upgrade` *patches* existing objects rather than replacing them. So
+that field could never be changed in place, by anyone, ever. Worse, Helm
+aborts the entire release on one rejected patch, so a latency
+optimisation took down the nightly deploy of the whole application.
+
+It was removed rather than worked around, because it was not earning its
+keep:
+
+- **Preemption freed nothing useful.** The prepuller requests 10m CPU /
+  32Mi. Evicting it cannot unblock a sandbox pod that wants 1000m / 2Gi.
+- **The autoscaler argument barely applies to a DaemonSet.**
+  cluster-autoscaler does not scale up *because* a DaemonSet pod is
+  pending; DS pods only factor into simulating a new node's capacity.
+- **It did not affect disk-pressure eviction**, the one form of eviction
+  the prepuller actually invites: kubelet ranks "exceeds
+  ephemeral-storage request" ahead of priority.
+- **Cluster-scoped objects are expensive in a Helm chart.** Two releases
+  of the same name in different namespaces render the same object, so the
+  name needed the namespace hashed into it, which is where the
+  trunc+sha32 logic and several tests came from.
+
+If you want the prepuller preemptible, point
+`sandboxImagePrepull.priorityClassName` at a low-priority class you
+manage yourself. A render test
+(`test_prepuller_ships_no_cluster_scoped_objects`) fails if this template
+starts emitting cluster-scoped objects again.
+
+Note also that **no CI lane would have caught this**: `ct install` only
+does a fresh install into an empty kind cluster, never an upgrade from
+the previously released chart, so the patch path where immutable-field
+violations live is untested. `ct install --upgrade` would cover it.
 
 ### Private registries
 
