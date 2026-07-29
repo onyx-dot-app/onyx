@@ -132,9 +132,11 @@ func (in *installer) plainf(format string, args ...any) {
 }
 
 // fancy reports whether the interactive renderer drives this run (never
-// under --no-prompt, so scripted output stays line-oriented).
+// under --no-prompt, so scripted output stays line-oriented, and never under
+// --verbose, which streams compose's own output to the normal screen — under
+// the alt screen it would be written where nothing can read it).
 func (in *installer) fancy() bool {
-	return in.deps.Fancy && !in.opts.NoPrompt
+	return in.deps.Fancy && !in.opts.NoPrompt && !in.opts.Verbose
 }
 
 // selectOne asks a single choice: arrow-key select when fancy, a numbered

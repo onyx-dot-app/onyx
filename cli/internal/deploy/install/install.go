@@ -1060,12 +1060,19 @@ func (in *installer) runComposePhase(ctx context.Context, p composePhase) error 
 	}
 	cmd.Stdout, cmd.Stderr = sink, sink
 
-	stop := make(chan struct{})
-	if p.watch != nil {
-		go in.pollServiceHealth(*p.watch, stop)
+	watchCtx, stopWatch := context.WithCancel(ctx)
+	watching := make(chan struct{})
+	if p.watch == nil {
+		close(watching)
+	} else {
+		go in.pollServiceHealth(watchCtx, in.wiz, *p.watch, watching)
 	}
 	_, err := in.deps.Runner.Run(ctx, cmd)
-	close(stop)
+	// The watch has to be off the screen before the phase ends: a repaint
+	// landing after TaskDone would redraw a finished phase as running, and
+	// after a failed one it would race the teardown below.
+	stopWatch()
+	<-watching
 	in.wiz.TaskDone(err == nil)
 
 	if err != nil {
@@ -1105,14 +1112,18 @@ func (in *installer) printFailureDiagnosis(output string) {
 }
 
 // pollServiceHealth feeds the wizard a live per-service checklist while
-// `up --wait` blocks (otherwise silent for up to ten minutes).
-func (in *installer) pollServiceHealth(w healthWatch, stop chan struct{}) {
-	ctx := context.Background()
+// `up --wait` blocks (otherwise silent for up to ten minutes). It runs until
+// ctx is cancelled and closes done on the way out, so the phase can be sure
+// nothing else paints before it reports its own result.
+func (in *installer) pollServiceHealth(ctx context.Context, wiz *ui.Wizard, w healthWatch, done chan struct{}) {
+	defer close(done)
+	tick := time.NewTicker(healthPollInterval)
+	defer tick.Stop()
 	for {
 		select {
-		case <-stop:
+		case <-ctx.Done():
 			return
-		case <-time.After(healthPollInterval):
+		case <-tick.C:
 		}
 		if w.quiet != nil && !w.quiet() {
 			continue
@@ -1122,9 +1133,9 @@ func (in *installer) pollServiceHealth(w healthWatch, stop chan struct{}) {
 			continue
 		}
 		rows, ready := watchRows(res.Stdout, w)
-		if len(rows) > 0 && in.wiz != nil {
-			in.wiz.Services(rows)
-			in.wiz.TaskExtra(fmt.Sprintf("%d/%d ready", ready, len(rows)))
+		if len(rows) > 0 {
+			wiz.Services(rows)
+			wiz.TaskExtra(fmt.Sprintf("%d/%d ready", ready, len(rows)))
 		}
 	}
 }

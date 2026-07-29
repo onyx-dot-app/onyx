@@ -101,6 +101,25 @@ func TestBoxesFillTerminalWidth(t *testing.T) {
 	}
 }
 
+// The last thing an install does is ask a question, and quitting it kills the
+// wizard. The work is over by then, so the summary still has to be printed —
+// there is nowhere else for the user to find the URL.
+func TestFinishPrintsCardAfterQuit(t *testing.T) {
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	close(done)
+	wiz := &Wizard{out: &buf, done: done, width: 80}
+
+	wiz.Finish("🎉 Onyx is ready  →  http://localhost:3000")
+
+	if !strings.Contains(buf.String(), "http://localhost:3000") {
+		t.Errorf("the summary was dropped with the wizard:\n%s", buf.String())
+	}
+	if got := borderWidth(buf.String()); got != 80 {
+		t.Errorf("card border is %d wide, want 80", got)
+	}
+}
+
 // borderWidth is the display width of the first box-drawing line in content,
 // or 0 when there is none.
 func borderWidth(content string) int {

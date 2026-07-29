@@ -535,6 +535,10 @@ type Wizard struct {
 	prog *tea.Program
 	done chan struct{}
 	out  io.Writer
+	// width is the terminal width the program last knew, kept for output
+	// printed after it has exited. Written before done is closed and read
+	// only once that close has been observed.
+	width int
 }
 
 // StartWizard launches the full-screen wizard program. onAbort fires only
@@ -552,6 +556,7 @@ func StartWizard(out io.Writer, title, version string, onAbort func()) *Wizard {
 		m, _ := w.prog.Run()
 		wm, ok := m.(wizModel)
 		if ok {
+			w.width = wm.width
 			w.printTail(wm)
 		}
 		close(w.done)
@@ -642,6 +647,16 @@ func (w *Wizard) Suspend(fn func() error) error {
 // It blocks until the card has been written, so callers can keep printing
 // plain output right after.
 func (w *Wizard) Finish(lines ...string) {
+	select {
+	case <-w.done:
+		// The program is already gone — the user quit during the last question
+		// the run asks, after the work itself was over. A send now would go
+		// nowhere, so the card is printed directly: quitting a prompt should
+		// not cost the user the URL they just waited for.
+		w.printTail(wizModel{width: w.width, card: lines})
+		return
+	default:
+	}
 	w.prog.Send(finishMsg(lines))
 	<-w.done
 }
