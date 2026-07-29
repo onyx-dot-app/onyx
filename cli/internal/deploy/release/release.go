@@ -6,6 +6,7 @@ package release
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -137,6 +138,12 @@ func (c *Client) LatestAppTag(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("no Onyx app release found among the repository's releases")
 }
 
+// ErrNotFound reports that the ref is reachable but doesn't carry the file.
+// Callers distinguish it from a transport failure: one means this deployment
+// simply didn't ship that file at that version, the other means the network
+// is unusable and nothing more should be fetched.
+var ErrNotFound = errors.New("not found")
+
 // FetchFile downloads repoPath (e.g. "deployment/docker_compose/env.template")
 // at ref. A 404 fails immediately (the ref or path doesn't exist); transient
 // errors are retried. Callers fall back to the embedded copies on error.
@@ -218,7 +225,7 @@ func (c *Client) fetchOnce(ctx context.Context, url string) (data []byte, retrya
 		}
 		return body, false, nil
 	case resp.StatusCode == http.StatusNotFound:
-		return nil, false, fmt.Errorf("not found (HTTP 404)")
+		return nil, false, fmt.Errorf("%w (HTTP 404)", ErrNotFound)
 	case resp.StatusCode >= 500:
 		return nil, true, fmt.Errorf("HTTP %d", resp.StatusCode)
 	default:

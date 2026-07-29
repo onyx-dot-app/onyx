@@ -3,6 +3,7 @@ package install
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,66 @@ func TestUninstallForceRemovesEverything(t *testing.T) {
 	}
 	if down == "" {
 		t.Fatal("compose down -v never ran")
+	}
+}
+
+// --dir, ONYX_DEPLOYMENT_DIR and INSTALL_PREFIX name the deletion root
+// freely, so a path that isn't recognizably an Onyx deployment must not be
+// handed to RemoveAll.
+func TestUninstallRefusesUnrecognizedDir(t *testing.T) {
+	isolateEnv(t)
+	root := t.TempDir()
+	keep := filepath.Join(root, "someone-elses-data.txt")
+	if err := os.WriteFile(keep, []byte("important"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	err := RunUninstall(context.Background(), deps, Options{Dir: root, Force: true})
+	if err == nil || !strings.Contains(err.Error(), "doesn't look like an Onyx deployment") {
+		t.Fatalf("err = %v, want a refusal", err)
+	}
+	if _, statErr := os.Stat(keep); statErr != nil {
+		t.Fatal("refused uninstall deleted unrelated data")
+	}
+}
+
+// Removing the directory after a failed teardown would strand the containers
+// and volumes with nothing left describing them.
+func TestUninstallKeepsFilesWhenTeardownFails(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	failDown := func(c dockercmd.Command) (dockercmd.Result, error) {
+		if strings.Contains(argv(c), "down -v") {
+			return dockercmd.Result{}, errors.New("permission denied while removing volume")
+		}
+		return healthyDockerHandler(c)
+	}
+
+	deps := testDeps(t, &fakeRunner{handler: failDown}, notFoundServer(t))
+	deps.IOS = &iostreams.IOStreams{
+		In:          strings.NewReader("DELETE\n"),
+		Out:         &bytes.Buffer{},
+		ErrOut:      &bytes.Buffer{},
+		IsStdinTTY:  true,
+		IsStdoutTTY: true,
+	}
+	err := RunUninstall(context.Background(), deps, Options{Dir: root, Force: false})
+	if err == nil || !strings.Contains(err.Error(), "still present") {
+		t.Fatalf("err = %v, want the teardown failure to stop the delete", err)
+	}
+	if _, statErr := os.Stat(root); statErr != nil {
+		t.Fatal("deployment files were deleted despite the failed teardown")
+	}
+
+	// --force means "delete it regardless".
+	deps2 := testDeps(t, &fakeRunner{handler: failDown}, notFoundServer(t))
+	if err := RunUninstall(context.Background(), deps2, Options{Dir: root, Force: true}); err != nil {
+		t.Fatalf("--force must delete anyway: %v\noutput:\n%s", err, outBuf(deps2).String())
+	}
+	if _, statErr := os.Stat(root); !os.IsNotExist(statErr) {
+		t.Error("install dir still exists after --force")
 	}
 }
 

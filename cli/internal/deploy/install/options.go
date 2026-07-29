@@ -71,6 +71,9 @@ type installer struct {
 	// started (0 if it wasn't running). It recovers the port of installs
 	// that predate recording HOST_PORT in .env.
 	observedPort int
+	// wasLite records that the deployment was in lite mode when the run
+	// started, so a switch to standard can undo lite's .env adjustments.
+	wasLite bool
 }
 
 func newInstaller(deps Deps, opts Options) *installer {

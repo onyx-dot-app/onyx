@@ -573,3 +573,78 @@ func TestInstallPullFailureRemovesFreshEnv(t *testing.T) {
 		t.Errorf("manifest tag = %q after failed fresh install, want empty", m.InstalledTag)
 	}
 }
+
+// Leaving lite mode has to undo lite's .env adjustments, or the "standard"
+// deployment keeps storing files in Postgres and never starts MinIO.
+func TestInstallRestoresStandardFileStoreWhenLeavingLite(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0") // lite
+
+	// --include-craft implies standard mode on a rerun.
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t))
+	if err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, IncludeCraft: true, Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+
+	env, err := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	envStr := string(env)
+	if got := Var(envStr, "COMPOSE_PROFILES"); got != "s3-filestore" {
+		t.Errorf("COMPOSE_PROFILES = %q, want the standard s3-filestore", got)
+	}
+	if got := Var(envStr, "FILE_STORE_BACKEND"); got != "s3" {
+		t.Errorf("FILE_STORE_BACKEND = %q, want s3", got)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "deployment", "docker-compose.onyx-lite.yml")); !os.IsNotExist(statErr) {
+		t.Error("lite overlay still on disk after switching to standard")
+	}
+}
+
+// A file that a pinned ref simply doesn't carry must not take the rest of the
+// deployment with it: the files that do exist at that ref still come from it.
+func TestInstallMissingFileAtRefDoesNotDisableFetching(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	const upstream = "# compose at v4.2.0\nname: onyx\n"
+	raw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			return
+		}
+		// The craft overlay is fetched before the nginx files but after the
+		// compose file; only it is absent at this ref.
+		if strings.HasSuffix(r.URL.Path, "docker-compose.craft.yml") {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(upstream))
+	}))
+	t.Cleanup(raw.Close)
+
+	root := t.TempDir()
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, raw)
+	if err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, IncludeCraft: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+
+	// Fetched after the missing overlay: still sourced from the ref.
+	nginx, err := os.ReadFile(filepath.Join(root, "data", "nginx", "app.conf.template"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(nginx) != upstream {
+		t.Errorf("nginx config fell back to embedded after an unrelated 404:\n%s", nginx)
+	}
+	craft, err := os.ReadFile(filepath.Join(root, "deployment", "docker-compose.craft.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(craft) == upstream {
+		t.Error("craft overlay should have come from the embedded copy")
+	}
+}

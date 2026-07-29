@@ -4,6 +4,12 @@ import (
 	"context"
 )
 
+// ProjectName is the compose project Onyx deployments run under, pinned by
+// `name: onyx` in docker-compose.yml. Containers and volumes carry it as a
+// label, which is what makes an install root movable and what lets docker
+// find the stack without the compose files.
+const ProjectName = "onyx"
+
 // Compose invokes docker compose (plugin) or docker-compose (standalone),
 // whichever is available, through the Docker sudo wrapper.
 type Compose struct {

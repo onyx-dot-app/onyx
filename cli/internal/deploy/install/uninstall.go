@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/onyx-dot-app/onyx/cli/internal/deploy/dockercmd"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/paths"
+	"github.com/onyx-dot-app/onyx/cli/internal/deploy/state"
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 )
 
@@ -28,6 +30,14 @@ func (in *installer) runUninstall(ctx context.Context) error {
 	if _, err := os.Stat(in.root.Dir); os.IsNotExist(err) {
 		in.warnf("No Onyx data directory found at %s. Nothing to remove.", in.root.Dir)
 		return nil
+	}
+	// The directory is about to be removed recursively, and --dir,
+	// ONYX_DEPLOYMENT_DIR and the legacy INSTALL_PREFIX all name it freely: a
+	// broad path like /home must not be taken at its word.
+	if !paths.IsInstall(in.root.Dir) && !state.Exists(in.root.Dir) {
+		return exitcodes.Newf(exitcodes.BadRequest,
+			"%s doesn't look like an Onyx deployment (no deployment/docker-compose.yml, deployment/.env or %s) — refusing to delete it",
+			in.root.Dir, state.FileName)
 	}
 
 	in.plainf("")
@@ -67,9 +77,17 @@ func (in *installer) runUninstall(ctx context.Context) error {
 		cmd := in.compose.Command(in.deploymentDir(), stopFallbackEnv(), in.composeFileNames(true), "down", "-v")
 		cmd.Stdout, cmd.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
 		if _, err := in.deps.Runner.Run(ctx, cmd); err != nil {
-			// Keep going like install.sh: the directory should still be
-			// removable even when container cleanup fails.
 			in.errorf("Failed to remove containers and volumes: %v", err)
+			// Deleting the directory now would strand the containers and
+			// volumes with nothing left that describes them, so the files
+			// stay put for a retry unless the user insists.
+			if !in.opts.Force {
+				return exitcodes.Newf(exitcodes.General,
+					"containers or volumes are still present — %s was left in place so you can retry; pass --force to delete it anyway",
+					in.root.Dir)
+			}
+			in.warnf("Deleting %s anyway (--force) — clean up leftovers with `docker compose -p %s down -v`",
+				in.root.Dir, dockercmd.ProjectName)
 		} else {
 			in.successf("Onyx containers and volumes removed")
 		}

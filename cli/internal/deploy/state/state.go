@@ -55,6 +55,13 @@ func Path(installRoot string) string {
 	return filepath.Join(installRoot, FileName)
 }
 
+// Exists reports whether an install root carries a manifest, i.e. whether the
+// CLI has ever managed it.
+func Exists(installRoot string) bool {
+	_, err := os.Stat(Path(installRoot))
+	return err == nil
+}
+
 // Load reads the manifest from an install root. A missing manifest returns
 // (nil, nil): the deployment predates the CLI (or was created by install.sh)
 // and callers run their adopt flow.

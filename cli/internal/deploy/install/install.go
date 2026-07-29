@@ -172,8 +172,9 @@ func (in *installer) runInstall(ctx context.Context) error {
 		// (or the overlays on disk) wins unless --lite/--include-craft say
 		// otherwise. (install.sh re-asked every run, so a --no-prompt rerun
 		// silently flipped standard installs to lite.)
-		in.lite = in.opts.Lite || (!in.opts.IncludeCraft &&
-			(manifest.Mode == state.ModeLite || in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel))))
+		in.wasLite = manifest.Mode == state.ModeLite ||
+			in.overlayOnDisk(filepath.Base(deployfiles.LiteOverlay.DestRel))
+		in.lite = in.opts.Lite || (!in.opts.IncludeCraft && in.wasLite)
 		in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
 			in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
 
@@ -745,6 +746,19 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 		env = SetVar(env, "COMPOSE_PROFILES", "")
 		in.successf("Cleared COMPOSE_PROFILES for lite mode")
 	}
+	// Leaving lite behind: undo those same adjustments, or the "standard"
+	// deployment keeps lite's storage behaviour with MinIO never starting.
+	// Values the user has since changed to something else are left alone.
+	if !in.lite && in.wasLite {
+		if Var(env, "COMPOSE_PROFILES") == "" {
+			env = SetVar(env, "COMPOSE_PROFILES", "s3-filestore")
+		}
+		if Var(env, "FILE_STORE_BACKEND") == "postgres" {
+			env = SetVar(env, "FILE_STORE_BACKEND", "s3")
+			in.warnf("Files stored while in lite mode live in Postgres; standard mode reads the MinIO store, so they won't be listed until you switch back.")
+		}
+		in.successf("Restored the standard file store (COMPOSE_PROFILES=s3-filestore, FILE_STORE_BACKEND=s3)")
+	}
 
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
 		return "", 0, fmt.Errorf("failed to write .env: %w", err)
@@ -920,7 +934,7 @@ func (in *installer) runningHostPort(ctx context.Context) int {
 		return 0
 	}
 	cmd := in.docker.Command(nil, "ps",
-		"--filter", "label=com.docker.compose.project=onyx",
+		"--filter", "label=com.docker.compose.project="+dockercmd.ProjectName,
 		"--format", "{{.Ports}}")
 	res, err := in.deps.Runner.Run(ctx, cmd)
 	if err != nil {
@@ -1021,7 +1035,7 @@ func (in *installer) pollServiceHealth(stop chan struct{}) {
 		case <-time.After(2 * time.Second):
 		}
 		cmd := in.docker.Command(nil, "ps",
-			"--filter", "label=com.docker.compose.project=onyx",
+			"--filter", "label=com.docker.compose.project="+dockercmd.ProjectName,
 			"--format", "{{.Names}}\t{{.Status}}")
 		res, err := in.deps.Runner.Run(ctx, cmd)
 		if err != nil {

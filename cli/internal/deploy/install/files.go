@@ -2,12 +2,14 @@ package install
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/deployfiles"
+	"github.com/onyx-dot-app/onyx/cli/internal/deploy/release"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/state"
 )
 
@@ -31,8 +33,8 @@ func managedFiles(lite, craft bool) []deployfiles.File {
 }
 
 // fileFetcher sources managed-file content for a ref, falling back to the
-// embedded copies. After the first fetch failure it stops trying the network
-// (each fetch retries with delays; once offline, every file would pay that).
+// embedded copies. Once the network itself fails it stops trying (each fetch
+// retries with delays; offline, every remaining file would pay that).
 type fileFetcher struct {
 	in       *installer
 	disabled bool
@@ -46,8 +48,16 @@ func (ff *fileFetcher) content(ctx context.Context, ref string, f deployfiles.Fi
 		if err == nil {
 			return data, ref, nil
 		}
-		ff.disabled = true
-		ff.in.warnf("Could not fetch %s at %s (%v) — using the files bundled with this CLI", f.RepoPath, ref, err)
+		// A file missing from a reachable ref (an overlay added after that
+		// release, say) says nothing about the rest: falling back for the
+		// whole set here would quietly mix one version's compose file with
+		// another's overlays and nginx config.
+		if errors.Is(err, release.ErrNotFound) {
+			ff.in.warnf("%s doesn't exist at %s — using the copy bundled with this CLI, which may not match that version", f.RepoPath, ref)
+		} else {
+			ff.disabled = true
+			ff.in.warnf("Could not fetch %s at %s (%v) — using the files bundled with this CLI", f.RepoPath, ref, err)
+		}
 	}
 	data, err := f.Content()
 	if err != nil {

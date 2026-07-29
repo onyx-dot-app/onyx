@@ -2,6 +2,7 @@ package release
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -105,8 +106,14 @@ func TestFetchFile404DoesNotRetry(t *testing.T) {
 	c, done := testClient(http.NotFoundHandler(), raw)
 	defer done()
 
-	if _, err := c.FetchFile(context.Background(), "v0.0.0", "deployment/nope"); err == nil {
+	_, err := c.FetchFile(context.Background(), "v0.0.0", "deployment/nope")
+	if err == nil {
 		t.Fatal("expected error")
+	}
+	// Callers tell "absent at this ref" apart from "network is down": only
+	// the latter stops them fetching the remaining files.
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("404 error = %v, want it to wrap ErrNotFound", err)
 	}
 	if calls != 1 {
 		t.Fatalf("404 was retried %d times", calls)

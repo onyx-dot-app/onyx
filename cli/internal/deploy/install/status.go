@@ -157,7 +157,7 @@ func (in *installer) inspectContainers(ctx context.Context) (services []Service,
 	}
 	in.docker.RefreshSudo(ctx)
 	cmd := in.docker.Command(nil, "ps", "-a",
-		"--filter", "label=com.docker.compose.project=onyx",
+		"--filter", "label=com.docker.compose.project="+dockercmd.ProjectName,
 		"--format", "{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}")
 	res, err := in.deps.Runner.Run(ctx, cmd)
 	if err != nil {
