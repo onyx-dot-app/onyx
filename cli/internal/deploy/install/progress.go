@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -37,6 +38,10 @@ const (
 	// per downloaded chunk, far more often than a terminal can usefully
 	// repaint.
 	progressRefresh = 150 * time.Millisecond
+	// healthPollInterval is how often the container list is re-read while a
+	// phase runs — often enough to look live, rare enough to stay out of the
+	// daemon's way.
+	healthPollInterval = 2 * time.Second
 	// maxProgressRows caps a checklist. The deployment has a handful of
 	// images and containers, so more rows than this means the output wasn't
 	// what we parsed it as, and the wizard pane must not grow past the screen.
@@ -444,12 +449,75 @@ var startPhases = map[string]string{
 	"Starting":   "starting",
 	"Started":    "started",
 	"Running":    "running",
-	"Waiting":    "waiting for health",
+	"Waiting":    "waiting",
 	"Healthy":    "healthy",
 	"Exited":     "exited",
 	"Skipped":    "skipped",
 	"Error":      "failed",
 	"Restarting": "restarting",
+}
+
+// healthWatch is the per-service checklist read off `docker ps` while a compose
+// command runs — the fallback for a compose whose own progress output says
+// nothing, and the only source of rows while `up --wait` blocks in silence.
+type healthWatch struct {
+	// quiet gates the watch when the command's output also fills the
+	// checklist: it publishes only while that output has said nothing.
+	quiet func() bool
+	// before maps each service to the container that was serving it when the
+	// phase began. `docker ps` cannot see an intent, only containers, so this
+	// is what tells a container still awaiting its turn from its replacement.
+	before map[string]string
+	// recreate records that this run replaces every container, which is what
+	// makes a service still on its original container unfinished rather than
+	// already up.
+	recreate bool
+}
+
+// watchRows renders `docker ps` output ("<name>\t<id>\t<status>" per line) as
+// checklist rows, and counts the services that are done.
+//
+// A rollout is three states, and the container list only shows one of them
+// directly: a service still on the container it started on is waiting its turn,
+// one whose container has disappeared is mid-swap, and one on a container that
+// wasn't there before is the new deployment coming up.
+func watchRows(psOutput string, w healthWatch) (rows []ui.ServiceRow, ready int) {
+	seen := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSpace(psOutput), "\n") {
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		name, id, status := shortContainerName(parts[0]), parts[1], parts[2]
+		seen[name] = true
+		if w.recreate && w.before[name] == id {
+			// Still the old container: up and serving, but this run is not
+			// done with it.
+			rows = append(rows, ui.ServiceRow{Name: name, Detail: "pending"})
+			continue
+		}
+		done := healthy(status)
+		if done {
+			ready++
+		}
+		rows = append(rows, ui.ServiceRow{Name: name, Detail: healthDetail(status), Ready: done})
+	}
+	// A service whose container is gone is between its two containers: compose
+	// stopped the old one and hasn't finished starting the new one.
+	for name := range w.before {
+		if !seen[name] {
+			rows = append(rows, ui.ServiceRow{Name: name, Detail: "restarting"})
+		}
+	}
+	slices.SortFunc(rows, func(a, b ui.ServiceRow) int { return strings.Compare(a.Name, b.Name) })
+	return rows, ready
+}
+
+// healthy reports whether a `docker ps` status says the container is up for
+// good: passing its health check, or having none to pass.
+func healthy(status string) bool {
+	return strings.Contains(status, "(healthy)") ||
+		(strings.HasPrefix(status, "Up") && !strings.Contains(status, "health"))
 }
 
 // healthDetail says what a container is doing, read off `docker ps` status
@@ -461,8 +529,8 @@ func healthDetail(status string) string {
 		return "healthy"
 	case strings.Contains(status, "(unhealthy)"):
 		return "unhealthy"
-	case strings.Contains(status, "(health: starting)"), strings.Contains(status, "(starting)"):
-		return "waiting for health"
+	case strings.Contains(status, "health: starting"), strings.Contains(status, "(starting)"):
+		return "waiting"
 	case strings.HasPrefix(status, "Up"):
 		return "running"
 	}

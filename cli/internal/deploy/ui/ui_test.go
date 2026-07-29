@@ -40,7 +40,7 @@ func sampleModels() map[string]wizModel {
 				{Name: "backend", Ready: true},
 				{Name: "web_server", Detail: "62%  310.4 MB / 500.1 MB"},
 				{Name: "model_server", Detail: "4%  21.0 MB / 512.5 MB"},
-				{Name: "relational_db", Detail: "waiting for health"},
+				{Name: "relational_db", Detail: "waiting"},
 			},
 			notes: []noteMsg{{"", "Using deployment/.env from the existing install"}},
 		},

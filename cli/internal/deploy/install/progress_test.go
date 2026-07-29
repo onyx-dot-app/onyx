@@ -195,7 +195,7 @@ func TestStartProgressBacksOffOnceComposeSpeaks(t *testing.T) {
 	// Whichever side fills the checklist, a row reads the same.
 	for _, tc := range []struct{ status, want string }{
 		{"Up 2 minutes (healthy)", "healthy"},
-		{"Up 3 seconds (health: starting)", "waiting for health"},
+		{"Up 3 seconds (health: starting)", "waiting"},
 		{"Up 9 minutes (unhealthy)", "unhealthy"},
 		{"Up About an hour", "running"},
 		{"Restarting (1) 4 seconds ago", "restarting"},
@@ -204,6 +204,45 @@ func TestStartProgressBacksOffOnceComposeSpeaks(t *testing.T) {
 		if got := healthDetail(tc.status); got != tc.want {
 			t.Errorf("healthDetail(%q) = %q, want %q", tc.status, got, tc.want)
 		}
+	}
+}
+
+// A container list shows what is running, not what a rollout is doing. Against
+// the containers the phase started with, it shows all three states: waiting its
+// turn, mid-swap, and up on the new deployment.
+func TestWatchRowsTellsReplacedFromPending(t *testing.T) {
+	w := healthWatch{
+		before: map[string]string{
+			"api_server":      "aaaa1111",
+			"background":      "bbbb2222",
+			"relational_db":   "cccc3333",
+			"inference_model": "dddd4444",
+		},
+		recreate: true,
+	}
+	// background's container is gone from the list: it is between the two.
+	ps := strings.Join([]string{
+		"onyx-relational_db-1\tcccc3333\tUp 2 hours (healthy)",
+		"onyx-api_server-1\t9999eeee\tUp 4 seconds (health: starting)",
+		"onyx-inference_model-1\t8888ffff\tUp 30 seconds (healthy)",
+	}, "\n")
+
+	rows, ready := watchRows(ps, w)
+	var sink checklistSink
+	sink.rows = rows
+	want := " api_server waiting, background restarting,✓inference_model healthy, relational_db pending"
+	if got := sink.render(); got != want {
+		t.Errorf("rows = %q, want %q", got, want)
+	}
+	if ready != 1 {
+		t.Errorf("ready = %d, want 1", ready)
+	}
+
+	// Without a recreate, compose is free to leave a container alone, so the
+	// one it kept is done rather than pending.
+	w.recreate = false
+	if _, ready := watchRows(ps, w); ready != 2 {
+		t.Errorf("ready = %d, want 2", ready)
 	}
 }
 

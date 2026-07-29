@@ -881,6 +881,7 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 	dir := in.deploymentDir()
 
 	upArgs := []string{"up", "-d"}
+	recreate := true
 	switch {
 	case release.IsFloatingTag(tag):
 		// A floating tag names a moving image: the digest changes under the
@@ -891,6 +892,10 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 		// on replacing them; compose would otherwise leave containers whose
 		// config it considers unchanged running the old image.
 		upArgs = append(upArgs, "--force-recreate")
+	default:
+		// Compose decides per container, so a container still on the one it
+		// started on may be one it means to leave alone.
+		recreate = false
 	}
 	wait := !in.opts.NoWait
 	if wait {
@@ -903,20 +908,24 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 		env:   env,
 		files: files,
 		args:  upArgs,
-		// Poll container health so the wizard shows something while
+	}
+	if wait && in.wiz != nil && !in.opts.Verbose {
+		// Watch container states so the wizard shows something while
 		// `up --wait` blocks (it is silent for as long as that takes).
-		poll: wait,
+		phase.watch = &healthWatch{before: in.runningContainers(ctx), recreate: recreate}
 	}
 	if mode := in.progressMode(ctx); mode != "" {
-		// Compose's own event stream says what is happening to each container
-		// — the poll can only see that the outgoing container is still up. The
-		// poll stays on behind it though: a compose that prints no events (a
-		// format we can't read, output swallowed by a wrapper) would otherwise
-		// leave the longest phase of the run with nothing on screen at all.
+		// Compose's own event stream names every transition, which is more than
+		// a container list can show. The watch stays on behind it though: a
+		// compose that prints no events (a format we can't read, output
+		// swallowed by a wrapper) would otherwise leave the longest phase of
+		// the run with nothing on screen at all.
 		phase.args = append([]string{"--progress", mode}, upArgs...)
 		start := newStartProgress(in.wiz.Services, in.wiz.TaskExtra, wait)
 		phase.onLine = start.line
-		phase.pollQuiet = func() bool { return !start.reporting() }
+		if phase.watch != nil {
+			phase.watch.quiet = func() bool { return !start.reporting() }
+		}
 		defer in.wiz.Services(nil)
 	}
 	if err := in.runComposePhase(ctx, phase); err != nil {
@@ -990,10 +999,7 @@ func (in *installer) runningHostPort(ctx context.Context) int {
 	if !dockercmd.Installed() {
 		return 0
 	}
-	cmd := in.docker.Command(nil, "ps",
-		"--filter", "label=com.docker.compose.project="+dockercmd.ProjectName,
-		"--format", "{{.Ports}}")
-	res, err := in.deps.Runner.Run(ctx, cmd)
+	res, err := in.deps.Runner.Run(ctx, in.psCommand("{{.Ports}}"))
 	if err != nil {
 		return 0
 	}
@@ -1013,12 +1019,9 @@ type composePhase struct {
 	env   map[string]string
 	files []string
 	args  []string
-	// poll watches container health while the command runs (`up --wait` is
-	// silent for as long as it takes everything to come up).
-	poll bool
-	// pollQuiet gates the poll when onLine is also filling the checklist: the
-	// poll then only publishes while the command's own output has said nothing.
-	pollQuiet func() bool
+	// watch reads container states off `docker ps` while the command runs;
+	// nil for phases with no containers to watch.
+	watch *healthWatch
 	// onLine receives each output line while the wizard drives the run, for
 	// phases whose progress can be read off the command's own output.
 	onLine func(string)
@@ -1058,8 +1061,8 @@ func (in *installer) runComposePhase(ctx context.Context, p composePhase) error 
 	cmd.Stdout, cmd.Stderr = sink, sink
 
 	stop := make(chan struct{})
-	if p.poll {
-		go in.pollServiceHealth(stop, p.pollQuiet)
+	if p.watch != nil {
+		go in.pollServiceHealth(*p.watch, stop)
 	}
 	_, err := in.deps.Runner.Run(ctx, cmd)
 	close(stop)
@@ -1102,50 +1105,54 @@ func (in *installer) printFailureDiagnosis(output string) {
 }
 
 // pollServiceHealth feeds the wizard a live per-service checklist while
-// `up --wait` blocks (otherwise silent for up to ten minutes). quiet, when
-// set, is the phase's own progress reader saying it has nothing to show: the
-// poll is the backstop for a compose whose event stream never arrives.
-func (in *installer) pollServiceHealth(stop chan struct{}, quiet func() bool) {
+// `up --wait` blocks (otherwise silent for up to ten minutes).
+func (in *installer) pollServiceHealth(w healthWatch, stop chan struct{}) {
 	ctx := context.Background()
 	for {
 		select {
 		case <-stop:
 			return
-		case <-time.After(2 * time.Second):
+		case <-time.After(healthPollInterval):
 		}
-		if quiet != nil && !quiet() {
+		if w.quiet != nil && !w.quiet() {
 			continue
 		}
-		cmd := in.docker.Command(nil, "ps",
-			"--filter", "label=com.docker.compose.project="+dockercmd.ProjectName,
-			"--format", "{{.Names}}\t{{.Status}}")
-		res, err := in.deps.Runner.Run(ctx, cmd)
+		res, err := in.deps.Runner.Run(ctx, in.psCommand("{{.Names}}\t{{.ID}}\t{{.Status}}"))
 		if err != nil {
 			continue
 		}
-		var rows []ui.ServiceRow
-		ready := 0
-		for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
-			parts := strings.SplitN(line, "\t", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			ok := strings.Contains(parts[1], "(healthy)") ||
-				(strings.HasPrefix(parts[1], "Up") && !strings.Contains(parts[1], "health"))
-			if ok {
-				ready++
-			}
-			rows = append(rows, ui.ServiceRow{
-				Name:   shortContainerName(parts[0]),
-				Detail: healthDetail(parts[1]),
-				Ready:  ok,
-			})
-		}
+		rows, ready := watchRows(res.Stdout, w)
 		if len(rows) > 0 && in.wiz != nil {
 			in.wiz.Services(rows)
 			in.wiz.TaskExtra(fmt.Sprintf("%d/%d ready", ready, len(rows)))
 		}
 	}
+}
+
+// psCommand lists the deployment's running containers in the given format.
+func (in *installer) psCommand(format string) dockercmd.Command {
+	return in.docker.Command(nil, "ps",
+		"--filter", "label=com.docker.compose.project="+dockercmd.ProjectName,
+		"--format", format)
+}
+
+// runningContainers maps each running service to the container serving it, so
+// a phase that replaces containers can tell which ones it has got to.
+func (in *installer) runningContainers(ctx context.Context) map[string]string {
+	if !dockercmd.Installed() {
+		return nil
+	}
+	res, err := in.deps.Runner.Run(ctx, in.psCommand("{{.Names}}\t{{.ID}}"))
+	if err != nil {
+		return nil
+	}
+	before := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
+		if name, id, ok := strings.Cut(line, "\t"); ok {
+			before[shortContainerName(name)] = id
+		}
+	}
+	return before
 }
 
 func (in *installer) printSuccess(ctx context.Context, hostPort int) {
