@@ -28,6 +28,18 @@ func sampleModels() map[string]wizModel {
 			},
 			notes: []noteMsg{{"ok", "Deployment files are up to date"}},
 		},
+		// The star question is the one that carries an emoji: a glyph the
+		// terminal draws two columns wide has to be measured as two.
+		"confirm": {
+			title:   "Onyx Installer",
+			version: "v0.1.0",
+			stage:   StageComplete,
+			answers: []answerMsg{{"Mode", "Lite"}, {"Version", "v4.4.6"}},
+			sel: &askSelectMsg{
+				title: "Enjoying Onyx? ⭐ Star the repo on GitHub?",
+				opts:  []Option{{Label: "Yes"}, {Label: "No"}},
+			},
+		},
 		"task": {
 			title:      "Onyx Installer",
 			version:    "v0.1.0",
@@ -93,12 +105,38 @@ func TestBoxesFillTerminalWidth(t *testing.T) {
 		wiz.printTail(wizModel{width: w, card: []string{
 			"🎉 Onyx is ready  →  http://localhost:3000",
 			"",
-			"Manage:  onyx-cli deploy status · stop · upgrade · uninstall",
+			"Manage this deployment any time with:",
+			"  onyx-cli deploy status      health, version, and URL",
 		}})
 		if got := borderWidth(buf.String()); got != w {
 			t.Errorf("summary card at %d columns: border is %d wide", w, got)
 		}
 	}
+}
+
+// An indented card line that outgrows the card continues under itself: the
+// command list the card ends with would otherwise look like twice as many
+// commands as it lists.
+func TestNarrowCardHangsWrappedLines(t *testing.T) {
+	var buf bytes.Buffer
+	wiz := &Wizard{out: &buf}
+	wiz.printTail(wizModel{width: 44, card: []string{
+		"  onyx-cli deploy uninstall   remove it and its data",
+	}})
+
+	for _, line := range strings.Split(buf.String(), "\n") {
+		plain := ansi.Strip(line)
+		if !strings.Contains(plain, "its data") {
+			continue
+		}
+		body := plain[strings.Index(plain, "│")+len("│"):]
+		// Two columns of card padding, then the line's own indent.
+		if !strings.HasPrefix(body, "    it and its data") {
+			t.Errorf("wrapped line lost its indent:\n%s", buf.String())
+		}
+		return
+	}
+	t.Errorf("the line never wrapped:\n%s", buf.String())
 }
 
 // The last thing an install does is ask a question, and quitting it kills the

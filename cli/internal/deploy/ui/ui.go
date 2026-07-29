@@ -569,6 +569,23 @@ func wrap(s string, width int) []string {
 	return strings.Split(ansi.WrapWc(s, width, " -/"), "\n")
 }
 
+// wrapHanging wraps a line so what overflows stays under it. Indented card
+// lines (a list of commands under its heading) would otherwise continue at the
+// left margin, where the eye reads them as another entry rather than the rest
+// of one.
+func wrapHanging(s string, width int) []string {
+	body := strings.TrimLeft(s, " ")
+	indent := s[:len(s)-len(body)]
+	if indent == "" || width-len(indent) < 1 {
+		return wrap(s, width)
+	}
+	segs := wrap(body, width-len(indent))
+	for i := range segs {
+		segs[i] = indent + segs[i]
+	}
+	return segs
+}
+
 // Wizard drives the model from the orchestration goroutine.
 type Wizard struct {
 	prog *tea.Program
@@ -622,7 +639,7 @@ func (w *Wizard) printTail(m wizModel) {
 		inner := max(width-cardChrome, minPaneInner)
 		var lines []string
 		for _, l := range m.card {
-			lines = append(lines, wrap(l, inner)...)
+			lines = append(lines, wrapHanging(l, inner)...)
 		}
 		fmt.Fprintln(w.out, cardBox.Width(inner+cardChrome).Render(strings.Join(lines, "\n")))
 		return

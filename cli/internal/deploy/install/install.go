@@ -1200,13 +1200,14 @@ func (in *installer) printSuccess(ctx context.Context, hostPort int) {
 		headline,
 		"",
 		"First signup becomes the admin account: " + url + "/auth/signup",
-		"Manage:  onyx-cli deploy status · stop · upgrade · uninstall",
 	}
 	if in.lite {
 		lines = append(lines, "",
 			"Lite mode: no OpenSearch/Redis/model servers or background workers.",
 			"Connectors and RAG search are off; chat, tools, uploads, projects work.")
 	}
+	lines = append(lines, "")
+	lines = append(lines, manageLines()...)
 
 	if in.wiz != nil {
 		// The install is over by the time the star question is on screen, so
@@ -1229,6 +1230,29 @@ func (in *installer) printSuccess(ctx context.Context, hostPort int) {
 	in.starPrompt(ctx)
 }
 
+// manageLines closes a summary card with the verbs that come after the
+// install. The installer is typically run once and then forgotten, so the
+// commands that keep the deployment going get a spelled-out block rather than
+// a single line of "status · stop · upgrade" — the point is that the reader
+// recognizes them months later, when something needs doing.
+func manageLines() []string {
+	cmds := []struct{ cmd, what string }{
+		{"onyx-cli deploy status", "health, version, and URL"},
+		{"onyx-cli deploy upgrade", "move to a newer version"},
+		{"onyx-cli deploy stop", "shut the services down"},
+		{"onyx-cli deploy uninstall", "remove it and its data"},
+	}
+	width := 0
+	for _, c := range cmds {
+		width = max(width, len(c.cmd))
+	}
+	lines := []string{"Manage this deployment any time with:"}
+	for _, c := range cmds {
+		lines = append(lines, "  "+ui.Accent(fmt.Sprintf("%-*s", width, c.cmd))+"   "+c.what)
+	}
+	return lines
+}
+
 // starPrompt ports install.sh's GitHub star prompt: only when interactive
 // and the gh CLI is available.
 func (in *installer) starPrompt(ctx context.Context) {
@@ -1246,7 +1270,7 @@ func (in *installer) askStarQuestion() bool {
 	if _, err := exec.LookPath("gh"); err != nil {
 		return false
 	}
-	ok, err := in.confirmYN("Enjoying Onyx? Star the repo on GitHub?", true)
+	ok, err := in.confirmYN("Enjoying Onyx? ⭐ Star the repo on GitHub?", true)
 	return err == nil && ok
 }
 

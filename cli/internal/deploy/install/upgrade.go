@@ -234,21 +234,18 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 func (in *installer) printUpgradeSuccess(hostPort int, from, to string) {
 	url := fmt.Sprintf("http://localhost:%d", hostPort)
 	headline := fmt.Sprintf("Onyx upgraded: %s → %s", from, to)
+	tail := append([]string{"Access Onyx at: " + ui.Accent(url), ""}, manageLines()...)
 	if in.wiz != nil {
 		in.wiz.Stage(ui.StageComplete)
-		in.wiz.Finish(
-			"🎉 "+headline,
-			"",
-			"Access Onyx at: "+ui.Accent(url),
-			"Check service health with: onyx-cli deploy status",
-		)
+		in.wiz.Finish(append([]string{"🎉 " + headline, ""}, tail...)...)
 		in.wiz = nil
 		return
 	}
 	in.plainf("")
 	in.successf("%s", headline)
-	in.infof("Access Onyx at: %s", url)
-	in.infof("Check service health with: onyx-cli deploy status")
+	for _, l := range tail {
+		in.plainf("%s", l)
+	}
 	in.plainf("")
 }
 
