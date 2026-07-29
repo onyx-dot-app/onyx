@@ -115,6 +115,7 @@ export default function BuildChatPanel({
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;
+  const hasInterruptibleTurn = session?.status === "running";
   const wasInterrupted = useWasInterrupted();
   const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
     useBuildContext();
@@ -848,7 +849,9 @@ export default function BuildChatPanel({
                     isRunning={displayIsRunning}
                     isInterrupting={isInterrupting}
                     onInterrupt={
-                      scheduledRunInFlight ? undefined : handleInterrupt
+                      hasInterruptibleTurn && !scheduledRunInFlight
+                        ? handleInterrupt
+                        : undefined
                     }
                     disabled={
                       isViewingSubagent || scheduledRunInFlight || !hasProvider
