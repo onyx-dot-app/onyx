@@ -18,7 +18,7 @@ class TestValidateNoVectorDbSettings:
 
     @patch("onyx.main.DISABLE_VECTOR_DB", True)
     @patch("onyx.main.MULTI_TENANT", False)
-    @patch("onyx.server.features.build.configs.ENABLE_CRAFT", False)
+    @patch("onyx.main.ENABLE_CRAFT", False)
     def test_no_error_when_no_conflicts(self) -> None:
         from onyx.main import validate_no_vector_db_settings
 
@@ -34,7 +34,7 @@ class TestValidateNoVectorDbSettings:
 
     @patch("onyx.main.DISABLE_VECTOR_DB", True)
     @patch("onyx.main.MULTI_TENANT", False)
-    @patch("onyx.server.features.build.configs.ENABLE_CRAFT", True)
+    @patch("onyx.main.ENABLE_CRAFT", True)
     def test_raises_on_enable_craft(self) -> None:
         from onyx.main import validate_no_vector_db_settings
 
@@ -43,7 +43,7 @@ class TestValidateNoVectorDbSettings:
 
     @patch("onyx.main.DISABLE_VECTOR_DB", True)
     @patch("onyx.main.MULTI_TENANT", True)
-    @patch("onyx.server.features.build.configs.ENABLE_CRAFT", True)
+    @patch("onyx.main.ENABLE_CRAFT", True)
     def test_multi_tenant_checked_before_craft(self) -> None:
         """MULTI_TENANT is checked first, so it should be the error raised."""
         from onyx.main import validate_no_vector_db_settings
