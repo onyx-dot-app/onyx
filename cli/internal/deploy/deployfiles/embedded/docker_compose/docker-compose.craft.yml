@@ -141,6 +141,13 @@ services:
     image: ${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:${IMAGE_TAG:-latest}}
     deploy:
       replicas: 0
+    # Defence in depth. `replicas: 0` is honoured by Compose v2 (even when the
+    # service is named explicitly), but the legacy standalone docker-compose
+    # ignores `deploy` outside swarm, and install.sh accepts a standalone binary
+    # with no minimum version. Unoverridden, the image's own ENTRYPOINT starts
+    # `opencode serve` on 0.0.0.0:4096 with no password -- and stays running, so
+    # nothing looks wrong. Anything that does start here must be inert.
+    entrypoint: ["/bin/true"]
 
 networks:
   # Pre-created by install.sh --include-craft.

@@ -877,9 +877,22 @@ def test_compose_prepull_never_starts_a_container() -> None:
     prepull = _craft_compose_services()["sandbox-image-prepull"]
 
     assert prepull["deploy"]["replicas"] == 0
-    # Nothing runs, so it needs no entrypoint, socket, network or volumes.
-    for key in ("entrypoint", "command", "volumes", "networks", "restart"):
+    # No socket, no volumes, no sandbox bridge: nothing is supposed to run.
+    for key in ("volumes", "networks", "restart"):
         assert key not in prepull
+
+
+def test_compose_prepull_is_inert_even_if_it_does_start() -> None:
+    """`deploy` is ignored by the legacy standalone docker-compose, which
+    install.sh accepts with no minimum version. If `replicas: 0` is dropped, a
+    container *is* created — and this image's own ENTRYPOINT starts
+    `opencode serve` on 0.0.0.0:4096 with no password, staying up so nothing
+    looks broken. The override is the only thing standing between a dropped
+    `deploy` key and an unauthenticated agent server on the compose network.
+    """
+    prepull = _craft_compose_services()["sandbox-image-prepull"]
+
+    assert prepull["entrypoint"] == ["/bin/true"]
 
 
 def test_embedded_craft_compose_copy_is_in_sync() -> None:
