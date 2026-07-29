@@ -284,36 +284,39 @@ Two differences from Kubernetes drive a different fix:
   explicit `docker image prune`. Pinning is therefore a bonus here, not
   the point.
 
-So the fix is just "pull at deploy time instead of at request time", in
-two layers:
+So the fix is a blocking `docker pull` in
+`install.sh --include-craft`, immediately after the `docker compose pull`
+that fetches the Onyx images — inside the step that already warns "this
+may take several minutes". The sandbox image is not a compose service
+(nothing runs it; `api_server` creates sandbox containers from it
+directly), so `compose pull` does not cover it on its own.
 
-1. **A `sandbox-image-prepull` service in
-   `docker-compose.craft.yml`.** This is the real fix. Declaring the
-   image as a service puts it on the normal compose lifecycle:
-   `docker compose pull` fetches it alongside the Onyx images, and
-   `install.sh` already runs that before `up`, inside the step that
-   already warns "this may take several minutes".
+**Exactly one pre-pull, and one fallback.** If the image is missing later
+— pruned, or a tag bumped by an operator who upgrades with plain
+`docker compose pull` rather than `install.sh` — `provision()` pulls it
+on demand, as it always has. That path is the only backstop, and it is
+enough: the cost lands on one request, and the error surfaces against the
+request that caused it.
 
-   It idles rather than exiting, for two reasons. `install.sh` runs
-   `docker compose up --wait` by default, which waits for services to be
-   *running* — a one-shot that exits would fail the install. And a live
-   container keeps the image out of `docker image prune -a`. The image's
-   own `ENTRYPOINT` (`/workspace/entrypoint.sh`) starts the agent, so the
-   entrypoint is overridden with the same portable idle loop the
-   Kubernetes prepuller uses.
+Earlier revisions of this added a long-running compose service to hold
+the image *and* a background warm at api_server startup. Both were
+removed. They were mutually redundant — each was justified by gaps the
+other covered — and neither survives the question "if the other exists,
+why do I?". The compose service also left a container idling forever for
+no reason beyond satisfying `docker compose up --wait`, which is an
+installer concern, not a reason to run a process on every deployment.
 
-2. **A background warm at api_server startup**
-   (`sandbox/prewarm.py`). Covers what compose doesn't reach: bare
-   `docker`, dev runs, and hosts where the image was pruned after
-   install. Deliberately a daemon thread that swallows everything — a
-   warm is an optimisation, so it must not delay readiness behind a
-   registry download or break startup when the socket is missing. On
-   failure the lazy pull in `provision()` stays the fallback and reports
-   the error against the request it belongs to.
+Do not warm at api_server startup. Blocking there would put all of Onyx's
+readiness behind the registry, and not just on first install: `:latest`
+is the default and is in `_MUTABLE_SANDBOX_IMAGE_TAGS`, for which
+`_ensure_sandbox_image` skips the local-presence check and always pulls.
+Every restart would contact the registry. Making it non-blocking instead
+just converts a broken deployment into a slow one that fails later, at a
+user's first sandbox.
 
 The `background` worker also provisions (waking `SLEEPING` sandboxes via
-`scheduled_tasks/executor.py`) and needs no warm of its own: it shares
-the host's image store, so whatever pulled first covers it.
+`scheduled_tasks/executor.py`) and needs nothing of its own: it shares
+the host's image store, so the installer's pull covers it.
 
 ### Private registries
 

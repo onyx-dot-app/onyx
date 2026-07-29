@@ -851,52 +851,25 @@ def _craft_compose_services() -> dict:
     return yaml.safe_load(compose_path.read_text())["services"]
 
 
-def test_compose_prepulls_the_sandbox_image() -> None:
-    """The prepull service must reference the *same* image ref the sandbox
-    containers use.
-
-    A drifted ref is the worst outcome available: compose pulls and holds an
-    image nobody runs while every first sandbox still cold-pulls, and the stack
-    looks healthy throughout. The only symptom is the slow provision the service
-    was added to remove.
+def test_installer_prepulls_the_image_the_sandboxes_run() -> None:
+    """install.sh pre-pulls the sandbox image so the first sandbox doesn't pay
+    the download; compose passes the same ref to the containers as
+    SANDBOX_CONTAINER_IMAGE. The default is spelled in both files, so a change to
+    one silently leaves the installer warming an image nobody runs — visible only
+    as the slow provision the pre-pull exists to remove.
     """
-    services = _craft_compose_services()
-    prepull_image = services["sandbox-image-prepull"]["image"]
+    compose_ref = next(
+        env
+        for env in _craft_compose_services()["api_server"]["environment"]
+        if env.startswith("SANDBOX_CONTAINER_IMAGE=")
+    )
+    install_sh = (REPO_ROOT / "deployment/docker_compose/install.sh").read_text()
 
-    for service_name in ("api_server", "background"):
-        assert (
-            f"SANDBOX_CONTAINER_IMAGE={prepull_image}"
-            in services[service_name]["environment"]
-        )
-
-
-def test_compose_prepull_does_not_run_the_agent() -> None:
-    """The image's own ENTRYPOINT (/workspace/entrypoint.sh) starts the agent, so
-    the prepull must override entrypoint rather than command, and idle portably —
-    `sleep infinity` is a GNU coreutils extension."""
-    prepull = _craft_compose_services()["sandbox-image-prepull"]
-    assert prepull["entrypoint"] == ["sh", "-c", "while :; do sleep 86400; done"]
-
-
-def test_compose_prepull_stays_running() -> None:
-    """install.sh runs `docker compose up --wait` by default, which waits for
-    services to be running — a one-shot that exits would fail the install. It
-    also keeps the image out of `docker image prune -a`."""
-    prepull = _craft_compose_services()["sandbox-image-prepull"]
-    assert prepull["restart"] == "unless-stopped"
-
-
-def test_compose_prepull_is_inert() -> None:
-    """It exists only to hold an image: no docker socket (root-equivalent on the
-    host), no sandbox bridge, no writable filesystem, no capabilities."""
-    prepull = _craft_compose_services()["sandbox-image-prepull"]
-
-    assert prepull["network_mode"] == "none"
-    assert "networks" not in prepull
-    assert "volumes" not in prepull
-    assert prepull["read_only"] is True
-    assert prepull["cap_drop"] == ["ALL"]
-    assert "no-new-privileges:true" in prepull["security_opt"]
+    assert "onyxdotapp/sandbox" in compose_ref
+    assert "onyxdotapp/sandbox" in install_sh
+    # And it must honour an operator's override rather than always pulling the
+    # default, or a private-registry mirror is warmed from the wrong place.
+    assert "SANDBOX_CONTAINER_IMAGE" in install_sh
 
 
 def test_embedded_craft_compose_copy_is_in_sync() -> None:

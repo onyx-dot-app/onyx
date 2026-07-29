@@ -112,15 +112,6 @@ class SandboxManager(_ServeMixin, ABC):
 
     supports_opencode_history_persistence: bool = False
 
-    def prewarm(self) -> None:
-        """Front-load whatever the first :meth:`provision` would otherwise pay
-        for, such as fetching the sandbox image.
-
-        Blocking, so callers decide whether to background it. Idempotent.
-        Backends that need no warming inherit this no-op — Kubernetes pre-pulls
-        at deploy time via the sandbox-image-prepuller DaemonSet.
-        """
-
     @abstractmethod
     def provision(
         self,
