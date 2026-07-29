@@ -93,6 +93,12 @@ sandboxProxy:
       cpu: 250m
       memory: 512Mi
 
+# The sandbox image is `kind load`ed with pullPolicy IfNotPresent, so there is
+# no registry pull to front-run — and without the local image overrides the
+# prepuller would eagerly pull the ~3.3 GB :edge image from Docker Hub.
+sandboxImagePrepull:
+  enabled: false
+
 # ---- Secrets ----
 
 auth:
