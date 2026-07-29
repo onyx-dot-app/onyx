@@ -40,6 +40,14 @@ const (
 // preflight carries the environment facts gathered concurrently while the
 // user answers the setup questions. Healthy values stay quiet; only problems
 // surface as warnings or provisioning offers.
+// tagLookup carries the background release lookup's outcome. The error is
+// reported by the receiving goroutine, not the sender: the output helpers
+// drive the wizard, which only the main goroutine may touch.
+type tagLookup struct {
+	tag string
+	err error
+}
+
 type preflight struct {
 	dockerVersion  string
 	composeVersion string
@@ -76,34 +84,49 @@ func (in *installer) runInstall(ctx context.Context) error {
 	_, envErr := os.Stat(envPath)
 	rerun := envErr == nil
 
+	// --tag is checked before anything else runs: a typo must fail here, not
+	// minutes later as a pull error with the bad version already on disk.
+	// pinnedTag is assigned once, before the goroutines below read it, and
+	// never again — opts stays immutable for the rest of the run.
+	pinnedTag := in.opts.Tag
+	if pinnedTag != "" {
+		validated, verr := in.validateTag(ctx, pinnedTag)
+		if verr != nil {
+			return verr
+		}
+		pinnedTag = validated
+	}
+
 	// The latest-release lookup and the environment checks run in the
 	// background while the user answers the questions below.
-	tagCh := make(chan string, 1)
+	tagCh := make(chan tagLookup, 1)
 	go func() {
-		if in.opts.Local {
-			tagCh <- "edge"
-			return
-		}
-		if in.opts.Tag != "" {
-			tagCh <- in.opts.Tag
-			return
-		}
-		if tag, err := in.deps.Release.LatestAppTag(ctx); err == nil {
-			tagCh <- tag
-		} else {
-			in.warnf("Could not determine latest Onyx release — falling back to main / edge")
-			tagCh <- "edge"
+		switch {
+		case in.opts.Local:
+			tagCh <- tagLookup{tag: "edge"}
+		case pinnedTag != "":
+			tagCh <- tagLookup{tag: pinnedTag}
+		default:
+			tag, err := in.deps.Release.LatestAppTag(ctx)
+			tagCh <- tagLookup{tag: tag, err: err}
 		}
 	}()
 	preCh := make(chan preflight, 1)
 	go func() { preCh <- in.gatherPreflight(ctx) }()
 
 	// tagCh delivers exactly one value; latestTag memoizes it so every
-	// consumer (question defaults, initialTag) can read it safely.
+	// consumer (question defaults, initialTag) can read it safely. The
+	// fallback is reported here rather than in the goroutine: output helpers
+	// touch the wizard, which only the main goroutine may drive.
 	var latestTag string
 	getLatestTag := func() string {
 		if latestTag == "" {
-			latestTag = <-tagCh
+			got := <-tagCh
+			if got.err != nil {
+				in.warnf("Could not determine latest Onyx release — falling back to main / edge")
+				got.tag = "edge"
+			}
+			latestTag = got.tag
 		}
 		return latestTag
 	}
@@ -128,7 +151,8 @@ func (in *installer) runInstall(ctx context.Context) error {
 	}
 
 	// ---- Questions: every decision is made up front ----
-	var updateTag string // rerun: non-empty means update to this tag
+	chosenTag := pinnedTag // the tag this run deploys; "" until answered
+	var updateTag string   // rerun: non-empty means update to this tag
 	pre, preSeen := preflight{}, false
 	if rerun {
 		// The running-services guard needs docker handles, so resolve the
@@ -137,6 +161,10 @@ func (in *installer) runInstall(ctx context.Context) error {
 		if err := in.resolveDockerProblems(ctx, pre); err != nil {
 			return err
 		}
+		// Read the published port while the deployment is still up: installs
+		// predating HOST_PORT recording have it nowhere else, and once the
+		// guard stops the containers docker no longer reports it.
+		in.observedPort = in.runningHostPort(ctx)
 		if err := in.guardServicesStopped(ctx, in.opts.Force && in.prompt.AssumeDefaults); err != nil {
 			return err
 		}
@@ -149,8 +177,8 @@ func (in *installer) runInstall(ctx context.Context) error {
 		in.craft = in.opts.IncludeCraft || manifest.IncludeCraft ||
 			in.overlayOnDisk(filepath.Base(deployfiles.CraftOverlay.DestRel))
 
-		if in.opts.Tag != "" {
-			updateTag = in.opts.Tag
+		if pinnedTag != "" {
+			updateTag = pinnedTag
 		} else if !in.prompt.AssumeDefaults {
 			choice, err := in.selectOne("This deployment already exists. What would you like to do?",
 				[]ui.Option{
@@ -161,7 +189,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 				return err
 			}
 			if choice == 1 {
-				updateTag, err = in.askString("Version to deploy", getLatestTag())
+				updateTag, err = in.askVersion(ctx, "Version to deploy", getLatestTag())
 				if err != nil {
 					return err
 				}
@@ -179,15 +207,15 @@ func (in *installer) runInstall(ctx context.Context) error {
 		if err := in.askModeQuestion(); err != nil {
 			return err
 		}
-		if in.opts.Tag == "" {
-			tag, err := in.askString("Version to deploy", getLatestTag())
+		if chosenTag == "" {
+			tag, err := in.askVersion(ctx, "Version to deploy", getLatestTag())
 			if err != nil {
 				return err
 			}
-			in.opts.Tag = tag
+			chosenTag = tag
 		}
 		if in.wiz != nil {
-			in.wiz.Answer("Version", in.opts.Tag)
+			in.wiz.Answer("Version", chosenTag)
 		}
 	}
 
@@ -229,7 +257,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		return fmt.Errorf("failed to create %s: %w", gitkeep, err)
 	}
 
-	initialTag := in.opts.Tag
+	initialTag := chosenTag
 	if initialTag == "" {
 		if updateTag != "" {
 			initialTag = updateTag
@@ -254,6 +282,13 @@ func (in *installer) runInstall(ctx context.Context) error {
 		if err := in.removeOverlayIfPresent(deployfiles.CraftOverlay, manifest, "Craft disabled this run"); err != nil {
 			return err
 		}
+	}
+
+	// Captured for rollback: a failed pull must not leave .env pointing at a
+	// version that never ran (nil means there was no .env before this run).
+	prevEnv, prevErr := os.ReadFile(envPath)
+	if prevErr != nil {
+		prevEnv = nil
 	}
 
 	var effectiveTag string
@@ -283,8 +318,19 @@ func (in *installer) runInstall(ctx context.Context) error {
 
 	in.successf("Configuration ready at %s (version %s)", in.root.Dir, effectiveTag)
 
+	// Persist the manifest's file records now: if the pull fails, the next
+	// run must still know the freshly materialized files were CLI-written,
+	// not hand-edited. InstalledTag advances only after a successful start.
+	if err := manifest.Save(in.root.Dir); err != nil {
+		return err
+	}
+
 	// ---- Phases 2 + 3: pull and start ----
-	if err := in.pullAndStart(ctx, effectiveTag, hostPort); err != nil {
+	if err := in.pullImages(ctx, effectiveTag, hostPort); err != nil {
+		in.rollbackEnv(envPath, prevEnv)
+		return err
+	}
+	if err := in.startServices(ctx, effectiveTag, hostPort); err != nil {
 		return err
 	}
 
@@ -306,6 +352,67 @@ func (in *installer) runInstall(ctx context.Context) error {
 
 	in.printSuccess(ctx, hostPort)
 	return nil
+}
+
+// validateTag normalizes a requested version and, when it can, confirms it
+// exists BEFORE anything is written, so a typo fails here instead of
+// surfacing minutes later as a pull error with the bad version already in
+// .env. Only release versions are looked up: floating and hand-built image
+// tags are pullable without a matching git ref. Verification is best-effort
+// by design — an unreachable (or lying) GitHub must never be able to block
+// an install that would otherwise work.
+func (in *installer) validateTag(ctx context.Context, tag string) (string, error) {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return "", exitcodes.New(exitcodes.BadRequest, "no version given")
+	}
+	normalized, checkable := release.NormalizeVersionTag(tag)
+	if normalized != tag {
+		in.infof("Using %s (Onyx versions are v-prefixed)", normalized)
+	}
+	// A dry run writes nothing and pulls nothing, so it stays offline.
+	if !checkable || in.opts.Local || in.opts.DryRun {
+		return normalized, nil
+	}
+
+	exists, err := in.deps.Release.RefExists(ctx, normalized)
+	if err != nil {
+		in.warnf("Could not verify that version %s exists (%v) — continuing", normalized, err)
+		return normalized, nil
+	}
+	if exists {
+		return normalized, nil
+	}
+	// A 404 is only worth acting on if the same endpoint answers for a ref
+	// that certainly exists: proxies and captive portals 404 everything, and
+	// rejecting a real version would leave no way to install at all.
+	if ok, cerr := in.deps.Release.RefExists(ctx, "main"); cerr != nil || !ok {
+		in.warnf("Could not reach GitHub to verify version %s — continuing", normalized)
+		return normalized, nil
+	}
+	return "", exitcodes.Newf(exitcodes.BadRequest,
+		"version %s not found — Onyx releases look like v4.4.6 (https://github.com/onyx-dot-app/onyx/releases)", normalized)
+}
+
+// askVersion asks for a deployment version and validates the answer;
+// interactive runs re-ask, seeded with the rejected text so a typo can be
+// corrected rather than retyped.
+func (in *installer) askVersion(ctx context.Context, title, def string) (string, error) {
+	for {
+		tag, err := in.askString(title, def)
+		if err != nil {
+			return "", err
+		}
+		resolved, verr := in.validateTag(ctx, tag)
+		if verr == nil {
+			return resolved, nil
+		}
+		if in.prompt.AssumeDefaults {
+			return "", verr
+		}
+		in.errorf("%v", verr)
+		def = tag
+	}
 }
 
 // askModeQuestion is the single merged deployment-mode select (mode and
@@ -591,14 +698,22 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 	}
 	env := string(existing)
 
-	// Keep the port the deployment already uses; scan only for installs that
-	// predate HOST_PORT recording (services are stopped on this path, so the
-	// scan can't collide with our own binding).
+	// Keep the port the deployment already uses. Installs that predate
+	// HOST_PORT recording fall back to the port they were observed
+	// publishing, and only a deployment that was never up gets a fresh scan
+	// (services are stopped on this path, so the scan can't collide with our
+	// own binding — but it would silently move a running deployment).
 	hostPort, perr := strconv.Atoi(Var(env, "HOST_PORT"))
 	if perr != nil {
-		hostPort = resources.FindAvailablePort(3000)
-		if hostPort != 3000 {
-			in.infof("Port 3000 is in use — using %d", hostPort)
+		switch {
+		case in.observedPort != 0:
+			hostPort = in.observedPort
+			in.infof("Recording the port this deployment already uses (%d) in .env", hostPort)
+		default:
+			hostPort = resources.FindAvailablePort(3000)
+			if hostPort != 3000 {
+				in.infof("Port 3000 is in use — using %d", hostPort)
+			}
 		}
 		env = SetVar(env, "HOST_PORT", strconv.Itoa(hostPort))
 	}
@@ -705,14 +820,17 @@ func (in *installer) ensureCraftResources(ctx context.Context) {
 	}
 }
 
-func (in *installer) pullAndStart(ctx context.Context, tag string, hostPort int) error {
-	env := map[string]string{
+func (in *installer) composeRunEnv(tag string, hostPort int) map[string]string {
+	return map[string]string{
 		"HOST_PORT": fmt.Sprintf("%d", hostPort),
 		"IMAGE_TAG": tag,
 	}
+}
+
+func (in *installer) pullImages(ctx context.Context, tag string, hostPort int) error {
+	env := in.composeRunEnv(tag, hostPort)
 	files := in.composeFileNames(false)
 	dir := in.deploymentDir()
-	floating := release.IsFloatingTag(tag)
 
 	if in.wiz != nil {
 		// Compose's own progress renderer (parallel per-layer bars) beats
@@ -732,19 +850,27 @@ func (in *installer) pullAndStart(ctx context.Context, tag string, hostPort int)
 			return exitcodes.Newf(exitcodes.General, "docker compose pull failed: %v", err)
 		}
 		in.wiz.Note("ok", fmt.Sprintf("Pulling images (%ds)", int(time.Since(began).Seconds())))
-	} else {
-		pullArgs := []string{"pull"}
-		if !in.opts.Verbose {
-			pullArgs = append(pullArgs, "--quiet")
-		}
-		if err := in.runComposePhase(ctx, ui.StagePull, "Pulling images", dir, env, files, pullArgs, false); err != nil {
-			in.infof("Check your internet connection and re-run. If the issue persists: founders@onyx.app")
-			return exitcodes.Newf(exitcodes.General, "docker compose pull failed: %v", err)
-		}
+		return nil
 	}
 
+	pullArgs := []string{"pull"}
+	if !in.opts.Verbose {
+		pullArgs = append(pullArgs, "--quiet")
+	}
+	if err := in.runComposePhase(ctx, ui.StagePull, "Pulling images", dir, env, files, pullArgs, false); err != nil {
+		in.infof("Check your internet connection and re-run. If the issue persists: founders@onyx.app")
+		return exitcodes.Newf(exitcodes.General, "docker compose pull failed: %v", err)
+	}
+	return nil
+}
+
+func (in *installer) startServices(ctx context.Context, tag string, hostPort int) error {
+	env := in.composeRunEnv(tag, hostPort)
+	files := in.composeFileNames(false)
+	dir := in.deploymentDir()
+
 	upArgs := []string{"up", "-d"}
-	if floating {
+	if release.IsFloatingTag(tag) {
 		upArgs = append(upArgs, "--pull", "always", "--force-recreate")
 	}
 	poll := false
@@ -764,6 +890,48 @@ func (in *installer) pullAndStart(ctx context.Context, tag string, hostPort int)
 		return exitcodes.Newf(exitcodes.General, "docker compose up failed: %v", err)
 	}
 	return nil
+}
+
+// rollbackEnv restores .env to its pre-run content after a failed pull, so a
+// version that never ran isn't left recorded as the deployment's current one.
+// Only .env is reverted: the managed config files have already been refreshed
+// to the target ref, and re-running completes the move.
+func (in *installer) rollbackEnv(envPath string, prev []byte) {
+	if prev == nil {
+		if err := os.Remove(envPath); err != nil {
+			in.warnf("Could not remove the incomplete .env: %v", err)
+			return
+		}
+		in.infof("Removed the incomplete .env — nothing was deployed; re-run to start over")
+		return
+	}
+	if err := os.WriteFile(envPath, prev, 0600); err != nil {
+		in.warnf("Could not restore .env: %v", err)
+		return
+	}
+	in.infof("Restored .env to the previously deployed version — re-run to retry")
+}
+
+// runningHostPort reports the host port the deployment currently publishes,
+// or 0 when nothing is running. It is the only record of the port for
+// installs created by install.sh, which never wrote HOST_PORT to .env.
+func (in *installer) runningHostPort(ctx context.Context) int {
+	if !dockercmd.Installed() {
+		return 0
+	}
+	cmd := in.docker.Command(nil, "ps",
+		"--filter", "label=com.docker.compose.project=onyx",
+		"--format", "{{.Ports}}")
+	res, err := in.deps.Runner.Run(ctx, cmd)
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
+		if port, perr := strconv.Atoi(publishedHostPort(line)); perr == nil {
+			return port
+		}
+	}
+	return 0
 }
 
 // runComposePhase runs one long compose command as a visible phase: a rail

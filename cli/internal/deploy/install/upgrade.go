@@ -46,6 +46,17 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 			"no Onyx deployment found at %s — run `onyx-cli deploy install` first", in.root.Dir)
 	}
 
+	// --tag is checked before the wizard takes over the screen, so a typo
+	// fails as a plain error instead of flashing the alt screen.
+	pinnedTag := in.opts.Tag
+	if pinnedTag != "" {
+		validated, verr := in.validateTag(ctx, pinnedTag)
+		if verr != nil {
+			return verr
+		}
+		pinnedTag = validated
+	}
+
 	// Upgrades share the install wizard (dry runs stay line-oriented).
 	if in.fancy() && !in.opts.DryRun {
 		in.wiz = ui.StartWizard(in.deps.IOS.Out, "Onyx Upgrade", in.deps.CLIVersion, in.cancel)
@@ -64,6 +75,12 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 
 	envPath := filepath.Join(in.root.Dir, "deployment", ".env")
 	envBytes, err := os.ReadFile(envPath)
+	if errors.Is(err, os.ErrNotExist) {
+		// Reachable when a fresh install failed before its first start: the
+		// config files are there, but .env was rolled back.
+		return exitcodes.Newf(exitcodes.NotAvailable,
+			"no deployment/.env at %s — run `onyx-cli deploy install` to finish setting up this deployment", in.root.Dir)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", envPath, err)
 	}
@@ -91,7 +108,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.wiz.Answer("From", installedTag)
 	}
 
-	targetTag, err := in.resolveUpgradeTag(ctx, installedTag)
+	targetTag, err := in.resolveUpgradeTag(ctx, installedTag, pinnedTag)
 	if err != nil {
 		return err
 	}
@@ -120,6 +137,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	if err := in.resolveDockerProblems(ctx, in.gatherPreflight(ctx)); err != nil {
 		return err
 	}
+	in.observedPort = in.runningHostPort(ctx)
 	// The running services are deliberately NOT stopped here: `up` recreates
 	// any container whose image or config changed, so the old version keeps
 	// serving while images download, and a failed pull leaves it running
@@ -136,13 +154,16 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		env = SetVarUncomment(env, "SANDBOX_BACKEND", backend)
 		in.successf("Aligned SANDBOX_BACKEND=%s with image tag %s", backend, targetTag)
 	}
-	// Reuse the port the deployment already runs on — scanning for a free
-	// one here would collide with our own still-running nginx and silently
-	// move Onyx to another port.
+	// Reuse the port the deployment already runs on — scanning for a free one
+	// here would collide with our own still-running nginx and silently move
+	// Onyx to another port. Installs created by install.sh never recorded
+	// HOST_PORT, so fall back to the port they are publishing right now.
 	hostPort, perr := strconv.Atoi(Var(env, "HOST_PORT"))
 	if perr != nil {
-		hostPort = 3000
-		env = SetVar(env, "HOST_PORT", "3000")
+		if hostPort = in.observedPort; hostPort == 0 {
+			hostPort = 3000
+		}
+		env = SetVar(env, "HOST_PORT", strconv.Itoa(hostPort))
 	}
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
 		return fmt.Errorf("failed to write .env: %w", err)
@@ -163,7 +184,18 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 		in.ensureCraftResources(ctx)
 	}
 
-	if err := in.pullAndStart(ctx, targetTag, hostPort); err != nil {
+	// Persist the manifest's file records now: if the pull fails, the next
+	// run must still know the freshly materialized files were CLI-written,
+	// not hand-edited. InstalledTag advances only after a successful start.
+	if err := manifest.Save(in.root.Dir); err != nil {
+		return err
+	}
+
+	if err := in.pullImages(ctx, targetTag, hostPort); err != nil {
+		in.rollbackEnv(envPath, envBytes)
+		return err
+	}
+	if err := in.startServices(ctx, targetTag, hostPort); err != nil {
 		return err
 	}
 
@@ -212,12 +244,13 @@ func (in *installer) printUpgradeSuccess(hostPort int, from, to string) {
 	in.plainf("")
 }
 
-// resolveUpgradeTag picks the target: --tag, or the latest app release
-// (prompted for interactively; taken as-is with --no-prompt), with the same
-// edge fallback install.sh uses when the release lookup fails.
-func (in *installer) resolveUpgradeTag(ctx context.Context, installedTag string) (string, error) {
-	if in.opts.Tag != "" {
-		return in.opts.Tag, nil
+// resolveUpgradeTag picks the target: the already-validated --tag, or the
+// latest app release (prompted for interactively; taken as-is with
+// --no-prompt), with the same edge fallback install.sh uses when the release
+// lookup fails.
+func (in *installer) resolveUpgradeTag(ctx context.Context, installedTag, pinnedTag string) (string, error) {
+	if pinnedTag != "" {
+		return pinnedTag, nil
 	}
 	defaultTag := "edge"
 	if tag, err := in.deps.Release.LatestAppTag(ctx); err == nil {
@@ -228,7 +261,7 @@ func (in *installer) resolveUpgradeTag(ctx context.Context, installedTag string)
 	if in.wiz == nil && !in.prompt.AssumeDefaults {
 		in.infof("Currently installed: %s", installedTag)
 	}
-	return in.askString("Version to upgrade to", defaultTag)
+	return in.askVersion(ctx, "Version to upgrade to", defaultTag)
 }
 
 // downgradeGuard warns when both tags parse as semver and the target is

@@ -3,6 +3,7 @@ package install
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -76,7 +77,46 @@ func rawServer(t *testing.T, body string) *httptest.Server {
 	return s
 }
 
+// notFoundServer 404s every download (exercising the embedded fallback) but
+// answers ref-existence HEAD probes, so pinned test tags validate.
 func notFoundServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(s.Close)
+	return s
+}
+
+// refServer answers HEAD probes only for the given refs (plus main, which
+// validation probes as its control) and 404s everything else: a healthy
+// GitHub that simply doesn't have the requested version.
+func refServer(t *testing.T, refs ...string) *httptest.Server {
+	t.Helper()
+	known := map[string]bool{"main": true}
+	for _, r := range refs {
+		known[r] = true
+	}
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			for ref := range known {
+				if strings.Contains(r.URL.Path, "/"+ref+"/") {
+					return
+				}
+			}
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(s.Close)
+	return s
+}
+
+// blackholeServer 404s everything, HEAD probes included — the captive-portal
+// / broken-proxy case, where no ref can be confirmed to exist.
+func blackholeServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	s := httptest.NewServer(http.NotFoundHandler())
 	t.Cleanup(s.Close)
@@ -424,5 +464,112 @@ func TestDryRunHasNoSideEffects(t *testing.T) {
 	}
 	if !strings.Contains(outBuf(deps).String(), "Dry run complete") {
 		t.Errorf("output:\n%s", outBuf(deps).String())
+	}
+}
+
+func TestInstallRejectsUnknownVersion(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	root := t.TempDir()
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, refServer(t))
+	err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v9.9.9", Dir: root, NoWait: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("err = %v, want unknown-version rejection", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "deployment", ".env")); !os.IsNotExist(statErr) {
+		t.Error("rejected install must not create .env")
+	}
+}
+
+// A network that 404s everything (captive portal, broken proxy) must not be
+// able to veto an install: verification is best-effort, so the run proceeds.
+func TestInstallProceedsWhenExistenceCannotBeConfirmed(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	root := t.TempDir()
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, blackholeServer(t))
+	if err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.0.0", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("unverifiable version must not block the install: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+	env, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+	if got := Var(string(env), "IMAGE_TAG"); got != "v4.0.0" {
+		t.Errorf("IMAGE_TAG = %q", got)
+	}
+}
+
+// Image tags that aren't git refs (hand-built images, -dev twins) are
+// pullable and must skip the repo lookup rather than be rejected.
+func TestInstallAcceptsNonReleaseImageTag(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	root := t.TempDir()
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, refServer(t))
+	if err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.0.0-dev", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("non-release image tag must be accepted: %v", err)
+	}
+}
+
+func TestInstallAddsMissingVersionPrefix(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	root := t.TempDir()
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, refServer(t, "v4.0.0"))
+	if err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "4.0.0", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("RunInstall: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+	env, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+	if got := Var(string(env), "IMAGE_TAG"); got != "v4.0.0" {
+		t.Errorf("IMAGE_TAG = %q, want the v-prefixed form", got)
+	}
+}
+
+// A dry run writes nothing and pulls nothing, so it must not need GitHub.
+func TestInstallDryRunStaysOffline(t *testing.T) {
+	isolateEnv(t)
+	raw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("dry run made a network request: %s %s", r.Method, r.URL.Path)
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(raw.Close)
+	deps := testDeps(t, &fakeRunner{handler: healthyDockerHandler}, raw)
+	if err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, DryRun: true, Tag: "v4.0.0", Dir: t.TempDir(),
+	}); err != nil {
+		t.Fatalf("RunInstall: %v", err)
+	}
+}
+
+func TestInstallPullFailureRemovesFreshEnv(t *testing.T) {
+	isolateEnv(t)
+	shimDockerOnPath(t)
+	root := t.TempDir()
+	failPull := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		if strings.Contains(argv(c), " pull") {
+			return dockercmd.Result{}, errors.New("manifest for tag not found")
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, failPull, notFoundServer(t))
+	err := RunInstall(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.0.0", Dir: root, NoWait: true,
+	})
+	if err == nil {
+		t.Fatal("install must fail when the pull fails")
+	}
+	// A version that never ran must not be recorded anywhere: no .env, and
+	// no InstalledTag in the manifest.
+	if _, statErr := os.Stat(filepath.Join(root, "deployment", ".env")); !os.IsNotExist(statErr) {
+		t.Error("failed fresh install must not leave .env behind")
+	}
+	if m, _ := state.Load(root); m != nil && m.InstalledTag != "" {
+		t.Errorf("manifest tag = %q after failed fresh install, want empty", m.InstalledTag)
 	}
 }

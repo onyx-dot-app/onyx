@@ -66,6 +66,11 @@ type installer struct {
 	wiz      *ui.Wizard // live wizard when the fancy renderer drives the run
 	cancel   func()     // cancels in-flight work when the wizard is quit
 	rootless bool       // daemon runs rootless (limits what compose can grant)
+
+	// observedPort is the host port the deployment published when the run
+	// started (0 if it wasn't running). It recovers the port of installs
+	// that predate recording HOST_PORT in .env.
+	observedPort int
 }
 
 func newInstaller(deps Deps, opts Options) *installer {

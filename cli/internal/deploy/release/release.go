@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -28,6 +29,38 @@ const (
 // appTagPattern matches Onyx app release tags (vX.Y.Z, optionally suffixed
 // like v4.4.6-beta.1), as opposed to tool releases such as cli/v1.2.3.
 var appTagPattern = regexp.MustCompile(`^v\d+\.\d+\.\d+`)
+
+// refPattern bounds what may be interpolated into a raw.githubusercontent
+// URL path. The ref comes from user input (--tag), and the files it selects
+// are written to the install root and executed by the deployment, so a ref
+// that could escape the repo (".." segments) must never reach the network.
+var refPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`)
+
+func checkRef(ref string) error {
+	if !refPattern.MatchString(ref) || strings.Contains(ref, "..") {
+		return fmt.Errorf("invalid git ref %q", ref)
+	}
+	return nil
+}
+
+// releaseVersionPattern matches a release version as a user would type it,
+// with or without the conventional "v" prefix. Image tags that are not git
+// refs (beta, nightly, vX.Y.Z-dev, locally built tags) deliberately don't
+// match: they are pullable but can't be looked up in the repo.
+var releaseVersionPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
+
+// NormalizeVersionTag adds the conventional "v" prefix to a bare release
+// version ("4.4.6" → "v4.4.6") and reports whether the result is a release
+// version, i.e. one whose existence can be checked with RefExists.
+func NormalizeVersionTag(tag string) (string, bool) {
+	if !releaseVersionPattern.MatchString(tag) {
+		return tag, false
+	}
+	if !strings.HasPrefix(tag, "v") {
+		return "v" + tag, true
+	}
+	return tag, true
+}
 
 // FloatingTags are rolling image tags that track main rather than a pinned
 // release.
@@ -108,6 +141,9 @@ func (c *Client) LatestAppTag(ctx context.Context) (string, error) {
 // at ref. A 404 fails immediately (the ref or path doesn't exist); transient
 // errors are retried. Callers fall back to the embedded copies on error.
 func (c *Client) FetchFile(ctx context.Context, ref, repoPath string) ([]byte, error) {
+	if err := checkRef(ref); err != nil {
+		return nil, err
+	}
 	url := c.RawBase + "/" + owner + "/" + repo + "/" + ref + "/" + repoPath
 
 	var lastErr error
@@ -133,6 +169,34 @@ func (c *Client) FetchFile(ctx context.Context, ref, repoPath string) ([]byte, e
 		}
 	}
 	return nil, fmt.Errorf("failed to fetch %s at %s: %w", repoPath, ref, lastErr)
+}
+
+// RefExists reports whether ref (a tag or branch) exists in the repo, via a
+// HEAD request for a file present at every deployable ref. A definitive 404
+// means the ref doesn't exist; transport errors and other statuses return an
+// error so callers can decide whether to proceed unverified.
+func (c *Client) RefExists(ctx context.Context, ref string) (bool, error) {
+	if err := checkRef(ref); err != nil {
+		return false, err
+	}
+	url := c.RawBase + "/" + owner + "/" + repo + "/" + ref + "/deployment/docker_compose/env.template"
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		return false, err
+	}
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	default:
+		return false, fmt.Errorf("HTTP %d checking ref %s", resp.StatusCode, ref)
+	}
 }
 
 func (c *Client) fetchOnce(ctx context.Context, url string) (data []byte, retryable bool, err error) {

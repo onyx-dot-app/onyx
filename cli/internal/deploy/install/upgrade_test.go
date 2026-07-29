@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,6 +172,48 @@ func TestUpgradeRecreatesWithoutStopping(t *testing.T) {
 	}
 }
 
+// Installs created by install.sh never recorded HOST_PORT. Defaulting to
+// 3000 would silently move a deployment that runs on another port, so the
+// port is recovered from the containers that are still running.
+func TestUpgradeRecoversUnrecordedPortFromContainers(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	// A legacy .env: no HOST_PORT line at all.
+	envPath := filepath.Join(root, "deployment", ".env")
+	env, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := strings.ReplaceAll(string(env), "HOST_PORT=3000\n", "")
+	if err := os.WriteFile(envPath, []byte(legacy), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	running := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		if strings.Contains(argv(c), "{{.Ports}}") {
+			return dockercmd.Result{Stdout: "0.0.0.0:3001->80/tcp, [::]:3001->80/tcp\n"}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, running, notFoundServer(t))
+	if err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("RunUpgrade: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+
+	got, _ := os.ReadFile(envPath)
+	if p := Var(string(got), "HOST_PORT"); p != "3001" {
+		t.Errorf("HOST_PORT = %q, want the observed 3001", p)
+	}
+	for _, c := range running.calls {
+		if strings.Contains(argv(c), " up ") && c.Env["HOST_PORT"] != "3001" {
+			t.Errorf("up ran with HOST_PORT=%q, want 3001", c.Env["HOST_PORT"])
+		}
+	}
+}
+
 func TestUpgradeDryRun(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.0.0")
@@ -189,5 +232,54 @@ func TestUpgradeDryRun(t *testing.T) {
 	after, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
 	if string(before) != string(after) {
 		t.Error("dry run modified .env")
+	}
+}
+
+func TestUpgradeRejectsUnknownVersion(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	deps := testDeps(t, runner, refServer(t))
+	err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v9.9.9", Dir: root, NoWait: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("err = %v, want unknown-version rejection", err)
+	}
+	env, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+	if Var(string(env), "IMAGE_TAG") != "v4.0.0" {
+		t.Error("rejected upgrade must not touch .env")
+	}
+}
+
+func TestUpgradePullFailureRollsBackEnv(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+
+	failPull := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		if strings.Contains(argv(c), " pull") {
+			return dockercmd.Result{}, errors.New("manifest for tag not found")
+		}
+		return healthyDockerHandler(c)
+	}}
+	deps := testDeps(t, failPull, notFoundServer(t))
+	err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	})
+	if err == nil {
+		t.Fatal("upgrade must fail when the pull fails")
+	}
+	// The deployment still runs the old version; .env and the manifest must
+	// keep saying so.
+	env, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+	if got := Var(string(env), "IMAGE_TAG"); got != "v4.0.0" {
+		t.Errorf("IMAGE_TAG = %q after failed pull, want the original v4.0.0", got)
+	}
+	m, merr := state.Load(root)
+	if merr != nil || m == nil {
+		t.Fatalf("manifest: %+v, %v", m, merr)
+	}
+	if m.InstalledTag != "v4.0.0" {
+		t.Errorf("manifest tag = %q after failed pull, want v4.0.0", m.InstalledTag)
 	}
 }

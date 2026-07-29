@@ -125,7 +125,9 @@ func (m wizModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sel, m.cursor = &msg, msg.def
 		return m, nil
 	case askInputMsg:
-		m.inp, m.typed = &msg, ""
+		// Prefill the default as real, editable text — backspacing to tweak
+		// e.g. just the patch version beats retyping the whole tag.
+		m.inp, m.typed = &msg, msg.def
 		return m, nil
 	case stageMsg:
 		m.stage = int(msg)
@@ -213,9 +215,12 @@ func (m wizModel) handleKey(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.aborted, m.userQuit = true, true
 			return m, tea.Quit
 		case "backspace":
-			if len(m.typed) > 0 {
-				m.typed = m.typed[:len(m.typed)-1]
+			// Rune-wise: byte slicing would split a multi-byte character.
+			if r := []rune(m.typed); len(r) > 0 {
+				m.typed = string(r[:len(r)-1])
 			}
+		case "ctrl+u":
+			m.typed = ""
 		default:
 			if len([]rune(s)) == 1 && !strings.Contains(s, "+") {
 				m.typed += s
@@ -283,11 +288,7 @@ func (m wizModel) View() tea.View {
 			pane = append(pane, line)
 		}
 	case m.inp != nil:
-		shown := m.typed
-		if shown == "" {
-			shown = dim.Render(m.inp.def)
-		}
-		pane = append(pane, accent.Render("? ")+m.inp.title, "  "+shown+accent.Render("▏"))
+		pane = append(pane, accent.Render("? ")+m.inp.title, "  "+m.typed+accent.Render("▏"))
 	case m.taskActive:
 		line := fmt.Sprintf("%s %s %s", accent.Render(spinners[m.frame%len(spinners)]),
 			m.taskLabel, dim.Render(fmt.Sprintf("(%ds)", int(time.Since(m.taskBegan).Seconds()))))

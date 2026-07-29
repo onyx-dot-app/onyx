@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -148,5 +149,81 @@ func TestConfigRef(t *testing.T) {
 	}
 	if !IsFloatingTag("edge") || !IsFloatingTag("latest") || IsFloatingTag("v4.4.6") {
 		t.Error("IsFloatingTag misclassifies")
+	}
+}
+
+func TestRefExists(t *testing.T) {
+	raw := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodHead {
+			t.Errorf("expected HEAD, got %s", r.Method)
+		}
+		switch {
+		case strings.Contains(r.URL.Path, "/v4.2.0/"):
+			// 200 by default
+		case strings.Contains(r.URL.Path, "/v9.9.9/"):
+			http.NotFound(w, r)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	})
+	c, done := testClient(http.NotFoundHandler(), raw)
+	defer done()
+
+	if ok, err := c.RefExists(context.Background(), "v4.2.0"); err != nil || !ok {
+		t.Errorf("v4.2.0: ok=%v err=%v, want existing tag", ok, err)
+	}
+	if ok, err := c.RefExists(context.Background(), "v9.9.9"); err != nil || ok {
+		t.Errorf("v9.9.9: ok=%v err=%v, want a definitive not-found", ok, err)
+	}
+	if _, err := c.RefExists(context.Background(), "flaky"); err == nil {
+		t.Error("a 5xx must surface as an error, not a verdict")
+	}
+}
+
+func TestNormalizeVersionTag(t *testing.T) {
+	cases := []struct {
+		in        string
+		want      string
+		checkable bool
+	}{
+		{"v4.4.6", "v4.4.6", true},
+		{"4.4.6", "v4.4.6", true},
+		{"edge", "edge", false},
+		{"latest", "latest", false},
+		{"main", "main", false},
+		{"v4.4.6-dev", "v4.4.6-dev", false}, // pullable image, not a git ref
+		{"beta", "beta", false},
+		{"v4.4", "v4.4", false},
+	}
+	for _, c := range cases {
+		got, checkable := NormalizeVersionTag(c.in)
+		if got != c.want || checkable != c.checkable {
+			t.Errorf("NormalizeVersionTag(%q) = (%q, %t), want (%q, %t)",
+				c.in, got, checkable, c.want, c.checkable)
+		}
+	}
+}
+
+// The ref lands in a URL path, and the files it selects are written to the
+// install root and executed, so refs that could escape the repo are refused
+// before any request goes out.
+func TestRefsThatEscapeTheRepoAreRefused(t *testing.T) {
+	var reached bool
+	raw := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+	})
+	c, done := testClient(http.NotFoundHandler(), raw)
+	defer done()
+
+	for _, ref := range []string{"../../other/repo/main", "main/../..", "", "-main", "ma in"} {
+		if _, err := c.FetchFile(context.Background(), ref, "deployment/docker_compose/env.template"); err == nil {
+			t.Errorf("FetchFile(%q) was allowed", ref)
+		}
+		if _, err := c.RefExists(context.Background(), ref); err == nil {
+			t.Errorf("RefExists(%q) was allowed", ref)
+		}
+	}
+	if reached {
+		t.Error("a rejected ref still reached the network")
 	}
 }
