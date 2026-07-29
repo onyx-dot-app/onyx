@@ -14,7 +14,10 @@ from onyx.auth.users import current_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.llm import fetch_default_llm_model, fetch_existing_llm_providers
+from onyx.db.llm import (
+    fetch_all_llm_providers_accessible_in_any_context,
+    fetch_default_llm_model,
+)
 from onyx.db.models import TokenRateLimit, User
 from onyx.db.token_limit import (
     fetch_all_global_token_rate_limits,
@@ -200,30 +203,39 @@ def get_my_usage(
     )
     window_cost_cents = get_user_cost_cents_since(db_session, user_id, window_start)
 
-    # Price tenant default chat model (no per-user model selection yet).
-    default_model = fetch_default_llm_model(db_session)
-    selected_model_price: ModelPrice | None = None
-    if default_model is not None:
-        provider = default_model.llm_provider.provider
-        price = get_model_price_per_million(default_model.name, provider, db_session)
-        # Omit price block unless both input/output rates known.
-        if price.input_per_mtok is not None and price.output_per_mtok is not None:
-            selected_model_price = price
-
-    # Price every configured chat model so users can compare costs, not just the
-    # tenant default. Dedup on (provider, model); skip unpriced models.
+    accessible_providers = fetch_all_llm_providers_accessible_in_any_context(
+        db_session, user
+    )
     available_model_prices: list[ModelPrice] = []
+    accessible_model_configuration_ids: set[int] = set()
     seen: set[tuple[str, str]] = set()
-    for prov in fetch_existing_llm_providers(db_session, flow_type_filter=[]):
-        for mc in prov.model_configurations:
-            key = (prov.provider, mc.name)
+    for provider in accessible_providers:
+        for model_configuration in provider.model_configurations:
+            if not model_configuration.is_visible:
+                continue
+            if model_configuration.id is not None:
+                accessible_model_configuration_ids.add(model_configuration.id)
+            key = (provider.provider, model_configuration.name)
             if key in seen:
                 continue
             seen.add(key)
-            price = get_model_price_per_million(mc.name, prov.provider, db_session)
+            price = get_model_price_per_million(
+                model_configuration.name, provider.provider, db_session
+            )
             if price.input_per_mtok is not None and price.output_per_mtok is not None:
                 available_model_prices.append(price)
     available_model_prices.sort(key=lambda p: (p.input_per_mtok or 0.0, p.model))
+
+    default_model = fetch_default_llm_model(db_session)
+    selected_model_price: ModelPrice | None = None
+    if (
+        default_model is not None
+        and default_model.id in accessible_model_configuration_ids
+    ):
+        provider = default_model.llm_provider.provider
+        price = get_model_price_per_million(default_model.name, provider, db_session)
+        if price.input_per_mtok is not None and price.output_per_mtok is not None:
+            selected_model_price = price
 
     budget = _user_cost_budget(db_session, user_id)
 

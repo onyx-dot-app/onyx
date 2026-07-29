@@ -20,6 +20,7 @@ from onyx.db.models import (
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Tool as ToolModel
+from onyx.db.persona import get_raw_personas_for_user
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.server.manage.embedding.models import (
@@ -590,6 +591,43 @@ def fetch_all_accessible_llm_providers(
         if can_user_access_llm_provider(
             p, user_group_ids, persona=None, is_admin=is_admin
         )
+    ]
+
+
+def fetch_all_llm_providers_accessible_in_any_context(
+    db_session: Session, user: User
+) -> list[LLMProviderView]:
+    """Return providers usable globally or through any agent the user can access."""
+    accessible_persona_ids = {
+        persona.id
+        for persona in get_raw_personas_for_user(
+            user,
+            db_session,
+            get_editable=False,
+            include_slack_bot_personas=True,
+        )
+    }
+    provider_models = fetch_existing_llm_providers(db_session, [])
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    is_admin = user.role == UserRole.ADMIN
+
+    def is_accessible(provider: LLMProviderModel) -> bool:
+        if can_user_access_llm_provider(
+            provider, user_group_ids, persona=None, is_admin=is_admin
+        ):
+            return True
+        return any(
+            persona.id in accessible_persona_ids
+            and can_user_access_llm_provider(
+                provider, user_group_ids, persona, is_admin=is_admin
+            )
+            for persona in provider.personas
+        )
+
+    return [
+        LLMProviderView.from_model(provider, include_api_key=False)
+        for provider in provider_models
+        if is_accessible(provider)
     ]
 
 

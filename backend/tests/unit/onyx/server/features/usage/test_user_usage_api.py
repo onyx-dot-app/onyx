@@ -88,7 +88,7 @@ def _make_app(db_session: Session, user: _StubUser) -> FastAPI:
 def _no_configured_providers(monkeypatch: pytest.MonkeyPatch) -> None:
     """Avoid querying LLM-provider tables absent from the SQLite test DB."""
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_existing_llm_providers",
+        "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
         lambda *_a, **_k: [],
     )
 
@@ -99,7 +99,8 @@ class _StubProvider:
 
 
 class _StubModelConfig:
-    def __init__(self, name: str, provider: str | None) -> None:
+    def __init__(self, name: str, provider: str | None, model_id: int = 1) -> None:
+        self.id = model_id
         self.name = name
         self.llm_provider = _StubProvider(provider)
 
@@ -133,14 +134,21 @@ def _seed_usage(
 
 
 class _StubMC:
-    def __init__(self, name: str) -> None:
+    def __init__(self, model_id: int, name: str, is_visible: bool = True) -> None:
+        self.id = model_id
         self.name = name
+        self.is_visible = is_visible
 
 
 class _StubProviderWithModels:
-    def __init__(self, provider: str | None, model_names: list[str]) -> None:
+    def __init__(
+        self, provider: str, model_configs: list[tuple[int, str, bool]]
+    ) -> None:
         self.provider = provider
-        self.model_configurations = [_StubMC(n) for n in model_names]
+        self.model_configurations = [
+            _StubMC(model_id, name, is_visible)
+            for model_id, name, is_visible in model_configs
+        ]
 
 
 def _seed_current_window(db_session: Session, user_id: str) -> datetime.datetime:
@@ -203,6 +211,10 @@ def test_selected_model_price_known_model(
         "onyx.server.features.usage.api.fetch_default_llm_model",
         lambda _db: _StubModelConfig("gpt-4o", "openai"),
     )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
+        lambda *_a, **_k: [_StubProviderWithModels("openai", [(1, "gpt-4o", True)])],
+    )
 
     client = TestClient(_make_app(db_session, _StubUser(caller)))
     price = client.get("/user/usage").json()["selected_model_price"]
@@ -223,10 +235,38 @@ def test_selected_model_price_unknown_model_nulls(
         "onyx.server.features.usage.api.fetch_default_llm_model",
         lambda _db: _StubModelConfig("totally-unknown-model-xyz", None),
     )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
+        lambda *_a, **_k: [
+            _StubProviderWithModels("openai", [(1, "totally-unknown-model-xyz", True)])
+        ],
+    )
 
     client = TestClient(_make_app(db_session, _StubUser(caller)))
     price = client.get("/user/usage").json()["selected_model_price"]
     assert price is None
+
+
+def test_selected_model_price_requires_model_access(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    caller = str(uuid4())
+    _seed_current_window(db_session, caller)
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_llm_model",
+        lambda _db: _StubModelConfig("gpt-4o", "openai", model_id=2),
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
+        lambda *_a, **_k: [
+            _StubProviderWithModels("openai", [(1, "gpt-4o-mini", True)])
+        ],
+    )
+
+    body = (
+        TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage").json()
+    )
+    assert body["selected_model_price"] is None
 
 
 class TestGetModelPricePerMillion:
@@ -353,9 +393,16 @@ def test_available_model_prices_lists_priced_models(
         "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
     )
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_existing_llm_providers",
+        "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
         lambda *_a, **_k: [
-            _StubProviderWithModels("openai", ["gpt-4o", "totally-unknown-model-xyz"])
+            _StubProviderWithModels(
+                "openai",
+                [
+                    (1, "gpt-4o", True),
+                    (2, "totally-unknown-model-xyz", True),
+                    (3, "gpt-4o-mini", False),
+                ],
+            )
         ],
     )
 
@@ -368,6 +415,7 @@ def test_available_model_prices_lists_priced_models(
     assert "cache_per_mtok" in prices["gpt-4o"]
     # An unpriced model is skipped, not surfaced with null prices.
     assert "totally-unknown-model-xyz" not in prices
+    assert "gpt-4o-mini" not in prices
 
 
 def test_budget_reflects_group_cost_limit(
