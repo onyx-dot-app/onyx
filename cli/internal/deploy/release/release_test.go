@@ -159,6 +159,28 @@ func TestConfigRef(t *testing.T) {
 	}
 }
 
+// Only released versions are safe to treat as already-pulled: everything else
+// is re-published under a name the host has already seen.
+func TestIsImmutableTag(t *testing.T) {
+	cases := map[string]bool{
+		"v4.4.6":     true,
+		"v10.0.12":   true,
+		"4.4.6":      false, // the CLI normalizes tags, but be strict here
+		"v4.4":       false,
+		"v4.4.6-dev": false,
+		"v4.4.x":     false,
+		"latest":     false,
+		"edge":       false,
+		"beta":       false,
+		"":           false,
+	}
+	for tag, want := range cases {
+		if got := IsImmutableTag(tag); got != want {
+			t.Errorf("IsImmutableTag(%q) = %v, want %v", tag, got, want)
+		}
+	}
+}
+
 func TestRefExists(t *testing.T) {
 	raw := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodHead {

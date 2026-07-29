@@ -844,6 +844,13 @@ func (in *installer) pullImages(ctx context.Context, tag string, hostPort int) e
 		files: in.composeFileNames(false),
 		args:  []string{"pull"},
 	}
+	if release.IsImmutableTag(tag) && in.composeAtLeast(ctx, minPullPolicyVersion) {
+		// A released tag names an image that never changes, so a copy already
+		// on the host is the copy this deployment wants. Without this compose
+		// asks the registry about every service on every run, which is most of
+		// the wait on a re-run that has nothing to fetch.
+		phase.args = append(phase.args, "--policy", "missing")
+	}
 	mode := in.progressMode(ctx)
 	switch {
 	case mode != "":

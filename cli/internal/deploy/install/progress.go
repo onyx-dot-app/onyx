@@ -26,6 +26,9 @@ const (
 	// 2.29; older versions reject the value outright.
 	minProgressVersion     = "2.19.0"
 	minProgressJSONVersion = "2.29.0"
+
+	// `pull --policy` landed in compose 2.22.
+	minPullPolicyVersion = "2.22.0"
 )
 
 const (
@@ -46,20 +49,29 @@ func (in *installer) progressMode(ctx context.Context) string {
 	if in.wiz == nil || in.opts.Verbose || in.compose == nil {
 		return ""
 	}
-	// Unparsable versions ("dev" builds) get the older flag: compose rejects
-	// a mode it doesn't know, and the phase's display is not worth failing a
-	// deployment over.
+	switch {
+	case in.composeAtLeast(ctx, minProgressJSONVersion):
+		return progressJSON
+	case in.composeAtLeast(ctx, minProgressVersion):
+		return progressPlain
+	default:
+		return ""
+	}
+}
+
+// composeAtLeast reports whether the installed compose is at least min. A
+// version that doesn't parse ("dev" builds) counts as too old: an unknown flag
+// fails the command outright, which is not a trade worth making for output.
+func (in *installer) composeAtLeast(ctx context.Context, min string) bool {
+	if in.compose == nil {
+		return false
+	}
 	have, ok := version.Parse(in.compose.Version(ctx))
 	if !ok {
-		return progressPlain
+		return false
 	}
-	if minJSON, _ := version.Parse(minProgressJSONVersion); !have.LessThan(minJSON) {
-		return progressJSON
-	}
-	if minAny, _ := version.Parse(minProgressVersion); !have.LessThan(minAny) {
-		return progressPlain
-	}
-	return ""
+	want, _ := version.Parse(min)
+	return !have.LessThan(want)
 }
 
 // composeEvent is compose's json progress event, narrowed to the fields these
@@ -128,7 +140,15 @@ type pullProgress struct {
 }
 
 type pullImage struct {
-	done   bool
+	done bool
+	// phase is what the image's layers are busy with, shown when there are no
+	// bytes to show — an image whose layers are all present locally moves
+	// through this checklist without a single counter.
+	phase string
+	rank  int
+	// note is how the image finished, when that is worth more than the tick:
+	// why it was skipped, or that it failed.
+	note   string
 	layers map[string]*pullLayer
 }
 
@@ -154,7 +174,11 @@ func (p *pullProgress) line(s string) {
 
 func (p *pullProgress) event(e composeEvent) (known, structural bool) {
 	if e.ParentID == "" {
-		return p.imageEvent(e.ID, firstWord(e.Text))
+		return p.imageEvent(e.ID, e.Text)
+	}
+	phase, ok := pullPhases[e.Text]
+	if !ok {
+		return false, false
 	}
 	img, _ := p.image(e.ParentID)
 	if img == nil {
@@ -174,16 +198,37 @@ func (p *pullProgress) event(e composeEvent) (known, structural bool) {
 		// Finished layers report no counters at all, so hold them at the
 		// last total they announced rather than letting the sum shrink.
 		layer.current = layer.total
-	default:
-		return false, false
+	}
+	// Layers finish out of order, so the image shows the furthest phase any of
+	// them has reached rather than whichever reported last.
+	if phase.rank > img.rank {
+		img.rank, img.phase = phase.rank, phase.word
 	}
 	return true, false
+}
+
+// pullPhases ranks the per-layer phases docker reports, with what the checklist
+// says while an image sits in each.
+var pullPhases = map[string]struct {
+	rank int
+	word string
+}{
+	"Preparing":          {1, "preparing"},
+	"Pulling fs layer":   {1, "preparing"},
+	"Waiting":            {1, "preparing"},
+	"Already exists":     {2, "already present"},
+	"Downloading":        {3, "downloading"},
+	"Verifying Checksum": {4, "verifying"},
+	"Download complete":  {4, "downloaded"},
+	"Extracting":         {5, "extracting"},
+	"Pull complete":      {6, "unpacked"},
 }
 
 // imageEvent records an image-level phase. Everything but "Pulling" ends the
 // image: compose reports skipped and failed images once and never mentions
 // them again.
-func (p *pullProgress) imageEvent(name, word string) (known, structural bool) {
+func (p *pullProgress) imageEvent(name, text string) (known, structural bool) {
+	word := firstWord(text)
 	switch word {
 	case "Pulling", "Pulled", "Skipped", "Warning", "Error":
 	default:
@@ -192,6 +237,20 @@ func (p *pullProgress) imageEvent(name, word string) (known, structural bool) {
 	img, created := p.image(name)
 	if img == nil {
 		return false, false
+	}
+	switch word {
+	case "Skipped":
+		// Compose skips an image for several reasons ("Skipped - Image is
+		// already present locally", "- No image to be pulled"); the one an
+		// operator is owed an explanation for is the cached image.
+		img.note = "skipped"
+		if strings.Contains(text, "already present") {
+			img.note = "already present"
+		}
+	case "Error":
+		img.note = "failed"
+	case "Warning":
+		img.note = "warning"
 	}
 	done := word != "Pulling"
 	structural = created || img.done != done
@@ -229,8 +288,13 @@ func (p *pullProgress) publish() {
 		switch {
 		case img.done:
 			done++
-		case tot > 0:
+			row.Detail = img.finished(tot)
+		case cur < tot:
 			row.Detail = fmt.Sprintf("%d%%  %s / %s", cur*100/tot, humanBytes(cur), humanBytes(tot))
+		default:
+			// Nothing is moving over the network: either the layers are all
+			// local, or the download is done and the image is being unpacked.
+			row.Detail = img.phase
 		}
 		rows = append(rows, row)
 	}
@@ -241,6 +305,19 @@ func (p *pullProgress) publish() {
 		extra += fmt.Sprintf(" · %s / %s", humanBytes(current), humanBytes(total))
 	}
 	p.extra(extra)
+}
+
+// finished is what a completed image's row says: why it was skipped, how much
+// came down, or that there was nothing to fetch.
+func (img *pullImage) finished(total int64) string {
+	switch {
+	case img.note != "":
+		return img.note
+	case total > 0:
+		return humanBytes(total)
+	default:
+		return "up to date"
+	}
 }
 
 // bytes sums the image's layers. Layers already present locally announce no

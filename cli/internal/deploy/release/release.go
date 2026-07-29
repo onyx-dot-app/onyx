@@ -69,6 +69,27 @@ func IsFloatingTag(tag string) bool {
 	return tag == "edge" || tag == "latest"
 }
 
+// IsImmutableTag reports whether tag names images that are published once and
+// never re-pushed, so a copy already on the host is the copy this deployment
+// wants. Only released versions qualify: floating tags move by design, and the
+// -dev twins are rebuilt per commit under the same name.
+func IsImmutableTag(tag string) bool {
+	rest, ok := strings.CutPrefix(tag, "v")
+	if !ok {
+		return false
+	}
+	parts := strings.Split(rest, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, p := range parts {
+		if p == "" || strings.TrimLeft(p, "0123456789") != "" {
+			return false
+		}
+	}
+	return true
+}
+
 // ConfigRef maps an image tag to the git ref its deployment files ship at:
 // floating tags track main, pinned tags use their own ref (mirrors
 // install.sh's CONFIG_REF logic).

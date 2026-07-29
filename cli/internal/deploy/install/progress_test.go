@@ -49,11 +49,38 @@ func TestPullProgressPlainTracksImages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := sink.render(); got != "✓backend, relational_db,✓cache" {
+	if got := sink.render(); got != "✓backend up to date, relational_db,✓cache already present" {
 		t.Errorf("rows = %q", got)
 	}
 	if sink.extra != "2/3 images" {
 		t.Errorf("extra = %q", sink.extra)
+	}
+}
+
+// An image whose layers are all on the host reports no byte counters at all,
+// so its row has to say what is happening some other way.
+func TestPullProgressReportsCachedLayers(t *testing.T) {
+	var sink checklistSink
+	p := newPullProgress(sink.hooks())
+	for _, line := range []string{
+		`{"id":"cache","text":"Pulling"}`,
+		`{"id":"9d8e18e5f8e4","parent_id":"cache","text":"Already exists"}`,
+		`{"id":"5f8e4a1b2c3d","parent_id":"cache","text":"Already exists"}`,
+	} {
+		p.line(line)
+	}
+	p.publish()
+
+	if got := sink.render(); got != " cache already present" {
+		t.Errorf("rows = %q", got)
+	}
+
+	// Downloaded layers still have to be unpacked, which is the other phase
+	// with no bytes left to count.
+	p.line(`{"id":"5f8e4a1b2c3d","parent_id":"cache","text":"Extracting","current":2,"total":4}`)
+	p.publish()
+	if got := sink.render(); got != " cache extracting" {
+		t.Errorf("rows = %q", got)
 	}
 }
 

@@ -251,6 +251,14 @@ func TestRunInstallFreshLiteNoPrompt(t *testing.T) {
 	if up.Env["IMAGE_TAG"] != "edge" || up.Env["HOST_PORT"] == "" {
 		t.Errorf("up env = %+v", up.Env)
 	}
+
+	// A floating tag moves under its own name, so nothing on the host can be
+	// assumed current.
+	for _, c := range runner.calls {
+		if strings.Contains(argv(c), " pull") && strings.Contains(argv(c), "--policy") {
+			t.Errorf("floating tag pull must not skip present images: %s", argv(c))
+		}
+	}
 }
 
 func TestRunInstallPinnedTagFetchesConfigs(t *testing.T) {
@@ -293,6 +301,18 @@ func TestRunInstallPinnedTagFetchesConfigs(t *testing.T) {
 	}
 	if strings.Contains(up, "--force-recreate") {
 		t.Errorf("pinned tag must not force-recreate: %s", up)
+	}
+
+	// A released tag is immutable, so images already on the host are taken as
+	// final instead of being re-checked against the registry one by one.
+	var pull string
+	for _, c := range runner.calls {
+		if strings.Contains(argv(c), " pull") {
+			pull = argv(c)
+		}
+	}
+	if !strings.Contains(pull, "--policy missing") {
+		t.Errorf("pull argv = %q", pull)
 	}
 
 	m, _ := state.Load(root)
