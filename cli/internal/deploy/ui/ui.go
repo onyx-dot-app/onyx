@@ -35,6 +35,10 @@ var (
 	spinners = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 )
 
+// promptMark heads a question. It is the dot the chat TUI marks its own turns
+// with (internal/tui), so being asked something looks the same across the CLI.
+const promptMark = "◉ "
+
 // Enabled reports whether the wizard should drive this run.
 func Enabled(ios *iostreams.IOStreams) bool {
 	return ios.IsInteractive() && os.Getenv("TERM") != "dumb" && os.Getenv("NO_COLOR") == ""
@@ -402,7 +406,7 @@ func (m wizModel) paneLines(inner, maxLines int) []string {
 		}
 		return clip(pane, maxLines)
 	case m.inp != nil:
-		return clip(append(wrap(accent.Render("? ")+m.inp.title, inner),
+		return clip(append(wrap(accent.Render(promptMark)+m.inp.title, inner),
 			truncate("  "+m.typed+accent.Render("▏"), inner)), maxLines)
 	case m.taskActive:
 		return clip(m.taskPane(inner, maxLines), maxLines)
@@ -415,7 +419,7 @@ func (m wizModel) paneLines(inner, maxLines int) []string {
 // opposed to single-line) title are what it gives up, in that order, when the
 // pane has to get shorter.
 func (m wizModel) selectPane(inner int, hints, wrapTitle bool) []string {
-	title := accent.Render("? ") + m.sel.title
+	title := accent.Render(promptMark) + m.sel.title
 	pane := []string{truncate(title, inner)}
 	if wrapTitle {
 		pane = wrap(title, inner)
