@@ -538,7 +538,11 @@ export default function ActionsPopover({
     }
   };
 
-  const handleMCPApiKeySubmit = async (serverId: number, apiKey: string) => {
+  const handleMCPApiKeySubmit = async (
+    serverId: number,
+    apiKey: string,
+    apiKeyChanged: boolean
+  ) => {
     try {
       const response = await fetch("/api/mcp/user-credentials", {
         method: "POST",
@@ -548,6 +552,7 @@ export default function ActionsPopover({
         body: JSON.stringify({
           server_id: serverId,
           credentials: { api_key: apiKey },
+          credentials_changed: { api_key: apiKeyChanged },
           transport: "streamable-http",
         }),
       });
@@ -565,7 +570,8 @@ export default function ActionsPopover({
 
   const handleMCPCredentialsSubmit = async (
     serverId: number,
-    credentials: Record<string, string>
+    credentials: Record<string, string>,
+    credentialsChanged: Record<string, boolean>
   ) => {
     try {
       const response = await fetch("/api/mcp/user-credentials", {
@@ -576,6 +582,7 @@ export default function ActionsPopover({
         body: JSON.stringify({
           server_id: serverId,
           credentials: credentials,
+          credentials_changed: credentialsChanged,
           transport: "streamable-http",
         }),
       });

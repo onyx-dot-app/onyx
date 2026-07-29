@@ -538,6 +538,13 @@ class MCPUserCredentialsRequest(BaseModel):
     credentials: dict[str, str] = Field(
         ..., description="User-provided credentials (api_key, custom_token, etc.)"
     )
+    credentials_changed: dict[str, bool] = Field(
+        default_factory=dict,
+        description=(
+            "Per-field flags marking which credentials were edited; fields "
+            "without a flag fall back to masked-value detection"
+        ),
+    )
     transport: str = Field(..., description="Transport type")
 
 

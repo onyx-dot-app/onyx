@@ -229,11 +229,11 @@ def _resolve_oauth_credentials(
     """Pick the effective client_id / client_secret for an upsert/connect.
 
     Mirrors the LLM-provider `api_key_changed` pattern: when the frontend
-    flags a field as unchanged, ignore whatever value it sent (it is most
-    likely a masked placeholder) and reuse the stored value. When the
-    frontend flags a field as changed, take the request value as-is, but
-    defensively reject masked placeholders so a buggy client can't write
-    a mask to the database.
+    flags a field as changed, take the request value as-is, but defensively
+    reject masked placeholders so a buggy client can't write a mask to the
+    database. When flagged unchanged, reuse the stored value — unless the
+    request carries a real (unmasked) replacement, which clients predating
+    the changed flags send for genuine edits.
 
     When there is no stored client yet (`existing_client is None`), an
     unchanged flag means the user did not edit since load — still use the
@@ -242,8 +242,6 @@ def _resolve_oauth_credentials(
     """
     resolved_id = request_client_id
     if not request_client_id_changed:
-        # A real (unmasked) value still wins without the flag — clients that
-        # predate the changed flags send only the edited value.
         if existing_client and not (
             request_client_id and not is_masked_credential(request_client_id)
         ):
@@ -269,11 +267,10 @@ def _resolve_admin_credentials(
     request_credentials_changed: dict[str, bool],
     existing_user_credentials: dict[str, str] | None,
 ) -> dict[str, str]:
-    """Per-key analogue of ``_resolve_oauth_credentials``: reuse the
-    stored value when the changed flag is False, otherwise take the
-    request value and reject masked placeholders defensively. Stored
-    values are sourced from the editing admin's own per-user
-    ``header_substitutions``."""
+    """Per-key analogue of ``_resolve_oauth_credentials``: reuse the stored
+    value when the changed flag is False, otherwise take the request value
+    and reject masked placeholders defensively. Stored values are sourced
+    from the caller's own per-user ``header_substitutions``."""
     resolved: dict[str, str] = {}
     for key, request_value in request_credentials.items():
         changed = request_credentials_changed.get(key, False)
@@ -282,9 +279,8 @@ def _resolve_admin_credentials(
             and existing_user_credentials
             and key in existing_user_credentials
         ):
-            # Clients that predate the changed flags never set them, so a
-            # real (unmasked) value that differs from storage is still an
-            # edit and must win; only masked/absent replays reuse storage.
+            # Flag-less clients still send real edits: an unmasked value
+            # wins; masked/absent replays reuse storage.
             if request_value and not is_masked_credential(request_value):
                 resolved[key] = request_value
             else:
@@ -1093,10 +1089,9 @@ def save_user_credentials(
 
     email = user.email
 
-    # The credentials modal seeds its inputs with masked stored values, so an
-    # edit of one field replays the untouched fields as masked literals.
-    # Resolve those against the user's stored substitutions; reject any mask
-    # that has no stored counterpart rather than persisting it as a real value.
+    # The credentials modal seeds its inputs with masked stored values, so
+    # untouched fields replay as masked literals; resolve them against the
+    # user's stored substitutions.
     existing_user_creds: dict[str, str] = {}
     existing_user_config = get_user_connection_config(server_id, email, db_session)
     if existing_user_config:
@@ -1104,16 +1099,12 @@ def save_user_credentials(
             existing_user_config, apply_mask=False
         )
         existing_user_creds = existing_user_dict.get(HEADER_SUBSTITUTIONS) or {}
-    credentials: dict[str, str] = {
-        field: (
-            existing_user_creds[field]
-            if is_masked_credential(value) and field in existing_user_creds
-            else value
-        )
-        for field, value in request.credentials.items()
-    }
     try:
-        reject_masked_credentials(credentials)
+        credentials = _resolve_admin_credentials(
+            request_credentials=request.credentials,
+            request_credentials_changed=request.credentials_changed,
+            existing_user_credentials=existing_user_creds,
+        )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
@@ -2032,9 +2023,8 @@ def _upsert_mcp_server(
                     OnyxErrorCode.INVALID_INPUT,
                     "A shared API token is required for admin-managed API-token servers.",
                 )
-            # Value-based change detection: clients that predate the
-            # `api_token_changed` flag send only the new token, so the flag
-            # alone can't be trusted to gate the config rewrite.
+            # Detect edits by value too — clients predating the
+            # `api_token_changed` flag send only the new token.
             existing_shared_token: str | None = None
             if mcp_server.admin_connection_config:
                 try:

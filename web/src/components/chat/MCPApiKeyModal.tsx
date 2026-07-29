@@ -19,10 +19,11 @@ interface MCPApiKeyModalProps {
   serverName: string;
   serverId: number;
   authTemplate?: MCPAuthTemplate;
-  onSubmit: (serverId: number, apiKey: string) => void;
+  onSubmit: (serverId: number, apiKey: string, apiKeyChanged: boolean) => void;
   onSubmitCredentials?: (
     serverId: number,
-    credentials: Record<string, string>
+    credentials: Record<string, string>,
+    credentialsChanged: Record<string, boolean>
   ) => void;
   onSuccess?: () => void;
   isAuthenticated?: boolean;
@@ -81,7 +82,15 @@ export default function MCPApiKeyModal({
       setIsSubmitting(true);
       try {
         if (onSubmitCredentials) {
-          await onSubmitCredentials(serverId, credentials);
+          // Fields are pre-filled with masked values; tell the backend which
+          // ones the user actually edited.
+          const credentialsChanged = Object.fromEntries(
+            Object.entries(credentials).map(([field, value]) => [
+              field,
+              value !== (existingCredentials?.[field] ?? ""),
+            ])
+          );
+          await onSubmitCredentials(serverId, credentials, credentialsChanged);
         }
         setCredentials({});
         if (onSuccess) {
@@ -106,7 +115,11 @@ export default function MCPApiKeyModal({
 
       setIsSubmitting(true);
       try {
-        await onSubmit(serverId, apiKey);
+        await onSubmit(
+          serverId,
+          apiKey,
+          apiKey !== (existingCredentials?.api_key ?? "")
+        );
         setApiKey("");
         if (onSuccess) {
           onSuccess();

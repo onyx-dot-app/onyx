@@ -12,6 +12,7 @@ directly because API responses mask credential values."""
 from unittest.mock import patch
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
@@ -22,6 +23,7 @@ from onyx.db.enums import (
 )
 from onyx.db.mcp import extract_connection_data, get_user_connection_config
 from onyx.db.models import MCPServer as DbMCPServer
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp.api import (
     HEADER_SUBSTITUTIONS,
     _upsert_mcp_server,
@@ -289,6 +291,56 @@ class TestEndUserCredentialUpdate:
         cfg = dict(extract_connection_data(cfg_row, apply_mask=False))
         assert cfg["headers"]["X-Org"] == "org-12345-abcdef", cfg
         assert cfg["headers"]["Authorization"] == "Bearer USER-KEY-B-2222-3333", cfg
+
+    def test_user_flags_take_precedence_over_mask_heuristic(
+        self, db_session: Session
+    ) -> None:
+        """With explicit flags, an unchanged masked replay resolves to storage
+        and a flagged mask-shaped value errors loudly instead of being kept."""
+        admin = create_test_user(db_session, "admin_flagged_user", role=UserRole.ADMIN)
+        user = create_test_user(db_session, "basic_flagged_user")
+        server_id = self._make_per_user_server(db_session, admin)
+
+        with patch(
+            "onyx.server.features.mcp.api.test_mcp_server_credentials",
+            return_value=(True, "ok"),
+        ):
+            save_user_credentials(
+                MCPUserCredentialsRequest(
+                    server_id=server_id,
+                    credentials={"api_key": "USER-KEY-A-0000-1111"},
+                    transport="streamable_http",
+                ),
+                db_session,
+                user,
+            )
+            save_user_credentials(
+                MCPUserCredentialsRequest(
+                    server_id=server_id,
+                    credentials={"api_key": mask_string("USER-KEY-A-0000-1111")},
+                    credentials_changed={"api_key": False},
+                    transport="streamable_http",
+                ),
+                db_session,
+                user,
+            )
+            with pytest.raises(OnyxError):
+                save_user_credentials(
+                    MCPUserCredentialsRequest(
+                        server_id=server_id,
+                        credentials={"api_key": "abcd...wxyz"},
+                        credentials_changed={"api_key": True},
+                        transport="streamable_http",
+                    ),
+                    db_session,
+                    user,
+                )
+
+        db_session.expire_all()
+        cfg_row = get_user_connection_config(server_id, user.email, db_session)
+        assert cfg_row is not None
+        cfg = dict(extract_connection_data(cfg_row, apply_mask=False))
+        assert cfg["headers"]["Authorization"] == "Bearer USER-KEY-A-0000-1111"
 
 
 class TestFlaglessClientsPerUserAndOAuth:

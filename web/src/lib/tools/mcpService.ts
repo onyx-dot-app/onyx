@@ -260,11 +260,14 @@ export async function startMCPUserOAuth(
   return res.json();
 }
 
-/** Save per-user credentials (API key / template fields) for an MCP server. */
+/** Save per-user credentials (API key / template fields) for an MCP server.
+ * `credentialsChanged` marks which fields the user edited; without it the
+ * backend falls back to masked-value detection. */
 export async function saveMCPUserCredentials(
   serverId: number,
   credentials: Record<string, string>,
-  transport: MCPTransportType = MCPTransportType.STREAMABLE_HTTP
+  transport: MCPTransportType = MCPTransportType.STREAMABLE_HTTP,
+  credentialsChanged?: Record<string, boolean>
 ): Promise<void> {
   const res = await fetch("/api/mcp/user-credentials", {
     method: "POST",
@@ -273,6 +276,9 @@ export async function saveMCPUserCredentials(
       server_id: serverId,
       credentials,
       transport,
+      ...(credentialsChanged
+        ? { credentials_changed: credentialsChanged }
+        : {}),
     }),
   });
   if (!res.ok) {
