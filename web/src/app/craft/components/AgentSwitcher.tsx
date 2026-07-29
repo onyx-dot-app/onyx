@@ -5,6 +5,7 @@ import { Popover, PopoverMenu, Text, LineItemButton } from "@opal/components";
 import {
   SvgChevronDown,
   SvgCpu,
+  SvgSparkle,
   SvgCheckCircle,
   SvgAlertTriangle,
 } from "@opal/icons";
@@ -132,6 +133,7 @@ export default function AgentSwitcher() {
               key="main"
               sizePreset="main-ui"
               variant="section"
+              icon={SvgSparkle}
               state={!isViewingSubagent ? "selected" : "empty"}
               onClick={selectMainAgent}
               title={titleLabel ?? "Main agent"}
