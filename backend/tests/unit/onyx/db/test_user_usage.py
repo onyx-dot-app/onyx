@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from onyx.db.models import User__UserGroup, UserUsage
 from onyx.db.user_usage import (
+    DELETED_USER_EXPORT_EMAIL,
     TokenUsageBucket,
     UserUsageByDay,
     get_cost_window_start,
@@ -31,6 +32,7 @@ from onyx.db.user_usage import (
     get_total_cost_cents_buckets_since,
     get_total_cost_cents_since,
     get_total_token_buckets_since,
+    get_usage_export,
     get_user_cost_cents_buckets_since,
     get_user_cost_cents_in_window,
     get_user_cost_cents_since,
@@ -115,6 +117,12 @@ def db_session() -> Generator[Session, None, None]:
             "timezone", 2, lambda _tz, value: value
         )
 
+    # Minimal stand-in for the real fastapi-users table: only id/email are ever
+    # referenced by these queries, and User.__table__ drags in unrelated FKs.
+    with engine.begin() as conn:
+        conn.exec_driver_sql(
+            'CREATE TABLE "user" (id CHAR(36) PRIMARY KEY, email VARCHAR)'
+        )
     cast(Table, UserUsage.__table__).create(bind=engine)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
@@ -201,6 +209,72 @@ class TestRecordUserUsage:
             assert row.cost_cents == pytest.approx(1.0)
         finally:
             session.close()
+
+
+class TestUsageExport:
+    def test_orphaned_usage_is_exported_and_reconciles_with_total(
+        self, db_session: Session
+    ) -> None:
+        """Spend left behind by a deleted user/API key must still export, and the
+        export must still add up to the tenant-wide total used for enforcement."""
+        live_user = str(uuid4())
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        db_session.execute(
+            text('INSERT INTO "user" (id, email) VALUES (:id, :email)'),
+            {"id": live_user, "email": "live@example.com"},
+        )
+        _seed_usage(db_session, live_user, "m", "CHAT", None, 10, 5, 0, 3.0, window)
+        # user_id NULL is what SET NULL leaves behind after the user is deleted.
+        db_session.add(
+            UserUsage(
+                user_id=None,
+                window_start=window,
+                model="m",
+                flow="CHAT",
+                provider="",
+                input_tokens=20,
+                output_tokens=7,
+                cache_read_tokens=0,
+                cost_cents=4.0,
+            )
+        )
+        db_session.flush()
+
+        rows = get_usage_export(db_session, window, window + datetime.timedelta(days=1))
+
+        by_email = {row.email: row for row in rows}
+        assert set(by_email) == {"live@example.com", DELETED_USER_EXPORT_EMAIL}
+        assert by_email[DELETED_USER_EXPORT_EMAIL].cost_cents == pytest.approx(4.0)
+        assert by_email[DELETED_USER_EXPORT_EMAIL].input_tokens == 20
+        assert sum(row.cost_cents for row in rows) == pytest.approx(
+            get_total_cost_cents_since(db_session, window)
+        )
+
+    def test_orphaned_rows_collapse_into_one_bucket_per_model_and_day(
+        self, db_session: Session
+    ) -> None:
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        for cost in (1.0, 2.5):
+            db_session.add(
+                UserUsage(
+                    user_id=None,
+                    window_start=window,
+                    model="m",
+                    flow="CHAT",
+                    provider="",
+                    input_tokens=1,
+                    output_tokens=1,
+                    cache_read_tokens=0,
+                    cost_cents=cost,
+                )
+            )
+        db_session.flush()
+
+        rows = get_usage_export(db_session, window, window + datetime.timedelta(days=1))
+
+        assert len(rows) == 1
+        assert rows[0].email == DELETED_USER_EXPORT_EMAIL
+        assert rows[0].cost_cents == pytest.approx(3.5)
 
 
 class TestAggregation:

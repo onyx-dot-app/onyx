@@ -25,6 +25,8 @@ USER_USAGE_BUCKET_SECONDS = 24 * 60 * 60
 USER_USAGE_BUCKET_HOURS = USER_USAGE_BUCKET_SECONDS // (60 * 60)
 TOKEN_BUDGET_PERIOD_ERROR = "Token budget periods must be whole UTC days"
 COST_BUDGET_PERIOD_ERROR = "Cost budget periods must be whole UTC days"
+# Not email-shaped on purpose: it can never collide with a real address.
+DELETED_USER_EXPORT_EMAIL = "(deleted user)"
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
 
 
@@ -216,11 +218,13 @@ def get_usage_export(
 ) -> list[UsageExportRow]:
     """Tenant-wide usage by email, model, and UTC day."""
     utc_day = func.date(func.timezone("UTC", UserUsage.window_start))
+    # Deleted users/API keys leave user_id NULL but keep their spend. An inner
+    # join would hide that spend here while the tenant-wide totals still count
+    # it, so the export would silently stop reconciling with them.
+    email_label = func.coalesce(User.email, DELETED_USER_EXPORT_EMAIL)
     query = (
-        # User.email comes from the fastapi-users base; ty mis-resolves it as a
-        # non-column role, so the multi-column select overload doesn't match.
-        select(  # ty: ignore[no-matching-overload]
-            User.email,
+        select(
+            email_label,
             UserUsage.model,
             utc_day.label("day"),
             func.sum(UserUsage.input_tokens),
@@ -228,13 +232,15 @@ def get_usage_export(
             func.sum(UserUsage.cache_read_tokens),
             func.sum(UserUsage.cost_cents),
         )
-        .join(User, User.id == UserUsage.user_id)
+        # UserUsage.user_id on the left: User.id comes from the fastapi-users
+        # base, which ty resolves as a plain value rather than a column.
+        .outerjoin(User, UserUsage.user_id == User.id)
         .where(
             UserUsage.window_start >= start,
             UserUsage.window_start < end,
         )
-        .group_by(User.email, UserUsage.model, utc_day)
-        .order_by(User.email, utc_day, UserUsage.model)
+        .group_by(email_label, UserUsage.model, utc_day)
+        .order_by(email_label, utc_day, UserUsage.model)
     )
     if model is not None:
         query = query.where(UserUsage.model == model)
