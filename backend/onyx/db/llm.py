@@ -772,6 +772,12 @@ def fetch_default_contextual_rag_model(
     return fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
 
 
+def fetch_default_chat_naming_model(
+    db_session: Session,
+) -> ModelConfiguration | None:
+    return fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
+
+
 def fetch_default_model(
     db_session: Session,
     flow_type: LLMModelFlowType,
@@ -910,6 +916,40 @@ def update_default_vision_provider(
         model=vision_model,
         flow_type=LLMModelFlowType.VISION,
     )
+
+
+def update_default_chat_naming_provider(
+    provider_id: int, chat_naming_model: str, db_session: Session
+) -> None:
+    provider = db_session.scalar(
+        select(LLMProviderModel).where(
+            LLMProviderModel.id == provider_id,
+        )
+    )
+
+    if provider is None:
+        raise ValueError(f"LLM Provider with id={provider_id} does not exist")
+
+    _update_default_model(
+        db_session=db_session,
+        provider_id=provider_id,
+        model=chat_naming_model,
+        flow_type=LLMModelFlowType.CHAT_NAMING,
+    )
+
+
+def update_no_default_chat_naming_provider(
+    db_session: Session,
+) -> None:
+    db_session.execute(
+        update(LLMModelFlow)
+        .where(
+            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT_NAMING,
+            LLMModelFlow.is_default == True,  # noqa: E712
+        )
+        .values(is_default=False)
+    )
+    db_session.commit()
 
 
 def update_no_default_contextual_rag_provider(
