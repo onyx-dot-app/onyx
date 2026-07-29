@@ -12,7 +12,8 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import Table, create_engine, event
+from sqlalchemy import Table, create_engine, event, text
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Engine
@@ -148,8 +149,6 @@ class TestRecordUserUsage:
         mock_session.flush.assert_called_once()
 
     def test_null_provider_stored_as_empty_string(self) -> None:
-        from sqlalchemy.dialects import postgresql
-
         mock_session = MagicMock()
         window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
 
@@ -169,6 +168,39 @@ class TestRecordUserUsage:
         stmt = mock_session.execute.call_args[0][0]
         compiled = stmt.compile(dialect=postgresql.dialect())
         assert compiled.params["provider"] == ""
+
+    def test_user_deletion_retains_usage_row_with_null_user_id(self) -> None:
+        engine: Engine = create_engine("sqlite://")
+
+        @event.listens_for(engine, "connect")
+        def _enable_foreign_keys(dbapi_connection: object, _: object) -> None:
+            cast(sqlite3.Connection, dbapi_connection).execute("PRAGMA foreign_keys=ON")
+
+        with engine.begin() as conn:
+            conn.exec_driver_sql(
+                'CREATE TABLE "user" (id CHAR(36) PRIMARY KEY, email VARCHAR)'
+            )
+        cast(Table, UserUsage.__table__).create(bind=engine)
+        SessionLocal = sessionmaker(bind=engine)
+        session = SessionLocal()
+        user_id = str(uuid4())
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        try:
+            session.execute(
+                text('INSERT INTO "user" (id, email) VALUES (:id, :email)'),
+                {"id": user_id, "email": "api-key@example.com"},
+            )
+            _seed_usage(session, user_id, "m", "CHAT", None, 1, 1, 0, 1.0, window)
+            session.commit()
+
+            session.execute(text('DELETE FROM "user" WHERE id = :id'), {"id": user_id})
+            session.commit()
+
+            row = session.query(UserUsage).one()
+            assert row.user_id is None
+            assert row.cost_cents == pytest.approx(1.0)
+        finally:
+            session.close()
 
 
 class TestAggregation:
