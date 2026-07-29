@@ -42,7 +42,8 @@ export type CopyButtonProps = DistributiveOmit<
  * `SvgAlertTriangle` (error) — callers cannot override it.
  *
  * When `children` is provided, the button renders with a text label.
- * When omitted, it renders as an icon-only button.
+ * When omitted, it renders as an icon-only button with a default "Copy"
+ * tooltip (labeled buttons get no tooltip unless one is passed explicitly).
  */
 export function CopyButton({
   getCopyText,
@@ -109,7 +110,9 @@ export function CopyButton({
     children,
     icon: getIcon(),
     onClick: handleCopy,
-    tooltip: tooltip ?? "Copy",
+    // A labeled button already says what it does, so only icon-only buttons
+    // get the default tooltip.
+    tooltip: tooltip ?? (children === undefined ? "Copy" : undefined),
   } as ButtonProps;
 
   return <Button {...resolvedProps} />;
