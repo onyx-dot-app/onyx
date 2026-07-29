@@ -1669,14 +1669,10 @@ sandboxImagePrepull:
     cpu: 10m
     memory: 32Mi
     ephemeralStorage: 64Mi
-  # Below cluster-autoscaler's expendable-pods cutoff (-10), so a pending
-  # prepuller is never itself a reason to scale up.
-  priorityClass:
-    create: true
-    value: -11
-  # Set to use an existing PriorityClass instead; skips creating the one above.
-  # create: false with this left empty is a valid opt-out, but drops the pod to
-  # the cluster default priority, where it competes with sandbox pods.
+  # Name of an EXISTING PriorityClass to run the prepuller under. The chart
+  # creates none, so an unset value means the cluster default priority. Point
+  # this at a low/negative class if you want a pending sandbox pod to be able to
+  # preempt the prepuller.
   priorityClassName: ""
   # Nodes that repull at once on a tag bump. Raise to warm a large pool faster,
   # at the cost of a thundering herd against the registry.

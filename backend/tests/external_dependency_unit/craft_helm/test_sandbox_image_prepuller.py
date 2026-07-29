@@ -20,10 +20,10 @@ the original latency. The only signal is provisioning being slow, which is what
 the feature was meant to fix. All four are fixed at chart-render time, so a
 render test catches them before deploy.
 
-Rendering needs the ``helm`` binary and the chart's subchart tarballs, which are
-gitignored, so these skip unless you have run ``helm dependency build`` on the
-chart. No CI lane currently supplies both, so treat them as a local guard for
-now: run them when you touch the sandbox chart templates.
+Lives beside ``test_pod_spec.py`` in the ``craft_helm`` shard, the lane that
+provides ``helm`` and runs ``helm dependency build`` (see
+``pr-external-dependency-unit-tests.yml``). Skips locally when those are
+unavailable; in CI those conditions fail instead of masking the suite.
 
 Only a missing-dependency error is treated as "can't run here". Any other helm
 failure is the chart being broken and fails the test — a render test that
@@ -32,17 +32,18 @@ reports a broken chart as a skip is worse than no test.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
-from pathlib import Path
 from typing import NoReturn
 
 import pytest
 import yaml
 
-# backend/tests/unit/onyx/server/features/build/sandbox/ -> repo root
-_REPO_ROOT = Path(__file__).resolve().parents[8]
+from tests.common.paths import find_ancestor_containing
+
+_REPO_ROOT = find_ancestor_containing("deployment/helm/charts/onyx")
 _CHART_DIR = _REPO_ROOT / "deployment" / "helm" / "charts" / "onyx"
 _PREPULLER_TEMPLATE = "templates/sandbox-image-prepuller.yaml"
 _PODTEMPLATE_TEMPLATE = "templates/sandbox-podtemplate.yaml"
@@ -58,11 +59,19 @@ _MISSING_DEPS_MARKERS = (
 )
 
 
+def _skip_or_fail(reason: str) -> NoReturn:
+    """Skip locally, but fail in CI — a shard that renders nothing must not
+    report green."""
+    if os.environ.get("CI"):
+        pytest.fail(reason)
+    pytest.skip(reason)
+
+
 def _handle_render_failure(stderr: str) -> NoReturn:
     """A missing-deps error means we can't run here; anything else is a real
     chart defect and must not be laundered into a skip."""
     if any(marker in stderr for marker in _MISSING_DEPS_MARKERS):
-        pytest.skip(f"chart dependencies not built: {stderr.strip()}")
+        _skip_or_fail(f"chart dependencies not built: {stderr.strip()}")
     pytest.fail(f"helm template failed: {stderr.strip()}")
 
 
@@ -71,7 +80,7 @@ def _run_helm(
 ) -> subprocess.CompletedProcess[str]:
     helm = shutil.which("helm")
     if helm is None:
-        pytest.skip("helm binary not available")
+        _skip_or_fail("helm binary not available")
     cmd = [
         helm,
         "template",
@@ -115,7 +124,7 @@ def _renders_nothing(extra_args: list[str]) -> bool:
 
 
 def _prepuller(extra_args: list[str] | None = None) -> dict:
-    """The DaemonSet. The template also emits a PriorityClass, so select by kind
+    """The DaemonSet. The template also emits a NetworkPolicy, so select by kind
     rather than assuming a single document."""
     docs = yaml.safe_load_all(_render(_PREPULLER_TEMPLATE, extra_args))
     return next(d for d in docs if d and d["kind"] == "DaemonSet")
@@ -205,59 +214,64 @@ def test_prepuller_requests_ephemeral_storage() -> None:
     assert resources["requests"] == resources["limits"]
 
 
-def test_prepuller_yields_to_pending_sandbox_pods() -> None:
-    """A do-nothing pod must never be the reason a sandbox fails to schedule and
-    triggers a scale-up. Negative priority lets a pending sandbox preempt it;
-    preemptionPolicy Never means the prepuller evicts nothing itself."""
-    docs = list(yaml.safe_load_all(_render(_PREPULLER_TEMPLATE)))
-    pc = next(d for d in docs if d and d["kind"] == "PriorityClass")
-    ds = next(d for d in docs if d and d["kind"] == "DaemonSet")
-
-    # Strictly below -10, cluster-autoscaler's default expendable-pods cutoff:
-    # at exactly -10 the prepuller is non-expendable and a pending one can be
-    # read as demand for a new node.
-    assert pc["value"] < -10
-    assert pc["globalDefault"] is False
-    assert pc["preemptionPolicy"] == "Never"
-    assert ds["spec"]["template"]["spec"]["priorityClassName"] == pc["metadata"]["name"]
-
-
-def _rendered_kinds(extra_args: list[str]) -> list[str]:
+def _rendered_kinds(extra_args: list[str] | None = None) -> list[str]:
     docs = yaml.safe_load_all(_render(_PREPULLER_TEMPLATE, extra_args))
     return [d["kind"] for d in docs if d]
 
 
-def test_existing_priority_class_skips_creation() -> None:
-    """An operator supplying their own class must not also get ours."""
+# Objects with no `metadata.namespace`. A cluster-scoped object from this
+# template is what broke the deploy described in
+# test_prepuller_ships_no_cluster_scoped_objects.
+_CLUSTER_SCOPED_KINDS = {
+    "PriorityClass",
+    "ClusterRole",
+    "ClusterRoleBinding",
+    "StorageClass",
+    "Namespace",
+    "CustomResourceDefinition",
+    "PersistentVolume",
+}
+
+
+def test_prepuller_ships_no_cluster_scoped_objects() -> None:
+    """Regression for a broken `helm upgrade` (#13490).
+
+    The prepuller originally created its own PriorityClass at value -10. A
+    follow-up changed the default to -11 while keeping the object's name, and
+    every existing install failed to upgrade:
+
+        Error: UPGRADE FAILED: cannot patch
+        "onyx-onyx-sandbox-image-prepuller" with kind PriorityClass: ...
+        value: Forbidden: may not be changed in an update.
+
+    `PriorityClass.value` is immutable and `helm upgrade` patches, so that field
+    could never be changed in place — and because Helm aborts the whole release
+    on one rejected patch, a latency optimisation took down the nightly deploy
+    of everything else.
+
+    The class was removed rather than worked around: it bought very little (see
+    docs/craft/sandbox/image-and-spinup.md), and an operator who wants one
+    points `priorityClassName` at their own. Keep this template namespaced —
+    cluster-scoped objects also collide between releases sharing a name in
+    different namespaces, which is why the removed class needed a
+    namespace-hashed name in the first place.
+    """
+    assert not _CLUSTER_SCOPED_KINDS.intersection(_rendered_kinds())
+
+
+def test_prepuller_has_no_priority_class_name_by_default() -> None:
+    """The chart creates no class, so it must not name one either — a
+    `priorityClassName` pointing at a nonexistent class fails pod admission."""
+    assert "priorityClassName" not in _prepuller_pod_spec()
+
+
+def test_prepuller_can_run_under_an_operator_supplied_priority_class() -> None:
+    """The opt-in for anyone who does want the prepuller preemptible: name an
+    existing class, and it is used verbatim without the chart creating one."""
     args = ["--set", "sandboxImagePrepull.priorityClassName=system-node-critical"]
 
     assert "PriorityClass" not in _rendered_kinds(args)
     assert _prepuller_pod_spec(args)["priorityClassName"] == "system-node-critical"
-
-
-def test_priority_class_creation_can_be_declined() -> None:
-    """Regression: sprig's ``merge`` treats ``false`` as empty and overwrites it
-    with the default, so a merge-based defaults block silently ignored
-    ``create: false``. Falsy values must survive."""
-    args = ["--set", "sandboxImagePrepull.priorityClass.create=false"]
-
-    assert "PriorityClass" not in _rendered_kinds(args)
-    assert "priorityClassName" not in _prepuller_pod_spec(args)
-
-
-def test_priority_class_value_zero_survives() -> None:
-    """Same trap for ints: ``value: 0`` must not silently become -10."""
-    pc = next(
-        d
-        for d in yaml.safe_load_all(
-            _render(
-                _PREPULLER_TEMPLATE,
-                ["--set", "sandboxImagePrepull.priorityClass.value=0"],
-            )
-        )
-        if d and d["kind"] == "PriorityClass"
-    )
-    assert pc["value"] == 0
 
 
 def test_repull_fanout_is_tunable_for_large_pools() -> None:
@@ -309,32 +323,22 @@ def test_prepuller_service_account_follows_the_configured_name() -> None:
     assert spec["serviceAccountName"] == "custom-sandbox-sa"
 
 
-def test_priority_class_name_is_namespace_scoped() -> None:
-    """PriorityClass is cluster-scoped. Two same-named releases in different
-    namespaces must not render the same object — the second install would fail
-    Helm's ownership check, and either release's upgrade could disrupt the
-    other."""
-
-    def pc_name(namespace: str) -> str:
-        docs = yaml.safe_load_all(
-            _render(_PREPULLER_TEMPLATE, ["--namespace", namespace])
+def test_prepuller_object_names_stay_within_k8s_limits() -> None:
+    """A long release/namespace pair must still emit valid names. Namespaced
+    objects don't need the namespace hashed into them the way the removed
+    PriorityClass did, but they do still have to be DNS-1123."""
+    docs = [
+        d
+        for d in yaml.safe_load_all(
+            _render(_PREPULLER_TEMPLATE, ["--namespace", "a" * 60])
         )
-        pc = next(d for d in docs if d and d["kind"] == "PriorityClass")
-        return pc["metadata"]["name"]
-
-    assert pc_name("onyx") != pc_name("onyx-staging")
-
-
-def test_priority_class_name_stays_within_k8s_limits() -> None:
-    """Long release/namespace pairs must hash down rather than emit an invalid
-    name, matching the trunc+sha shape used for the RBAC names."""
-    long_ns = "a" * 60
-    docs = yaml.safe_load_all(_render(_PREPULLER_TEMPLATE, ["--namespace", long_ns]))
-    name = next(d for d in docs if d and d["kind"] == "PriorityClass")["metadata"][
-        "name"
+        if d
     ]
-    assert len(name) <= 253
-    assert re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", name), name
+    assert docs
+    for doc in docs:
+        name = doc["metadata"]["name"]
+        assert len(name) <= 253, name
+        assert re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", name), name
 
 
 def test_prepuller_is_excluded_from_sandbox_network_policies() -> None:
