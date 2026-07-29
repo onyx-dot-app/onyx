@@ -19,6 +19,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
     can_user_access_llm_provider,
+    fetch_default_chat_naming_model,
     fetch_default_llm_model,
     fetch_default_vision_model,
     fetch_existing_llm_provider_by_id,
@@ -29,8 +30,10 @@ from onyx.db.llm import (
     fetch_user_group_ids,
     remove_llm_provider,
     sync_model_configurations,
+    update_default_chat_naming_provider,
     update_default_provider,
     update_default_vision_provider,
+    update_no_default_chat_naming_provider,
     upsert_llm_provider,
     validate_persona_ids_exist,
 )
@@ -541,6 +544,9 @@ def list_llm_providers(
         default_vision=DefaultModel.from_model_config(
             fetch_default_vision_model(db_session)
         ),
+        default_chat_naming=DefaultModel.from_model_config(
+            fetch_default_chat_naming_model(db_session)
+        ),
     )
 
 
@@ -746,6 +752,31 @@ def set_provider_as_default_vision(
     invalidate_provider_listing_cache()
 
 
+@admin_router.post("/default-chat-naming")
+def set_provider_as_default_chat_naming(
+    default_model: DefaultModel,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_default_chat_naming_provider(
+        provider_id=default_model.provider_id,
+        chat_naming_model=default_model.model_name,
+        db_session=db_session,
+    )
+    invalidate_provider_listing_cache()
+
+
+@admin_router.delete("/default-chat-naming")
+def clear_default_chat_naming(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Clear the dedicated naming model; auto-naming falls back to the
+    session's model."""
+    update_no_default_chat_naming_provider(db_session=db_session)
+    invalidate_provider_listing_cache()
+
+
 @admin_router.get("/auto-config")
 def get_auto_config(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -866,6 +897,9 @@ def list_llm_provider_basics(
         ),
         default_vision=DefaultModel.from_model_config(
             fetch_default_vision_model(db_session)
+        ),
+        default_chat_naming=DefaultModel.from_model_config(
+            fetch_default_chat_naming_model(db_session)
         ),
     )
     cache_provider_listing(
