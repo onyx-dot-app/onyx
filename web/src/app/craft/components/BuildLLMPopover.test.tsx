@@ -9,6 +9,10 @@ jest.mock("@/lib/hooks/useLLMProviderOptions", () => ({
   useLLMProviderOptions: () => ({ llmProviderOptions: [] }),
 }));
 
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({ user: { id: "test-user" } }),
+}));
+
 Element.prototype.scrollIntoView = jest.fn();
 
 function model(
@@ -74,6 +78,30 @@ describe("BuildLLMPopover recommended models", () => {
     expect(screen.getByText("GPT-5.6 Sol")).toBeInTheDocument();
     expect(screen.getByText("GPT-5.5")).toBeInTheDocument();
     expect(screen.queryByText("GPT-5 Mini")).not.toBeInTheDocument();
+  });
+
+  it("still lists a non-recommended model when it is the current selection", () => {
+    render(
+      <BuildLLMPopover
+        currentSelection={{
+          providerId: 13,
+          providerName: "OpenAI Team",
+          provider: "openai_compatible",
+          modelName: "gpt-5-mini",
+        }}
+        onSelectionChange={jest.fn()}
+        llmProviders={providers}
+      >
+        <button>Choose model</button>
+      </BuildLLMPopover>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
+
+    // The selected provider's group auto-expands, revealing the active model
+    // alongside the recommended ones.
+    expect(screen.getByText("GPT-5 Mini")).toBeInTheDocument();
+    expect(screen.getByText("GPT-5.6 Sol")).toBeInTheDocument();
   });
 });
 
