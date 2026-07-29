@@ -72,6 +72,10 @@ const (
 	// and a padding column on each side. The summary card pads wider.
 	paneChrome = 4
 	cardChrome = 6
+	// An option line is "  Label  hint": a two-column cursor, then at least
+	// this much space before the hint.
+	cursorWidth = 2
+	hintGap     = 2
 	// Sizes assumed until the first window-size message arrives.
 	defaultWidth  = 80
 	defaultHeight = 24
@@ -424,6 +428,7 @@ func (m wizModel) selectPane(inner int, hints, wrapTitle bool) []string {
 	if wrapTitle {
 		pane = wrap(title, inner)
 	}
+	col := hintColumn(m.sel.opts, inner)
 	for i, o := range m.sel.opts {
 		cursor, label := "  ", o.Label
 		if i == m.cursor {
@@ -436,8 +441,9 @@ func (m wizModel) selectPane(inner int, hints, wrapTitle bool) []string {
 		}
 		// Keep the hint beside its option while it fits; otherwise it wraps
 		// underneath rather than being cut off.
-		if lipgloss.Width(line)+2+lipgloss.Width(o.Hint) <= inner {
-			pane = append(pane, line+"  "+dim.Render(o.Hint))
+		pad := max(col-lipgloss.Width(line), hintGap)
+		if lipgloss.Width(line)+pad+lipgloss.Width(o.Hint) <= inner {
+			pane = append(pane, line+strings.Repeat(" ", pad)+dim.Render(o.Hint))
 			continue
 		}
 		pane = append(pane, truncate(line, inner))
@@ -446,6 +452,35 @@ func (m wizModel) selectPane(inner int, hints, wrapTitle bool) []string {
 		}
 	}
 	return pane
+}
+
+// hintColumn is the column the hints all start at, so they read down the pane
+// as one column instead of stepping in and out with the labels. Zero means
+// each hint simply follows its own label.
+func hintColumn(opts []Option, inner int) int {
+	widest := 0
+	for _, o := range opts {
+		if o.Hint != "" {
+			widest = max(widest, lipgloss.Width(o.Label))
+		}
+	}
+	if widest == 0 {
+		return 0
+	}
+	col := cursorWidth + widest + hintGap
+	// Lining the hints up must not cost one of them its place beside its
+	// option: on a screen where the column would push a hint that fits onto
+	// its own line, the ragged layout says the same thing in fewer rows.
+	for _, o := range opts {
+		if o.Hint == "" {
+			continue
+		}
+		fits := cursorWidth+lipgloss.Width(o.Label)+hintGap+lipgloss.Width(o.Hint) <= inner
+		if fits && col+lipgloss.Width(o.Hint) > inner {
+			return 0
+		}
+	}
+	return col
 }
 
 // clip keeps a pane within its row budget, marking what it cut.

@@ -145,6 +145,46 @@ func TestNarrowChecklistKeepsPercent(t *testing.T) {
 	}
 }
 
+// Hints read as a column, not as text stepping in and out with the labels —
+// except where the column would cost a hint its place beside its option.
+func TestOptionHintsShareAColumn(t *testing.T) {
+	opts := []Option{
+		{Label: "Lite", Hint: "chat, tools, uploads, projects — no vector search (recommended)"},
+		{Label: "Standard", Hint: "full search, connectors, and RAG"},
+		{Label: "Standard + Craft", Hint: "adds AI web-app building (binds the docker socket)"},
+	}
+	m := wizModel{sel: &askSelectMsg{title: "How should Onyx be deployed?", opts: opts}}
+
+	// Roomy: every hint starts past the widest label, at the same column.
+	want := cursorWidth + ansi.StringWidthWc("Standard + Craft") + hintGap
+	for i, line := range m.selectPane(94, true, false)[1:] {
+		got := hintStart(line, opts[i].Hint)
+		if got != want {
+			t.Errorf("hint %d starts at column %d, want %d:\n%s", i, got, want, line)
+		}
+	}
+
+	// Tight: at 74 columns all three hints still fit beside their own label,
+	// and lining them up would push the first onto a line of its own.
+	pane := m.selectPane(74, true, false)
+	if len(pane) != 1+len(opts) {
+		t.Errorf("the column cost a hint its place beside its option:\n%s", strings.Join(pane, "\n"))
+	}
+	if got := hintStart(pane[1], opts[0].Hint); got != cursorWidth+ansi.StringWidthWc("Lite")+hintGap {
+		t.Errorf("hint 0 should follow its own label at 74 columns, starts at %d", got)
+	}
+}
+
+// hintStart is the column hint begins at within a rendered option line.
+func hintStart(line, hint string) int {
+	plain := ansi.Strip(line)
+	i := strings.Index(plain, hint)
+	if i < 0 {
+		return -1
+	}
+	return ansi.StringWidthWc(plain[:i])
+}
+
 // Long option hints must survive a narrow screen, wrapped under their option
 // rather than truncated away.
 func TestNarrowViewKeepsOptionHints(t *testing.T) {
