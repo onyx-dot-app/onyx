@@ -131,6 +131,13 @@ func (in *installer) plainf(format string, args ...any) {
 	fmt.Fprintf(in.deps.IOS.Out, format+"\n", args...)
 }
 
+// cmdf prints a command on a line of its own, in the accent the summary card
+// marks the URL with. These lines exist to be typed: what introduced them is
+// prose, and the eye should be able to find the part that isn't.
+func (in *installer) cmdf(format string, args ...any) {
+	in.plainf("  %s", ui.Accent(fmt.Sprintf(format, args...)))
+}
+
 // fancy reports whether the interactive renderer drives this run (never
 // under --no-prompt, so scripted output stays line-oriented, and never under
 // --verbose, which streams compose's own output to the normal screen — under

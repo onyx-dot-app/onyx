@@ -839,14 +839,14 @@ func (in *installer) ensureCraftResources(ctx context.Context) {
 	network := sandboxNetworkName()
 	if created, err := in.docker.EnsureNetwork(ctx, network); err != nil {
 		in.warnf("Could not create sandbox network %s — create it manually:", network)
-		in.plainf("    docker network create %s", network)
+		in.cmdf("docker network create %s", network)
 	} else if created {
 		in.successf("Created sandbox bridge network: %s", network)
 	}
 
 	if created, err := in.docker.EnsureVolume(ctx, sandboxProxyCAVolume); err != nil {
 		in.warnf("Could not create sandbox proxy CA volume %s — create it manually:", sandboxProxyCAVolume)
-		in.plainf("    docker volume create %s", sandboxProxyCAVolume)
+		in.cmdf("docker volume create %s", sandboxProxyCAVolume)
 	} else if created {
 		in.successf("Created sandbox proxy CA volume: %s", sandboxProxyCAVolume)
 	}
@@ -958,8 +958,8 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 			// it had already brought up, which is worth saying before the run
 			// reports itself cancelled.
 			in.infof("Services that already started are still running:")
-			in.plainf("  onyx-cli deploy status")
-			in.plainf("  onyx-cli deploy stop")
+			in.cmdf("onyx-cli deploy status")
+			in.cmdf("onyx-cli deploy stop")
 			return err
 		}
 		in.infof("Current container status:")
@@ -967,8 +967,8 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 		ps.Stdout, ps.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
 		_, _ = in.deps.Runner.Run(ctx, ps)
 		in.infof("Check the logs of any unhealthy service:")
-		in.plainf("  onyx-cli deploy status")
-		in.plainf("  (cd %q && docker compose %s logs <service>)", dir, strings.Join(fileArgs(files), " "))
+		in.cmdf("onyx-cli deploy status")
+		in.cmdf("(cd %q && docker compose %s logs <service>)", dir, strings.Join(fileArgs(files), " "))
 		in.explainIncompleteStart(tag, prevTag)
 		in.infof("If the issue persists, please contact: founders@onyx.app")
 		return exitcodes.Newf(exitcodes.General, "docker compose up failed: %v", err)
