@@ -160,6 +160,62 @@ func TestUpgradeProdRejectsPreOverlayProdFile(t *testing.T) {
 	}
 }
 
+// --local trusts what's on disk — except a pre-overlay docker-compose.prod.yml,
+// which is not a customization: stacked on the base file it re-publishes the
+// dev port. With --force it is replaced by the bundled overlay (backed up).
+func TestUpgradeProdLocalReplacesLegacyProdFile(t *testing.T) {
+	root := prodFixture(t, "v4.0.0") // fixture prod.yml is legacy-shaped (no !override)
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	deps := testDeps(t, runner, notFoundServer(t))
+
+	err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Local: true, Tag: "v4.2.0", Dir: root, NoWait: true, Force: true,
+	})
+	if err != nil {
+		t.Fatalf("RunUpgrade: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+
+	overlay, _ := os.ReadFile(filepath.Join(root, "deployment", "docker-compose.prod.yml"))
+	if !strings.Contains(string(overlay), "!override") {
+		t.Errorf("legacy prod file must be replaced by the bundled overlay under --local, got:\n%s", overlay)
+	}
+	backups, _ := filepath.Glob(filepath.Join(root, "deployment", "docker-compose.prod.yml.bak-*"))
+	if len(backups) == 0 {
+		t.Error("replacing the legacy prod file must leave a backup")
+	}
+	// The rest of --local behavior is untouched: the on-disk base compose
+	// file was trusted as-is.
+	base, _ := os.ReadFile(filepath.Join(root, "deployment", "docker-compose.yml"))
+	if string(base) != "name: onyx\nservices: {}\n" {
+		t.Errorf("--local must keep the on-disk base compose file, got:\n%s", base)
+	}
+}
+
+// Without consent to replace it, adoption must stop rather than proceed into
+// a merge that would publish the dev port on a prod host.
+func TestUpgradeProdRefusesToKeepLegacyProdFile(t *testing.T) {
+	root := prodFixture(t, "v4.0.0")
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	deps := testDeps(t, runner, notFoundServer(t))
+
+	err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Local: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "--force") {
+		t.Fatalf("err = %v, want a hard stop naming --force", err)
+	}
+
+	env, _ := os.ReadFile(filepath.Join(root, "deployment", ".env"))
+	if Var(string(env), "IMAGE_TAG") != "v4.0.0" {
+		t.Error("refused adoption must not touch .env")
+	}
+	for _, c := range runner.calls {
+		if line := argv(c); strings.Contains(line, " pull") || strings.Contains(line, " up ") {
+			t.Errorf("deployed despite the refusal: %s", line)
+		}
+	}
+}
+
 // The prod overlay's !override / !reset tags are a parse error before compose
 // v2.24.4; the run must stop before touching anything.
 func TestUpgradeProdRefusesOldCompose(t *testing.T) {
