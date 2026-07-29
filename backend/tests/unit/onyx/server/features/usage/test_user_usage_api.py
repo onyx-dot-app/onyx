@@ -28,7 +28,7 @@ from onyx.db.models import (
 )
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.llm import cost_overrides
-from onyx.llm.cost import get_model_price_per_million
+from onyx.llm.cost import ModelPrice, get_model_price_per_million
 from onyx.server.features.usage.api import user_usage_router
 
 
@@ -84,13 +84,23 @@ def _make_app(db_session: Session, user: _StubUser) -> FastAPI:
     return app
 
 
+@pytest.fixture(autouse=True)
+def _no_configured_providers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid querying LLM-provider tables absent from the SQLite test DB."""
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
+        lambda *_a, **_k: [],
+    )
+
+
 class _StubProvider:
     def __init__(self, provider: str | None) -> None:
         self.provider = provider
 
 
 class _StubModelConfig:
-    def __init__(self, name: str, provider: str | None) -> None:
+    def __init__(self, name: str, provider: str | None, model_id: int = 1) -> None:
+        self.id = model_id
         self.name = name
         self.llm_provider = _StubProvider(provider)
 
@@ -121,6 +131,24 @@ def _seed_usage(
         )
     )
     db_session.flush()
+
+
+class _StubMC:
+    def __init__(self, model_id: int, name: str, is_visible: bool = True) -> None:
+        self.id = model_id
+        self.name = name
+        self.is_visible = is_visible
+
+
+class _StubProviderWithModels:
+    def __init__(
+        self, provider: str, model_configs: list[tuple[int, str, bool]]
+    ) -> None:
+        self.provider = provider
+        self.model_configurations = [
+            _StubMC(model_id, name, is_visible)
+            for model_id, name, is_visible in model_configs
+        ]
 
 
 def _seed_current_window(db_session: Session, user_id: str) -> datetime.datetime:
@@ -183,6 +211,10 @@ def test_selected_model_price_known_model(
         "onyx.server.features.usage.api.fetch_default_llm_model",
         lambda _db: _StubModelConfig("gpt-4o", "openai"),
     )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
+        lambda *_a, **_k: [_StubProviderWithModels("openai", [(1, "gpt-4o", True)])],
+    )
 
     client = TestClient(_make_app(db_session, _StubUser(caller)))
     price = client.get("/user/usage").json()["selected_model_price"]
@@ -203,10 +235,38 @@ def test_selected_model_price_unknown_model_nulls(
         "onyx.server.features.usage.api.fetch_default_llm_model",
         lambda _db: _StubModelConfig("totally-unknown-model-xyz", None),
     )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
+        lambda *_a, **_k: [
+            _StubProviderWithModels("openai", [(1, "totally-unknown-model-xyz", True)])
+        ],
+    )
 
     client = TestClient(_make_app(db_session, _StubUser(caller)))
     price = client.get("/user/usage").json()["selected_model_price"]
     assert price is None
+
+
+def test_selected_model_price_requires_model_access(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    caller = str(uuid4())
+    _seed_current_window(db_session, caller)
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_llm_model",
+        lambda _db: _StubModelConfig("gpt-4o", "openai", model_id=2),
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
+        lambda *_a, **_k: [
+            _StubProviderWithModels("openai", [(1, "gpt-4o-mini", True)])
+        ],
+    )
+
+    body = (
+        TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage").json()
+    )
+    assert body["selected_model_price"] is None
 
 
 class TestGetModelPricePerMillion:
@@ -214,14 +274,13 @@ class TestGetModelPricePerMillion:
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
-        cost_overrides.upsert_override(db_session, "gpt-4o", 1.0, 4.0)
+        cost_overrides.upsert_override(db_session, "gpt-4o", 1.0, 4.0, 0.5)
         cost_overrides.invalidate_override_cache()
 
-        in_price, out_price = get_model_price_per_million(
-            "gpt-4o", "openai", db_session
-        )
-        assert in_price == pytest.approx(1.0)
-        assert out_price == pytest.approx(4.0)
+        price = get_model_price_per_million("gpt-4o", "openai", db_session)
+        assert price.input_per_mtok == pytest.approx(1.0)
+        assert price.output_per_mtok == pytest.approx(4.0)
+        assert price.cache_per_mtok == pytest.approx(0.5)
 
     def test_litellm_fallback_when_no_override(
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
@@ -229,16 +288,19 @@ class TestGetModelPricePerMillion:
         monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
         # Clear tenant override cache between tests.
         cost_overrides.invalidate_override_cache()
-        in_price, out_price = get_model_price_per_million(
-            "gpt-4o", "openai", db_session
-        )
-        assert in_price == pytest.approx(2.5)
-        assert out_price == pytest.approx(10.0)
+        price = get_model_price_per_million("gpt-4o", "openai", db_session)
+        assert price.input_per_mtok == pytest.approx(2.5)
+        assert price.output_per_mtok == pytest.approx(10.0)
 
     def test_unknown_model_nulls(self) -> None:
-        assert get_model_price_per_million("totally-unknown-model-xyz", None) == (
-            None,
-            None,
+        assert get_model_price_per_million(
+            "totally-unknown-model-xyz", None
+        ) == ModelPrice(
+            model="totally-unknown-model-xyz",
+            provider=None,
+            input_per_mtok=None,
+            output_per_mtok=None,
+            cache_per_mtok=None,
         )
 
     def test_never_raises_on_lookup_failure(
@@ -250,7 +312,13 @@ class TestGetModelPricePerMillion:
         import litellm
 
         monkeypatch.setattr(litellm, "get_model_info", _boom)
-        assert get_model_price_per_million("gpt-4o", "openai") == (None, None)
+        assert get_model_price_per_million("gpt-4o", "openai") == ModelPrice(
+            model="gpt-4o",
+            provider="openai",
+            input_per_mtok=None,
+            output_per_mtok=None,
+            cache_per_mtok=None,
+        )
 
 
 def test_budget_reflects_user_cost_limit(
@@ -310,8 +378,44 @@ def test_budget_reflects_global_cost_limit(
         TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage").json()
     )
     assert body["budget_cents"] == pytest.approx(100.0)
-    # 100 - (1.25 caller + 5.0 other): distinguishes GLOBAL from USER scope.
+    # Includes both users' spend because this is a global limit.
     assert body["budget_remaining_cents"] == pytest.approx(93.75)
+
+
+def test_available_model_prices_lists_priced_models(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    caller = str(uuid4())
+    _seed_current_window(db_session, caller)
+    monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
+    cost_overrides.invalidate_override_cache()
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
+        lambda *_a, **_k: [
+            _StubProviderWithModels(
+                "openai",
+                [
+                    (1, "gpt-4o", True),
+                    (2, "totally-unknown-model-xyz", True),
+                    (3, "gpt-4o-mini", False),
+                ],
+            )
+        ],
+    )
+
+    body = (
+        TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage").json()
+    )
+    prices = {p["model"]: p for p in body["available_model_prices"]}
+    assert prices["gpt-4o"]["input_per_mtok"] == pytest.approx(2.5)
+    assert prices["gpt-4o"]["output_per_mtok"] == pytest.approx(10.0)
+    assert "cache_per_mtok" in prices["gpt-4o"]
+    # An unpriced model is skipped, not surfaced with null prices.
+    assert "totally-unknown-model-xyz" not in prices
+    assert "gpt-4o-mini" not in prices
 
 
 def test_budget_reflects_group_cost_limit(

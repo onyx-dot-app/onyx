@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from onyx.db.models import ModelCostOverride
 from onyx.db.user_usage import UserUsageByDay as UsageDayModel
+from onyx.llm.cost import ModelPrice
 
 
 class CostOverrideUpsertRequest(BaseModel):
@@ -68,13 +69,12 @@ class UsageExportResponse(BaseModel):
     users: list[UsageExportUser]
 
 
-class ModelPrice(BaseModel):
-    """USD per 1M tokens for the user's selected chat model; null if unpriced."""
+class ResetUsageRequest(BaseModel):
+    user_email: str = Field(min_length=1)
 
-    model: str
-    provider: str | None
-    input_per_mtok: float | None
-    output_per_mtok: float | None
+
+class ResetUsageResponse(BaseModel):
+    reset_rows: int = Field(ge=0)
 
 
 class EffectiveCostBudget(BaseModel):
@@ -93,3 +93,4 @@ class UserUsageResponse(BaseModel):
     budget_remaining_cents: float | None
     budget_period_hours: int | None = None
     selected_model_price: ModelPrice | None
+    available_model_prices: list[ModelPrice] = Field(default_factory=list)
