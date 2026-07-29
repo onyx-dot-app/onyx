@@ -49,7 +49,9 @@ func TestPullProgressPlainTracksImages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := sink.render(); got != "✓backend up to date, relational_db,✓cache already present" {
+	// An image that was already on the host reads as pulled: the row answers
+	// "is this image here", not "did bytes move".
+	if got := sink.render(); got != "✓backend pulled, relational_db,✓cache pulled" {
 		t.Errorf("rows = %q", got)
 	}
 	if sink.extra != "2/3 images" {
@@ -108,6 +110,36 @@ func TestPullProgressReportsDownloadedBytes(t *testing.T) {
 	}
 	if sink.extra != "0/2 images · 1.6 MB / 3.1 MB" {
 		t.Errorf("extra = %q", sink.extra)
+	}
+}
+
+// The wizard asks compose for json, so a failed phase's captured output has to
+// be turned back into something readable before it is shown as scrollback.
+func TestFailureTailRendersEvents(t *testing.T) {
+	captured := strings.Join([]string{
+		`{"id":"Container onyx-api_server-1","status":"Starting"}`,
+		`{"id":"9d8e18e5f8e4","parent_id":"backend","text":"Downloading","current":5,"total":50}`,
+		`{"dry-run":false}`,
+		`{"tail":true,"text":"container onyx-api_server-1 is unhealthy"}`,
+		`Error response from daemon: no such image`,
+		``,
+	}, "\n")
+
+	got := failureTail(captured, 10)
+	want := []string{
+		"Container onyx-api_server-1 Starting",
+		"9d8e18e5f8e4 Downloading",
+		"container onyx-api_server-1 is unhealthy",
+		"Error response from daemon: no such image",
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("tail = %q, want %q", got, want)
+	}
+
+	// The tail is the end of the output, so the error that ended the run is
+	// what survives the cut.
+	if got := failureTail(captured, 1); len(got) != 1 || got[0] != want[len(want)-1] {
+		t.Errorf("capped tail = %q", got)
 	}
 }
 

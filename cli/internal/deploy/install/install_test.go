@@ -146,6 +146,31 @@ func testDeps(t *testing.T, runner *fakeRunner, raw *httptest.Server) Deps {
 
 func outBuf(d Deps) *bytes.Buffer { return d.IOS.Out.(*bytes.Buffer) }
 
+// Quitting kills the compose command, which comes back as an error like any
+// other. The run must not dress that up as a failure: nothing failed, and the
+// output compose was in the middle of writing explains nothing.
+func TestCancelledComposePhaseIsNotReportedAsFailure(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	deps := testDeps(t, runner, notFoundServer(t))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	in := newInstaller(deps, Options{Verbose: true})
+	in.compose = dockercmd.DetectCompose(ctx, dockercmd.NewDocker(runner))
+	runner.handler = func(dockercmd.Command) (dockercmd.Result, error) {
+		cancel()
+		return dockercmd.Result{}, errors.New("signal: killed")
+	}
+
+	err := in.runComposePhase(ctx, composePhase{title: "Starting services", dir: t.TempDir()})
+	if err == nil {
+		t.Fatal("a killed command must still surface as an error")
+	}
+	if out := outBuf(deps).String(); strings.Contains(out, "failed") {
+		t.Errorf("cancelled phase reported a failure:\n%s", out)
+	}
+}
+
 func isolateEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("ONYX_DEPLOYMENT_DIR", "")

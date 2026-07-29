@@ -863,6 +863,9 @@ func (in *installer) pullImages(ctx context.Context, tag string, hostPort int) e
 		phase.args = append(phase.args, "--quiet")
 	}
 	if err := in.runComposePhase(ctx, phase); err != nil {
+		if ctx.Err() != nil {
+			return err
+		}
 		in.infof("Check your internet connection and re-run. If the issue persists: founders@onyx.app")
 		return exitcodes.Newf(exitcodes.General, "docker compose pull failed: %v", err)
 	}
@@ -913,6 +916,15 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 		defer in.wiz.Services(nil)
 	}
 	if err := in.runComposePhase(ctx, phase); err != nil {
+		if ctx.Err() != nil {
+			// Cancelled, not broken. Quitting stops compose, not the containers
+			// it had already brought up, which is worth saying before the run
+			// reports itself cancelled.
+			in.infof("Services that already started are still running:")
+			in.plainf("  onyx-cli deploy status")
+			in.plainf("  onyx-cli deploy stop")
+			return err
+		}
 		in.infof("Current container status:")
 		ps := in.compose.Command(dir, env, files, "ps")
 		ps.Stdout, ps.Stderr = in.deps.IOS.Out, in.deps.IOS.ErrOut
@@ -1017,9 +1029,10 @@ func (in *installer) runComposePhase(ctx context.Context, p composePhase) error 
 		cmd.Stdout = io.MultiWriter(in.deps.IOS.Out, &seen)
 		cmd.Stderr = io.MultiWriter(in.deps.IOS.ErrOut, &seen)
 		_, err := in.deps.Runner.Run(ctx, cmd)
-		if err == nil {
+		switch {
+		case err == nil:
 			in.successf("%s complete", p.title)
-		} else {
+		case ctx.Err() == nil:
 			in.errorf("%s failed", p.title)
 			in.printFailureDiagnosis(seen.String())
 		}
@@ -1049,11 +1062,12 @@ func (in *installer) runComposePhase(ctx context.Context, p composePhase) error 
 		// Tear the wizard down so the tail prints as plain scrollback.
 		in.wiz.Abort()
 		in.wiz = nil
-		lines := strings.Split(strings.TrimSpace(captured.String()), "\n")
-		if len(lines) > failureLogTail {
-			lines = lines[len(lines)-failureLogTail:]
+		if ctx.Err() != nil {
+			// Quitting killed the command mid-sentence. What it had written by
+			// then describes nothing that went wrong, so it is not shown.
+			return err
 		}
-		for _, l := range lines {
+		for _, l := range failureTail(captured.String(), failureLogTail) {
 			in.plainf("  %s", l)
 		}
 		in.printFailureDiagnosis(captured.String())

@@ -54,24 +54,34 @@ func (in *installer) progressMode(ctx context.Context) string {
 		return progressJSON
 	case in.composeAtLeast(ctx, minProgressVersion):
 		return progressPlain
+	case !in.composeVersionKnown(ctx):
+		// A version that doesn't parse is a build too new or too odd to have
+		// a number, not a compose from before 2.19: give it the older mode
+		// rather than dropping the phase's display entirely.
+		return progressPlain
 	default:
 		return ""
 	}
 }
 
-// composeAtLeast reports whether the installed compose is at least min. A
-// version that doesn't parse ("dev" builds) counts as too old: an unknown flag
-// fails the command outright, which is not a trade worth making for output.
+// composeAtLeast reports whether the installed compose is known to be at least
+// min. An unreadable version answers no: passing a flag compose might not know
+// fails the command outright.
 func (in *installer) composeAtLeast(ctx context.Context, min string) bool {
+	if !in.composeVersionKnown(ctx) {
+		return false
+	}
+	have, _ := version.Parse(in.compose.Version(ctx))
+	want, _ := version.Parse(min)
+	return !have.LessThan(want)
+}
+
+func (in *installer) composeVersionKnown(ctx context.Context) bool {
 	if in.compose == nil {
 		return false
 	}
-	have, ok := version.Parse(in.compose.Version(ctx))
-	if !ok {
-		return false
-	}
-	want, _ := version.Parse(min)
-	return !have.LessThan(want)
+	_, ok := version.Parse(in.compose.Version(ctx))
+	return ok
 }
 
 // composeEvent is compose's json progress event, narrowed to the fields these
@@ -240,12 +250,11 @@ func (p *pullProgress) imageEvent(name, text string) (known, structural bool) {
 	}
 	switch word {
 	case "Skipped":
-		// Compose skips an image for several reasons ("Skipped - Image is
-		// already present locally", "- No image to be pulled"); the one an
-		// operator is owed an explanation for is the cached image.
-		img.note = "skipped"
-		if strings.Contains(text, "already present") {
-			img.note = "already present"
+		// An image already on the host is as pulled as one that just came
+		// down, and reads better as such. Compose's other skips (nothing to
+		// pull, buildable image) do need naming.
+		if !strings.Contains(text, "already present") {
+			img.note = "skipped"
 		}
 	case "Error":
 		img.note = "failed"
@@ -288,7 +297,7 @@ func (p *pullProgress) publish() {
 		switch {
 		case img.done:
 			done++
-			row.Detail = img.finished(tot)
+			row.Detail = img.finished()
 		case cur < tot:
 			row.Detail = fmt.Sprintf("%d%%  %s / %s", cur*100/tot, humanBytes(cur), humanBytes(tot))
 		default:
@@ -307,17 +316,14 @@ func (p *pullProgress) publish() {
 	p.extra(extra)
 }
 
-// finished is what a completed image's row says: why it was skipped, how much
-// came down, or that there was nothing to fetch.
-func (img *pullImage) finished(total int64) string {
-	switch {
-	case img.note != "":
+// finished is what a completed image's row says. Whether it came down now or
+// was already on the host, the answer to the only question being asked is the
+// same: the image is here.
+func (img *pullImage) finished() string {
+	if img.note != "" {
 		return img.note
-	case total > 0:
-		return humanBytes(total)
-	default:
-		return "up to date"
 	}
+	return "pulled"
 }
 
 // bytes sums the image's layers. Layers already present locally announce no
@@ -467,6 +473,41 @@ func decodeEvent(s string) (composeEvent, bool) {
 		return composeEvent{}, false
 	}
 	return composeEvent{ID: fields[0], Text: strings.Join(fields[1:], " ")}, true
+}
+
+// failureTail is the end of a failed phase's output, as a person should read
+// it. The phases the wizard drives ask compose for json, which is a fine thing
+// to parse and a terrible thing to be shown, so events are rendered back into
+// the line plain progress would have printed; whatever compose wrote outside
+// the event stream — where the error itself arrives — is kept verbatim.
+func failureTail(captured string, limit int) []string {
+	var lines []string
+	for _, raw := range strings.Split(captured, "\n") {
+		line := strings.TrimSpace(raw)
+		if strings.HasPrefix(line, "{") {
+			line = readableEvent(line)
+		}
+		if line == "" {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) > limit {
+		lines = lines[len(lines)-limit:]
+	}
+	return lines
+}
+
+// readableEvent renders one json progress event as "<id> <what happened>",
+// empty when the event has nothing to say. A line that only looked like an
+// event is returned unchanged rather than dropped: compose's own words matter
+// more here than the guess that they were json.
+func readableEvent(line string) string {
+	var e composeEvent
+	if err := json.Unmarshal([]byte(line), &e); err != nil {
+		return line
+	}
+	return strings.TrimSpace(e.ID + " " + strings.TrimSpace(e.Text+" "+e.Status))
 }
 
 // composeObjects are the id prefixes compose gives non-image events; they are
