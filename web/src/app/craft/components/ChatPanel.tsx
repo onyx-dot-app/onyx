@@ -121,7 +121,7 @@ export default function BuildChatPanel({
   const toggleOutputPanel = useToggleOutputPanel();
   const onWakeIntent = useWakeOnIntent();
 
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders, defaultText } = useLLMProviders();
   // Sessions can outlive the org's supported providers — gate sends until one
   // exists (the model picker stays enabled so admins can connect from it).
   const hasProvider = hasSupportedCraftProvider(llmProviders);
@@ -142,7 +142,7 @@ export default function BuildChatPanel({
   const selectedModel =
     (sessionId ? modelBySession[sessionId] : undefined) ??
     sessionModel ??
-    getDefaultLlmSelection(llmProviders);
+    getDefaultLlmSelection(llmProviders, defaultText);
 
   const contextUsage = useMemo(() => {
     const usage = session?.contextUsage;

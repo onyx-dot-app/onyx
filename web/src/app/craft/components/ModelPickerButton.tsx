@@ -23,11 +23,11 @@ export default function ModelPickerButton({
   onChange,
   disabled = false,
 }: ModelPickerButtonProps) {
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders, defaultText } = useLLMProviders();
 
   const effective = useMemo(
-    () => selection ?? getDefaultLlmSelection(llmProviders),
-    [selection, llmProviders]
+    () => selection ?? getDefaultLlmSelection(llmProviders, defaultText),
+    [selection, llmProviders, defaultText]
   );
 
   const displayName = useMemo(() => {
