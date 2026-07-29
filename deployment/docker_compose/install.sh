@@ -1296,27 +1296,6 @@ else
     exit 1
 fi
 
-# Craft sandbox image. Not a compose service (nothing runs it; the api_server
-# creates sandbox containers from it directly), so `compose pull` above misses
-# it. Without this the first sandbox pays the ~1 GB download inside the user's
-# request, via DockerSandboxManager's on-demand pull -- which stays as the
-# fallback for a host that loses the image later.
-if [ "$INCLUDE_CRAFT" = true ]; then
-    # Read from $ENV_FILE, not the shell: install.sh never sources .env, and an
-    # operator pointing Craft at their own registry sets it there.
-    SANDBOX_IMAGE=$(grep "^SANDBOX_CONTAINER_IMAGE=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d ' "'"'"'')
-    # Keep this default in sync with docker-compose.craft.yml's
-    # SANDBOX_CONTAINER_IMAGE (pinned by test_docker_manager_config.py).
-    SANDBOX_IMAGE="${SANDBOX_IMAGE:-onyxdotapp/sandbox:${CURRENT_IMAGE_TAG:-latest}}"
-    print_info "Downloading Craft sandbox image (${SANDBOX_IMAGE})..."
-    if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker pull "$SANDBOX_IMAGE"; then
-        print_success "Craft sandbox image downloaded successfully"
-    else
-        print_error "Failed to download Craft sandbox image ${SANDBOX_IMAGE}"
-        exit 1
-    fi
-fi
-
 # Build the up flags. With --wait (default), Compose waits until every
 # container with a healthcheck reports healthy before returning, and names any
 # service that stays unhealthy past the timeout.

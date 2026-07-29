@@ -851,25 +851,35 @@ def _craft_compose_services() -> dict:
     return yaml.safe_load(compose_path.read_text())["services"]
 
 
-def test_installer_prepulls_the_image_the_sandboxes_run() -> None:
-    """install.sh pre-pulls the sandbox image so the first sandbox doesn't pay
-    the download; compose passes the same ref to the containers as
-    SANDBOX_CONTAINER_IMAGE. The default is spelled in both files, so a change to
-    one silently leaves the installer warming an image nobody runs — visible only
-    as the slow provision the pre-pull exists to remove.
+def test_compose_prepulls_the_image_the_sandboxes_run() -> None:
+    """The prepull entry exists so `docker compose pull` fetches the sandbox
+    image, and must name the *same* ref the sandbox containers get. A drifted
+    ref warms an image nobody runs while every sandbox still cold-pulls, and
+    nothing looks wrong — the only symptom is the slow provision it exists to
+    remove.
     """
-    compose_ref = next(
-        env
-        for env in _craft_compose_services()["api_server"]["environment"]
-        if env.startswith("SANDBOX_CONTAINER_IMAGE=")
-    )
-    install_sh = (REPO_ROOT / "deployment/docker_compose/install.sh").read_text()
+    services = _craft_compose_services()
+    prepull_image = services["sandbox-image-prepull"]["image"]
 
-    assert "onyxdotapp/sandbox" in compose_ref
-    assert "onyxdotapp/sandbox" in install_sh
-    # And it must honour an operator's override rather than always pulling the
-    # default, or a private-registry mirror is warmed from the wrong place.
-    assert "SANDBOX_CONTAINER_IMAGE" in install_sh
+    for service_name in ("api_server", "background"):
+        assert (
+            f"SANDBOX_CONTAINER_IMAGE={prepull_image}"
+            in services[service_name]["environment"]
+        )
+
+
+def test_compose_prepull_never_starts_a_container() -> None:
+    """It is an image reference, not a workload. `replicas: 0` keeps `up` from
+    creating anything, so nothing idles doing nothing and `up --wait` — which
+    install.sh passes by default — stays green. A one-shot that exited would
+    fail that wait; a long-lived idler would leave a pointless container.
+    """
+    prepull = _craft_compose_services()["sandbox-image-prepull"]
+
+    assert prepull["deploy"]["replicas"] == 0
+    # Nothing runs, so it needs no entrypoint, socket, network or volumes.
+    for key in ("entrypoint", "command", "volumes", "networks", "restart"):
+        assert key not in prepull
 
 
 def test_embedded_craft_compose_copy_is_in_sync() -> None:
