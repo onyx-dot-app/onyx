@@ -116,7 +116,7 @@ from onyx.configs.constants import (
     MilestoneRecordType,
     OnyxRedisLocks,
 )
-from onyx.db.api_key import fetch_user_for_api_key
+from onyx.db.api_key import fetch_api_key_auth_result
 from onyx.db.auth import (
     SQLAlchemyUserAdminDB,
     get_access_token_db,
@@ -168,7 +168,9 @@ from shared_configs.configs import (
 )
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
+    CURRENT_USAGE_CREDENTIAL_CONTEXTVAR,
     CURRENT_USER_ID_CONTEXTVAR,
+    UsageCredentialIdentity,
     get_current_tenant_id,
 )
 
@@ -2012,6 +2014,8 @@ async def _resolve_optional_user(
     user: User | None,
     user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
+    request.state.usage_credential = UsageCredentialIdentity("session")
+
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
         await _maybe_refresh_oauth_tokens(user, async_db_session, user_manager)
@@ -2025,8 +2029,22 @@ async def _resolve_optional_user(
                 # Expose the token's scopes so require_permission can cap the
                 # request to them.
                 request.state.token_scopes = pat.scopes
+                request.state.usage_credential = UsageCredentialIdentity(
+                    "pat",
+                    str(pat.pat_id),
+                    pat.pat_name,
+                    pat.pat_display,
+                )
         elif hashed_api_key := get_hashed_api_key_from_request(request):
-            user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
+            api_key = await fetch_api_key_auth_result(hashed_api_key, async_db_session)
+            if api_key is not None:
+                user = api_key.user
+                request.state.usage_credential = UsageCredentialIdentity(
+                    "api_key",
+                    str(api_key.api_key_id),
+                    api_key.api_key_name,
+                    api_key.api_key_display,
+                )
     except ValueError:
         logger.warning("Issue with validating authentication token")
         return None
@@ -2060,9 +2078,13 @@ async def optional_user(
         user_manager,
     )
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id) if user is not None else None)
+    credential_token = CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.set(
+        getattr(request.state, "usage_credential", None)
+    )
     try:
         yield user
     finally:
+        CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.reset(credential_token)
         CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
 

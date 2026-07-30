@@ -1,9 +1,10 @@
 import uuid
+from typing import NamedTuple
 
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from onyx.auth.api_key import (
     ApiKeyDescriptor,
@@ -26,6 +27,13 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+class ApiKeyAuthResult(NamedTuple):
+    user: User
+    api_key_id: int
+    api_key_name: str | None
+    api_key_display: str
 
 
 def get_api_key_email_pattern() -> str:
@@ -63,6 +71,33 @@ async def fetch_user_for_api_key(
         select(User)
         .join(ApiKey, ApiKey.user_id == User.id)
         .where(ApiKey.hashed_api_key == hashed_api_key)
+    )
+
+
+async def fetch_api_key_auth_result(
+    hashed_api_key: str, async_db_session: AsyncSession
+) -> ApiKeyAuthResult | None:
+    row = (
+        (
+            await async_db_session.execute(
+                select(ApiKey)
+                .join(ApiKey.user)
+                # a lazy row.user under an AsyncSession raises MissingGreenlet
+                .options(contains_eager(ApiKey.user))
+                .where(ApiKey.hashed_api_key == hashed_api_key)
+            )
+        )
+        .scalars()
+        .unique()
+        .one_or_none()
+    )
+    if row is None:
+        return None
+    return ApiKeyAuthResult(
+        user=row.user,
+        api_key_id=row.id,
+        api_key_name=row.name,
+        api_key_display=row.api_key_display,
     )
 
 
