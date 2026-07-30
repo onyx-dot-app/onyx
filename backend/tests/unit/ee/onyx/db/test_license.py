@@ -178,7 +178,7 @@ class TestCheckSeatAvailabilityMultiTenant:
 
     @patch("ee.onyx.db.license.MULTI_TENANT", True)
     @patch(
-        "ee.onyx.server.tenants.user_mapping.get_tenant_count",
+        "ee.onyx.db.user_tenant_mapping.get_tenant_count",
         return_value=5,
     )
     @patch("ee.onyx.db.license.get_license_metadata")
@@ -196,7 +196,7 @@ class TestCheckSeatAvailabilityMultiTenant:
 
     @patch("ee.onyx.db.license.MULTI_TENANT", True)
     @patch(
-        "ee.onyx.server.tenants.user_mapping.get_tenant_count",
+        "ee.onyx.db.user_tenant_mapping.get_tenant_count",
         return_value=10,
     )
     @patch("ee.onyx.db.license.get_license_metadata")

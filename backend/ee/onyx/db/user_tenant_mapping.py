@@ -1,5 +1,6 @@
 from fastapi_users import exceptions
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from onyx.auth.invited_users import (
     get_invited_users,
@@ -8,10 +9,10 @@ from onyx.auth.invited_users import (
     write_pending_users,
 )
 from onyx.db.engine.sql_engine import (
-    get_session_with_shared_schema,
+    get_catalog_session,
     get_session_with_tenant,
 )
-from onyx.db.models import UserTenantMapping
+from onyx.db.models import UserTenantMapping, UserTenantMappingOAuthAccount
 from onyx.server.manage.models import TenantSnapshot
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
@@ -25,7 +26,7 @@ def get_tenant_id_for_email(email: str) -> str:
         return POSTGRES_DEFAULT_SCHEMA
     # Implement logic to get tenant_id from the mapping table
     try:
-        with get_session_with_shared_schema() as db_session:
+        with get_catalog_session() as db_session:
             # First try to get an active tenant
             result = db_session.execute(
                 select(UserTenantMapping).where(
@@ -60,13 +61,72 @@ def get_tenant_id_for_email(email: str) -> str:
 
 
 def user_owns_a_tenant(email: str) -> bool:
-    with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as db_session:
+    email = email.lower()
+    with get_catalog_session() as db_session:
         result = (
             db_session.query(UserTenantMapping)
             .filter(UserTenantMapping.email == email)
             .first()
         )
         return result is not None
+
+
+def record_oauth_identity(
+    email: str, tenant_id: str, oauth_name: str, account_id: str
+) -> None:
+    """Link the IdP subject to this user's mapping row so resolution survives
+    an address change at the provider.
+
+    A subject links to one mapping, and the first linked row wins: a later
+    login whose address maps elsewhere never re-links it, so address
+    reassignment cannot steal a linked identity.
+
+    No-op outside multi-tenant, where the mapping tables are not provisioned.
+    """
+    if not MULTI_TENANT:
+        return
+
+    normalized_email = email.lower()
+    with get_catalog_session() as db_session:
+        if db_session.get(UserTenantMapping, (normalized_email, tenant_id)) is None:
+            logger.info("No mapping row to link in tenant %s", tenant_id)
+            return
+
+        inserted = db_session.execute(
+            pg_insert(UserTenantMappingOAuthAccount)
+            .values(
+                oauth_name=oauth_name,
+                account_id=account_id,
+                email=normalized_email,
+                tenant_id=tenant_id,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[
+                    UserTenantMappingOAuthAccount.oauth_name,
+                    UserTenantMappingOAuthAccount.account_id,
+                ]
+            )
+            .returning(
+                UserTenantMappingOAuthAccount.email,
+                UserTenantMappingOAuthAccount.tenant_id,
+            )
+        ).one_or_none()
+        if inserted is None:
+            owner = db_session.execute(
+                select(
+                    UserTenantMappingOAuthAccount.email,
+                    UserTenantMappingOAuthAccount.tenant_id,
+                ).where(
+                    UserTenantMappingOAuthAccount.oauth_name == oauth_name,
+                    UserTenantMappingOAuthAccount.account_id == account_id,
+                )
+            ).one_or_none()
+            if owner is None or tuple(owner) != (normalized_email, tenant_id):
+                logger.warning(
+                    "OAuth identity is already linked to another tenant mapping"
+                )
+                return
+        db_session.commit()
 
 
 def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
@@ -81,7 +141,7 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     if not unique_emails:
         return
 
-    with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as db_session:
+    with get_catalog_session() as db_session:
         try:
             # Start a transaction
             db_session.begin()
@@ -122,7 +182,7 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
             if new_active_seat_emails:
                 from ee.onyx.server.tenants.billing import enforce_cloud_seat_limit
 
-                # Lock + bill held across the inserts below; rolled back
+                # Lock + bill held across the inserts below. Rolled back
                 # on Stripe decline by the outer ``except Exception``.
                 enforce_cloud_seat_limit(
                     seats_needed=len(new_active_seat_emails),
@@ -156,7 +216,7 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
 
 
 def remove_users_from_tenant(emails: list[str], tenant_id: str) -> None:
-    with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as db_session:
+    with get_catalog_session() as db_session:
         try:
             mappings_to_delete = (
                 db_session.query(UserTenantMapping)
@@ -179,22 +239,11 @@ def remove_users_from_tenant(emails: list[str], tenant_id: str) -> None:
 
 
 def remove_all_users_from_tenant(tenant_id: str) -> None:
-    with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as db_session:
+    with get_catalog_session() as db_session:
         db_session.query(UserTenantMapping).filter(
             UserTenantMapping.tenant_id == tenant_id
         ).delete()
         db_session.commit()
-
-
-def invite_self_to_tenant(email: str, tenant_id: str) -> None:
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-    try:
-        pending_users = get_pending_users()
-        if email in pending_users:
-            return
-        write_pending_users(pending_users + [email])
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 def approve_user_invite(email: str, tenant_id: str) -> None:
@@ -202,7 +251,7 @@ def approve_user_invite(email: str, tenant_id: str) -> None:
     Approve a user invite to a tenant.
     This will delete all existing records for this email and create a new mapping entry for the user in this tenant.
     """
-    with get_session_with_shared_schema() as db_session:
+    with get_catalog_session() as db_session:
         # Delete all existing records for this email
         db_session.query(UserTenantMapping).filter(
             UserTenantMapping.email == email
@@ -232,7 +281,7 @@ def accept_user_invite(email: str, tenant_id: str) -> None:
     Accept an invitation to join a tenant.
     This activates the user's mapping to the tenant.
     """
-    with get_session_with_shared_schema() as db_session:
+    with get_catalog_session() as db_session:
         try:
             # Lock the user's mappings first to prevent race conditions.
             # This ensures no concurrent request can modify this user's mappings.
@@ -311,7 +360,7 @@ def deny_user_invite(email: str, tenant_id: str) -> None:
     Deny an invitation to join a tenant.
     This removes the user's mapping to the tenant.
     """
-    with get_session_with_shared_schema() as db_session:
+    with get_catalog_session() as db_session:
         # Delete the mapping for this user and tenant
         result = (
             db_session.query(UserTenantMapping)
@@ -357,7 +406,7 @@ def get_tenant_count(tenant_id: str) -> int:
     from onyx.db.models import User
 
     # First get all emails with active mappings to this tenant
-    with get_session_with_shared_schema() as db_session:
+    with get_catalog_session() as db_session:
         active_mapping_emails = (
             db_session.query(UserTenantMapping.email)
             .filter(
@@ -391,7 +440,7 @@ def get_tenant_invitation(email: str) -> TenantSnapshot | None:
     """
     Get the first tenant invitation for this user
     """
-    with get_session_with_shared_schema() as db_session:
+    with get_catalog_session() as db_session:
         # Get the first tenant invitation for this user
         invitation = (
             db_session.query(UserTenantMapping)
