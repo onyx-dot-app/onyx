@@ -206,21 +206,26 @@ fi
 
 # --- Verify the download ---
 # The checksums file covers every asset in the release; the archive's own line
-# is the one that matters.
+# is the one that matters. Every failure here is fatal: the archive is about to
+# be executed, so an unverified one is never installed.
 verify_checksum() {
     local archive="${TMP_DIR}/${ARCHIVE_NAME}"
     local sums="${TMP_DIR}/${CHECKSUMS_NAME}"
     local expected actual
 
-    if ! download_file "${DOWNLOAD_BASE}/${CHECKSUMS_NAME}" "$sums" 2>/dev/null; then
-        print_warning "Could not download ${CHECKSUMS_NAME} — skipping checksum verification"
-        return 0
+    if ! download_file "${DOWNLOAD_BASE}/${CHECKSUMS_NAME}" "$sums"; then
+        print_error "Failed to download ${CHECKSUMS_NAME}"
+        echo "  The downloaded binary cannot be verified, so it will not be installed." >&2
+        echo "  Check your internet connection and try again." >&2
+        return 1
     fi
 
     expected="$(awk -v name="$ARCHIVE_NAME" '$2 == name { print $1; exit }' "$sums")"
     if [[ -z "$expected" ]]; then
-        print_warning "No checksum listed for ${ARCHIVE_NAME} — skipping verification"
-        return 0
+        print_error "No checksum listed for ${ARCHIVE_NAME} in ${CHECKSUMS_NAME}"
+        echo "  The downloaded binary cannot be verified, so it will not be installed." >&2
+        echo "  Please report this at ${RELEASES_URL%/releases}/issues" >&2
+        return 1
     fi
 
     if command -v sha256sum &> /dev/null; then
@@ -230,8 +235,10 @@ verify_checksum() {
     elif command -v openssl &> /dev/null; then
         actual="$(openssl dgst -sha256 "$archive" | awk '{print $NF}')"
     else
-        print_warning "No sha256 tool found — skipping checksum verification"
-        return 0
+        print_error "No sha256 tool found (sha256sum, shasum, or openssl)"
+        echo "  The downloaded binary cannot be verified, so it will not be installed." >&2
+        echo "  Install one of those tools and try again." >&2
+        return 1
     fi
 
     if [[ "$actual" != "$expected" ]]; then
