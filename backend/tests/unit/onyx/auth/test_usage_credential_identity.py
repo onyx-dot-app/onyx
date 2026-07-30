@@ -8,10 +8,13 @@ from onyx.db.enums import PatType
 from onyx.db.models import User
 from onyx.db.pat import PatAuthResult
 from shared_configs.contextvars import UsageCredentialIdentity
+from shared_configs.enums import UsageCredentialType
 
 
-def _bare_request() -> Request:
-    return Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+def _bare_request(headers: list[tuple[bytes, bytes]] | None = None) -> Request:
+    return Request(
+        {"type": "http", "method": "GET", "path": "/", "headers": headers or []}
+    )
 
 
 async def _no_oauth_refresh(*_: Any, **__: Any) -> None:
@@ -39,7 +42,9 @@ async def test_cookie_session_user_is_session_credential() -> None:
     user = cast(User, object())
 
     assert await _resolve(request, user) is user
-    assert request.state.usage_credential == UsageCredentialIdentity("session")
+    assert request.state.usage_credential == UsageCredentialIdentity(
+        UsageCredentialType.SESSION
+    )
 
 
 @pytest.mark.asyncio
@@ -52,13 +57,16 @@ async def test_unauthenticated_request_has_no_credential() -> None:
 
 @pytest.mark.parametrize(
     "pat_type, expected_credential_type",
-    [(PatType.USER, "pat"), (PatType.CRAFT, "craft_pat")],
+    [
+        (PatType.USER, UsageCredentialType.PAT),
+        (PatType.CRAFT, UsageCredentialType.CRAFT_PAT),
+    ],
 )
 @pytest.mark.asyncio
 async def test_pat_type_selects_credential_type(
     monkeypatch: pytest.MonkeyPatch,
     pat_type: PatType,
-    expected_credential_type: str,
+    expected_credential_type: UsageCredentialType,
 ) -> None:
     pat_user = cast(User, object())
     pat = PatAuthResult(
@@ -87,13 +95,22 @@ async def test_pat_type_selects_credential_type(
 async def test_external_jwt_user_is_jwt_credential(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Exercises the real _check_for_saml_and_jwt, since that is what stamps the
+    credential — stubbing it out would test nothing."""
     jwt_user = cast(User, object())
 
-    async def fake_check(*_: Any, **__: Any) -> User:
+    async def fake_verify(_: str) -> dict[str, str]:
+        return {"sub": "someone"}
+
+    async def fake_get_or_create(*_: Any, **__: Any) -> User:
         return jwt_user
 
-    monkeypatch.setattr(users, "_check_for_saml_and_jwt", fake_check)
-    request = _bare_request()
+    monkeypatch.setattr(users, "JWT_PUBLIC_KEY_URL", "https://idp.example/jwks")
+    monkeypatch.setattr(users, "verify_jwt_token", fake_verify)
+    monkeypatch.setattr(users, "_get_or_create_user_from_jwt", fake_get_or_create)
+    request = _bare_request([(b"authorization", b"Bearer some-token")])
 
     assert await _resolve(request, None) is jwt_user
-    assert request.state.usage_credential == UsageCredentialIdentity("jwt")
+    assert request.state.usage_credential == UsageCredentialIdentity(
+        UsageCredentialType.JWT
+    )

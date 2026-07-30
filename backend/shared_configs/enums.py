@@ -40,3 +40,17 @@ class WebContentProviderType(str, Enum):
 class TracingProviderType(str, Enum):
     BRAINTRUST = "braintrust"
     LANGFUSE = "langfuse"
+
+
+class UsageCredentialType(str, Enum):
+    """The kind of credential that authenticated a request.
+
+    CRAFT_PAT is split from PAT because Craft sandbox tokens are agent-driven
+    yet carry the owning human's user_id.
+    """
+
+    SESSION = "session"
+    JWT = "jwt"
+    PAT = "pat"
+    CRAFT_PAT = "craft_pat"
+    API_KEY = "api_key"

@@ -173,6 +173,7 @@ from shared_configs.contextvars import (
     UsageCredentialIdentity,
     get_current_tenant_id,
 )
+from shared_configs.enums import UsageCredentialType
 
 logger = setup_logger()
 
@@ -1945,6 +1946,10 @@ async def _check_for_saml_and_jwt(
                 user = await _get_or_create_user_from_jwt(
                     payload, request, async_db_session
                 )
+                if user is not None:
+                    request.state.usage_credential = UsageCredentialIdentity(
+                        UsageCredentialType.JWT
+                    )
 
     return user
 
@@ -2015,15 +2020,16 @@ async def _resolve_optional_user(
     user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
     # A cookie-session user (password / OAuth / SAML) is already resolved here;
-    # anything else is credential-less until one of the branches below claims it.
-    had_session_user = user is not None
-    if had_session_user:
-        request.state.usage_credential = UsageCredentialIdentity("session")
+    # anything else is credential-less until whichever branch authenticates it
+    # claims it. Each branch stamps its own type, so no caller has to infer the
+    # mechanism from the absence of another one.
+    if user is not None:
+        request.state.usage_credential = UsageCredentialIdentity(
+            UsageCredentialType.SESSION
+        )
 
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
-        if not had_session_user:
-            request.state.usage_credential = UsageCredentialIdentity("jwt")
         await _maybe_refresh_oauth_tokens(user, async_db_session, user_manager)
         return user
 
@@ -2035,11 +2041,12 @@ async def _resolve_optional_user(
                 # Expose the token's scopes so require_permission can cap the
                 # request to them.
                 request.state.token_scopes = pat.scopes
-                # Craft sandbox tokens are agent-driven and carry the owning
-                # human's user_id, so they need their own credential type to
-                # stay separable from interactive PAT usage.
                 request.state.usage_credential = UsageCredentialIdentity(
-                    "craft_pat" if pat.pat_type == PatType.CRAFT else "pat",
+                    (
+                        UsageCredentialType.CRAFT_PAT
+                        if pat.pat_type == PatType.CRAFT
+                        else UsageCredentialType.PAT
+                    ),
                     str(pat.pat_id),
                     pat.pat_name,
                     pat.pat_display,
@@ -2049,7 +2056,7 @@ async def _resolve_optional_user(
             if api_key is not None:
                 user = api_key.user
                 request.state.usage_credential = UsageCredentialIdentity(
-                    "api_key",
+                    UsageCredentialType.API_KEY,
                     str(api_key.api_key_id),
                     api_key.api_key_name,
                     api_key.api_key_display,
