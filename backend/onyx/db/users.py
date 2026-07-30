@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import Select, case, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, lazyload, selectinload
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
 from sqlalchemy.sql.expression import or_
@@ -347,7 +347,9 @@ def fetch_user_by_id(
         User.id == user_id  # ty: ignore[invalid-argument-type]
     )
     if for_update:
-        query = query.with_for_update()
+        # oauth_accounts is lazy="joined"; Postgres forbids FOR UPDATE on the
+        # nullable side of an outer join, so defer it when locking.
+        query = query.options(lazyload(User.oauth_accounts)).with_for_update()
     return query.first()
 
 

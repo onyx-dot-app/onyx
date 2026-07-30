@@ -499,6 +499,7 @@ def reconcile_sandbox(
     sandbox_id = reservation.sandbox_id
     tenant_id = reservation.tenant_id
     generation = reservation.generation
+    onyx_pat = reservation.onyx_pat
     outcome = (
         (
             SandboxReadyOutcome.REVIVED
@@ -522,10 +523,9 @@ def reconcile_sandbox(
             "Sandbox %s marked RUNNING but pod is unhealthy/missing; recovering.",
             sandbox_id,
         )
-        snapshot_opencode_history_before_recovery(
-            sandbox_manager, sandbox_id, tenant_id
-        )
-        sandbox_manager.terminate(sandbox_id)
+        # Claim the recovery generation BEFORE any destructive external work:
+        # a racing recoverer that loses this CAS must never terminate a
+        # runtime the winner is already rebuilding.
         new_generation = begin_recovery_attempt_cas__no_commit(
             db_session, sandbox_id, generation
         )
@@ -540,6 +540,27 @@ def reconcile_sandbox(
         generation = new_generation
         outcome = SandboxReadyOutcome.RECOVERED
 
+        try:
+            # A RUNNING reservation skips the PAT read; the re-provision below
+            # requires one.
+            sandbox = get_sandbox_by_id(db_session, sandbox_id)
+            if sandbox is None:
+                raise RuntimeError(f"Sandbox {sandbox_id} disappeared during recovery")
+            with time_provision_phase(SandboxProvisionPhase.ENSURE_PAT):
+                onyx_pat = ensure_sandbox_pat(db_session, sandbox, user)
+            db_session.commit()
+
+            snapshot_opencode_history_before_recovery(
+                sandbox_manager, sandbox_id, tenant_id
+            )
+            sandbox_manager.terminate(sandbox_id)
+        except Exception as e:
+            db_session.rollback()
+            _record_provisioning_failure(db_session, sandbox_id, generation, e)
+            raise SandboxProvisioningError(
+                f"Sandbox {sandbox_id} recovery failed: {e}"
+            ) from e
+
     # External provisioning against the committed identity. provision()
     # returns only once the sandbox is RUNNING; anything else raises.
     try:
@@ -548,7 +569,7 @@ def reconcile_sandbox(
                 sandbox_id=sandbox_id,
                 user_id=user.id,
                 tenant_id=tenant_id,
-                onyx_pat=reservation.onyx_pat,
+                onyx_pat=onyx_pat,
                 provisioning_generation=generation,
             )
     except Exception as e:
@@ -558,24 +579,35 @@ def reconcile_sandbox(
         ) from e
 
     # Managed content must land before the row reports RUNNING (turns
-    # dispatch the moment RUNNING is visible).
-    payload = build_managed_content_payload(user, db_session)
-    db_session.commit()
-    skills_hydrated = push_managed_content(sandbox_manager, sandbox_id, payload)
+    # dispatch the moment RUNNING is visible). Any failure here must still
+    # finalize the attempt as FAILED — the row cannot be left PROVISIONING
+    # until the stale-attempt threshold.
+    try:
+        payload = build_managed_content_payload(user, db_session)
+        db_session.commit()
+        skills_hydrated = push_managed_content(sandbox_manager, sandbox_id, payload)
 
-    finalized = finalize_provisioning_attempt__no_commit(
-        db_session, sandbox_id, generation, SandboxStatus.RUNNING
-    )
-    if not finalized:
-        db_session.rollback()
-        raise StaleProvisioningAttemptError(
-            f"Sandbox {sandbox_id} generation {generation} was superseded "
-            f"before finalization"
+        finalized = finalize_provisioning_attempt__no_commit(
+            db_session, sandbox_id, generation, SandboxStatus.RUNNING
         )
-    record_managed_content_hashes__no_commit(
-        db_session, sandbox_id, payload, skills_hydrated
-    )
-    db_session.commit()
+        if not finalized:
+            db_session.rollback()
+            raise StaleProvisioningAttemptError(
+                f"Sandbox {sandbox_id} generation {generation} was superseded "
+                f"before finalization"
+            )
+        record_managed_content_hashes__no_commit(
+            db_session, sandbox_id, payload, skills_hydrated
+        )
+        db_session.commit()
+    except StaleProvisioningAttemptError:
+        raise
+    except Exception as e:
+        db_session.rollback()
+        _record_provisioning_failure(db_session, sandbox_id, generation, e)
+        raise SandboxProvisioningError(
+            f"Sandbox {sandbox_id} provisioning failed: {e}"
+        ) from e
 
     return _get_sandbox_committed(db_session, sandbox_id), outcome
 

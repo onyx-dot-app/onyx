@@ -485,10 +485,10 @@ def restore_session(
 
     except SandboxProvisioningInProgressError as e:
         db_session.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=f"Sandbox is being provisioned by another request: {e}",
-        )
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"Sandbox is being provisioned by another request: {e}",
+        ) from e
     except OnyxError:
         db_session.rollback()
         raise

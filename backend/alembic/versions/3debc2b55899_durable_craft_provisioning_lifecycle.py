@@ -32,15 +32,17 @@ def upgrade() -> None:
     )
 
     # Port allocation previously had no uniqueness guarantee, so concurrent
-    # creates could have reserved the same port. Keep the newest reservation
-    # per port; ports are re-allocated on restore, so nulling is safe.
+    # creates could have reserved the same port. Keep the oldest reservation
+    # per port (within a shared pod its dev server won the bind; later
+    # duplicates never served). A cleared session gets a fresh port on its
+    # next sleep/restore cycle.
     op.execute(
         """
         UPDATE build_session SET nextjs_port = NULL
         WHERE id IN (
             SELECT id FROM (
                 SELECT id, ROW_NUMBER() OVER (
-                    PARTITION BY nextjs_port ORDER BY created_at DESC
+                    PARTITION BY nextjs_port ORDER BY created_at ASC
                 ) AS rn
                 FROM build_session
                 WHERE nextjs_port IS NOT NULL

@@ -1495,11 +1495,13 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       let sessionData = await fetchSession(sessionId);
 
       // Check if session needs to be restored:
-      // - Sandbox is sleeping or terminated
+      // - Sandbox is sleeping, terminated, or failed (the backend treats
+      //   failed as reprovisionable — restore retries the attempt)
       // - Sandbox is running but session workspace is not loaded
       const needsRestore =
         sessionData.sandbox?.status === "sleeping" ||
         sessionData.sandbox?.status === "terminated" ||
+        sessionData.sandbox?.status === "failed" ||
         (sessionData.sandbox?.status === "running" &&
           !sessionData.session_loaded_in_sandbox);
 
