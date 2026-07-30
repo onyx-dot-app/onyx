@@ -66,6 +66,28 @@ export interface MCPAuthFormValues {
   custom_headers: KeyValue[];
 }
 
+// Blocking validation for the custom-header rows, derived from form values so
+// submission stays gated even while the (Radix-unmounted) collapsed editor
+// isn't rendering its own inline errors. Mirrors InputKeyValue's row checks;
+// fully-empty rows are scaffolding and are dropped at submit instead.
+function computeCustomHeadersError(rows: KeyValue[]): string | null {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const key = row.key.trim();
+    if (!key) {
+      if (row.value.trim() !== "") {
+        return "Every custom header with a value needs a name.";
+      }
+      continue;
+    }
+    if (seen.has(key)) {
+      return `Duplicate custom header name: ${key}`;
+    }
+    seen.add(key);
+  }
+  return null;
+}
+
 const GOOGLE_AUTHORIZATION_ENDPOINT_HINT =
   "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_ENDPOINT_HINT = "https://oauth2.googleapis.com/token";
@@ -549,6 +571,10 @@ export default function MCPAuthenticationModal({
               }
             }, [mcpServer?.server_url, setFieldValue]);
 
+            const customHeadersError = computeCustomHeadersError(
+              values.custom_headers || []
+            );
+
             return (
               <Form className="flex flex-col h-full">
                 <Modal.Body>
@@ -998,7 +1024,7 @@ export default function MCPAuthenticationModal({
                   <div className="flex flex-col gap-4 p-2">
                     <Divider paddingPerpendicular="fit" />
                     <SimpleCollapsible
-                      open={customHeadersOpen}
+                      open={customHeadersOpen || !!customHeadersError}
                       onOpenChange={setCustomHeadersOpen}
                     >
                       <SimpleCollapsible.Header
@@ -1007,7 +1033,10 @@ export default function MCPAuthenticationModal({
                       />
                       <SimpleCollapsible.Content>
                         <Section alignItems="stretch" height="auto">
-                          <FormField name="custom_headers" state="idle">
+                          <FormField
+                            name="custom_headers"
+                            state={customHeadersError ? "error" : "idle"}
+                          >
                             <FormField.Control asChild>
                               <InputKeyValue
                                 keyTitle="Header Name"
@@ -1021,6 +1050,11 @@ export default function MCPAuthenticationModal({
                                 addButtonLabel="Add Header"
                               />
                             </FormField.Control>
+                            <FormField.Message
+                              messages={{
+                                error: customHeadersError ?? undefined,
+                              }}
+                            />
                             <FormField.Description>
                               Sent for every user alongside the authentication
                               headers, which always take precedence — the{" "}
@@ -1050,7 +1084,7 @@ export default function MCPAuthenticationModal({
                     Cancel
                   </Button>
                   <Button
-                    disabled={!isValid || isSubmitting}
+                    disabled={!isValid || isSubmitting || !!customHeadersError}
                     type="submit"
                     data-testid="mcp-auth-connect-button"
                   >
