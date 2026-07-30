@@ -44,6 +44,10 @@ jest.mock("@/lib/languageModels/costOverrides", () => ({
   upsertCostOverride: (...args: unknown[]) => mockUpsertCostOverride(...args),
 }));
 
+jest.mock("@/lib/languageModels/hooks", () => ({
+  useAdminLLMProviders: () => ({ llmProviders: [] }),
+}));
+
 jest.mock("@/sections/model-selector/ModelSelector", () => ({
   __esModule: true,
   default: ({

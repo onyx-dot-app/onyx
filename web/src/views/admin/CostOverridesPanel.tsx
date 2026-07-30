@@ -17,6 +17,7 @@ import { markdown } from "@opal/utils";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { getProvider } from "@/lib/languageModels";
 import { LLMOption } from "@/lib/languageModels/options";
+import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
   CostOverride,
@@ -58,6 +59,7 @@ interface OverrideFormProps {
 
 function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const { mutate } = useSWRConfig();
+  const { llmProviders } = useAdminLLMProviders();
   const [model, setModel] = useState(existing?.model ?? "");
   const [provider, setProvider] = useState(existing?.provider ?? "");
   const [inputRate, setInputRate] = useState(
@@ -134,6 +136,8 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
           ) : (
             <ModelSelector
               value={modelConfigId}
+              providerOptions={llmProviders ?? []}
+              includeHiddenModels
               onChange={(opt: LLMOption) => {
                 setModel(opt.modelName);
                 setProvider(opt.provider);
