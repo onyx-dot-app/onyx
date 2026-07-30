@@ -10,7 +10,7 @@ import {
 import Title from "@/components/ui/title";
 import { DeleteButton } from "@/components/DeleteButton";
 import { deleteTokenRateLimit, updateTokenRateLimit } from "./lib";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader, toast } from "@opal/layouts";
 import { TokenRateLimitDisplay } from "./types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
@@ -21,16 +21,12 @@ import { Spacer } from "@opal/components";
 
 const HOURS_PER_DAY = 24;
 const UTC_DAY_LABEL = "UTC day";
-const HOUR_LABEL = "hour";
-const COST_ONLY_LABEL = "Cost only";
+const UPDATE_ERROR_MESSAGE = "Failed to update token rate limit";
+const DELETE_ERROR_MESSAGE = "Failed to delete token rate limit";
 
-function formatPeriod(tokenRateLimit: TokenRateLimitDisplay): string {
-  const isTokenBudget = tokenRateLimit.token_budget !== null;
-  const value = isTokenBudget
-    ? tokenRateLimit.period_hours / HOURS_PER_DAY
-    : tokenRateLimit.period_hours;
-  const unit = isTokenBudget ? UTC_DAY_LABEL : HOUR_LABEL;
-  return `${value} ${unit}${value === 1 ? "" : "s"}`;
+export function formatPeriod(tokenRateLimit: TokenRateLimitDisplay): string {
+  const days = tokenRateLimit.period_hours / HOURS_PER_DAY;
+  return `${days} ${UTC_DAY_LABEL}${days === 1 ? "" : "s"}`;
 }
 
 type TokenRateLimitTableArgs = {
@@ -55,7 +51,7 @@ export const TokenRateLimitTable = ({
     tokenRateLimits[0] !== undefined &&
     tokenRateLimits[0].group_name !== undefined;
 
-  const handleEnabledChange = (id: number) => {
+  const handleEnabledChange = async (id: number) => {
     const tokenRateLimit = tokenRateLimits.find(
       (tokenRateLimit) => tokenRateLimit.token_id === id
     );
@@ -64,19 +60,31 @@ export const TokenRateLimitTable = ({
       return;
     }
 
-    updateTokenRateLimit(id, {
-      token_budget: tokenRateLimit.token_budget,
-      period_hours: tokenRateLimit.period_hours,
-      enabled: !tokenRateLimit.enabled,
-    }).then(() => {
-      mutate(fetchUrl);
-    });
+    try {
+      await updateTokenRateLimit(id, {
+        token_budget: tokenRateLimit.token_budget,
+        period_hours: tokenRateLimit.period_hours,
+        cost_budget_cents: tokenRateLimit.cost_budget_cents,
+        enabled: !tokenRateLimit.enabled,
+      });
+      await mutate(fetchUrl);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : UPDATE_ERROR_MESSAGE
+      );
+    }
   };
 
-  const handleDelete = (id: number) =>
-    deleteTokenRateLimit(id).then(() => {
-      mutate(fetchUrl);
-    });
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteTokenRateLimit(id);
+      await mutate(fetchUrl);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : DELETE_ERROR_MESSAGE
+      );
+    }
+  };
 
   if (tokenRateLimits.length === 0) {
     return (
@@ -116,7 +124,8 @@ export const TokenRateLimitTable = ({
             <TableHead>Enabled</TableHead>
             {shouldRenderGroupName() && <TableHead>Group Name</TableHead>}
             <TableHead>Time Window</TableHead>
-            <TableHead>Token Budget (Thousands)</TableHead>
+            <TableHead>Token Budget</TableHead>
+            <TableHead>Cost Budget (USD)</TableHead>
             {isAdmin && <TableHead>Delete</TableHead>}
           </TableRow>
         </TableHeader>
@@ -162,9 +171,15 @@ export const TokenRateLimitTable = ({
                 )}
                 <TableCell>{formatPeriod(tokenRateLimit)}</TableCell>
                 <TableCell>
-                  {tokenRateLimit.token_budget === null
-                    ? COST_ONLY_LABEL
-                    : `${tokenRateLimit.token_budget} thousand tokens`}
+                  {tokenRateLimit.token_budget != null
+                    ? (tokenRateLimit.token_budget * 1000).toLocaleString() +
+                      " tokens"
+                    : "—"}
+                </TableCell>
+                <TableCell>
+                  {tokenRateLimit.cost_budget_cents != null
+                    ? "$" + (tokenRateLimit.cost_budget_cents / 100).toFixed(2)
+                    : "—"}
                 </TableCell>
                 {isAdmin && (
                   <TableCell>
