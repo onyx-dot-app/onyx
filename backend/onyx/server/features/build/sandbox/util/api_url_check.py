@@ -13,11 +13,10 @@ import httpx
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.timeouts import CONNECT_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-_PROBE_TIMEOUT_SECONDS = 5.0
 
 _validated = False
 _validated_lock = threading.Lock()
@@ -28,7 +27,7 @@ def _probe_health(base_url: str) -> httpx.Response | None:
     try:
         return httpx.get(
             f"{base_url}/health",
-            timeout=_PROBE_TIMEOUT_SECONDS,
+            timeout=CONNECT_TIMEOUT_SECONDS,
             follow_redirects=True,
         )
     except httpx.HTTPError:

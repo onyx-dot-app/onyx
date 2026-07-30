@@ -21,6 +21,7 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.interactive_turns.executor import (
     start_interactive_turn_runner,
@@ -33,15 +34,17 @@ from onyx.server.features.build.interactive_turns.state import (
 )
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
+from onyx.server.features.build.timeouts import POLL_INTERVAL_SECONDS
 from onyx.utils.logger import setup_logger
 
 router = APIRouter()
 logger = setup_logger()
 
-LIVE_STREAM_READY_POLL_SECONDS = 0.25
-LIVE_STREAM_KEEPALIVE_SECONDS = 15.0
-LIVE_STREAM_RUNNER_RETRY_SECONDS = 5.0
 TERMINAL_STREAM_EVENT_TYPES = frozenset(("prompt_response", "error"))
+
+# Throttle on runner-claim retries from the attach stream; must be well under
+# RUNNER_STALE_AFTER_SECONDS so a stolen turn restarts promptly.
+LIVE_STREAM_RUNNER_RETRY_SECONDS = 5.0
 
 
 def _format_stream_error(detail: str) -> str:
@@ -194,7 +197,7 @@ def get_interactive_turn_events(
 
             yield SSE_KEEPALIVE
             maybe_start_runner()
-            time.sleep(LIVE_STREAM_READY_POLL_SECONDS)
+            time.sleep(POLL_INTERVAL_SECONDS)
 
         try:
             with get_session_with_current_tenant() as stream_db_session:
@@ -203,7 +206,7 @@ def get_interactive_turn_events(
                 for chunk in session_manager.subscribe_to_existing_session_events(
                     session_id,
                     user_id,
-                    keepalive_seconds=LIVE_STREAM_KEEPALIVE_SECONDS,
+                    keepalive_seconds=SSE_KEEPALIVE_INTERVAL,
                 ):
                     yield chunk
                     chunk_type = _stream_chunk_type(chunk)
@@ -229,8 +232,9 @@ def get_interactive_turn_events(
                         continue
                     terminal_error_detail = None
                     # Not redundant with the attach-time force start: a dead
-                    # runner's turn only becomes reclaimable 90s after its last
-                    # heartbeat; claim no-ops while the turn is healthy.
+                    # runner's turn only becomes reclaimable
+                    # RUNNER_STALE_AFTER_SECONDS after its last heartbeat;
+                    # claim no-ops while the turn is healthy.
                     maybe_start_runner()
                 if terminal_error_detail:
                     yield _format_stream_error(terminal_error_detail)

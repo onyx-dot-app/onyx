@@ -4,7 +4,10 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from onyx.db.models import ExternalApp
-from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import (
+    SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS,
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -156,7 +159,9 @@ def generate_agent_instructions(
     )
     content = content.replace(
         "{{APPROVAL_CLIENT_TIMEOUT_SECONDS}}",
-        str(SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 20),
+        str(
+            SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS
+        ),
     )
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
     content = content.replace("{{CONNECTABLE_APPS_LIST}}", connectable_apps_section)

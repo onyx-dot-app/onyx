@@ -25,6 +25,7 @@ from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.server.features.build.db.build_session import (
     allocate_nextjs_port,
     get_build_session,
@@ -75,6 +76,7 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
     rollback_failed_provisioning,
 )
 from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
+from onyx.server.features.build.timeouts import POLL_INTERVAL_SECONDS
 from onyx.server.features.build.utils import sanitize_filename, validate_file
 from onyx.skills.push import build_user_skills_payload
 from onyx.utils.logger import setup_logger
@@ -1026,10 +1028,6 @@ def get_session_scheduled_run_context(
     )
 
 
-LIVE_STREAM_READY_POLL_SECONDS = 1.0
-LIVE_STREAM_KEEPALIVE_SECONDS = 15.0
-
-
 def _scheduled_run_is_running(
     *,
     db_session: Session,
@@ -1094,7 +1092,7 @@ def get_session_scheduled_run_events(
                     break
 
             yield SSE_KEEPALIVE
-            time.sleep(LIVE_STREAM_READY_POLL_SECONDS)
+            time.sleep(POLL_INTERVAL_SECONDS)
 
         try:
             with get_session_with_current_tenant() as stream_db_session:
@@ -1102,7 +1100,7 @@ def get_session_scheduled_run_events(
                 for chunk in session_manager.subscribe_to_existing_session_events(
                     session_id,
                     user_id,
-                    keepalive_seconds=LIVE_STREAM_KEEPALIVE_SECONDS,
+                    keepalive_seconds=SSE_KEEPALIVE_INTERVAL,
                 ):
                     yield chunk
                     stream_db_session.expire_all()

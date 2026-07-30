@@ -25,6 +25,11 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     FilesystemListResponse,
 )
 from onyx.server.features.build.sandbox.models import FilesystemEntry
+from onyx.server.features.build.timeouts import (
+    BULK_TRANSFER_TIMEOUT_SECONDS,
+    CONNECT_TIMEOUT_SECONDS,
+    RPC_TIMEOUT_SECONDS,
+)
 
 _SIDECAR_CHUNK_SIZE = 8 * 1024 * 1024
 
@@ -130,7 +135,7 @@ class SidecarClient:
         sandbox_id: UUID,
         session_id: UUID,
         path: str,
-        timeout_seconds: float = 30.0,
+        timeout_seconds: float = RPC_TIMEOUT_SECONDS,
     ) -> list[FilesystemEntry]:
         payload = FilesystemListRequest(session_id=session_id, path=path)
         body = payload.model_dump_json().encode()
@@ -222,7 +227,7 @@ class SidecarClient:
         archive_file: IO[bytes],
         sha256_hex: str,
         operation_label: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,
     ) -> None:
         def body() -> Iterator[bytes]:
             archive_file.seek(0)
@@ -248,7 +253,7 @@ class SidecarClient:
         sandbox_id: UUID,
         endpoint_path: str,
         operation_label: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,
     ) -> None:
         body = b""
         self._post(
@@ -350,7 +355,7 @@ class SidecarClient:
     def _timeout_for_post(remaining_seconds: float) -> httpx.Timeout:
         return httpx.Timeout(
             remaining_seconds,
-            connect=min(5.0, remaining_seconds),
+            connect=min(CONNECT_TIMEOUT_SECONDS, remaining_seconds),
             read=remaining_seconds,
             write=remaining_seconds,
         )

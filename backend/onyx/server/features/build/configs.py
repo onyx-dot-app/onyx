@@ -37,6 +37,10 @@ SANDBOX_MAX_CONCURRENT_PER_ORG = int(
 SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS = int(
     os.environ.get("SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS", "180")
 )
+# Margin a client-side wait must add over the approval window so a decision
+# landing at the wire never races the client's own timeout. Shared by the
+# AGENTS.md guidance and the inactivity-backstop default below.
+SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS = 20
 SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS = int(
     os.environ.get("SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS", "60")
 )
@@ -168,17 +172,20 @@ SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0
 SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
 
 # Maximum time opencode-serve may go without emitting a turn event. Coarse
-# liveness backstop only: it must stay above opencode's own per-tool timeouts
-# (bash defaults to 180s here, webfetch 120s) so it never pre-empts a healthy
-# long-running tool — it exists to catch stalls opencode does not bound itself
-# (LLM-stream hangs, non-bash/MCP tool hangs). The turn budget is the hard ceiling.
+# liveness backstop only: it must stay above every in-tool wait so it never
+# pre-empts a healthy long-running tool — opencode's bash tool defaults to
+# 180s, and a proxy-parked approval inside a tool call holds the stream
+# silent for the full approval window, hence the derivation. It exists to
+# catch stalls opencode does not bound itself (LLM-stream hangs, non-bash/MCP
+# tool hangs). The turn budget is the hard ceiling.
 OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS = float(
-    os.environ.get("OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS", "200.0")
+    os.environ.get(
+        "OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS",
+        str(
+            SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + SANDBOX_APPROVAL_WAIT_MARGIN_SECONDS
+        ),
+    )
 )
-
-# Hard ceiling for background prompt-slot renewal, so a leaked holder cannot
-# retain mutual exclusion indefinitely.
-PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS = 30 * 60.0
 
 # Prompt-slot lock lease; renewed on every sandbox event/keepalive, so a dead
 # holder strands the slot for at most this long.
@@ -203,8 +210,11 @@ OPENCODE_SERVE_CONNECT_TIMEOUT = float(
 OPENCODE_SERVE_REQUEST_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_REQUEST_TIMEOUT", "30.0")
 )
-# Idle timeout for /event SSE. The reader reconnects (with backoff) if the
-# stream is silent for this long.
+# Idle timeout for the raw /event SSE connection to opencode-serve. The
+# reader reconnects (with backoff) if no bytes arrive for this long. Its
+# floor is opencode-serve's own emission cadence on /event — NOT our
+# downstream UI keepalive, which is synthesized after the bus and never
+# reaches this connection.
 OPENCODE_SERVE_EVENT_READ_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_EVENT_READ_TIMEOUT", "60.0")
 )

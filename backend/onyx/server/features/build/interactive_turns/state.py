@@ -10,7 +10,18 @@ from uuid import UUID, uuid4
 
 from onyx.cache.interface import CacheBackend, CacheLock
 from onyx.server.features.build.sandbox.models import PromptAttachment
+from onyx.server.features.build.timeouts import (
+    ACTIVE_TURN_TTL_SECONDS,
+    REQUEST_ID_TTL_SECONDS,
+    RUNNER_STALE_AFTER_SECONDS,
+)
 from onyx.utils.datetime import datetime_to_utc
+
+# Turn-state mutex: guards a handful of Redis round-trips per mutation; the
+# lease only needs to exceed the longest critical section. Ownership is
+# decided by the runner_id compare, never by this lease.
+TURN_LOCK_LEASE_SECONDS = 60.0
+TURN_LOCK_WAIT_SECONDS = 10.0
 
 
 class InteractiveTurnStatus(StrEnum):
@@ -28,11 +39,6 @@ TURN_STATUS_FAILED = InteractiveTurnStatus.FAILED
 TURN_STATUS_CANCELLED = InteractiveTurnStatus.CANCELLED
 
 ACTIVE_TURN_STATUSES = frozenset((TURN_STATUS_QUEUED, TURN_STATUS_RUNNING))
-ACTIVE_TURN_TTL_SECONDS = 45 * 60
-REQUEST_ID_TTL_SECONDS = 60 * 60
-TURN_LOCK_LEASE_SECONDS = 60.0
-TURN_LOCK_WAIT_SECONDS = 10.0
-RUNNER_STALE_AFTER_SECONDS = 90.0
 
 
 class InteractiveTurnLockError(Exception):

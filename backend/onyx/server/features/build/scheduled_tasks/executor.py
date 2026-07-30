@@ -60,16 +60,11 @@ from onyx.server.features.build.sandbox.event_schema import (
 from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
+from onyx.server.features.build.timeouts import TURN_BUDGET_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-
-# Per-run wall-clock budget (monotonic). Tasks that blow past this are
-# marked ``failed (error_class=timeout)``. The stuck-run sweeper uses a
-# slightly larger threshold (45 min) so a hung run that fails to honor the
-# budget still gets cleaned up out-of-band.
-DEFAULT_EXECUTOR_BUDGET_SECONDS = 30 * 60
 
 # Summary length on the run row (per spec: ~120 chars of final agent
 # message).
@@ -167,7 +162,7 @@ def _notify(
 def run_scheduled_task_logic(
     run_id: UUID,
     *,
-    budget_seconds: int = DEFAULT_EXECUTOR_BUDGET_SECONDS,
+    budget_seconds: int = TURN_BUDGET_SECONDS,
 ) -> None:
     """Execute a single scheduled-task run end-to-end.
 
@@ -632,10 +627,3 @@ def _drive_agent(
             # approval gate, budget exceeded, exception). Matches the
             # interactive path's finally in _stream_cli_agent_response.
             prompt_slot_cm.__exit__(None, None, None)
-
-
-# Re-export for the Celery task wrapper.
-__all__ = [
-    "DEFAULT_EXECUTOR_BUDGET_SECONDS",
-    "run_scheduled_task_logic",
-]
