@@ -74,3 +74,22 @@ class TestNextjsStartReplaySafety:
         spawn = script.index("nohup bun run dev")
         assert pid_guard < spawn
         assert "kill -0" in script
+
+    def test_pid_guard_verifies_process_identity(self) -> None:
+        # A recycled PID belonging to an unrelated process must not read as
+        # "server already running" — the guard checks the process cwd too.
+        script = build_nextjs_start_script(_SESSION_PATH, 3010)
+        assert (
+            f'"$(readlink /proc/$NEXTJS_PID/cwd 2>/dev/null)"'
+            f' = "{_SESSION_PATH}/outputs/web"' in script
+        )
+
+    def test_check_and_spawn_is_serialized_and_server_drops_lock_fd(self) -> None:
+        # Two replays past the materialization lock (e.g. a timed-out setup
+        # still running beside its retry) must not both spawn; and the
+        # backgrounded server must close the lock fd or it would hold the
+        # lock forever.
+        script = build_nextjs_start_script(_SESSION_PATH, 3010)
+        assert f"9>{_SESSION_PATH}.nextjs.lock" in script
+        assert script.index("flock -x 9") < script.index("nohup bun run dev")
+        assert "2>&1 9>&- &" in script
