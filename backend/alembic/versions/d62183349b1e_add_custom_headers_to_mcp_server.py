@@ -1,7 +1,7 @@
 """add custom_headers to mcp_server
 
 Revision ID: d62183349b1e
-Revises: f57f35403f6c
+Revises: b3f1c9a27d84
 Create Date: 2026-07-28 14:09:39.216317
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "d62183349b1e"
-down_revision = "f57f35403f6c"
+down_revision = "b3f1c9a27d84"
 branch_labels = None
 depends_on = None
 
