@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
@@ -11,6 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -42,7 +44,8 @@ from onyx.llm.models import (
 from onyx.llm.models import FunctionCall as ToolFunctionCall
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.server.auth_check import check_router_auth
-from onyx.server.features.build.craft_gateway import is_craft_gateway_request
+from onyx.server.features.build import craft_gateway
+from onyx.server.features.build.craft_gateway import is_gateway_request
 from onyx.server.gateway import api as gateway_api
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.models import (
@@ -51,6 +54,34 @@ from onyx.server.gateway.models import (
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
+
+
+def _pat_request(token_scopes: list[Permission] | None) -> Request:
+    request = Request({"type": "http", "headers": []})
+    if token_scopes is not None:
+        request.state.token_scopes = token_scopes
+    return request
+
+
+def _route_permission_dependency(path: str) -> Callable[..., Awaitable[User]]:
+    # Pulled off the live route rather than rebuilt, so these tests follow the
+    # permission the endpoint actually enforces.
+    application = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
+    application.include_router(gateway_api.router)
+    route = cast(
+        APIRoute,
+        next(
+            route
+            for route in application.routes
+            if getattr(route, "path", None) == f"{GATEWAY_PATH_PREFIX}{path}"
+        ),
+    )
+    dependency = next(
+        dep.call
+        for dep in route.dependant.dependencies
+        if getattr(dep.call, "_is_require_permission", False)
+    )
+    return cast("Callable[..., Awaitable[User]]", dependency)
 
 
 def _model(
@@ -776,6 +807,7 @@ def test_endpoint_applies_craft_policy() -> None:
             return_value=(provider, model_config),
         ) as resolve_model,
         patch.object(gateway_api, "handle_chat_completion") as handle,
+        patch.object(gateway_api, "check_token_rate_limits"),
     ):
         handle.return_value.to_wire.return_value = {}
         gateway_api.gateway_chat_completions(
@@ -796,10 +828,45 @@ def test_endpoint_applies_craft_policy() -> None:
     )
 
 
-def test_craft_flow_is_gated_by_craft_credential_check() -> None:
+def test_endpoint_enforces_token_rate_limits_before_calling_provider() -> None:
+    request = ChatCompletionRequest(
+        model="1/test",
+        messages=[{"role": "user", "content": "hi"}],
+    )
+    db_session = cast(Session, MagicMock(spec=Session))
+    user = cast(User, MagicMock(spec=User))
+    http_request = cast(Request, MagicMock(spec=Request))
+
+    rate_limited = OnyxError(OnyxErrorCode.RATE_LIMITED, "over budget")
+    with (
+        patch.dict(
+            gateway_api._FLOW_ACCESS_CHECKS,
+            {LLMFlow.CRAFT_LLM_GENERATION: MagicMock(return_value=True)},
+        ),
+        patch.object(
+            gateway_api, "check_token_rate_limits", side_effect=rate_limited
+        ) as rate_check,
+        patch.object(gateway_api, "resolve_gateway_model") as resolve_model,
+        patch.object(gateway_api, "handle_chat_completion") as handle,
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        gateway_api.gateway_chat_completions(
+            request=request,
+            http_request=http_request,
+            user=user,
+            db_session=db_session,
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.RATE_LIMITED
+    rate_check.assert_called_once_with(user)
+    resolve_model.assert_not_called()
+    handle.assert_not_called()
+
+
+def test_craft_flow_is_gated_by_general_gateway_credential_check() -> None:
     assert (
         gateway_api._FLOW_ACCESS_CHECKS[LLMFlow.CRAFT_LLM_GENERATION]
-        is is_craft_gateway_request
+        is is_gateway_request
     )
 
 
@@ -822,3 +889,186 @@ def test_endpoint_rejects_non_gateway_credentials() -> None:
             db_session=cast(Session, MagicMock(spec=Session)),
         )
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+
+class TestGatewayAuthComposition:
+    @staticmethod
+    def _basic_user() -> User:
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+        return cast(User, user)
+
+    @staticmethod
+    def _base_dep() -> Callable[..., Awaitable[User]]:
+        return _route_permission_dependency("/v1/chat/completions")
+
+    @pytest.mark.asyncio
+    async def test_plain_gateway_scoped_pat_is_accepted(self) -> None:
+        user = self._basic_user()
+        request = _pat_request([Permission.READ_SEARCH, Permission.USE_LLM_GATEWAY])
+        base_dep = self._base_dep()
+
+        assert await base_dep(request=request, user=user) is user
+        with patch.object(
+            craft_gateway, "is_craft_enabled_for_user", return_value=False
+        ):
+            assert is_gateway_request(request, user)
+
+    @pytest.mark.asyncio
+    async def test_craft_sandbox_pat_still_works_unchanged(self) -> None:
+        user = self._basic_user()
+        request = _pat_request([Permission.CRAFT_SANDBOX])
+        base_dep = self._base_dep()
+
+        assert await base_dep(request=request, user=user) is user
+        with patch.object(
+            craft_gateway, "is_craft_enabled_for_user", return_value=True
+        ):
+            assert is_gateway_request(request, user)
+        with patch.object(
+            craft_gateway, "is_craft_enabled_for_user", return_value=False
+        ):
+            assert not is_gateway_request(request, user)
+
+    @pytest.mark.asyncio
+    async def test_unrestricted_pat_is_rejected(self) -> None:
+        """scopes=None is an unrestricted PAT, not a scope-less one."""
+        user = self._basic_user()
+        request = _pat_request(None)
+
+        assert not is_gateway_request(request, user)
+
+    @pytest.mark.asyncio
+    async def test_session_and_api_key_auth_are_rejected(self) -> None:
+        """Session auth and plain API keys never set token_scopes."""
+        user = self._basic_user()
+        request = Request({"type": "http", "headers": []})
+
+        assert not is_gateway_request(request, user)
+
+    @pytest.mark.asyncio
+    async def test_gateway_scope_alone_passes_both_gates(self) -> None:
+        user = self._basic_user()
+        request = _pat_request([Permission.USE_LLM_GATEWAY])
+        base_dep = self._base_dep()
+
+        assert await base_dep(request=request, user=user) is user
+        with patch.object(
+            craft_gateway, "is_craft_enabled_for_user", return_value=False
+        ):
+            assert is_gateway_request(request, user)
+
+    @pytest.mark.asyncio
+    async def test_read_search_scope_alone_fails_base_permission_gate(self) -> None:
+        user = self._basic_user()
+        request = _pat_request([Permission.READ_SEARCH])
+        base_dep = self._base_dep()
+
+        with pytest.raises(OnyxError) as exc_info:
+            await base_dep(request=request, user=user)
+        assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+        with patch.object(
+            craft_gateway, "is_craft_enabled_for_user", return_value=False
+        ):
+            assert not is_gateway_request(request, user)
+
+
+def _catalog_provider() -> LLMProviderView:
+    return _provider(
+        7,
+        "openai",
+        [_model("gpt-5-mini"), _model("hidden", is_visible=False)],
+    )
+
+
+def test_list_models_returns_openai_shape_excluding_hidden_models() -> None:
+    provider = _catalog_provider()
+    with (
+        patch.dict(
+            gateway_api._FLOW_ACCESS_CHECKS,
+            {LLMFlow.CRAFT_LLM_GENERATION: MagicMock(return_value=True)},
+        ),
+        patch.object(
+            gateway_api,
+            "fetch_all_accessible_llm_providers",
+            return_value=[provider],
+        ) as fetch_providers,
+    ):
+        response = gateway_api.gateway_list_models(
+            http_request=cast(Request, MagicMock(spec=Request)),
+            user=cast(User, MagicMock(spec=User)),
+            db_session=cast(Session, MagicMock(spec=Session)),
+        )
+        fetch_providers.assert_called_once()
+
+    payload = json.loads(bytes(response.body))
+    assert payload["object"] == "list"
+    assert [m["id"] for m in payload["data"]] == ["7/gpt-5-mini"]
+    assert payload["data"][0]["object"] == "model"
+    assert payload["data"][0]["owned_by"] == "openai"
+
+
+def test_list_models_ids_round_trip_through_resolve_gateway_model() -> None:
+    provider = _catalog_provider()
+    with (
+        patch.dict(
+            gateway_api._FLOW_ACCESS_CHECKS,
+            {LLMFlow.CRAFT_LLM_GENERATION: MagicMock(return_value=True)},
+        ),
+        patch.object(
+            gateway_api, "fetch_all_accessible_llm_providers", return_value=[provider]
+        ),
+    ):
+        response = gateway_api.gateway_list_models(
+            http_request=cast(Request, MagicMock(spec=Request)),
+            user=cast(User, MagicMock(spec=User)),
+            db_session=cast(Session, MagicMock(spec=Session)),
+        )
+    model_id = json.loads(bytes(response.body))["data"][0]["id"]
+
+    with patch.object(
+        gateway_api, "fetch_accessible_llm_provider_by_id", return_value=provider
+    ):
+        resolved_provider, resolved_model = gateway_api.resolve_gateway_model(
+            cast(Session, MagicMock(spec=Session)),
+            cast(User, MagicMock(spec=User)),
+            model_id,
+        )
+
+    assert resolved_provider is provider
+    assert resolved_model.name == "gpt-5-mini"
+
+
+def test_list_models_rejects_non_gateway_credentials() -> None:
+    with (
+        patch.dict(
+            gateway_api._FLOW_ACCESS_CHECKS,
+            {LLMFlow.CRAFT_LLM_GENERATION: MagicMock(return_value=False)},
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        gateway_api.gateway_list_models(
+            http_request=cast(Request, MagicMock(spec=Request)),
+            user=cast(User, MagicMock(spec=User)),
+            db_session=cast(Session, MagicMock(spec=Session)),
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+
+def test_models_route_has_single_permission_dependency() -> None:
+    application = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
+    application.include_router(gateway_api.router)
+    models_route = cast(
+        APIRoute,
+        next(
+            route
+            for route in application.routes
+            if getattr(route, "path", None) == f"{GATEWAY_PATH_PREFIX}/v1/models"
+        ),
+    )
+    auth_dependencies = [
+        dependency.call
+        for dependency in models_route.dependant.dependencies
+        if getattr(dependency.call, "_is_require_permission", False)
+    ]
+    assert len(auth_dependencies) == 1

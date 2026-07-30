@@ -12,7 +12,10 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.llm import fetch_accessible_llm_provider_by_id
+from onyx.db.llm import (
+    fetch_accessible_llm_provider_by_id,
+    fetch_all_accessible_llm_providers,
+)
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -34,14 +37,17 @@ from onyx.llm.models import (
 from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tracing_wrap import _finalize_tool_calls, _merge_tool_call_delta
-from onyx.server.features.build.craft_gateway import is_craft_gateway_request
+from onyx.server.features.build.craft_gateway import is_gateway_request
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
+from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
     ChatCompletionChunk,
     ChatCompletionRequest,
     ChatCompletionResponse,
+    ModelListResponse,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
+from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import (
     llm_generation_span,
@@ -58,7 +64,7 @@ router = APIRouter(prefix=GATEWAY_PATH_PREFIX)
 # Callers never supply the flow; the endpoint picks it and this mapping
 # enforces the matching credential.
 _FLOW_ACCESS_CHECKS: dict[LLMFlow, Callable[[Request, User], bool]] = {
-    LLMFlow.CRAFT_LLM_GENERATION: is_craft_gateway_request,
+    LLMFlow.CRAFT_LLM_GENERATION: is_gateway_request,
 }
 
 _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
@@ -147,6 +153,13 @@ def _prepare_messages(
     try:
         messages = _MESSAGES_ADAPTER.validate_python(raw_messages)
     except ValidationError as e:
+        # Shapes only: message content is user data the gateway does not persist.
+        logger.warning(
+            "LLM gateway rejected %d message(s): roles=%s errors=%s",
+            len(raw_messages),
+            [m.get("role") for m in raw_messages if isinstance(m, dict)],
+            [(tuple(err["loc"][:4]), err["type"]) for err in e.errors()[:10]],
+        )
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT, f"Invalid messages: {e.error_count()} errors"
         ) from e
@@ -444,11 +457,10 @@ def handle_chat_completion(
     return ChatCompletionResponse.from_model_response(response, request.model)
 
 
-@router.post("/v1/chat/completions")
-def gateway_chat_completions(
-    request: ChatCompletionRequest,
+@router.get("/v1/models")
+def gateway_list_models(
     http_request: Request,
-    user: User = Depends(require_permission(Permission.READ_SEARCH)),
+    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     flow = LLMFlow.CRAFT_LLM_GENERATION
@@ -457,6 +469,25 @@ def gateway_chat_completions(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This credential is not authorized to use the Onyx LLM gateway.",
         )
+    providers = fetch_all_accessible_llm_providers(db_session, user)
+    catalog = build_gateway_model_catalog(providers)
+    return JSONResponse(content=ModelListResponse.from_catalog(catalog).to_wire())
+
+
+@router.post("/v1/chat/completions")
+def gateway_chat_completions(
+    request: ChatCompletionRequest,
+    http_request: Request,
+    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    flow = LLMFlow.CRAFT_LLM_GENERATION
+    if not _FLOW_ACCESS_CHECKS[flow](http_request, user):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "This credential is not authorized to use the Onyx LLM gateway.",
+        )
+    check_token_rate_limits(user)
     provider, model_config = resolve_gateway_model(db_session, user, request.model)
     result = handle_chat_completion(
         request=request,
