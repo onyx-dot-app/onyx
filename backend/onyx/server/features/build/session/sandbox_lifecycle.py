@@ -3,6 +3,8 @@ interactive (``create_session__no_commit``) and headless
 (``ensure_sandbox_running``) flows."""
 
 import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from uuid import UUID
@@ -523,6 +525,65 @@ def list_snapshotable_session_workspaces(
     return existing_session_ids
 
 
+@contextmanager
+def _exclude_session_creation(lock: RedisLock) -> Iterator[bool]:
+    """Hold the session-creation lock for the block, yielding whether it was
+    acquired. Never blocks: a session being created into this sandbox right now
+    is a reason to skip acting on it, not to wait."""
+    acquired = lock.acquire(blocking=False)
+    try:
+        yield acquired
+    finally:
+        if acquired and lock.owned():
+            lock.release()
+
+
+@contextmanager
+def sandbox_mutation_window(
+    db_session: DBSession,
+    sandbox: Sandbox,
+    session_creation_lock: RedisLock,
+    *,
+    still_eligible: Callable[[], bool],
+) -> Iterator[bool]:
+    """The exclusive window in which a live sandbox may be mutated, yielding
+    whether the caller may proceed.
+
+    Anything that disturbs a running sandbox shares three preconditions, and
+    all three must hold *now* rather than when the caller decided to act —
+    deciding and acting can be minutes apart when snapshots are involved:
+
+    - no session is being created into the sandbox (its lock is held for the
+      whole block, so none can start either);
+    - the row still says RUNNING, so a concurrent recovery or reap has not
+      already moved it;
+    - the caller's own reason for acting still applies.
+
+    ``still_eligible`` is evaluated inside the window and owns its own logging:
+    only the caller knows what it was waiting for.
+    """
+    with _exclude_session_creation(session_creation_lock) as excluded:
+        if not excluded:
+            logger.info(
+                "Sandbox %s has a session creation in progress; skipping",
+                sandbox.id,
+            )
+            yield False
+            return
+
+        db_session.refresh(sandbox)
+        if sandbox.status != SandboxStatus.RUNNING:
+            logger.info(
+                "Sandbox %s is %s rather than RUNNING; skipping",
+                sandbox.id,
+                sandbox.status.value,
+            )
+            yield False
+            return
+
+        yield still_eligible()
+
+
 def sleep_sandbox(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
@@ -564,22 +625,19 @@ def sleep_sandbox(
                 e,
             )
 
-    if not session_creation_lock.acquire(blocking=False):
-        logger.info(
-            "Skipping idle sandbox %s while a session is being created",
-            sandbox_id,
-        )
-        return
-    try:
+    with _exclude_session_creation(session_creation_lock) as excluded:
+        if not excluded:
+            logger.info(
+                "Skipping idle sandbox %s while a session is being created",
+                sandbox_id,
+            )
+            return
         session_ids = list_snapshotable_session_workspaces(
             db_session,
             sandbox_manager,
             sandbox,
             session_creation_lock,
         )
-    finally:
-        if session_creation_lock.owned():
-            session_creation_lock.release()
 
     snapshot_failed = False
     for session_id in session_ids:
@@ -633,15 +691,9 @@ def sleep_sandbox(
             sandbox_id,
         )
 
-    # Do not block session creation during snapshots. Reacquire its lock before
-    # the final check so a workspace cannot appear between the rescan and kill.
-    if not session_creation_lock.acquire(blocking=False):
-        logger.info(
-            "Sandbox %s has a session creation in progress; skipping reap",
-            sandbox_id,
-        )
-        return
-    try:
+    def still_reapable() -> bool:
+        """Snapshotting above does not hold the lock, so a workspace can appear
+        while it runs and the user can come back at any point."""
         if not pod_unreachable:
             current_session_ids = list_snapshotable_session_workspaces(
                 db_session,
@@ -657,15 +709,20 @@ def sleep_sandbox(
                     sandbox_id,
                     len(new_session_ids),
                 )
-                return
+                return False
 
-        # Snapshotting above can take minutes; re-check idleness right before
-        # the kill.
-        db_session.refresh(sandbox)
-        if sandbox.status != SandboxStatus.RUNNING or not is_sandbox_idle(
-            sandbox, datetime.now(timezone.utc)
-        ):
+        if not is_sandbox_idle(sandbox, datetime.now(timezone.utc)):
             logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
+            return False
+        return True
+
+    with sandbox_mutation_window(
+        db_session,
+        sandbox,
+        session_creation_lock,
+        still_eligible=still_reapable,
+    ) as may_reap:
+        if not may_reap:
             return
 
         # Terminate the pod (but keep the sandbox record).
@@ -683,9 +740,6 @@ def sleep_sandbox(
         update_sandbox_status__no_commit(db_session, sandbox_id, SandboxStatus.SLEEPING)
         db_session.commit()
         logger.info("Sandbox %s is now sleeping", sandbox_id)
-    finally:
-        if session_creation_lock.owned():
-            session_creation_lock.release()
 
 
 def mark_sandbox_provisioning(db_session: DBSession, sandbox: Sandbox) -> None:
