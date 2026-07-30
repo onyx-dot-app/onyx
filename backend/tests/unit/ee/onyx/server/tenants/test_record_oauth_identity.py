@@ -234,6 +234,36 @@ def test_accept_invite_leaves_a_former_holders_links_alone() -> None:
     assert stranger_mapping.active is False
 
 
+def test_accept_invite_activates_the_row_for_the_accepted_address() -> None:
+    """A tenant can hold several rows for one user, keyed by different addresses.
+    The invitation belongs to the address being accepted, so selecting on the
+    tenant alone would activate whichever row the query happened to return."""
+    stale_same_tenant = SimpleNamespace(
+        email="old@example.com", tenant_id="tenant_new", active=False
+    )
+    invitation = SimpleNamespace(
+        email="new@example.com", tenant_id="tenant_new", active=False
+    )
+    with (
+        patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
+        patch(f"{_MAPPING_MODULE}.get_invited_users", return_value=[]),
+    ):
+        db_session = session_ctx.return_value.__enter__.return_value
+        mapping_query = MagicMock()
+        # The stale row sorts first, which is what the tenant-only predicate hit.
+        mapping_query.filter.return_value.with_for_update.return_value.all.return_value = [
+            stale_same_tenant,
+            invitation,
+        ]
+        db_session.query.side_effect = [mapping_query]
+        db_session.execute.return_value.all.return_value = []
+
+        accept_user_invite("new@example.com", "tenant_new", [("google", "sub-123")])
+
+    assert invitation.active is True
+    assert stale_same_tenant.active is False
+
+
 def test_accept_invite_links_subjects_that_were_never_linked() -> None:
     """A user can accept before their first OAuth login links anything, so
     acceptance itself must create the missing links on the destination."""

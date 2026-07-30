@@ -1,3 +1,10 @@
+"""Membership routing for the shared `public.user_tenant_mapping` catalog.
+
+"Subject" throughout this module means the OAuth subject: the provider-issued
+identifier for an account, which survives the user renaming their email address
+at that provider. It is the `(oauth_name, account_id)` pair.
+"""
+
 from collections.abc import Sequence
 
 from fastapi_users import exceptions
@@ -139,10 +146,11 @@ def get_tenant_id_for_oauth_account(oauth_name: str, account_id: str) -> str | N
 def get_superseded_tenant_id_for_oauth_account(
     oauth_name: str, account_id: str
 ) -> str | None:
-    """Workspace of a membership whose address was taken over by someone else.
+    """Workspace of a membership that yielded the email address it was filed under.
 
-    Leaving a workspace deletes the mapping, so an inactive linked row is a
-    standing membership that had to yield the address it was filed under.
+    Leaving a workspace deletes the mapping, so an inactive linked row is still a
+    real membership. It yields when its owner joins another workspace under the
+    same address, or when a different person takes that address over.
     """
     if not MULTI_TENANT:
         return None
@@ -374,15 +382,15 @@ def approve_user_invite(email: str, tenant_id: str) -> None:
             ),
             None,
         )
-        # Approving by address proves nothing about identity, since the address
-        # may have been reassigned. Rival rows are deactivated rather than
+        # Approving by email address proves nothing about identity, since that
+        # address may have been reassigned. Rival rows are deactivated rather than
         # deleted so their owner's subject links are not cascaded away.
         for mapping in existing_mappings:
             if mapping is not destination:
                 mapping.active = False
 
-        # uq_user_active_email_idx is immediate, so free the address before
-        # this tenant's row becomes active.
+        # uq_user_active_email_idx is immediate, so free the email address
+        # before this tenant's row becomes active.
         db_session.flush()
         if destination is None:
             # A fresh mapping starts unlinked: subjects attach on the next login.
@@ -442,7 +450,9 @@ def accept_user_invite(
                 (
                     candidate
                     for candidate in mappings
-                    if candidate.tenant_id == tenant_id and not candidate.active
+                    if candidate.email == email
+                    and candidate.tenant_id == tenant_id
+                    and not candidate.active
                 ),
                 None,
             )
@@ -469,8 +479,9 @@ def accept_user_invite(
                     (oauth_name, account_id)
                     for oauth_name, account_id, _, _ in presented_links
                 }
-                # An address-matched row can be a former holder's, so only rows
-                # a presented subject links to are provably this identity's.
+                # Rows this login's OAuth subjects are already linked to. Matching
+                # on the email address alone would also catch rows belonging to
+                # whoever held that address before this user.
                 owned_mapping_keys = {
                     (owner_email, owner_tenant_id)
                     for _, _, owner_email, owner_tenant_id in presented_links
@@ -506,21 +517,23 @@ def accept_user_invite(
                         if (oauth_name, account_id) not in linked_identities
                     ]
                 )
+                # Every subject presented today that was not already linked now
+                # links to the destination row.
                 db_session.flush()
 
                 for candidate in mappings:
                     if candidate is mapping or not candidate.active:
                         continue
-                    # One active row per address, so a rival yields. Rows this
-                    # identity does not own only deactivate: their subject links
-                    # belong to whoever held the address before.
+                    # One active row per email address, so a rival yields. A row
+                    # this user does not own is only deactivated, because its
+                    # OAuth subject links belong to that address's previous holder.
                     if (candidate.email, candidate.tenant_id) in owned_mapping_keys:
                         db_session.delete(candidate)
                     else:
                         candidate.active = False
 
-                # uq_user_active_email_idx is immediate, so free the address
-                # before the destination becomes active.
+                # uq_user_active_email_idx is immediate, so free the email
+                # address before the destination becomes active.
                 db_session.flush()
                 mapping.active = True
                 db_session.commit()
