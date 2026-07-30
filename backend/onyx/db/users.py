@@ -337,12 +337,18 @@ def get_user_by_email(email: str, db_session: Session) -> User | None:
     return user
 
 
-def fetch_user_by_id(db_session: Session, user_id: UUID) -> User | None:
-    return (
-        db_session.query(User)
-        .filter(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .first()
+def fetch_user_by_id(
+    db_session: Session, user_id: UUID, for_update: bool = False
+) -> User | None:
+    """``for_update`` adds ``SELECT ... FOR UPDATE``, serializing concurrent
+    transactions that use the user row as a reservation boundary (e.g. Craft
+    sandbox/session reservation). Hold only for a short transaction."""
+    query = db_session.query(User).filter(
+        User.id == user_id  # ty: ignore[invalid-argument-type]
     )
+    if for_update:
+        query = query.with_for_update()
+    return query.first()
 
 
 def _generate_password_hash() -> str:

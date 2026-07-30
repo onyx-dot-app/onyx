@@ -349,7 +349,7 @@ def _drive_agent(
         with session_creation_lock(task_user_id):
             # Create the BuildSession. SCHEDULED origin keeps it out of the
             # Craft sidebar (see `get_user_build_sessions`).
-            build_session = session_manager.create_session__no_commit(
+            build_session = session_manager.create_session(
                 user_id=task_user_id,
                 origin=SessionOrigin.SCHEDULED,
                 name=f"Scheduled: {task_name}",

@@ -1,9 +1,10 @@
 """Database operations for CLI agent sandbox management."""
 
 import datetime
+from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
@@ -87,6 +88,77 @@ def get_sandbox_by_user_id(db_session: Session, user_id: UUID) -> Sandbox | None
     """Get sandbox by user ID (primary lookup method)."""
     stmt = select(Sandbox).where(Sandbox.user_id == user_id)
     return db_session.execute(stmt).scalar_one_or_none()
+
+
+def begin_provisioning_attempt__no_commit(
+    db_session: Session,
+    sandbox: Sandbox,
+) -> int:
+    """Authorize a new external provisioning attempt: advance the fencing
+    generation and mark the sandbox ``PROVISIONING``. Must run inside the
+    per-user reservation transaction (user row locked) so concurrent
+    reservers serialize on generation assignment.
+
+    Returns the new generation, which the attempt must present to the
+    compare-and-set transitions below.
+    """
+    sandbox.status = SandboxStatus.PROVISIONING
+    sandbox.provisioning_generation += 1
+    sandbox.provisioning_started_at = datetime.datetime.now(datetime.timezone.utc)
+    db_session.flush()
+    return sandbox.provisioning_generation
+
+
+def begin_recovery_attempt_cas__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+    expected_generation: int,
+) -> int | None:
+    """Compare-and-set takeover of an unhealthy ``RUNNING`` sandbox for a new
+    provisioning attempt (recovery happens outside the reservation lock).
+    Returns the new generation, or None when the row already moved on."""
+    result = db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.id == sandbox_id,
+            Sandbox.provisioning_generation == expected_generation,
+            Sandbox.status == SandboxStatus.RUNNING,
+        )
+        .values(
+            status=SandboxStatus.PROVISIONING,
+            provisioning_generation=expected_generation + 1,
+            provisioning_started_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+    )
+    if result.rowcount != 1:  # ty: ignore[unresolved-attribute]
+        return None
+    return expected_generation + 1
+
+
+def finalize_provisioning_attempt__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+    generation: int,
+    to_status: Literal[SandboxStatus.RUNNING, SandboxStatus.FAILED],
+) -> bool:
+    """Generation-guarded compare-and-set ``PROVISIONING`` → outcome.
+    Returns False when the attempt is stale (the row moved on or a newer
+    generation exists) — the caller's external work must not be recorded as
+    the current runtime. ``RUNNING`` also stamps the heartbeat so the fresh
+    pod gets a proper idle-timeout baseline."""
+    values: dict[str, object] = {"status": to_status}
+    if to_status == SandboxStatus.RUNNING:
+        values["last_heartbeat"] = datetime.datetime.now(datetime.timezone.utc)
+    result = db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.id == sandbox_id,
+            Sandbox.provisioning_generation == generation,
+            Sandbox.status == SandboxStatus.PROVISIONING,
+        )
+        .values(**values)
+    )
+    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
 
 def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:

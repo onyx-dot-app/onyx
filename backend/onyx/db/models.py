@@ -6075,6 +6075,14 @@ class BuildSession(Base):
             desc("created_at"),
         ),
         Index("ix_build_session_status", "status"),
+        # Durable port reservation: allocation retries on collision instead of
+        # trusting the application-level scan.
+        Index(
+            "uq_build_session_nextjs_port",
+            "nextjs_port",
+            unique=True,
+            postgresql_where=text("nextjs_port IS NOT NULL"),
+        ),
     )
 
 
@@ -6109,6 +6117,21 @@ class Sandbox(Base):
 
     encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
+    )
+
+    # Fencing token for external reconciliation: advanced (under the per-user
+    # reservation lock) each time a new provisioning attempt is authorized.
+    # Finalization is a compare-and-set on this value, so a stale attempt can
+    # never mark a newer generation RUNNING/FAILED or clean its resources.
+    provisioning_generation: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # When the current attempt was authorized; a committed PROVISIONING row
+    # whose attempt is older than the managers' bounded waits is dead and may
+    # be taken over. Failure diagnostics live in logs (keyed by sandbox ID +
+    # generation), not here.
+    provisioning_started_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     # Relationships

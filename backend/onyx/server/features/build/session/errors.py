@@ -30,3 +30,13 @@ class UploadLimitExceededError(ValueError):
 class SandboxProvisioningError(RuntimeError):
     """Raised when a sandbox is mid-provision and the caller cannot wait
     it out."""
+
+
+class SandboxProvisioningInProgressError(SandboxProvisioningError):
+    """A live provisioning attempt (recent committed ``PROVISIONING``
+    generation) already owns the sandbox; the caller should retry shortly."""
+
+
+class StaleProvisioningAttemptError(SandboxProvisioningError):
+    """This attempt's generation was superseded before it could finalize;
+    its external work must not be recorded as the current runtime."""

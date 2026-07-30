@@ -116,6 +116,7 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
 from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
+    LABEL_PROVISIONING_GENERATION,
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
 )
@@ -129,6 +130,13 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
+from onyx.server.features.build.sandbox.session_workspace import (
+    MANAGED_SKILLS_PATH,
+    MANAGED_USER_LIBRARY_PATH,
+    SESSIONS_ROOT,
+    build_session_workspace_setup_script,
+    build_workspace_exists_check_script,
+)
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
@@ -153,16 +161,12 @@ LABEL_USER_ID = "onyx.app/user-id"
 
 # Path conventions inside the sandbox container — must match the K8s image.
 WORKSPACE_ROOT = "/workspace"
-SESSIONS_ROOT = f"{WORKSPACE_ROOT}/sessions"
 # Opencode's data home (its XDG_DATA_HOME); matches entrypoint.sh's default. It
 # lives in the container writable layer, not the per-sandbox volume, so it is
 # durable only via the FileStore history snapshot. Its basename must equal the
 # daemon archive's root dir, so put_archive at WORKSPACE_ROOT lands the restored
 # tree here (see _maybe_restore_opencode_history).
 OPENCODE_DATA_DIR = f"{WORKSPACE_ROOT}/.opencode-data"
-TEMPLATES_OUTPUTS_PATH = f"{WORKSPACE_ROOT}/templates/outputs"
-MANAGED_SKILLS_PATH = f"{WORKSPACE_ROOT}/managed/skills"
-MANAGED_USER_LIBRARY_PATH = f"{WORKSPACE_ROOT}/managed/user_library"
 SANDBOX_EXEC_USER = "1000:1000"
 # Docker exec bypasses firewall-init.sh's setpriv environment workaround, so
 # sandbox-user execs must carry the uid/gid and user HOME together.
@@ -345,6 +349,7 @@ def build_sandbox_labels(
     tenant_id: str,
     user_id: UUID | None,
     compose_project: str | None = None,
+    provisioning_generation: int | None = None,
 ) -> dict[str, str]:
     """Standard label set for sandbox-owned docker resources.
 
@@ -352,6 +357,9 @@ def build_sandbox_labels(
     Desktop groups sandbox containers under the same "onyx" stack header as
     api_server/postgres/redis/etc. Auto-detected by ``DockerSandboxManager``
     from its own container's labels.
+
+    ``provisioning_generation`` is stamped on containers (not the per-sandbox
+    volume, which persists across generations) for attribution.
     """
     labels: dict[str, str] = {
         LABEL_COMPONENT: LABEL_COMPONENT_VALUE,
@@ -363,6 +371,8 @@ def build_sandbox_labels(
         labels[LABEL_USER_ID] = str(user_id)
     if compose_project:
         labels["com.docker.compose.project"] = compose_project
+    if provisioning_generation is not None:
+        labels[LABEL_PROVISIONING_GENERATION] = str(provisioning_generation)
     return labels
 
 
@@ -463,6 +473,7 @@ def build_container_create_kwargs(
     cpu_limit: float,
     opencode_password: str,
     opencode_config_json: str,
+    provisioning_generation: int,
     compose_project: str | None = None,
     sandbox_proxy_host: str | None = None,
     proxy_ca_volume_name: str | None = None,
@@ -601,7 +612,11 @@ def build_container_create_kwargs(
         "command": command,
         "detach": True,
         "labels": build_sandbox_labels(
-            sandbox_id, tenant_id, user_id, compose_project=compose_project
+            sandbox_id,
+            tenant_id,
+            user_id,
+            compose_project=compose_project,
+            provisioning_generation=provisioning_generation,
         ),
         "user": user,
         "cap_drop": ["ALL"],
@@ -804,7 +819,8 @@ class DockerSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        onyx_pat: str | None = None,
+        onyx_pat: str | None,
+        provisioning_generation: int,
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning.")
@@ -857,6 +873,7 @@ class DockerSandboxManager(SandboxManager):
                 volume_name=volume_name,
                 opencode_password=opencode_password,
                 opencode_config_json=opencode_config_json,
+                provisioning_generation=provisioning_generation,
             )
 
         if created_fresh:
@@ -945,6 +962,7 @@ class DockerSandboxManager(SandboxManager):
         volume_name: str,
         opencode_password: str,
         opencode_config_json: str,
+        provisioning_generation: int,
     ) -> tuple[Container, bool]:
         """
         Creates (not starts) the container; returns ``(container,
@@ -974,6 +992,7 @@ class DockerSandboxManager(SandboxManager):
             compose_project=self._compose_project,
             sandbox_proxy_host=proxy_host,
             proxy_ca_volume_name=(SANDBOX_PROXY_CA_VOLUME_NAME if proxy_host else None),
+            provisioning_generation=provisioning_generation,
         )
         # create (not run) so the caller can put_archive history before start.
         # detach is run-only.
@@ -1025,7 +1044,7 @@ class DockerSandboxManager(SandboxManager):
         state = (container.attrs or {}).get("State") or {}
         return state.get("Status") == "running"
 
-    def _render_agents_md(
+    def _build_agents_md(
         self,
         *,
         agent_provider: str | None,
@@ -1034,8 +1053,8 @@ class DockerSandboxManager(SandboxManager):
         connectable_apps_section: str,
         user_name: str | None = None,
     ) -> str:
-        """Shell-escaped AGENTS.md for ``printf '%s' '...'``."""
-        agent_instructions = generate_agent_instructions(
+        """Raw (unescaped) AGENTS.md content."""
+        return generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             connectable_apps_section=connectable_apps_section,
             provider=agent_provider,
@@ -1045,7 +1064,6 @@ class DockerSandboxManager(SandboxManager):
             user_name=user_name,
             organization_instructions=load_settings().craft_instructions,
         )
-        return agent_instructions.replace("'", "'\\''")
 
     def setup_session_workspace(
         self,
@@ -1059,7 +1077,7 @@ class DockerSandboxManager(SandboxManager):
     ) -> None:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
-        agents_md = self._render_agents_md(
+        agents_md = self._build_agents_md(
             agent_provider=llm_config.provider,
             agent_model=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -1074,48 +1092,12 @@ class DockerSandboxManager(SandboxManager):
                 session_id=str(session_id),
             )
         )
-        session_opencode_config_setup = (
-            f"printf '%s' {shlex.quote(session_opencode_config)} > "
-            f"{session_path}/opencode.json"
+        setup_script = build_session_workspace_setup_script(
+            session_path=session_path,
+            agents_md=agents_md,
+            session_opencode_config_json=session_opencode_config,
+            nextjs_port=nextjs_port,
         )
-
-        nextjs_start = (
-            build_nextjs_start_script(session_path, nextjs_port)
-            if nextjs_port is not None
-            else ""
-        )
-        setup_script = f"""
-set -e
-echo "Creating session directory: {session_path}"
-mkdir -p {session_path}/outputs {session_path}/attachments {session_path}/.opencode
-if [ -d {TEMPLATES_OUTPUTS_PATH} ]; then
-    cp -r {TEMPLATES_OUTPUTS_PATH}/* {session_path}/outputs/
-    # flock+sentinel: serialize concurrent session setups; .ready guards
-    # against a partial cp from a previous interrupted run.
-    (
-        flock -x 9
-        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
-            echo "Bootstrapping bun cache on workspace volume..."
-            rm -rf {BUN_CACHE_DIR}
-            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \
-                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
-            touch {BUN_CACHE_DIR}/.ready
-        fi
-    ) 9>{BUN_CACHE_DIR}.lock
-    cd {session_path}/outputs/web && \
-        BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \
-        bun install --frozen-lockfile --backend=hardlink
-else
-    echo "Warning: outputs template not found at {TEMPLATES_OUTPUTS_PATH}"
-    mkdir -p {session_path}/outputs/web
-fi
-ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
-ln -sf {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
-printf '%s' '{agents_md}' > {session_path}/AGENTS.md
-{session_opencode_config_setup}
-{nextjs_start}
-echo "Session workspace setup complete"
-"""
 
         logger.info(
             "Setting up session workspace %s in sandbox %s.", session_id, sandbox_id
@@ -1177,14 +1159,15 @@ echo "Session cleanup complete"
         container = self._get_container(sandbox_id)
         if container is None:
             return False
-        target = f"{SESSIONS_ROOT}/{session_id}/outputs"
         try:
             result = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
                     "-c",
-                    f'[ -d "{target}" ] && echo "WORKSPACE_FOUND" || echo "WORKSPACE_MISSING"',
+                    build_workspace_exists_check_script(
+                        f"{SESSIONS_ROOT}/{session_id}"
+                    ),
                 ],
                 check=False,
             )
@@ -1516,7 +1499,7 @@ fi
         """Rewrite generated session configuration and managed symlinks."""
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
-        agents_md = self._render_agents_md(
+        agents_md = self._build_agents_md(
             agent_provider=agent_provider,
             agent_model=agent_model,
             nextjs_port=nextjs_port,
@@ -1549,7 +1532,7 @@ set -e
 mkdir -p {session_path}/.opencode
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
-printf '%s' '{agents_md}' > {session_path}/AGENTS.md
+printf '%s' {shlex.quote(agents_md)} > {session_path}/AGENTS.md
 {session_opencode_config_setup}
 if [ -n "$(find {session_path}/attachments -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
     printf '\n\n' >> {session_path}/AGENTS.md

@@ -118,9 +118,11 @@ class SandboxManager(_ServeMixin, ABC):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        onyx_pat: str | None = None,
+        onyx_pat: str | None,
+        provisioning_generation: int,
     ) -> SandboxInfo:
-        """Provision a new sandbox for a user.
+        """Provision a new sandbox for a user. Returns only once the sandbox
+        is RUNNING; every failure raises.
 
         Craft MCP servers and the gateway provider catalog are NOT registered
         here — they live in the per-session ``opencode.json`` (see
@@ -138,6 +140,10 @@ class SandboxManager(_ServeMixin, ABC):
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the sandbox
+            provisioning_generation: Committed fencing generation of the
+                attempt; stamped onto backend resources at creation for
+                operator-facing orphan attribution (never read
+                programmatically — the DB compare-and-set is the fence).
 
         Returns:
             SandboxInfo with the provisioned sandbox details

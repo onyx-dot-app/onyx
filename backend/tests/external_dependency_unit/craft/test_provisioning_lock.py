@@ -148,6 +148,7 @@ def _provision(
         user_id=uuid4(),
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         onyx_pat="test-pat",
+        provisioning_generation=1,
     )
 
 
