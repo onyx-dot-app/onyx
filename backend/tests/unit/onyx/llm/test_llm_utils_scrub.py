@@ -6,10 +6,12 @@ from echoing API keys back through error messages.
 from collections.abc import Iterable
 from typing import Any
 
+from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.utils import (
     collect_llm_credential_values,
     is_sensitive_custom_config_key,
+    litellm_exception_to_error_msg,
     scrub_sensitive_values,
 )
 from onyx.llm.utils import (
@@ -20,6 +22,7 @@ _SECRET_KEY = "sk-anthropic-supersecret-DO-NOT-LEAK-1234567890"
 _SECRET_VERTEX_BLOB = (
     '{"private_key":"-----BEGIN PRIVATE KEY-----abc-----END PRIVATE KEY-----"}'
 )
+_CLASSIFIED_ERROR_CODE = "MODEL_REFUSAL"
 
 
 class _StubLLM(LLM):
@@ -171,6 +174,23 @@ def test_collect_llm_credential_values_skips_missing_api_key() -> None:
     llm = _StubLLM(config)
 
     assert collect_llm_credential_values(llm) == []
+
+
+def test_safe_error_redacts_classified_error_without_losing_metadata() -> None:
+    llm = _StubLLM(_make_config())
+    error = ClassifiedLLMError(
+        client_error_msg=f"Provider declined request for key {_SECRET_KEY}",
+        error_code=_CLASSIFIED_ERROR_CODE,
+        is_retryable=False,
+    )
+
+    message, error_code, is_retryable = litellm_exception_to_error_msg(error, llm)
+    safe_message = scrub_sensitive_values(message, collect_llm_credential_values(llm))
+
+    assert _SECRET_KEY not in safe_message
+    assert "[REDACTED]" in safe_message
+    assert error_code == _CLASSIFIED_ERROR_CODE
+    assert is_retryable is False
 
 
 # ---------------------------------------------------------------------------
