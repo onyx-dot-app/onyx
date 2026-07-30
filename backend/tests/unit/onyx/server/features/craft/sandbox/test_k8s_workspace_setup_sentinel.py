@@ -15,13 +15,13 @@ import pytest
 
 import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    WORKSPACE_SETUP_DEADLINE_SECONDS,
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
 from onyx.server.features.build.sandbox.session_workspace import (
     WORKSPACE_SETUP_COMPLETE_SENTINEL,
 )
+from onyx.server.features.build.timeouts import WORKSPACE_SETUP_DEADLINE_SECONDS
 
 _LLM_CONFIG = CraftLLMProviderConfig(
     provider="openai",

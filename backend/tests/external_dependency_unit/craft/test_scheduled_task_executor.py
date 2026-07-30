@@ -253,8 +253,8 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
 ) -> None:
     """A RUNNING run older than the running threshold → ``cleanup_stuck_scheduled_runs`` marks it FAILED.
 
-    Production threshold is ``DEFAULT_EXECUTOR_BUDGET_SECONDS + 15 min`` (i.e.
-    45 min). Backdating ``started_at`` by 50 min puts the run past that.
+    Production threshold is ``TURN_BUDGET_SECONDS + TURN_RECLAIM_SLACK_SECONDS``
+    (i.e. 45 min). Backdating ``started_at`` by 50 min puts the run past that.
     """
     user = make_user(db_session)
     task = ScheduledTask(
@@ -304,7 +304,7 @@ def test_timeout_error_event_marks_run_failed_with_timeout_class(
     """Regression for ENG-4234: terminal timeout Error → FAILED/timeout."""
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
-        "onyx.server.features.build.session.manager.build_user_skills_payload",
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
         lambda *_: ("", {}),
     )
 
@@ -341,7 +341,7 @@ def test_prompt_response_marks_run_succeeded(
     """Happy-path regression: clean PromptResponse → SUCCEEDED, not FAILED."""
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
-        "onyx.server.features.build.session.manager.build_user_skills_payload",
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
         lambda *_: ("", {}),
     )
 
@@ -379,7 +379,7 @@ def test_scheduled_run_threads_budget_as_turn_timeout(
     timeout so the generic 15-min prompt timeout can't undercut the run budget."""
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
-        "onyx.server.features.build.session.manager.build_user_skills_payload",
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
         lambda *_: ("", {}),
     )
 
@@ -421,7 +421,7 @@ def test_cancelled_prompt_response_marks_run_failed(
     """
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
-        "onyx.server.features.build.session.manager.build_user_skills_payload",
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
         lambda *_: ("", {}),
     )
 
@@ -456,7 +456,7 @@ def test_transport_error_event_marks_run_failed_with_agent_exception_class(
     """Non-timeout terminal Error → FAILED with error_class=agent_exception."""
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
-        "onyx.server.features.build.session.manager.build_user_skills_payload",
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
         lambda *_: ("", {}),
     )
 
@@ -493,7 +493,7 @@ def test_stream_without_prompt_response_marks_run_failed(
     """Stream ending with no PromptResponse (and no Error) → FAILED, not SUCCEEDED."""
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
-        "onyx.server.features.build.session.manager.build_user_skills_payload",
+        "onyx.server.features.build.session.sandbox_lifecycle.build_user_skills_payload",
         lambda *_: ("", {}),
     )
 
@@ -527,7 +527,7 @@ def test_run_fails_when_wake_fails(
     backend is bound so SessionManager construction can't raise and satisfy the
     assertion via the same broad handler without exercising the timeout path."""
     monkeypatch.setattr(
-        "onyx.server.features.build.scheduled_tasks.executor.PROVISIONING_WAIT_SECONDS",
+        "onyx.server.features.build.scheduled_tasks.executor.PROVISION_WAIT_SECONDS",
         0,
     )
 

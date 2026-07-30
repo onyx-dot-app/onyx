@@ -6,6 +6,7 @@ import hashlib
 import io
 import zipfile
 from collections.abc import Callable, Generator, Iterable
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -40,10 +41,7 @@ from onyx.db.models import (
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
-from onyx.server.features.build.db.sandbox import (
-    create_sandbox__no_commit,
-    update_sandbox_status__no_commit,
-)
+from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.session import llm_config
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.manage.llm.models import (
@@ -215,7 +213,11 @@ def sandbox(
         owner = user or test_user
         row = create_sandbox__no_commit(db_session=db_session, user_id=owner.id)
         if status != SandboxStatus.PROVISIONING:
-            update_sandbox_status__no_commit(db_session, row.id, status)
+            # Raw seed of an arbitrary lifecycle state; production writes go
+            # through the attempt-numbered helpers.
+            row.status = status
+            if status == SandboxStatus.RUNNING:
+                row.last_heartbeat = datetime.now(timezone.utc)
         db_session.commit()
         db_session.refresh(row)
         return row

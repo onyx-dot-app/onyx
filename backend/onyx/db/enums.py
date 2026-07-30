@@ -333,8 +333,20 @@ class OpenSearchTenantMigrationStatus(str, PyEnum):
 
 # Onyx Build Mode Enums
 class BuildSessionStatus(str, PyEnum):
+    """Lifecycle of a build session.
+
+    INITIALIZING: reserved identity committed; workspace/OpenCode setup is
+                  still reconciling (or was interrupted and is repairable).
+    ACTIVE:       workspace, config, and OpenCode session are usable.
+    IDLE:         sandbox slept; workspace must be restored before use.
+    FAILED:       initialization failed after the sandbox came up; the
+                  session identity is retained and repaired on retry.
+    """
+
+    INITIALIZING = "initializing"
     ACTIVE = "active"
     IDLE = "idle"
+    FAILED = "failed"
 
 
 class SessionOrigin(str, PyEnum):

@@ -2,15 +2,15 @@
 
 Two ``KubernetesSandboxManager`` instances stand in for two api_server
 replicas sharing one Redis. Exactly one replica may create the pod and run
-the startup restore handshake; a concurrent provisioner must wait on the
-per-sandbox lock and then reuse the ready pod — never stream a second
-restore into the same pod (the 08fe79d8 production race).
+the startup restore handshake; a concurrent provisioner fails fast with
+``SandboxProvisionContentionError`` (never streams a second restore into the
+same pod — the 08fe79d8 production race) and a later retry reuses the ready
+pod without re-restoring.
 """
 
 from __future__ import annotations
 
 import threading
-import time
 from collections.abc import Callable
 from uuid import UUID, uuid4
 
@@ -24,7 +24,10 @@ from onyx.server.features.build.sandbox.kubernetes import kubernetes_sandbox_man
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
-from onyx.server.features.build.sandbox.models import SandboxInfo
+from onyx.server.features.build.sandbox.models import (
+    SandboxInfo,
+    SandboxProvisionContentionError,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
@@ -71,13 +74,22 @@ def _make_replica(
         with cluster.lock:
             return pod_name in cluster.ready
 
-    def _ensure_service_exists(sandbox_id: UUID, tenant_id: str) -> None:  # noqa: ARG001
+    def _ensure_service_exists(
+        sandbox_id: UUID,  # noqa: ARG001
+        tenant_id: str,  # noqa: ARG001
+        deadline: float,  # noqa: ARG001
+    ) -> None:
         return None
 
     def _provision_opencode_secret(sandbox_id: str, config_json: str) -> None:  # noqa: ARG001
         return None
 
-    def _create_sandbox_pod(*, sandbox_id: str, tenant_id: str) -> str:  # noqa: ARG001
+    def _create_sandbox_pod(
+        *,
+        sandbox_id: str,
+        tenant_id: str,  # noqa: ARG001
+        provisioning_attempt_number: int,  # noqa: ARG001
+    ) -> str:
         return m._get_pod_name(sandbox_id)
 
     def _wait_for_pod_ip(pod_name: str, deadline: float) -> bool:  # noqa: ARG001
@@ -86,7 +98,7 @@ def _make_replica(
     def _restore_opencode_history_snapshot(
         sandbox_id: UUID,
         tenant_id: str,  # noqa: ARG001
-        timeout_seconds: float = 300.0,  # noqa: ARG001
+        timeout_seconds: float,  # noqa: ARG001
     ) -> bool:
         with cluster.lock:
             cluster.restores.append(sandbox_id)
@@ -94,7 +106,7 @@ def _make_replica(
             on_restore()
         return True
 
-    def _wait_for_pod_ready(pod_name: str, timeout: float = 60.0) -> bool:  # noqa: ARG001
+    def _wait_for_pod_ready(pod_name: str, deadline: float) -> bool:  # noqa: ARG001
         # Real pods flip Ready only after the sidecar handshake completes.
         with cluster.lock:
             if pod_name not in cluster.pods:
@@ -104,7 +116,7 @@ def _make_replica(
 
     def _wait_for_opencode_serve_ready(
         sandbox_id: UUID,  # noqa: ARG001
-        timeout: float = 30.0,  # noqa: ARG001
+        timeout: float,  # noqa: ARG001
     ) -> bool:
         return True
 
@@ -148,10 +160,11 @@ def _provision(
         user_id=uuid4(),
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         onyx_pat="test-pat",
+        provisioning_attempt_number=1,
     )
 
 
-def test_concurrent_provision_runs_exactly_one_restore(
+def test_concurrent_provision_fails_fast_and_restore_runs_once(
     lock_env: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -167,59 +180,7 @@ def test_concurrent_provision_runs_exactly_one_restore(
         assert release_restore.wait(timeout=10)
 
     winner = _make_replica(cluster, monkeypatch, on_restore=_hold_restore)
-    loser = _make_replica(cluster, monkeypatch)
-
-    results: dict[str, SandboxInfo] = {}
-    errors: list[BaseException] = []
-
-    def _run(name: str, replica: KubernetesSandboxManager) -> None:
-        try:
-            results[name] = _provision(replica, sandbox_id)
-        except BaseException as e:
-            errors.append(e)
-
-    t_winner = threading.Thread(target=_run, args=("winner", winner))
-    t_winner.start()
-    assert restore_entered.wait(timeout=10)
-
-    t_loser = threading.Thread(target=_run, args=("loser", loser))
-    t_loser.start()
-    time.sleep(0.5)
-
-    # Loser must be parked on the lock while the winner is mid-restore.
-    assert t_loser.is_alive()
-    assert "loser" not in results
-    assert cluster.pod_creates == [pod_name]
-    assert cluster.restores == [sandbox_id]
-
-    release_restore.set()
-    t_winner.join(timeout=10)
-    t_loser.join(timeout=10)
-    assert not t_winner.is_alive() and not t_loser.is_alive()
-
-    assert errors == []
-    assert results["winner"].status == SandboxStatus.RUNNING
-    assert results["loser"].status == SandboxStatus.RUNNING
-    assert cluster.pod_creates == [pod_name]
-    assert cluster.restores == [sandbox_id]
-
-
-def test_loser_times_out_while_winner_holds_lock(
-    lock_env: None,  # noqa: ARG001
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    cluster = _FakeCluster()
-    sandbox_id = uuid4()
-
-    restore_entered = threading.Event()
-    release_restore = threading.Event()
-
-    def _hold_restore() -> None:
-        restore_entered.set()
-        assert release_restore.wait(timeout=10)
-
-    winner = _make_replica(cluster, monkeypatch, on_restore=_hold_restore)
-    loser = _make_replica(cluster, monkeypatch)
+    contender = _make_replica(cluster, monkeypatch)
 
     winner_result: list[SandboxInfo] = []
     t_winner = threading.Thread(
@@ -227,20 +188,27 @@ def test_loser_times_out_while_winner_holds_lock(
     )
     t_winner.start()
     assert restore_entered.wait(timeout=10)
-    # Patch only after the winner acquires: the constant is also the TTL.
-    monkeypatch.setattr(
-        kubernetes_sandbox_manager, "PROVISION_LOCK_TIMEOUT_SECONDS", 0.5
-    )
 
+    # Contender bounces off the held lock instead of parking; the winner's
+    # restore stays the only one.
     try:
-        with pytest.raises(RuntimeError, match="Timed out waiting"):
-            _provision(loser, sandbox_id)
+        with pytest.raises(SandboxProvisionContentionError):
+            _provision(contender, sandbox_id)
+        assert cluster.pod_creates == [pod_name]
+        assert cluster.restores == [sandbox_id]
     finally:
         release_restore.set()
         t_winner.join(timeout=10)
+    assert not t_winner.is_alive()
 
     assert len(winner_result) == 1
     assert winner_result[0].status == SandboxStatus.RUNNING
+
+    # Retry after the winner finished: reuses the ready pod, no second
+    # create or restore.
+    retry_result = _provision(contender, sandbox_id)
+    assert retry_result.status == SandboxStatus.RUNNING
+    assert cluster.pod_creates == [pod_name]
     assert cluster.restores == [sandbox_id]
 
 
@@ -258,14 +226,12 @@ def test_lock_released_after_provision_failure(
         raise ApiException(status=500, reason="secret create failed")
 
     monkeypatch.setattr(failing, "_provision_opencode_secret", _boom)
-    # If the failed attempt orphaned the lock, the retry would time out.
-    monkeypatch.setattr(
-        kubernetes_sandbox_manager, "PROVISION_LOCK_TIMEOUT_SECONDS", 3.0
-    )
 
     with pytest.raises(ApiException):
         _provision(failing, sandbox_id)
 
+    # If the failed attempt orphaned the lock, this retry would raise
+    # SandboxProvisionContentionError instead of provisioning.
     retry = _make_replica(cluster, monkeypatch)
     info = _provision(retry, sandbox_id)
 

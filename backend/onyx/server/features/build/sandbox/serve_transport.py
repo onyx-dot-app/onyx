@@ -66,9 +66,6 @@ SandboxEvent = Any
 # Tags serve-transport logs with the api_server replica handling the prompt.
 _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 
-# opencode-serve boot lags backend Ready by ~1–3s warm, up to ~15s cold.
-OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 30
-
 # Live attach streams are UI-facing. Coalesce adjacent text deltas just long
 # enough to avoid one React update per tiny opencode token burst, while keeping
 # control packets and final/error packets effectively immediate.
@@ -345,7 +342,7 @@ class _ServeMixin:
     def _wait_for_opencode_serve_ready(
         self,
         sandbox_id: UUID,
-        timeout: float = OPENCODE_SERVE_READY_TIMEOUT_SECONDS,
+        timeout: float,
     ) -> bool:
         """Block until opencode-serve answers ``GET /doc`` with 200 (opencode
         binds :4096 a few seconds after the pod is Ready). Probes the Service

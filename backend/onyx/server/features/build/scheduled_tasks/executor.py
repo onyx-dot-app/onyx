@@ -12,7 +12,7 @@ Lifecycle (see ``docs/craft/features/scheduled-tasks/overview.md``):
    marked it failed).
 2. Get the user's sandbox to a RUNNING state via
    ``SessionManager.ensure_sandbox_running`` — creates a sandbox if the
-   user has none, waits up to ``PROVISIONING_WAIT_SECONDS`` for any
+   user has none, waits up to ``PROVISION_WAIT_SECONDS`` for any
    concurrent provisioner, and wakes SLEEPING / TERMINATED / FAILED
    sandboxes in place. SKIP only if the wait window elapses with the
    sandbox still PROVISIONING (``sandbox_provisioning``); any other
@@ -60,7 +60,10 @@ from onyx.server.features.build.sandbox.event_schema import (
 from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
-from onyx.server.features.build.timeouts import TURN_BUDGET_SECONDS
+from onyx.server.features.build.timeouts import (
+    PROVISION_WAIT_SECONDS,
+    TURN_BUDGET_SECONDS,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -69,8 +72,6 @@ logger = setup_logger()
 # Summary length on the run row (per spec: ~120 chars of final agent
 # message).
 SUMMARY_MAX_CHARS = 120
-
-PROVISIONING_WAIT_SECONDS = 120
 
 
 def _clip_summary(text: str) -> str:
@@ -217,15 +218,14 @@ def run_scheduled_task_logic(
         task_prompt = task.prompt
 
         # ensure_sandbox_running handles every state we care about:
-        # creates a sandbox if none exists, waits up to
-        # PROVISIONING_WAIT_SECONDS for any concurrent provisioner, wakes
-        # SLEEPING / TERMINATED / FAILED, and recovers a RUNNING-but-
-        # unhealthy pod.
+        # creates a sandbox if none exists, waits out any concurrent
+        # provisioner, wakes SLEEPING / TERMINATED / FAILED, and recovers a
+        # RUNNING-but-unhealthy pod.
         try:
             session_manager = SessionManager(db_session)
             sandbox = session_manager.ensure_sandbox_running(
                 task_user_id,
-                provisioning_wait_seconds=PROVISIONING_WAIT_SECONDS,
+                provisioning_wait_seconds=PROVISION_WAIT_SECONDS,
             )
             db_session.commit()
         except Exception as exc:
@@ -344,7 +344,7 @@ def _drive_agent(
         with session_creation_lock(task_user_id):
             # Create the BuildSession. SCHEDULED origin keeps it out of the
             # Craft sidebar (see `get_user_build_sessions`).
-            build_session = session_manager.create_session__no_commit(
+            build_session = session_manager.create_session(
                 user_id=task_user_id,
                 origin=SessionOrigin.SCHEDULED,
                 name=f"Scheduled: {task_name}",

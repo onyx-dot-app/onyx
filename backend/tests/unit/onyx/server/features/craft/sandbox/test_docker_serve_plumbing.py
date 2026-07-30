@@ -375,7 +375,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     monkeypatch.setattr(
         DockerSandboxManager,
         "_wait_for_opencode_serve_ready",
-        lambda self, sandbox_id: True,  # noqa: ARG005 — patched callable
+        lambda self, sandbox_id, timeout: True,  # noqa: ARG005 — patched callable
     )
 
     mgr = _bare_manager()
@@ -415,6 +415,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
         user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
         tenant_id="tenant-abc",
         onyx_pat="pat-redacted",
+        provisioning_attempt_number=1,
     )
 
     assert info.status.value == "running"
@@ -558,6 +559,7 @@ def test_provision_removes_container_when_history_restore_fails(
             user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             tenant_id="tenant-abc",
             onyx_pat="pat-redacted",
+            provisioning_attempt_number=1,
         )
 
     # Half-provisioned container is force-removed; opencode never started.

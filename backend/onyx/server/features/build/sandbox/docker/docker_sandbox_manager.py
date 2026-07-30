@@ -116,6 +116,7 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
 from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
+    LABEL_PROVISIONING_ATTEMPT,
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
 )
@@ -148,6 +149,11 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_base_config,
     build_provider_opencode_config,
 )
+from onyx.server.features.build.timeouts import (
+    BULK_TRANSFER_TIMEOUT_SECONDS,
+    POLL_INTERVAL_SECONDS,
+    PROVISION_DEADLINE_SECONDS,
+)
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -172,12 +178,6 @@ SANDBOX_EXEC_USER = "1000:1000"
 SANDBOX_EXEC_ENV = {"HOME": "/home/sandbox", "USER": "sandbox"}
 SANDBOX_TMP_PATH = "/tmp"  # noqa: S108 - sandbox-local scratch mount.
 SANDBOX_TMPFS_OPTIONS = "rw,nosuid,nodev,size=5g,mode=1777"
-
-# Mirror the K8s constants in ``kubernetes_sandbox_manager`` (POD_READY_*),
-# which are also module-level and not env-tunable.
-CONTAINER_READY_TIMEOUT_SECONDS = 120
-CONTAINER_READY_POLL_INTERVAL_SECONDS = 1.0
-
 
 # Egress proxy file paths inside the sandbox container. Matched by
 # ``firewall-init.sh``: ``CA_SRC`` defaults to ``/sandbox-ca/ca.crt`` and
@@ -348,6 +348,7 @@ def build_sandbox_labels(
     tenant_id: str,
     user_id: UUID | None,
     compose_project: str | None = None,
+    provisioning_attempt_number: int | None = None,
 ) -> dict[str, str]:
     """Standard label set for sandbox-owned docker resources.
 
@@ -355,6 +356,9 @@ def build_sandbox_labels(
     Desktop groups sandbox containers under the same "onyx" stack header as
     api_server/postgres/redis/etc. Auto-detected by ``DockerSandboxManager``
     from its own container's labels.
+
+    ``provisioning_attempt_number`` is stamped on containers (not the per-sandbox
+    volume, which persists across generations) for attribution.
     """
     labels: dict[str, str] = {
         LABEL_COMPONENT: LABEL_COMPONENT_VALUE,
@@ -366,6 +370,8 @@ def build_sandbox_labels(
         labels[LABEL_USER_ID] = str(user_id)
     if compose_project:
         labels["com.docker.compose.project"] = compose_project
+    if provisioning_attempt_number is not None:
+        labels[LABEL_PROVISIONING_ATTEMPT] = str(provisioning_attempt_number)
     return labels
 
 
@@ -466,6 +472,7 @@ def build_container_create_kwargs(
     cpu_limit: float,
     opencode_password: str,
     opencode_config_json: str,
+    provisioning_attempt_number: int,
     compose_project: str | None = None,
     sandbox_proxy_host: str | None = None,
     proxy_ca_volume_name: str | None = None,
@@ -604,7 +611,11 @@ def build_container_create_kwargs(
         "command": command,
         "detach": True,
         "labels": build_sandbox_labels(
-            sandbox_id, tenant_id, user_id, compose_project=compose_project
+            sandbox_id,
+            tenant_id,
+            user_id,
+            compose_project=compose_project,
+            provisioning_attempt_number=provisioning_attempt_number,
         ),
         "user": user,
         "cap_drop": ["ALL"],
@@ -770,9 +781,10 @@ class DockerSandboxManager(SandboxManager):
             )
         return c
 
-    def _wait_for_container_running(self, container: Container) -> bool:
-        start_time = time.time()
-        while time.time() - start_time < CONTAINER_READY_TIMEOUT_SECONDS:
+    def _wait_for_container_running(
+        self, container: Container, deadline: float
+    ) -> bool:
+        while time.monotonic() < deadline:
             container.reload()
             state = (container.attrs or {}).get("State") or {}
             status = state.get("Status")
@@ -783,7 +795,7 @@ class DockerSandboxManager(SandboxManager):
                 raise RuntimeError(
                     f"Sandbox container {container.name} exited unexpectedly. Logs:\n{logs[:2000]}"
                 )
-            time.sleep(CONTAINER_READY_POLL_INTERVAL_SECONDS)
+            time.sleep(POLL_INTERVAL_SECONDS)
         return False
 
     def provision(
@@ -791,7 +803,8 @@ class DockerSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        onyx_pat: str | None = None,
+        onyx_pat: str | None,
+        provisioning_attempt_number: int,
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning.")
@@ -844,6 +857,7 @@ class DockerSandboxManager(SandboxManager):
                 volume_name=volume_name,
                 opencode_password=opencode_password,
                 opencode_config_json=opencode_config_json,
+                provisioning_attempt_number=provisioning_attempt_number,
             )
 
         if created_fresh:
@@ -860,12 +874,19 @@ class DockerSandboxManager(SandboxManager):
                     f"Failed to provision sandbox container {container.name}: {e}"
                 ) from e
 
-        if not self._wait_for_container_running(container):
+        # One deadline shared by the readiness phases. Started here, after the
+        # image pull: a cold pull of the sandbox image can legitimately take
+        # minutes and must not eat the container's own startup budget.
+        deadline = time.monotonic() + PROVISION_DEADLINE_SECONDS
+
+        if not self._wait_for_container_running(container, deadline):
             raise RuntimeError(
                 f"Timeout waiting for sandbox container {container.name} to be running."
             )
 
-        if not self._wait_for_opencode_serve_ready(sandbox_id):
+        if not self._wait_for_opencode_serve_ready(
+            sandbox_id, timeout=deadline - time.monotonic()
+        ):
             raise RuntimeError(
                 f"opencode-serve never became ready in sandbox container {container.name}."
             )
@@ -932,6 +953,7 @@ class DockerSandboxManager(SandboxManager):
         volume_name: str,
         opencode_password: str,
         opencode_config_json: str,
+        provisioning_attempt_number: int,
     ) -> tuple[Container, bool]:
         """
         Creates (not starts) the container; returns ``(container,
@@ -961,6 +983,7 @@ class DockerSandboxManager(SandboxManager):
             compose_project=self._compose_project,
             sandbox_proxy_host=proxy_host,
             proxy_ca_volume_name=(SANDBOX_PROXY_CA_VOLUME_NAME if proxy_host else None),
+            provisioning_attempt_number=provisioning_attempt_number,
         )
         # create (not run) so the caller can put_archive history before start.
         # detach is run-only.
@@ -1001,7 +1024,7 @@ class DockerSandboxManager(SandboxManager):
 
         logger.info("Terminated Docker sandbox %s.", sandbox_id)
 
-    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:  # noqa: ARG002
+    def health_check(self, sandbox_id: UUID, timeout: float) -> bool:  # noqa: ARG002
         container = self._get_container(sandbox_id)
         if container is None:
             return False
@@ -1243,7 +1266,7 @@ echo "Session cleanup complete"
         self,
         sandbox_id: UUID,
         tenant_id: str,
-        timeout_seconds: float = 300.0,  # noqa: ARG002 - exec uses the docker client timeout
+        timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,  # noqa: ARG002 - exec uses the docker client timeout
     ) -> bool:
         """Captures sandbox-global opencode history to the FileStore.
 
