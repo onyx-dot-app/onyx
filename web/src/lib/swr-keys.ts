@@ -43,6 +43,7 @@ export const SWR_KEYS = {
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
   llmContextualCost: "/api/admin/llm/provider-contextual-cost",
   userUsage: (days: number) => `/api/user/usage?days=${days}`,
+  costOverrides: "/api/admin/cost-overrides",
 
   // ── Image Generation ──────────────────────────────────────────────────────
   imageGenConfig: "/api/admin/image-generation/config",

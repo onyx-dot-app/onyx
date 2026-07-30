@@ -26,6 +26,7 @@ import { Disabled, Hoverable, Interactive } from "@opal/core";
 import {
   GLOBAL_DEFAULT_LLM_OPTION,
   LLMOption,
+  ModelOptionProvider,
   buildLlmOptions,
   groupLlmOptions,
   llmOptionKey,
@@ -463,6 +464,8 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
 
 export interface ModelSelectorContentProps {
   currentModelName?: string;
+  providerOptions?: ModelOptionProvider[];
+  includeHiddenModels?: boolean;
   requiresImageInput?: boolean;
   onSelect: (option: LLMOption) => void;
   isSelected: (option: LLMOption) => boolean;
@@ -476,6 +479,8 @@ export interface ModelSelectorContentProps {
 
 export default function ModelSelectorContent({
   currentModelName,
+  providerOptions,
+  includeHiddenModels = false,
   requiresImageInput,
   onSelect,
   isSelected,
@@ -485,8 +490,14 @@ export default function ModelSelectorContent({
   modelDetail,
 }: ModelSelectorContentProps) {
   const [detailOption, setDetailOption] = useState<LLMOption | null>(null);
-  const { llmProviders, isLoading, defaultText } =
-    useCurrentAgentLLMProviders();
+  const {
+    llmProviders: currentAgentProviderOptions,
+    isLoading: currentAgentProvidersLoading,
+    defaultText,
+  } = useCurrentAgentLLMProviders();
+  const llmProviders = providerOptions ?? currentAgentProviderOptions;
+  const isLoading =
+    providerOptions === undefined && currentAgentProvidersLoading;
 
   const globalDefaultDisplayName = useMemo(() => {
     if (!defaultText || !llmProviders) return null;
@@ -501,8 +512,8 @@ export default function ModelSelectorContent({
   const scrollContainerRef = externalScrollRef ?? internalScrollRef;
 
   const llmOptions = useMemo(
-    () => buildLlmOptions(llmProviders, currentModelName),
-    [llmProviders, currentModelName]
+    () => buildLlmOptions(llmProviders, currentModelName, includeHiddenModels),
+    [llmProviders, currentModelName, includeHiddenModels]
   );
 
   const filteredOptions = useMemo(() => {
