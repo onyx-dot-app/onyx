@@ -143,8 +143,8 @@ function formatContextWindow(tokens: number): string {
   return tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : `${tokens}`;
 }
 
-/** Both views render at this height so the popover never resizes. */
-const PANE_HEIGHT_CLASS = "h-[352px]";
+/** Fixed-height scroll box: the popover clips overflow instead of scrolling. */
+const DETAIL_PANE_HEIGHT_CLASS = "h-[352px]";
 
 const SLIDER_THUMB_CLASS =
   "block size-3 rounded-full bg-background-neutral-00 shadow-[0_0_2px_1px_rgba(0,0,0,0.15)] focus:outline-none";
@@ -335,7 +335,7 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   return (
     <div
       className={cn(
-        PANE_HEIGHT_CLASS,
+        DETAIL_PANE_HEIGHT_CLASS,
         "flex w-full flex-col gap-1 overflow-y-auto"
       )}
     >
@@ -611,7 +611,7 @@ export default function ModelSelectorContent({
   }
 
   return (
-    <div className={cn(PANE_HEIGHT_CLASS, "flex w-full flex-col gap-1")}>
+    <Section gap={0.5}>
       <InputTypeIn
         searchIcon
         variant="internal"
@@ -723,6 +723,6 @@ export default function ModelSelectorContent({
                   })),
         ]}
       </PopoverMenu>
-    </div>
+    </Section>
   );
 }
