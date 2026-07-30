@@ -121,11 +121,6 @@ def _make_replica(
         return True
 
     monkeypatch.setattr(m, "_pod_exists_and_healthy", _pod_exists_and_healthy)
-    monkeypatch.setattr(
-        m,
-        "_stamp_pod_attempt_number",
-        lambda _pod_name, _attempt_number: None,
-    )
     monkeypatch.setattr(m, "_ensure_service_exists", _ensure_service_exists)
     monkeypatch.setattr(m, "_provision_opencode_secret", _provision_opencode_secret)
     monkeypatch.setattr(m, "_create_sandbox_pod", _create_sandbox_pod)

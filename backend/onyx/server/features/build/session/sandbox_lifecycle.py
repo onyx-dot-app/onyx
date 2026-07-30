@@ -591,14 +591,7 @@ def reconcile_sandbox(
             snapshot_opencode_history_before_recovery(
                 sandbox_manager, sandbox_id, tenant_id
             )
-            sandbox_manager.terminate(sandbox_id, max_attempt_number=attempt_number)
-        except SandboxProvisionContentionError as e:
-            db_session.rollback()
-            _record_provisioning_failure(db_session, sandbox_id, attempt_number, e)
-            raise SandboxProvisioningInProgressError(
-                f"Sandbox {sandbox_id} runtime is owned by a concurrent "
-                f"provisioner; retry"
-            ) from e
+            sandbox_manager.terminate(sandbox_id)
         except Exception as e:
             db_session.rollback()
             _record_provisioning_failure(db_session, sandbox_id, attempt_number, e)
@@ -608,7 +601,7 @@ def reconcile_sandbox(
 
     if reservation.terminate_before_provision:
         try:
-            sandbox_manager.terminate(sandbox_id, max_attempt_number=attempt_number)
+            sandbox_manager.terminate(sandbox_id)
         except Exception:
             logger.warning(
                 "Best-effort terminate of stale runtime for sandbox %s before "
@@ -981,10 +974,12 @@ def sleep_sandbox(
             return
         sleep_attempt_number = sandbox.provisioning_attempt_number
 
-        # Claim SLEEPING durably BEFORE destroying anything: once this commits,
-        # no other flow believes the runtime is theirs, so the kill below can
-        # never race a claim. The reverse order could destroy a runtime a
-        # concurrent recovery had just claimed.
+        # Terminate the pod (but keep the sandbox record).
+        sandbox_manager.terminate(sandbox_id)
+
+        # A recovery/create that started a newer attempt mid-terminate owns
+        # the sandbox now; only claim ports/sessions if the sleep write
+        # applies.
         if not sleep_running_sandbox__no_commit(
             db_session, sandbox_id, sleep_attempt_number
         ):
@@ -1005,30 +1000,6 @@ def sleep_sandbox(
         logger.debug("Marked %s sessions as IDLE for user %s", idled, sandbox.user_id)
 
         db_session.commit()
-
-        # Destroy the runtime (the sandbox record stays, as SLEEPING). The
-        # attempt bound plus the provisioning lock inside terminate() mean a
-        # wake that starts right after the commit either reuses the live pod
-        # first (terminate then skips) or provisions fresh after the deletion.
-        # A failed kill leaves an orphan runtime the next wake reuses or
-        # replaces — a leak is recoverable, a killed live runtime is not.
-        try:
-            sandbox_manager.terminate(
-                sandbox_id, max_attempt_number=sleep_attempt_number
-            )
-        except SandboxProvisionContentionError:
-            logger.info(
-                "Sandbox %s runtime is being provisioned by a concurrent flow; "
-                "leaving it to that owner",
-                sandbox_id,
-            )
-        except Exception:
-            logger.warning(
-                "Failed to terminate runtime of sleeping sandbox %s; the next "
-                "wake reuses or replaces it",
-                sandbox_id,
-                exc_info=True,
-            )
         logger.info("Sandbox %s is now sleeping", sandbox_id)
     finally:
         if session_creation_lock.owned():

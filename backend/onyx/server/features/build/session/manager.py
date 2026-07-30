@@ -715,18 +715,7 @@ class SessionManager:
                 mcp_config_hash=sandbox_mcp_config_hash,
             )
             if not finalized:
-                # Another initializer got there first. If it converged on
-                # ACTIVE the session is healthy — this attempt's work was
-                # redundant, not wrong.
                 self._db_session.rollback()
-                self._db_session.refresh(session)
-                if session.status == BuildSessionStatus.ACTIVE:
-                    logger.info(
-                        "Session %s was finalized ACTIVE by a concurrent "
-                        "initializer; converged",
-                        session_id,
-                    )
-                    return
                 raise StaleProvisioningAttemptError(
                     f"Session {session_id} left INITIALIZING before this "
                     f"attempt finalized"

@@ -1013,29 +1013,10 @@ class DockerSandboxManager(SandboxManager):
                 return self._require_container(sandbox_id), False
             raise RuntimeError(f"Failed to create sandbox container: {e}") from e
 
-    def terminate(
-        self, sandbox_id: UUID, max_attempt_number: int | None = None
-    ) -> None:
+    def terminate(self, sandbox_id: UUID) -> None:
         self._close_all_sandbox_buses(sandbox_id)
 
         container = self._get_container(sandbox_id)
-        if container is not None and max_attempt_number is not None:
-            raw = ((container.attrs or {}).get("Config", {}).get("Labels") or {}).get(
-                LABEL_PROVISIONING_ATTEMPT
-            )
-            try:
-                container_attempt = int(raw) if raw is not None else None
-            except ValueError:
-                container_attempt = None
-            if container_attempt is not None and container_attempt > max_attempt_number:
-                logger.warning(
-                    "Skipping terminate of sandbox %s: container belongs to attempt "
-                    "%s, newer than caller's attempt %s",
-                    sandbox_id,
-                    container_attempt,
-                    max_attempt_number,
-                )
-                return
         if container is not None:
             try:
                 container.remove(force=True, v=False)

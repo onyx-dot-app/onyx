@@ -227,7 +227,6 @@ class StubSandboxManager(SandboxManager):
 
         self.last_provision_payload: dict[str, Any] | None = None
         self.last_terminate_sandbox_id: UUID | None = None
-        self.last_terminate_max_attempt_number: int | None = None
         self.last_setup_session_workspace_payload: dict[str, Any] | None = None
         self.last_cleanup_session_workspace_payload: dict[str, Any] | None = None
         self.last_regenerate_session_config_payload: dict[str, Any] | None = None
@@ -301,12 +300,9 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("provision")
         return self.provision_returns
 
-    def terminate(
-        self, sandbox_id: UUID, max_attempt_number: int | None = None
-    ) -> None:
+    def terminate(self, sandbox_id: UUID) -> None:
         self.terminate_count += 1
         self.last_terminate_sandbox_id = sandbox_id
-        self.last_terminate_max_attempt_number = max_attempt_number
         self.terminated_sandbox_ids.append(sandbox_id)
         if not self.terminate_silent:
             raise _not_configured("terminate")

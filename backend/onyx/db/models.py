@@ -6124,9 +6124,10 @@ class Sandbox(Base):
     # Attempt number: incremented (under the per-user reservation lock) each
     # time a new provisioning attempt is authorized. Every status write names
     # the attempt it belongs to and only applies while the row still holds
-    # that number, and backend deletes check the runtime's attempt label — so
-    # an old attempt can never overwrite a newer attempt's outcome or destroy
-    # its runtime.
+    # that number, so an old attempt can never overwrite a newer attempt's
+    # outcome. Backend runtime deletes are name-keyed and best-effort
+    # serialized by the provisioning lock; a wrongly deleted pod self-heals
+    # through unhealthy-RUNNING recovery.
     provisioning_attempt_number: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
