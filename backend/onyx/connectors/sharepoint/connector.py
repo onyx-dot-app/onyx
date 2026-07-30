@@ -293,6 +293,36 @@ def _site_page_in_time_window(
     )
 
 
+def _drive_item_in_time_window(
+    item: dict[str, Any],
+    start: datetime | None,
+    end: datetime | None,
+) -> bool:
+    """Return True if a drive item falls within [start, end].
+
+    Uses the later of `createdDateTime` and `lastModifiedDateTime`: a file
+    copied or synced into a drive keeps its original modification date, which
+    can predate the window even though the file is new to the drive. Items
+    carrying neither timestamp are kept.
+    """
+    if start is None and end is None:
+        return True
+
+    timestamps = [
+        ts
+        for ts in (
+            _parse_sharepoint_datetime(item.get("createdDateTime")),
+            _parse_sharepoint_datetime(item.get("lastModifiedDateTime")),
+        )
+        if ts is not None
+    ]
+    if not timestamps:
+        return True
+
+    item_ts = max(timestamps)
+    return (start is None or item_ts >= start) and (end is None or item_ts <= end)
+
+
 # Transport-level exceptions that indicate a transient network/server-side
 # problem rather than an HTTP error. These can occur both as bare exceptions
 # (older office365 SDK paths that don't wrap them) and as the underlying
@@ -2050,18 +2080,8 @@ class SharepointConnector(
                     # but still yield them — the downstream conversion handles filtering
                     # by extension / mime type.
 
-                    # NOTE: We are now including items without a lastModifiedDateTime,
-                    # and respecting when only one of start or end is set.
-                    if start is not None or end is not None:
-                        raw_ts = item.get("lastModifiedDateTime")
-                        if raw_ts:
-                            mod_dt = datetime.fromisoformat(
-                                raw_ts.replace("Z", "+00:00")
-                            )
-                            if start is not None and mod_dt < start:
-                                continue
-                            if end is not None and mod_dt > end:
-                                continue
+                    if not _drive_item_in_time_window(item, start, end):
+                        continue
 
                     yield DriveItemData.from_graph_json(item)
 
@@ -2145,14 +2165,8 @@ class SharepointConnector(
                 if "folder" in item or "deleted" in item:
                     continue
 
-                if start is not None or end is not None:
-                    raw_ts = item.get("lastModifiedDateTime")
-                    if raw_ts:
-                        mod_dt = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
-                        if start is not None and mod_dt < start:
-                            continue
-                        if end is not None and mod_dt > end:
-                            continue
+                if not _drive_item_in_time_window(item, start, end):
+                    continue
 
                 yield DriveItemData.from_graph_json(item)
 
@@ -2212,14 +2226,8 @@ class SharepointConnector(
         for item in data.get("value", []):
             if "folder" in item or "deleted" in item:
                 continue
-            if start is not None or end is not None:
-                raw_ts = item.get("lastModifiedDateTime")
-                if raw_ts:
-                    mod_dt = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
-                    if start is not None and mod_dt < start:
-                        continue
-                    if end is not None and mod_dt > end:
-                        continue
+            if not _drive_item_in_time_window(item, start, end):
+                continue
             items.append(DriveItemData.from_graph_json(item))
 
         next_url = data.get("@odata.nextLink")
