@@ -1763,6 +1763,30 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
       },
     ],
   },
+  google_chat: {
+    description: "Configure Google Chat connector",
+    values: [],
+    advanced_values: [
+      {
+        type: "list",
+        query: "Enter Google Chat spaces to include:",
+        label: "Spaces",
+        name: "space_names",
+        description:
+          "Optionally list exact space resource names (spaces/...) or display names. Leave empty to index public messages from every space the Chat app has joined. Workspace administrator approval is required for message access.",
+        optional: true,
+      },
+      {
+        type: "text",
+        query: "Enter the Start Date:",
+        label: "Start Date",
+        name: "start_date",
+        description:
+          "Only messages after this date will be indexed. Format: YYYY-MM-DD",
+        optional: true,
+      },
+    ],
+  },
   freshdesk: {
     description: "Configure Freshdesk connector",
     values: [],

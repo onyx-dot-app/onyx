@@ -226,6 +226,7 @@ class DocumentSource(str, Enum):
     SLACK = "slack"
     WEB = "web"
     GOOGLE_DRIVE = "google_drive"
+    GOOGLE_CHAT = "google_chat"
     GMAIL = "gmail"
     GITHUB = "github"
     GITBOOK = "gitbook"
@@ -726,6 +727,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.SLACK: "Team messages and channel discussions",
     DocumentSource.WEB: "Indexed web pages",
     DocumentSource.GOOGLE_DRIVE: "Documents, spreadsheets, and presentations",
+    DocumentSource.GOOGLE_CHAT: "Messages and conversations in Google Chat spaces",
     DocumentSource.GMAIL: "Email conversations and threads",
     DocumentSource.GITHUB: "Pull requests, issues, and code reviews",
     DocumentSource.GITBOOK: "Documentation and knowledge base pages",
