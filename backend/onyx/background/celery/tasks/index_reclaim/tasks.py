@@ -55,6 +55,7 @@ from onyx.db.search_settings import (
     get_search_settings_by_id,
     record_failure__no_commit,
 )
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.index_reclaim import (
     ReclaimOutcome,
@@ -179,11 +180,13 @@ def _drive_deleting(db_session: Session, search_settings: SearchSettings) -> Non
     INCOMPLETE leaves it DELETING for next tick."""
     index_name = search_settings.index_name
     settings_id = search_settings.id
-    tenant_id = get_current_tenant_id()
+    tenant_state = TenantState(
+        tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT
+    )
     deadline = time.monotonic() + _DELETE_TIME_BUDGET_S
 
     while True:
-        outcome = reclaim_index_data(index_name, MULTI_TENANT, tenant_id)
+        outcome = reclaim_index_data(index_name, tenant_state)
         if outcome == ReclaimOutcome.COMPLETE:
             advance_to_reclaimed__no_commit(search_settings)
             db_session.commit()
