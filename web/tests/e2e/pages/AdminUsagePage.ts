@@ -16,8 +16,9 @@ export class AdminUsagePage {
     await expect(this.usageRows.first()).toBeVisible({ timeout: 15_000 });
   }
 
-  async resetFirstUser(): Promise<void> {
-    const row = this.usageRows.first();
+  async resetUser(email: string): Promise<void> {
+    const row = this.page.getByTestId(`usage-row-${email}`);
+    await expect(row).toBeVisible();
     const responsePromise = this.page.waitForResponse(
       (response) =>
         response.url().includes(RESET_ENDPOINT) &&
@@ -26,7 +27,7 @@ export class AdminUsagePage {
 
     await row.getByRole("button", { name: "Reset" }).click();
     expect((await responsePromise).ok()).toBeTruthy();
-    await expect(this.page.getByText(/reset usage for/i)).toBeVisible({
+    await expect(this.page.getByText(`Reset usage for ${email}.`)).toBeVisible({
       timeout: 10_000,
     });
   }

@@ -1,5 +1,6 @@
 import { test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
+import { TEST_ADMIN_CREDENTIALS } from "@tests/e2e/constants";
 import { AdminUsagePage } from "@tests/e2e/pages/AdminUsagePage";
 
 /**
@@ -21,6 +22,6 @@ test.describe("admin per-user usage table + reset", () => {
 
     const usage = new AdminUsagePage(page);
     await usage.goto();
-    await usage.resetFirstUser();
+    await usage.resetUser(TEST_ADMIN_CREDENTIALS.email);
   });
 });

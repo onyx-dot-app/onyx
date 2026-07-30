@@ -207,7 +207,7 @@ export default function PerUserUsagePanel() {
         <Text font="secondary-body" color="text-03">
           Tokens (input, output, cache reads) and cost per user over the report
           window. Click a column to rank by it, or search by email. Reset clears
-          the user&apos;s current UTC-day usage; prior days are kept.
+          usage from every currently active limit window.
         </Text>
 
         <InputTypeIn
