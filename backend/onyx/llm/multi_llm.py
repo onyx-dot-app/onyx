@@ -99,6 +99,36 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
 # still advertises temperature as supported).
 _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
 
+# Best-effort tuning kwargs, never worth failing a chat over. _completion
+# retries provider rejections without them: reasoning keys first, then all.
+# Semantics-changing keys (tools, tool_choice, messages) are never stripped.
+_REASONING_KWARG_KEYS = frozenset(
+    {"thinking", "output_config", "reasoning", "reasoning_effort"}
+)
+_BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset({"temperature"})
+
+# Substrings provider 400s use to name each strippable kwarg (errors may
+# cite only inner fields like budget_tokens or effort).
+_KWARG_ERROR_ALIASES: dict[str, tuple[str, ...]] = {
+    "thinking": ("thinking", "budget_tokens"),
+    "output_config": ("output_config", "effort"),
+    "reasoning": ("reasoning", "effort"),
+    "reasoning_effort": ("reasoning_effort", "effort"),
+    "temperature": ("temperature",),
+}
+
+
+def _rejection_names_strippable_kwargs(error: Exception, strippable: set[str]) -> bool:
+    """True when the 400's message names a kwarg a later attempt would drop.
+    Unrelated 400s (context length, malformed input) must not be retried."""
+    message = str(error).lower()
+    return any(
+        alias in message
+        for key in strippable
+        for alias in _KWARG_ERROR_ALIASES.get(key, (key,))
+    )
+
+
 # Named tiers spanning Claude's naming schemes, including the Claude 5 line whose
 # version digit can precede or follow the tier ("claude-sonnet-5" vs
 # "claude-5-sonnet").
@@ -542,7 +572,7 @@ class LitellmLLM(LLM):
         client: "HTTPHandler | None" = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         # Lazy loading to avoid memory bloat for non-inference flows
-        from litellm.exceptions import RateLimitError, Timeout
+        from litellm.exceptions import BadRequestError, RateLimitError, Timeout
 
         from onyx.llm.litellm_singleton import litellm
 
@@ -841,23 +871,54 @@ class LitellmLLM(LLM):
             if tools and tool_choice is not None:
                 optional_kwargs["tool_choice"] = tool_choice
 
-            with temporary_env_and_lock(self._custom_config or {}):
-                response = litellm.completion(
-                    mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
-                    model=model,
-                    base_url=self._api_base or None,
-                    api_version=api_version,
-                    custom_llm_provider=self._custom_llm_provider or None,
-                    messages=messages,
-                    tools=tools,
-                    stream=stream,
-                    timeout=timeout_override or self._timeout,
-                    max_tokens=max_tokens,
-                    client=client,
-                    **optional_kwargs,
-                    **passthrough_kwargs,
-                )
-            return response
+            def _call_litellm(opts: dict[str, Any]) -> Any:
+                # Built per attempt because the context manager is single-use.
+                with temporary_env_and_lock(self._custom_config or {}):
+                    return litellm.completion(
+                        mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
+                        model=model,
+                        base_url=self._api_base or None,
+                        api_version=api_version,
+                        custom_llm_provider=self._custom_llm_provider or None,
+                        messages=messages,
+                        tools=tools,
+                        stream=stream,
+                        timeout=timeout_override or self._timeout,
+                        max_tokens=max_tokens,
+                        client=client,
+                        **opts,
+                        **passthrough_kwargs,
+                    )
+
+            # Retry ladder for provider 400s: drop reasoning kwargs, then every
+            # best-effort kwarg. Unknown models or capability drift degrade to
+            # provider defaults with a warning instead of failing the message.
+            attempts = [optional_kwargs]
+            for strip_keys in (_REASONING_KWARG_KEYS, _BEST_EFFORT_KWARG_KEYS):
+                stripped = {
+                    k: v for k, v in optional_kwargs.items() if k not in strip_keys
+                }
+                if len(stripped) < len(attempts[-1]):
+                    attempts.append(stripped)
+
+            for i, opts in enumerate(attempts):
+                try:
+                    return _call_litellm(opts)
+                except BadRequestError as e:
+                    if i == len(attempts) - 1:
+                        raise
+                    # Only retry rejections a later attempt can strip away.
+                    remaining_strippable = set(opts) - set(attempts[-1])
+                    if not _rejection_names_strippable_kwargs(e, remaining_strippable):
+                        raise
+                    logger.warning(
+                        "Provider rejected request for model %s. Retrying "
+                        "without %s: %s",
+                        model,
+                        sorted(set(opts) - set(attempts[i + 1])),
+                        e,
+                    )
+            raise RuntimeError("unreachable: retry ladder always returns or raises")
         except Exception as e:
             # for break pointing
             if isinstance(e, Timeout):
