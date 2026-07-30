@@ -107,10 +107,29 @@ class EmptyLLMResponseError(ClassifiedLLMError):
         self.finish_reason = finish_reason
 
 
-# LiteLLM normalizes provider refusal stop reasons (e.g. Anthropic's
-# stop_reason="refusal", Gemini's SAFETY) to "content_filter". Some
-# OpenAI-compatible gateways forward the raw provider value instead.
-_REFUSAL_FINISH_REASONS = {"content_filter", "refusal"}
+# LiteLLM maps these native policy blocks to content_filter, but gateways may
+# forward the provider value unchanged.
+_REFUSAL_FINISH_REASONS = {
+    "BLOCKLIST",
+    "CONTENT_BLOCKED",
+    "ERROR_TOXIC",
+    "IMAGE_OTHER",
+    "IMAGE_PROHIBITED_CONTENT",
+    "IMAGE_RECITATION",
+    "IMAGE_SAFETY",
+    "LANGUAGE",
+    "MODEL_ARMOR",
+    "OTHER",
+    "PROHIBITED_CONTENT",
+    "RECITATION",
+    "SAFETY",
+    "SPII",
+    "content_filter",
+    "content_filtered",
+    "guardrail_intervened",
+    "refusal",
+    "sensitive",
+}
 
 
 def _build_empty_llm_response_error(
