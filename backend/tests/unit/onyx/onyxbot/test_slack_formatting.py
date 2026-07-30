@@ -285,6 +285,12 @@ def test_link_label_text_is_not_autolinked() -> None:
     )
 
 
+def test_markdown_link_keeps_nested_url_label_flat() -> None:
+    rendered = _render("[outer https://nested.example](https://outer.example/a|b>c)")
+
+    assert "<https://outer.example/a%7Cb%3Ec|outer https://nested.example>" == rendered
+
+
 def test_image_labels_cannot_nest_slack_links() -> None:
     assert "<https://images.example/a.png|https://alt.example>" == _render(
         "![https://alt.example](https://images.example/a.png)"

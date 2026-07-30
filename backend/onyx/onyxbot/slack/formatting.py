@@ -62,6 +62,10 @@ def format_slack_link_url(url: str) -> str:
     return _escape_slack_specials(url.replace("|", "%7C"))
 
 
+def _escape_markdown_link_destination(url: str) -> str:
+    return url.replace("|", "%7C").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _format_slack_link_label(text: str) -> str:
     text = _RENDERED_SLACK_LINK_PATTERN.sub(
         lambda match: match.group(2) or match.group(1), text
@@ -140,9 +144,11 @@ def _normalize_link_destinations(message: str) -> str:
             normalized_parts.append(message[destination_start:])
             return "".join(normalized_parts)
 
-        already_wrapped = destination.startswith("<") and destination.endswith(">")
-        if destination and not already_wrapped:
-            destination = f"<{destination}>"
+        if destination:
+            already_wrapped = destination.startswith("<") and destination.endswith(">")
+            if already_wrapped:
+                destination = destination[1:-1]
+            destination = f"<{_escape_markdown_link_destination(destination)}>"
 
         normalized_parts.append(destination)
         normalized_parts.append(")")
