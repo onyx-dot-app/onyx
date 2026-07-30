@@ -242,6 +242,21 @@ def test_link_label_text_is_not_autolinked() -> None:
     assert "Contact support@onyx.app" == _clean_markdown_link_text(
         "Contact support@onyx.app"
     )
+    assert "Read the portal" == _clean_markdown_link_text(
+        "Read the [portal](https://onyx.app)"
+    )
+    assert "Visit https://onyx.app" == _clean_markdown_link_text(
+        "Visit <https://onyx.app>"
+    )
+
+
+def test_image_labels_cannot_nest_slack_links() -> None:
+    assert "<https://images.example/a.png|https://alt.example>" == _render(
+        "![https://alt.example](https://images.example/a.png)"
+    )
+    assert "<https://images.example/a.png|https://alt.example>" == _render(
+        "![<https://alt.example>](https://images.example/a.png)"
+    )
 
 
 def test_trailing_punctuation_excluded_from_url() -> None:

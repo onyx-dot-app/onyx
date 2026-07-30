@@ -3,6 +3,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from mistune import HTMLRenderer, create_markdown
+from mistune.plugins import Plugin
 
 if TYPE_CHECKING:
     from mistune.core import InlineState
@@ -33,6 +34,9 @@ _MARKDOWN_LINK_PATTERN = re.compile(r"\[(?:[^\[\]]|\[[^\]]*\])*\]\(")
 # mailto: is included because mistune parses <mailto:a@b.com|label> as a single
 # autolink and percent-encodes the pipe into the address.
 _SLACK_LINK_PATTERN = re.compile(r"<((?:https?://|mailto:)[^|>]+)\|([^>]+)>")
+_RENDERED_SLACK_LINK_PATTERN = re.compile(
+    r"<((?:https?://|mailto:)[^|>]+)(?:\|([^>]*))?>"
+)
 
 # Bare URLs and emails are emitted explicitly because Slack's auto-linker can
 # absorb an adjacent emphasis delimiter into the href.
@@ -45,6 +49,24 @@ _EMAIL_LINK_PATTERN = (
     r"(?![a-zA-Z0-9-])"
 )
 _URL_TRAILING_PUNCTUATION = ".,:;\"'*_~"
+_SLACK_SPECIALS: dict[str, str] = {"&": "&amp;", "<": "&lt;", ">": "&gt;"}
+
+
+def _escape_slack_specials(text: str) -> str:
+    for special, replacement in _SLACK_SPECIALS.items():
+        text = text.replace(special, replacement)
+    return text
+
+
+def format_slack_link_url(url: str) -> str:
+    return _escape_slack_specials(url.replace("|", "%7C"))
+
+
+def _format_slack_link_label(text: str) -> str:
+    text = _RENDERED_SLACK_LINK_PATTERN.sub(
+        lambda match: match.group(2) or match.group(1), text
+    )
+    return text.replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _sanitize_html(text: str) -> str:
@@ -149,7 +171,7 @@ def _append_autolink(
     url: str,
     end_pos: int,
 ) -> int:
-    if state.in_link:
+    if state.in_link or state.in_image:
         inline.process_text(label, state)
     else:
         state.append_token(
@@ -196,7 +218,7 @@ def _parse_email_link(
     )
 
 
-def slack_autolink(md: "Markdown") -> None:
+def _slack_autolink(md: "Markdown") -> None:
     """Mistune plugin turning bare URLs and emails into link tokens.
 
     Registering at the inline-parser level means code spans, fenced blocks and
@@ -207,21 +229,23 @@ def slack_autolink(md: "Markdown") -> None:
     md.inline.register("email_link", _EMAIL_LINK_PATTERN, _parse_email_link)
 
 
-def format_slack_message(message: str | None, autolink: bool = True) -> str:
+def format_slack_message(message: str | None, render_links: bool = True) -> str:
     """Render markdown as Slack mrkdwn.
 
     Callers embedding the result inside a Slack link label must pass
-    autolink=False, since a nested <...> would terminate the outer link.
+    render_links=False, since a nested <...> would terminate the outer link.
     """
     if message is None:
         return ""
     message = _transform_outside_code_blocks(message, _sanitize_html)
     message = _convert_slack_links_to_markdown(message)
     normalized_message = _normalize_link_destinations(message)
-    plugins: list[Any] = ["strikethrough", "table"]
-    if autolink:
-        plugins.append(slack_autolink)
-    md = create_markdown(renderer=SlackRenderer(), plugins=plugins)
+    plugins: list[str | Plugin] = ["strikethrough", "table"]
+    if render_links:
+        plugins.append(_slack_autolink)
+    md = create_markdown(
+        renderer=SlackRenderer(render_links=render_links), plugins=plugins
+    )
     result = md(normalized_message)
     # With HTMLRenderer, result is always str (not AST list)
     assert isinstance(result, str)
@@ -235,17 +259,14 @@ class SlackRenderer(HTMLRenderer):
     no raw HTML ever appears in Slack messages.
     """
 
-    SPECIALS: dict[str, str] = {"&": "&amp;", "<": "&lt;", ">": "&gt;"}
-
-    def __init__(self) -> None:
+    def __init__(self, render_links: bool = True) -> None:
         super().__init__()
+        self._render_links = render_links
         self._table_headers: list[str] = []
         self._current_row_cells: list[str] = []
 
     def escape_special(self, text: str) -> str:
-        for special, replacement in self.SPECIALS.items():
-            text = text.replace(special, replacement)
-        return text
+        return _escape_slack_specials(text)
 
     def heading(self, text: str, level: int, **attrs: Any) -> str:  # noqa: ARG002
         return f"*{text}*\n\n"
@@ -273,16 +294,23 @@ class SlackRenderer(HTMLRenderer):
         return f"li: {text}\n"
 
     def link(self, text: str, url: str, title: str | None = None) -> str:
-        escaped_url = self.escape_special(url)
+        escaped_url = format_slack_link_url(url)
         # A label identical to the href is what an autolinked bare URL produces
-        label = text or title
+        label = text or (self.escape_special(title) if title else None)
+        if not self._render_links:
+            return _format_slack_link_label(label or self.escape_special(url))
         if label and label != escaped_url:
-            return f"<{escaped_url}|{label}>"
+            return f"<{escaped_url}|{_format_slack_link_label(label)}>"
         return f"<{escaped_url}>"
 
     def image(self, text: str, url: str, title: str | None = None) -> str:
-        escaped_url = self.escape_special(url)
-        display_text = title or text
+        escaped_url = format_slack_link_url(url)
+        display_text = self.escape_special(title) if title else text
+        display_text = _format_slack_link_label(
+            display_text or self.escape_special(url)
+        )
+        if not self._render_links:
+            return display_text
         return f"<{escaped_url}|{display_text}>" if display_text else f"<{escaped_url}>"
 
     def codespan(self, text: str) -> str:
