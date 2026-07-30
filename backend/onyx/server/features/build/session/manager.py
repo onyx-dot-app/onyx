@@ -36,7 +36,6 @@ from onyx.server.features.build.configs import (
     MAX_TOTAL_UPLOAD_SIZE_BYTES,
     MAX_UPLOAD_FILES_PER_SESSION,
     OPENCODE_DISABLED_TOOLS,
-    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
 )
 from onyx.server.features.build.db.build_session import (
     allocate_nextjs_port,
@@ -62,10 +61,7 @@ from onyx.server.features.build.sandbox.models import (
     FilesystemEntry,
     PromptAttachment,
 )
-from onyx.server.features.build.sandbox.serve_transport import (
-    PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
-    PromptSlot,
-)
+from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
@@ -95,6 +91,10 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
     hydrate_managed_content,
 )
 from onyx.server.features.build.session.streaming import BuildStreamingState
+from onyx.server.features.build.timeouts import (
+    PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
+)
 from onyx.skills.push import build_user_skills_payload
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
@@ -102,6 +102,9 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# Webapp-ready probe on the UI-poll hot path; any response (even 404) counts.
+_WEBAPP_PROBE_TIMEOUT_SECONDS = 2.0
 
 _DISPOSE_PENDING_TTL_SECONDS = 24 * 3600
 
@@ -1431,7 +1434,7 @@ class SessionManager:
                 f"{internal_url}/api/build/sessions/{session_id}/webapp"
                 "/_next/static/onyx-ready-probe.js"
             )
-            with httpx.Client(timeout=2.0) as client:
+            with httpx.Client(timeout=_WEBAPP_PROBE_TIMEOUT_SECONDS) as client:
                 client.get(probe_url)
             return True
         except Exception:
