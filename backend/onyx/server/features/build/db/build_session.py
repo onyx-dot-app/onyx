@@ -203,6 +203,26 @@ def get_empty_session_for_user(
     )
 
 
+def get_active_session_ids_for_user(
+    user_id: UUID,
+    db_session: Session,
+) -> list[UUID]:
+    """IDs of the user's ACTIVE sessions, whatever their origin.
+
+    ACTIVE is the only status a turn can be in flight under — sessions are
+    marked IDLE when their sandbox sleeps — so this bounds the set of sessions
+    worth asking the turn cache about.
+    """
+    return list(
+        db_session.scalars(
+            select(BuildSession.id).where(
+                BuildSession.user_id == user_id,
+                BuildSession.status == BuildSessionStatus.ACTIVE,
+            )
+        )
+    )
+
+
 def update_session_activity(
     session_id: UUID,
     db_session: Session,
