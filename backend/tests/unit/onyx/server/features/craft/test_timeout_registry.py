@@ -8,7 +8,6 @@ their point of use (single-file, free-standing) are imported from there.
 
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
-    OPENCODE_SERVE_EVENT_READ_TIMEOUT,
     PROMPT_SLOT_LEASE_SECONDS,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
     SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
@@ -52,15 +51,12 @@ def test_turn_derivations() -> None:
 
 
 def test_keepalive_derivations() -> None:
-    # The couplings ARE the spec: env-tuning the keepalive must move runner
-    # staleness and the SSE idle timeout with it — a fixed stale threshold
-    # under a raised keepalive steals turns from healthy silent tool calls,
-    # and a fixed read timeout turns the event stream into reconnect churn.
-    # The literals pin the multipliers and the default keepalive together.
+    # The coupling IS the spec: env-tuning the keepalive must move runner
+    # staleness with it — a fixed stale threshold under a raised keepalive
+    # steals turns from healthy silent tool calls. The literal pins the
+    # multiplier and the default keepalive together.
     assert RUNNER_STALE_AFTER_SECONDS == 6 * SSE_KEEPALIVE_INTERVAL
     assert RUNNER_STALE_AFTER_SECONDS == 90.0
-    assert OPENCODE_SERVE_EVENT_READ_TIMEOUT == 4 * SSE_KEEPALIVE_INTERVAL
-    assert OPENCODE_SERVE_EVENT_READ_TIMEOUT == 60.0
     assert LIVE_STREAM_RUNNER_RETRY_SECONDS < RUNNER_STALE_AFTER_SECONDS
 
 

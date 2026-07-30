@@ -210,12 +210,13 @@ OPENCODE_SERVE_CONNECT_TIMEOUT = float(
 OPENCODE_SERVE_REQUEST_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_REQUEST_TIMEOUT", "30.0")
 )
-# Idle timeout for /event SSE. The reader reconnects (with backoff) if the
-# stream is silent for this long. Derived from the keepalive cadence: the
-# stream carries a keepalive at least every SSE_KEEPALIVE_INTERVAL, so N
-# missed keepalives — not an independent number — is what "dead stream" means.
+# Idle timeout for the raw /event SSE connection to opencode-serve. The
+# reader reconnects (with backoff) if no bytes arrive for this long. Its
+# floor is opencode-serve's own emission cadence on /event — NOT our
+# downstream UI keepalive, which is synthesized after the bus and never
+# reaches this connection.
 OPENCODE_SERVE_EVENT_READ_TIMEOUT = float(
-    os.environ.get("OPENCODE_SERVE_EVENT_READ_TIMEOUT", str(4 * SSE_KEEPALIVE_INTERVAL))
+    os.environ.get("OPENCODE_SERVE_EVENT_READ_TIMEOUT", "60.0")
 )
 
 # ==============================================================================
