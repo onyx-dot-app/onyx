@@ -1,7 +1,7 @@
 """durable craft provisioning lifecycle
 
 Revision ID: 3debc2b55899
-Revises: 0d9c7b6a5e4f
+Revises: 4662f8c3e038
 Create Date: 2026-07-29 16:05:31.324630
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "3debc2b55899"
-down_revision = "0d9c7b6a5e4f"
+down_revision = "4662f8c3e038"
 branch_labels = None
 depends_on = None
 
