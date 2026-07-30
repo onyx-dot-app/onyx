@@ -46,11 +46,19 @@ class TestSetupScriptReplaySafety:
         outputs_index = script.index("Copying outputs template")
         assert touch_index < outputs_index < remove_index
 
-    def test_whole_setup_serialized_with_session_flock(self) -> None:
+    def test_materialization_serialized_with_session_flock(self) -> None:
         script = _setup_script()
         assert f"8>{_SESSION_PATH}.setup.lock" in script
         # The flock must open before any workspace mutation.
         assert script.index("flock -x 8") < script.index("mkdir -p")
+
+    def test_dev_server_starts_outside_the_setup_lock(self) -> None:
+        # A backgrounded dev server inside the flock subshell would inherit
+        # fd 8 and hold the setup lock for its entire lifetime, deadlocking
+        # every later repair/restore. It must start after the lock releases.
+        script = _setup_script()
+        lock_close = script.index(f"8>{_SESSION_PATH}.setup.lock")
+        assert script.index("bun run dev") > lock_close
 
     def test_agents_md_is_shell_quoted(self) -> None:
         # Content with quotes must round-trip through printf without breaking

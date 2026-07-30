@@ -83,8 +83,12 @@ fi
     return f"""
 set -e
 
-# Serialize the whole setup per session: a concurrent replay blocks here and
-# then re-runs over the completed workspace, converging instead of racing.
+# Serialize workspace *materialization* per session with an flock: a concurrent
+# replay blocks here and then re-runs over the completed workspace, converging
+# instead of racing. The dev-server launch is deliberately NOT inside this
+# subshell — a backgrounded server started here would inherit fd 8 and hold the
+# lock for its entire lifetime, deadlocking every later repair/restore. It runs
+# after the lock releases and has its own pid-guard for idempotency.
 (
 flock -x 8
 set -e
@@ -114,10 +118,11 @@ printf '%s' {shlex.quote(agents_md)} > {session_path}/AGENTS.md
 
 printf '%s' {shlex.quote(session_opencode_config_json)} > {session_path}/opencode.json
 
-# Start Next.js dev server
-{nextjs_start_script}
-
 rm -f {session_path}/{SETUP_IN_PROGRESS_MARKER}
-echo "Session workspace setup complete"
+echo "Workspace materialization complete"
 ) 8>{session_path}.setup.lock
+
+# Start Next.js dev server (outside the setup lock; own pid-guard).
+{nextjs_start_script}
+echo "Session workspace setup complete"
 """
