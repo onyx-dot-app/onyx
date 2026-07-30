@@ -20,11 +20,11 @@ basic_retry_wrapper = retry_builder(tries=7)
 _SLACK_LIMIT = 900
 
 _NON_INTERACTIVE_SLACK_TEXT_PATTERN = re.compile(
-    r"<(?P<url>(?:https?://|mailto:)[^|>]+)(?:\|(?P<label>[^>]*))?>"
+    r"<(?P<url>(?:https?://|mailto:)[^|<>]+)(?:\|(?P<label>[^<>]*))?>"
     r"|(?P<code>```[\s\S]*?```|`[^`\n]*`)"
 )
 _SUBTEAM_MENTION_PATTERN = re.compile(
-    r"<!subteam\^(?P<id>[^>|]+)(?:\|(?P<label>[^>]*))?>"
+    r"<!subteam\^(?P<id>[^<>|]+)(?:\|(?P<label>[^<>]*))?>"
 )
 
 # used to serialize access to the retry TTL

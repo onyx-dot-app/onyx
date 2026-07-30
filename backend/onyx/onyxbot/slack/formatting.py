@@ -33,9 +33,9 @@ _MARKDOWN_LINK_PATTERN = re.compile(r"\[(?:[^\[\]]|\[[^\]]*\])*\]\(")
 # brackets and Slack would render them as literal text instead of links.
 # mailto: is included because mistune parses <mailto:a@b.com|label> as a single
 # autolink and percent-encodes the pipe into the address.
-_SLACK_LINK_PATTERN = re.compile(r"<((?:https?://|mailto:)[^|>]+)\|([^>]+)>")
+_SLACK_LINK_PATTERN = re.compile(r"<((?:https?://|mailto:)[^|<>]+)\|([^<>]+)>")
 _RENDERED_SLACK_LINK_PATTERN = re.compile(
-    r"<((?:https?://|mailto:)[^|>]+)(?:\|([^>]*))?>"
+    r"<((?:https?://|mailto:)[^|<>]+)(?:\|([^<>]*))?>"
 )
 
 # Bare URLs and emails are emitted explicitly because Slack's auto-linker can

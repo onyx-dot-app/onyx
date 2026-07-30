@@ -1,5 +1,11 @@
+from onyx.connectors.slack.utils import (
+    _NON_INTERACTIVE_SLACK_TEXT_PATTERN,
+    _SUBTEAM_MENTION_PATTERN,
+)
 from onyx.onyxbot.slack.blocks import _clean_markdown_link_text
 from onyx.onyxbot.slack.formatting import (
+    _RENDERED_SLACK_LINK_PATTERN,
+    _SLACK_LINK_PATTERN,
     _convert_slack_links_to_markdown,
     _normalize_link_destinations,
     _sanitize_html,
@@ -70,6 +76,16 @@ def test_slack_style_links_preserved_inside_code_blocks() -> None:
     converted = _convert_slack_links_to_markdown(message)
 
     assert "<https://example.com|click>" in converted
+
+
+def test_slack_token_patterns_stop_at_nested_openers() -> None:
+    nested_link = "<https://outer|label<https://nested>"
+    nested_subteam = "<!subteam^S1<!subteam^S2>"
+
+    assert _SLACK_LINK_PATTERN.fullmatch(nested_link) is None
+    assert _RENDERED_SLACK_LINK_PATTERN.fullmatch(nested_link) is None
+    assert _NON_INTERACTIVE_SLACK_TEXT_PATTERN.fullmatch(nested_link) is None
+    assert _SUBTEAM_MENTION_PATTERN.fullmatch(nested_subteam) is None
 
 
 def test_html_tags_stripped_outside_code_blocks() -> None:
