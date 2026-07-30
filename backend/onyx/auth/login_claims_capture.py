@@ -137,8 +137,12 @@ def _retain_richer_sources(
     return merged
 
 
-async def _store_claims_snapshot(email: str, snapshot: dict[str, Any]) -> None:
-    tenant_id = await _resolve_capture_tenant_id(email)
+async def _store_claims_snapshot(
+    email: str,
+    snapshot: dict[str, Any],
+    tenant_id: str | None = None,
+) -> None:
+    tenant_id = tenant_id or await _resolve_capture_tenant_id(email)
     if tenant_id is None:
         logger.debug(
             "Skipping claims capture for %s: tenant not yet resolved "
@@ -274,6 +278,8 @@ async def capture_oauth_login_claims(
     oauth_client: Any,
     email: str,
     token: dict[str, Any],
+    *,
+    tenant_id: str | None = None,
 ) -> None:
     """Snapshot the claims the IdP sent for this login into Redis.
 
@@ -287,7 +293,9 @@ async def capture_oauth_login_claims(
         return
     try:
         await asyncio.wait_for(
-            _capture_oauth_login_claims(oauth_client, email, token),
+            _capture_oauth_login_claims(
+                oauth_client, email, token, tenant_id=tenant_id
+            ),
             timeout=_IDP_CLAIMS_CAPTURE_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
@@ -300,6 +308,8 @@ async def _capture_oauth_login_claims(
     oauth_client: Any,
     email: str,
     token: dict[str, Any],
+    *,
+    tenant_id: str | None = None,
 ) -> None:
     try:
         id_token_claims: dict[str, Any] = {}
@@ -356,7 +366,7 @@ async def _capture_oauth_login_claims(
             },
         }
 
-        await _store_claims_snapshot(email, snapshot)
+        await _store_claims_snapshot(email, snapshot, tenant_id)
     except Exception:
         logger.warning(
             "OAuth claims capture failed for %s (login unaffected)",

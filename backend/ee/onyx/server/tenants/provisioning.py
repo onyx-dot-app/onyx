@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
 from ee.onyx.db.user_tenant_mapping import (
     add_users_to_tenant,
-    get_tenant_id_for_email,
+    resolve_tenant_id,
     user_owns_a_tenant,
 )
 from ee.onyx.server.tenants.access import generate_data_plane_token
@@ -25,7 +25,6 @@ from ee.onyx.server.tenants.schema_management import (
     drop_schema,
     run_alembic_migrations,
 )
-from onyx.auth.users import exceptions
 from onyx.configs.app_configs import (
     ANTHROPIC_DEFAULT_API_KEY,
     AUTO_PROVISION_DEFAULT_LLM_PROVIDERS,
@@ -90,11 +89,16 @@ async def get_or_provision_tenant(
     email: str,
     referral_source: str | None = None,
     request: Request | None = None,
+    oauth_name: str | None = None,
+    account_id: str | None = None,
 ) -> str:
     """
     Get existing tenant ID for an email or create a new tenant if none exists.
     This function should only be called after we have verified we want this user's tenant to exist.
     It returns the tenant ID associated with the email, creating a new tenant if necessary.
+
+    When the caller knows the IdP subject it is tried before the email, which is
+    what stops a renamed user being treated as a brand new signup.
     """
     # Early return for non-multi-tenant mode
     if not MULTI_TENANT:
@@ -103,14 +107,9 @@ async def get_or_provision_tenant(
     if referral_source and request:
         await submit_to_hubspot(email, referral_source, request)
 
-    # First, check if the user already has a tenant
-    tenant_id: str | None = None
-    try:
-        tenant_id = get_tenant_id_for_email(email)
+    tenant_id = resolve_tenant_id(email, oauth_name, account_id)
+    if tenant_id:
         return tenant_id
-    except exceptions.UserNotExists:
-        # User doesn't exist, so we need to create a new tenant or assign an existing one
-        pass
 
     try:
         # Try to get a pre-provisioned tenant
