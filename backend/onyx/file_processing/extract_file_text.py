@@ -393,12 +393,24 @@ def read_pdf_file(
                         break
 
                     image = Image.open(io.BytesIO(image_file_object.data))
+                    # Store in a format vision APIs and browsers accept —
+                    # scanned PDFs typically embed pages as CCITT TIFFs.
+                    image_format = (
+                        image.format
+                        if image.format in ("PNG", "JPEG", "GIF", "WEBP")
+                        else "PNG"
+                    )
                     img_byte_arr = io.BytesIO()
-                    image.save(img_byte_arr, format=image.format)
+                    try:
+                        image.save(img_byte_arr, format=image_format)
+                    except (OSError, ValueError):
+                        # Modes the target format can't store (e.g. CMYK)
+                        image_format = "PNG"
+                        img_byte_arr = io.BytesIO()
+                        image.convert("RGB").save(img_byte_arr, format=image_format)
                     img_bytes = img_byte_arr.getvalue()
 
-                    image_format = image.format.lower() if image.format else "png"
-                    image_name = f"page_{page_num + 1}_image_{image_file_object.name}.{image_format}"
+                    image_name = f"page_{page_num + 1}_image_{image_file_object.name}.{image_format.lower()}"
                     if image_callback is not None:
                         # Stream image out immediately
                         image_callback(img_bytes, image_name)

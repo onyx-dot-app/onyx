@@ -21,7 +21,7 @@ from onyx.llm.utils import llm_response_to_string
 from onyx.server.metrics.image_processing import track_image_summarization
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
-from onyx.utils.b64 import get_image_type_from_bytes
+from onyx.utils.b64 import normalize_image_for_llm
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -164,9 +164,13 @@ def _summarize_image(
 
 
 def _encode_image_for_llm_prompt(image_data: bytes) -> str:
-    """Prepare a data URL with the correct MIME type for the LLM message."""
+    """Prepare a data URL with the correct MIME type for the LLM message.
+
+    Transcodes formats vision APIs reject (e.g. TIFF page images already
+    stored by older extraction code) to PNG rather than failing them.
+    """
     try:
-        mime_type = get_image_type_from_bytes(image_data)
+        image_data, mime_type = normalize_image_for_llm(image_data)
     except ValueError as exc:
         raise UnsupportedImageFormatError(
             "Unsupported image format for summarization"
