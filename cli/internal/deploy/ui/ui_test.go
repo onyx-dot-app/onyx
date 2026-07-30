@@ -268,3 +268,45 @@ func TestPainterFollowsTheStream(t *testing.T) {
 		t.Errorf("NO_COLOR should stay plain, got %q", got)
 	}
 }
+
+// The accent and the secondary grey follow the terminal's background: the
+// same text is styled differently on a light terminal than on a dark one,
+// and a stream that can't be asked keeps the dark default rather than
+// guessing.
+func TestColorsFollowTheBackground(t *testing.T) {
+	t.Cleanup(func() { useBackground(true) })
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("NO_COLOR", "")
+	tty := &iostreams.IOStreams{Out: &bytes.Buffer{}, IsStdinTTY: true, IsStdoutTTY: true}
+
+	t.Setenv(BackgroundEnv, "light")
+	if darkBackground(tty) {
+		t.Error("an explicit light background should be honored")
+	}
+	t.Setenv(BackgroundEnv, "Dark")
+	if !darkBackground(tty) {
+		t.Error("an explicit dark background should be honored")
+	}
+	t.Setenv(BackgroundEnv, "")
+	if !darkBackground(&iostreams.IOStreams{Out: &bytes.Buffer{}}) {
+		t.Error("a stream that can't be queried should stay on the dark default")
+	}
+
+	const text = "onyx-cli deploy status"
+	useBackground(true)
+	darkAccent, darkDim := Accent(text), dim.Render(text)
+	useBackground(false)
+	lightAccent, lightDim := Accent(text), dim.Render(text)
+
+	for _, c := range []struct{ what, dark, light string }{
+		{"accent", darkAccent, lightAccent},
+		{"dim", darkDim, lightDim},
+	} {
+		if c.dark == c.light {
+			t.Errorf("%s should differ between light and dark backgrounds", c.what)
+		}
+		if ansi.Strip(c.light) != text {
+			t.Errorf("%s styling changed the text: %q", c.what, ansi.Strip(c.light))
+		}
+	}
+}

@@ -54,6 +54,9 @@ type Deps struct {
 
 // NewDeps wires production dependencies.
 func NewDeps(ios *iostreams.IOStreams, cliVersion string) Deps {
+	// Before anything is styled or the wizard takes the terminal over: the
+	// accent color is picked by asking the terminal for its background.
+	ui.DetectBackground(ios)
 	return Deps{
 		IOS:        ios,
 		Runner:     dockercmd.ExecRunner{},
