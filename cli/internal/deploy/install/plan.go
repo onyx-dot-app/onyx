@@ -16,6 +16,9 @@ func (in *installer) printPlan(defaultTag string) {
 	if in.craft {
 		in.plainf("  • Include Craft: true")
 	}
+	if in.dev {
+		in.plainf("  • Dev overlay: true (service ports published on the host)")
+	}
 	if in.opts.Project != "" {
 		in.plainf("  • Compose project: %s", in.opts.Project)
 	}
