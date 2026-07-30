@@ -22,3 +22,13 @@ test("accepts a cost limit with cents", async () => {
   expect(costLimit).toHaveValue("1.23");
   expect(screen.getAllByPlaceholderText("Cost limit")).toHaveLength(2);
 });
+
+test("enforces a positive cost limit", async () => {
+  const user = setupUser();
+  render(<TokenLimitSectionHarness />);
+
+  const costLimit = screen.getByPlaceholderText("Cost limit");
+  await user.type(costLimit, "0");
+
+  expect(costLimit).toHaveValue("0.01");
+});
