@@ -145,7 +145,9 @@ def _callback(client: TestClient, state: str) -> httpx.Response:
     # Every callback test resolves the tenant the same way; centralize the patch.
     with patch(
         "onyx.auth.users.fetch_ee_implementation_or_noop",
-        return_value=lambda _email: "tenant_1",
+        # Dispatch arity varies by target. This test guards the mobile bridge,
+        # not the resolver signature.
+        return_value=lambda *_args: "tenant_1",
     ):
         return client.get(
             "/auth/oauth/callback",
