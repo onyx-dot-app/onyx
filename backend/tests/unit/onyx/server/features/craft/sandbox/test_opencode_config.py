@@ -95,7 +95,6 @@ def test_gateway_is_the_only_enabled_provider() -> None:
             "input": ["text", "image"],
             "output": ["text"],
         },
-        "options": {"reasoningEffort": "high"},
         "limit": {
             "context": 200_000,
             "input": 200_000,

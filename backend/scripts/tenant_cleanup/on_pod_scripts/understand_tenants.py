@@ -10,7 +10,7 @@ from onyx.db.engine.sql_engine import SqlEngine, get_session_with_shared_schema
 
 
 def get_tenant_activity_summary(session: Session) -> list[dict[str, Any]]:
-    """Return a list of dicts, one per tenant, with last query info, doc count, and user count."""
+    """Return chat/Craft activity, document count, and user count per tenant."""
 
     # Step 1: fetch all tenant schemas
     tenant_schemas = [
@@ -29,6 +29,19 @@ def get_tenant_activity_summary(session: Session) -> list[dict[str, Any]]:
 
     print(f"Found {len(tenant_schemas)} tenant schemas", file=sys.stderr)
 
+    schemas_with_build_sessions = {
+        row[0]
+        for row in session.execute(
+            text("""
+            SELECT schemaname
+            FROM pg_tables
+            WHERE tablename = 'build_session'
+                AND schemaname = ANY(:tenant_schemas)
+            """),
+            {"tenant_schemas": tenant_schemas},
+        )
+    }
+
     summaries = []
 
     # Step 2: loop through each tenant schema
@@ -37,6 +50,12 @@ def get_tenant_activity_summary(session: Session) -> list[dict[str, Any]]:
             print(f"Processing tenant {idx}/{len(tenant_schemas)}", file=sys.stderr)
 
         try:
+            craft_activity_select = (
+                f'(SELECT MAX(last_activity_at) FROM "{schema}".build_session)'
+                if schema in schemas_with_build_sessions
+                else "NULL::timestamptz"
+            )
+
             # Use a single query to get all data at once
             query = text(f"""
                 SELECT
@@ -55,6 +74,7 @@ def get_tenant_activity_summary(session: Session) -> list[dict[str, Any]]:
                         ORDER BY time_sent DESC
                         LIMIT 1
                     ) AS last_query_text,
+                    {craft_activity_select} AS last_craft_activity_time,
                     (SELECT COUNT(*) FROM "{schema}".document) AS num_documents,
                     (SELECT COUNT(*) FROM "{schema}".user) AS num_users
             """)

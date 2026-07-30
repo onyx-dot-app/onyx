@@ -1,7 +1,13 @@
 "use client";
 
 import { markdown } from "@opal/utils";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import { Formik, Form } from "formik";
 import useSWR, { mutate } from "swr";
@@ -13,6 +19,8 @@ import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { InputTextArea, InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
 import {
   SvgAddLines,
   SvgActions,
@@ -649,6 +657,86 @@ export default function ChatPreferencesPage() {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
+  // Dedicated chat-naming model. Auto-naming reads this designation via
+  // fetch_default_chat_naming_model; when unset it uses the session's model.
+  const {
+    llmProviders,
+    defaultChatNaming,
+    refetch: refetchLlmProviders,
+  } = useAdminLLMProviders();
+
+  // Resolve defaultChatNaming (id + name based) to a model_configuration_id
+  // for ModelSelector.
+  const chatNamingModelConfigId = useMemo(() => {
+    if (!defaultChatNaming || !llmProviders) return null;
+    for (const p of llmProviders) {
+      if (p.id !== defaultChatNaming.provider_id) continue;
+      const mc = p.model_configurations.find(
+        (m) => m.name === defaultChatNaming.model_name
+      );
+      if (mc?.id != null) return mc.id;
+    }
+    return null;
+  }, [llmProviders, defaultChatNaming]);
+
+  const handleChatNamingModelChange = useCallback(
+    async ({
+      modelName,
+      providerName,
+    }: {
+      modelName: string;
+      providerName: string | null;
+    }) => {
+      const provider = llmProviders?.find((p) => p.name === providerName);
+      if (!provider) {
+        toast.error("Could not resolve provider");
+        return;
+      }
+      try {
+        const response = await fetch("/api/admin/llm/default-chat-naming", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider_id: provider.id,
+            model_name: modelName,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(
+            (await response.json()).detail ??
+              "Failed to update chat naming model"
+          );
+        }
+        await refetchLlmProviders();
+        toast.success("Chat naming model updated");
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "An unknown error occurred"
+        );
+      }
+    },
+    [llmProviders, refetchLlmProviders]
+  );
+
+  const handleClearChatNamingModel = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/llm/default-chat-naming", {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error(
+          (await response.json()).detail ?? "Failed to reset chat naming model"
+        );
+      }
+      await refetchLlmProviders();
+      toast.success("Chat naming reset to the session's model");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "An unknown error occurred"
+      );
+    }
+  }, [refetchLlmProviders]);
+
   // Local state for text fields (save-on-blur)
   const [companyName, setCompanyName] = useState(s.company_name ?? "");
   const [companyDescription, setCompanyDescription] = useState(
@@ -933,6 +1021,32 @@ export default function ChatPreferencesPage() {
                     });
                   }}
                 />
+              </InputHorizontal>
+              <InputHorizontal
+                title="Chat Naming Model"
+                description="Model used to auto-name chat sessions. Defaults to each session's own model — pin a small, fast model here if your main model can't serve concurrent requests."
+                withLabel
+              >
+                <div className="flex items-center gap-2">
+                  {chatNamingModelConfigId !== null && (
+                    <Button
+                      prominence="tertiary"
+                      size="sm"
+                      onClick={() => void handleClearChatNamingModel()}
+                    >
+                      Reset
+                    </Button>
+                  )}
+                  <ModelSelector
+                    value={chatNamingModelConfigId}
+                    onChange={(opt) =>
+                      void handleChatNamingModelChange({
+                        modelName: opt.modelName,
+                        providerName: opt.name,
+                      })
+                    }
+                  />
+                </div>
               </InputHorizontal>
             </Section>
           </Card>

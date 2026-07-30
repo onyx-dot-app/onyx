@@ -24,6 +24,7 @@ import {
   SvgFolderPlus,
 } from "@opal/icons";
 import { Button, InputTypeIn, ShadowDiv, Text } from "@opal/components";
+import { Section } from "@/layouts/general-layouts";
 
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
@@ -63,6 +64,18 @@ function buildTreeFromFlatList(flatList: LibraryEntry[]): LibraryEntry[] {
   return rootEntries;
 }
 
+/** Keep entries whose name matches, plus folders with any matching descendant. */
+function filterTree(entries: LibraryEntry[], query: string): LibraryEntry[] {
+  const result: LibraryEntry[] = [];
+  for (const entry of entries) {
+    const children = entry.children ? filterTree(entry.children, query) : [];
+    if (entry.name.toLowerCase().includes(query) || children.length > 0) {
+      result.push({ ...entry, children });
+    }
+  }
+  return result;
+}
+
 function formatFileSize(bytes: number | null): string {
   if (bytes === null) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -83,10 +96,11 @@ export default function UserLibraryModal({
 }: UserLibraryModalProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [entryToDelete, setEntryToDelete] = useState<LibraryEntry | null>(null);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadTargetPathRef = useRef<string>("/");
@@ -110,12 +124,24 @@ export default function UserLibraryModal({
     return buildTreeFromFlatList(tree);
   }, [tree]);
 
-  // Clear any in-progress drag state when the modal closes, so a drag that
-  // was interrupted by a close doesn't leave the overlay stuck on reopen.
+  const trimmedQuery = searchQuery.trim().toLowerCase();
+  const visibleTree = useMemo(
+    () =>
+      trimmedQuery
+        ? filterTree(hierarchicalTree, trimmedQuery)
+        : hierarchicalTree,
+    [hierarchicalTree, trimmedQuery]
+  );
+
+  // Reset transient state when the modal closes, so a drag interrupted by a
+  // close doesn't leave the overlay stuck and a stale search doesn't hide
+  // files on reopen.
   useEffect(() => {
     if (!open) {
       dragDepth.current = 0;
       setIsDragging(false);
+      setSearchQuery("");
+      setActionError(null);
     }
   }, [open]);
 
@@ -136,7 +162,7 @@ export default function UserLibraryModal({
       if (fileArray.length === 0) return;
 
       setIsUploading(true);
-      setUploadError(null);
+      setActionError(null);
 
       try {
         // A lone .zip is expanded server-side; everything else uploads as-is.
@@ -153,7 +179,7 @@ export default function UserLibraryModal({
         mutate();
         onChanges?.();
       } catch (err) {
-        setUploadError(err instanceof Error ? err.message : "Upload failed");
+        setActionError(err instanceof Error ? err.message : "Upload failed");
       } finally {
         setIsUploading(false);
       }
@@ -216,10 +242,11 @@ export default function UserLibraryModal({
 
     try {
       await deleteLibraryFile(entryToDelete.id);
+      setActionError(null);
       mutate();
       onChanges?.();
     } catch (err) {
-      console.error("Failed to delete:", err);
+      setActionError(err instanceof Error ? err.message : "Failed to delete");
     } finally {
       setEntryToDelete(null);
     }
@@ -231,10 +258,10 @@ export default function UserLibraryModal({
 
     try {
       await createLibraryDirectory({ name, parent_path: "/" });
+      setActionError(null);
       mutate();
     } catch (err) {
-      console.error("Failed to create directory:", err);
-      setUploadError(
+      setActionError(
         err instanceof Error ? err.message : "Failed to create folder"
       );
     } finally {
@@ -243,18 +270,43 @@ export default function UserLibraryModal({
     }
   }, [mutate, newFolderName]);
 
-  const fileCount = hierarchicalTree.length;
+  const isEmpty = hierarchicalTree.length === 0;
+  const noMatches = !isEmpty && visibleTree.length === 0;
 
   return (
     <>
       <Modal open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-        <Modal.Content width="lg" height="fit">
+        <Modal.Content width="sm" height="fit" preventAccidentalClose={false}>
           <Modal.Header
-            icon={SvgFileText}
-            title="Your Files"
-            description="Upload files for your agent to read (Excel, Word, PowerPoint, etc.)"
+            icon={SvgFolder}
+            title="Library"
+            description="Files your agent can read in every session."
             onClose={onClose}
-          />
+          >
+            <Section flexDirection="row" gap={0.5}>
+              <InputTypeIn
+                placeholder="Search files..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                searchIcon
+                autoComplete="off"
+              />
+              <Button
+                prominence="secondary"
+                icon={SvgFolderPlus}
+                onClick={() => setShowNewFolderModal(true)}
+                tooltip="New folder"
+                aria-label="New folder"
+              />
+              <Button
+                icon={SvgUploadCloud}
+                disabled={isUploading}
+                onClick={() => handleUploadToFolder("/")}
+              >
+                {isUploading ? "Uploading…" : "Upload"}
+              </Button>
+            </Section>
+          </Modal.Header>
           <Modal.Body>
             <input
               ref={fileInputRef}
@@ -266,28 +318,10 @@ export default function UserLibraryModal({
             />
 
             <div className="flex w-full flex-col gap-3">
-              {/* Toolbar: primary actions, right-aligned */}
-              <div className="flex items-center justify-end gap-2">
-                <Button
-                  prominence="secondary"
-                  icon={SvgFolderPlus}
-                  onClick={() => setShowNewFolderModal(true)}
-                >
-                  New folder
-                </Button>
-                <Button
-                  icon={SvgUploadCloud}
-                  disabled={isUploading}
-                  onClick={() => handleUploadToFolder("/")}
-                >
-                  {isUploading ? "Uploading…" : "Upload"}
-                </Button>
-              </div>
-
-              {uploadError && (
+              {actionError && (
                 <div className="rounded-8 border border-status-error-02 bg-status-error-01 px-3 py-2">
                   <Text font="secondary-body" color="status-error-05">
-                    {uploadError}
+                    {actionError}
                   </Text>
                 </div>
               )}
@@ -312,17 +346,24 @@ export default function UserLibraryModal({
                       Failed to load files
                     </Text>
                   </div>
-                ) : fileCount === 0 ? (
+                ) : isEmpty ? (
                   <UploadDropzone
                     onClick={() => handleUploadToFolder("/")}
                     active={isDragging}
                   />
+                ) : noMatches ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Text font="secondary-body" color="text-03">
+                      No files match your search
+                    </Text>
+                  </div>
                 ) : (
                   <ShadowDiv className="max-h-[360px]">
                     <div className="flex flex-col gap-0.5">
                       <LibraryTreeView
-                        entries={hierarchicalTree}
+                        entries={visibleTree}
                         expandedPaths={expandedPaths}
+                        forceExpanded={trimmedQuery.length > 0}
                         onToggleFolder={toggleFolder}
                         onDelete={setEntryToDelete}
                         onUploadToFolder={handleUploadToFolder}
@@ -344,7 +385,9 @@ export default function UserLibraryModal({
           </Modal.Body>
 
           <Modal.Footer>
-            <Button onClick={onClose}>Done</Button>
+            <Button prominence="secondary" onClick={onClose}>
+              Done
+            </Button>
           </Modal.Footer>
         </Modal.Content>
       </Modal>
@@ -380,7 +423,7 @@ export default function UserLibraryModal({
         <Modal.Content width="sm" height="fit">
           <Modal.Header
             icon={SvgFolder}
-            title="New Folder"
+            title="New folder"
             onClose={() => {
               setShowNewFolderModal(false);
               setNewFolderName("");
@@ -456,8 +499,7 @@ function UploadDropzone({ onClick, active }: UploadDropzoneProps) {
         Drag files here or click to upload
       </Text>
       <Text font="secondary-body" color="text-03">
-        Excel, Word, PowerPoint, PDF, or ZIP. PDFs with many embedded images may
-        be rejected.
+        Excel, Word, PowerPoint, PDF, or ZIP
       </Text>
     </div>
   );
@@ -466,6 +508,8 @@ function UploadDropzone({ onClick, active }: UploadDropzoneProps) {
 interface LibraryTreeViewProps {
   entries: LibraryEntry[];
   expandedPaths: Set<string>;
+  /** Expand every folder regardless of `expandedPaths` (used while searching). */
+  forceExpanded: boolean;
   onToggleFolder: (path: string) => void;
   onDelete: (entry: LibraryEntry) => void;
   onUploadToFolder: (folderPath: string) => void;
@@ -475,6 +519,7 @@ interface LibraryTreeViewProps {
 function LibraryTreeView({
   entries,
   expandedPaths,
+  forceExpanded,
   onToggleFolder,
   onDelete,
   onUploadToFolder,
@@ -487,14 +532,27 @@ function LibraryTreeView({
     return a.name.localeCompare(b.name);
   });
 
+  // Only reserve chevron space when this level mixes folders and files.
+  const hasDirectories = sortedEntries.some((entry) => entry.is_directory);
+
   return (
     <>
       {sortedEntries.map((entry) => {
-        const isExpanded = expandedPaths.has(entry.path);
+        const isExpanded = forceExpanded || expandedPaths.has(entry.path);
 
         return (
           <div key={entry.id} className="flex flex-col">
-            <div className="group flex items-center gap-2 rounded-8 px-2 py-1.5 transition-colors hover:bg-background-tint-01">
+            <div
+              className={cn(
+                "group flex items-center gap-2 rounded-8 px-2 py-1.5 transition-colors hover:bg-background-tint-01",
+                entry.is_directory && "cursor-pointer"
+              )}
+              onClick={
+                entry.is_directory
+                  ? () => onToggleFolder(entry.path)
+                  : undefined
+              }
+            >
               {/* Indent for nesting depth */}
               {depth > 0 && (
                 <span
@@ -510,11 +568,15 @@ function LibraryTreeView({
                   prominence="tertiary"
                   size="2xs"
                   icon={isExpanded ? SvgChevronDown : SvgChevronRight}
-                  onClick={() => onToggleFolder(entry.path)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleFolder(entry.path);
+                  }}
                   tooltip={isExpanded ? "Collapse" : "Expand"}
+                  aria-label={isExpanded ? "Collapse" : "Expand"}
                 />
               ) : (
-                <span aria-hidden className="w-5 shrink-0" />
+                hasDirectories && <span aria-hidden className="w-5 shrink-0" />
               )}
 
               {/* Type icon */}
@@ -533,20 +595,20 @@ function LibraryTreeView({
 
               {/* Name */}
               <div className="min-w-0 flex-1">
-                <Text font="secondary-body" color="text-04" maxLines={1}>
+                <Text font="main-ui-muted" color="text-04" maxLines={1}>
                   {entry.name}
                 </Text>
               </div>
 
               {/* File size */}
               {!entry.is_directory && entry.file_size !== null && (
-                <Text font="secondary-body" color="text-02" nowrap>
+                <Text font="secondary-body" color="text-03" nowrap>
                   {formatFileSize(entry.file_size)}
                 </Text>
               )}
 
               {/* Row actions — revealed on hover/focus */}
-              <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+              <div className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                 {entry.is_directory && (
                   <Button
                     prominence="tertiary"
@@ -559,6 +621,7 @@ function LibraryTreeView({
                       onUploadToFolder(uploadPath);
                     }}
                     tooltip="Upload to this folder"
+                    aria-label="Upload to this folder"
                   />
                 )}
                 <Button
@@ -566,8 +629,12 @@ function LibraryTreeView({
                   prominence="tertiary"
                   size="sm"
                   icon={SvgTrash}
-                  onClick={() => onDelete(entry)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(entry);
+                  }}
                   tooltip="Delete"
+                  aria-label="Delete"
                 />
               </div>
             </div>
@@ -577,6 +644,7 @@ function LibraryTreeView({
               <LibraryTreeView
                 entries={entry.children}
                 expandedPaths={expandedPaths}
+                forceExpanded={forceExpanded}
                 onToggleFolder={onToggleFolder}
                 onDelete={onDelete}
                 onUploadToFolder={onUploadToFolder}

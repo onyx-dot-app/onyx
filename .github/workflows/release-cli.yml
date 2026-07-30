@@ -148,6 +148,50 @@ jobs:
           gh release upload "$TAG" --clobber \
             cli/dist/*.tar.gz cli/dist/*.zip cli/dist/*_checksums.txt
 
+      # The install.sh/install.ps1 bootstrappers download the newest CLI from
+      # the fixed cli-latest release: the repo-global releases/latest alias
+      # can't be used (it resolves to app/desktop releases — CLI releases are
+      # created with --latest=false), and hitting api.github.com to discover
+      # the newest cli/v* tag would expose installs to rate limits. Assets are
+      # re-published under version-less names so the download URLs are static.
+      - name: Update the cli-latest rolling release
+        if: startsWith(github.ref_name, 'cli/v') && !contains(github.ref_name, '-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#cli/}"
+          mkdir -p latest-dist
+          for archive in cli/dist/onyx-cli_"${version#v}"_*; do
+            name="$(basename "$archive")"
+            cp "$archive" "latest-dist/${name/onyx-cli_${version#v}_/onyx-cli_}"
+          done
+          rm -f latest-dist/onyx-cli_checksums.txt
+          (cd latest-dist && sha256sum -- * > onyx-cli_checksums.txt)
+
+          # Move (or create) the cli-latest tag at this commit.
+          if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/cli-latest" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/cli-latest" \
+              -f "sha=${GITHUB_SHA}" -F force=true >/dev/null
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f "ref=refs/tags/cli-latest" -f "sha=${GITHUB_SHA}" >/dev/null
+          fi
+
+          release_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq '.[] | select(.tag_name == "cli-latest") | .id' | head -n 1)"
+          notes="Rolling release tracking the newest onyx-cli (currently ${TAG#cli/}). Used by the install.sh/install.ps1 bootstrappers; see the cli/v* releases for changelogs."
+          if [ -z "$release_id" ]; then
+            gh release create cli-latest \
+              --latest=false \
+              --title "onyx-cli latest" \
+              --notes "$notes"
+          else
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+              -f "body=${notes}" -f make_latest=false >/dev/null
+          fi
+          gh release upload cli-latest --clobber latest-dist/*
+
   docker-amd64:
     runs-on:
       - runs-on

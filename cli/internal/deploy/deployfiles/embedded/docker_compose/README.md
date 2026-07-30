@@ -29,6 +29,22 @@ the install.sh script with --delete-data.
 
 To shut down the deployment without deleting, use install.sh --shutdown.
 
+### Onyx CLI (alternative)
+
+The same guided install also ships inside the Onyx CLI and will eventually
+replace install.sh once it stabilizes:
+
+```
+pip install onyx-cli && onyx-cli deploy install
+```
+
+It understands existing install.sh deployments (an `onyx_data` directory is
+detected and managed in place; new installs default to `~/.config/onyx`) and
+adds lifecycle commands: `onyx-cli deploy status` (versions, containers,
+health), `deploy stop`, `deploy upgrade [--tag vX.Y.Z]` (rewrites only
+IMAGE_TAG, preserves your .env edits, backs up hand-edited files), and
+`deploy uninstall`.
+
 ### Upgrading the deployment
 Onyx maintains backwards compatibility across all minor versions following SemVer. If following the install.sh script (or through Docker Compose), you can
 upgrade it by first bringing down the containers. To do this, use `install.sh --shutdown`
@@ -69,8 +85,8 @@ template or the generated files, so a stray edit to a generated file gets revert
 commit.
 
 onyx-cli embeds copies of the guided-install deployment files (the generated
-`docker-compose.yml`, the lite/craft overlays, `env.template`, the nginx config, and this README)
-under `cli/internal/deploy/deployfiles/embedded/`. The same `ods generate-compose --write` run
+`docker-compose.yml` and `docker-compose.prod.yml`, the lite/craft overlays, the env templates,
+the nginx config, and this README) under `cli/internal/deploy/deployfiles/embedded/`. The same `ods generate-compose --write` run
 refreshes them after rendering the variants, and a drift test in the cli module (`go test ./...`)
 gates staleness. If you change any of those files, re-run the generator and commit the refreshed
 embedded copies.

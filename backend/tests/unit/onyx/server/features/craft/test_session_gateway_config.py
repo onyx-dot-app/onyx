@@ -168,7 +168,7 @@ def test_gateway_model_capabilities_reach_opencode_catalog() -> None:
     }
     assert vision_model["attachment"] is True
     assert vision_model["reasoning"] is True
-    assert vision_model["options"] == {"reasoningEffort": "high"}
+    assert "options" not in vision_model
 
     text_model = opencode_models["3/claude-text-only"]
     assert text_model["modalities"] == {

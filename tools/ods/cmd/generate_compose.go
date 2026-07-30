@@ -31,8 +31,9 @@ docker-compose.template.yml instead, then regenerate with:
   ods generate-compose --write
 
 The command also syncs the deployment files that onyx-cli embeds via
-go:embed (the generated docker-compose.yml, the lite/craft overlays,
-env.template, the nginx config, and the install-root README) into
+go:embed (the generated docker-compose.yml and docker-compose.prod.yml, the
+lite/craft overlays, the env templates, the nginx config, and the
+install-root README) into
 byte-identical copies under cli/internal/deploy/deployfiles/embedded/ —
 go:embed cannot reference files outside the cli module, and the copies must
 always be refreshed together with the generated compose files.

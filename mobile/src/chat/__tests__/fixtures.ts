@@ -1,7 +1,11 @@
 import { type SearchDoc } from "@/chat/contracts/documents";
 import { UserFileStatus, type ProjectFile } from "@/chat/contracts/projects";
 import { ChatFileType } from "@/chat/interfaces";
-import { type ObjTypes, type Packet } from "@/chat/streamingModels";
+import {
+  type ObjTypes,
+  type Packet,
+  type Placement,
+} from "@/chat/streamingModels";
 
 // Shared ProjectFile builder so the file's shape lives in one place across tests.
 export function makeProjectFile(
@@ -21,6 +25,14 @@ export function makeProjectFile(
 
 export function makePacket(obj: ObjTypes, turnIndex = 0): Packet {
   return { placement: { turn_index: turnIndex }, obj };
+}
+
+// Packet with an explicit placement (turn/tab/sub_turn/model). turn_index defaults to 0.
+export function makePlacedPacket(
+  obj: ObjTypes,
+  placement: Partial<Placement> = {},
+): Packet {
+  return { placement: { turn_index: 0, ...placement }, obj };
 }
 
 export function makeCitationPacket(
