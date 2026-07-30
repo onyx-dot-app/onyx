@@ -302,7 +302,7 @@ def test_trailing_punctuation_excluded_from_url() -> None:
 
 def test_balanced_url_parentheses_stay_inside_the_link() -> None:
     assert "<https://onyx.app/docs_(v2)>" == _render("https://onyx.app/docs_(v2)")
-    assert "<https://onyx.app/docs>)" == _render("https://onyx.app/docs)")
+    assert "<https://onyx.app/docs>)))" == _render("https://onyx.app/docs)))")
 
 
 def test_url_delimiters_and_short_hosts_do_not_break_slack_links() -> None:

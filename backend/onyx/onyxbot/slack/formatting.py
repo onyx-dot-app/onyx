@@ -187,8 +187,11 @@ def _append_autolink(
 def _trim_url_trailing_punctuation(url: str) -> str:
     url = url.rstrip(_URL_TRAILING_PUNCTUATION)
     for opening, closing in (("(", ")"), ("[", "]")):
-        while url.endswith(closing) and url.count(closing) > url.count(opening):
-            url = url[:-1]
+        excess_closings = max(0, url.count(closing) - url.count(opening))
+        trailing_closings = len(url) - len(url.rstrip(closing))
+        trim_count = min(excess_closings, trailing_closings)
+        if trim_count:
+            url = url[:-trim_count]
     return url
 
 
