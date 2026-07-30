@@ -6066,6 +6066,13 @@ class Sandbox(Base):
     skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     mcp_config_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    # Set when a newer sandbox image lands, cleared once this sandbox runs it.
+    # The drain is gated on the sandbox being free of chat work, so a queued
+    # sandbox keeps serving its old image until that is true.
+    recycle_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
     )

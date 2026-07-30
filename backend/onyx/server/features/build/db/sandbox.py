@@ -3,7 +3,7 @@
 import datetime
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
@@ -185,6 +185,84 @@ def get_running_sandboxes(db_session: Session) -> list[Sandbox]:
     """Get all RUNNING sandboxes (the sweep task's working set)."""
     stmt = select(Sandbox).where(Sandbox.status == SandboxStatus.RUNNING)
     return list(db_session.execute(stmt).scalars().all())
+
+
+def request_recycle_for_running_sandboxes__no_commit(
+    db_session: Session,
+    requested_at: datetime.datetime,
+) -> int:
+    """Queue every RUNNING sandbox for recycling, returning how many were newly
+    queued. Caller commits.
+
+    Called when a newer sandbox image becomes available. Queueing the whole
+    RUNNING set is correct by construction — every one of those was created
+    before the new image landed — which is what lets the enqueue be a single
+    statement rather than a per-sandbox interrogation of the backend.
+
+    Already-queued sandboxes keep their original timestamp so a second image
+    landing mid-drain cannot push them to the back of the queue.
+    """
+    result = db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.status == SandboxStatus.RUNNING,
+            Sandbox.recycle_requested_at.is_(None),
+        )
+        .values(recycle_requested_at=requested_at)
+    )
+    db_session.flush()
+    return result.rowcount or 0  # ty: ignore[unresolved-attribute]
+
+
+def get_sandboxes_awaiting_recycle(
+    db_session: Session,
+    limit: int | None = None,
+) -> list[Sandbox]:
+    """Queued RUNNING sandboxes, longest-waiting first.
+
+    ``limit`` bounds how many a single drain pass takes on, so a fleet-wide
+    rollout doesn't become one enormous unit of work.
+    """
+    stmt = (
+        select(Sandbox)
+        .where(
+            Sandbox.status == SandboxStatus.RUNNING,
+            Sandbox.recycle_requested_at.isnot(None),
+        )
+        .order_by(Sandbox.recycle_requested_at)
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    return list(db_session.execute(stmt).scalars().all())
+
+
+def count_sandboxes_awaiting_recycle(db_session: Session) -> int:
+    """Queue depth. A drain that stalls behind long-lived chat work is
+    invisible without it."""
+    stmt = select(func.count()).where(
+        Sandbox.status == SandboxStatus.RUNNING,
+        Sandbox.recycle_requested_at.isnot(None),
+    )
+    return db_session.execute(stmt).scalar_one()
+
+
+def clear_recycle_request__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+) -> None:
+    """Drop a sandbox from the queue. Caller commits.
+
+    Idempotent, and deliberately not conditional on the sandbox having reached
+    the new image: a sandbox that left RUNNING (slept, terminated, failed) will
+    be re-provisioned onto whatever is current, so it no longer needs recycling
+    either.
+    """
+    db_session.execute(
+        update(Sandbox)
+        .where(Sandbox.id == sandbox_id)
+        .values(recycle_requested_at=None)
+    )
+    db_session.flush()
 
 
 def user_has_stale_active_session(
