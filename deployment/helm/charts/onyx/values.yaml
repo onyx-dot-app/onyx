@@ -1471,6 +1471,9 @@ configMap:
   # Leave SANDBOX_PROXY_PORT unset; the chart owns the internal proxy port.
   # SANDBOX_PROXY_HOST defaults to the chart-managed Service DNS name and may be
   # overridden only if sandboxes must reach a different proxy host.
+  # MODEL_SERVER_HOST / INDEXING_MODEL_SERVER_HOST default to the chart-managed
+  # model Services; set them here to point at external model servers instead
+  # (the chart defaults are then not rendered).
   # See deployment/helm/README.md for the external-Redis / ElastiCache path.
 
   # Authentication is always enabled (email/password). SSO (Google/OIDC/SAML)
