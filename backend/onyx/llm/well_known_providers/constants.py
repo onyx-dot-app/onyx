@@ -13,6 +13,11 @@ LM_STUDIO_API_KEY_CONFIG_KEY = "LM_STUDIO_API_KEY"
 LITELLM_PROXY_PROVIDER_NAME = "litellm_proxy"
 
 BIFROST_PROVIDER_NAME = "bifrost"
+# Which API surface a Bifrost provider targets; stored in custom_config.
+BIFROST_API_MODE_CONFIG_KEY = "bifrost_api_mode"
+BIFROST_API_MODE_CHAT_COMPLETIONS = "chat_completions"
+BIFROST_API_MODE_RESPONSES = "responses"
+BIFROST_DEFAULT_API_MODE = BIFROST_API_MODE_CHAT_COMPLETIONS
 
 OPENAI_COMPATIBLE_PROVIDER_NAME = "openai_compatible"
 

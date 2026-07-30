@@ -57,6 +57,18 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
          setattr in v1.93.0. Our patch rebuilds the response via model_construct so the
          original ResponseAPIUsage object is preserved. Handles ResponseCompletedEvent,
          ResponseIncompleteEvent, and ResponseFailedEvent (matching upstream).
+
+7. Explicit responses/ Prefix Ignored (_patch_responses_api_bridge_check):
+   - responses_api_bridge_check only engages the completions->responses bridge when
+     the model is unknown to LiteLLM's registry (model_info mode is None / lookup
+     raises). Gateway model ids like "anthropic/claude-haiku-4-5" resolve in the
+     registry (valid provider prefix + known tail, mode "chat"), so an explicit
+     "responses/" prefix is left attached and the request is sent to
+     /chat/completions with the mangled model name
+   - The prefix is only ever set deliberately (Onyx API-surface routing for
+     OpenAI-compatible gateways such as Bifrost and Portkey), so honor it
+     unconditionally and pass the remainder through as the literal model id
+   STATUS: STILL NEEDED - v1.93.0 consults the registry before honoring the prefix.
 """
 
 import time
@@ -583,6 +595,54 @@ def _patch_logging_assembled_streaming_response() -> None:
     )
 
 
+def _patch_responses_api_bridge_check() -> None:
+    """
+    Patches litellm.main.responses_api_bridge_check to honor an explicit
+    "responses/" model prefix unconditionally.
+
+    Upstream only engages the completions->responses bridge when its registry
+    doesn't recognize the model. Gateway model ids such as
+    "anthropic/claude-haiku-4-5" DO resolve (valid provider prefix + known
+    tail, mode "chat"), so the prefix is left attached and the request goes to
+    /chat/completions with a mangled model name. The prefix is only ever set
+    deliberately, so it must always win; the remainder is passed through
+    verbatim as the gateway's literal model id.
+    """
+    import litellm.main as litellm_main
+
+    if (
+        getattr(litellm_main.responses_api_bridge_check, "__name__", "")
+        == "_patched_responses_api_bridge_check"
+    ):
+        return
+
+    original_bridge_check = litellm_main.responses_api_bridge_check
+
+    def _patched_responses_api_bridge_check(
+        model: str,
+        custom_llm_provider: str,
+        web_search_options: Optional[Any] = None,
+        tools: Optional[list[Any]] = None,
+        reasoning_effort: Optional[Any] = None,
+        reasoning_summary: Optional[Any] = None,
+    ) -> tuple[dict, str]:
+        if model.startswith("responses/"):
+            return {"mode": "responses"}, model.removeprefix("responses/")
+        return original_bridge_check(
+            model=model,
+            custom_llm_provider=custom_llm_provider,
+            web_search_options=web_search_options,
+            tools=tools,
+            reasoning_effort=reasoning_effort,
+            reasoning_summary=reasoning_summary,
+        )
+
+    _patched_responses_api_bridge_check.__name__ = "_patched_responses_api_bridge_check"
+    litellm_main.responses_api_bridge_check = (  # ty: ignore[invalid-assignment]
+        _patched_responses_api_bridge_check
+    )
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -594,6 +654,7 @@ def apply_monkey_patches() -> None:
     - Patching AzureOpenAIResponsesAPIConfig.should_fake_stream to enable native streaming
     - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
     - Patching Logging._get_assembled_streaming_response to avoid mutating original response
+    - Patching responses_api_bridge_check to always honor an explicit responses/ prefix
     """
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
@@ -601,3 +662,4 @@ def apply_monkey_patches() -> None:
     _patch_azure_responses_should_fake_stream()
     _patch_responses_api_usage_format()
     _patch_logging_assembled_streaming_response()
+    _patch_responses_api_bridge_check()
