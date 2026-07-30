@@ -17,6 +17,15 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # The non-native status enum was sized to its longest member at creation
+    # ("active" → VARCHAR(6)); widen for the new INITIALIZING value.
+    op.alter_column(
+        "build_session",
+        "status",
+        type_=sa.String(length=12),
+        existing_type=sa.String(length=6),
+        existing_nullable=False,
+    )
     op.add_column(
         "sandbox",
         sa.Column(
@@ -64,3 +73,16 @@ def downgrade() -> None:
     op.drop_index("uq_build_session_nextjs_port", table_name="build_session")
     op.drop_column("sandbox", "provisioning_started_at")
     op.drop_column("sandbox", "provisioning_generation")
+    # Fold the statuses this revision introduced back into the old set before
+    # shrinking the column (non-native enums persist member NAMES).
+    op.execute(
+        "UPDATE build_session SET status = 'IDLE' "
+        "WHERE status IN ('INITIALIZING', 'FAILED')"
+    )
+    op.alter_column(
+        "build_session",
+        "status",
+        type_=sa.String(length=6),
+        existing_type=sa.String(length=12),
+        existing_nullable=False,
+    )
