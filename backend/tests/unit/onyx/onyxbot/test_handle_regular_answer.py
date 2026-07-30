@@ -100,6 +100,7 @@ def _make_slack_channel_config(
     persona.id = 123
     persona.name = "Scoped Agent"
     persona.document_sets = []
+    persona.tools = []
 
     slack_channel_config = MagicMock()
     slack_channel_config.persona = persona
@@ -579,3 +580,78 @@ def test_private_channel_non_ephemeral_attributes_usage(
     assert mock_respond.call_args.kwargs["receiver_ids"] is None
     mock_update_react.assert_called_once()
     assert mock_update_react.call_args.kwargs["remove"] is True
+
+
+@pytest.mark.parametrize(
+    "has_search_tool,search_available,expected_forced_id",
+    [
+        (True, True, 77),  # persona has SearchTool and it is usable -> forced
+        (True, False, None),  # SearchTool attached but unavailable -> not forced
+        (False, True, None),  # persona without SearchTool -> not forced
+    ],
+)
+def test_search_tool_forced_only_when_usable(
+    has_search_tool: bool,
+    search_available: bool,
+    expected_forced_id: int | None,
+) -> None:
+    """Slack answers force the persona's search tool on the first LLM cycle
+    (regression for the #7399 refactor dropping guaranteed retrieval), but
+    never for personas without a usable search tool."""
+    slack_channel_config = _make_slack_channel_config()
+    persona = slack_channel_config.persona
+    if has_search_tool:
+        search_tool = MagicMock()
+        search_tool.id = 77
+        search_tool.in_code_tool_id = "SearchTool"
+        persona.tools = [search_tool]
+
+    user = MagicMock()
+    user.id = uuid4()
+
+    def _gather_stream(_: object) -> ChatBasicResponse:
+        return ChatBasicResponse(
+            answer="answer",
+            answer_citationless="answer",
+            top_documents=[],
+            error_msg=None,
+            message_id=1,
+            citation_info=[],
+        )
+
+    with (
+        patch(f"{_HANDLE_REGULAR_ANSWER}.get_user_by_email", return_value=user),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.get_anonymous_user", return_value=MagicMock()),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.get_persona_by_id", return_value=persona),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.rate_limits", side_effect=_identity_decorator),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.retry_builder", side_effect=_identity_decorator
+        ),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.get_channel_name_from_id",
+            return_value=("channel", False),
+        ),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.gather_stream", side_effect=_gather_stream),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.build_slack_response_blocks", return_value=[]),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.handle_stream_message_objects",
+            return_value=iter(()),
+        ) as mock_handle_stream_message_objects,
+        patch(f"{_HANDLE_REGULAR_ANSWER}.SearchTool") as mock_search_tool_cls,
+        patch(f"{_HANDLE_REGULAR_ANSWER}.respond_in_thread_or_channel"),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.update_emote_react"),
+    ):
+        mock_search_tool_cls.is_available.return_value = search_available
+        handle_regular_answer(
+            message_info=_make_slack_message_info(ChannelType.IM),
+            slack_channel_config=slack_channel_config,
+            receiver_ids=None,
+            client=MagicMock(),
+            channel="C123",
+            logger=_mock_logger(),
+            db_session=MagicMock(),
+            feedback_reminder_id=None,
+        )
+
+    stream_call_kwargs = mock_handle_stream_message_objects.call_args.kwargs
+    assert stream_call_kwargs["new_msg_req"].forced_tool_id == expected_forced_id
