@@ -111,7 +111,7 @@ def test_repeat_login_for_the_linked_mapping_is_idempotent() -> None:
     db_session.commit.assert_called_once()
 
 
-def test_rekey_resolves_the_mapping_by_oauth_subject() -> None:
+def test_rekey_normalizes_the_new_address_onto_the_matched_row() -> None:
     with (
         patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
         patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,

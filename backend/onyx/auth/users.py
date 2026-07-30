@@ -342,13 +342,34 @@ def verify_email_is_invited(email: str) -> None:
 def remove_user_from_invited_users_after_login(
     email: str, user_id: uuid.UUID, tenant_id: str
 ) -> None:
-    """Best-effort invite cleanup for an already-authenticated login."""
+    """Best-effort invite cleanup. A leftover entry is inert once the user is a
+    member, so a failure must not fail the login."""
     try:
         remove_user_from_invited_users(email)
     except Exception:
         logger.warning(
             "Invite cleanup failed after login: user_id=%s tenant=%s",
             user_id,
+            tenant_id,
+            exc_info=True,
+        )
+
+
+def rekey_tenant_mapping_after_login(
+    email: str, tenant_id: str, oauth_identities: list[tuple[str, str]]
+) -> None:
+    """Best-effort catalog rekey for a login that has already succeeded.
+
+    Tenant resolution routes by linked subject, so a membership row left under
+    the old address still reaches the right workspace and the next login retries.
+    """
+    try:
+        fetch_ee_implementation_or_noop(
+            "onyx.db.user_tenant_mapping", "rekey_user_mapping_email", None
+        )(email, tenant_id, oauth_identities)
+    except Exception:
+        logger.warning(
+            "Tenant mapping rekey failed after login: tenant=%s",
             tenant_id,
             exc_info=True,
         )
@@ -1052,24 +1073,21 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             assert user is not None
 
-            # Keyed on the stored email rather than the one the IdP just sent:
-            # that is the address this user's membership row is filed under.
+            # Keyed on the stored email rather than the one the IdP just sent.
+            # The membership row moves onto the new address at the rekey below.
             fetch_ee_implementation_or_noop(
                 "onyx.db.user_tenant_mapping", "record_oauth_identity", None
             )(user.email, tenant_id, oauth_name, account_id)
 
             # The provider is authoritative for the address, so adopt it when it
-            # has moved. Runs in every deployment: single-tenant reaches the
-            # right user by subject and so hits this with a stale email too.
-            oauth_user_id = user.id
+            # moves. Not gated on multi-tenant: single-tenant reaches the same
+            # user by subject and so arrives here with a stale email too.
             email_reconcile_result = await db_session.run_sync(
-                lambda sync_session: reconcile_user_email__no_commit(
-                    oauth_user_id, account_email, sync_session
-                )
+                partial(reconcile_user_email__no_commit, user.id, account_email)
             )
-            if email_reconcile_result:
-                await db_session.commit()
+            if email_reconcile_result is not None:
                 _, reconciled_prior_emails = email_reconcile_result
+                await db_session.commit()
                 user.email = account_email.lower()
                 user.prior_emails = reconciled_prior_emails
 
@@ -1078,22 +1096,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 for oauth_account in user.oauth_accounts
             ]
 
-            # Resolve by subject so a failed rekey is repaired on the next login
-            # even though `User.email` has already changed. Every linked subject
-            # is passed so a row another provider linked is still matched.
-            fetch_ee_implementation_or_noop(
-                "onyx.db.user_tenant_mapping", "rekey_user_mapping_email", None
-            )(
-                user.email,
-                tenant_id,
-                oauth_identities,
-            )
-
-            # An invite issued to a replaced address is still this user's.
-            for prior_email in user.prior_emails:
-                remove_user_from_invited_users_after_login(
-                    prior_email, user.id, tenant_id
-                )
+            rekey_tenant_mapping_after_login(user.email, tenant_id, oauth_identities)
 
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
@@ -1161,7 +1164,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             if user.oidc_expiry is not None and not track_external_idp_expiry:
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # ty: ignore[invalid-assignment]
-            remove_user_from_invited_users_after_login(user.email, user.id, tenant_id)
+            # An invite issued to a replaced address is still this user's.
+            for invited_email in (user.email, *user.prior_emails):
+                remove_user_from_invited_users_after_login(
+                    invited_email, user.id, tenant_id
+                )
 
             return user
 

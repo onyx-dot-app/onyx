@@ -252,12 +252,10 @@ def rekey_user_mapping_email(
     """Collapse this tenant's membership rows for the user's linked subjects
     onto their new address, keeping one row and deleting the rest.
 
-    Otherwise a row keeps routing the old address and leaves the new one
-    unmapped, which is the state that provisions a second tenant.
-
-    Ownership is matched by any linked subject, since the provider used for
-    this login may not be the one that linked the row. Subject links are moved
-    to the surviving row before the others are deleted.
+    An unmapped new address links no further subjects and resolves nowhere for
+    a login that presents none, which is what provisions a second tenant.
+    Ownership is matched by any linked subject, since the provider used for this
+    login may not be the one that linked the row.
 
     No-op outside multi-tenant, where the mapping tables are not provisioned.
     """
@@ -293,13 +291,12 @@ def rekey_user_mapping_email(
             .with_for_update()
             .one_or_none()
         )
-        identity_source = next(
-            (mapping for mapping in matched_mappings if mapping.active),
-            matched_mappings[0],
-        )
-
         if destination is None:
-            destination = identity_source
+            # Prefer the active row so the surviving membership keeps its state.
+            destination = next(
+                (mapping for mapping in matched_mappings if mapping.active),
+                matched_mappings[0],
+            )
             destination.email = normalized_new_email
 
         source_mappings = [
@@ -326,12 +323,12 @@ def rekey_user_mapping_email(
                 account.email = destination.email
                 account.tenant_id = destination.tenant_id
 
-            # Move association FKs before their source mappings are deleted,
-            # or ON DELETE CASCADE takes the links with them.
+            # Land the FK moves before the source mappings are deleted, or
+            # ON DELETE CASCADE takes the links with them.
             db_session.flush()
 
         destination.active = destination.active or any(
-            mapping.active for mapping in matched_mappings
+            mapping.active for mapping in source_mappings
         )
         for mapping in source_mappings:
             db_session.delete(mapping)
