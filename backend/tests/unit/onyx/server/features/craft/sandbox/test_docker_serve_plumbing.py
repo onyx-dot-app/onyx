@@ -2,7 +2,7 @@
 
 These tests exercise the pure logic added by the
 docker-sandbox-serve port — no Docker engine required. We use
-``object.__new__(DockerSandboxManager)`` to bypass ``_initialize``
+``object.__new__(DockerSandboxManager)`` to bypass ``__init__``
 (which would try to open the Docker socket) and verify:
 
 - ``_load_serve_connection_info`` produces the expected container-name
@@ -48,10 +48,9 @@ def _skip_api_url_probe(monkeypatch: pytest.MonkeyPatch) -> None:
 def _bare_manager() -> DockerSandboxManager:
     """
     DockerSandboxManager without touching the Docker socket: skips
-    ``_initialize`` so contributors without docker running can still run
+    ``__init__`` so contributors without docker running can still run
     these tests.
     """
-    DockerSandboxManager._instance = None
     mgr: DockerSandboxManager = object.__new__(DockerSandboxManager)
     mgr._agent_instructions_template_path = (  # type: ignore[attr-defined]
         dsm.Path(dsm.__file__).parent.parent.parent / "AGENTS.template.md"
@@ -333,7 +332,7 @@ def test_attachments_section_is_inserted_before_connectable_apps(
 
 def test_init_serve_state_is_idempotent() -> None:
     """
-    ``_init_serve_state`` is called from ``_initialize``; provision paths must
+    ``_init_serve_state`` is called from ``__init__``; provision paths must
     not blow up if called twice.
     """
     mgr = _bare_manager()

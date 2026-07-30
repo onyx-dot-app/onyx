@@ -59,7 +59,7 @@ def _make_replica(
     on_restore: Callable[[], None] | None = None,
 ) -> KubernetesSandboxManager:
     """A fresh manager (like a separate api_server pod) with all k8s I/O
-    faked against the shared cluster state; skips ``_initialize`` so no kube
+    faked against the shared cluster state; skips ``__init__`` so no kube
     config is needed. The restore handshake and pod creation are recorded so
     tests can assert exactly-once semantics."""
     m: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
