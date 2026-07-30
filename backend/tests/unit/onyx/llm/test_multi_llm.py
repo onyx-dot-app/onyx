@@ -26,6 +26,8 @@ from onyx.llm.models import (
 )
 from onyx.llm.multi_llm import (
     LitellmLLM,
+    LLMTimeoutError,
+    _consume_stream_with_timeout,
     _parse_anthropic_model_version,
     temporary_env_and_lock,
 )
@@ -2806,3 +2808,36 @@ def test_ui_only_keys_never_injected_or_warned(
             llm.invoke([UserMessage(content="Hi")])
         assert env_during_call["BEDROCK_AUTH_METHOD"] is None
         mock_warn.assert_not_called()
+
+
+class _PingStream:
+    """A stream that emits an empty keepalive 'ping' forever, like a stalled LLM call."""
+
+    def __iter__(self) -> "_PingStream":
+        return self
+
+    def __next__(self) -> object:
+        time.sleep(0.005)  # a packet keeps arriving, resetting any per-read timeout
+        return object()
+
+
+def test_consume_stream_no_timeout_returns_all_chunks() -> None:
+    assert _consume_stream_with_timeout(iter([1, 2, 3]), total_timeout=None) == [
+        1,
+        2,
+        3,
+    ]
+
+
+def test_consume_stream_completes_within_budget() -> None:
+    assert _consume_stream_with_timeout(iter([1, 2, 3]), total_timeout=5) == [1, 2, 3]
+
+
+def test_consume_stream_ping_flood_trips_total_timeout() -> None:
+    start = time.monotonic()
+
+    with pytest.raises(LLMTimeoutError):
+        _consume_stream_with_timeout(_PingStream(), total_timeout=0.05)
+
+    # unwound promptly via the raise, not blocked on the ping flood
+    assert time.monotonic() - start < 2.0
