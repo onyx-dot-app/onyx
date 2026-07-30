@@ -339,6 +339,14 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         Boolean, nullable=True, default=None
     )
 
+    # Addresses this user was renamed away from, until each one's ACL repair
+    # completes. Never grants access. An entry lets a later login re-submit a
+    # lost repair and reserves the address against another user claiming it
+    # mid-repair. `expire_prior_emails` closes entries out.
+    prior_emails: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
+    )
+
     """
     Preferences probably should be in a separate table at some point, but for now
     putting here for simpicity
@@ -5404,6 +5412,39 @@ class UserTenantMapping(PublicBase):
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:  # noqa: ARG002
         return value.lower() if value else value
+
+
+class UserTenantMappingOAuthAccount(PublicBase):
+    """Copy of an `OAuthAccount` subject, which survives an email change at the
+    provider, keyed to the mapping row it authenticates. The primary key holds
+    one mapping per subject. ON UPDATE CASCADE follows an email rekey, and ON
+    DELETE CASCADE drops the link with its membership. Widths mirror the source
+    columns."""
+
+    __tablename__ = "user_tenant_mapping_oauth_account"
+
+    oauth_name: Mapped[str] = mapped_column(
+        String(length=100), nullable=False, primary_key=True
+    )
+    account_id: Mapped[str] = mapped_column(
+        String(length=320), nullable=False, primary_key=True
+    )
+    email: Mapped[str] = mapped_column(String, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["email", "tenant_id"],
+            [
+                "public.user_tenant_mapping.email",
+                "public.user_tenant_mapping.tenant_id",
+            ],
+            ondelete="CASCADE",
+            onupdate="CASCADE",
+        ),
+        Index("ix_user_tenant_mapping_oauth_account_mapping", "email", "tenant_id"),
+        {"schema": "public"},
+    )
 
 
 class AvailableTenant(PublicBase):
