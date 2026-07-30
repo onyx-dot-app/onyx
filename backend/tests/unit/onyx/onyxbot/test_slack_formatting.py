@@ -217,6 +217,12 @@ def test_bold_email_renders_as_mailto_link() -> None:
     rendered = _render("Contact **support@onyx.app** for help.")
 
     assert "Contact *<mailto:support@onyx.app|support@onyx.app>* for help." == rendered
+    assert "_<mailto:support@onyx.app|support@onyx.app>_" == _render(
+        "_support@onyx.app_"
+    )
+    assert "~<mailto:support@onyx.app|support@onyx.app>~" == _render(
+        "~~support@onyx.app~~"
+    )
 
 
 def test_bare_email_is_not_split_by_zero_width_space() -> None:
@@ -333,6 +339,8 @@ def test_url_delimiters_and_short_hosts_do_not_break_slack_links() -> None:
 
 
 def test_email_autolinking_does_not_match_an_overlong_local_part() -> None:
-    message = f"{'a' * 65}@example.com"
-
-    assert "mailto:" not in format_slack_message(message)
+    repeated_specials = [character * 65 for character in ("a", "!", ".", "*", "_", "~")]
+    mixed_specials = [character + "a" * 64 for character in ("!", "*", "_", "~")]
+    for local_part in repeated_specials + mixed_specials:
+        message = f"{local_part}@example.com"
+        assert "mailto:" not in format_slack_message(message)

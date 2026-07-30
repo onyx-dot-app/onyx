@@ -41,9 +41,12 @@ _RENDERED_SLACK_LINK_PATTERN = re.compile(
 # Bare URLs and emails are emitted explicitly because Slack's auto-linker can
 # absorb an adjacent emphasis delimiter into the href.
 _URL_LINK_PATTERN = r"https?://[^\s<>|]+"
+_EMAIL_LOCAL_CHARACTER_CLASS = r"a-zA-Z0-9.!#$%&'*+/=?^_`{}~-"
+_EMAIL_LOCAL_CHARACTER_PATTERN = re.compile(rf"[{_EMAIL_LOCAL_CHARACTER_CLASS}]")
+_EMAIL_MARKDOWN_DELIMITER_LENGTHS = {"*": (1, 3), "_": (1, 3), "~": (2, 2)}
 _EMAIL_LINK_PATTERN = (
     r"(?<![a-zA-Z0-9])"
-    r"[a-zA-Z0-9.!#$%&'*+/=?^_`{}~-]{1,64}"
+    rf"[{_EMAIL_LOCAL_CHARACTER_CLASS}]{{1,64}}"
     r"@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
     r"(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+"
     r"(?![a-zA-Z0-9-])"
@@ -218,12 +221,46 @@ def _parse_email_link(
     inline: "InlineParser", m: re.Match[str], state: "InlineState"
 ) -> int:
     email = m.group(0)
+    if _email_match_starts_inside_local_part(m, state):
+        inline.process_text(email, state)
+        return m.end()
     return _append_autolink(
         inline,
         state,
         label=email,
         url=f"mailto:{email}",
         end_pos=m.end(),
+    )
+
+
+def _email_match_starts_inside_local_part(
+    m: re.Match[str], state: "InlineState"
+) -> bool:
+    """Reject suffix matches unless preceding local chars are Markdown delimiters."""
+    match_start, match_end = m.span()
+    if match_start == 0:
+        return False
+
+    preceding_character = state.src[match_start - 1]
+    if _EMAIL_LOCAL_CHARACTER_PATTERN.fullmatch(preceding_character) is None:
+        return False
+
+    delimiter_lengths = _EMAIL_MARKDOWN_DELIMITER_LENGTHS.get(preceding_character)
+    if delimiter_lengths is None or m.group(0).startswith(preceding_character):
+        return True
+
+    minimum_length, maximum_length = delimiter_lengths
+    return not any(
+        match_start >= length
+        and state.src.startswith(
+            preceding_character * length, match_start - length, match_start
+        )
+        and (
+            match_start == length
+            or state.src[match_start - length - 1] != preceding_character
+        )
+        and state.src.startswith(preceding_character * length, match_end)
+        for length in range(minimum_length, maximum_length + 1)
     )
 
 
