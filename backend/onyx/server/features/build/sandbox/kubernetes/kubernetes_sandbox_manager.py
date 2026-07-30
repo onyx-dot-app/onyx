@@ -1304,23 +1304,19 @@ class KubernetesSandboxManager(SandboxManager):
 
     def _stamp_pod_attempt_number(self, pod_name: str, attempt_number: int) -> None:
         """Mark the pod as owned by ``attempt_number`` when an attempt reuses
-        a pod it didn't create. Best-effort: on failure the label is stale and
-        a guarded delete may destroy the reused pod — recoverable via the
-        normal unhealthy-RUNNING recovery."""
-        try:
-            self._core_api.patch_namespaced_pod(
-                name=pod_name,
-                namespace=self._namespace,
-                body={
-                    "metadata": {
-                        "labels": {LABEL_PROVISIONING_ATTEMPT: str(attempt_number)}
-                    }
-                },
-            )
-        except ApiException:
-            logger.warning(
-                "Failed to restamp attempt label on pod %s", pod_name, exc_info=True
-            )
+        a pod it didn't create. Fail-closed: an unstamped adopted pod would
+        stay deletable by stale attempts, so a failure here fails the attempt
+        (the retry tears down and re-provisions) instead of finalizing RUNNING
+        on a hazard."""
+        self._core_api.patch_namespaced_pod(
+            name=pod_name,
+            namespace=self._namespace,
+            body={
+                "metadata": {
+                    "labels": {LABEL_PROVISIONING_ATTEMPT: str(attempt_number)}
+                }
+            },
+        )
 
     def _pod_attempt_number(self, pod_name: str) -> int | None:
         """The provisioning-attempt label of the live pod, or None when the
