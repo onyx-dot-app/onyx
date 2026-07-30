@@ -34,15 +34,17 @@ _MARKDOWN_LINK_PATTERN = re.compile(r"\[(?:[^\[\]]|\[[^\]]*\])*\]\(")
 # autolink and percent-encodes the pipe into the address.
 _SLACK_LINK_PATTERN = re.compile(r"<((?:https?://|mailto:)[^|>]+)\|([^>]+)>")
 
-# Slack's auto-linker absorbs an adjacent emphasis delimiter into the href, so
-# bare URLs and emails get emitted as explicit links. The trailing class excludes
-# * _ ~ to leave the closing emphasis marker for the emphasis rule.
-_URL_LINK_PATTERN = r"""https?://[^\s<]+[^<>|.,:;"')\]\s*_~]"""
+# Bare URLs and emails are emitted explicitly because Slack's auto-linker can
+# absorb an adjacent emphasis delimiter into the href.
+_URL_LINK_PATTERN = r"https?://[^\s<>|]+"
 _EMAIL_LINK_PATTERN = (
-    r"[a-zA-Z0-9.!#$%&'*+/=?^_`{}~-]+"
+    r"(?<![a-zA-Z0-9])"
+    r"[a-zA-Z0-9.!#$%&'*+/=?^_`{}~-]{1,64}"
     r"@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
     r"(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+"
+    r"(?![a-zA-Z0-9-])"
 )
+_URL_TRAILING_PUNCTUATION = ".,:;\"'*_~"
 
 
 def _sanitize_html(text: str) -> str:
@@ -141,9 +143,12 @@ def _convert_slack_links_to_markdown(message: str) -> str:
 
 
 def _append_autolink(
-    inline: "InlineParser", m: re.Match[str], state: "InlineState", url: str
+    inline: "InlineParser",
+    state: "InlineState",
+    label: str,
+    url: str,
+    end_pos: int,
 ) -> int:
-    label = m.group(0)
     if state.in_link:
         inline.process_text(label, state)
     else:
@@ -154,19 +159,41 @@ def _append_autolink(
                 "attrs": {"url": url},
             }
         )
-    return m.end()
+    return end_pos
+
+
+def _trim_url_trailing_punctuation(url: str) -> str:
+    url = url.rstrip(_URL_TRAILING_PUNCTUATION)
+    for opening, closing in (("(", ")"), ("[", "]")):
+        while url.endswith(closing) and url.count(closing) > url.count(opening):
+            url = url[:-1]
+    return url
 
 
 def _parse_url_link(
     inline: "InlineParser", m: re.Match[str], state: "InlineState"
 ) -> int:
-    return _append_autolink(inline, m, state, m.group(0))
+    url = _trim_url_trailing_punctuation(m.group(0))
+    return _append_autolink(
+        inline,
+        state,
+        label=url,
+        url=url,
+        end_pos=m.start() + len(url),
+    )
 
 
 def _parse_email_link(
     inline: "InlineParser", m: re.Match[str], state: "InlineState"
 ) -> int:
-    return _append_autolink(inline, m, state, f"mailto:{m.group(0)}")
+    email = m.group(0)
+    return _append_autolink(
+        inline,
+        state,
+        label=email,
+        url=f"mailto:{email}",
+        end_pos=m.end(),
+    )
 
 
 def slack_autolink(md: "Markdown") -> None:

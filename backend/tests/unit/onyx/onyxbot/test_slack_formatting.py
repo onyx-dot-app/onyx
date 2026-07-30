@@ -248,3 +248,19 @@ def test_trailing_punctuation_excluded_from_url() -> None:
     assert "trailing <https://onyx.app/docs>. Done" == _render(
         "trailing https://onyx.app/docs. Done"
     )
+
+
+def test_balanced_url_parentheses_stay_inside_the_link() -> None:
+    assert "<https://onyx.app/docs_(v2)>" == _render("https://onyx.app/docs_(v2)")
+    assert "<https://onyx.app/docs>)" == _render("https://onyx.app/docs)")
+
+
+def test_url_delimiters_and_short_hosts_do_not_break_slack_links() -> None:
+    assert "<https://x>" == _render("https://x")
+    assert "<https://onyx.app>|label" == _render("https://onyx.app|label")
+
+
+def test_email_autolinking_does_not_match_an_overlong_local_part() -> None:
+    message = f"{'a' * 65}@example.com"
+
+    assert "mailto:" not in format_slack_message(message)
