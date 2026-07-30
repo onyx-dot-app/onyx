@@ -16,6 +16,7 @@ from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     IndexingMode,
     ProcessingMode,
+    SwitchoverType,
 )
 from onyx.db.models import (
     Connector,
@@ -785,6 +786,29 @@ def fetch_indexable_standard_connector_credential_pair_ids(
         stmt = stmt.limit(limit)
 
     return list(db_session.scalars(stmt))
+
+
+def compute_wont_port_cc_pair_ids(
+    db_session: Session, switchover_type: SwitchoverType
+) -> list[int]:
+    """cc_pairs whose data will NOT be carried into the new index for this reindex —
+    the complement of the port scope. Derived from the SAME
+    fetch_indexable_standard_connector_credential_pair_ids the reindex/swap use, so a
+    change to what ports is reflected here automatically (no re-encoded status rules).
+    Works out to INVALID always + PAUSED under ACTIVE_ONLY. Excludes DELETING (already
+    being removed) and the default Ingestion cc_pair.
+    """
+    will_port = set(
+        fetch_indexable_standard_connector_credential_pair_ids(
+            db_session,
+            active_cc_pairs_only=(switchover_type == SwitchoverType.ACTIVE_ONLY),
+        )
+    )
+    stmt = select(ConnectorCredentialPair.id).where(
+        ConnectorCredentialPair.id != DEFAULT_CC_PAIR_ID,
+        ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+    )
+    return sorted(cc_id for cc_id in db_session.scalars(stmt) if cc_id not in will_port)
 
 
 def fetch_connector_credential_pair_for_connector(
