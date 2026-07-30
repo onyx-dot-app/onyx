@@ -5,7 +5,7 @@
 // chat scale, re-optimizable to incremental later behind the same API. renderComplete/forceShowAnswer
 // are the only true UI state; everything else derives from the packets.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import {
   CitationMap,
@@ -59,21 +59,24 @@ export function usePacketProcessor(
     [nodeId, rawPackets],
   );
 
-  // Reset transient UI state on a message switch or stream rewind — in an effect, not during render,
-  // so react-hooks/refs stays satisfied.
-  const prevNodeIdRef = useRef(nodeId);
-  const prevFinalAnswerComingRef = useRef(state.finalAnswerComing);
-  useEffect(() => {
-    if (prevNodeIdRef.current !== nodeId) {
-      setRenderComplete(false);
-      setForceShowAnswer(false);
-    } else if (prevFinalAnswerComingRef.current && !state.finalAnswerComing) {
-      // Tool-after-message: answer retracted, so the renderer must re-run — clear completion.
+  // Reset transient UI state synchronously during render (React re-renders before commit) so a
+  // message switch or a retracted answer can't briefly show the prior node's completion.
+  const [prevNodeId, setPrevNodeId] = useState(nodeId);
+  const [prevFinalAnswerComing, setPrevFinalAnswerComing] = useState(
+    state.finalAnswerComing,
+  );
+  if (prevNodeId !== nodeId) {
+    setPrevNodeId(nodeId);
+    setPrevFinalAnswerComing(state.finalAnswerComing);
+    setRenderComplete(false);
+    setForceShowAnswer(false);
+  } else if (prevFinalAnswerComing !== state.finalAnswerComing) {
+    setPrevFinalAnswerComing(state.finalAnswerComing);
+    // Tool-after-message: answer retracted, so the renderer must re-run — clear completion.
+    if (prevFinalAnswerComing && !state.finalAnswerComing) {
       setRenderComplete(false);
     }
-    prevNodeIdRef.current = nodeId;
-    prevFinalAnswerComingRef.current = state.finalAnswerComing;
-  }, [nodeId, state.finalAnswerComing]);
+  }
 
   const effectiveFinalAnswerComing = state.finalAnswerComing || forceShowAnswer;
   const displayGroups = useMemo(() => {

@@ -376,6 +376,28 @@ describe("usePacedTurnGroups", () => {
       rerender({ nodeId: 2 });
       expect(result.current.pacedTurnGroups.length).toBe(1);
     });
+
+    it("does not carry a prior node's revealed steps into a new node", () => {
+      const { result, rerender } = renderHook(
+        ({ turnGroups, nodeId }: { turnGroups: TurnGroup[]; nodeId: number }) =>
+          usePacedTurnGroups(turnGroups, [], false, nodeId, false),
+        {
+          initialProps: {
+            turnGroups: [createTurnGroup([createStep(0, 0)])],
+            nodeId: 1,
+          },
+        },
+      );
+      expect(result.current.pacedTurnGroups[0]?.steps[0]?.key).toBe("0-0");
+
+      // New node whose only step has a different key — the prior "0-0" must not leak through.
+      rerender({
+        turnGroups: [createTurnGroup([createStep(5, 0)])],
+        nodeId: 2,
+      });
+      expect(result.current.pacedTurnGroups.length).toBe(1);
+      expect(result.current.pacedTurnGroups[0]?.steps[0]?.key).toBe("5-0");
+    });
   });
 
   describe("timer cleanup", () => {

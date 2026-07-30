@@ -86,6 +86,16 @@ export function usePacedTurnGroups(
 
   const nodeIdStr = String(nodeId);
 
+  // Message switch: reset the published mirrors synchronously during render (React re-renders before
+  // commit), so the transition frame can't flash the previous node's revealed steps or answer. The
+  // ref + timer reset and reprocessing happen in the effect below.
+  const [prevNodeIdStr, setPrevNodeIdStr] = useState(nodeIdStr);
+  if (prevNodeIdStr !== nodeIdStr) {
+    setPrevNodeIdStr(nodeIdStr);
+    setRevealedStepKeys(new Set());
+    setToolPacingComplete(false);
+  }
+
   // Publish the ref's working set/flag to state so the next render reflects them.
   const publish = useCallback(() => {
     const state = stateRef.current;
@@ -132,21 +142,14 @@ export function usePacedTurnGroups(
 
   // Process incoming turn groups (reset → transition → stop-flush → reveal/queue).
   useEffect(() => {
-    // Reset on message switch (web did this during render); clear any pending timer. Republish empty
-    // only when the prior node had content, to avoid a spurious re-render on first mount.
+    // Reset the ref bookkeeping + timer on a message switch (the published mirrors were already
+    // cleared synchronously during render, above).
     if (stateRef.current.nodeId !== nodeIdStr) {
-      const hadContent =
-        stateRef.current.revealedStepKeys.size > 0 ||
-        stateRef.current.toolPacingComplete;
       if (stateRef.current.pacingTimer) {
         clearTimeout(stateRef.current.pacingTimer);
       }
       stateRef.current = createInitialPacingState();
       stateRef.current.nodeId = nodeIdStr;
-      if (hadContent) {
-        setRevealedStepKeys(new Set());
-        setToolPacingComplete(false);
-      }
     }
 
     const state = stateRef.current;
