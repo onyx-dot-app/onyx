@@ -1,3 +1,4 @@
+from onyx.connectors.jira_service_management.connector import JiraServiceManagementConnector
 import importlib
 from typing import Any
 from typing import Type
