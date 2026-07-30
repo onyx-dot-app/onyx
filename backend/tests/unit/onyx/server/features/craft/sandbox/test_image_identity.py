@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from docker.errors import NotFound
+from docker.errors import APIError, NotFound
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
@@ -333,3 +333,146 @@ def test_docker_runtime_state_tracks_container_presence(
 
     assert state.healthy is not missing_container
     assert (state.image is None) is missing_container
+
+
+# --- fleet scan -------------------------------------------------------------
+#
+# "Which sandboxes are on a superseded image" is derived from what is actually
+# running rather than recorded when a new image lands, so it needs no
+# bookkeeping to stay true. That only pays off if the whole fleet costs one
+# backend call, which is what these pin.
+
+
+def _labelled_pod(sandbox_id: str, spec_image: str) -> SimpleNamespace:
+    pod = _pod(spec_image, None)
+    pod.metadata = SimpleNamespace(  # type: ignore[attr-defined]
+        name=f"sandbox-{sandbox_id[:8]}",
+        labels={"onyx.app/sandbox-id": sandbox_id},
+    )
+    return cast(SimpleNamespace, pod)
+
+
+def test_k8s_fleet_scan_costs_one_list_call() -> None:
+    ids = [str(UUID(int=i)) for i in range(3)]
+    core_api = MagicMock()
+    core_api.read_namespaced_pod_template.return_value = _podtemplate(NEW_TAG_REF)
+    mgr = _k8s_manager(core_api)
+    core_api.list_namespaced_pod.return_value = SimpleNamespace(
+        items=[_labelled_pod(i, TAG_REF) for i in ids]
+    )
+
+    identities = mgr.list_live_sandbox_images()
+
+    assert set(identities) == {UUID(i) for i in ids}
+    assert all(identity.is_stale for identity in identities.values())
+    # One list for the pods, one PodTemplate read shared across all of them.
+    assert core_api.list_namespaced_pod.call_count == 1
+    assert core_api.read_namespaced_pod_template.call_count == 1
+
+
+def test_k8s_fleet_scan_separates_current_from_superseded() -> None:
+    current, stale = str(UUID(int=1)), str(UUID(int=2))
+    core_api = MagicMock()
+    core_api.read_namespaced_pod_template.return_value = _podtemplate(NEW_TAG_REF)
+    mgr = _k8s_manager(core_api)
+    core_api.list_namespaced_pod.return_value = SimpleNamespace(
+        items=[
+            _labelled_pod(current, NEW_TAG_REF),
+            _labelled_pod(stale, TAG_REF),
+        ]
+    )
+
+    identities = mgr.list_live_sandbox_images()
+
+    assert identities[UUID(current)].is_stale is False
+    assert identities[UUID(stale)].is_stale is True
+
+
+def test_k8s_fleet_scan_skips_pods_without_a_usable_id() -> None:
+    """A pod that cannot be tied back to a sandbox row is not actionable, and a
+    malformed label must not take the whole scan down with it."""
+    good = str(UUID(int=7))
+    core_api = MagicMock()
+    core_api.read_namespaced_pod_template.return_value = _podtemplate(TAG_REF)
+    mgr = _k8s_manager(core_api)
+    unlabelled = _pod(TAG_REF, None)
+    unlabelled.metadata = SimpleNamespace(name="orphan", labels={})  # type: ignore[attr-defined]
+    core_api.list_namespaced_pod.return_value = SimpleNamespace(
+        items=[
+            unlabelled,
+            _labelled_pod("not-a-uuid", TAG_REF),
+            _labelled_pod(good, TAG_REF),
+        ]
+    )
+
+    assert set(mgr.list_live_sandbox_images()) == {UUID(good)}
+
+
+def test_k8s_fleet_scan_reports_nothing_when_the_desired_image_is_unknown() -> None:
+    """An unreadable PodTemplate must not make the fleet look stale."""
+    core_api = MagicMock()
+    core_api.read_namespaced_pod_template.side_effect = ApiException(status=403)
+    mgr = _k8s_manager(core_api)
+    core_api.list_namespaced_pod.return_value = SimpleNamespace(
+        items=[_labelled_pod(str(UUID(int=1)), TAG_REF)]
+    )
+
+    assert mgr.list_live_sandbox_images() == {}
+
+
+def test_k8s_fleet_scan_survives_an_unlistable_namespace() -> None:
+    core_api = MagicMock()
+    core_api.read_namespaced_pod_template.return_value = _podtemplate(TAG_REF)
+    mgr = _k8s_manager(core_api)
+    core_api.list_namespaced_pod.side_effect = ApiException(status=403)
+
+    assert mgr.list_live_sandbox_images() == {}
+
+
+def _listed_container(sandbox_id: str, image: str, image_id: str) -> MagicMock:
+    container = MagicMock()
+    container.name = f"sandbox-{sandbox_id[:8]}"
+    # List shape, not inspect shape: ref and resolved ID at the top level.
+    container.attrs = {
+        "Image": image,
+        "ImageID": image_id,
+        "Labels": {"onyx.app/sandbox-id": sandbox_id},
+    }
+    return container
+
+
+def test_docker_fleet_scan_uses_the_list_shape() -> None:
+    """`list` reports Image/ImageID at the top level while `inspect` nests the
+    ref under Config; reading the wrong pair yields a bogus comparison."""
+    sandbox_id = str(UUID(int=3))
+    mgr, docker = _docker_manager("onyxdotapp/sandbox:latest")
+    docker.images.get.return_value = SimpleNamespace(id=DIGEST_B)
+    docker.containers.list.return_value = [
+        _listed_container(sandbox_id, "onyxdotapp/sandbox:latest", DIGEST_A)
+    ]
+
+    identities = mgr.list_live_sandbox_images()
+
+    assert set(identities) == {UUID(sandbox_id)}
+    identity = identities[UUID(sandbox_id)]
+    assert identity.running_digest == DIGEST_A
+    assert identity.is_stale is True
+
+
+def test_docker_fleet_scan_includes_stopped_containers() -> None:
+    """A stopped container is restarted rather than recreated, so one built from
+    a superseded image would come back on it."""
+    mgr, docker = _docker_manager("onyxdotapp/sandbox:latest")
+    docker.images.get.return_value = SimpleNamespace(id=DIGEST_B)
+    docker.containers.list.return_value = []
+
+    mgr.list_live_sandbox_images()
+
+    assert docker.containers.list.call_args.kwargs["all"] is True
+
+
+def test_docker_fleet_scan_survives_a_daemon_error() -> None:
+    mgr, docker = _docker_manager("onyxdotapp/sandbox:latest")
+    docker.containers.list.side_effect = APIError("daemon is unwell")
+
+    assert mgr.list_live_sandbox_images() == {}

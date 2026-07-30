@@ -676,6 +676,42 @@ class KubernetesSandboxManager(SandboxManager):
             desired_digest=desired_digest if pinned else None,
         )
 
+    def list_live_sandbox_images(self) -> dict[UUID, SandboxImageIdentity]:
+        """One API call for the whole fleet, keyed by the sandbox-id label.
+
+        The desired ref comes from the same short-TTL cache the per-pod path
+        uses, so a sweep over every sandbox costs one list and no extra reads.
+        """
+        try:
+            pods = self._core_api.list_namespaced_pod(
+                namespace=self._namespace,
+                label_selector=f"{LABEL_K8S_COMPONENT}={LABEL_K8S_COMPONENT_SANDBOX}",
+            )
+        except ApiException as e:
+            logger.warning("Could not list sandbox pods: %s", e)
+            return {}
+
+        identities: dict[UUID, SandboxImageIdentity] = {}
+        for pod in pods.items:
+            raw_id = ((pod.metadata.labels if pod.metadata else None) or {}).get(
+                LABEL_SANDBOX_ID
+            )
+            if raw_id is None:
+                continue
+            try:
+                sandbox_id = UUID(raw_id)
+            except ValueError:
+                logger.warning(
+                    "Sandbox pod %s carries an unparseable id label %r",
+                    pod.metadata.name if pod.metadata else "<unknown>",
+                    raw_id,
+                )
+                continue
+            identity = self._image_identity(pod)
+            if identity is not None:
+                identities[sandbox_id] = identity
+        return identities
+
     def _create_sandbox_service(
         self,
         sandbox_id: UUID,

@@ -1052,6 +1052,26 @@ class DockerSandboxManager(SandboxManager):
         precisely what we want to notice.
         """
         attrs = container.attrs or {}
+        # Inspect shape: the ref lives under Config, the resolved ID at the top.
+        return self._identity_for(
+            running_ref=(attrs.get("Config") or {}).get("Image"),
+            running_digest=attrs.get("Image"),
+        )
+
+    def _identity_for(
+        self,
+        *,
+        running_ref: str | None,
+        running_digest: str | None,
+    ) -> SandboxImageIdentity:
+        """Pair a container's image with the one a fresh container would use.
+
+        Takes the running side as values rather than a container because Docker
+        reports it under different keys depending on how it was fetched:
+        ``inspect`` nests the ref under ``Config`` while ``list`` returns
+        ``Image``/``ImageID`` at the top level. Resolving the desired side
+        stays here so it cannot drift between the two.
+        """
         desired_digest: str | None = None
         try:
             desired_digest = self._docker.images.get(self._image).id
@@ -1065,11 +1085,50 @@ class DockerSandboxManager(SandboxManager):
             )
 
         return SandboxImageIdentity(
-            running_ref=(attrs.get("Config") or {}).get("Image"),
-            running_digest=attrs.get("Image"),
+            running_ref=running_ref,
+            running_digest=running_digest,
             desired_ref=self._image,
             desired_digest=desired_digest,
         )
+
+    def list_live_sandbox_images(self) -> dict[UUID, SandboxImageIdentity]:
+        """One daemon call for the whole fleet, keyed by the sandbox-id label.
+
+        Includes stopped containers deliberately: ``_reuse_existing_container``
+        restarts an exited container rather than recreating it, so one built
+        from a superseded image would come back on that image. It is a recycle
+        candidate exactly like a running one.
+        """
+        try:
+            containers = self._docker.containers.list(
+                all=True,
+                filters={"label": f"{LABEL_COMPONENT}={LABEL_COMPONENT_VALUE}"},
+            )
+        except APIError as e:
+            logger.warning("Could not list sandbox containers: %s", e)
+            return {}
+
+        identities: dict[UUID, SandboxImageIdentity] = {}
+        for container in containers:
+            attrs = container.attrs or {}
+            raw_id = ((attrs.get("Labels") or {}) or {}).get(LABEL_SANDBOX_ID)
+            if raw_id is None:
+                continue
+            try:
+                sandbox_id = UUID(raw_id)
+            except ValueError:
+                logger.warning(
+                    "Sandbox container %s carries an unparseable id label %r",
+                    container.name,
+                    raw_id,
+                )
+                continue
+            # List shape: ref and resolved ID both sit at the top level.
+            identities[sandbox_id] = self._identity_for(
+                running_ref=attrs.get("Image"),
+                running_digest=attrs.get("ImageID"),
+            )
+        return identities
 
     def _render_agents_md(
         self,

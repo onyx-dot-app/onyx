@@ -40,6 +40,7 @@ from onyx.server.features.build.sandbox.models import (
     PushFailure,
     PushResult,
     RetriableWriteError,
+    SandboxImageIdentity,
     SandboxInfo,
     SandboxRuntimeState,
     SnapshotResult,
@@ -372,6 +373,22 @@ class SandboxManager(_ServeMixin, ABC):
         return SandboxRuntimeState(
             healthy=self.health_check(sandbox_id, timeout=timeout)
         )
+
+    def list_live_sandbox_images(self) -> dict[UUID, SandboxImageIdentity]:
+        """Image identity of every live sandbox on this backend, keyed by
+        sandbox id.
+
+        Answers "which sandboxes are running something other than what a new
+        one would get" in a single backend call for the whole fleet, rather than
+        one call per sandbox. Both backends already label their sandboxes with
+        the sandbox id, so the mapping needs no help from the caller — and the
+        answer is derived from what is actually running, so it needs no
+        bookkeeping to stay true.
+
+        Empty when the backend cannot report identity, which reads as "nothing
+        known to be stale" — never as "everything is current".
+        """
+        return {}
 
     def send_message(
         self,
