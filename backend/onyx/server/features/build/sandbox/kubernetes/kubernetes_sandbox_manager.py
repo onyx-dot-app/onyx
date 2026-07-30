@@ -76,8 +76,6 @@ from onyx.server.features.build.configs import (
     SANDBOX_SERVICE_ACCOUNT_NAME,
 )
 from onyx.server.features.build.sandbox.base import (
-    BUN_CACHE_DIR,
-    BUN_IMAGE_CACHE_DIR,
     SandboxManager,
 )
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
@@ -120,6 +118,12 @@ from onyx.server.features.build.sandbox.serve_transport import (
     OPENCODE_SERVE_READY_TIMEOUT_SECONDS,
     ServeConnectionInfo,
 )
+from onyx.server.features.build.sandbox.session_workspace import (
+    SESSIONS_ROOT,
+    WORKSPACE_SETUP_COMPLETE_SENTINEL,
+    build_session_workspace_setup_script,
+    build_workspace_exists_check_script,
+)
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
@@ -146,6 +150,12 @@ logger = setup_logger()
 _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 
 POD_READY_TIMEOUT_SECONDS = 30
+
+# Session-workspace materialization (template copy + bun install). Enforced as
+# an explicit exec deadline paired with a completion sentinel — the Kubernetes
+# exec client returns truncated output without raising when its window lapses,
+# so the sentinel is what distinguishes success from truncation.
+WORKSPACE_SETUP_DEADLINE_SECONDS = 180.0
 
 # Shared deadline for IP assignment (scheduling + image pull) and the restore.
 OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS = 90.0
@@ -1375,7 +1385,7 @@ class KubernetesSandboxManager(SandboxManager):
             RuntimeError: If workspace setup fails
         """
         pod_name = self._get_pod_name(str(sandbox_id))
-        session_path = f"/workspace/sessions/{session_id}"
+        session_path = f"{SESSIONS_ROOT}/{session_id}"
 
         # Paths inside the pod (created during workspace setup below):
         # - {session_path}/attachments: user-uploaded files
@@ -1389,8 +1399,6 @@ class KubernetesSandboxManager(SandboxManager):
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
         )
-
-        agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
         session_opencode_config = json.dumps(
             build_provider_opencode_config(
                 llm_config,
@@ -1399,86 +1407,22 @@ class KubernetesSandboxManager(SandboxManager):
                 session_id=str(session_id),
             )
         )
-        session_opencode_config_setup = (
-            f"printf '%s' {shlex.quote(session_opencode_config)} > "
-            f"{session_path}/opencode.json"
+        setup_script = build_session_workspace_setup_script(
+            session_path=session_path,
+            agents_md=agent_instructions,
+            session_opencode_config_json=session_opencode_config,
+            nextjs_port=nextjs_port,
         )
-
-        # Copy outputs template from baked-in location and install npm dependencies
-        outputs_setup = f"""
-echo "Copying outputs template"
-if [ -d /workspace/templates/outputs ]; then
-    cp -r /workspace/templates/outputs/* {session_path}/outputs/
-    # flock+sentinel: serialize concurrent session setups; .ready guards
-    # against a partial cp from a previous interrupted run.
-    (
-        flock -x 9
-        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
-            echo "Bootstrapping bun cache on workspace volume..."
-            rm -rf {BUN_CACHE_DIR}
-            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
-                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
-            touch {BUN_CACHE_DIR}/.ready
-        fi
-    ) 9>{BUN_CACHE_DIR}.lock
-    cd {session_path}/outputs/web && \\
-        BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
-        bun install --frozen-lockfile --backend=hardlink
-else
-    echo "Warning: outputs template not found at /workspace/templates/outputs"
-    mkdir -p {session_path}/outputs/web
-fi
-"""
-
-        # Headless callers (scheduled tasks) pass nextjs_port=None — the
-        # agent's tools work without a dev server.
-        nextjs_start_script = (
-            build_nextjs_start_script(
-                session_path, nextjs_port, check_node_modules=False
-            )
-            if nextjs_port is not None
-            else ""
-        )
-
-        setup_script = f"""
-set -e
-
-# Create session directory structure
-echo "Creating session directory: {session_path}"
-mkdir -p {session_path}/outputs
-mkdir -p {session_path}/attachments
-
-# Setup outputs
-{outputs_setup}
-
-# DO NOT mkdir /workspace/managed/skills or /workspace/managed/user_library
-# here — the push daemon swaps these paths via os.rename(symlink, mount),
-# which fails if the mount is a real directory. Dangling until the first
-# push lands is fine; nothing reads these during the rest of setup.
-mkdir -p {session_path}/.opencode
-ln -sf /workspace/managed/skills {session_path}/.opencode/skills
-echo "Linked skills to /workspace/managed/skills"
-ln -sf /workspace/managed/user_library {session_path}/user_library
-echo "Linked user_library to /workspace/managed/user_library"
-
-# Write agent instructions
-echo "Writing AGENTS.md"
-printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-
-{session_opencode_config_setup}
-
-# Start Next.js dev server
-{nextjs_start_script}
-
-echo "Session workspace setup complete"
-"""
 
         logger.info(
             "Setting up session workspace %s in sandbox %s", session_id, sandbox_id
         )
 
         try:
-            # Execute setup script in the pod
+            # Execute setup script in the pod. The exec client returns
+            # whatever output was buffered when _request_timeout lapses
+            # WITHOUT raising (the command keeps running in the pod), so
+            # success is the sentinel, not a clean return.
             exec_response = k8s_stream(
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
@@ -1489,9 +1433,16 @@ echo "Session workspace setup complete"
                 stdin=False,
                 stdout=True,
                 tty=False,
+                _request_timeout=WORKSPACE_SETUP_DEADLINE_SECONDS,
             )
 
             logger.debug("Session setup output: %s", exec_response)
+            if WORKSPACE_SETUP_COMPLETE_SENTINEL not in exec_response:
+                raise RuntimeError(
+                    f"Workspace setup for session {session_id} did not complete "
+                    f"within {WORKSPACE_SETUP_DEADLINE_SECONDS:.0f}s (output tail: "
+                    f"{exec_response[-500:]!r})"
+                )
             logger.info(
                 "Set up session workspace %s in sandbox %s", session_id, sandbox_id
             )
@@ -1735,13 +1686,13 @@ echo "Session cleanup complete"
             True if the session workspace exists, False otherwise
         """
         pod_name = self._get_pod_name(str(sandbox_id))
-        session_path = f"/workspace/sessions/{session_id}/outputs"
+        session_path = f"{SESSIONS_ROOT}/{session_id}"
 
-        # Use exec to check if directory exists
+        # Use exec to check for a complete (not in-progress) workspace
         exec_command = [
             "/bin/sh",
             "-c",
-            f'[ -d "{session_path}" ] && echo "WORKSPACE_FOUND" || echo "WORKSPACE_MISSING"',
+            build_workspace_exists_check_script(session_path),
         ]
 
         try:
@@ -1896,6 +1847,7 @@ echo "Session cleanup complete"
                     stderr=True,
                     stdin=False,
                     stdout=True,
+                    _request_timeout=WORKSPACE_SETUP_DEADLINE_SECONDS,
                     tty=False,
                 )
         except ApiException as e:

@@ -9,7 +9,7 @@ docker-sandbox-serve port — no Docker engine required. We use
   fallback URL or localhost-published URL + cleartext password from a mocked
   container's ``inspect`` data, yields a ``None`` password for legacy
   containers, and returns ``None`` when the container is gone.
-- ``_render_agents_md`` produces shell-escaped AGENTS.md content.
+- ``_build_agents_md`` renders AGENTS.md content.
 """
 
 from __future__ import annotations
@@ -239,11 +239,11 @@ def llm_config() -> CraftLLMProviderConfig:
     )
 
 
-def test_render_agents_md_returns_escaped_string(
+def test_build_agents_md_renders_instructions(
     llm_config: CraftLLMProviderConfig,
 ) -> None:
     mgr = _bare_manager()
-    agents_md = mgr._render_agents_md(
+    agents_md = mgr._build_agents_md(
         agent_provider=llm_config.provider,
         agent_model=llm_config.model_name,
         nextjs_port=None,
@@ -251,7 +251,6 @@ def test_render_agents_md_returns_escaped_string(
     )
     assert isinstance(agents_md, str)
     assert agents_md
-    assert "'" not in agents_md or "'\\''" in agents_md
     assert "## Skills" not in agents_md
     assert "{{AVAILABLE_SKILLS_SECTION}}" not in agents_md
 
@@ -272,7 +271,7 @@ def test_setup_writes_fresh_gateway_catalog_before_instance_start(
         manager, "_require_container", MagicMock(return_value=MagicMock())
     )
     monkeypatch.setattr(
-        manager, "_render_agents_md", MagicMock(return_value="instructions")
+        manager, "_build_agents_md", MagicMock(return_value="instructions")
     )
     gateway = CraftLLMProviderConfig(
         provider="onyx",
