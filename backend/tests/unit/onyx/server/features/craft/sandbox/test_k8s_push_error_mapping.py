@@ -106,7 +106,7 @@ def _service_host(mgr: KubernetesSandboxManager) -> Callable[[UUID], str]:
 
 
 def _make_manager() -> KubernetesSandboxManager:
-    """Construct a manager without invoking _initialize (which needs a K8s config).
+    """Construct a manager without invoking __init__ (which needs a K8s config).
 
     ``write_files_to_sandbox`` resolves the sidecar host via the Service FQDN,
     then POSTs over the mocked ``httpx.Client``. Bypass ``__new__`` cache with

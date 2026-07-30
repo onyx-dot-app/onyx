@@ -47,7 +47,6 @@ import secrets
 import shlex
 import tarfile
 import tempfile
-import threading
 import time
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -272,23 +271,12 @@ class KubernetesSandboxManager(SandboxManager):
     IMPORTANT: This manager does NOT interface with the database directly.
     All database operations should be handled by the caller.
 
-    This is a singleton class - use get_sandbox_manager() to get the instance.
+    Process-wide instance is cached by get_sandbox_manager().
     """
 
     supports_opencode_history_persistence = True
 
-    _instance: "KubernetesSandboxManager | None" = None
-    _lock = threading.Lock()
-
-    def __new__(cls) -> "KubernetesSandboxManager":
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialize()
-        return cls._instance
-
-    def _initialize(self) -> None:
+    def __init__(self) -> None:
         """Initialize Kubernetes client and configuration."""
         load_kube_config()
 

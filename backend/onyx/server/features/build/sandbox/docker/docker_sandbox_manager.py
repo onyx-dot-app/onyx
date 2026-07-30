@@ -628,28 +628,12 @@ def build_container_create_kwargs(
 class DockerSandboxManager(SandboxManager):
     """Sandbox manager that drives the host Docker Engine.
 
-    Singleton; use :func:`get_sandbox_manager` to obtain the instance.
+    Process-wide instance is cached by :func:`get_sandbox_manager`.
     """
-
-    _instance: "DockerSandboxManager | None" = None
-    _lock = threading.Lock()
 
     supports_opencode_history_persistence = True
 
-    def __new__(cls) -> "DockerSandboxManager":
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    # Publish to the cache only after _initialize() succeeds, so
-                    # a transient init failure (e.g. the Docker socket briefly
-                    # unavailable) can't leave a half-built singleton that every
-                    # later caller reuses; the next call retries instead.
-                    instance = super().__new__(cls)
-                    instance._initialize()
-                    cls._instance = instance
-        return cls._instance
-
-    def _initialize(self) -> None:
+    def __init__(self) -> None:
         # Mirrors the K8s posture from #11604: the proxy is mandatory whenever
         # craft is enabled.
         if not SANDBOX_PROXY_HOST:
