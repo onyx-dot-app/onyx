@@ -33,7 +33,7 @@ export function useUsageExport() {
   return { usage: data, isLoading, error, refetch: mutate };
 }
 
-/** Clears a user's current UTC-day usage bucket. */
+/** Clears a user's usage across active enforcement windows. */
 export async function resetUserUsage(userEmail: string): Promise<void> {
   const response = await fetch(SWR_KEYS.adminUsageReset, {
     method: "POST",
