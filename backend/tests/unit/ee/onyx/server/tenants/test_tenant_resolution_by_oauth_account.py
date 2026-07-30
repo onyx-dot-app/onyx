@@ -6,6 +6,7 @@ If the order inverts, a renamed user resolves nowhere and `get_or_provision_tena
 hands them a newly provisioned empty workspace instead of the one they belong to.
 """
 
+from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,6 +15,9 @@ from sqlalchemy.dialects import postgresql
 
 from ee.onyx.db.user_tenant_mapping import (
     _oauth_identity_matches_mapping,
+    get_superseded_tenant_id_for_oauth_account,
+    get_tenant_id_for_email,
+    get_tenant_id_for_oauth_account,
     resolve_tenant_id,
 )
 from ee.onyx.server.tenants.provisioning import get_or_provision_tenant
@@ -54,16 +58,14 @@ def test_falls_back_to_email_when_subject_is_unstamped() -> None:
     assert tenant_id == "tenant_from_email"
 
 
-def test_active_email_membership_wins_over_inactive_subject_history() -> None:
-    """A stale subject stamp must not lock out the identity that currently owns
-    an active email membership."""
-    inactive_subject = OnyxError(
-        OnyxErrorCode.CONFLICT, "identity has no active workspace"
-    )
+def test_an_active_email_membership_outranks_a_superseded_subject() -> None:
+    """An admin moving a member into another workspace deactivates the row their
+    subject is linked to. Following that link would undo the move."""
+    superseded = MagicMock()
     with (
+        patch(f"{_MAPPING_MODULE}.get_tenant_id_for_oauth_account", return_value=None),
         patch(
-            f"{_MAPPING_MODULE}.get_tenant_id_for_oauth_account",
-            side_effect=inactive_subject,
+            f"{_MAPPING_MODULE}.get_superseded_tenant_id_for_oauth_account", superseded
         ),
         patch(
             f"{_MAPPING_MODULE}.get_tenant_id_for_email",
@@ -73,26 +75,26 @@ def test_active_email_membership_wins_over_inactive_subject_history() -> None:
         tenant_id = resolve_tenant_id("current@example.com", "google", "sub-123")
 
     assert tenant_id == "tenant_from_email"
+    superseded.assert_not_called()
 
 
-def test_inactive_subject_still_fails_closed_without_an_email_membership() -> None:
-    inactive_subject = OnyxError(
-        OnyxErrorCode.CONFLICT, "identity has no active workspace"
-    )
+def test_a_superseded_subject_answers_when_the_address_maps_nowhere() -> None:
+    """The renamed-and-reassigned case: the address now belongs to someone else,
+    so only the subject still names the workspace this user belongs to."""
     with (
+        patch(f"{_MAPPING_MODULE}.get_tenant_id_for_oauth_account", return_value=None),
         patch(
-            f"{_MAPPING_MODULE}.get_tenant_id_for_oauth_account",
-            side_effect=inactive_subject,
+            f"{_MAPPING_MODULE}.get_superseded_tenant_id_for_oauth_account",
+            return_value="tenant_superseded",
         ),
         patch(
             f"{_MAPPING_MODULE}.get_tenant_id_for_email",
             side_effect=exceptions.UserNotExists(),
         ),
     ):
-        with pytest.raises(OnyxError) as exc_info:
-            resolve_tenant_id("unmapped@example.com", "google", "sub-123")
+        tenant_id = resolve_tenant_id("renamed@example.com", "google", "sub-123")
 
-    assert exc_info.value is inactive_subject
+    assert tenant_id == "tenant_superseded"
 
 
 def test_password_login_skips_the_subject_lookup() -> None:
@@ -190,8 +192,6 @@ def test_several_pending_email_invitations_are_ambiguous() -> None:
         patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
         patch(f"{_MAPPING_MODULE}.get_catalog_session", session_ctx),
     ):
-        from ee.onyx.db.user_tenant_mapping import get_tenant_id_for_email
-
         with pytest.raises(OnyxError) as exc_info:
             get_tenant_id_for_email("user@example.com")
 
@@ -200,55 +200,48 @@ def test_several_pending_email_invitations_are_ambiguous() -> None:
     db_session.commit.assert_not_called()
 
 
-def test_inactive_historical_subject_is_not_reactivated() -> None:
-    """A stamped inactive row is prior membership, not an invitation. Restoring
-    it would silently undo a removal from that workspace."""
+def _catalog_session(tenant_id: str | None) -> tuple[MagicMock, MagicMock]:
     session_ctx = MagicMock()
     db_session = session_ctx.return_value.__enter__.return_value
-    active_miss = MagicMock()
-    active_miss.scalar_one_or_none.return_value = None
-    inactive_hit = MagicMock()
-    inactive_hit.scalar_one_or_none.return_value = "tenant_inactive"
-    db_session.execute.side_effect = [active_miss, inactive_hit]
+    db_session.scalar.return_value = tenant_id
+    return session_ctx, db_session
+
+
+@pytest.mark.parametrize(
+    "lookup, expected_predicate",
+    [
+        (get_tenant_id_for_oauth_account, "active IS true"),
+        (get_superseded_tenant_id_for_oauth_account, "active IS false"),
+    ],
+)
+def test_each_lookup_filters_on_its_own_membership_state(
+    lookup: Callable[[str, str], str | None], expected_predicate: str
+) -> None:
+    """Both read one linked row, so the `active` predicate is the only thing
+    separating a live membership from one that yielded its address."""
+    session_ctx, db_session = _catalog_session("tenant_a")
 
     with (
         patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
         patch(f"{_MAPPING_MODULE}.get_catalog_session", session_ctx),
     ):
-        from ee.onyx.db.user_tenant_mapping import get_tenant_id_for_oauth_account
+        assert lookup("google", "sub-123") == "tenant_a"
 
-        with pytest.raises(OnyxError) as exc_info:
-            get_tenant_id_for_oauth_account("google", "sub-123")
-
-    assert exc_info.value.error_code is OnyxErrorCode.CONFLICT
-    db_session.query.assert_not_called()
+    sql = str(
+        db_session.scalar.call_args[0][0].compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert expected_predicate in sql
     db_session.commit.assert_not_called()
 
 
-def test_inactive_subject_does_not_follow_a_reassigned_email() -> None:
-    """The old address may now belong to a different person, so its active
-    mapping cannot prove anything about this subject."""
-    session_ctx = MagicMock()
-    db_session = session_ctx.return_value.__enter__.return_value
-    active_subject_miss = MagicMock()
-    active_subject_miss.scalar_one_or_none.return_value = None
-    inactive_subject_hit = MagicMock()
-    inactive_subject_hit.scalar_one_or_none.return_value = "tenant_old"
-    db_session.execute.side_effect = [
-        active_subject_miss,
-        inactive_subject_hit,
-    ]
+def test_an_unlinked_subject_maps_nowhere() -> None:
+    session_ctx, _ = _catalog_session(None)
 
     with (
         patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
         patch(f"{_MAPPING_MODULE}.get_catalog_session", session_ctx),
     ):
-        from ee.onyx.db.user_tenant_mapping import get_tenant_id_for_oauth_account
-
-        with pytest.raises(OnyxError) as exc_info:
-            get_tenant_id_for_oauth_account("google", "sub-123")
-
-    assert exc_info.value.error_code is OnyxErrorCode.CONFLICT
-    assert db_session.execute.call_count == 2
-    db_session.query.assert_not_called()
-    db_session.commit.assert_not_called()
+        assert get_tenant_id_for_oauth_account("google", "sub-123") is None
+        assert get_superseded_tenant_id_for_oauth_account("google", "sub-1") is None

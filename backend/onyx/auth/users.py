@@ -2483,8 +2483,8 @@ async def complete_login_flow(
 
     next_url = sanitize_next_url(state_data.get("next_url"))
     referral_source = state_data.get("referral_source", None)
-    # Drives the new_team redirect below, so it shares oauth_callback's resolver
-    # rather than restating the order. Disagreeing greets a returning user as new.
+    # Drives the new_team redirect below. Resolving differently from the login
+    # itself would greet a returning user as a brand new signup.
     tenant_id = fetch_ee_implementation_or_noop(
         "onyx.db.user_tenant_mapping", "resolve_tenant_id", None
     )(account_email, oauth_client.name, account_id)
