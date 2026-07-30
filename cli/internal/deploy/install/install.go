@@ -36,6 +36,10 @@ const (
 	minComposeVersion  = "2.24.0"
 	failureLogTail     = 30
 
+	// dockerDesktopWait bounds the wait for the macOS daemon to answer, and so
+	// also bounds how long its spinner can turn with nothing else on screen.
+	dockerDesktopWait = 120 * time.Second
+
 	// s3FilestoreProfile is the COMPOSE_PROFILES entry that runs MinIO: on in
 	// standard mode, off in lite. It is the only entry the CLI owns.
 	s3FilestoreProfile = "s3-filestore"
@@ -685,9 +689,9 @@ func (in *installer) resolveDockerProblems(ctx context.Context, pre preflight) e
 
 	if !in.docker.DaemonRunning(ctx) {
 		if runtime.GOOS == "darwin" {
-			in.infof("Docker daemon is not running. Starting Docker Desktop...")
-			if err := in.suspend(func() error {
-				return dockercmd.StartDockerDesktopDarwin(ctx, in.docker, in.deps.IOS.Out, 120*time.Second)
+			in.infof("Docker daemon is not running.")
+			if err := in.runTask("Starting Docker Desktop", func(progress io.Writer) error {
+				return dockercmd.StartDockerDesktopDarwin(ctx, in.docker, progress, dockerDesktopWait)
 			}); err != nil {
 				return exitcodes.Newf(exitcodes.General, "%v", err)
 			}

@@ -5,6 +5,7 @@ package install
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/dockercmd"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/paths"
@@ -315,4 +316,21 @@ func (in *installer) suspend(fn func() error) error {
 		return in.wiz.Suspend(fn)
 	}
 	return fn()
+}
+
+// runTask shows fn as a spinner phase rather than releasing the screen for it,
+// for steps that neither prompt nor report progress worth reading — the only
+// two things suspend() buys. Their narration ("Waiting for X to start...",
+// once every couple of seconds) is what the spinner and its elapsed counter
+// say instead, so under the wizard it is dropped rather than written to a
+// screen the wizard has taken over.
+func (in *installer) runTask(label string, fn func(progress io.Writer) error) error {
+	if in.wiz == nil || in.opts.Verbose {
+		in.infof("%s...", label)
+		return fn(in.deps.IOS.Out)
+	}
+	in.wiz.TaskStart(label)
+	err := fn(io.Discard)
+	in.wiz.TaskDone(err == nil)
+	return err
 }
