@@ -100,8 +100,8 @@ def _split_text(text: str, limit: int = 3000) -> list[str]:
 
 
 def _clean_markdown_link_text(text: str) -> str:
-    # Remove any newlines within the text
-    return format_slack_message(text).replace("\n", " ").strip()
+    # Result is interpolated into a <link|label>, so it must stay link-free
+    return format_slack_message(text, autolink=False).replace("\n", " ").strip()
 
 
 def _build_qa_feedback_block(

@@ -1,8 +1,13 @@
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mistune import HTMLRenderer, create_markdown
+
+if TYPE_CHECKING:
+    from mistune.core import InlineState
+    from mistune.inline_parser import InlineParser
+    from mistune.markdown import Markdown
 
 # Tags that should be replaced with a newline (line-break and block-level elements)
 _HTML_NEWLINE_TAG_PATTERN = re.compile(
@@ -25,7 +30,19 @@ _MARKDOWN_LINK_PATTERN = re.compile(r"\[(?:[^\[\]]|\[[^\]]*\])*\]\(")
 # Matches Slack-style links <url|text> that LLMs sometimes output directly.
 # Mistune doesn't recognise this syntax, so text() would escape the angle
 # brackets and Slack would render them as literal text instead of links.
-_SLACK_LINK_PATTERN = re.compile(r"<(https?://[^|>]+)\|([^>]+)>")
+# mailto: is included because mistune parses <mailto:a@b.com|label> as a single
+# autolink and percent-encodes the pipe into the address.
+_SLACK_LINK_PATTERN = re.compile(r"<((?:https?://|mailto:)[^|>]+)\|([^>]+)>")
+
+# Slack's auto-linker absorbs an adjacent emphasis delimiter into the href, so
+# bare URLs and emails get emitted as explicit links. The trailing class excludes
+# * _ ~ to leave the closing emphasis marker for the emphasis rule.
+_URL_LINK_PATTERN = r"""https?://[^\s<]+[^<>|.,:;"')\]\s*_~]"""
+_EMAIL_LINK_PATTERN = (
+    r"[a-zA-Z0-9.!#$%&'*+/=?^_`{}~-]+"
+    r"@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+    r"(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+"
+)
 
 
 def _sanitize_html(text: str) -> str:
@@ -123,13 +140,61 @@ def _convert_slack_links_to_markdown(message: str) -> str:
     )
 
 
-def format_slack_message(message: str | None) -> str:
+def _append_autolink(
+    inline: "InlineParser", m: re.Match[str], state: "InlineState", url: str
+) -> int:
+    label = m.group(0)
+    if state.in_link:
+        inline.process_text(label, state)
+    else:
+        state.append_token(
+            {
+                "type": "link",
+                "children": [{"type": "text", "raw": label}],
+                "attrs": {"url": url},
+            }
+        )
+    return m.end()
+
+
+def _parse_url_link(
+    inline: "InlineParser", m: re.Match[str], state: "InlineState"
+) -> int:
+    return _append_autolink(inline, m, state, m.group(0))
+
+
+def _parse_email_link(
+    inline: "InlineParser", m: re.Match[str], state: "InlineState"
+) -> int:
+    return _append_autolink(inline, m, state, f"mailto:{m.group(0)}")
+
+
+def slack_autolink(md: "Markdown") -> None:
+    """Mistune plugin turning bare URLs and emails into link tokens.
+
+    Registering at the inline-parser level means code spans, fenced blocks and
+    existing link labels are skipped for free, and the emphasis rules still see
+    their own delimiters.
+    """
+    md.inline.register("url_link", _URL_LINK_PATTERN, _parse_url_link)
+    md.inline.register("email_link", _EMAIL_LINK_PATTERN, _parse_email_link)
+
+
+def format_slack_message(message: str | None, autolink: bool = True) -> str:
+    """Render markdown as Slack mrkdwn.
+
+    Callers embedding the result inside a Slack link label must pass
+    autolink=False, since a nested <...> would terminate the outer link.
+    """
     if message is None:
         return ""
     message = _transform_outside_code_blocks(message, _sanitize_html)
     message = _convert_slack_links_to_markdown(message)
     normalized_message = _normalize_link_destinations(message)
-    md = create_markdown(renderer=SlackRenderer(), plugins=["strikethrough", "table"])
+    plugins: list[Any] = ["strikethrough", "table"]
+    if autolink:
+        plugins.append(slack_autolink)
+    md = create_markdown(renderer=SlackRenderer(), plugins=plugins)
     result = md(normalized_message)
     # With HTMLRenderer, result is always str (not AST list)
     assert isinstance(result, str)
@@ -182,10 +247,10 @@ class SlackRenderer(HTMLRenderer):
 
     def link(self, text: str, url: str, title: str | None = None) -> str:
         escaped_url = self.escape_special(url)
-        if text:
-            return f"<{escaped_url}|{text}>"
-        if title:
-            return f"<{escaped_url}|{title}>"
+        # A label identical to the href is what an autolinked bare URL produces
+        label = text or title
+        if label and label != escaped_url:
+            return f"<{escaped_url}|{label}>"
         return f"<{escaped_url}>"
 
     def image(self, text: str, url: str, title: str | None = None) -> str:

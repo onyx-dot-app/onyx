@@ -1,3 +1,4 @@
+from onyx.onyxbot.slack.blocks import _clean_markdown_link_text
 from onyx.onyxbot.slack.formatting import (
     _convert_slack_links_to_markdown,
     _normalize_link_destinations,
@@ -176,3 +177,74 @@ def test_table_empty_first_column_no_bare_asterisks() -> None:
     # Empty title should not produce "**" (bare asterisks)
     assert "**" not in formatted
     assert "  • Status: Done" in formatted
+
+
+def _render(message: str) -> str:
+    """Run the full onyxbot answer path, i.e. the bytes Slack actually receives."""
+    return decode_escapes(remove_slack_text_interactions(format_slack_message(message)))
+
+
+def test_bold_url_delimiters_stay_outside_the_link() -> None:
+    rendered = _render("See **https://onyx.app/docs** for details.")
+
+    # A bare URL lets Slack's greedy auto-linker pull the closing * into the
+    # href, which breaks the link and orphans the opening * as literal text.
+    assert "See *<https://onyx.app/docs>* for details." == rendered
+
+
+def test_italic_and_strikethrough_urls_stay_intact() -> None:
+    assert "_<https://onyx.app>_" == _render("_https://onyx.app_")
+    assert "~<https://onyx.app>~" == _render("~~https://onyx.app~~")
+
+
+def test_bold_email_renders_as_mailto_link() -> None:
+    rendered = _render("Contact **support@onyx.app** for help.")
+
+    assert "Contact *<mailto:support@onyx.app|support@onyx.app>* for help." == rendered
+
+
+def test_bare_email_is_not_split_by_zero_width_space() -> None:
+    rendered = _render("plain support@onyx.app plain")
+
+    assert "​" not in rendered
+    assert "<mailto:support@onyx.app|support@onyx.app>" in rendered
+
+
+def test_mentions_are_still_defanged() -> None:
+    rendered = _render("Ping <@U123> and @channel please")
+
+    assert "@​U123" in rendered
+    assert "@​channel" in rendered
+
+
+def test_slack_style_mailto_link_survives_formatting() -> None:
+    message = "<mailto:support@onyx.app|support@onyx.app>"
+
+    assert message == _render(message)
+
+
+def test_urls_and_emails_in_code_are_left_alone() -> None:
+    assert "```\nhttps://onyx.app and a@b.com\n```" == _render(
+        "```\nhttps://onyx.app and a@b.com\n```"
+    )
+    assert "code `a@b.com` span" == _render("code `a@b.com` span")
+
+
+def test_url_link_drops_redundant_label() -> None:
+    assert "<https://onyx.app>" == _render("[https://onyx.app](https://onyx.app)")
+
+
+def test_link_label_text_is_not_autolinked() -> None:
+    # A nested <...> would terminate the citation link that wraps this title
+    title = _clean_markdown_link_text("Runbook for https://onyx.app/docs")
+
+    assert "Runbook for https://onyx.app/docs" == title
+    assert "Contact support@onyx.app" == _clean_markdown_link_text(
+        "Contact support@onyx.app"
+    )
+
+
+def test_trailing_punctuation_excluded_from_url() -> None:
+    assert "trailing <https://onyx.app/docs>. Done" == _render(
+        "trailing https://onyx.app/docs. Done"
+    )

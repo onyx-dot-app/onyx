@@ -19,6 +19,9 @@ basic_retry_wrapper = retry_builder(tries=7)
 # number of messages we request per page when fetching paginated slack messages
 _SLACK_LIMIT = 900
 
+# An @ that starts a token, i.e. a mention rather than part of an email or URL
+_MENTION_AT_PATTERN = re.compile(r"(?<!\w)@")
+
 # used to serialize access to the retry TTL
 ONYX_SLACK_LOCK_TTL = 1800  # how long the lock is allowed to idle before it expires
 ONYX_SLACK_LOCK_BLOCKING_TIMEOUT = 60  # how long to wait for the lock per wait attempt
@@ -322,5 +325,9 @@ class SlackTextCleaner:
 
     @staticmethod
     def add_zero_width_whitespace_after_tag(message: str) -> str:
-        """Add a 0 width whitespace after every @"""
-        return message.replace("@", "@\u200b")
+        """Defang mention-shaped text by inserting a zero-width space after the @.
+
+        An @ preceded by a word character belongs to an email or URL userinfo,
+        where the zero-width space would split the address and break the link.
+        """
+        return _MENTION_AT_PATTERN.sub("@\u200b", message)
