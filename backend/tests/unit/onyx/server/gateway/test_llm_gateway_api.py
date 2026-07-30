@@ -819,13 +819,25 @@ def test_handle_chat_completion_sanitizes_generic_invoke_failure() -> None:
         ("auto", ToolChoiceOptions.AUTO),
         ("required", ToolChoiceOptions.REQUIRED),
         ("none", ToolChoiceOptions.NONE),
-        ("bogus", None),
-        ({"type": "function", "function": {"name": "bash"}}, None),
         (None, None),
     ],
 )
 def test_parse_tool_choice(raw: object, expected: ToolChoiceOptions | None) -> None:
     assert gateway_api._parse_tool_choice(raw) is expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["bogus", {"type": "function", "function": {"name": "bash"}}],
+)
+def test_parse_tool_choice_refuses_unsupported(raw: object) -> None:
+    """A tool_choice we cannot honor must fail loudly. Downgrading to auto lets
+    the model skip a tool the caller required, with nothing in the response to
+    say the constraint was dropped."""
+    with pytest.raises(OnyxError) as exc_info:
+        gateway_api._parse_tool_choice(raw)
+
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
 def test_gateway_route_exposes_standard_auth_dependency() -> None:
@@ -1667,6 +1679,37 @@ async def test_handle_responses_request_streaming_returns_event_stream() -> None
             assert event["item_id"] in open_items, (
                 f"{event['type']} referenced unopened item {event['item_id']}"
             )
+
+
+def test_handle_responses_request_refuses_previous_response_id() -> None:
+    """We store nothing, so honoring previous_response_id would silently drop
+    the conversation history the caller believes we are holding."""
+    request = ResponsesRequest(
+        model="1/test", input="say hi", previous_response_id="resp_abc"
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        _handle_responses_call(request)
+
+    assert exc_info.value.error_code is OnyxErrorCode.NOT_IMPLEMENTED
+
+
+def test_responses_request_still_tolerates_codex_session_fields() -> None:
+    """Guards the refusals above from over-reaching: Codex sends `store: false`
+    and `reasoning.summary`, and both must stay accepted. Reasoning summaries
+    are an unimplemented output, not a rejected input."""
+    request = ResponsesRequest.model_validate(
+        {
+            "model": "1/test",
+            "input": "hi",
+            "store": False,
+            "reasoning": {"summary": "auto"},
+            "tool_choice": "auto",
+        }
+    )
+
+    assert request.previous_response_id is None
+    assert gateway_api._parse_tool_choice(request.tool_choice) is ToolChoiceOptions.AUTO
 
 
 def test_responses_gateway_route_carries_same_permission_dependency() -> None:

@@ -225,13 +225,23 @@ def _prepare_messages(
 
 
 def _parse_tool_choice(raw: Any) -> ToolChoiceOptions | None:
+    if raw is None:
+        return None
     if isinstance(raw, str):
         try:
             return ToolChoiceOptions(raw)
-        except ValueError:
-            return None
-    # Named-function tool_choice objects are not supported; fall back to auto.
-    return None
+        except ValueError as e:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Unsupported tool_choice {raw!r}; expected one of "
+                f"{', '.join(option.value for option in ToolChoiceOptions)}.",
+            ) from e
+    # Silently downgrading to auto would let the model ignore a tool the caller
+    # required, so refuse instead of guessing.
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        "Named-function tool_choice is not supported by the Onyx gateway.",
+    )
 
 
 _STREAM_END = object()
@@ -826,6 +836,12 @@ def handle_responses_request(
     model_config: ModelConfigurationView,
     flow: LLMFlow,
 ) -> StreamingResponse | ResponsesObjectPayload:
+    if request.previous_response_id is not None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_IMPLEMENTED,
+            "The Onyx gateway does not store responses; send the full "
+            "conversation in `input` instead of `previous_response_id`.",
+        )
     llm = llm_from_provider(
         model_name=model_config.name,
         llm_provider=provider,
