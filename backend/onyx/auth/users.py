@@ -356,7 +356,10 @@ def remove_user_from_invited_users_after_login(
 
 
 def rekey_tenant_mapping_after_login(
-    email: str, tenant_id: str, oauth_identities: list[tuple[str, str]]
+    email: str,
+    tenant_id: str,
+    oauth_identities: list[tuple[str, str]],
+    previous_email: str | None = None,
 ) -> None:
     """Best-effort catalog rekey for a login that has already succeeded.
 
@@ -366,7 +369,7 @@ def rekey_tenant_mapping_after_login(
     try:
         fetch_ee_implementation_or_noop(
             "onyx.db.user_tenant_mapping", "rekey_user_mapping_email", None
-        )(email, tenant_id, oauth_identities)
+        )(email, tenant_id, oauth_identities, previous_email)
     except Exception:
         logger.warning(
             "Tenant mapping rekey failed after login: tenant=%s",
@@ -1085,24 +1088,25 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             email_reconcile_result = await db_session.run_sync(
                 partial(reconcile_user_email__no_commit, user.id, account_email)
             )
+            replaced_email: str | None = None
             if email_reconcile_result is not None:
                 replaced_email, reconciled_prior_emails = email_reconcile_result
+                # Retire the consumed invite before the rename commits. A failure
+                # afterwards leaves it able to authorize the address's next holder,
+                # and no later login reports that address again.
+                remove_user_from_invited_users(replaced_email)
                 await db_session.commit()
                 user.email = account_email.lower()
                 user.prior_emails = reconciled_prior_emails
-                # Retire the invite this user joined with, once, at the rename.
-                # Retrying it on later logins would delete an invitation issued
-                # to whoever holds that address next.
-                remove_user_from_invited_users_after_login(
-                    replaced_email, user.id, tenant_id
-                )
 
             oauth_identities = [
                 (oauth_account.oauth_name, oauth_account.account_id)
                 for oauth_account in user.oauth_accounts
             ]
 
-            rekey_tenant_mapping_after_login(user.email, tenant_id, oauth_identities)
+            rekey_tenant_mapping_after_login(
+                user.email, tenant_id, oauth_identities, replaced_email
+            )
 
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled

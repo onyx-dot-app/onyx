@@ -257,6 +257,7 @@ def rekey_user_mapping_email(
     new_email: str,
     tenant_id: str,
     oauth_identities: Sequence[tuple[str, str]],
+    previous_email: str | None = None,
 ) -> None:
     """Collapse this tenant's membership rows for the user's linked subjects
     onto their new address, keeping one row and deleting the rest.
@@ -264,7 +265,8 @@ def rekey_user_mapping_email(
     An unmapped new address links no further subjects and resolves nowhere for
     a login that presents none, which is what provisions a second tenant.
     Ownership is matched by any linked subject, since the provider used for this
-    login may not be the one that linked the row.
+    login may not be the one that linked the row. ``previous_email`` names the
+    row the caller is moving, since a tenant can hold several of this user's.
 
     No-op outside multi-tenant, where the mapping tables are not provisioned.
     """
@@ -319,8 +321,17 @@ def rekey_user_mapping_email(
             .one_or_none()
         )
         if destination is None:
-            # Prefer the active row so the surviving membership keeps its state.
+            normalized_previous = previous_email.lower() if previous_email else None
             destination = next(
+                (
+                    mapping
+                    for mapping in matched_mappings
+                    if mapping.email == normalized_previous
+                ),
+                None,
+            ) or next(
+                # No caller-named row, so fall back to keeping an active
+                # membership active rather than reviving a retired one.
                 (mapping for mapping in matched_mappings if mapping.active),
                 matched_mappings[0],
             )
@@ -341,7 +352,14 @@ def rekey_user_mapping_email(
                             (mapping.email, mapping.tenant_id)
                             for mapping in source_mappings
                         ]
-                    )
+                    ),
+                    # A row can carry a stranger's subject, so scope the move to
+                    # this user's. `identities` is every provider they have
+                    # linked, not just the one used today, so none is stranded.
+                    tuple_(
+                        UserTenantMappingOAuthAccount.oauth_name,
+                        UserTenantMappingOAuthAccount.account_id,
+                    ).in_(identities),
                 )
                 .with_for_update()
                 .all()

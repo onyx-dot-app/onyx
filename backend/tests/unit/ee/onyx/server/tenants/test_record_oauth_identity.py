@@ -271,6 +271,83 @@ def test_rekey_merges_an_existing_destination_row() -> None:
     db_session.commit.assert_called_once()
 
 
+def test_rekey_moves_the_row_the_caller_names() -> None:
+    """A tenant can hold several of this user's rows, and the active-email index
+    is per address rather than per tenant, so more than one can be active.
+    Choosing among them by `active` alone renames whichever row sorted first."""
+    other_active = SimpleNamespace(
+        email="other@example.com", tenant_id="tenant_abc", active=True
+    )
+    renamed = SimpleNamespace(
+        email="old@example.com", tenant_id="tenant_abc", active=True
+    )
+    with (
+        patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
+        patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
+    ):
+        db_session = session_ctx.return_value.__enter__.return_value
+        db_session.scalar.return_value = None
+        mapping_query = MagicMock()
+        locked = mapping_query.filter.return_value.with_for_update.return_value
+        # The unrelated active row sorts first.
+        locked.all.return_value = [other_active, renamed]
+        locked.one_or_none.return_value = None
+        account_query = MagicMock()
+        account_query.filter.return_value.with_for_update.return_value.all.return_value = []
+        db_session.query.side_effect = [mapping_query, mapping_query, account_query]
+
+        rekey_user_mapping_email(
+            new_email="new@example.com",
+            tenant_id="tenant_abc",
+            oauth_identities=[("google", "sub-123")],
+            previous_email="old@example.com",
+        )
+
+    assert renamed.email == "new@example.com"
+    assert other_active.email == "other@example.com"
+
+
+def test_rekey_leaves_a_co_owners_subject_link_alone() -> None:
+    """Several subjects can share one mapping row and they are not always the
+    same person's, since a declined rekey parks a row under its old address and
+    an invite for the next holder reuses it."""
+    source = SimpleNamespace(
+        email="old@example.com", tenant_id="tenant_abc", active=True
+    )
+    with (
+        patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
+        patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
+    ):
+        db_session = session_ctx.return_value.__enter__.return_value
+        db_session.scalar.return_value = None
+        mapping_query = MagicMock()
+        locked = mapping_query.filter.return_value.with_for_update.return_value
+        locked.all.return_value = [source]
+        locked.one_or_none.return_value = SimpleNamespace(
+            email="new@example.com", tenant_id="tenant_abc", active=False
+        )
+        account_query = MagicMock()
+        account_query.filter.return_value.with_for_update.return_value.all.return_value = []
+        db_session.query.side_effect = [mapping_query, mapping_query, account_query]
+
+        rekey_user_mapping_email(
+            new_email="new@example.com",
+            tenant_id="tenant_abc",
+            oauth_identities=[("google", "sub-123")],
+            previous_email="old@example.com",
+        )
+
+    # Mocks do not evaluate filters, so assert the association query is scoped by
+    # subject as well as by row. Without it a co-owner's link moves too.
+    sql = str(
+        account_query.filter.call_args.args[1].compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "oauth_name" in sql
+    assert "sub-123" in sql
+
+
 def test_rekey_declines_when_the_address_is_held_elsewhere() -> None:
     """uq_user_active_email_idx spans tenants. Moving the row onto a taken
     address makes the other tenant's row answer this user's next login, so the

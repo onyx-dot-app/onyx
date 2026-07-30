@@ -34,7 +34,21 @@ def test_the_rekey_receives_the_adopted_address_and_every_subject() -> None:
     with patch(f"{_AUTH_MODULE}.fetch_ee_implementation_or_noop", return_value=rekey):
         rekey_tenant_mapping_after_login("new@example.com", "tenant_a", _IDENTITIES)
 
-    rekey.assert_called_once_with("new@example.com", "tenant_a", _IDENTITIES)
+    rekey.assert_called_once_with("new@example.com", "tenant_a", _IDENTITIES, None)
+
+
+def test_the_replaced_address_is_passed_through() -> None:
+    """A tenant can hold several of this user's rows, so the rekey needs the one
+    the caller is moving rather than picking among them."""
+    rekey = MagicMock()
+    with patch(f"{_AUTH_MODULE}.fetch_ee_implementation_or_noop", return_value=rekey):
+        rekey_tenant_mapping_after_login(
+            "new@example.com", "tenant_a", _IDENTITIES, "old@example.com"
+        )
+
+    rekey.assert_called_once_with(
+        "new@example.com", "tenant_a", _IDENTITIES, "old@example.com"
+    )
 
 
 def test_a_keyboard_interrupt_is_not_swallowed() -> None:
