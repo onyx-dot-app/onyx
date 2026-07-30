@@ -197,8 +197,7 @@ class MCPServerResolver(CredentialResolver):
             headers.update(refreshed)
             auth_headers.update(refreshed)
 
-        # Auth headers only: custom headers exist whether or not this user has
-        # connected, so counting them would forward without user credentials.
+        # Gate on auth headers — custom headers alone must not forward.
         requires_auth = server.auth_type not in (None, MCPAuthenticationType.NONE)
         if requires_auth and not auth_headers:
             raise CredentialUnavailableError(

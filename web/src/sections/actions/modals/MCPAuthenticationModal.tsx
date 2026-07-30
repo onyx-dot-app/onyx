@@ -67,9 +67,9 @@ export interface MCPAuthFormValues {
 }
 
 // Blocking validation for the custom-header rows, derived from form values so
-// submission stays gated even while the (Radix-unmounted) collapsed editor
-// isn't rendering its own inline errors. Mirrors InputKeyValue's row checks;
-// fully-empty rows are scaffolding and are dropped at submit instead.
+// submission stays gated even while the collapsed (Radix-unmounted) editor
+// isn't rendering its own inline errors. HTTP header names are
+// case-insensitive, so duplicates are detected case-insensitively.
 function computeCustomHeadersError(rows: KeyValue[]): string | null {
   const seen = new Set<string>();
   for (const row of rows) {
@@ -80,10 +80,11 @@ function computeCustomHeadersError(rows: KeyValue[]): string | null {
       }
       continue;
     }
-    if (seen.has(key)) {
+    const lowered = key.toLowerCase();
+    if (seen.has(lowered)) {
       return `Duplicate custom header name: ${key}`;
     }
-    seen.add(key);
+    seen.add(lowered);
   }
   return null;
 }
@@ -331,12 +332,10 @@ export default function MCPAuthenticationModal({
     return flags;
   };
 
-  // Per-key changed flags for `custom_headers`, mirroring
-  // `computeAdminCredentialsChangedFlags`: the backend keeps the stored value
-  // for unchanged keys, so masked read-back values are never persisted.
+  // Per-key changed flags, mirroring `computeAdminCredentialsChangedFlags` so
+  // masked read-back values are never persisted.
   const buildCustomHeadersPayload = (values: MCPAuthFormValues) => {
-    // Until the full server config loads, the stored headers are unknown;
-    // omit the field entirely so the backend leaves them untouched.
+    // Stored headers unknown until the full config loads; omit = leave untouched.
     if (!fullServer) {
       return {};
     }

@@ -176,9 +176,8 @@ class MCPTool(Tool[None]):
                         denylisted_provided,
                     )
 
-            # Priority 2 + 3: admin custom headers, then stored
-            # connection-config headers, then the PT_OAuth login token — all
-            # override request headers; auth headers override custom headers.
+            # Priority 2 + 3: custom headers, then stored config headers, then
+            # the PT_OAuth login token — later sources win.
             credentials = ResolvedMCPCredentials(
                 connection_config=self.connection_config,
                 user_oauth_token=self._user_oauth_token,
@@ -188,9 +187,8 @@ class MCPTool(Tool[None]):
             auth_headers = credentials.build_auth_headers()
             headers.update(credentials.build_headers())
 
-            # Check if this is an authentication issue before making the call.
-            # Custom headers don't count — they exist whether or not this user
-            # has connected.
+            # Custom headers don't count as auth config — they exist whether
+            # or not this user has connected.
             is_passthrough_oauth = (
                 self.mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH
             )

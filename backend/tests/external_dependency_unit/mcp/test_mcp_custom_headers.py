@@ -176,6 +176,12 @@ class TestRequestValidation:
         with pytest.raises(ValidationError, match="Invalid custom header name"):
             MCPToolCreateRequest(**self._base_request({"bad header": "value"}))
 
+    def test_case_insensitive_duplicate_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="Duplicate custom header"):
+            MCPToolCreateRequest(
+                **self._base_request({"X-Api-Key": "a", "x-api-key": "b"})
+            )
+
     def test_valid_headers_accepted(self) -> None:
         request = MCPToolCreateRequest(
             **self._base_request({_GATEWAY_KEY_HEADER: _GATEWAY_KEY_VALUE})

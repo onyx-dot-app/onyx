@@ -59,23 +59,26 @@ DENYLISTED_MCP_HEADERS = {
     "host",
 }
 
-# Header names admins may never set via a server's custom headers.
-# Authorization is reserved for the credentials the server's auth_type
-# produces (e.g. the per-user OAuth token), which must always win that header.
+# Reserved for the credentials the server's auth_type produces (e.g. the
+# per-user OAuth token), which must always win that header.
 RESERVED_CUSTOM_HEADER_NAMES = {
     "authorization",
 }
 
 
 def validate_custom_header_names(headers: dict[str, str]) -> None:
-    """Validate admin-defined custom header names, raising ValueError on
-    invalid, denylisted, or reserved names."""
+    """Raise ValueError on invalid, denylisted, reserved, or (case-insensitively)
+    duplicate custom header names."""
+    seen: set[str] = set()
     for name in headers:
         if _HTTP_FIELD_NAME_RE.fullmatch(name) is None:
             raise ValueError(f"Invalid custom header name: {name!r}")
         lowered = name.lower()
         if lowered in DENYLISTED_MCP_HEADERS or lowered in RESERVED_CUSTOM_HEADER_NAMES:
             raise ValueError(f"Custom headers may not set the {name!r} header")
+        if lowered in seen:
+            raise ValueError(f"Duplicate custom header name: {name!r}")
+        seen.add(lowered)
 
 
 # This should be updated along with MCPConnectionData
@@ -231,11 +234,10 @@ class MCPToolCreateRequest(BaseModel):
     custom_headers: Optional[dict[str, str]] = Field(
         None,
         description=(
-            "Admin-defined headers sent on every request to the server for "
-            "all auth types (e.g. an API-gateway admission key), merged "
-            "below the auth headers so they can never override the per-user "
-            "Authorization. Values may reference {user_email}. None leaves "
-            "stored headers unchanged; an empty dict clears them."
+            "Admin-defined headers sent on every request (e.g. a gateway "
+            "admission key), merged below the auth headers. Values may "
+            "reference {user_email}. None leaves stored headers unchanged; "
+            "an empty dict clears them."
         ),
     )
     custom_headers_changed: dict[str, bool] = Field(

@@ -295,12 +295,10 @@ def _resolve_custom_headers(
     request_headers_changed: dict[str, bool],
     existing_headers: dict[str, str],
 ) -> dict[str, str] | UnsetType:
-    """Resolve the custom-header dict to store for an upsert. ``None`` in the
-    request leaves the stored headers unchanged (older clients don't send the
-    field); otherwise the request dict is authoritative: keys absent from it
-    are removed, and each kept key takes the request value when its changed
-    flag is set (rejecting masked placeholders defensively) or the stored
-    value otherwise."""
+    """Resolve the custom-header dict to store. ``None`` leaves stored headers
+    unchanged (older clients); otherwise the request dict is authoritative,
+    each kept key taking the request value when flagged changed (masked
+    placeholders rejected) or the stored value otherwise."""
     if request_headers is None:
         return UNSET
     resolved: dict[str, str] = {}
@@ -817,8 +815,7 @@ async def _connect_oauth(
     # the auth_url for us to send to the frontend. The callback handler waits for
     # the auth code to be available in redis; this code gets set by our callback endpoint
     # which is called by the frontend after the user goes through the login flow.
-    # The probe hits server_url, which may be an API gateway that requires the
-    # admin custom headers for admission.
+    # server_url may be a gateway that requires the custom headers.
     probe_headers = render_custom_headers(
         extract_custom_headers(mcp_server), user.email or ""
     )
@@ -1178,8 +1175,7 @@ def save_user_credentials(
             )
 
         server_url = mcp_server.server_url
-        # Validate through the same headers runtime calls send: admin custom
-        # headers below the user's credential headers.
+        # Validate through the same headers runtime calls send.
         test_headers = render_custom_headers(
             extract_custom_headers(mcp_server), email or ""
         )
@@ -1485,8 +1481,7 @@ def _db_mcp_server_to_api_mcp_server(
     # Calculate tool count from the relationship
     tool_count = len(db_server.current_actions) if db_server.current_actions else 0
 
-    # Masked custom headers for the edit form; values are gateway admission
-    # credentials, so expose them only where admin credentials are exposed.
+    # Masked for the edit form; exposed only where admin credentials are.
     custom_headers_masked: dict[str, str] | None = None
     if can_view_admin_credentials:
         stored_custom_headers = extract_custom_headers(db_server)
@@ -1819,8 +1814,7 @@ def _list_mcp_tools_by_id(
         )
 
     user_id = str(user.id)
-    # Discover tools from the MCP server. Admin custom headers go below the
-    # auth headers — server_url may be an API gateway that requires them.
+    # Discover tools from the MCP server; custom headers go below auth headers.
     auth = None
     headers: dict[str, str] = render_custom_headers(
         extract_custom_headers(mcp_server), user.email or ""
@@ -2165,11 +2159,8 @@ def _upsert_mcp_server(
         ):
             delete_connection_config(mcp_server.admin_connection_config_id, db_session)
 
-        # Update the server with new values. Custom headers are resolved
-        # against the stored dict so masked read-back values are never
-        # persisted; they are deliberately not part of
-        # `changing_connection_config` — editing a gateway header must not
-        # wipe user credentials.
+        # Update the server with new values. Custom headers deliberately skip
+        # `changing_connection_config` — editing them must not wipe user creds.
         mcp_server = update_mcp_server__no_commit(
             server_id=request.existing_server_id,
             db_session=db_session,

@@ -442,10 +442,9 @@ def extract_custom_headers(server: MCPServer) -> dict[str, str]:
 def render_custom_headers(
     custom_headers: dict[str, str] | None, user_email: str
 ) -> dict[str, str]:
-    """Admin-defined custom headers ready to send: denylisted and reserved
-    names stripped (write-time validation enforces this too; stripping again
-    keeps a directly-edited DB row from overriding e.g. Authorization) and
-    auto placeholders like ``{user_email}`` substituted."""
+    """Custom headers ready to send: denylisted/reserved names stripped (so a
+    directly-edited DB row can't override Authorization) and ``{user_email}``
+    substituted."""
     if not custom_headers:
         return {}
     rendered: dict[str, str] = {}
@@ -482,9 +481,8 @@ class ResolvedMCPCredentials(BaseModel):
     def build_auth_headers(self) -> dict[str, str]:
         """Auth headers for a request to the server: the stored
         connection-config headers, with PT_OAUTH's login token taking
-        precedence. Empty when no credentials are stored — the signal for
-        "this user has not connected yet", so admin custom headers are
-        deliberately excluded here.
+        precedence. Empty when no credentials are stored — the "not connected"
+        signal, so custom headers are deliberately excluded.
 
         Denylisted headers (see DENYLISTED_MCP_HEADERS) are stripped so every
         consumer gets the security filter automatically — stored credentials
@@ -505,9 +503,8 @@ class ResolvedMCPCredentials(BaseModel):
         return headers
 
     def build_headers(self) -> dict[str, str]:
-        """All headers for a request to the server: admin custom headers with
-        the auth headers merged on top, so the auth_type's credentials always
-        win a name collision."""
+        """All headers for a request: custom headers with the auth headers
+        merged on top, so the auth_type's credentials win a collision."""
         headers = render_custom_headers(self.custom_headers, self.user_email)
         headers.update(self.build_auth_headers())
         return headers
@@ -604,8 +601,7 @@ def can_resolve_mcp_credentials(
         )
     except MCPCredentialsError:
         return False
-    # Auth headers only: admin custom headers exist regardless of whether this
-    # user has connected, so counting them would report everyone as connected.
+    # Auth headers only — counting custom headers would report everyone as connected.
     return bool(credentials.build_auth_headers())
 
 
