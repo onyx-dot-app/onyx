@@ -1143,6 +1143,7 @@ def run_llm_step_pkt_generator(
     actionable_chunk_count = 0
     empty_chunk_count = 0
     finish_reasons: set[str] = set()
+    terminal_finish_reason: str | None = None
     xml_tool_call_content_filter = _XmlToolCallContentFilter()
 
     processor_state: Any = None
@@ -1291,6 +1292,7 @@ def run_llm_step_pkt_generator(
             finish_reason = packet.choice.finish_reason
             if finish_reason:
                 finish_reasons.add(str(finish_reason))
+                terminal_finish_reason = str(finish_reason)
             delta = packet.choice.delta
 
             # Weird behavior from some model providers, just log and ignore for now
@@ -1525,6 +1527,7 @@ def run_llm_step_pkt_generator(
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
             raw_answer=accumulated_raw_answer if accumulated_raw_answer else None,
+            finish_reason=terminal_finish_reason,
         ),
         has_reasoned,
     )

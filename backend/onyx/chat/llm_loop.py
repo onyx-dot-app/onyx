@@ -43,6 +43,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
 from onyx.db.models import Persona
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
 from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.models import ReasoningEffort
@@ -81,7 +82,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-class EmptyLLMResponseError(RuntimeError):
+class EmptyLLMResponseError(ClassifiedLLMError):
     """Raised when the streamed LLM response completes without a usable answer."""
 
     def __init__(
@@ -93,14 +94,23 @@ class EmptyLLMResponseError(RuntimeError):
         client_error_msg: str,
         error_code: str = "EMPTY_LLM_RESPONSE",
         is_retryable: bool = True,
+        finish_reason: str | None = None,
     ) -> None:
-        super().__init__(client_error_msg)
+        super().__init__(
+            client_error_msg=client_error_msg,
+            error_code=error_code,
+            is_retryable=is_retryable,
+        )
         self.provider = provider
         self.model = model
         self.tool_choice = tool_choice
-        self.client_error_msg = client_error_msg
-        self.error_code = error_code
-        self.is_retryable = is_retryable
+        self.finish_reason = finish_reason
+
+
+# LiteLLM normalizes provider refusal stop reasons (e.g. Anthropic's
+# stop_reason="refusal", Gemini's SAFETY) to "content_filter". Some
+# OpenAI-compatible gateways forward the raw provider value instead.
+_REFUSAL_FINISH_REASONS = {"content_filter", "refusal"}
 
 
 def _build_empty_llm_response_error(
@@ -110,6 +120,29 @@ def _build_empty_llm_response_error(
 ) -> EmptyLLMResponseError:
     provider = llm.config.model_provider
     model = llm.config.model_name
+    finish_reason = llm_step_result.finish_reason
+
+    # A refusal/content-filter stop is a deliberate model decision (HTTP 200
+    # with no content), not a transport failure — retrying the same request
+    # against the same model will not help.
+    if finish_reason in _REFUSAL_FINISH_REASONS:
+        model_suggestion = (
+            " (e.g. Claude Opus 4.8)" if provider == LlmProviderNames.ANTHROPIC else ""
+        )
+        return EmptyLLMResponseError(
+            provider=provider,
+            model=model,
+            tool_choice=tool_choice,
+            client_error_msg=(
+                "The selected model declined to respond to this request and "
+                f"returned no content (finish_reason={finish_reason}). Try "
+                "rephrasing the request or switching to a different model"
+                f"{model_suggestion}."
+            ),
+            error_code="MODEL_REFUSAL",
+            is_retryable=False,
+            finish_reason=finish_reason,
+        )
 
     # OpenAI quota exhaustion has reached us as a streamed "stop" with zero content.
     # When the stream is completely empty and there is no reasoning/tool output, surface
@@ -131,6 +164,7 @@ def _build_empty_llm_response_error(
             ),
             error_code="BUDGET_EXCEEDED",
             is_retryable=False,
+            finish_reason=finish_reason,
         )
 
     return EmptyLLMResponseError(
@@ -142,6 +176,7 @@ def _build_empty_llm_response_error(
             "completed. No text or tool calls were received from the upstream "
             "provider."
         ),
+        finish_reason=finish_reason,
     )
 
 
@@ -227,6 +262,7 @@ def _try_fallback_tool_extraction(
                 answer=llm_step_result.answer,
                 tool_calls=extracted_tool_calls,
                 raw_answer=llm_step_result.raw_answer,
+                finish_reason=llm_step_result.finish_reason,
             ),
             True,
         )
@@ -705,6 +741,7 @@ def run_llm_loop(
             answer=None,
             tool_calls=None,
             raw_answer=None,
+            finish_reason=None,
         )
 
         # Hold back a margin below max_input_tokens: our tiktoken estimate can
