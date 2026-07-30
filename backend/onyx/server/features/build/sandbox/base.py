@@ -45,6 +45,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.features.build.timeouts import BULK_TRANSFER_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -297,7 +298,7 @@ class SandboxManager(_ServeMixin, ABC):
         self,
         sandbox_id: UUID,
         tenant_id: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,
     ) -> bool:
         """Snapshot sandbox-global opencode history if this backend supports it.
 
@@ -351,11 +352,12 @@ class SandboxManager(_ServeMixin, ABC):
         ...
 
     @abstractmethod
-    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
+    def health_check(self, sandbox_id: UUID, timeout: float) -> bool:
         """Check if the sandbox is healthy.
 
         Args:
             sandbox_id: The sandbox ID to check
+            timeout: Probe timeout, chosen by the caller for its path.
 
         Returns:
             True if sandbox is healthy, False otherwise

@@ -27,6 +27,12 @@ MANAGED_USER_LIBRARY_PATH = "/workspace/managed/user_library"
 # complete.
 SETUP_IN_PROGRESS_MARKER = ".setup-in-progress"
 
+# Last line the setup script prints. Callers MUST verify it in the exec
+# output: the Kubernetes exec client returns buffered output without raising
+# when its timeout lapses (and never raises on a nonzero exit), so the
+# sentinel is the only reliable success signal.
+WORKSPACE_SETUP_COMPLETE_SENTINEL = "ONYX_WORKSPACE_SETUP_COMPLETE"
+
 
 def build_workspace_exists_check_script(session_path: str) -> str:
     """Emit ``WORKSPACE_FOUND`` only for a complete workspace: the outputs
@@ -124,5 +130,5 @@ echo "Workspace materialization complete"
 
 # Start Next.js dev server (outside the setup lock; own pid-guard).
 {nextjs_start_script}
-echo "Session workspace setup complete"
+echo "{WORKSPACE_SETUP_COMPLETE_SENTINEL}"
 """

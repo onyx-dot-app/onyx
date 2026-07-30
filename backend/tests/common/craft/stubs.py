@@ -460,7 +460,7 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("list_session_workspaces")
         return list(self.list_session_workspaces_returns)
 
-    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
+    def health_check(self, sandbox_id: UUID, timeout: float) -> bool:
         self.health_check_count += 1
         self.last_health_check_payload = {
             "sandbox_id": sandbox_id,

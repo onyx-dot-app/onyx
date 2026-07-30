@@ -109,7 +109,7 @@ def begin_provisioning_attempt__no_commit(
     return sandbox.provisioning_generation
 
 
-def begin_recovery_attempt_cas__no_commit(
+def begin_recovery_attempt__no_commit(
     db_session: Session,
     sandbox_id: UUID,
     expected_generation: int,
@@ -157,6 +157,27 @@ def finalize_provisioning_attempt__no_commit(
             Sandbox.status == SandboxStatus.PROVISIONING,
         )
         .values(**values)
+    )
+    return result.rowcount == 1  # ty: ignore[unresolved-attribute]
+
+
+def sleep_running_sandbox__no_commit(
+    db_session: Session,
+    sandbox_id: UUID,
+    generation: int,
+) -> bool:
+    """Generation-guarded compare-and-set ``RUNNING`` → ``SLEEPING`` for the
+    idle reaper. Returns False when the row moved on (a concurrent recovery or
+    create advanced the generation / left RUNNING), so the reaper must not
+    clobber that decision with an unconditional sleep."""
+    result = db_session.execute(
+        update(Sandbox)
+        .where(
+            Sandbox.id == sandbox_id,
+            Sandbox.provisioning_generation == generation,
+            Sandbox.status == SandboxStatus.RUNNING,
+        )
+        .values(status=SandboxStatus.SLEEPING)
     )
     return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 

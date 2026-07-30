@@ -253,8 +253,8 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
 ) -> None:
     """A RUNNING run older than the running threshold → ``cleanup_stuck_scheduled_runs`` marks it FAILED.
 
-    Production threshold is ``DEFAULT_EXECUTOR_BUDGET_SECONDS + 15 min`` (i.e.
-    45 min). Backdating ``started_at`` by 50 min puts the run past that.
+    Production threshold is ``TURN_BUDGET_SECONDS + TURN_RECLAIM_SLACK_SECONDS``
+    (i.e. 45 min). Backdating ``started_at`` by 50 min puts the run past that.
     """
     user = make_user(db_session)
     task = ScheduledTask(
@@ -527,7 +527,7 @@ def test_run_fails_when_wake_fails(
     backend is bound so SessionManager construction can't raise and satisfy the
     assertion via the same broad handler without exercising the timeout path."""
     monkeypatch.setattr(
-        "onyx.server.features.build.scheduled_tasks.executor.PROVISIONING_WAIT_SECONDS",
+        "onyx.server.features.build.scheduled_tasks.executor.PROVISION_WAIT_SECONDS",
         0,
     )
 

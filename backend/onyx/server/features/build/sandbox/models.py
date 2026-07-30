@@ -104,3 +104,8 @@ class RetriableWriteError(Exception):
 
 class FatalWriteError(Exception):
     """Permanent failure in write_files_to_sandbox (validation, auth)."""
+
+
+class SandboxProvisionContentionError(Exception):
+    """Another provisioner holds this sandbox's provisioning lock. Retryable:
+    the lifecycle layer records the attempt FAILED and the caller re-reserves."""

@@ -132,6 +132,8 @@ def test_wakes_dormant_sandbox(
     existing = sandbox(user=test_user, status=initial_status)
     stub_sandbox_manager.provision_returns = _running_info(existing.id)
     stub_sandbox_manager.write_files_to_sandbox_silent = True
+    # A FAILED revive tears down any wedged runtime before re-provisioning.
+    stub_sandbox_manager.terminate_silent = True
 
     result = session_manager_with_stub.ensure_sandbox_running(test_user.id)
     db_session.commit()
@@ -236,6 +238,8 @@ def test_stale_provisioning_attempt_is_taken_over(
 
     stub_sandbox_manager.provision_returns = _running_info(existing.id)
     stub_sandbox_manager.write_files_to_sandbox_silent = True
+    # Taking over a stale attempt tears down its half-built runtime first.
+    stub_sandbox_manager.terminate_silent = True
 
     result = session_manager_with_stub.ensure_sandbox_running(
         test_user.id,

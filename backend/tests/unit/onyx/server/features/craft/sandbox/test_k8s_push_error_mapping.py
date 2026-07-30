@@ -41,7 +41,6 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
 )
 from onyx.server.features.build.sandbox.kubernetes import sidecar_client
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
     KubernetesSandboxManager,
     _build_targz,
 )
@@ -705,14 +704,19 @@ def test_restore_opencode_history_posts_archive_to_sidecar(
         assert archive_file.read() == archive_body
         assert sha256_hex == hashlib.sha256(archive_body).hexdigest()
         assert operation_label == "opencode history restore"
-        assert timeout_seconds == OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
+        assert timeout_seconds == 90.0
         calls.append("restore")
 
     sidecar_client = MagicMock()
     sidecar_client.post_archive.side_effect = fake_post_archive
     monkeypatch.setattr(mgr, "_sidecar_client", sidecar_client)
 
-    assert mgr.restore_opencode_history_snapshot(sandbox_id, "tenant-test") is True
+    assert (
+        mgr.restore_opencode_history_snapshot(
+            sandbox_id, "tenant-test", timeout_seconds=90.0
+        )
+        is True
+    )
 
     sidecar_client.post_archive.assert_called_once()
     assert calls == ["restore"]
@@ -739,13 +743,18 @@ def test_restore_opencode_history_marks_sidecar_ready_when_no_snapshot(
         assert sandbox_id == expected_sandbox_id
         assert endpoint_path == SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH
         assert operation_label == "opencode history restore marker"
-        assert timeout_seconds == OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
+        assert timeout_seconds == 90.0
 
     sidecar_client = MagicMock()
     sidecar_client.post_empty.side_effect = fake_mark_restored
     monkeypatch.setattr(mgr, "_sidecar_client", sidecar_client)
 
-    assert mgr.restore_opencode_history_snapshot(sandbox_id, "tenant-test") is False
+    assert (
+        mgr.restore_opencode_history_snapshot(
+            sandbox_id, "tenant-test", timeout_seconds=90.0
+        )
+        is False
+    )
 
     sidecar_client.post_empty.assert_called_once()
 
@@ -903,13 +912,17 @@ def test_provision_conflicting_not_ready_pod_runs_startup_restore(
     monkeypatch.setattr(
         mgr,
         "_wait_for_pod_ready",
-        MagicMock(side_effect=lambda _pod_name: calls.append("pod-ready") or True),
+        MagicMock(
+            side_effect=lambda _pod_name, _deadline: calls.append("pod-ready") or True
+        ),
     )
     monkeypatch.setattr(
         mgr,
         "_wait_for_opencode_serve_ready",
         MagicMock(
-            side_effect=lambda _sandbox_id: calls.append("opencode-ready") or True
+            side_effect=lambda _sandbox_id, timeout: (  # noqa: ARG005
+                calls.append("opencode-ready") or True
+            )
         ),
     )
 

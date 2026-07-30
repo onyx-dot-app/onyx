@@ -36,10 +36,15 @@ from onyx.server.features.build.db.sandbox import (
 )
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.errors import (
+    SandboxProvisioningError,
     SandboxProvisioningInProgressError,
     StaleProvisioningAttemptError,
 )
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    ProvisioningPolicy,
+    ensure_sandbox_ready,
+)
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 from tests.common.craft.stubs import StubSandboxManager
 
@@ -195,6 +200,11 @@ def test_interrupted_provision_resumes_same_sandbox_identity(
     stub_sandbox_manager.setup_session_workspace_silent = True
     stub_sandbox_manager.write_files_to_sandbox_silent = True
     stub_sandbox_manager.write_sandbox_file_silent = True
+    # Taking over a stale PROVISIONING attempt tears down its half-built
+    # runtime before re-provisioning.
+    stub_sandbox_manager.terminate_silent = True
+    # The reused empty session takes the workspace-missing repair path.
+    stub_sandbox_manager.session_workspace_exists_returns = False
 
     result = session_manager_with_stub.get_or_create_empty_session(user_id=test_user.id)
 
@@ -257,6 +267,35 @@ def test_interrupted_session_initialization_repaired_under_same_id(
         .all()
     )
     assert len(rows) == 1
+
+
+def test_attempt_self_deadline_finalizes_failed_before_external_work(
+    db_session: Session,
+    test_user: User,
+    stub_sandbox_manager: StubSandboxManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An attempt past ``ATTEMPT_DEADLINE_SECONDS`` aborts itself, recording
+    FAILED durably without ever reaching ``provision()`` — the same number
+    observers use to declare the attempt stale."""
+    monkeypatch.setattr(
+        "onyx.server.features.build.session.sandbox_lifecycle.ATTEMPT_DEADLINE_SECONDS",
+        -1.0,
+    )
+
+    with pytest.raises(SandboxProvisioningError):
+        ensure_sandbox_ready(
+            db_session,
+            stub_sandbox_manager,
+            test_user.id,
+            policy=ProvisioningPolicy.FAIL,
+        )
+
+    db_session.rollback()
+    sandbox = get_sandbox_by_user_id(db_session, test_user.id)
+    assert sandbox is not None
+    assert sandbox.status == SandboxStatus.FAILED
+    assert stub_sandbox_manager.provision_count == 0
 
 
 def test_stale_generation_cannot_finalize_newer_generation(

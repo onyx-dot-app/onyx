@@ -138,6 +138,8 @@ class TestDurableProvisionFailure:
             last_heartbeat=None,
         )
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        # Reviving a FAILED sandbox tears down any wedged runtime first.
+        stub_sandbox_manager.terminate_silent = True
 
         sandbox, _outcome = ensure_sandbox_ready(
             db_session,

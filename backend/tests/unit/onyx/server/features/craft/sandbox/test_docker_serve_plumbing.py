@@ -376,7 +376,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     monkeypatch.setattr(
         DockerSandboxManager,
         "_wait_for_opencode_serve_ready",
-        lambda self, sandbox_id: True,  # noqa: ARG005 — patched callable
+        lambda self, sandbox_id, timeout: True,  # noqa: ARG005 — patched callable
     )
 
     mgr = _bare_manager()
