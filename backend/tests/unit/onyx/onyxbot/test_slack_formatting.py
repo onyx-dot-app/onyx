@@ -206,7 +206,7 @@ def test_bold_email_renders_as_mailto_link() -> None:
 def test_bare_email_is_not_split_by_zero_width_space() -> None:
     rendered = _render("plain support@onyx.app plain")
 
-    assert "​" not in rendered
+    assert "\u200b" not in rendered
     assert "<mailto:support@onyx.app|support@onyx.app>" in rendered
 
 
