@@ -47,6 +47,11 @@ fi
 
     return f"""
 set -e
+# Replay safety: a live server already attached to this session keeps its
+# port; spawning a second one would fail to bind and leave a zombie.
+if [ -f {session_path}/nextjs.pid ] && kill -0 "$(cat {session_path}/nextjs.pid)" 2>/dev/null; then
+    echo "Next.js server already running (PID $(cat {session_path}/nextjs.pid)); reusing"
+else
 cd {session_path}/outputs/web
 {install_check}
 export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/$(basename {session_path})/webapp"
@@ -80,4 +85,5 @@ nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
+fi
 """
