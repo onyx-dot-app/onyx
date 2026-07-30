@@ -79,6 +79,17 @@ DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() ==
 # are disabled but core chat, tools, user file uploads, and Projects still work.
 DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
 
+# TEMPORARY (will be removed soon): operator-forced Search-UI scope (self-hosted only) —
+# comma-separated document set NAMES. When set, the Onyx Search UI is restricted to those sets
+# (AND'd on top of any persona/user scope; ACL still enforced) — chat/other flows are unaffected,
+# and it is disabled under MULTI_TENANT. Empty = no restriction. Names match the index directly; a
+# name that doesn't exist matches nothing (fail-closed) and is logged. Read at import — restart to change.
+FORCED_DOCUMENT_SET_NAMES: list[str] = [
+    name.strip()
+    for name in os.environ.get("FORCED_DOCUMENT_SET_NAMES", "").split(",")
+    if name.strip()
+]
+
 # Which backend to use for caching, locks, and ephemeral state.
 # "redis" (default) or "postgres" (only valid when DISABLE_VECTOR_DB=true).
 CACHE_BACKEND = CacheBackendType(
