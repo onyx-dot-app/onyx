@@ -1,7 +1,7 @@
 """add index reclaim columns
 
 Revision ID: b3f1c9a27d84
-Revises: ea9771dd828c
+Revises: 0d9c7b6a5e4f
 Create Date: 2026-07-23 00:00:00.000000
 
 Additive old-index-reclamation columns on search_settings (post-reindex deletion of
@@ -17,7 +17,7 @@ from onyx.db.enums import IndexReclaimStatus
 
 # revision identifiers, used by Alembic.
 revision = "b3f1c9a27d84"
-down_revision = "ea9771dd828c"
+down_revision = "0d9c7b6a5e4f"
 branch_labels = None
 depends_on = None
 
