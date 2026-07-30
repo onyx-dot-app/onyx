@@ -15,6 +15,7 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import LLMProvider, ModelConfiguration
+from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import (
     get_max_input_tokens,
@@ -148,6 +149,15 @@ def litellm_exception_to_error_msg(
     error_msg = str(core_exception)
     error_code = "UNKNOWN_ERROR"
     is_retryable = True
+
+    # This is raised by us in cases where we already have computed the stuff we
+    # normally pull out of litellm errors. Just send it through.
+    if isinstance(core_exception, ClassifiedLLMError):
+        return (
+            core_exception.client_error_msg,
+            core_exception.error_code,
+            core_exception.is_retryable,
+        )
 
     if custom_error_msg_mappings:
         for error_msg_pattern, custom_error_msg in custom_error_msg_mappings.items():
