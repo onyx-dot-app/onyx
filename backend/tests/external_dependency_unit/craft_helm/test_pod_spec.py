@@ -49,6 +49,7 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
 )
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
+    _require_container,
 )
 from tests.common.paths import find_ancestor_containing
 
@@ -641,7 +642,7 @@ def test_missing_container_raises_clear_error_on_version_skew() -> None:
     must surface as an actionable RuntimeError, not an opaque StopIteration."""
     spec = client.V1PodSpec(containers=[client.V1Container(name="sandbox")])
     with pytest.raises(RuntimeError, match="sidecar"):
-        KubernetesSandboxManager._require_container(spec, "sidecar")
+        _require_container(spec, "sidecar")
 
 
 def test_service_exposes_push_daemon_port() -> None:

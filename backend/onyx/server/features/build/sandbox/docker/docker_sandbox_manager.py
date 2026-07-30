@@ -124,7 +124,9 @@ from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     FileSet,
     FilesystemEntry,
+    SandboxImageIdentity,
     SandboxInfo,
+    SandboxRuntimeState,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
@@ -1014,16 +1016,60 @@ class DockerSandboxManager(SandboxManager):
 
         logger.info("Terminated Docker sandbox %s.", sandbox_id)
 
-    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:  # noqa: ARG002
+    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
+        return self.get_runtime_state(sandbox_id, timeout=timeout).healthy
+
+    def get_runtime_state(
+        self,
+        sandbox_id: UUID,
+        timeout: float = 60.0,  # noqa: ARG002
+    ) -> SandboxRuntimeState:
         container = self._get_container(sandbox_id)
         if container is None:
-            return False
+            return SandboxRuntimeState(healthy=False)
         try:
             container.reload()
         except (APIError, NotFound):
-            return False
+            return SandboxRuntimeState(healthy=False)
         state = (container.attrs or {}).get("State") or {}
-        return state.get("Status") == "running"
+        return SandboxRuntimeState(
+            healthy=state.get("Status") == "running",
+            image=self._image_identity(container),
+        )
+
+    def _image_identity(self, container: Container) -> SandboxImageIdentity:
+        """Compare the container's image against the one a fresh container
+        would be created from.
+
+        Digest-exact and local: both sides are Docker image IDs off the same
+        daemon, so this sees a mutable tag being repointed, which the K8s
+        equivalent can only do when the deployment pins a digest.
+
+        The desired side is whatever the local store holds for the ref right
+        now — which is exactly what ``_create_sandbox_container`` would use.
+        Unlike the K8s equivalent this isn't cached: it's a local socket call,
+        and an out-of-process ``docker compose pull`` moving the tag is
+        precisely what we want to notice.
+        """
+        attrs = container.attrs or {}
+        desired_digest: str | None = None
+        try:
+            desired_digest = self._docker.images.get(self._image).id
+        except (APIError, NotFound) as e:
+            # Not yet pulled, or the daemon is unhappy. Falls back to
+            # comparing refs rather than reporting a bogus mismatch.
+            logger.debug(
+                "Could not resolve local image %s for identity check: %s",
+                self._image,
+                e,
+            )
+
+        return SandboxImageIdentity(
+            running_ref=(attrs.get("Config") or {}).get("Image"),
+            running_digest=attrs.get("Image"),
+            desired_ref=self._image,
+            desired_digest=desired_digest,
+        )
 
     def _render_agents_md(
         self,

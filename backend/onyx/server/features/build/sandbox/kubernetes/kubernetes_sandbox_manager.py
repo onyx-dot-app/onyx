@@ -113,7 +113,9 @@ from onyx.server.features.build.sandbox.models import (
     FileSet,
     FilesystemEntry,
     RetriableWriteError,
+    SandboxImageIdentity,
     SandboxInfo,
+    SandboxRuntimeState,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
@@ -178,6 +180,11 @@ _SIDECAR_CONTAINER_NAME = "sidecar"
 
 # Helm-rendered PodTemplate carrying the static sandbox pod shape.
 _PODTEMPLATE_NAME = "sandbox-pod"
+
+# The desired image is re-read from the PodTemplate rather than cached for the
+# process lifetime (a deploy changes it under a running api-server), but it is
+# read on the health path, so don't hit the API server every time.
+_DESIRED_IMAGE_TTL_SECONDS = 60.0
 
 # Per-session egress tagging plugin, baked into the sandbox image (see
 # docker/Dockerfile). Path must match the COPY destination there.
@@ -261,6 +268,30 @@ def _build_targz(files: FileSet) -> tuple[bytes, str]:
     return raw, hashlib.sha256(raw).hexdigest()
 
 
+def _find_container(spec: client.V1PodSpec, name: str) -> client.V1Container | None:
+    for container in list(spec.containers or []) + list(spec.init_containers or []):
+        if container.name == name:
+            return container
+    return None
+
+
+def _require_container(spec: client.V1PodSpec, name: str) -> client.V1Container:
+    """Find a container in the PodTemplate by name, or raise a clear error.
+
+    A bare ``next()`` would surface a PodTemplate/version skew (template
+    missing the expected container) as an opaque ``StopIteration``; this
+    names the container and the fix, matching the 404 PodTemplate error.
+    """
+    container = _find_container(spec, name)
+    if container is None:
+        raise RuntimeError(
+            f"PodTemplate '{_PODTEMPLATE_NAME}' has no '{name}' container. "
+            f"The PodTemplate and api-server versions are likely out of sync — "
+            f"apply the matching sandbox PodTemplate."
+        )
+    return container
+
+
 class KubernetesSandboxManager(SandboxManager):
     """Kubernetes-based sandbox manager for production deployments.
 
@@ -279,6 +310,11 @@ class KubernetesSandboxManager(SandboxManager):
 
     _instance: "KubernetesSandboxManager | None" = None
     _lock = threading.Lock()
+
+    # (ref, expiry) for the desired sandbox image. Unlocked: a race just makes
+    # two threads read the same PodTemplate, and the tuple swap is atomic.
+    # Class-level default so the attribute exists before _initialize runs.
+    _desired_image_cache: tuple[str | None, float] | None = None
 
     def __new__(cls) -> "KubernetesSandboxManager":
         if cls._instance is None:
@@ -531,7 +567,7 @@ class KubernetesSandboxManager(SandboxManager):
         ]
 
         secret_name = self._get_opencode_secret_name(sandbox_id)
-        sandbox_container = self._require_container(spec, _SANDBOX_CONTAINER_NAME)
+        sandbox_container = _require_container(spec, _SANDBOX_CONTAINER_NAME)
         sandbox_container.env = list(sandbox_container.env or []) + [
             client.V1EnvVar(
                 name=OPENCODE_SERVER_PASSWORD,
@@ -554,7 +590,7 @@ class KubernetesSandboxManager(SandboxManager):
         ]
 
         _, push_public_key_b64 = get_push_key_pair()
-        sidecar_container = self._require_container(spec, _SIDECAR_CONTAINER_NAME)
+        sidecar_container = _require_container(spec, _SIDECAR_CONTAINER_NAME)
         sidecar_container.env = list(sidecar_container.env or []) + [
             client.V1EnvVar(
                 name=SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
@@ -562,21 +598,82 @@ class KubernetesSandboxManager(SandboxManager):
             ),
         ]
 
-    @staticmethod
-    def _require_container(spec: client.V1PodSpec, name: str) -> client.V1Container:
-        """Find a container in the PodTemplate by name, or raise a clear error.
+    def _desired_image_ref(self) -> str | None:
+        """The sandbox image a pod created right now would run, or None if it
+        can't be determined.
 
-        A bare ``next()`` would surface a PodTemplate/version skew (template
-        missing the expected container) as an opaque ``StopIteration``; this
-        names the container and the fix, matching the 404 PodTemplate error.
+        Read from the PodTemplate, not ``SANDBOX_CONTAINER_IMAGE``: the chart
+        only puts that key in the api-server's configMap when an operator sets
+        it explicitly, so the env can say ``onyxdotapp/sandbox:latest`` while
+        the PodTemplate the pods are actually built from says
+        ``onyxdotapp/sandbox:v1.2.3``.
+
+        Never raises — an unreadable PodTemplate must not fail a health check.
+        Provisioning reads the template separately and uncached, and reports
+        the same failure loudly there.
         """
-        for container in list(spec.containers or []) + list(spec.init_containers or []):
-            if container.name == name:
-                return container
-        raise RuntimeError(
-            f"PodTemplate '{_PODTEMPLATE_NAME}' has no '{name}' container. "
-            f"The PodTemplate and api-server versions are likely out of sync — "
-            f"apply the matching sandbox PodTemplate."
+        now = time.monotonic()
+        cached = self._desired_image_cache
+        if cached is not None:
+            cached_ref, expires_at = cached
+            if now < expires_at:
+                return cached_ref
+
+        ref: str | None = None
+        try:
+            pod_template = self._core_api.read_namespaced_pod_template(
+                name=_PODTEMPLATE_NAME, namespace=self._namespace
+            )
+            container = _find_container(
+                pod_template.template.spec, _SANDBOX_CONTAINER_NAME
+            )
+            ref = container.image if container is not None else None
+        except ApiException as e:
+            logger.warning(
+                "Could not read PodTemplate '%s' to resolve the desired sandbox "
+                "image: %s",
+                _PODTEMPLATE_NAME,
+                e,
+            )
+
+        # Failures are cached too, so an outage can't turn every health check
+        # into an API call.
+        self._desired_image_cache = (ref, now + _DESIRED_IMAGE_TTL_SECONDS)
+        return ref
+
+    def _image_identity(self, pod: client.V1Pod) -> SandboxImageIdentity | None:
+        """Compare what this pod runs against what the PodTemplate now wants.
+
+        The running ref comes from the pod *spec* rather than the container
+        status: the spec holds the ref verbatim as it was copied from the
+        PodTemplate, while the status carries the runtime's normalized form
+        (``docker.io/`` prefixed), which would never compare equal.
+
+        A digest is only available on the desired side when the deployment
+        pins one (``repo@sha256:...``); on a mutable tag this degrades to
+        comparing refs, which cannot see the tag being repointed.
+        """
+        desired_ref = self._desired_image_ref()
+        if desired_ref is None:
+            return None
+
+        container = _find_container(pod.spec, _SANDBOX_CONTAINER_NAME)
+        running_digest: str | None = None
+        for status in pod.status.container_statuses or []:
+            if status.name == _SANDBOX_CONTAINER_NAME:
+                running_digest = status.image_id or None
+                break
+
+        # Only a pinned ref carries a digest. Test the separator rather than
+        # the remainder: ``rpartition`` hands back the *whole* string when "@"
+        # is absent, so a tag would masquerade as a digest and never compare
+        # equal to the real one the runtime reports.
+        _, pinned, desired_digest = desired_ref.rpartition("@")
+        return SandboxImageIdentity(
+            running_ref=container.image if container is not None else None,
+            running_digest=running_digest,
+            desired_ref=desired_ref,
+            desired_digest=desired_digest if pinned else None,
         )
 
     def _create_sandbox_service(
@@ -1989,6 +2086,12 @@ fi
 
     def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
         """Check whether the agent container and sidecar are both healthy."""
+        return self.get_runtime_state(sandbox_id, timeout=timeout).healthy
+
+    def get_runtime_state(
+        self, sandbox_id: UUID, timeout: float = 60.0
+    ) -> SandboxRuntimeState:
+        """Health and image identity from a single pod read."""
         pod_name = self._get_pod_name(str(sandbox_id))
         try:
             pod = self._core_api.read_namespaced_pod(
@@ -1997,15 +2100,18 @@ fi
             )
         except ApiException as e:
             if e.status == 404:
-                return False
+                return SandboxRuntimeState(healthy=False)
             raise
-        if not self._sandbox_container_is_ready(pod):
-            return False
 
-        return self._sidecar_client.is_healthy(
+        image = self._image_identity(pod)
+        if not self._sandbox_container_is_ready(pod):
+            return SandboxRuntimeState(healthy=False, image=image)
+
+        healthy = self._sidecar_client.is_healthy(
             sandbox_id=sandbox_id,
             timeout_seconds=timeout,
         )
+        return SandboxRuntimeState(healthy=healthy, image=image)
 
     def _load_serve_connection_info(
         self, sandbox_id: UUID

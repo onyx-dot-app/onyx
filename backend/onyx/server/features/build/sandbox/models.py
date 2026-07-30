@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TypeAlias
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from onyx.db.enums import SandboxStatus
 from onyx.server.gateway.models import GatewayModelDescriptor
@@ -54,6 +54,69 @@ class SandboxInfo(BaseModel):
     directory_path: str
     status: SandboxStatus
     last_heartbeat: datetime | None
+
+
+class SandboxImageIdentity(BaseModel):
+    """What a live sandbox is running vs what the deployment wants now.
+
+    Sandbox pods/containers are created imperatively and owned by no
+    controller, so nothing reconciles a live one toward a new deployed image.
+    This is the comparison that says whether it needs recycling.
+
+    Both sides always come from the same manager: K8s compares registry
+    manifest digests, Docker local image IDs, and the two are not
+    interchangeable.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    # None when the sandbox is gone or its runtime hasn't reported yet.
+    running_ref: str | None
+    running_digest: str | None
+    desired_ref: str
+    desired_digest: str | None
+
+    @field_validator("running_digest", "desired_digest")
+    @classmethod
+    def _strip_repository(cls, value: str | None) -> str | None:
+        """Keep only the `sha256:...` part: a K8s imageID may or may not carry
+        a repository prefix (`docker.io/onyxdotapp/sandbox@sha256:...`)
+        depending on the runtime, while Docker image IDs never do."""
+        if value is None:
+            return None
+        _, prefixed, digest = value.rpartition("@")
+        return digest if prefixed else value
+
+    @property
+    def digest_comparable(self) -> bool:
+        """Whether both sides resolved to a digest. False means the check has
+        degraded to comparing refs, which cannot see a mutable tag being
+        repointed at new content."""
+        return self.running_digest is not None and self.desired_digest is not None
+
+    @property
+    def is_stale(self) -> bool:
+        """Whether the sandbox is running something other than what a fresh
+        one would be. Unknown identity is never stale — recycling costs a
+        user their pod, so it takes positive evidence."""
+        if self.digest_comparable:
+            return self.running_digest != self.desired_digest
+        if self.running_ref is None:
+            return False
+        return self.running_ref != self.desired_ref
+
+
+class SandboxRuntimeState(BaseModel):
+    """Liveness plus image identity of a sandbox, read together.
+
+    One object because both come from the same backend read: splitting them
+    would double the API calls on the provisioning hot path.
+    """
+
+    healthy: bool
+    # None when the backend can't report image identity, or the sandbox is
+    # gone. Callers must read it as "unknown", never as "current".
+    image: SandboxImageIdentity | None = None
 
 
 class SnapshotResult(BaseModel):

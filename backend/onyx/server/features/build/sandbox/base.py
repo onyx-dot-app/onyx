@@ -41,6 +41,7 @@ from onyx.server.features.build.sandbox.models import (
     PushResult,
     RetriableWriteError,
     SandboxInfo,
+    SandboxRuntimeState,
     SnapshotResult,
 )
 from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
@@ -355,6 +356,22 @@ class SandboxManager(_ServeMixin, ABC):
             True if sandbox is healthy, False otherwise
         """
         ...
+
+    def get_runtime_state(
+        self, sandbox_id: UUID, timeout: float = 60.0
+    ) -> SandboxRuntimeState:
+        """Liveness plus the image identity of the live sandbox.
+
+        Callers that need both should prefer this over :meth:`health_check`:
+        backends that can report image identity do so from the same read, so
+        it costs no extra round trip.
+
+        Backends that can't report it return ``image=None``, which means
+        "unknown" — never "up to date".
+        """
+        return SandboxRuntimeState(
+            healthy=self.health_check(sandbox_id, timeout=timeout)
+        )
 
     def send_message(
         self,
