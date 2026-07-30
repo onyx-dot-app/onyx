@@ -13,6 +13,9 @@
 #                     the newest published release.
 #   ONYX_CLI_BIN_DIR  where the binary is installed. Defaults to
 #                     /usr/local/bin when running as root, else ~/.local/bin.
+#   ONYX_CLI_NO_MODIFY_PATH
+#                     set to skip adding ~/.local/bin to PATH in the shell
+#                     startup files.
 #
 # This script must remain compatible with bash 3.2 — macOS still ships
 # 3.2.57 by default and the curl-pipe installer is invoked with /bin/bash.
@@ -84,6 +87,9 @@ show_help() {
     echo "  ONYX_CLI_VERSION  onyx-cli release to install (default: newest)"
     echo "  ONYX_CLI_BIN_DIR  install location (default: ~/.local/bin, or"
     echo "                    /usr/local/bin as root)"
+    echo "  ONYX_CLI_NO_MODIFY_PATH"
+    echo "                    don't touch shell startup files to add ~/.local/bin"
+    echo "                    to PATH"
 }
 
 for arg in "$@"; do
@@ -172,12 +178,14 @@ else
 fi
 
 # --- Resolve where the binary goes ---
+DEFAULT_USER_BIN_DIR=""
 if [[ -n "$ONYX_CLI_BIN_DIR" ]]; then
     BIN_DIR="$ONYX_CLI_BIN_DIR"
 elif [[ "$(id -u)" -eq 0 ]]; then
     BIN_DIR="/usr/local/bin"
 else
     BIN_DIR="${HOME}/.local/bin"
+    DEFAULT_USER_BIN_DIR="yes"
 fi
 BIN_PATH="${BIN_DIR}/onyx-cli"
 
@@ -267,20 +275,29 @@ chmod +x "${TMP_DIR}/onyx-cli"
 mv -f "${TMP_DIR}/onyx-cli" "$BIN_PATH"
 print_success "onyx-cli installed to ${BIN_PATH}"
 
-# Appends `line` to `profile` unless it is already there. Returns non-zero
-# when the file cannot be written so the caller can fall back to printing
-# manual instructions.
+# --- Make onyx-cli reachable by name ---
+# The install below runs through $BIN_PATH either way, but the deployment is
+# managed afterwards with `onyx-cli deploy status|logs|upgrade|uninstall`, so a
+# PATH that doesn't cover BIN_DIR turns every one of those into "command not
+# found". ~/.local/bin is not on PATH by default on macOS, and Debian's
+# ~/.profile only adds it if the directory already existed at login — which it
+# may not have until this script created it moments ago.
+PATH_MARKER="# Added by the Onyx installer"
+
+# Appends `line` to `profile` under PATH_MARKER unless the marker is already
+# there. Returns non-zero when the file cannot be written so the caller can
+# fall back to printing manual instructions.
 append_line_to_profile() {
     local profile="$1"
     local line="$2"
-    if [[ -f "$profile" ]] && grep -Fq "$line" "$profile" 2>/dev/null; then
+    if [[ -f "$profile" ]] && grep -Fq "$PATH_MARKER" "$profile" 2>/dev/null; then
         return 0
     fi
     mkdir -p "$(dirname "$profile")" 2>/dev/null || return 1
     # 2>/dev/null must precede >>: redirections apply left to right, and a
     # failing append would otherwise print the shell's error before stderr
     # is silenced.
-    printf '\n# Added by the Onyx installer\n%s\n' "$line" 2>/dev/null >> "$profile"
+    printf '\n%s\n%s\n' "$PATH_MARKER" "$line" 2>/dev/null >> "$profile"
 }
 
 case ":${PATH}:" in
@@ -297,34 +314,43 @@ case ":${PATH}:" in
         # Persist BIN_DIR into the login shell's profile so onyx-cli still
         # resolves in new shells once this installer hands over to the CLI.
         # The script itself runs under bash even when the user's shell is zsh
-        # or fish, hence the $SHELL sniffing.
-        PATH_LINE="export PATH=\"${BIN_DIR}:\$PATH\""
+        # or fish, hence the $SHELL sniffing. Only the default user-local
+        # location is patched in: an explicit ONYX_CLI_BIN_DIR means the
+        # caller manages their own PATH, and ONYX_CLI_NO_MODIFY_PATH opts out.
         PROFILE_FILE=""
-        case "${SHELL##*/}" in
-            zsh)
-                PROFILE_FILE="${ZDOTDIR:-$HOME}/.zshrc"
-                ;;
-            bash)
-                # macOS terminals start login shells, which skip ~/.bashrc.
-                if [[ "$OS" == "darwin" ]]; then
-                    PROFILE_FILE="${HOME}/.bash_profile"
-                else
-                    PROFILE_FILE="${HOME}/.bashrc"
-                fi
-                ;;
-            fish)
-                PROFILE_FILE="${HOME}/.config/fish/config.fish"
-                PATH_LINE="fish_add_path \"${BIN_DIR}\""
-                ;;
-        esac
+        PATH_LINE=""
+        if [[ -n "$DEFAULT_USER_BIN_DIR" ]] && [[ -z "$ONYX_CLI_NO_MODIFY_PATH" ]]; then
+            # The startup files get the unexpanded $HOME so they stay portable.
+            # shellcheck disable=SC2016
+            PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+            case "${SHELL##*/}" in
+                zsh)
+                    PROFILE_FILE="${ZDOTDIR:-$HOME}/.zshrc"
+                    ;;
+                bash)
+                    # macOS terminals start login shells, which skip ~/.bashrc.
+                    if [[ "$OS" == "darwin" ]]; then
+                        PROFILE_FILE="${HOME}/.bash_profile"
+                    else
+                        PROFILE_FILE="${HOME}/.bashrc"
+                    fi
+                    ;;
+                fish)
+                    PROFILE_FILE="${HOME}/.config/fish/config.fish"
+                    # shellcheck disable=SC2016
+                    PATH_LINE='fish_add_path "$HOME/.local/bin"'
+                    ;;
+            esac
+        fi
 
         if [[ -n "$PROFILE_FILE" ]] && append_line_to_profile "$PROFILE_FILE" "$PATH_LINE"; then
             print_success "Added ${BIN_DIR} to PATH in ${PROFILE_FILE}"
             print_info "Restart your shell (or run the line below) to pick it up:"
+            echo -e "   ${BOLD}${PATH_LINE}${NC}"
         else
             print_warning "${BIN_DIR} is not in your PATH — add it to run onyx-cli directly:"
+            echo -e "   ${BOLD}export PATH=\"${BIN_DIR}:\$PATH\"${NC}"
         fi
-        echo -e "   ${BOLD}${PATH_LINE}${NC}"
         # Fix up this process too so anything the CLI spawns can find it.
         export PATH="${BIN_DIR}:${PATH}"
         ;;
