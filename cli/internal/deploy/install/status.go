@@ -293,17 +293,34 @@ func drift(tags ...string) bool {
 
 // severity is how much attention this service deserves, reading the restart
 // count `docker ps` doesn't show: a container past the crash-loop threshold is
-// failing whatever state the listing happened to catch it in. Restarts is
-// filled in by addFailureFacts, and only for containers that were already in
-// trouble — a healthy one stays sevOK however often it has been restarted.
+// failing whatever state this sample caught it in.
+//
+// The restart count only settles an unsettled container, though. It counts the
+// restarts the policy has had to perform over the whole life of the container
+// and never goes back down, so one that looped at boot and has served for
+// hours since is up, and says so.
 func (s Service) severity() severity {
-	if s.crashLooping() {
+	if s.crashLooping() && unsettled(s.Status) {
 		return sevBad
 	}
 	return severityOf(s.Status)
 }
 
 func (s Service) crashLooping() bool { return s.Restarts >= crashLoop }
+
+// justStarted matches the uptimes docker prints for a container that came up
+// moments ago: "Up Less than a second", "Up 3 seconds", "Up About a minute".
+var justStarted = regexp.MustCompile(`^Up (Less than a second|\d+ seconds?|About a minute)`)
+
+// unsettled reports whether `docker ps` alone can't call this container up: it
+// is in no state to serve, or it is in one it entered moments ago. The second
+// half is what a crash loop looks like between two restarts — a service with
+// no health check to fail reads as a plain "Up 2 seconds" there, which is also
+// how it reads when it is simply new, and only the restart count tells those
+// apart.
+func unsettled(status string) bool {
+	return severityOf(status) != sevOK || justStarted.MatchString(status)
+}
 
 // isUp, isUnhealthy and notRunning are the tests the verdict counts with, so
 // the sentences underneath it can be selected by the same rule the number was.
@@ -313,13 +330,15 @@ func isUp(s Service) bool        { return s.severity() == sevOK }
 func notRunning(s Service) bool  { return !strings.HasPrefix(s.Status, "Up") }
 func isUnhealthy(s Service) bool { return strings.Contains(s.Status, "(unhealthy)") }
 
-// addFailureFacts fills in what `docker ps` left out, for the containers a
-// verdict could end up reporting. Only those: the extra call costs a
-// round-trip, and a service that is up and healthy has nothing to explain.
+// addFailureFacts fills in what `docker ps` left out, for the containers its
+// listing couldn't settle on its own. Only those: the extra call costs a
+// round-trip, and a service that has been serving for hours has nothing to
+// explain. It selects on the status alone — the facts it fetches are what the
+// fact-aware tests above read, so it cannot ask them.
 func (in *installer) addFailureFacts(ctx context.Context, services []Service) {
 	var names []string
 	for _, s := range services {
-		if !isUp(s) {
+		if unsettled(s.Status) {
 			names = append(names, s.Name)
 		}
 	}

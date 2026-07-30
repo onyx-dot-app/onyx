@@ -512,6 +512,82 @@ func TestStatusCatchesCrashLoopBetweenRestarts(t *testing.T) {
 	}
 }
 
+// Half the deployment has no health check at all (background, cache,
+// opensearch, code-interpreter), so between two crashes those containers read
+// as a plain "Up 2 seconds" — indistinguishable from a service that has just
+// come up, except for the restart count. A container that young has to be
+// inspected for it, or the crash loop stays invisible for exactly as long as
+// the container is alive. A container that has been serving for hours is not
+// inspected: its restart count is history, not a fault.
+func TestStatusCatchesCrashLoopWithoutHealthCheck(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.2.0")
+
+	psOut := "onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 2 hours (healthy)\t0.0.0.0:3000->80/tcp\tapi_server\n" +
+		"onyx-background-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 2 seconds\t\tbackground\n"
+	inspectOut := `{"name":"/onyx-background-1","restarts":12,"exit":1,"oom":false,"error":"","health":null}`
+	statusRunner := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		switch {
+		case strings.Contains(argv(c), "ps -a"):
+			return dockercmd.Result{Stdout: psOut}, nil
+		case strings.Contains(argv(c), "inspect"):
+			return dockercmd.Result{Stdout: inspectOut}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	shimDockerOnPath(t)
+	deps := testDeps(t, statusRunner, notFoundServer(t))
+	err := RunStatus(context.Background(), deps, Options{Dir: root}, false)
+	if err == nil || !strings.Contains(err.Error(), "degraded") {
+		t.Fatalf("err = %v, want a degraded exit", err)
+	}
+
+	out := outBuf(deps).String()
+	for _, want := range []string{
+		"1 of 2 services are not up",
+		"background has restarted 12 times (exit 1)",
+		"crash-looping",
+		"logs --dir " + strconv.Quote(root) + " background\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+	for _, c := range statusRunner.calls {
+		if strings.Contains(argv(c), "inspect") && strings.Contains(argv(c), "api_server") {
+			t.Errorf("a container serving for hours was inspected: %s", argv(c))
+		}
+	}
+}
+
+// A restart count is a container's whole history and never goes back down, so
+// on its own it cannot say what is happening now: a service that looped at
+// boot and has served ever since is up, and the report has to say so.
+func TestStatusForgivesOldRestartsOnceServing(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.2.0")
+
+	psOut := "onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 2 hours (healthy)\t0.0.0.0:3000->80/tcp\tapi_server\n" +
+		"onyx-background-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 3 hours\t\tbackground\n"
+	statusRunner := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
+		switch {
+		case strings.Contains(argv(c), "ps -a"):
+			return dockercmd.Result{Stdout: psOut}, nil
+		case strings.Contains(argv(c), "inspect"):
+			return dockercmd.Result{Stdout: `{"name":"/onyx-background-1","restarts":12,"exit":1,"oom":false,"error":"","health":null}`}, nil
+		}
+		return healthyDockerHandler(c)
+	}}
+	shimDockerOnPath(t)
+	deps := testDeps(t, statusRunner, notFoundServer(t))
+	if err := RunStatus(context.Background(), deps, Options{Dir: root}, false); err != nil {
+		t.Fatalf("RunStatus: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+	if out := outBuf(deps).String(); !strings.Contains(out, "All 2 services are up") {
+		t.Errorf("a recovered container is still being called a failure:\n%s", out)
+	}
+}
+
 // A service inside its health check's start period is not a failure — but it
 // is not up either, and a report that calls it up has nothing left to say when
 // it never comes up. Its probes fail by design while it starts, so the report
