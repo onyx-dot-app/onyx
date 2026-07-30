@@ -339,10 +339,12 @@ export default function MCPAuthenticationModal({
     if (!fullServer) {
       return {};
     }
+    // Keyed lowercased: a casing-only rename must not count as an edit, or
+    // the untouched masked value would be sent as changed and rejected.
     const initialByKey: Record<string, string> = {};
     (initialValues.custom_headers || []).forEach((row) => {
       if (row.key.trim()) {
-        initialByKey[row.key] = row.value;
+        initialByKey[row.key.toLowerCase()] = row.value;
       }
     });
     const headers: Record<string, string> = {};
@@ -352,9 +354,10 @@ export default function MCPAuthenticationModal({
       if (!key) {
         return;
       }
+      const lowered = key.toLowerCase();
       headers[key] = row.value;
       changedFlags[key] =
-        !(key in initialByKey) || row.value !== initialByKey[key];
+        !(lowered in initialByKey) || row.value !== initialByKey[lowered];
     });
     return { custom_headers: headers, custom_headers_changed: changedFlags };
   };

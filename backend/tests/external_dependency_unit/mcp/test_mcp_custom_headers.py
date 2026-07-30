@@ -236,6 +236,38 @@ class TestUpsert:
             "x-new-header": "fresh_value",
         }
 
+    def test_casing_only_rename_keeps_stored_value(self, db_session: Session) -> None:
+        """Renaming a header's casing without editing its masked value must
+        carry the stored value over under the new casing, not reject it."""
+        admin = create_test_user(db_session, "upsert_admin3")
+        base: dict[str, Any] = {
+            "name": f"Upsert Server {uuid4().hex[:8]}",
+            "server_url": "http://gateway.example.com/mcp",
+            "auth_type": MCPAuthenticationType.PT_OAUTH,
+            "auth_performer": MCPAuthenticationPerformer.PER_USER,
+            "transport": MCPTransport.STREAMABLE_HTTP,
+        }
+        server = _upsert_mcp_server(
+            MCPToolCreateRequest(
+                **base, custom_headers={"X-Litellm-Api-Key": _GATEWAY_KEY_VALUE}
+            ),
+            db_session,
+            admin,
+        )
+        server = _upsert_mcp_server(
+            MCPToolCreateRequest(
+                **base,
+                existing_server_id=server.id,
+                custom_headers={_GATEWAY_KEY_HEADER: "••••••••••••"},
+                custom_headers_changed={_GATEWAY_KEY_HEADER: False},
+            ),
+            db_session,
+            admin,
+        )
+        assert extract_custom_headers(server) == {
+            _GATEWAY_KEY_HEADER: _GATEWAY_KEY_VALUE
+        }
+
     def test_omitted_field_leaves_headers_untouched_and_empty_clears(
         self, db_session: Session
     ) -> None:

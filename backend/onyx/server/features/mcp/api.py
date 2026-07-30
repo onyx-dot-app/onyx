@@ -298,14 +298,19 @@ def _resolve_custom_headers(
     """Resolve the custom-header dict to store. ``None`` leaves stored headers
     unchanged (older clients); otherwise the request dict is authoritative,
     each kept key taking the request value when flagged changed (masked
-    placeholders rejected) or the stored value otherwise."""
+    placeholders rejected) or the stored value otherwise. Stored values are
+    matched case-insensitively so a casing-only rename keeps its value."""
     if request_headers is None:
         return UNSET
+    existing_by_lower = {
+        name.lower(): value for name, value in existing_headers.items()
+    }
     resolved: dict[str, str] = {}
     for name, request_value in request_headers.items():
-        changed = request_headers_changed.get(name, name not in existing_headers)
-        if not changed and name in existing_headers:
-            resolved[name] = existing_headers[name]
+        lowered = name.lower()
+        changed = request_headers_changed.get(name, lowered not in existing_by_lower)
+        if not changed and lowered in existing_by_lower:
+            resolved[name] = existing_by_lower[lowered]
             continue
         if request_value:
             reject_masked_credentials({name: request_value})
