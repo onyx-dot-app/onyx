@@ -443,9 +443,7 @@ class LitellmLLM(LLM):
         # request can run indefinitely as long as data keeps arriving within this
         # window. If the LLM pauses for longer than this timeout between chunks,
         # a ReadTimeout is raised.
-        self._timeout = timeout
-        if timeout is None:
-            self._timeout = LLM_SOCKET_READ_TIMEOUT
+        self._timeout = timeout if timeout is not None else LLM_SOCKET_READ_TIMEOUT
 
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
 
@@ -1073,9 +1071,17 @@ class LitellmLLM(LLM):
         # This note may not be entirely accurate as there is a lot of complexity in the LiteLLM codebase around this
         # and not every model path was traced thoroughly. It is also possible that in future versions of LiteLLM
         # they will realize that their OpenAI handling is not threadsafe. Hope they will just fix it.
+        # Cap the per-read timeout at the total budget. The deadline is only
+        # checked between chunks, so without this a single blocking read could
+        # overshoot a total shorter than the socket read timeout. No-op when the
+        # total exceeds it (our defaults do).
+        read_timeout = timeout_override or self._timeout
+        if total_timeout_override is not None:
+            read_timeout = min(read_timeout, max(1, int(total_timeout_override)))
+
         client = None
         if self._uses_isolated_client():
-            client = HTTPHandler(timeout=timeout_override or self._timeout)
+            client = HTTPHandler(timeout=read_timeout)
 
         try:
             # When env-only custom_config keys are injected (self-hosted
@@ -1095,7 +1101,7 @@ class LitellmLLM(LLM):
                     tool_choice=tool_choice,
                     stream=True,
                     structured_response_format=structured_response_format,
-                    timeout_override=timeout_override,
+                    timeout_override=read_timeout,
                     max_tokens=max_tokens,
                     parallel_tool_calls=True,
                     reasoning_effort=reasoning_effort,

@@ -2841,3 +2841,47 @@ def test_consume_stream_ping_flood_trips_total_timeout() -> None:
 
     # unwound promptly via the raise, not blocked on the ping flood
     assert time.monotonic() - start < 2.0
+
+
+@pytest.mark.parametrize(
+    "total_timeout_override, expected_read_timeout",
+    [
+        (30, 30),  # total below the socket read timeout -> read timeout capped at it
+        (300, 60),  # total above it -> read timeout unchanged
+        (None, 60),  # no total -> read timeout unchanged
+    ],
+)
+def test_invoke_caps_read_timeout_at_total_budget(
+    total_timeout_override: int | None, expected_read_timeout: int
+) -> None:
+    # The deadline is only checked between chunks, so the per-read timeout must be
+    # capped at the total or a blocking read could overshoot a sub-read-timeout budget.
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=60,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name="claude-haiku-4-5",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name="claude-haiku-4-5",
+        ),
+    )
+    chunk = litellm.ModelResponse(
+        id="chatcmpl-1",
+        choices=[
+            litellm.Choices(
+                delta=_create_delta(role="assistant", content="hi"),
+                finish_reason="stop",
+                index=0,
+            )
+        ],
+        model="claude-haiku-4-5",
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = [chunk]
+        llm.invoke(
+            [UserMessage(content="Hi")],
+            total_timeout_override=total_timeout_override,
+        )
+        assert mock_completion.call_args.kwargs["timeout"] == expected_read_timeout
