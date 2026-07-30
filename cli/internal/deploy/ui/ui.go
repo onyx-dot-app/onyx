@@ -14,26 +14,87 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"golang.org/x/term"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 )
 
+// The accent color follows the terminal's background. ANSI 6 (cyan) carries
+// the highlight on the dark terminals it was picked for but washes out on
+// light ones, where 256-color 25 (a dark blue) reads with the same weight.
+// The light choice is deliberately out of the first sixteen slots: those are
+// whatever the color scheme says they are, and a "blue" that a light theme
+// defines as pastel would put us back where we started.
 var (
-	accent   = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
+	accentDark  = lipgloss.Color("6")
+	accentLight = lipgloss.Color("25")
+)
+
+var (
+	accent   = lipgloss.NewStyle().Foreground(accentDark).Bold(true)
 	dim      = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	okStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 	warnSt   = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 	errSt    = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 	railOn   = lipgloss.NewStyle().Bold(true)
-	cardBox  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("6")).Padding(0, 2)
+	cardBox  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accentDark).Padding(0, 2)
 	paneBox  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("8")).Padding(0, 1)
 	spinners = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 )
+
+// BackgroundEnv forces which background the accent color is picked for
+// ("light" or "dark"), for terminals that don't answer the query or answer
+// it wrongly.
+const BackgroundEnv = "ONYX_TERM_BACKGROUND"
+
+var detectOnce sync.Once
+
+// DetectBackground picks the accent color for this terminal, once per
+// process. Call it before any styled output and before the wizard starts:
+// asking the terminal means writing a query and reading the reply in raw
+// mode, which only works while nothing else owns the input.
+func DetectBackground(ios *iostreams.IOStreams) {
+	detectOnce.Do(func() { useBackground(darkBackground(ios)) })
+}
+
+// useBackground repaints the styles that carry the accent.
+func useBackground(dark bool) {
+	c := accentLight
+	if dark {
+		c = accentDark
+	}
+	accent = accent.Foreground(c)
+	cardBox = cardBox.BorderForeground(c)
+}
+
+// darkBackground resolves the terminal's background, defaulting to dark —
+// the assumption the palette was built on, and the safer one to be wrong
+// about since cyan on a light background is dull rather than invisible.
+func darkBackground(ios *iostreams.IOStreams) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(BackgroundEnv))) {
+	case "light":
+		return false
+	case "dark":
+		return true
+	}
+	// Only a real terminal on both ends can be asked, and the query has to go
+	// to the actual descriptors rather than whatever ios wraps. A terminal
+	// that stays silent (or sits behind a multiplexer that swallows the
+	// query) keeps the dark default; lipgloss pairs the query with a device
+	// attributes request every terminal answers, so a non-answer costs a
+	// round trip rather than the full timeout.
+	if !Color(ios) || !ios.IsStdinTTY ||
+		!term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
+		return true
+	}
+	return lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
+}
 
 // promptMark heads a question. It is the dot the chat TUI marks its own turns
 // with (internal/tui), so being asked something looks the same across the CLI.
@@ -65,7 +126,7 @@ func (p Painter) Err(s string) string  { return p.render(errSt, s) }
 func (p Painter) Dim(s string) string  { return p.render(dim, s) }
 
 // Accent marks the thing to act on — a URL, or a command meant to be typed
-// next. It is the same cyan the wizard's summary card uses, and it earns its
+// next. It is the same color the wizard's summary card uses, and it earns its
 // place by being rare: a line that highlights everything highlights nothing.
 func (p Painter) Accent(s string) string { return p.render(accent, s) }
 
