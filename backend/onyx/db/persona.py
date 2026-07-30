@@ -1439,6 +1439,7 @@ def upsert_persona(
                 list(added_node_ids),
                 user.email,
                 get_user_external_group_ids(db_session, user),
+                user_id=user.id,
             )
             if added_node_ids - accessible_node_ids:
                 raise ValueError(
