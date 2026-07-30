@@ -16,49 +16,51 @@ This README focuses on the easiest guided deployment which is via install.sh.
 curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh && chmod +x install.sh && ./install.sh
 ```
 
+The script installs the Onyx CLI (`onyx-cli`) and hands over to `onyx-cli deploy install`, which is
+where the guided installation lives. Any flags you pass are forwarded to it. If you already have the
+CLI (`pip install onyx-cli`), skip the script and run `onyx-cli deploy install` directly.
+
 This provides a guided installation of Onyx via Docker Compose. It will deploy the latest version of Onyx
 and set up the volumes to ensure data is persisted across deployments or upgrades.
 
-The script will create an onyx_data directory, all necessary files for the deployment will be stored in
-there. Note that no application critical data is stored in that directory so even if you delete it, the
-data needed to restore the app will not be destroyed.
+The deployment files are stored in `~/.config/onyx` (an existing `onyx_data` directory from an older
+install is detected and kept in place; `--dir` targets another location). Note that no application
+critical data is stored in that directory so even if you delete it, the data needed to restore the app
+will not be destroyed.
 
 The data about chats, users, etc. are instead stored as named Docker Volumes. This is managed by Docker
 and where it is stored will depend on your Docker setup. You can always delete these as well by running
-the install.sh script with --delete-data.
+`onyx-cli deploy uninstall`.
 
-To shut down the deployment without deleting, use install.sh --shutdown.
+To shut down the deployment without deleting, use `onyx-cli deploy stop`.
 
-### Onyx CLI (alternative)
+### Managing the deployment
 
-The same guided install also ships inside the Onyx CLI and will eventually
-replace install.sh once it stabilizes:
+Beyond installing, the CLI covers the rest of the lifecycle:
 
-```
-pip install onyx-cli && onyx-cli deploy install
-```
-
-It understands existing install.sh deployments (an `onyx_data` directory is
-detected and managed in place; new installs default to `~/.config/onyx`) and
-adds lifecycle commands: `onyx-cli deploy status` (versions, containers,
-health), `deploy stop`, `deploy upgrade [--tag vX.Y.Z]` (rewrites only
-IMAGE_TAG, preserves your .env edits, backs up hand-edited files), and
-`deploy uninstall`.
+| Command | What it does |
+| --- | --- |
+| `onyx-cli deploy status` | Installed version, containers, and health (`--json` for scripts) |
+| `onyx-cli deploy logs [service...]` | Logs of the deployment's containers |
+| `onyx-cli deploy stop` | Stop the containers, keep the data |
+| `onyx-cli deploy upgrade [--tag vX.Y.Z]` | Upgrade in place (see below) |
+| `onyx-cli deploy uninstall` | Remove the containers, volumes, and deployment directory |
 
 ### Upgrading the deployment
-Onyx maintains backwards compatibility across all minor versions following SemVer. If following the install.sh script (or through Docker Compose), you can
-upgrade it by first bringing down the containers. To do this, use `install.sh --shutdown`
-(or `docker compose down` from the directory with the docker-compose.yml file).
+Onyx maintains backwards compatibility across all minor versions following SemVer, so upgrading is
+`onyx-cli deploy upgrade` (add `--tag vX.Y.Z` to pin a version). It rewrites only IMAGE_TAG, preserves
+your .env edits, and backs up hand-edited files.
 
-After the containers are stopped, you can safely upgrade by either re-running the `install.sh` script (if you left the values as default which is latest,
-then it will automatically update to latest each time the script is run). If you are more comfortable running docker compose commands, you can also run
-commands directly from the directory with the docker-compose.yml file. First verify the version you want in the environment file (see below),
-(if using `latest` tag, be sure to run `docker compose pull`) and run `docker compose up` to restart the services on the latest version
+If you are more comfortable running docker compose commands, you can also run commands directly from
+the directory with the docker-compose.yml file. First bring the containers down (`docker compose down`),
+verify the version you want in the environment file (see below), (if using `latest` tag, be sure to run
+`docker compose pull`) and run `docker compose up` to restart the services on the latest version
 
 ### Environment variables
-The Docker Compose files try to look for a .env file in the same directory. The `install.sh` script sets it up from a file called env.template which is
-downloaded during the initial setup. Feel free to edit the .env file to customize your deployment. The most important / common changed values are
-located near the top of the file.
+The Docker Compose files try to look for a .env file in the same directory. The installer sets it up
+from a file called env.template. Feel free to edit the .env file to customize your deployment. The most
+important / common changed values are located near the top of the file. Later `onyx-cli deploy` runs
+keep your edits.
 
 IMAGE_TAG is the version of Onyx to run. It is recommended to leave it as latest to get all updates with each redeployment.
 
@@ -67,26 +69,3 @@ Every image publishes a `-dev` twin for each of its tags (e.g. `latest-dev`, `v1
 its `-dev` twin adds interactive debugging tools (vim, nano, curl, ps, psql) that the default image leaves out to stay
 minimal. The web-server, model-server, and sandbox `-dev` tags are identical to their plain counterparts and exist so
 that one version string covers every image.
-
-## Maintaining the compose files (contributors)
-
-`docker-compose.yml`, `docker-compose.prod.yml` and `docker-compose.prod-no-letsencrypt.yml` are
-generated from the single source of truth `docker-compose.template.yml` — do not hand-edit them.
-To change any of the three, edit the template (per-variant differences are expressed with `#!for` /
-`#!only` / `#!value` directives, documented in `ods generate-compose --help`) and regenerate:
-
-```
-ods generate-compose --write
-```
-
-The generator lives in `tools/ods` (`internal/composegen`) and ships with the `onyx-devtools`
-package. The `docker-compose-sync` pre-commit hook runs it automatically for commits touching the
-template or the generated files, so a stray edit to a generated file gets reverted on the next
-commit.
-
-onyx-cli embeds copies of the guided-install deployment files (the generated
-`docker-compose.yml` and `docker-compose.prod.yml`, the lite/craft overlays, the env templates,
-the nginx config, and this README) under `cli/internal/deploy/deployfiles/embedded/`. The same `ods generate-compose --write` run
-refreshes them after rendering the variants, and a drift test in the cli module (`go test ./...`)
-gates staleness. If you change any of those files, re-run the generator and commit the refreshed
-embedded copies.
