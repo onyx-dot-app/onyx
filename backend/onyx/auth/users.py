@@ -1086,10 +1086,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 partial(reconcile_user_email__no_commit, user.id, account_email)
             )
             if email_reconcile_result is not None:
-                _, reconciled_prior_emails = email_reconcile_result
+                replaced_email, reconciled_prior_emails = email_reconcile_result
                 await db_session.commit()
                 user.email = account_email.lower()
                 user.prior_emails = reconciled_prior_emails
+                # Retire the invite this user joined with, once, at the rename.
+                # Retrying it on later logins would delete an invitation issued
+                # to whoever holds that address next.
+                remove_user_from_invited_users_after_login(
+                    replaced_email, user.id, tenant_id
+                )
 
             oauth_identities = [
                 (oauth_account.oauth_name, oauth_account.account_id)
@@ -1164,11 +1170,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             if user.oidc_expiry is not None and not track_external_idp_expiry:
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # ty: ignore[invalid-assignment]
-            # An invite issued to a replaced address is still this user's.
-            for invited_email in (user.email, *user.prior_emails):
-                remove_user_from_invited_users_after_login(
-                    invited_email, user.id, tenant_id
-                )
+            remove_user_from_invited_users_after_login(user.email, user.id, tenant_id)
 
             return user
 

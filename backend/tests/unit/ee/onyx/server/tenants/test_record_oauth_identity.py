@@ -117,6 +117,7 @@ def test_rekey_normalizes_the_new_address_onto_the_matched_row() -> None:
         patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
     ):
         db_session = session_ctx.return_value.__enter__.return_value
+        db_session.scalar.return_value = None
         mapping = SimpleNamespace(
             email="old@example.com", tenant_id="tenant_abc", active=True
         )
@@ -142,6 +143,7 @@ def test_rekey_moves_links_off_every_mapping_it_deletes() -> None:
         patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
     ):
         db_session = session_ctx.return_value.__enter__.return_value
+        db_session.scalar.return_value = None
         survivor = SimpleNamespace(
             email="old@example.com", tenant_id="tenant_abc", active=True
         )
@@ -189,6 +191,7 @@ def test_rekey_accepts_a_different_linked_provider_identity() -> None:
         patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
     ):
         db_session = session_ctx.return_value.__enter__.return_value
+        db_session.scalar.return_value = None
         mapping = SimpleNamespace(
             email="old@example.com", tenant_id="tenant_abc", active=True
         )
@@ -220,6 +223,7 @@ def test_rekey_merges_an_existing_destination_row() -> None:
         patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
     ):
         db_session = session_ctx.return_value.__enter__.return_value
+        db_session.scalar.return_value = None
         source = SimpleNamespace(
             email="old@example.com", tenant_id="tenant_abc", active=True
         )
@@ -265,6 +269,27 @@ def test_rekey_merges_an_existing_destination_row() -> None:
     db_session.flush.assert_called_once_with()
     db_session.delete.assert_called_once_with(source)
     db_session.commit.assert_called_once()
+
+
+def test_rekey_declines_when_the_address_is_held_elsewhere() -> None:
+    """uq_user_active_email_idx spans tenants. Moving the row onto a taken
+    address makes the other tenant's row answer this user's next login, so the
+    membership stays under the address whose subject link still resolves it."""
+    with (
+        patch(f"{_MAPPING_MODULE}.MULTI_TENANT", True),
+        patch(f"{_MAPPING_MODULE}.get_catalog_session") as session_ctx,
+    ):
+        db_session = session_ctx.return_value.__enter__.return_value
+        db_session.scalar.return_value = "tenant_other"
+
+        rekey_user_mapping_email(
+            new_email="new@example.com",
+            tenant_id="tenant_abc",
+            oauth_identities=[("google", "sub-123")],
+        )
+
+    db_session.query.assert_not_called()
+    db_session.commit.assert_not_called()
 
 
 def test_accept_invite_moves_every_link_off_a_row_this_identity_owns() -> None:

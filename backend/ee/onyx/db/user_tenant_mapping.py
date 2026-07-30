@@ -103,20 +103,29 @@ def resolve_tenant_id(
     """Tenant this login belongs to, or None when it maps nowhere.
 
     An active subject membership wins because only the subject survives an
-    address change. A superseded one is the last resort, since an active email
-    membership names a workspace the user was deliberately moved into.
+    address change. A superseded one ranks behind an active email membership,
+    which is where an admin-initiated workspace move lands, and ahead of an
+    address that maps nowhere or to several pending invitations.
     """
+    superseded_tenant_id: str | None = None
     if oauth_name and account_id:
         tenant_id = get_tenant_id_for_oauth_account(oauth_name, account_id)
         if tenant_id:
             return tenant_id
+        superseded_tenant_id = get_superseded_tenant_id_for_oauth_account(
+            oauth_name, account_id
+        )
 
     try:
         return get_tenant_id_for_email(email)
     except exceptions.UserNotExists:
-        if not (oauth_name and account_id):
-            return None
-        return get_superseded_tenant_id_for_oauth_account(oauth_name, account_id)
+        return superseded_tenant_id
+    except OnyxError:
+        # A linked subject names exactly one workspace, so it settles an address
+        # the caller would otherwise have to disambiguate.
+        if superseded_tenant_id is None:
+            raise
+        return superseded_tenant_id
 
 
 def _oauth_account_tenant_id(
@@ -269,6 +278,24 @@ def rekey_user_mapping_email(
 
     normalized_new_email = new_email.lower()
     with get_catalog_session() as db_session:
+        # uq_user_active_email_idx spans tenants, so the address may already be
+        # held. Moving the row onto it anyway would make the other tenant's row
+        # answer this user's next login, and the subject link still resolves it.
+        held_elsewhere = db_session.scalar(
+            select(UserTenantMapping.tenant_id).where(
+                UserTenantMapping.email == normalized_new_email,
+                UserTenantMapping.tenant_id != tenant_id,
+                UserTenantMapping.active == True,  # noqa: E712
+            )
+        )
+        if held_elsewhere is not None:
+            logger.warning(
+                "Renamed address is active in another workspace, leaving the "
+                "tenant %s mapping under its current address",
+                tenant_id,
+            )
+            return
+
         matched_mappings = (
             db_session.query(UserTenantMapping)
             .filter(

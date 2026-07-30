@@ -60,12 +60,12 @@ def test_falls_back_to_email_when_subject_is_unstamped() -> None:
 
 def test_an_active_email_membership_outranks_a_superseded_subject() -> None:
     """An admin moving a member into another workspace deactivates the row their
-    subject is linked to. Following that link would undo the move."""
-    superseded = MagicMock()
+    subject is linked to. Preferring that link would undo the move."""
     with (
         patch(f"{_MAPPING_MODULE}.get_tenant_id_for_oauth_account", return_value=None),
         patch(
-            f"{_MAPPING_MODULE}.get_superseded_tenant_id_for_oauth_account", superseded
+            f"{_MAPPING_MODULE}.get_superseded_tenant_id_for_oauth_account",
+            return_value="tenant_left_behind",
         ),
         patch(
             f"{_MAPPING_MODULE}.get_tenant_id_for_email",
@@ -75,7 +75,41 @@ def test_an_active_email_membership_outranks_a_superseded_subject() -> None:
         tenant_id = resolve_tenant_id("current@example.com", "google", "sub-123")
 
     assert tenant_id == "tenant_from_email"
-    superseded.assert_not_called()
+
+
+def test_a_superseded_subject_settles_an_ambiguous_address() -> None:
+    """A rekey that cannot claim a taken address leaves an inactive row, which
+    can make the address ambiguous. The subject names one workspace, so the
+    caller is not asked to choose between rows that are all this user's."""
+    conflict = OnyxError(OnyxErrorCode.CONFLICT, "several pending invitations")
+    with (
+        patch(f"{_MAPPING_MODULE}.get_tenant_id_for_oauth_account", return_value=None),
+        patch(
+            f"{_MAPPING_MODULE}.get_superseded_tenant_id_for_oauth_account",
+            return_value="tenant_superseded",
+        ),
+        patch(f"{_MAPPING_MODULE}.get_tenant_id_for_email", side_effect=conflict),
+    ):
+        assert (
+            resolve_tenant_id("user@example.com", "google", "sub-123")
+            == "tenant_superseded"
+        )
+
+
+def test_an_ambiguous_address_still_conflicts_without_a_linked_subject() -> None:
+    conflict = OnyxError(OnyxErrorCode.CONFLICT, "several pending invitations")
+    with (
+        patch(f"{_MAPPING_MODULE}.get_tenant_id_for_oauth_account", return_value=None),
+        patch(
+            f"{_MAPPING_MODULE}.get_superseded_tenant_id_for_oauth_account",
+            return_value=None,
+        ),
+        patch(f"{_MAPPING_MODULE}.get_tenant_id_for_email", side_effect=conflict),
+    ):
+        with pytest.raises(OnyxError) as exc_info:
+            resolve_tenant_id("user@example.com", "google", "sub-123")
+
+    assert exc_info.value is conflict
 
 
 def test_a_superseded_subject_answers_when_the_address_maps_nowhere() -> None:
