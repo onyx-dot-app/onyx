@@ -19,10 +19,15 @@ basic_retry_wrapper = retry_builder(tries=7)
 # number of messages we request per page when fetching paginated slack messages
 _SLACK_LIMIT = 900
 
+# An @ that starts a token, i.e. a mention rather than part of an email or URL
+_MENTION_AT_PATTERN = re.compile(r"(?<!\w)@")
+
+# Regions where an @ must survive defanging: link tokens and code
 _NON_INTERACTIVE_SLACK_TEXT_PATTERN = re.compile(
     r"<(?P<url>(?:https?://|mailto:)[^|<>]+)(?:\|(?P<label>[^<>]*))?>"
     r"|(?P<code>```[\s\S]*?```|`[^`\n]*`)"
 )
+# replace_special_catchall handles the labelled form. This also catches <!subteam^ID>
 _SUBTEAM_MENTION_PATTERN = re.compile(
     r"<!subteam\^(?P<id>[^<>|]+)(?:\|(?P<label>[^<>]*))?>"
 )
@@ -333,10 +338,17 @@ class SlackTextCleaner:
 
     @staticmethod
     def add_zero_width_whitespace_after_tag(message: str) -> str:
-        """Defang plain-text mentions without changing link destinations or code."""
+        """Defang plain-text mentions without changing link destinations or code.
+
+        A mailto token whose label is its own address is left whole, so its raw
+        @ survives.
+        """
 
         def defang(text: str) -> str:
-            return text.replace("@", "@\u200b")
+            # Only an @ starting a token is a mention. One preceded by a word
+            # character belongs to an email or URL userinfo, where the
+            # zero-width space would split the address.
+            return _MENTION_AT_PATTERN.sub("@\u200b", text)
 
         result: list[str] = []
         cursor = 0

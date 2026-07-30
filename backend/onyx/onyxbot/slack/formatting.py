@@ -3,12 +3,12 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from mistune import HTMLRenderer, create_markdown
-from mistune.plugins import Plugin
 
 if TYPE_CHECKING:
     from mistune.core import InlineState
     from mistune.inline_parser import InlineParser
     from mistune.markdown import Markdown
+    from mistune.plugins import PluginRef
 
 # Tags that should be replaced with a newline (line-break and block-level elements)
 _HTML_NEWLINE_TAG_PATTERN = re.compile(
@@ -28,18 +28,17 @@ _FENCED_CODE_BLOCK_PATTERN = re.compile(r"```[\s\S]*?```")
 # The inner group handles nested brackets for citation links like [[1]](.
 _MARKDOWN_LINK_PATTERN = re.compile(r"\[(?:[^\[\]]|\[[^\]]*\])*\]\(")
 
-# Matches Slack-style links <url|text> that LLMs sometimes output directly.
-# Mistune doesn't recognise this syntax, so text() would escape the angle
-# brackets and Slack would render them as literal text instead of links.
-# mailto: is included because mistune parses <mailto:a@b.com|label> as a single
-# autolink and percent-encodes the pipe into the address.
+# Slack-style <url|text> links that LLMs sometimes emit directly. Mistune parses
+# <mailto:a@b.com|label> as one autolink and percent-encodes the pipe, so mailto
+# has to be recognised here rather than left to the parser.
 _SLACK_LINK_PATTERN = re.compile(r"<((?:https?://|mailto:)[^|<>]+)\|([^<>]+)>")
+# Same shape against already-rendered output, where the label may be absent
 _RENDERED_SLACK_LINK_PATTERN = re.compile(
     r"<((?:https?://|mailto:)[^|<>]+)(?:\|([^<>]*))?>"
 )
 
-# Bare URLs and emails are emitted explicitly because Slack's auto-linker can
-# absorb an adjacent emphasis delimiter into the href.
+# Bare URLs and emails are emitted explicitly because Slack's auto-linker absorbs
+# an adjacent emphasis delimiter into the href (observed in Block Kit Builder).
 _URL_LINK_PATTERN = r"https?://[^\s<>|]+"
 _EMAIL_LOCAL_CHARACTER_CLASS = r"a-zA-Z0-9.!#$%&'*+/=?^_`{}~-"
 _EMAIL_LOCAL_CHARACTER_PATTERN = re.compile(rf"[{_EMAIL_LOCAL_CHARACTER_CLASS}]")
@@ -180,6 +179,9 @@ def _append_autolink(
     url: str,
     end_pos: int,
 ) -> int:
+    # in_link is load-bearing beyond nesting: SlackRenderer.link compares the
+    # label to the href before flattening, so a nested autolink would defeat
+    # the redundant-label collapse.
     if state.in_link or state.in_image:
         inline.process_text(label, state)
     else:
@@ -194,13 +196,17 @@ def _append_autolink(
 
 
 def _trim_url_trailing_punctuation(url: str) -> str:
+    """Give back trailing sentence punctuation and unbalanced closers.
+
+    Shortening the match is what leaves a closing emphasis marker for the
+    emphasis rule, so _URL_TRAILING_PUNCTUATION carries * _ ~ as well.
+    """
     url = url.rstrip(_URL_TRAILING_PUNCTUATION)
     for opening, closing in (("(", ")"), ("[", "]")):
-        excess_closings = max(0, url.count(closing) - url.count(opening))
-        trailing_closings = len(url) - len(url.rstrip(closing))
-        trim_count = min(excess_closings, trailing_closings)
-        if trim_count:
-            url = url[:-trim_count]
+        excess = url.count(closing) - url.count(opening)
+        while excess > 0 and url.endswith(closing):
+            url = url[:-1]
+            excess -= 1
     return url
 
 
@@ -236,7 +242,12 @@ def _parse_email_link(
 def _email_match_starts_inside_local_part(
     m: re.Match[str], state: "InlineState"
 ) -> bool:
-    """Reject suffix matches unless preceding local chars are Markdown delimiters."""
+    """True when the match is a truncated local part rather than a whole address.
+
+    A preceding local-part character normally means the regex started mid-address.
+    The exception is an emphasis run that brackets the match on both sides with
+    the same delimiter at the same length, which makes it markup rather than text.
+    """
     match_start, match_end = m.span()
     if match_start == 0:
         return False
@@ -249,30 +260,24 @@ def _email_match_starts_inside_local_part(
     if delimiter_lengths is None or m.group(0).startswith(preceding_character):
         return True
 
+    before = state.src[:match_start]
+    opening_run = len(before) - len(before.rstrip(preceding_character))
     minimum_length, maximum_length = delimiter_lengths
-    return not any(
-        match_start >= length
-        and state.src.startswith(
-            preceding_character * length, match_start - length, match_start
-        )
-        and (
-            match_start == length
-            or state.src[match_start - length - 1] != preceding_character
-        )
-        and state.src.startswith(preceding_character * length, match_end)
-        for length in range(minimum_length, maximum_length + 1)
+    return not (
+        minimum_length <= opening_run <= maximum_length
+        and state.src.startswith(preceding_character * opening_run, match_end)
     )
 
 
 def _slack_autolink(md: "Markdown") -> None:
     """Mistune plugin turning bare URLs and emails into link tokens.
 
-    Registering at the inline-parser level means code spans, fenced blocks and
-    existing link labels are skipped for free, and the emphasis rules still see
-    their own delimiters.
+    Inline registration only buys code-span and fenced-block skipping. Link and
+    image labels still reach these rules, so nesting is prevented by the
+    in_link/in_image guard in _append_autolink.
     """
-    md.inline.register("url_link", _URL_LINK_PATTERN, _parse_url_link)
-    md.inline.register("email_link", _EMAIL_LINK_PATTERN, _parse_email_link)
+    md.inline.register("slack_url_link", _URL_LINK_PATTERN, _parse_url_link)
+    md.inline.register("slack_email_link", _EMAIL_LINK_PATTERN, _parse_email_link)
 
 
 def format_slack_message(message: str | None, render_links: bool = True) -> str:
@@ -286,7 +291,7 @@ def format_slack_message(message: str | None, render_links: bool = True) -> str:
     message = _transform_outside_code_blocks(message, _sanitize_html)
     message = _convert_slack_links_to_markdown(message)
     normalized_message = _normalize_link_destinations(message)
-    plugins: list[str | Plugin] = ["strikethrough", "table"]
+    plugins: list["PluginRef"] = ["strikethrough", "table"]
     if render_links:
         plugins.append(_slack_autolink)
     md = create_markdown(

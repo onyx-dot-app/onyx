@@ -101,7 +101,7 @@ def _split_text(text: str, limit: int = 3000) -> list[str]:
 
 
 def _clean_markdown_link_text(text: str) -> str:
-    # Result is interpolated into a <link|label>, so it must stay link-free
+    # Must emit no Slack link syntax: callers may nest the result in a <url|label>
     return format_slack_message(text, render_links=False).replace("\n", " ").strip()
 
 
@@ -285,6 +285,8 @@ def _build_sources_blocks(
         document_link = format_slack_link_url(d.link) if d.link else None
         img_link = source_to_github_img_link(d.source_type)
 
+        # verbatim stops Slack auto-linking indexed document text, which would
+        # otherwise absorb the surrounding * and > into a URL it detected
         section_blocks.append(
             ContextBlock(
                 elements=[

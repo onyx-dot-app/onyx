@@ -196,16 +196,20 @@ def test_table_empty_first_column_no_bare_asterisks() -> None:
 
 
 def _render(message: str) -> str:
-    """Run the full onyxbot answer path, i.e. the bytes Slack actually receives."""
+    """Mirror the answer-block render path in blocks.py."""
     return decode_escapes(remove_slack_text_interactions(format_slack_message(message)))
 
 
 def test_bold_url_delimiters_stay_outside_the_link() -> None:
     rendered = _render("See **https://onyx.app/docs** for details.")
 
-    # A bare URL lets Slack's greedy auto-linker pull the closing * into the
-    # href, which breaks the link and orphans the opening * as literal text.
     assert "See *<https://onyx.app/docs>* for details." == rendered
+
+
+def test_unlinked_email_is_still_not_split_by_zero_width_space() -> None:
+    # Rejected as a truncated local part, so it stays plain text and the
+    # mention defanging is the only thing left that could corrupt it
+    assert "a *support@onyx.app" == _render("a *support@onyx.app")
 
 
 def test_italic_and_strikethrough_urls_stay_intact() -> None:
