@@ -2014,10 +2014,16 @@ async def _resolve_optional_user(
     user: User | None,
     user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
-    request.state.usage_credential = UsageCredentialIdentity("session")
+    # A cookie-session user (password / OAuth / SAML) is already resolved here;
+    # anything else is credential-less until one of the branches below claims it.
+    had_session_user = user is not None
+    if had_session_user:
+        request.state.usage_credential = UsageCredentialIdentity("session")
 
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
+        if not had_session_user:
+            request.state.usage_credential = UsageCredentialIdentity("jwt")
         await _maybe_refresh_oauth_tokens(user, async_db_session, user_manager)
         return user
 
