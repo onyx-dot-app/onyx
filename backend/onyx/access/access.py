@@ -121,10 +121,18 @@ def _get_acl_for_user(
     matches one entry in the returned set.
 
     Anonymous users only have access to public documents.
+
+    Addresses the user was renamed away from match too. Indexed ACLs keep
+    naming the old one until the source system re-syncs, and the alias is
+    revoked as soon as the address belongs to somebody else.
     """
     if user.is_anonymous:
         return {PUBLIC_DOC_PAT}
-    return {prefix_user_email(user.email), PUBLIC_DOC_PAT}
+    return {
+        prefix_user_email(user.email),
+        *(prefix_user_email(email) for email in user.prior_emails),
+        PUBLIC_DOC_PAT,
+    }
 
 
 def get_acl_for_user(user: User, db_session: Session | None = None) -> set[str]:
