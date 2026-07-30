@@ -27,6 +27,7 @@ type Status struct {
 	RunningTag   string    `json:"running_tag,omitempty"`
 	Mode         string    `json:"mode,omitempty"`
 	IncludeCraft bool      `json:"include_craft"`
+	Dev          bool      `json:"dev"`
 	AccessURL    string    `json:"access_url,omitempty"`
 	Services     []Service `json:"services"`
 	Healthy      bool      `json:"healthy"`
@@ -89,6 +90,7 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 		st.ManifestTag = manifest.InstalledTag
 		st.Mode = string(manifest.Mode)
 		st.IncludeCraft = manifest.IncludeCraft
+		st.Dev = manifest.Dev
 	}
 	in.resolveProject(manifest)
 	if env, err := os.ReadFile(filepath.Join(in.deploymentDir(), ".env")); err == nil {
@@ -103,6 +105,8 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 			st.Mode = string(state.ModeProd)
 		}
 	}
+	// The overlay on disk is what the lifecycle verbs stack, manifest or not.
+	st.Dev = st.Dev || in.overlayOnDisk(filepath.Base(deployfiles.DevOverlay.DestRel))
 
 	st.Services, st.RunningTag, st.AccessURL = in.inspectContainers(ctx)
 	// Prod publishes 80/443 behind a real domain; the port-derived localhost
@@ -134,7 +138,9 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 	}
 
 	in.plainf("Onyx deployment at %s (%s)", st.Dir, st.Source)
-	in.plainf("  Mode: %s%s", st.Mode, map[bool]string{true: " + craft", false: ""}[st.IncludeCraft])
+	in.plainf("  Mode: %s%s%s", st.Mode,
+		map[bool]string{true: " + craft", false: ""}[st.IncludeCraft],
+		map[bool]string{true: " + dev", false: ""}[st.Dev])
 	in.plainf("  Version (manifest): %s", in.orUnknown(st.ManifestTag))
 	in.plainf("  Version (.env):     %s", in.orUnknown(st.EnvTag))
 	in.plainf("  Version (running):  %s", in.orUnknown(st.RunningTag))

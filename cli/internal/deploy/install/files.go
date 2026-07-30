@@ -14,12 +14,13 @@ import (
 )
 
 // managedFiles returns the files for the selected mode: the base set plus the
-// overlays that apply. Prod swaps in its own set — the standalone prod
-// compose file and the prod env/nginx templates — and deliberately leaves
-// out the README: prod installs are typically adopted in place (sometimes
-// inside a checked-out source tree), and dropping a README into someone's
-// root is not adoption.
-func managedFiles(prod, lite, craft bool) []deployfiles.File {
+// overlays that apply (callers settle the combinations — prod takes neither
+// the lite nor the dev overlay). Prod swaps in its own set — the standalone
+// prod compose file and the prod env/nginx templates — and deliberately
+// leaves out the README: prod installs are typically adopted in place
+// (sometimes inside a checked-out source tree), and dropping a README into
+// someone's root is not adoption.
+func managedFiles(prod, lite, craft, dev bool) []deployfiles.File {
 	var files []deployfiles.File
 	if prod {
 		files = []deployfiles.File{
@@ -43,6 +44,9 @@ func managedFiles(prod, lite, craft bool) []deployfiles.File {
 	}
 	if craft {
 		files = append(files, deployfiles.CraftOverlay)
+	}
+	if dev {
+		files = append(files, deployfiles.DevOverlay)
 	}
 	return files
 }

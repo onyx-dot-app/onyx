@@ -22,6 +22,7 @@ type Options struct {
 	Lite         bool
 	IncludeCraft bool
 	Prod         bool
+	Dev          bool
 	Tag          string
 	Local        bool
 	Offline      bool
@@ -76,6 +77,7 @@ type installer struct {
 	lite     bool
 	craft    bool
 	prod     bool
+	dev      bool
 	project  string     // compose project name every docker/compose call uses
 	wiz      *ui.Wizard // live wizard when the fancy renderer drives the run
 	cancel   func()     // cancels in-flight work when the wizard is quit
