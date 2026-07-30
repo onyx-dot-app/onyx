@@ -95,8 +95,7 @@ async def test_pat_type_selects_credential_type(
 async def test_external_jwt_user_is_jwt_credential(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Exercises the real _check_for_saml_and_jwt, since that is what stamps the
-    credential — stubbing it out would test nothing."""
+    """Drives the real _check_for_saml_and_jwt — stubbing it out tests nothing."""
     jwt_user = cast(User, object())
 
     async def fake_verify(_: str) -> dict[str, str]:

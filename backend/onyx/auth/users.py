@@ -2019,10 +2019,6 @@ async def _resolve_optional_user(
     user: User | None,
     user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
-    # A cookie-session user (password / OAuth / SAML) is already resolved here;
-    # anything else is credential-less until whichever branch authenticates it
-    # claims it. Each branch stamps its own type, so no caller has to infer the
-    # mechanism from the absence of another one.
     if user is not None:
         request.state.usage_credential = UsageCredentialIdentity(
             UsageCredentialType.SESSION
