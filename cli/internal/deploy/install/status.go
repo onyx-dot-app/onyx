@@ -58,8 +58,8 @@ func (s Service) name() string {
 
 // RunStatus implements `deploy status`. Read-only: it never provisions or
 // mutates anything. Exit codes make it usable as a probe: 0 when installed
-// with all services up and none unhealthy, NotAvailable when no install
-// exists, General when stopped or degraded.
+// with every service settled and up, NotAvailable when no install exists,
+// General when stopped, degraded, or still coming up.
 func RunStatus(ctx context.Context, deps Deps, opts Options, jsonOut bool) error {
 	in := newInstaller(deps, opts)
 	return in.runStatus(ctx, jsonOut)
@@ -112,16 +112,18 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 	}
 	in.addFailureFacts(ctx, st.Services)
 
-	up, unhealthy := 0, 0
+	up, starting, failing := 0, 0, 0
 	for _, s := range st.Services {
-		if isRunning(s) {
+		switch s.severity() {
+		case sevOK:
 			up++
-		}
-		if isUnhealthy(s) {
-			unhealthy++
+		case sevWatch:
+			starting++
+		default:
+			failing++
 		}
 	}
-	st.Healthy = up > 0 && up == len(st.Services) && unhealthy == 0
+	st.Healthy = up > 0 && up == len(st.Services)
 
 	if jsonOut {
 		code := exitcodes.Success
@@ -146,7 +148,7 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 		return exitcodes.New(exitcodes.General, "deployment is stopped")
 	}
 	for _, s := range st.Services {
-		sev := severityOf(s.Status)
+		sev := s.severity()
 		line := fmt.Sprintf("  %s %-40s %s", sev.paint(in.paint, sev.mark()), s.Name, in.paintStatus(s.Status))
 		if s.Restarts >= 2 {
 			line += in.paint.Dim(fmt.Sprintf("  ·  %d restarts", s.Restarts))
@@ -157,18 +159,47 @@ func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
 	if st.AccessURL != "" {
 		in.infof("Access Onyx at: %s", st.AccessURL)
 	}
-	if unhealthy > 0 {
-		in.failf("%d of %d services unhealthy", unhealthy, len(st.Services))
-		in.explainFailures(st.Services, isUnhealthy)
-		return exitcodes.New(exitcodes.General, "deployment is degraded")
-	}
-	if up < len(st.Services) {
-		in.failf("%d of %d containers are not running", len(st.Services)-up, len(st.Services))
-		in.explainFailures(st.Services, notRunning)
-		return exitcodes.New(exitcodes.General, "deployment is partially stopped")
+	// One count, one list: every service that isn't up is worth naming,
+	// whichever way it isn't. Splitting the verdict by kind used to drop the
+	// rest of them — and a service still working through its health check was
+	// counted as up, which is where a crash-looping container sampled between
+	// two restarts went missing.
+	if notUp := starting + failing; notUp > 0 {
+		if failing > 0 {
+			in.failf("%d of %d services are not up", notUp, len(st.Services))
+		} else {
+			in.warnf("%d of %d services are still starting", notUp, len(st.Services))
+		}
+		in.explainFailures(st.Services)
+		return exitcodes.New(exitcodes.General, notUpReason(st.Services))
 	}
 	in.successf("All %d services are up", up)
 	return nil
+}
+
+// notUpReason names the worst thing on the board, which is what the one-line
+// reason a probe reads should say: a health check that is failing outranks a
+// container that is missing, and both outrank a deployment that simply hasn't
+// finished coming up.
+func notUpReason(services []Service) string {
+	stopped, looping := false, false
+	for _, s := range services {
+		switch {
+		case isUnhealthy(s):
+			return "deployment is degraded"
+		case notRunning(s):
+			stopped = true
+		case s.crashLooping():
+			looping = true
+		}
+	}
+	switch {
+	case stopped:
+		return "deployment is partially stopped"
+	case looping:
+		return "deployment is degraded"
+	}
+	return "deployment is still starting"
 }
 
 func (in *installer) emitStatus(st Status, code exitcodes.Code) error {
@@ -260,20 +291,54 @@ func drift(tags ...string) bool {
 	return false
 }
 
-// isRunning, isUnhealthy and notRunning are the tests the verdict counts
-// with, so the sentences underneath it can be selected by the same rule the
-// number was.
-func isRunning(s Service) bool   { return strings.HasPrefix(s.Status, "Up") }
-func notRunning(s Service) bool  { return !isRunning(s) }
+// severity is how much attention this service deserves, reading the restart
+// count `docker ps` doesn't show: a container past the crash-loop threshold is
+// failing whatever state this sample caught it in.
+//
+// The restart count only settles an unsettled container, though. It counts the
+// restarts the policy has had to perform over the whole life of the container
+// and never goes back down, so one that looped at boot and has served for
+// hours since is up, and says so.
+func (s Service) severity() severity {
+	if s.crashLooping() && unsettled(s.Status) {
+		return sevBad
+	}
+	return severityOf(s.Status)
+}
+
+func (s Service) crashLooping() bool { return s.Restarts >= crashLoop }
+
+// justStarted matches the uptimes docker prints for a container that came up
+// moments ago: "Up Less than a second", "Up 3 seconds", "Up About a minute".
+var justStarted = regexp.MustCompile(`^Up (Less than a second|\d+ seconds?|About a minute)`)
+
+// unsettled reports whether `docker ps` alone can't call this container up: it
+// is in no state to serve, or it is in one it entered moments ago. The second
+// half is what a crash loop looks like between two restarts — a service with
+// no health check to fail reads as a plain "Up 2 seconds" there, which is also
+// how it reads when it is simply new, and only the restart count tells those
+// apart.
+func unsettled(status string) bool {
+	return severityOf(status) != sevOK || justStarted.MatchString(status)
+}
+
+// isUp, isUnhealthy and notRunning are the tests the verdict counts with, so
+// the sentences underneath it can be selected by the same rule the number was.
+// A container is up once it has settled: one still inside its health check's
+// start period has not, whatever the "Up" in front of its status says.
+func isUp(s Service) bool        { return s.severity() == sevOK }
+func notRunning(s Service) bool  { return !strings.HasPrefix(s.Status, "Up") }
 func isUnhealthy(s Service) bool { return strings.Contains(s.Status, "(unhealthy)") }
 
-// addFailureFacts fills in what `docker ps` left out, for the containers a
-// verdict could end up reporting. Only those: the extra call costs a
-// round-trip, and a service that is up and healthy has nothing to explain.
+// addFailureFacts fills in what `docker ps` left out, for the containers its
+// listing couldn't settle on its own. Only those: the extra call costs a
+// round-trip, and a service that has been serving for hours has nothing to
+// explain. It selects on the status alone — the facts it fetches are what the
+// fact-aware tests above read, so it cannot ask them.
 func (in *installer) addFailureFacts(ctx context.Context, services []Service) {
 	var names []string
 	for _, s := range services {
-		if notRunning(s) || isUnhealthy(s) {
+		if unsettled(s.Status) {
 			names = append(names, s.Name)
 		}
 	}
@@ -293,15 +358,17 @@ func (in *installer) addFailureFacts(ctx context.Context, services []Service) {
 // explainFailures says what is wrong with each service the verdict above it
 // counted, and names the one command that shows why. Without it the worst
 // state on the board — a container that keeps dying — is also the only one the
-// report says nothing more about. troubled is the verdict's own test, so the
-// report can't claim two failures and then explain one.
-func (in *installer) explainFailures(services []Service, troubled func(Service) bool) {
+// report says nothing more about. It selects on isUp, the verdict's own test,
+// so the report can't claim two failures and then explain one.
+func (in *installer) explainFailures(services []Service) {
 	var names []string
+	coming := true
 	for _, s := range services {
-		if !troubled(s) {
+		if isUp(s) {
 			continue
 		}
 		names = append(names, s.name())
+		coming = coming && s.severity() == sevWatch
 		if s.Diagnosis != "" {
 			in.plainf("  %s %s", s.name(), s.Diagnosis)
 		}
@@ -314,6 +381,12 @@ func (in *installer) explainFailures(services []Service, troubled func(Service) 
 	named := " " + strings.Join(names, " ")
 	if len(names) > 3 {
 		named = ""
+	}
+	// Nothing has gone wrong when every one of them is still coming up, so the
+	// command to offer is the one that watches them finish.
+	if coming {
+		in.infof("Follow along: %s", in.paint.Accent("onyx-cli deploy logs -f"+in.dirArg()+named))
+		return
 	}
 	in.infof("See why: %s", in.paint.Accent("onyx-cli deploy logs"+in.dirArg()+named))
 }
