@@ -50,10 +50,20 @@ from onyx.server.gateway.models import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     ModelListResponse,
+    ResponsesCompletedEvent,
+    ResponsesContentPartAddedEvent,
+    ResponsesContentPartDoneEvent,
+    ResponsesCreatedEvent,
+    ResponsesFailedEvent,
+    ResponsesFunctionCallArgumentsDoneEvent,
     ResponsesFunctionCallItem,
     ResponsesMessageItem,
     ResponsesObjectPayload,
     ResponsesOutputItem,
+    ResponsesOutputItemAddedEvent,
+    ResponsesOutputItemDoneEvent,
+    ResponsesOutputTextDeltaEvent,
+    ResponsesOutputTextDoneEvent,
     ResponsesOutputTextPart,
     ResponsesRequest,
 )
@@ -366,6 +376,37 @@ def _stream_worker(
                 _put_stream_item(out, _STREAM_END, cancelled)
 
 
+def _run_bridged_stream(
+    worker: Callable[..., None], worker_kwargs: dict[str, Any]
+) -> Iterator[str]:
+    """Bridge a stream worker through a queue so the whole consumption —
+    including the generation span's ContextVar enter/exit — happens on ONE
+    thread. Yielding directly from a sync generator breaks under Starlette,
+    which resumes the generator on varying threadpool threads (ContextVar
+    tokens can't be reset across contexts)."""
+    out: "queue.Queue[Any]" = queue.Queue(maxsize=256)
+    cancelled = threading.Event()
+    worker_thread = start_thread_with_context(
+        worker,
+        name="llm-gateway-stream",
+        daemon=True,
+        kwargs={**worker_kwargs, "out": out, "cancelled": cancelled},
+    )
+    try:
+        while True:
+            try:
+                item = out.get(timeout=0.5)
+            except queue.Empty:
+                if not worker_thread.is_alive():
+                    return
+                continue
+            if item is _STREAM_END:
+                return
+            yield item
+    finally:
+        cancelled.set()
+
+
 def _stream_sse(
     llm: LLM,
     flow: LLMFlow,
@@ -377,18 +418,9 @@ def _stream_sse(
     reasoning_effort: ReasoningEffort,
     model: str,
 ) -> Iterator[str]:
-    """Bridge the worker through a queue so the whole stream consumption —
-    including the generation span's ContextVar enter/exit — happens on ONE
-    thread. Yielding directly from a sync generator breaks under Starlette,
-    which resumes the generator on varying threadpool threads (ContextVar
-    tokens can't be reset across contexts)."""
-    out: "queue.Queue[Any]" = queue.Queue(maxsize=256)
-    cancelled = threading.Event()
-    worker = start_thread_with_context(
+    return _run_bridged_stream(
         _stream_worker,
-        name="llm-gateway-stream",
-        daemon=True,
-        kwargs={
+        {
             "llm": llm,
             "flow": flow,
             "messages": messages,
@@ -398,23 +430,8 @@ def _stream_sse(
             "max_tokens": max_tokens,
             "reasoning_effort": reasoning_effort,
             "model": model,
-            "out": out,
-            "cancelled": cancelled,
         },
     )
-    try:
-        while True:
-            try:
-                item = out.get(timeout=0.5)
-            except queue.Empty:
-                if not worker.is_alive():
-                    return
-                continue
-            if item is _STREAM_END:
-                return
-            yield item
-    finally:
-        cancelled.set()
 
 
 def handle_chat_completion(
@@ -596,17 +613,249 @@ def _build_responses_output_items(
     return items
 
 
+def _responses_stream_worker(
+    llm: LLM,
+    flow: LLMFlow,
+    messages: list[ChatCompletionMessage],
+    tools: list[dict[str, Any]] | None,
+    tool_choice: ToolChoiceOptions | None,
+    max_tokens: int | None,
+    reasoning_effort: ReasoningEffort,
+    model: str,
+    response_id: str,
+    created_at: int,
+    out: "queue.Queue[Any]",
+    cancelled: threading.Event,
+) -> None:
+    def emit(event: Any) -> bool:
+        return _put_stream_item(
+            out, f"data: {json.dumps(event.to_wire())}\n\n", cancelled
+        )
+
+    emit(
+        ResponsesCreatedEvent.create(
+            ResponsesObjectPayload.from_parts(
+                response_id=response_id,
+                created_at=created_at,
+                model=model,
+                status="in_progress",
+                output=[],
+            )
+        )
+    )
+    message_item_id = _new_id("msg")
+    # Runs on its own thread after the endpoint has returned the
+    # StreamingResponse, so the trace must be opened here rather than in the
+    # endpoint for the generation span to see an active trace.
+    with (
+        _gateway_trace(flow, model),
+        llm_generation_span(
+            llm, flow=flow, input_messages=messages, tools=tools
+        ) as span,
+    ):
+        accumulated_content: list[str] = []
+        accumulated_reasoning: list[str] = []
+        final_usage: Usage | None = None
+        text_item_open = False
+        tool_call_buffer: dict[int, ChatCompletionDeltaToolCall] = {}
+        upstream: Iterator[ModelResponseStream] | None = None
+        try:
+            upstream = llm.stream(
+                prompt=messages,
+                tools=tools,
+                tool_choice=tool_choice,
+                max_tokens=max_tokens,
+                reasoning_effort=reasoning_effort,
+            )
+            for chunk in upstream:
+                if cancelled.is_set():
+                    break
+                if chunk.usage:
+                    final_usage = chunk.usage
+                if chunk.choice.delta.content:
+                    if not text_item_open:
+                        # Open the item before the first delta; Codex drops
+                        # deltas for items it has not seen added.
+                        if not emit(
+                            ResponsesOutputItemAddedEvent.create(
+                                output_index=0,
+                                item=ResponsesMessageItem.create(
+                                    id=message_item_id, status="in_progress", content=[]
+                                ),
+                            )
+                        ):
+                            break
+                        if not emit(
+                            ResponsesContentPartAddedEvent.create(
+                                item_id=message_item_id,
+                                output_index=0,
+                                part=ResponsesOutputTextPart.create(text=""),
+                            )
+                        ):
+                            break
+                        text_item_open = True
+                    accumulated_content.append(chunk.choice.delta.content)
+                    if not emit(
+                        ResponsesOutputTextDeltaEvent.create(
+                            item_id=message_item_id,
+                            delta=chunk.choice.delta.content,
+                        )
+                    ):
+                        break
+                if chunk.choice.delta.reasoning_content:
+                    accumulated_reasoning.append(chunk.choice.delta.reasoning_content)
+                for delta_tc in chunk.choice.delta.tool_calls:
+                    _merge_tool_call_delta(tool_call_buffer, delta_tc)
+            else:
+                final_tool_calls = _finalize_tool_calls(tool_call_buffer)
+                full_text = "".join(accumulated_content)
+                if text_item_open:
+                    completed_part = ResponsesOutputTextPart.create(text=full_text)
+                    emit(
+                        ResponsesOutputTextDoneEvent.create(
+                            item_id=message_item_id, output_index=0, text=full_text
+                        )
+                    )
+                    emit(
+                        ResponsesContentPartDoneEvent.create(
+                            item_id=message_item_id,
+                            output_index=0,
+                            part=completed_part,
+                        )
+                    )
+                    emit(
+                        ResponsesOutputItemDoneEvent.create(
+                            output_index=0,
+                            item=ResponsesMessageItem.create(
+                                id=message_item_id,
+                                status="completed",
+                                content=[completed_part],
+                            ),
+                        )
+                    )
+                for tool_index, tool_call in enumerate(
+                    final_tool_calls or [], start=1 if text_item_open else 0
+                ):
+                    call_item = _function_call_item(tool_call)
+                    if call_item is None:
+                        continue
+                    emit(
+                        ResponsesOutputItemAddedEvent.create(
+                            output_index=tool_index, item=call_item
+                        )
+                    )
+                    emit(
+                        ResponsesFunctionCallArgumentsDoneEvent.create(
+                            item_id=call_item.id,
+                            output_index=tool_index,
+                            arguments=call_item.arguments,
+                        )
+                    )
+                    emit(
+                        ResponsesOutputItemDoneEvent.create(
+                            output_index=tool_index, item=call_item
+                        )
+                    )
+                emit(
+                    ResponsesCompletedEvent.create(
+                        ResponsesObjectPayload.from_parts(
+                            response_id=response_id,
+                            created_at=created_at,
+                            model=model,
+                            status="completed",
+                            output=_build_responses_output_items(
+                                "".join(accumulated_content) or None,
+                                final_tool_calls,
+                                message_item_id,
+                            ),
+                            usage=final_usage,
+                        )
+                    )
+                )
+        except LLMRateLimitError as exc:
+            if span is not None:
+                span.set_error(
+                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
+                )
+            logger.exception(
+                "LLM gateway responses stream rate limited for model %s", model
+            )
+            emit(
+                ResponsesFailedEvent.create(
+                    ResponsesObjectPayload.failed(
+                        response_id=response_id,
+                        created_at=created_at,
+                        model=model,
+                        message="The selected model is temporarily rate limited.",
+                    )
+                )
+            )
+        except LLMTimeoutError as exc:
+            if span is not None:
+                span.set_error(
+                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
+                )
+            logger.exception(
+                "LLM gateway responses stream timed out for model %s", model
+            )
+            emit(
+                ResponsesFailedEvent.create(
+                    ResponsesObjectPayload.failed(
+                        response_id=response_id,
+                        created_at=created_at,
+                        model=model,
+                        message="The selected model did not respond in time.",
+                    )
+                )
+            )
+        except Exception as exc:
+            if span is not None:
+                span.set_error(
+                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
+                )
+            logger.exception("LLM gateway responses stream failed for model %s", model)
+            emit(
+                ResponsesFailedEvent.create(
+                    ResponsesObjectPayload.failed(
+                        response_id=response_id,
+                        created_at=created_at,
+                        model=model,
+                        message="The upstream LLM request failed.",
+                    )
+                )
+            )
+        finally:
+            try:
+                close = getattr(upstream, "close", None)
+                if callable(close):
+                    close()
+            except Exception:
+                logger.exception(
+                    "LLM gateway responses stream cleanup failed for model %s", model
+                )
+            try:
+                if span is not None:
+                    record_llm_span_output(
+                        span,
+                        output="".join(accumulated_content) or None,
+                        usage=final_usage,
+                        reasoning="".join(accumulated_reasoning) or None,
+                        tool_calls=_finalize_tool_calls(tool_call_buffer),
+                    )
+            except Exception:
+                logger.exception(
+                    "LLM gateway responses span cleanup failed for model %s", model
+                )
+            finally:
+                _put_stream_item(out, _STREAM_END, cancelled)
+
+
 def handle_responses_request(
     request: ResponsesRequest,
     provider: LLMProviderView,
     model_config: ModelConfigurationView,
     flow: LLMFlow,
-) -> ResponsesObjectPayload:
-    if request.stream:
-        raise OnyxError(
-            OnyxErrorCode.NOT_IMPLEMENTED,
-            "Streaming is not yet supported on the Responses API.",
-        )
+) -> StreamingResponse | ResponsesObjectPayload:
     llm = llm_from_provider(
         model_name=model_config.name,
         llm_provider=provider,
@@ -622,6 +871,27 @@ def handle_responses_request(
     max_tokens = request.max_output_tokens
     response_id = _new_id("resp")
     created_at = int(time.time())
+
+    if request.stream:
+        return StreamingResponse(
+            _run_bridged_stream(
+                _responses_stream_worker,
+                {
+                    "llm": llm,
+                    "flow": flow,
+                    "messages": messages,
+                    "tools": tools,
+                    "tool_choice": tool_choice,
+                    "max_tokens": max_tokens,
+                    "reasoning_effort": reasoning_effort,
+                    "model": request.model,
+                    "response_id": response_id,
+                    "created_at": created_at,
+                },
+            ),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     with (
         _gateway_trace(flow, llm.config.model_name),
@@ -730,4 +1000,6 @@ def gateway_responses(
         model_config=model_config,
         flow=flow,
     )
+    if isinstance(result, StreamingResponse):
+        return result
     return JSONResponse(content=result.to_wire())

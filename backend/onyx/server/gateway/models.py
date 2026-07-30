@@ -343,3 +343,170 @@ class ResponsesObjectPayload(_WireModel):
             output=output,
             **kwargs,
         )
+
+    @classmethod
+    def failed(
+        cls, *, response_id: str, created_at: int, model: str, message: str
+    ) -> "ResponsesObjectPayload":
+        return cls(
+            id=response_id,
+            object="response",
+            created_at=created_at,
+            status="failed",
+            model=model,
+            output=[],
+            error={"message": message, "type": "server_error"},
+        )
+
+
+class ResponsesCreatedEvent(_WireModel):
+    type: Literal["response.created"] = "response.created"
+    response: ResponsesObjectPayload
+
+    @classmethod
+    def create(cls, response: ResponsesObjectPayload) -> "ResponsesCreatedEvent":
+        return cls(type="response.created", response=response)
+
+
+class ResponsesOutputTextDeltaEvent(_WireModel):
+    type: Literal["response.output_text.delta"] = "response.output_text.delta"
+    item_id: str
+    output_index: int = 0
+    content_index: int = 0
+    delta: str
+
+    @classmethod
+    def create(cls, *, item_id: str, delta: str) -> "ResponsesOutputTextDeltaEvent":
+        return cls(
+            type="response.output_text.delta",
+            item_id=item_id,
+            output_index=0,
+            content_index=0,
+            delta=delta,
+        )
+
+
+class ResponsesOutputItemAddedEvent(_WireModel):
+    type: Literal["response.output_item.added"] = "response.output_item.added"
+    output_index: int = 0
+    item: ResponsesOutputItem
+
+    @classmethod
+    def create(
+        cls, *, output_index: int, item: ResponsesOutputItem
+    ) -> "ResponsesOutputItemAddedEvent":
+        return cls(
+            type="response.output_item.added", output_index=output_index, item=item
+        )
+
+
+class ResponsesOutputItemDoneEvent(_WireModel):
+    type: Literal["response.output_item.done"] = "response.output_item.done"
+    output_index: int = 0
+    item: ResponsesOutputItem
+
+    @classmethod
+    def create(
+        cls, *, output_index: int, item: ResponsesOutputItem
+    ) -> "ResponsesOutputItemDoneEvent":
+        return cls(
+            type="response.output_item.done", output_index=output_index, item=item
+        )
+
+
+class ResponsesContentPartAddedEvent(_WireModel):
+    type: Literal["response.content_part.added"] = "response.content_part.added"
+    item_id: str
+    output_index: int = 0
+    content_index: int = 0
+    part: ResponsesOutputTextPart
+
+    @classmethod
+    def create(
+        cls, *, item_id: str, output_index: int, part: ResponsesOutputTextPart
+    ) -> "ResponsesContentPartAddedEvent":
+        return cls(
+            type="response.content_part.added",
+            item_id=item_id,
+            output_index=output_index,
+            content_index=0,
+            part=part,
+        )
+
+
+class ResponsesContentPartDoneEvent(_WireModel):
+    type: Literal["response.content_part.done"] = "response.content_part.done"
+    item_id: str
+    output_index: int = 0
+    content_index: int = 0
+    part: ResponsesOutputTextPart
+
+    @classmethod
+    def create(
+        cls, *, item_id: str, output_index: int, part: ResponsesOutputTextPart
+    ) -> "ResponsesContentPartDoneEvent":
+        return cls(
+            type="response.content_part.done",
+            item_id=item_id,
+            output_index=output_index,
+            content_index=0,
+            part=part,
+        )
+
+
+class ResponsesOutputTextDoneEvent(_WireModel):
+    type: Literal["response.output_text.done"] = "response.output_text.done"
+    item_id: str
+    output_index: int = 0
+    content_index: int = 0
+    text: str
+
+    @classmethod
+    def create(
+        cls, *, item_id: str, output_index: int, text: str
+    ) -> "ResponsesOutputTextDoneEvent":
+        return cls(
+            type="response.output_text.done",
+            item_id=item_id,
+            output_index=output_index,
+            content_index=0,
+            text=text,
+        )
+
+
+class ResponsesFunctionCallArgumentsDoneEvent(_WireModel):
+    type: Literal["response.function_call_arguments.done"] = (
+        "response.function_call_arguments.done"
+    )
+    item_id: str
+    output_index: int = 0
+    arguments: str
+
+    @classmethod
+    def create(
+        cls, *, item_id: str, output_index: int, arguments: str
+    ) -> "ResponsesFunctionCallArgumentsDoneEvent":
+        return cls(
+            type="response.function_call_arguments.done",
+            item_id=item_id,
+            output_index=output_index,
+            arguments=arguments,
+        )
+
+
+class ResponsesCompletedEvent(_WireModel):
+    type: Literal["response.completed"] = "response.completed"
+    response: ResponsesObjectPayload
+
+    @classmethod
+    def create(cls, response: ResponsesObjectPayload) -> "ResponsesCompletedEvent":
+        return cls(type="response.completed", response=response)
+
+
+class ResponsesFailedEvent(_WireModel):
+    type: Literal["response.failed"] = "response.failed"
+    response: ResponsesObjectPayload
+
+    @classmethod
+    def create(cls, response: ResponsesObjectPayload) -> "ResponsesFailedEvent":
+        return cls(type="response.failed", response=response)

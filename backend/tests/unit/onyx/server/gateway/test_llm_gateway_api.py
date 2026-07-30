@@ -1245,13 +1245,168 @@ def test_handle_responses_request_non_streaming_returns_completed_response() -> 
     assert payload["usage"]["input_tokens"] == 120
 
 
-def test_handle_responses_request_rejects_streaming() -> None:
-    request = ResponsesRequest(model="1/test", input="say hi", stream=True)
+class _ResponsesStreamLLM(_ConfigOnlyLLM):
+    """Replays a fixed chunk sequence through the responses stream."""
 
-    with pytest.raises(OnyxError) as exc_info:
-        _handle_responses_call(request)
+    def __init__(self, chunks: list[ModelResponseStream]) -> None:
+        super().__init__(
+            LLMConfig(
+                model_provider="openai",
+                model_name="test",
+                temperature=0,
+                max_input_tokens=1_000,
+            )
+        )
+        self._chunks = chunks
 
-    assert exc_info.value.error_code is OnyxErrorCode.NOT_IMPLEMENTED
+    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+        del args, kwargs
+        yield from self._chunks
+
+
+_TEXT_CHUNKS = [
+    ModelResponseStream(
+        id="r1", created="0", choice=StreamingChoice(delta=Delta(content="Hi"))
+    ),
+    ModelResponseStream(
+        id="r1",
+        created="0",
+        choice=StreamingChoice(finish_reason="stop", delta=Delta()),
+        usage=_wire_usage(),
+    ),
+]
+
+_TOOL_CALL_CHUNKS = [
+    ModelResponseStream(
+        id="s1",
+        created="0",
+        choice=StreamingChoice(
+            delta=Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        id="call_1",
+                        index=0,
+                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
+                    )
+                ]
+            )
+        ),
+    ),
+    ModelResponseStream(
+        id="s1",
+        created="0",
+        choice=StreamingChoice(finish_reason="tool_calls", delta=Delta()),
+    ),
+]
+
+
+def _responses_stream_events(
+    chunks: list[ModelResponseStream],
+    *,
+    tools: list[dict[str, Any]] | None = None,
+    model: str = "1/test",
+    response_id: str = "resp_1",
+) -> list[dict[str, Any]]:
+    with patch.object(gateway_api, "llm_generation_span", return_value=nullcontext()):
+        frames = list(
+            gateway_api._run_bridged_stream(
+                gateway_api._responses_stream_worker,
+                {
+                    "llm": _ResponsesStreamLLM(chunks),
+                    "flow": LLMFlow.CRAFT_LLM_GENERATION,
+                    "messages": [UserMessage(content="hi")],
+                    "tools": tools,
+                    "tool_choice": None,
+                    "max_tokens": None,
+                    "reasoning_effort": ReasoningEffort.AUTO,
+                    "model": model,
+                    "response_id": response_id,
+                    "created_at": 100,
+                },
+            )
+        )
+    return [json.loads(frame.removeprefix("data: ")) for frame in frames]
+
+
+def test_responses_stream_emits_created_first_and_completed_last() -> None:
+    events = _responses_stream_events(_TEXT_CHUNKS)
+    assert events[0]["type"] == "response.created"
+    assert events[0]["response"]["status"] == "in_progress"
+    assert events[-1]["type"] == "response.completed"
+    assert events[-1]["response"]["status"] == "completed"
+    assert events[-1]["response"]["output"][0]["content"][0]["text"] == "Hi"
+    delta_events = [e for e in events if e["type"] == "response.output_text.delta"]
+    assert delta_events[0]["delta"] == "Hi"
+
+
+def test_responses_stream_emits_full_output_item_lifecycle_in_order() -> None:
+    """Regression test: Codex 0.145 rejects any output_text.delta whose item
+    was never opened ("OutputTextDelta without active item"). Every delta
+    must be bracketed by output_item.added/content_part.added before it and
+    output_text.done/content_part.done/output_item.done after, and every
+    lifecycle event's item_id must match the item opened in output_item.added."""
+    events = _responses_stream_events(_TEXT_CHUNKS)
+    event_types = [e["type"] for e in events]
+
+    assert event_types == [
+        "response.created",
+        "response.output_item.added",
+        "response.content_part.added",
+        "response.output_text.delta",
+        "response.output_text.done",
+        "response.content_part.done",
+        "response.output_item.done",
+        "response.completed",
+    ]
+
+    added_event = events[1]
+    assert added_event["item"]["type"] == "message"
+    assert added_event["item"]["status"] == "in_progress"
+    message_item_id = added_event["item"]["id"]
+
+    for event in events[2:7]:
+        item_id = (
+            event.get("item_id")
+            if "item_id" in event
+            else event.get("item", {}).get("id")
+        )
+        assert item_id == message_item_id
+
+    delta_event = events[3]
+    assert delta_event["delta"] == "Hi"
+    assert events[4]["text"] == "Hi"
+    assert events[5]["part"]["text"] == "Hi"
+    done_item_event = events[6]
+    assert done_item_event["item"]["status"] == "completed"
+    assert done_item_event["item"]["content"][0]["text"] == "Hi"
+
+
+def test_responses_stream_tool_call_gets_own_output_item_lifecycle() -> None:
+    """A text-free tool-call turn must still open/close a function_call
+    output item — no text item lifecycle should appear at all."""
+    events = _responses_stream_events(_TOOL_CALL_CHUNKS, response_id="resp_2")
+    event_types = [e["type"] for e in events]
+
+    assert event_types == [
+        "response.created",
+        "response.output_item.added",
+        "response.function_call_arguments.done",
+        "response.output_item.done",
+        "response.completed",
+    ]
+
+    added_event = events[1]
+    assert added_event["item"]["type"] == "function_call"
+    assert added_event["output_index"] == 0
+    call_item_id = added_event["item"]["id"]
+
+    args_done_event = events[2]
+    assert args_done_event["item_id"] == call_item_id
+    assert args_done_event["arguments"] == '{"cmd":"ls"}'
+
+    done_event = events[3]
+    assert done_event["item"]["id"] == call_item_id
+    assert done_event["item"]["status"] == "completed"
 
 
 def test_responses_gateway_route_carries_same_permission_dependency() -> None:
@@ -1439,6 +1594,35 @@ def test_codex_capture_converts_without_rejecting_input() -> None:
     assert tools is not None
     assert {t["type"] for t in tools} == {"function"}
     assert len(tools) < len(request.tools or [])
+
+
+def test_codex_capture_streams_valid_item_lifecycle() -> None:
+    """The invariant Codex enforces: no output_text.delta may reference an
+    item that was not previously opened by output_item.added."""
+    request = ResponsesRequest.model_validate(_codex_fixture())
+
+    events = _responses_stream_events(
+        _TEXT_CHUNKS,
+        tools=gateway_api._responses_tools(request),
+        model=request.model,
+        response_id="resp_replay",
+    )
+    assert events[0]["type"] == "response.created"
+    assert events[-1]["type"] == "response.completed"
+
+    open_items: set[str] = set()
+    for event in events:
+        if event["type"] == "response.output_item.added":
+            open_items.add(event["item"]["id"])
+        elif event["type"] in (
+            "response.output_text.delta",
+            "response.output_text.done",
+            "response.content_part.added",
+            "response.content_part.done",
+        ):
+            assert event["item_id"] in open_items, (
+                f"{event['type']} referenced unopened item {event['item_id']}"
+            )
 
 
 def test_responses_tool_round_trip_assistant_content_is_flattened() -> None:
