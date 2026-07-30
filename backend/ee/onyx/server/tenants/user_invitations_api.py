@@ -1,26 +1,43 @@
 from fastapi import APIRouter, Depends, HTTPException
 
+from ee.onyx.db.user_tenant_mapping import (
+    accept_user_invite,
+    approve_user_invite,
+    deny_user_invite,
+)
 from ee.onyx.server.tenants.models import (
     ApproveUserRequest,
     PendingUserSnapshot,
     RequestInviteRequest,
 )
-from ee.onyx.server.tenants.user_mapping import (
-    accept_user_invite,
-    approve_user_invite,
-    deny_user_invite,
-    invite_self_to_tenant,
+from onyx.auth.invited_users import (
+    get_pending_users,
+    write_pending_users,
 )
-from onyx.auth.invited_users import get_pending_users
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.db.enums import Permission
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 logger = setup_logger()
 
 router = APIRouter(prefix="/tenants")
+
+
+def invite_self_to_tenant(email: str, tenant_id: str) -> None:
+    # The pending list lives in the target tenant's KV store, not the caller's.
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        pending_users = get_pending_users()
+        if email in pending_users:
+            return
+        write_pending_users(pending_users + [email])
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 @router.post("/users/invite/request")

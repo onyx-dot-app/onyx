@@ -156,7 +156,7 @@ def get_used_seats(tenant_id: str | None = None) -> int:
     Per-user predicate ``user_counts_toward_seats`` mirrors this filter.
     """
     if MULTI_TENANT:
-        from ee.onyx.server.tenants.user_mapping import get_tenant_count
+        from ee.onyx.db.user_tenant_mapping import get_tenant_count
 
         return get_tenant_count(tenant_id or get_current_tenant_id())
     else:

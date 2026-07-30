@@ -481,7 +481,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     async def get_by_email(self, user_email: str) -> User:
         tenant_id = fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+            "onyx.db.user_tenant_mapping", "get_tenant_id_for_email", None
         )(user_email)
         async with get_async_session_context_manager(tenant_id) as db_session:
             if MULTI_TENANT:
@@ -524,7 +524,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         try:
             tenant_id = fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.user_mapping",
+                "onyx.db.user_tenant_mapping",
                 "get_tenant_id_for_email",
                 None,
             )(email)
@@ -1011,6 +1011,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                                 existing_oauth_account,  # ty: ignore[invalid-argument-type]
                                 oauth_account_dict,
                             )
+
+            # Keyed on the stored email rather than the one the IdP just sent:
+            # that is the address this user's membership row is filed under.
+            fetch_ee_implementation_or_noop(
+                "onyx.db.user_tenant_mapping", "record_oauth_identity", None
+            )(user.email, tenant_id, oauth_name, account_id)
 
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
@@ -2468,7 +2474,7 @@ async def complete_login_flow(
     referral_source = state_data.get("referral_source", None)
     try:
         tenant_id = fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+            "onyx.db.user_tenant_mapping", "get_tenant_id_for_email", None
         )(account_email)
     except exceptions.UserNotExists:
         tenant_id = None
