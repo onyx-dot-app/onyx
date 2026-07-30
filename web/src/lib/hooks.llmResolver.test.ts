@@ -21,6 +21,7 @@ describe("LLM resolver helpers", () => {
             max_input_tokens: null,
             supports_image_input: false,
             supports_reasoning: false,
+            effectiveDisplayName: "",
           },
         ],
       }),
@@ -35,6 +36,7 @@ describe("LLM resolver helpers", () => {
             max_input_tokens: null,
             supports_image_input: false,
             supports_reasoning: false,
+            effectiveDisplayName: "",
           },
         ],
       }),
@@ -65,6 +67,7 @@ describe("LLM resolver helpers", () => {
             max_input_tokens: null,
             supports_image_input: true,
             supports_reasoning: false,
+            effectiveDisplayName: "gpt-4o-mini",
           },
         ],
       }),
@@ -79,6 +82,7 @@ describe("LLM resolver helpers", () => {
             max_input_tokens: null,
             supports_image_input: true,
             supports_reasoning: false,
+            effectiveDisplayName: "claude-3-5-sonnet",
           },
         ],
       }),
@@ -109,6 +113,7 @@ describe("LLM resolver helpers", () => {
             max_input_tokens: null,
             supports_image_input: false,
             supports_reasoning: false,
+            effectiveDisplayName: "",
           },
         ],
       }),
@@ -123,6 +128,7 @@ describe("LLM resolver helpers", () => {
             max_input_tokens: null,
             supports_image_input: false,
             supports_reasoning: false,
+            effectiveDisplayName: "",
           },
         ],
       }),
@@ -144,6 +150,56 @@ describe("LLM resolver helpers", () => {
     });
   });
 
+  test("falls back to the global default when the saved model's provider is gone", () => {
+    const providers: LLMProviderDescriptor[] = [
+      makeProvider({
+        id: 10,
+        name: "First Provider",
+        provider: "openai",
+        model_configurations: [
+          {
+            name: "gpt-first",
+            is_visible: true,
+            max_input_tokens: null,
+            supports_image_input: false,
+            supports_reasoning: false,
+            effectiveDisplayName: "",
+          },
+        ],
+      }),
+      makeProvider({
+        id: 20,
+        name: "Global Default Provider",
+        provider: "anthropic",
+        model_configurations: [
+          {
+            name: "claude-global-default",
+            is_visible: true,
+            max_input_tokens: null,
+            supports_image_input: false,
+            supports_reasoning: false,
+            effectiveDisplayName: "",
+          },
+        ],
+      }),
+    ];
+
+    // Personal default points at a provider that no longer exists (e.g. it
+    // was deleted by an admin). The admin-configured global default should
+    // win over the first provider in the list.
+    const descriptor = getValidLlmDescriptorForProviders(
+      structureValue("Deleted Provider", "litellm", "some-old-model"),
+      providers,
+      { provider_id: 20, model_name: "claude-global-default" }
+    );
+
+    expect(descriptor).toEqual({
+      name: "Global Default Provider",
+      provider: "anthropic",
+      modelName: "claude-global-default",
+    });
+  });
+
   test("uses first provider with models when no explicit default exists", () => {
     const providers: LLMProviderDescriptor[] = [
       makeProvider({
@@ -157,6 +213,7 @@ describe("LLM resolver helpers", () => {
             max_input_tokens: null,
             supports_image_input: false,
             supports_reasoning: false,
+            effectiveDisplayName: "",
           },
         ],
       }),
@@ -171,6 +228,7 @@ describe("LLM resolver helpers", () => {
             max_input_tokens: null,
             supports_image_input: false,
             supports_reasoning: false,
+            effectiveDisplayName: "",
           },
         ],
       }),

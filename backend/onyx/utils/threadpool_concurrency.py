@@ -5,22 +5,15 @@ import contextvars
 import copy
 import threading
 import uuid
-from collections.abc import Callable
-from collections.abc import Coroutine
-from collections.abc import Iterator
-from collections.abc import MutableMapping
-from collections.abc import Sequence
-from concurrent.futures import as_completed
-from concurrent.futures import FIRST_COMPLETED
-from concurrent.futures import Future
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import wait
-from typing import Any
-from typing import cast
-from typing import Generic
-from typing import overload
-from typing import Protocol
-from typing import TypeVar
+from collections.abc import Callable, Coroutine, Iterator, MutableMapping, Sequence
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    Future,
+    ThreadPoolExecutor,
+    as_completed,
+    wait,
+)
+from typing import Any, Generic, Protocol, TypeVar, cast, overload
 
 from pydantic import GetCoreSchemaHandler
 from pydantic.types import T
@@ -480,6 +473,32 @@ def run_multiple_in_background(
     for func in funcs:
         executor.submit(ctx.run, func)
     return executor
+
+
+def start_thread_with_context(
+    target: Callable[..., Any],
+    *,
+    name: str | None = None,
+    daemon: bool = False,
+    args: tuple[Any, ...] = (),
+    kwargs: dict[str, Any] | None = None,
+) -> threading.Thread:
+    """Spawn a fire-and-forget thread that inherits the caller's contextvars
+    (tenant id, request id, trace context). A raw ``threading.Thread`` starts
+    with an empty context, so tenant-scoped DB access inside the thread would
+    raise "Tenant ID is not set".
+
+    Unlike ``run_in_background`` / ``run_multiple_in_background``, this is for
+    daemon producer threads that are never joined.
+    """
+    ctx = contextvars.copy_context()
+    thread = threading.Thread(
+        target=lambda: ctx.run(target, *args, **(kwargs or {})),
+        name=name,
+        daemon=daemon,
+    )
+    thread.start()
+    return thread
 
 
 class TimeoutThread(threading.Thread, Generic[R]):

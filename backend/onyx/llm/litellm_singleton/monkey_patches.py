@@ -3,7 +3,7 @@ LiteLLM Monkey Patches
 
 This module addresses the following issues in LiteLLM:
 
-Status checked against LiteLLM v1.85.1 (2026-05-26):
+Status checked against LiteLLM v1.93.0 (2026-07-20):
 
 1. Ollama Streaming Reasoning Content (_patch_ollama_chunk_parser):
    - LiteLLM's chunk_parser doesn't properly handle reasoning content in streaming
@@ -54,28 +54,22 @@ Status checked against LiteLLM v1.85.1 (2026-05-26):
    - This replaces the proper ResponseAPIUsage object with a dict, causing Pydantic
      serialization warnings
    STATUS: STILL NEEDED - Upstream still mutates result.response.usage in place via
-         setattr in v1.85.1. Our patch rebuilds the response via model_construct so the
+         setattr in v1.93.0. Our patch rebuilds the response via model_construct so the
          original ResponseAPIUsage object is preserved. Handles ResponseCompletedEvent,
          ResponseIncompleteEvent, and ResponseFailedEvent (matching upstream).
 """
 
 import time
 import uuid
-from typing import Any
-from typing import cast
-from typing import List
-from typing import Optional
+from typing import Any, List, Optional, cast
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
-)
-from litellm.completion_extras.litellm_responses_transformation.transformation import (
     OpenAiResponsesToChatCompletionStreamIterator,
 )
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.llms.ollama.common_utils import OllamaError
-from litellm.types.utils import ChatCompletionUsageBlock
-from litellm.types.utils import ModelResponseStream
+from litellm.types.utils import ChatCompletionUsageBlock, ModelResponseStream
 
 # Original upstream chunk_parser, saved before any patching for fallback use
 _original_responses_chunk_parser = (
@@ -122,8 +116,7 @@ def _patch_ollama_chunk_parser() -> None:
             - return finish_reason when done is true
             - return usage when done is true
             """
-            from litellm.types.utils import Delta
-            from litellm.types.utils import StreamingChoices
+            from litellm.types.utils import Delta, StreamingChoices
 
             # process tool calls - if complete function arg - add id to tool call
             tool_calls = chunk["message"].get("tool_calls")
@@ -260,9 +253,7 @@ def _patch_responses_reasoning_summary_newlines() -> None:
         self: Any, chunk: dict
     ) -> "ModelResponseStream":
         from litellm.types.llms.openai import ResponsesAPIStreamEvents
-        from litellm.types.utils import Delta
-        from litellm.types.utils import ModelResponseStream
-        from litellm.types.utils import StreamingChoices
+        from litellm.types.utils import Delta, ModelResponseStream, StreamingChoices
         from pydantic import BaseModel
 
         parsed_chunk = chunk
@@ -315,7 +306,6 @@ def _patch_openai_responses_transform_response() -> None:
     Patches LiteLLMResponsesTransformationHandler.transform_response to properly
     concatenate multiple reasoning summary parts with newlines in non-streaming responses.
     """
-    # Store the original method
     original_transform_response = (
         LiteLLMResponsesTransformationHandler.transform_response
     )
@@ -344,34 +334,9 @@ def _patch_openai_responses_transform_response() -> None:
         api_key: Optional[str] = None,
         json_mode: Optional[bool] = None,
     ) -> Any:
-        """
-        Patched transform_response that properly concatenates reasoning summary parts
-        with newlines.
-        """
-        from openai.types.responses.response import Response as ResponsesAPIResponse
+        from litellm.types.llms.openai import ResponsesAPIResponse
         from openai.types.responses.response_reasoning_item import ResponseReasoningItem
 
-        # Check if raw_response has reasoning items that need concatenation
-        if isinstance(raw_response, ResponsesAPIResponse) and raw_response.output:
-            for item in raw_response.output:
-                if isinstance(item, ResponseReasoningItem) and item.summary:
-                    # Concatenate summary texts with double newlines
-                    summary_texts = []
-                    for summary_item in item.summary:
-                        text = getattr(summary_item, "text", "")
-                        if text:
-                            summary_texts.append(text)
-
-                    if len(summary_texts) > 1:
-                        # Modify the first summary item to contain all concatenated text
-                        combined_text = "\n\n".join(summary_texts)
-                        if hasattr(item.summary[0], "text"):
-                            # Create a modified copy of the response with concatenated text
-                            # Since OpenAI types are typically frozen, we need to work around this
-                            # by modifying the object after the fact or using the result
-                            pass  # The fix is applied in the result processing below
-
-        # Call the original method
         result = original_transform_response(
             self,
             model,
@@ -387,28 +352,26 @@ def _patch_openai_responses_transform_response() -> None:
             json_mode,
         )
 
-        # Post-process: If there are multiple summary items, fix the reasoning_content
+        combined_text: str | None = None
         if isinstance(raw_response, ResponsesAPIResponse) and raw_response.output:
             for item in raw_response.output:
-                if isinstance(item, ResponseReasoningItem) and item.summary:
-                    if len(item.summary) > 1:
-                        # Concatenate all summary texts with double newlines
-                        summary_texts = []
-                        for summary_item in item.summary:
-                            text = getattr(summary_item, "text", "")
-                            if text:
-                                summary_texts.append(text)
+                if not isinstance(item, ResponseReasoningItem) or not item.summary:
+                    continue
 
-                        if summary_texts:
-                            combined_text = "\n\n".join(summary_texts)
-                            # Update the reasoning_content in the result choices
-                            if hasattr(result, "choices"):
-                                for choice in result.choices:
-                                    if hasattr(choice, "message") and hasattr(
-                                        choice.message, "reasoning_content"
-                                    ):
-                                        choice.message.reasoning_content = combined_text
-                    break  # Only process the first reasoning item
+                summary_texts = [
+                    text
+                    for summary_item in item.summary
+                    if (text := getattr(summary_item, "text", ""))
+                ]
+                if len(summary_texts) > 1:
+                    combined_text = "\n\n".join(summary_texts)
+                break
+
+        if combined_text and hasattr(result, "choices"):
+            for choice in result.choices:
+                message = getattr(choice, "message", None)
+                if message is not None and getattr(message, "reasoning_content", None):
+                    message.reasoning_content = combined_text
 
         return result
 
@@ -467,15 +430,14 @@ def _patch_responses_api_usage_format() -> None:
     This patch wraps model_construct to transform usage before construction, ensuring
     the correct type regardless of which code path calls model_construct.
 
-    Affected locations in LiteLLM v1.85.1:
-    - litellm/llms/openai/responses/transformation.py (lines 215, 574)
-    - litellm/llms/chatgpt/responses/transformation.py (line 147)
-    - litellm/llms/manus/responses/transformation.py (lines 157, 224)
-    - litellm/llms/volcengine/responses/transformation.py (lines 225, 277)
-    - litellm/completion_extras/litellm_responses_transformation/handler.py (line 51)
+    Affected locations in LiteLLM v1.93.0:
+    - litellm/llms/openai/responses/transformation.py (lines 268, 635)
+    - litellm/llms/chatgpt/responses/transformation.py (line 212)
+    - litellm/llms/manus/responses/transformation.py (lines 223, 311)
+    - litellm/llms/volcengine/responses/transformation.py (line 262)
+    - litellm/completion_extras/litellm_responses_transformation/handler.py (line 57)
     """
-    from litellm.types.llms.openai import ResponseAPIUsage
-    from litellm.types.llms.openai import ResponsesAPIResponse
+    from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
 
     original_model_construct = ResponsesAPIResponse.model_construct
 
@@ -543,13 +505,14 @@ def _patch_logging_assembled_streaming_response() -> None:
     """
     from litellm.litellm_core_utils.litellm_logging import Logging as LiteLLMLoggingObj
     from litellm.responses.utils import ResponseAPILoggingUtils
-    from litellm.types.llms.openai import ResponseAPIUsage
-    from litellm.types.llms.openai import ResponseCompletedEvent
-    from litellm.types.llms.openai import ResponseFailedEvent
-    from litellm.types.llms.openai import ResponseIncompleteEvent
-    from litellm.types.llms.openai import ResponsesAPIResponse
-    from litellm.types.utils import ModelResponse
-    from litellm.types.utils import TextCompletionResponse
+    from litellm.types.llms.openai import (
+        ResponseAPIUsage,
+        ResponseCompletedEvent,
+        ResponseFailedEvent,
+        ResponseIncompleteEvent,
+        ResponsesAPIResponse,
+    )
+    from litellm.types.utils import ModelResponse, TextCompletionResponse
 
     original_method = LiteLLMLoggingObj._get_assembled_streaming_response
 

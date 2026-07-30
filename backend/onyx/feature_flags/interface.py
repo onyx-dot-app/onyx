@@ -3,7 +3,6 @@ from typing import Any
 from uuid import UUID
 
 from onyx.db.models import User
-from shared_configs.configs import ENVIRONMENT
 
 
 class FeatureFlagProvider(abc.ABC):
@@ -66,7 +65,4 @@ class NoOpFeatureFlagProvider(FeatureFlagProvider):
         user_id: UUID,  # noqa: ARG002
         user_properties: dict[str, Any] | None = None,  # noqa: ARG002
     ) -> bool:
-        environment = ENVIRONMENT
-        if environment == "local":
-            return True
         return False

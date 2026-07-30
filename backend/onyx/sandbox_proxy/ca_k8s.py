@@ -13,16 +13,19 @@ import time
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
-from onyx.sandbox_proxy.ca import CAStore
-from onyx.sandbox_proxy.ca import CAStoreConflictError
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_CA_CONFIGMAP
-from onyx.server.features.build.configs import SANDBOX_PROXY_CA_SECRET
-from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
-from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
+from onyx.sandbox_proxy.ca import CAStore, CAStoreConflictError
+from onyx.server.features.build.configs import (
+    SANDBOX_NAMESPACE,
+    SANDBOX_PROXY_CA_CONFIGMAP,
+    SANDBOX_PROXY_CA_SECRET,
+    SANDBOX_PROXY_NAMESPACE,
+)
+from onyx.server.features.build.sandbox.kubernetes.k8s_client import build_core_v1_api
+from onyx.server.features.build.sandbox.labels import (
+    LABEL_K8S_COMPONENT,
+    LABEL_K8S_MANAGED_BY,
+    LABEL_K8S_MANAGED_BY_ONYX,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -58,8 +61,7 @@ class K8sSecretCAStore(CAStore):
         configmap_name: str = SANDBOX_PROXY_CA_CONFIGMAP,
     ) -> None:
         if core_api is None:
-            load_kube_config()
-            core_api = client.CoreV1Api()
+            core_api = build_core_v1_api()
         self._core = core_api
         self._proxy_ns = proxy_namespace
         self._sandbox_ns = sandbox_namespace
@@ -69,7 +71,8 @@ class K8sSecretCAStore(CAStore):
     def load(self) -> tuple[bytes, bytes] | None:
         try:
             secret = self._core.read_namespaced_secret(
-                name=self._secret_name, namespace=self._proxy_ns
+                name=self._secret_name,
+                namespace=self._proxy_ns,
             )
         except ApiException as e:
             if e.status == 404:
@@ -120,7 +123,10 @@ class K8sSecretCAStore(CAStore):
         )
 
         try:
-            self._core.create_namespaced_secret(namespace=self._proxy_ns, body=secret)
+            self._core.create_namespaced_secret(
+                namespace=self._proxy_ns,
+                body=secret,
+            )
         except ApiException as e:
             # 409 on create = cold-cluster race lost.
             if e.status in (409, 422):
@@ -149,7 +155,8 @@ class K8sSecretCAStore(CAStore):
 
         try:
             self._core.create_namespaced_config_map(
-                namespace=self._sandbox_ns, body=body
+                namespace=self._sandbox_ns,
+                body=body,
             )
             return
         except ApiException as e:

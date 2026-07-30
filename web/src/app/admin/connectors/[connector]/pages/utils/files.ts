@@ -1,4 +1,4 @@
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { createConnector, runConnector } from "@/lib/connector";
 import { createCredential, linkCredential } from "@/lib/credential";
 import { FileConfig } from "@/lib/connectors/connectors";

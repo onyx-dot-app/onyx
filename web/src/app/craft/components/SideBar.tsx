@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useMemo, useCallback, useState, useEffect, useRef } from "react";
+import type { Route } from "next";
 import { useRouter, usePathname } from "next/navigation";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import {
@@ -12,10 +13,14 @@ import {
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { SidebarTab, Text } from "@opal/components";
+import {
+  SidebarLayouts,
+  SidebarStateProvider,
+  useSidebarState,
+} from "@opal/layouts";
 import RefreshText from "@/refresh-components/texts/Text";
-import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
-import SidebarBody from "@/sections/sidebar/SidebarBody";
-import SidebarSection from "@/sections/sidebar/SidebarSection";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
+import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { Popover, PopoverMenu } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -23,7 +28,6 @@ import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgEditBig,
   SvgArrowLeft,
@@ -36,7 +40,7 @@ import {
   SvgPlug,
   SvgSimpleLoader,
 } from "@opal/icons";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { Button } from "@opal/components";
 import TypewriterText from "@/app/craft/components/TypewriterText";
 import OpencodeDebugLogsButton from "@/app/craft/components/OpencodeDebugLogs";
@@ -50,6 +54,7 @@ import {
   CRAFT_APPS_PATH,
   CRAFT_TASKS_PATH,
 } from "@/app/craft/v1/constants";
+import { useUnsavedChangesNavigation } from "@/providers/UnsavedChangesNavigationProvider";
 
 // ============================================================================
 // Fun Deleting Messages
@@ -323,187 +328,195 @@ function BuildSessionButton({
 // Build Sidebar Inner
 // ============================================================================
 
-interface BuildSidebarInnerProps {
-  folded: boolean;
-  onFoldClick: () => void;
-}
+const MemoizedBuildSidebarInner = memo(() => {
+  const { folded } = useSidebarState();
+  const router = useRouter();
+  const { requestNavigation } = useUnsavedChangesNavigation();
+  const pathname = usePathname();
+  const session = useSession();
+  const sessionHistory = useSessionHistory();
+  // Access actions directly like chat does - these don't cause re-renders
+  const renameBuildSession = useBuildSessionStore(
+    (state) => state.renameBuildSession
+  );
+  const deleteBuildSession = useBuildSessionStore(
+    (state) => state.deleteBuildSession
+  );
+  const refreshSessionHistory = useBuildSessionStore(
+    (state) => state.refreshSessionHistory
+  );
+  const returnToMainAgent = useBuildSessionStore(
+    (state) => state.returnToMainAgent
+  );
+  const { limits, isEnabled } = useUsageLimits();
 
-const MemoizedBuildSidebarInner = memo(
-  ({ folded, onFoldClick }: BuildSidebarInnerProps) => {
-    const router = useRouter();
-    const pathname = usePathname();
-    const session = useSession();
-    const sessionHistory = useSessionHistory();
-    // Access actions directly like chat does - these don't cause re-renders
-    const renameBuildSession = useBuildSessionStore(
-      (state) => state.renameBuildSession
-    );
-    const deleteBuildSession = useBuildSessionStore(
-      (state) => state.deleteBuildSession
-    );
-    const refreshSessionHistory = useBuildSessionStore(
-      (state) => state.refreshSessionHistory
-    );
-    const returnToMainAgent = useBuildSessionStore(
-      (state) => state.returnToMainAgent
-    );
-    const { limits, isEnabled } = useUsageLimits();
+  // Fetch session history on mount
+  useEffect(() => {
+    refreshSessionHistory();
+  }, [refreshSessionHistory]);
 
-    // Fetch session history on mount
-    useEffect(() => {
-      refreshSessionHistory();
-    }, [refreshSessionHistory]);
+  // Build section title with usage if cloud is enabled
+  // limit=0 indicates unlimited (local/self-hosted mode), so hide the count
+  const sessionsTitle = useMemo(() => {
+    if (isEnabled && limits && limits.limit > 0) {
+      return `Total Messages (${limits.messagesUsed}/${limits.limit})`;
+    }
+    return "Sessions";
+  }, [isEnabled, limits]);
 
-    // Build section title with usage if cloud is enabled
-    // limit=0 indicates unlimited (local/self-hosted mode), so hide the count
-    const sessionsTitle = useMemo(() => {
-      if (isEnabled && limits && limits.limit > 0) {
-        return `Total Messages (${limits.messagesUsed}/${limits.limit})`;
-      }
-      return "Sessions";
-    }, [isEnabled, limits]);
+  // Navigate to new build - session controller handles setCurrentSession and pre-provisioning
+  const navigate = useCallback(
+    (destination: Route) => requestNavigation(() => router.push(destination)),
+    [requestNavigation, router]
+  );
 
-    // Navigate to new build - session controller handles setCurrentSession and pre-provisioning
-    const handleNewBuild = useCallback(() => {
-      router.push(CRAFT_PATH);
-    }, [router]);
+  const handleNewBuild = useCallback(() => navigate(CRAFT_PATH), [navigate]);
 
-    const handleLoadSession = useCallback(
-      (sessionId: string) => {
-        // Clicking a session in the sidebar always lands on the main-agent view
-        // (one click back from any subagent transcript you were viewing).
+  const handleLoadSession = useCallback(
+    (sessionId: string) => {
+      // Clicking a session in the sidebar always lands on the main-agent view
+      // (one click back from any subagent transcript you were viewing).
+      requestNavigation(() => {
         returnToMainAgent(sessionId);
         router.push(
           `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
         );
-      },
-      [router, returnToMainAgent]
-    );
+      });
+    },
+    [requestNavigation, router, returnToMainAgent]
+  );
 
-    const newBuildButton = useMemo(
-      () => (
-        <SidebarTab icon={SvgEditBig} folded={folded} onClick={handleNewBuild}>
-          Start Crafting
-        </SidebarTab>
-      ),
-      [folded, handleNewBuild]
-    );
+  const newBuildButton = useMemo(
+    () => (
+      <SidebarTab icon={SvgEditBig} folded={folded} onClick={handleNewBuild}>
+        Start Crafting
+      </SidebarTab>
+    ),
+    [folded, handleNewBuild]
+  );
 
-    const scheduledTasksPanel = useMemo(
-      () => (
-        <SidebarTab
-          icon={SvgClock}
-          folded={folded}
-          href={CRAFT_TASKS_PATH}
-          selected={pathname.startsWith(CRAFT_TASKS_PATH)}
-        >
-          Scheduled Tasks
-        </SidebarTab>
-      ),
-      [folded, pathname]
-    );
+  const scheduledTasksPanel = useMemo(
+    () => (
+      <SidebarTab
+        icon={SvgClock}
+        folded={folded}
+        onClick={() => navigate(CRAFT_TASKS_PATH)}
+        selected={pathname.startsWith(CRAFT_TASKS_PATH)}
+      >
+        Scheduled Tasks
+      </SidebarTab>
+    ),
+    [folded, navigate, pathname]
+  );
 
-    const appsTab = useMemo(
-      () => (
-        <SidebarTab
-          icon={SvgPlug}
-          folded={folded}
-          href={CRAFT_APPS_PATH}
-          selected={pathname.startsWith(CRAFT_APPS_PATH)}
-        >
-          Apps
-        </SidebarTab>
-      ),
-      [folded, pathname]
-    );
+  const appsTab = useMemo(
+    () => (
+      <SidebarTab
+        icon={SvgPlug}
+        folded={folded}
+        onClick={() => navigate(CRAFT_APPS_PATH)}
+        selected={pathname.startsWith(CRAFT_APPS_PATH)}
+      >
+        Apps
+      </SidebarTab>
+    ),
+    [folded, navigate, pathname]
+  );
 
-    const skillsPanel = useMemo(
-      () => (
-        <SidebarTab
-          icon={SvgBlocks}
-          folded={folded}
-          href={CRAFT_SKILLS_PATH}
-          selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
-        >
-          Skills
-        </SidebarTab>
-      ),
-      [folded, pathname]
-    );
+  const skillsPanel = useMemo(
+    () => (
+      <SidebarTab
+        icon={SvgBlocks}
+        folded={folded}
+        onClick={() => navigate(CRAFT_SKILLS_PATH)}
+        selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
+      >
+        Skills
+      </SidebarTab>
+    ),
+    [folded, navigate, pathname]
+  );
 
-    const backToChatButton = useMemo(
-      () => (
-        <SidebarTab icon={SvgArrowLeft} folded={folded} href="/app">
-          Back to Chat
-        </SidebarTab>
-      ),
-      [folded]
-    );
+  const backToChatButton = useMemo(
+    () => (
+      <SidebarTab
+        icon={SvgArrowLeft}
+        folded={folded}
+        onClick={() => navigate("/app")}
+      >
+        Back to Chat
+      </SidebarTab>
+    ),
+    [folded, navigate]
+  );
 
-    const footer = useMemo(
-      () => (
-        <div>
-          {backToChatButton}
-          <OpencodeDebugLogsButton folded={folded} />
-          <AccountPopover folded={folded} />
+  const footer = useMemo(
+    () => (
+      <div>
+        {backToChatButton}
+        <OpencodeDebugLogsButton folded={folded} />
+        <AccountPopover folded={folded} />
+      </div>
+    ),
+    [folded, backToChatButton]
+  );
+
+  const showLogoWhenFolded = useShowLogoWhenFolded();
+
+  return (
+    <SidebarLayouts.Root foldable>
+      <SidebarLayouts.Header
+        renderAppLogo={renderSidebarLogo}
+        showLogoWhenFolded={showLogoWhenFolded}
+      >
+        <div className="flex flex-col gap-0.5">
+          {newBuildButton}
+          {scheduledTasksPanel}
+          {skillsPanel}
+          {appsTab}
         </div>
-      ),
-      [folded, backToChatButton]
-    );
-
-    return (
-      <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
-        <SidebarBody
-          pinnedContent={
-            <div className="flex flex-col gap-0.5">
-              {newBuildButton}
-              {scheduledTasksPanel}
-              {skillsPanel}
-              {appsTab}
-            </div>
-          }
-          footer={footer}
-          scrollKey="build-sidebar"
-        >
-          {!folded && (
-            <SidebarSection title={sessionsTitle}>
-              {sessionHistory.length === 0 ? (
-                <div className="pl-2 pr-1.5 py-1">
-                  <Text color="text-01">
-                    Start building! Session history will appear here.
-                  </Text>
-                </div>
-              ) : (
-                sessionHistory.map((historyItem) => (
-                  <BuildSessionButton
-                    key={historyItem.id}
-                    historyItem={historyItem}
-                    isActive={
-                      !pathname.startsWith(CRAFT_TASKS_PATH) &&
-                      !pathname.startsWith(CRAFT_SKILLS_PATH) &&
-                      !pathname.startsWith(CRAFT_APPS_PATH) &&
-                      session?.id === historyItem.id
-                    }
-                    onLoad={() => handleLoadSession(historyItem.id)}
-                    onRename={(newName) =>
-                      renameBuildSession(historyItem.id, newName)
-                    }
-                    onDelete={() => deleteBuildSession(historyItem.id)}
-                    onDeleteActiveSession={
-                      session?.id === historyItem.id
-                        ? () => router.push(CRAFT_PATH)
-                        : undefined
-                    }
-                  />
-                ))
-              )}
-            </SidebarSection>
-          )}
-        </SidebarBody>
-      </SidebarWrapper>
-    );
-  }
-);
+      </SidebarLayouts.Header>
+      <SidebarLayouts.Body scrollKey="build-sidebar">
+        {!folded && (
+          <>
+            <SidebarLayouts.Section title={sessionsTitle} />
+            {sessionHistory.length === 0 ? (
+              <div className="pl-2 pr-1.5 py-1">
+                <Text color="text-01">
+                  Start building! Session history will appear here.
+                </Text>
+              </div>
+            ) : (
+              sessionHistory.map((historyItem) => (
+                <BuildSessionButton
+                  key={historyItem.id}
+                  historyItem={historyItem}
+                  isActive={
+                    !pathname.startsWith(CRAFT_TASKS_PATH) &&
+                    !pathname.startsWith(CRAFT_SKILLS_PATH) &&
+                    !pathname.startsWith(CRAFT_APPS_PATH) &&
+                    session?.id === historyItem.id
+                  }
+                  onLoad={() => handleLoadSession(historyItem.id)}
+                  onRename={(newName) =>
+                    renameBuildSession(historyItem.id, newName)
+                  }
+                  onDelete={() => deleteBuildSession(historyItem.id)}
+                  onDeleteActiveSession={
+                    session?.id === historyItem.id
+                      ? () => navigate(CRAFT_PATH)
+                      : undefined
+                  }
+                />
+              ))
+            )}
+          </>
+        )}
+      </SidebarLayouts.Body>
+      <SidebarLayouts.Footer>{footer}</SidebarLayouts.Footer>
+    </SidebarLayouts.Root>
+  );
+});
 
 MemoizedBuildSidebarInner.displayName = "BuildSidebarInner";
 
@@ -513,40 +526,13 @@ MemoizedBuildSidebarInner.displayName = "BuildSidebarInner";
 
 export default function BuildSidebar() {
   const { leftSidebarFolded, setLeftSidebarFolded } = useBuildContext();
-  const { isMobile } = useScreenSize();
-
-  if (!isMobile)
-    return (
-      <MemoizedBuildSidebarInner
-        folded={leftSidebarFolded}
-        onFoldClick={() => setLeftSidebarFolded((prev) => !prev)}
-      />
-    );
 
   return (
-    <>
-      <div
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 transition-transform duration-200",
-          leftSidebarFolded ? "-translate-x-full" : "translate-x-0"
-        )}
-      >
-        <MemoizedBuildSidebarInner
-          folded={false}
-          onFoldClick={() => setLeftSidebarFolded(true)}
-        />
-      </div>
-
-      {/* Hitbox to close the sidebar if anything outside of it is touched */}
-      <div
-        className={cn(
-          "fixed inset-0 z-40 bg-mask-03 backdrop-blur-03 transition-opacity duration-200",
-          leftSidebarFolded
-            ? "opacity-0 pointer-events-none"
-            : "opacity-100 pointer-events-auto"
-        )}
-        onClick={() => setLeftSidebarFolded(true)}
-      />
-    </>
+    <SidebarStateProvider
+      defaultFolded={leftSidebarFolded}
+      onFoldedChange={setLeftSidebarFolded}
+    >
+      <MemoizedBuildSidebarInner />
+    </SidebarStateProvider>
   );
 }

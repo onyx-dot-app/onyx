@@ -11,6 +11,7 @@ import React, {
 import { useUser } from "@/providers/UserProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { INTERNAL_URL, IS_DEV } from "@/lib/constants";
+import { stripMarkdownForTTS as cleanTextForTTS } from "@/lib/voice/utils";
 
 // --- TTS Configuration Constants ---
 
@@ -103,21 +104,6 @@ interface VoiceModeContextType {
 }
 
 const VoiceModeContext = createContext<VoiceModeContextType | null>(null);
-
-/**
- * Clean text for TTS - remove markdown formatting
- */
-function cleanTextForTTS(text: string): string {
-  return text
-    .replace(/\*\*/g, "") // Remove bold markers
-    .replace(/\*/g, "") // Remove italic markers
-    .replace(/`{1,3}/g, "") // Remove code markers
-    .replace(/#{1,6}\s*/g, "") // Remove headers
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // Convert links to just text
-    .replace(/\n+/g, " ") // Replace newlines with spaces
-    .replace(/\s+/g, " ") // Normalize whitespace
-    .trim();
-}
 
 /**
  * Find the next natural chunk boundary in text.

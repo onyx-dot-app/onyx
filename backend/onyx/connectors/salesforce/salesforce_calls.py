@@ -6,15 +6,13 @@ from datetime import datetime
 
 from pytz import UTC
 from simple_salesforce import Salesforce
-from simple_salesforce.bulk2 import SFBulk2Handler
-from simple_salesforce.bulk2 import SFBulk2Type
+from simple_salesforce.bulk2 import SFBulk2Handler, SFBulk2Type
 from simple_salesforce.exceptions import SalesforceRefusedRequest
 from simple_salesforce.format import format_soql
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.salesforce.utils import MODIFIED_FIELD
-from onyx.connectors.salesforce.utils import validate_sf_identifier
+from onyx.connectors.salesforce.utils import MODIFIED_FIELD, validate_sf_identifier
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 

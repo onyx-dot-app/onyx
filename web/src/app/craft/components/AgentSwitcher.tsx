@@ -5,6 +5,7 @@ import { Popover, PopoverMenu, Text, LineItemButton } from "@opal/components";
 import {
   SvgChevronDown,
   SvgCpu,
+  SvgSparkle,
   SvgCheckCircle,
   SvgAlertTriangle,
 } from "@opal/icons";
@@ -24,7 +25,7 @@ function SubagentStatus({ subagent }: { subagent: SubagentState }) {
       {subagent.status === "running" && (
         <span
           aria-hidden
-          className="w-2 h-2 rounded-full bg-action-link-04 animate-pulse shrink-0"
+          className="w-2 h-2 rounded-full bg-action-selection-04 animate-pulse shrink-0"
         />
       )}
       {subagent.status === "done" && (
@@ -132,6 +133,7 @@ export default function AgentSwitcher() {
               key="main"
               sizePreset="main-ui"
               variant="section"
+              icon={SvgSparkle}
               state={!isViewingSubagent ? "selected" : "empty"}
               onClick={selectMainAgent}
               title={titleLabel ?? "Main agent"}

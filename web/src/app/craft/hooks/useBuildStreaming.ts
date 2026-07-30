@@ -6,30 +6,88 @@ import { useSWRConfig } from "swr";
 import {
   Artifact,
   ArtifactType,
+  BuildMessageAttachment,
   SessionErrorCode,
 } from "@/app/craft/types/streamingTypes";
 
 import {
-  sendMessageStream,
+  createTurn,
+  fetchActiveTurn,
+  fetchTurnEventStream,
   interruptMessageStream,
   processSSEStream,
   fetchSession,
   fetchScheduledRunEventStream,
   RateLimitError,
 } from "@/app/craft/services/apiServices";
+import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
-import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
-import { StreamItem } from "@/app/craft/types/displayTypes";
+import {
+  useBuildSessionStore,
+  type BuildSessionData,
+} from "@/app/craft/hooks/useBuildSessionStore";
+import { StreamItem, ToolCallState } from "@/app/craft/types/displayTypes";
 
 import { genId } from "@/app/craft/utils/streamItemHelpers";
 import { parsePacket } from "@/app/craft/utils/parsePacket";
 import {
   classifySubagentEvent,
   toolCallStateFromProgress,
+  toolCallStateFromStart,
   subagentNameFromTask,
+  subagentNameFromToolCall,
   cleanTaskOutput,
 } from "@/app/craft/utils/subagentRouting";
+
+const INTERRUPT_RECONCILE_INTERVAL_MS = 1000;
+const INTERRUPT_RECONCILE_MAX_ATTEMPTS = 30;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function promptFromToolCall(toolCall: ToolCallState): string {
+  const prompt = toolCall.command || toolCall.description || "";
+  return prompt.replace(/^Spawning subagent:\s*/, "").trim();
+}
+
+function findParentTaskToolCall(
+  session: BuildSessionData,
+  subagentSessionId: string
+): ToolCallState | null {
+  const streamItems = [
+    ...session.messages.flatMap((message) => {
+      const items = message.message_metadata?.streamItems;
+      return Array.isArray(items) ? (items as StreamItem[]) : [];
+    }),
+    ...session.streamItems,
+  ];
+  const currentParent =
+    session.subagents.get(subagentSessionId)?.parentToolCallId ?? "";
+  if (currentParent) {
+    const parentItem = streamItems.find(
+      (item) => item.type === "tool_call" && item.toolCall.id === currentParent
+    );
+    return parentItem?.type === "tool_call" ? parentItem.toolCall : null;
+  }
+
+  const linkedParentIds = new Set(
+    Array.from(session.subagents.values())
+      .map((subagent) => subagent.parentToolCallId)
+      .filter(Boolean)
+  );
+  for (const item of [...streamItems].reverse()) {
+    if (item.type !== "tool_call") continue;
+    if (item.toolCall.kind !== "task" && item.toolCall.toolName !== "task") {
+      continue;
+    }
+    if (linkedParentIds.has(item.toolCall.id)) continue;
+    return item.toolCall;
+  }
+
+  return null;
+}
 
 /**
  * Hook for handling message streaming in build sessions.
@@ -70,6 +128,9 @@ export function useBuildStreaming() {
   const updateToolCallStreamItem = useBuildSessionStore(
     (state) => state.updateToolCallStreamItem
   );
+  const cancelLatestInFlightToolCallStreamItem = useBuildSessionStore(
+    (state) => state.cancelLatestInFlightToolCallStreamItem
+  );
   const upsertTodoListStreamItem = useBuildSessionStore(
     (state) => state.upsertTodoListStreamItem
   );
@@ -86,6 +147,83 @@ export function useBuildStreaming() {
     (state) => state.openMarkdownPreview
   );
 
+  const reconcileInterruptedTurn = useCallback(
+    async (
+      sessionId: string,
+      interruptedTurnId: string | null,
+      generation: number
+    ): Promise<void> => {
+      // Only act while this is still the interrupt we launched for; otherwise a
+      // newer turn (a queued auto-send bumps the generation) would be clobbered.
+      const ownsInterrupt = (turnId: string | null): boolean => {
+        const s = useBuildSessionStore.getState().sessions.get(sessionId);
+        return (
+          !!s &&
+          s.turnGeneration === generation &&
+          s.status === "running" &&
+          (turnId === null || !s.activeTurnId || s.activeTurnId === turnId)
+        );
+      };
+
+      // Reload BEFORE the flip to "active": the flip triggers the queued
+      // auto-send, so reloading after would race the freshly-started next turn.
+      const settle = async (): Promise<void> => {
+        await useBuildSessionStore
+          .getState()
+          .loadSession(sessionId, { force: true, preferPersisted: true })
+          .catch((err) =>
+            console.warn("[Streaming] Failed to reload settled turn:", err)
+          );
+        if (!ownsInterrupt(null)) return;
+        updateSessionData(sessionId, {
+          status: "active",
+          isInterrupting: false,
+          activeTurnId: null,
+          activeTurnIndex: null,
+          activeTurnLocalOwner: false,
+        });
+      };
+
+      let turnId = interruptedTurnId;
+      for (let i = 0; i < INTERRUPT_RECONCILE_MAX_ATTEMPTS; i++) {
+        await sleep(INTERRUPT_RECONCILE_INTERVAL_MS);
+        if (!ownsInterrupt(turnId)) return;
+
+        let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>>;
+        try {
+          activeTurn = await fetchActiveTurn(sessionId);
+        } catch (err) {
+          console.warn(
+            "[Streaming] Failed to reconcile interrupted turn:",
+            err
+          );
+          continue;
+        }
+
+        if (!activeTurn) {
+          await settle();
+          return;
+        }
+        // turnId is null when the interrupt beat the local activeTurnId — adopt
+        // the backend's; a different id means the backend moved on, so bail.
+        if (turnId === null) turnId = activeTurn.turn_id;
+        else if (activeTurn.turn_id !== turnId) return;
+      }
+
+      // Timed out: settle if the turn is actually gone now (unblock the UI),
+      // otherwise it's genuinely still running — just clear the "stopping" state.
+      console.warn("[Streaming] Interrupted turn reconciliation timed out");
+      if (!ownsInterrupt(turnId)) return;
+      const turnGone = await fetchActiveTurn(sessionId)
+        .then((t) => t === null)
+        .catch(() => false);
+      if (!ownsInterrupt(turnId)) return;
+      if (turnGone) await settle();
+      else updateSessionData(sessionId, { isInterrupting: false });
+    },
+    [updateSessionData]
+  );
+
   // Subagent routing actions
   const recordSubagentToolCall = useBuildSessionStore(
     (state) => state.recordSubagentToolCall
@@ -96,43 +234,68 @@ export function useBuildStreaming() {
   const markSubagentComplete = useBuildSessionStore(
     (state) => state.markSubagentComplete
   );
+  const appendSubagentResponseChunk = useBuildSessionStore(
+    (state) => state.appendSubagentResponseChunk
+  );
+  const appendSubagentThinkingChunk = useBuildSessionStore(
+    (state) => state.appendSubagentThinkingChunk
+  );
 
-  // ── Output file detector registry ──────────────────────────────────────
-  // Ordered by priority — first match wins.
-  // To add a new output type, add an entry here + a store action.
-  const OUTPUT_FILE_DETECTORS = useMemo(
-    () => [
-      {
-        match: (fp: string, k: string) =>
-          (k === "edit" || k === "write") &&
-          (fp.includes("/web/") || fp.startsWith("web/")),
-        onDetect: (sid: string) => triggerWebappRefresh(sid),
-      },
-      {
-        match: (fp: string, k: string) =>
-          (k === "edit" || k === "write") &&
-          fp.endsWith(".md") &&
-          (fp.includes("/outputs/") || fp.startsWith("outputs/")),
-        onDetect: (sid: string, fp: string) => {
-          openMarkdownPreview(sid, fp);
-          triggerFilesRefresh(sid);
-        },
-      },
-      {
-        match: (fp: string, k: string) =>
-          (k === "edit" || k === "write") &&
-          (fp.includes("/outputs/") || fp.startsWith("outputs/")),
-        onDetect: (sid: string) => triggerFilesRefresh(sid),
-      },
-    ],
+  const handleCompletedFileChange = useCallback(
+    (sid: string, filePath: string) => {
+      const isWebFile =
+        filePath.includes("/web/") || filePath.startsWith("web/");
+      const isOutputFile =
+        filePath.includes("/outputs/") || filePath.startsWith("outputs/");
+
+      if (isWebFile) triggerWebappRefresh(sid);
+      if (isOutputFile) {
+        if (filePath.endsWith(".md")) openMarkdownPreview(sid, filePath);
+        triggerFilesRefresh(sid);
+      }
+    },
     [triggerWebappRefresh, triggerFilesRefresh, openMarkdownPreview]
   );
 
   const createStreamPacketProcessor = useCallback(
-    (sessionId: string, options?: { onPromptResponse?: () => void }) => {
+    (
+      sessionId: string,
+      options?: { onPromptResponse?: () => void; expectedTurnId?: string }
+    ) => {
       let accumulatedText = "";
       let accumulatedThinking = "";
       let lastItemType: "text" | "thinking" | "tool" | null = null;
+      const currentItems =
+        useBuildSessionStore.getState().sessions.get(sessionId)?.streamItems ??
+        [];
+      let needsTurnCompletionFileRefresh = currentItems.some(
+        (item) =>
+          item.type === "tool_call" &&
+          item.toolCall.kind === "execute" &&
+          item.toolCall.status === "completed"
+      );
+      const lastCurrentItem = currentItems[currentItems.length - 1];
+      if (lastCurrentItem?.type === "text") {
+        accumulatedText = lastCurrentItem.content;
+        lastItemType = "text";
+        if (!lastCurrentItem.isStreaming) {
+          useBuildSessionStore
+            .getState()
+            .updateStreamItem(sessionId, lastCurrentItem.id, {
+              isStreaming: true,
+            });
+        }
+      } else if (lastCurrentItem?.type === "thinking") {
+        accumulatedThinking = lastCurrentItem.content;
+        lastItemType = "thinking";
+        if (!lastCurrentItem.isStreaming) {
+          useBuildSessionStore
+            .getState()
+            .updateStreamItem(sessionId, lastCurrentItem.id, {
+              isStreaming: true,
+            });
+        }
+      }
 
       const finalizeStreaming = () => {
         const session = useBuildSessionStore.getState().sessions.get(sessionId);
@@ -153,12 +316,77 @@ export function useBuildStreaming() {
         }
       };
 
+      const appendErrorItem = (message: string) => {
+        const content = message || "Turn failed.";
+        const session = useBuildSessionStore.getState().sessions.get(sessionId);
+        const lastItem = session?.streamItems[session.streamItems.length - 1];
+
+        finalizeStreaming();
+        if (lastItem?.type === "error" && lastItem.content === content) {
+          return;
+        }
+
+        appendStreamItem(sessionId, {
+          type: "error",
+          id: genId("error"),
+          content,
+        });
+      };
+
+      const seedFromParentTask = (subagentSessionId: string): string => {
+        const session = useBuildSessionStore.getState().sessions.get(sessionId);
+        const parentToolCall = session
+          ? findParentTaskToolCall(session, subagentSessionId)
+          : null;
+        const existing = session?.subagents.get(subagentSessionId);
+        const parentToolCallId =
+          parentToolCall?.id ?? existing?.parentToolCallId ?? "";
+
+        if (parentToolCallId || parentToolCall) {
+          seedSubagentMeta(
+            sessionId,
+            subagentSessionId,
+            parentToolCallId,
+            parentToolCall?.subagentType ?? null,
+            parentToolCall ? subagentNameFromToolCall(parentToolCall) : "",
+            parentToolCall ? promptFromToolCall(parentToolCall) : ""
+          );
+        }
+
+        return parentToolCallId;
+      };
+
       return (rawPacket: unknown) => {
         const parsed = parsePacket(rawPacket);
+        if (options?.expectedTurnId && parsed.type !== "approval_requested") {
+          const currentTurnId = useBuildSessionStore
+            .getState()
+            .sessions.get(sessionId)?.activeTurnId;
+          if (currentTurnId !== options.expectedTurnId) {
+            if (parsed.type === "prompt_response") {
+              options.onPromptResponse?.();
+            }
+            return;
+          }
+        }
 
         switch (parsed.type) {
           case "text_chunk": {
             if (!parsed.text) break;
+
+            if (parsed.parentSessionId !== null && parsed.sessionId !== null) {
+              finalizeStreaming();
+              accumulatedText = "";
+              accumulatedThinking = "";
+              lastItemType = null;
+              seedFromParentTask(parsed.sessionId);
+              appendSubagentResponseChunk(
+                sessionId,
+                parsed.sessionId,
+                parsed.text
+              );
+              break;
+            }
 
             accumulatedText += parsed.text;
 
@@ -182,6 +410,20 @@ export function useBuildStreaming() {
           case "thinking_chunk": {
             if (!parsed.text) break;
 
+            if (parsed.parentSessionId !== null && parsed.sessionId !== null) {
+              finalizeStreaming();
+              accumulatedText = "";
+              accumulatedThinking = "";
+              lastItemType = null;
+              seedFromParentTask(parsed.sessionId);
+              appendSubagentThinkingChunk(
+                sessionId,
+                parsed.sessionId,
+                parsed.text
+              );
+              break;
+            }
+
             accumulatedThinking += parsed.text;
 
             if (lastItemType === "thinking") {
@@ -201,16 +443,54 @@ export function useBuildStreaming() {
             break;
           }
 
+          case "subagent_started": {
+            if (!parsed.subagentSessionId) break;
+            seedFromParentTask(parsed.subagentSessionId);
+            break;
+          }
+
           case "tool_call_start": {
             finalizeStreaming();
             accumulatedText = "";
             accumulatedThinking = "";
 
             // Child (subagent-internal) start: do not add to main transcript.
-            // The subagent pill is created from its progress events.
+            // Record it in the subagent stream immediately so in-progress
+            // tools show before their first progress packet arrives.
             if (parsed.parentSessionId !== null && parsed.sessionId !== null) {
+              const parentToolCallId = seedFromParentTask(parsed.sessionId);
+              recordSubagentToolCall(
+                sessionId,
+                parsed.sessionId,
+                parentToolCallId,
+                toolCallStateFromStart(parsed),
+                parsed.subagentType,
+                ""
+              );
               lastItemType = "tool";
               break;
+            }
+
+            const isInterrupting = useBuildSessionStore
+              .getState()
+              .sessions.get(sessionId)?.isInterrupting;
+            const startedToolCall = {
+              ...toolCallStateFromStart(parsed),
+              status: isInterrupting ? "cancelled" : "pending",
+            } satisfies ToolCallState;
+
+            // Parent `task` start packets can carry the spawned child session
+            // before any progress packet arrives. Seed immediately so the task
+            // row has a click target while the subagent is still running.
+            if (parsed.subagentSessionId !== null) {
+              seedSubagentMeta(
+                sessionId,
+                parsed.subagentSessionId,
+                parsed.toolCallId,
+                parsed.subagentType,
+                subagentNameFromToolCall(startedToolCall),
+                promptFromToolCall(startedToolCall)
+              );
             }
 
             // Skip tool_call_start for TodoWrite; pill is created on progress.
@@ -222,47 +502,40 @@ export function useBuildStreaming() {
             appendStreamItem(sessionId, {
               type: "tool_call",
               id: parsed.toolCallId,
-              toolCall: {
-                id: parsed.toolCallId,
-                kind: parsed.kind,
-                toolName: parsed.toolName,
-                title: parsed.title,
-                status: "pending",
-                description: "",
-                command: "",
-                rawOutput: "",
-                subagentType: undefined,
-                isNewFile: true,
-                oldContent: "",
-                newContent: "",
-              },
+              toolCall: startedToolCall,
             });
             lastItemType = "tool";
             break;
           }
 
           case "tool_call_progress": {
+            if (parsed.status === "completed" && parsed.kind === "execute") {
+              needsTurnCompletionFileRefresh = true;
+            }
+            if (
+              parsed.status === "completed" &&
+              parsed.kind === "edit" &&
+              parsed.filePath
+            ) {
+              handleCompletedFileChange(sessionId, parsed.filePath);
+            }
+
             const subagentClass = classifySubagentEvent(parsed);
 
             // Child (subagent-internal) event: route to the subagent's own
             // tool-call list, not the main transcript.
             if (subagentClass.kind === "child") {
+              const parentToolCallId = seedFromParentTask(
+                subagentClass.subagentSessionId
+              );
               recordSubagentToolCall(
                 sessionId,
                 subagentClass.subagentSessionId,
-                "",
+                parentToolCallId,
                 toolCallStateFromProgress(parsed),
                 null,
                 ""
               );
-              if (parsed.filePath && parsed.kind) {
-                for (const detector of OUTPUT_FILE_DETECTORS) {
-                  if (detector.match(parsed.filePath, parsed.kind)) {
-                    detector.onDetect(sessionId, parsed.filePath);
-                    break;
-                  }
-                }
-              }
               break;
             }
 
@@ -297,6 +570,30 @@ export function useBuildStreaming() {
               }
             }
 
+            if (
+              subagentClass.kind === "normal" &&
+              (parsed.kind === "task" || parsed.toolName === "task")
+            ) {
+              const session = useBuildSessionStore
+                .getState()
+                .sessions.get(sessionId);
+              const subagent = Array.from(
+                session?.subagents.values() ?? []
+              ).find((candidate) => {
+                return candidate.parentToolCallId === parsed.toolCallId;
+              });
+              if (subagent) {
+                seedSubagentMeta(
+                  sessionId,
+                  subagent.sessionId,
+                  parsed.toolCallId,
+                  parsed.subagentType,
+                  subagentNameFromTask(parsed),
+                  parsed.command
+                );
+              }
+            }
+
             if (parsed.isTodo) {
               upsertTodoListStreamItem(sessionId, parsed.toolCallId, {
                 id: parsed.toolCallId,
@@ -306,8 +603,15 @@ export function useBuildStreaming() {
               break;
             }
 
+            const status =
+              useBuildSessionStore.getState().sessions.get(sessionId)
+                ?.isInterrupting &&
+              (parsed.status === "pending" || parsed.status === "in_progress")
+                ? "cancelled"
+                : parsed.status;
+
             updateToolCallStreamItem(sessionId, parsed.toolCallId, {
-              status: parsed.status,
+              status,
               title: parsed.title,
               description: parsed.description,
               command: parsed.command,
@@ -323,14 +627,6 @@ export function useBuildStreaming() {
               }),
             });
 
-            if (parsed.filePath && parsed.kind) {
-              for (const detector of OUTPUT_FILE_DETECTORS) {
-                if (detector.match(parsed.filePath, parsed.kind)) {
-                  detector.onDetect(sessionId, parsed.filePath);
-                  break;
-                }
-              }
-            }
             break;
           }
 
@@ -366,19 +662,34 @@ export function useBuildStreaming() {
           }
 
           case "prompt_response": {
+            if (needsTurnCompletionFileRefresh) {
+              // Shell commands and scripts can mutate the workspace without
+              // emitting structured file paths. Reconcile once when the turn ends.
+              triggerFilesRefresh(sessionId);
+            }
             finalizeStreaming();
+            const isInterrupting = useBuildSessionStore
+              .getState()
+              .sessions.get(sessionId)?.isInterrupting;
+            if (isInterrupting) {
+              cancelLatestInFlightToolCallStreamItem(sessionId);
+            }
 
             const session = useBuildSessionStore
               .getState()
               .sessions.get(sessionId);
 
             if (session && session.streamItems.length > 0) {
-              const savedStreamItems = session.streamItems.map((item) => ({
-                ...item,
-                ...(item.type === "text" || item.type === "thinking"
-                  ? { isStreaming: false }
-                  : {}),
-              }));
+              // Connect cards are transient interaction prompts, not transcript
+              // content — drop them from the persisted message.
+              const savedStreamItems = session.streamItems
+                .filter((item) => item.type !== "connect_app_request")
+                .map((item) => ({
+                  ...item,
+                  ...(item.type === "text" || item.type === "thinking"
+                    ? { isStreaming: false }
+                    : {}),
+                }));
               const textContent = session.streamItems
                 .filter((item) => item.type === "text")
                 .map((item) => item.content)
@@ -389,17 +700,27 @@ export function useBuildStreaming() {
                 type: "assistant",
                 content: textContent,
                 timestamp: new Date(),
+                turn_index: session.activeTurnIndex ?? undefined,
                 message_metadata: {
                   streamItems: savedStreamItems,
                 },
               });
             }
 
-            updateSessionData(sessionId, {
-              status: "active",
-              streamItems: [],
-              isInterrupting: false,
-            });
+            if (isInterrupting) {
+              // While interrupting, defer settlement to reconcile (settling now races the
+              // in-flight cancel → "Concurrent turn in flight"); just clear persisted streamItems.
+              updateSessionData(sessionId, { streamItems: [] });
+            } else {
+              updateSessionData(sessionId, {
+                status: "active",
+                streamItems: [],
+                isInterrupting: false,
+                activeTurnId: null,
+                activeTurnIndex: null,
+                activeTurnLocalOwner: false,
+              });
+            }
             options?.onPromptResponse?.();
             break;
           }
@@ -409,11 +730,55 @@ export function useBuildStreaming() {
             break;
           }
 
+          case "connect_app_request": {
+            // The `connect_app` tool is parked server-side; render the card
+            // inline so resolving it can unblock the tool.
+            if (!parsed.requestId) break;
+            appendStreamItem(sessionId, {
+              type: "connect_app_request",
+              id: parsed.requestId,
+              requestId: parsed.requestId,
+              externalAppId: parsed.externalAppId,
+              reason: parsed.reason,
+            });
+            break;
+          }
+
+          case "context_usage": {
+            updateSessionData(sessionId, {
+              contextUsage: {
+                usedTokens: parsed.usedTokens,
+              },
+            });
+            break;
+          }
+
+          case "compaction": {
+            appendStreamItem(sessionId, {
+              type: "compaction",
+              id: genId("compaction"),
+              summary: parsed.summary,
+            });
+            break;
+          }
+
           case "error": {
+            // Safety net for an error arriving mid-interrupt: defer to reconcile rather than
+            // marking failed, which strands the queued auto-send and stalls reconcile.
+            if (
+              useBuildSessionStore.getState().sessions.get(sessionId)
+                ?.isInterrupting
+            ) {
+              break;
+            }
+            appendErrorItem(parsed.message);
             updateSessionData(sessionId, {
               status: "failed",
               error: parsed.message,
               isInterrupting: false,
+              activeTurnId: null,
+              activeTurnIndex: null,
+              activeTurnLocalOwner: false,
             });
             break;
           }
@@ -429,26 +794,167 @@ export function useBuildStreaming() {
       updateLastStreamingText,
       updateLastStreamingThinking,
       updateToolCallStreamItem,
+      cancelLatestInFlightToolCallStreamItem,
       upsertTodoListStreamItem,
       addArtifactToSession,
       appendMessageToSession,
-      OUTPUT_FILE_DETECTORS,
+      handleCompletedFileChange,
+      triggerFilesRefresh,
       globalMutate,
       recordSubagentToolCall,
       seedSubagentMeta,
       markSubagentComplete,
+      appendSubagentResponseChunk,
+      appendSubagentThinkingChunk,
     ]
   );
 
   /**
-   * Stream a message to the given session and process the SSE response.
+   * Attach to a background turn's live event stream.
+   */
+  const streamTurnEvents = useCallback(
+    async (
+      sessionId: string,
+      turnId: string,
+      signal: AbortSignal,
+      onSettled?: () => void
+    ): Promise<void> => {
+      const existingSession = useBuildSessionStore
+        .getState()
+        .sessions.get(sessionId);
+      if (
+        existingSession?.activeTurnId === turnId &&
+        existingSession.activeTurnLocalOwner &&
+        existingSession.abortController.signal !== signal
+      ) {
+        return;
+      }
+
+      updateSessionData(sessionId, {
+        status: "running",
+        isInterrupting:
+          existingSession?.activeTurnId === turnId
+            ? existingSession.isInterrupting
+            : false,
+        activeTurnId: turnId,
+      });
+      if (existingSession?.activeTurnId !== turnId) {
+        clearStreamItems(sessionId);
+      }
+
+      let settledFromPromptResponse = false;
+      let transportError = false;
+      const processor = createStreamPacketProcessor(sessionId, {
+        expectedTurnId: turnId,
+        onPromptResponse: () => {
+          settledFromPromptResponse = true;
+          onSettled?.();
+        },
+      });
+      const clearTurnIfCurrent = (
+        updates: Partial<{
+          status: "active" | "failed";
+          error: string;
+          isInterrupting: boolean;
+        }>
+      ) => {
+        const currentSession = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId);
+        if (currentSession?.activeTurnId !== turnId) {
+          return;
+        }
+        updateSessionData(sessionId, {
+          ...updates,
+          activeTurnId: null,
+          activeTurnIndex: null,
+          activeTurnLocalOwner: false,
+        });
+      };
+
+      try {
+        const response = await fetchTurnEventStream(sessionId, turnId, signal);
+        if (!response) {
+          clearTurnIfCurrent({
+            status: "active",
+            isInterrupting: false,
+          });
+          return;
+        }
+        await processSSEStream(response, processor);
+      } catch (err) {
+        if ((err as Error).name === "AbortError") {
+          const currentSession = useBuildSessionStore
+            .getState()
+            .sessions.get(sessionId);
+          if (currentSession?.activeTurnId === turnId) {
+            updateSessionData(sessionId, { isInterrupting: false });
+          }
+          return;
+        }
+
+        transportError = true;
+        console.warn("[Streaming] Turn attach stream error:", err);
+        const currentSession = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId);
+        if (currentSession?.activeTurnId === turnId) {
+          updateSessionData(sessionId, {
+            status: "running",
+            isInterrupting: false,
+          });
+        }
+      } finally {
+        if (!signal.aborted) {
+          const currentSession = useBuildSessionStore
+            .getState()
+            .sessions.get(sessionId);
+          // While interrupting, reconcileInterruptedTurn owns settlement; settling here races it and strands the queued auto-send.
+          if (!currentSession?.isInterrupting) {
+            if (
+              !transportError &&
+              currentSession?.status === "running" &&
+              currentSession?.activeTurnId === turnId
+            ) {
+              clearTurnIfCurrent({
+                status: "active",
+                isInterrupting: false,
+              });
+            }
+            const settledStatus = useBuildSessionStore
+              .getState()
+              .sessions.get(sessionId)?.status;
+            if (settledStatus !== "failed") {
+              await useBuildSessionStore
+                .getState()
+                .loadSession(sessionId, { force: true })
+                .catch((err) =>
+                  console.warn(
+                    "[Streaming] Failed to reload settled turn:",
+                    err
+                  )
+                );
+            }
+          }
+          if (!settledFromPromptResponse) {
+            onSettled?.();
+          }
+        }
+      }
+    },
+    [updateSessionData, clearStreamItems, createStreamPacketProcessor]
+  );
+
+  /**
+   * Start an interactive backend turn, then attach to its event stream.
    * Populates streamItems in FIFO order as packets arrive.
    */
   const streamMessage = useCallback(
     async (
       sessionId: string,
       content: string,
-      model?: { provider: string; modelName: string } | null
+      model?: BuildLlmSelection | null,
+      attachments: BuildMessageAttachment[] = []
     ): Promise<void> => {
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
@@ -463,21 +969,30 @@ export function useBuildStreaming() {
       updateSessionData(sessionId, {
         status: "running",
         isInterrupting: false,
+        wasInterrupted: false,
+        turnGeneration: (existingSession?.turnGeneration ?? 0) + 1,
+        activeTurnId: null,
+        activeTurnIndex: null,
+        activeTurnLocalOwner: true,
       });
       clearStreamItems(sessionId);
 
       try {
-        const response = await sendMessageStream(
+        const turn = await createTurn(
           sessionId,
           content,
+          crypto.randomUUID(),
           controller.signal,
-          model
+          model,
+          attachments
         );
+        updateSessionData(sessionId, {
+          activeTurnId: turn.turn_id,
+          activeTurnIndex: turn.turn_index,
+          activeTurnLocalOwner: true,
+        });
 
-        await processSSEStream(
-          response,
-          createStreamPacketProcessor(sessionId)
-        );
+        await streamTurnEvents(sessionId, turn.turn_id, controller.signal);
       } catch (err) {
         if ((err as Error).name === "AbortError") {
           updateSessionData(sessionId, { isInterrupting: false });
@@ -487,6 +1002,9 @@ export function useBuildStreaming() {
             status: "active",
             error: SessionErrorCode.RATE_LIMIT_EXCEEDED,
             isInterrupting: false,
+            activeTurnId: null,
+            activeTurnIndex: null,
+            activeTurnLocalOwner: false,
           });
         } else {
           console.error("[Streaming] Stream error:", err);
@@ -494,18 +1012,22 @@ export function useBuildStreaming() {
             status: "failed",
             error: (err as Error).message,
             isInterrupting: false,
+            activeTurnId: null,
+            activeTurnIndex: null,
+            activeTurnLocalOwner: false,
           });
         }
       } finally {
-        setAbortController(sessionId, new AbortController());
+        // Only reset if this turn still owns the controller; clobbering a newer
+        // turn's controller trips its streamTurnEvents duplicate-watcher guard
+        // (signal mismatch) and hangs the FE while the backend completes.
+        const session = useBuildSessionStore.getState().sessions.get(sessionId);
+        if (session?.abortController === controller) {
+          setAbortController(sessionId, new AbortController());
+        }
       }
     },
-    [
-      setAbortController,
-      updateSessionData,
-      clearStreamItems,
-      createStreamPacketProcessor,
-    ]
+    [setAbortController, updateSessionData, clearStreamItems, streamTurnEvents]
   );
 
   /**
@@ -519,15 +1041,29 @@ export function useBuildStreaming() {
         return;
       }
 
-      updateSessionData(sessionId, { isInterrupting: true });
+      const interruptedTurnId = session.activeTurnId;
+      const generation = session.turnGeneration;
+      updateSessionData(sessionId, {
+        isInterrupting: true,
+        wasInterrupted: true,
+      });
+      cancelLatestInFlightToolCallStreamItem(sessionId);
       try {
         await interruptMessageStream(sessionId);
+        void reconcileInterruptedTurn(sessionId, interruptedTurnId, generation);
       } catch (err) {
         console.error("[Streaming] Failed to interrupt:", err);
-        updateSessionData(sessionId, { isInterrupting: false });
+        updateSessionData(sessionId, {
+          isInterrupting: false,
+          wasInterrupted: false,
+        });
       }
     },
-    [updateSessionData]
+    [
+      reconcileInterruptedTurn,
+      updateSessionData,
+      cancelLatestInFlightToolCallStreamItem,
+    ]
   );
 
   const streamScheduledRunEvents = useCallback(
@@ -587,12 +1123,14 @@ export function useBuildStreaming() {
       streamMessage,
       interruptStreaming,
       streamScheduledRunEvents,
+      streamTurnEvents,
       abortStream: abortCurrentSession,
     }),
     [
       streamMessage,
       interruptStreaming,
       streamScheduledRunEvents,
+      streamTurnEvents,
       abortCurrentSession,
     ]
   );

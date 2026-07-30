@@ -1,18 +1,13 @@
 from collections.abc import Generator
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import Document, TextSection
 from onyx.indexing.embedder import DefaultIndexingEmbedder
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import DocAwareChunk
-from onyx.indexing.models import IndexChunk
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import EmbedTextType
+from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
+from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
 
 @pytest.fixture

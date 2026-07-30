@@ -1,4 +1,3 @@
-import logging
 import random
 import re
 import string
@@ -7,36 +6,32 @@ import time
 import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from retry import retry
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from slack_sdk.models.blocks import Block
-from slack_sdk.models.blocks import SectionBlock
+from slack_sdk.models.blocks import Block, SectionBlock
 from slack_sdk.models.metadata import Metadata
 from slack_sdk.socket_mode import SocketModeClient
 
 from onyx.configs.app_configs import DISABLE_TELEMETRY
-from onyx.configs.constants import ID_SEPARATOR
-from onyx.configs.constants import MessageType
-from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_VISIBILITY
-from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_QPM
-from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_WAIT_TIME
-from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
-from onyx.configs.onyxbot_configs import ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD
-from onyx.configs.onyxbot_configs import ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS
+from onyx.configs.constants import ID_SEPARATOR, MessageType
+from onyx.configs.onyxbot_configs import (
+    ONYX_BOT_FEEDBACK_VISIBILITY,
+    ONYX_BOT_MAX_QPM,
+    ONYX_BOT_MAX_WAIT_TIME,
+    ONYX_BOT_NUM_RETRIES,
+    ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD,
+    ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
+)
 from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.constants import FeedbackVisibility
-from onyx.onyxbot.slack.models import ChannelType
-from onyx.onyxbot.slack.models import ThreadMessage
+from onyx.onyxbot.slack.models import ChannelType, ThreadMessage
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
-from onyx.utils.text_processing import replace_whitespaces_w_space
+from onyx.utils.retry_wrapper import retry_builder
+from onyx.utils.telemetry import RecordType, optional_telemetry
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
@@ -232,11 +227,10 @@ def _build_error_block(error_message: str) -> Block:
     return SectionBlock(text=display_text)
 
 
-@retry(
+@retry_builder(
     tries=ONYX_BOT_NUM_RETRIES,
     delay=0.25,
     backoff=2,
-    logger=cast(logging.Logger, logger),
 )
 def respond_in_thread_or_channel(
     client: WebClient,
@@ -413,28 +407,6 @@ def get_view_values(state_values: dict[str, Any]) -> dict[str, str]:
             elif "value" in v:
                 view_values[k] = v["value"]
     return view_values
-
-
-def translate_vespa_highlight_to_slack(match_strs: list[str], used_chars: int) -> str:
-    def _replace_highlight(s: str) -> str:
-        s = re.sub(r"(?<=[^\s])<hi>(.*?)</hi>", r"\1", s)
-        s = s.replace("</hi>", "*").replace("<hi>", "*")
-        return s
-
-    final_matches = [
-        replace_whitespaces_w_space(_replace_highlight(match_str)).strip()
-        for match_str in match_strs
-        if match_str
-    ]
-    combined = "... ".join(final_matches)
-
-    # Slack introduces "Show More" after 300 on desktop which is ugly
-    # But don't trim the message if there is still a highlight after 300 chars
-    remaining = 300 - used_chars
-    if len(combined) > remaining and "*" not in combined[remaining:]:
-        combined = combined[: remaining - 3] + "..."
-
-    return combined
 
 
 def remove_slack_text_interactions(slack_str: str) -> str:

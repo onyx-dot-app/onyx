@@ -1,5 +1,4 @@
-from collections.abc import Callable
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -8,30 +7,34 @@ from onyx.db.memory import UserMemoryContext
 from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
-from onyx.prompts.chat_prompts import CITATION_REMINDER
-from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
-from onyx.prompts.chat_prompts import FILE_REMINDER
-from onyx.prompts.chat_prompts import LAST_CYCLE_CITATION_REMINDER
-from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
-from onyx.prompts.prompt_utils import get_company_context
-from onyx.prompts.prompt_utils import handle_onyx_date_awareness
-from onyx.prompts.prompt_utils import replace_citation_guidance_tag
-from onyx.prompts.prompt_utils import replace_reminder_tag
-from onyx.prompts.tool_prompts import GENERATE_IMAGE_GUIDANCE
-from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
-from onyx.prompts.tool_prompts import MEMORY_GUIDANCE
-from onyx.prompts.tool_prompts import OPEN_URLS_GUIDANCE
-from onyx.prompts.tool_prompts import PYTHON_TOOL_GUIDANCE
-from onyx.prompts.tool_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
-from onyx.prompts.tool_prompts import TOOL_SECTION_HEADER
-from onyx.prompts.tool_prompts import WEB_SEARCH_GUIDANCE
-from onyx.prompts.tool_prompts import WEB_SEARCH_SITE_DISABLED_GUIDANCE
-from onyx.prompts.user_info import BASIC_INFORMATION_PROMPT
-from onyx.prompts.user_info import TEAM_INFORMATION_PROMPT
-from onyx.prompts.user_info import USER_INFORMATION_HEADER
-from onyx.prompts.user_info import USER_MEMORIES_PROMPT
-from onyx.prompts.user_info import USER_PREFERENCES_PROMPT
-from onyx.prompts.user_info import USER_ROLE_PROMPT
+from onyx.prompts.chat_prompts import (
+    CITATION_REMINDER,
+    DEFAULT_SYSTEM_PROMPT,
+    FILE_REMINDER,
+    LAST_CYCLE_CITATION_REMINDER,
+    REQUIRE_CITATION_GUIDANCE,
+)
+from onyx.prompts.prompt_utils import apply_prompt_placeholders, get_company_context
+from onyx.prompts.tool_prompts import (
+    GENERATE_IMAGE_GUIDANCE,
+    INTERNAL_SEARCH_GUIDANCE,
+    MEMORY_GUIDANCE,
+    OPEN_URLS_GUIDANCE,
+    PYTHON_TOOL_GUIDANCE,
+    TOOL_DESCRIPTION_SEARCH_GUIDANCE,
+    TOOL_SECTION_HEADER,
+    WEB_SEARCH_GUIDANCE,
+    WEB_SEARCH_SITE_DISABLED_GUIDANCE,
+)
+from onyx.prompts.user_info import (
+    BASIC_INFORMATION_PROMPT,
+    ORGANIZATION_PROFILE_PROMPT,
+    TEAM_INFORMATION_PROMPT,
+    USER_INFORMATION_HEADER,
+    USER_MEMORIES_PROMPT,
+    USER_PREFERENCES_PROMPT,
+    USER_ROLE_PROMPT,
+)
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -138,6 +141,24 @@ def build_reminder_message(
     return reminder if reminder else None
 
 
+def process_prompt_template(
+    prompt_str: str,
+    *,
+    datetime_aware: bool,
+    append_datetime_if_aware: bool,
+    should_cite_documents: bool,
+) -> str:
+    """Apply standard prompt placeholders to any agent or task prompt."""
+    processed_prompt, _ = apply_prompt_placeholders(
+        prompt_str,
+        datetime_aware=datetime_aware,
+        append_datetime_if_aware=append_datetime_if_aware,
+        should_cite_documents=should_cite_documents,
+        append_citation_if_missing=False,
+    )
+    return processed_prompt
+
+
 def _build_user_information_section(
     user_memory_context: UserMemoryContext | None,
     company_context: str | None,
@@ -163,6 +184,17 @@ def _build_user_information_section(
                     user_name=ctx.user_info.name or "",
                     user_email=ctx.user_info.email or "",
                     user_role=role_line,
+                )
+            )
+
+        if ctx.user_info.organization_profile:
+            formatted_profile = "\n".join(
+                f"- {label}: {value}"
+                for label, value in ctx.user_info.organization_profile.items()
+            )
+            sections.append(
+                ORGANIZATION_PROFILE_PROMPT.format(
+                    organization_profile=formatted_profile
                 )
             )
 
@@ -202,17 +234,14 @@ def build_system_prompt(
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
     """
-    system_prompt = handle_onyx_date_awareness(base_system_prompt, datetime_aware)
-
-    # Replace citation guidance placeholder if present
-    system_prompt, should_append_citation_guidance = replace_citation_guidance_tag(
-        system_prompt,
+    system_prompt, should_append_citation_guidance = apply_prompt_placeholders(
+        base_system_prompt,
+        datetime_aware=datetime_aware,
+        append_datetime_if_aware=True,
         should_cite_documents=should_cite_documents,
         include_all_guidance=include_all_guidance,
+        append_citation_if_missing=True,
     )
-
-    # Replace reminder tag placeholder if present
-    system_prompt = replace_reminder_tag(system_prompt)
 
     company_context = get_company_context()
     user_info_section = _build_user_information_section(

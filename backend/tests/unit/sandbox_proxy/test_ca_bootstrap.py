@@ -4,14 +4,11 @@ from pathlib import Path
 
 import pytest
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
-from onyx.sandbox_proxy.ca import CABootstrap
-from onyx.sandbox_proxy.ca import CAStore
-from onyx.sandbox_proxy.ca import CAStoreConflictError
+from onyx.sandbox_proxy.ca import CABootstrap, CAStore, CAStoreConflictError
 
 
 class _InMemoryStore(CAStore):

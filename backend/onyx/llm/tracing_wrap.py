@@ -17,26 +17,23 @@ from __future__ import annotations
 
 import functools
 import inspect
-from collections.abc import Callable
-from collections.abc import Iterator
-from typing import Any
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING, Any
 
-from onyx.llm.model_response import ChatCompletionDeltaToolCall
+from onyx.llm.model_response import ChatCompletionDeltaToolCall, Usage
 from onyx.llm.model_response import FunctionCall as DeltaFunctionCall
-from onyx.llm.model_response import Usage
 from onyx.tracing.framework.create import get_current_span
 from onyx.tracing.framework.span_data import GenerationSpanData
 
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM
-    from onyx.llm.model_response import ModelResponse
-    from onyx.llm.model_response import ModelResponseStream
+    from onyx.llm.model_response import ModelResponse, ModelResponseStream
     from onyx.llm.models import ToolCall
 
 
 _ALREADY_WRAPPED_ATTR = "_onyx_tracing_wrapped"
 _PROMPT_PARAM_NAME = "prompt"
+_TOOLS_PARAM_NAME = "tools"
 
 
 def _outer_generation_span_active() -> bool:
@@ -101,25 +98,28 @@ def _validate_prompt_param(fn: Callable[..., Any]) -> inspect.Signature:
     return sig
 
 
-def _extract_prompt(
+def _extract_prompt_and_tools(
     sig: inspect.Signature,
     self_: "LLM",
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
-) -> Any | None:
-    """Bind ``args`` / ``kwargs`` against ``sig`` and return the ``prompt`` value.
+) -> tuple[Any | None, Any | None]:
+    """Bind ``args`` / ``kwargs`` against ``sig`` and return ``(prompt, tools)``.
 
     Uses ``Signature.bind`` so extraction is robust to any mix of positional
     / keyword argument passing and immune to future parameter reordering.
-    Returns ``None`` if the arguments don't match the signature — the
-    fallback span will simply omit input messages rather than fail the
+    Returns ``(None, None)`` if the arguments don't match the signature — the
+    fallback span will simply omit input messages / tools rather than fail the
     request.
     """
     try:
         bound = sig.bind(self_, *args, **kwargs)
     except TypeError:
-        return None
-    return bound.arguments.get(_PROMPT_PARAM_NAME)
+        return None, None
+    return (
+        bound.arguments.get(_PROMPT_PARAM_NAME),
+        bound.arguments.get(_TOOLS_PARAM_NAME),
+    )
 
 
 def wrap_invoke(
@@ -137,12 +137,11 @@ def wrap_invoke(
             return invoke_fn(self, *args, **kwargs)
 
         from onyx.tracing.flows import LLMFlow
-        from onyx.tracing.llm_utils import llm_generation_span
-        from onyx.tracing.llm_utils import record_llm_response
+        from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 
-        prompt = _extract_prompt(sig, self, args, kwargs)
+        prompt, tools = _extract_prompt_and_tools(sig, self, args, kwargs)
         with llm_generation_span(
-            self, flow=LLMFlow.UNTAGGED_INVOKE, input_messages=prompt
+            self, flow=LLMFlow.UNTAGGED_INVOKE, input_messages=prompt, tools=tools
         ) as span:
             try:
                 response = invoke_fn(self, *args, **kwargs)
@@ -194,12 +193,11 @@ def wrap_stream(
             return
 
         from onyx.tracing.flows import LLMFlow
-        from onyx.tracing.llm_utils import llm_generation_span
-        from onyx.tracing.llm_utils import record_llm_span_output
+        from onyx.tracing.llm_utils import llm_generation_span, record_llm_span_output
 
-        prompt = _extract_prompt(sig, self, args, kwargs)
+        prompt, tools = _extract_prompt_and_tools(sig, self, args, kwargs)
         with llm_generation_span(
-            self, flow=LLMFlow.UNTAGGED_STREAM, input_messages=prompt
+            self, flow=LLMFlow.UNTAGGED_STREAM, input_messages=prompt, tools=tools
         ) as span:
             accumulated_content: list[str] = []
             final_usage: Usage | None = None

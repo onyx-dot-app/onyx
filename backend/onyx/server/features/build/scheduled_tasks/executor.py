@@ -5,7 +5,7 @@ The Celery `run_scheduled_task` task is a thin wrapper around
 logic importable + testable without a Celery worker (external-dependency
 unit tests instantiate it directly).
 
-Lifecycle (see ``docs/craft/features/scheduled-tasks.md``):
+Lifecycle (see ``docs/craft/features/scheduled-tasks/overview.md``):
 
 1. Fetch the run row + owning task. Bail out idempotently if the run is
    not ``QUEUED`` (Celery may redeliver, or a sweeper may have already
@@ -20,15 +20,15 @@ Lifecycle (see ``docs/craft/features/scheduled-tasks.md``):
 3. Transition QUEUED -> RUNNING.
 4. Create a fresh ``BuildSession`` with ``origin=SCHEDULED``. Record its
    id on the run row.
-5. Drive the agent via the shared ``_yield_sandbox_events`` generator,
-   persisting each event with ``_persist_sandbox_event``. Enforce a 30 min
+5. Drive the agent via the shared ``yield_sandbox_events`` generator,
+   persisting each event with ``persist_sandbox_event``. Enforce a 30 min
    monotonic budget (Celery thread-pool time limits are silently
    disabled — see CLAUDE.md).
 6. On ``RequestPermissionRequest`` (approval gate): mark
    ``AWAITING_APPROVAL``, emit a notification, return without writing a
    terminal status. Resume mechanics are owned by the approvals project;
    until that ships these runs are "terminal-for-display".
-7. On clean stream completion: ``_finalize_persist``, derive a
+7. On clean stream completion: ``finalize_persist``, derive a
    ~120-char summary, mark ``SUCCEEDED``.
 8. On any exception inside the drive loop: mark ``FAILED`` with the
    exception class/detail and emit a notification. We deliberately
@@ -41,18 +41,23 @@ import time
 from typing import Any
 from uuid import UUID
 
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import NotificationType
+from onyx.configs.constants import MessageType, NotificationType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ScheduledTaskErrorClass
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import SessionOrigin
+from onyx.db.enums import ScheduledTaskErrorClass, ScheduledTaskRunStatus, SessionOrigin
 from onyx.db.notification import create_notification
-from onyx.db.scheduled_task import get_run
-from onyx.db.scheduled_task import mark_run_status
-from onyx.server.features.build.db.build_session import create_message
-from onyx.server.features.build.db.build_session import get_session_messages
-from onyx.server.features.build.sandbox.event_schema import RequestPermissionRequest
+from onyx.db.scheduled_task import get_run, mark_run_status
+from onyx.server.features.build.db.build_session import (
+    create_message,
+    get_session_messages,
+)
+from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.sandbox.event_schema import (
+    TURN_ERROR_CODE_TIMEOUT,
+    Error,
+    PromptResponse,
+    RequestPermissionRequest,
+)
+from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.utils.logger import setup_logger
@@ -73,6 +78,16 @@ SUMMARY_MAX_CHARS = 120
 PROVISIONING_WAIT_SECONDS = 120
 
 
+def _clip_summary(text: str) -> str:
+    if len(text) <= SUMMARY_MAX_CHARS:
+        return text
+    clipped = text[:SUMMARY_MAX_CHARS]
+    last_space = clipped.rfind(" ")
+    if last_space > SUMMARY_MAX_CHARS // 2:
+        clipped = clipped[:last_space]
+    return clipped.rstrip() + "…"
+
+
 def _summary_from_state(state: BuildStreamingState, fallback: str = "") -> str:
     """Build a ~120-char summary from accumulated agent message text.
 
@@ -82,8 +97,8 @@ def _summary_from_state(state: BuildStreamingState, fallback: str = "") -> str:
     if state.message_chunks:
         full = "".join(state.message_chunks).strip()
         if full:
-            return full[:SUMMARY_MAX_CHARS]
-    return fallback[:SUMMARY_MAX_CHARS] if fallback else ""
+            return _clip_summary(full)
+    return _clip_summary(fallback) if fallback else ""
 
 
 def _summary_from_session_messages(session_id: UUID, db_session: Any) -> str:
@@ -105,7 +120,7 @@ def _summary_from_session_messages(session_id: UUID, db_session: Any) -> str:
         if isinstance(content, dict):
             text = content.get("text") or ""
             if isinstance(text, str) and text.strip():
-                return text.strip()[:SUMMARY_MAX_CHARS]
+                return _clip_summary(text.strip())
     return ""
 
 
@@ -325,45 +340,47 @@ def _drive_agent(
         AWAITING_APPROVAL). ``False`` otherwise (run status is terminal).
     """
     # We open a single session for the whole drive so that the
-    # `_persist_sandbox_event` calls (which write `BuildMessage` rows) and the
+    # `persist_sandbox_event` calls (which write `BuildMessage` rows) and the
     # final `mark_run_status` happen against the same connection. The
     # session is committed eagerly at key points so observers see progress.
     with get_session_with_current_tenant() as db_session:
         session_manager = SessionManager(db_session)
 
-        # Create the BuildSession. SCHEDULED origin keeps it out of the
-        # Craft sidebar (see `get_user_build_sessions`).
-        build_session = session_manager.create_session__no_commit(
-            user_id=task_user_id,
-            origin=SessionOrigin.SCHEDULED,
-            name=f"Scheduled: {task_name}",
-        )
-        session_id = build_session.id
+        with session_creation_lock(task_user_id):
+            # Create the BuildSession. SCHEDULED origin keeps it out of the
+            # Craft sidebar (see `get_user_build_sessions`).
+            build_session = session_manager.create_session__no_commit(
+                user_id=task_user_id,
+                origin=SessionOrigin.SCHEDULED,
+                name=f"Scheduled: {task_name}",
+            )
+            session_id = build_session.id
 
-        # Persist the user prompt as turn 0 so the transcript matches an
-        # interactive run exactly (interactive flow does the same in
-        # `_stream_cli_agent_response`).
-        create_message(
-            session_id=session_id,
-            message_type=MessageType.USER,
-            turn_index=0,
-            message_metadata={
-                "type": "user_message",
-                "content": {"type": "text", "text": task_prompt},
-            },
-            db_session=db_session,
-        )
+            # Persist the user prompt as turn 0 so the transcript matches an
+            # interactive run exactly (interactive flow does the same in
+            # `_stream_cli_agent_response`).
+            create_message(
+                session_id=session_id,
+                message_type=MessageType.USER,
+                turn_index=0,
+                message_metadata={
+                    "type": "user_message",
+                    "content": {"type": "text", "text": task_prompt},
+                },
+                db_session=db_session,
+            )
 
-        # Wire the session id onto the run row so the UI can deep-link
-        # from the run history into the session view as soon as anything
-        # is persisted.
-        mark_run_status(
-            db_session=db_session,
-            run_id=run_id,
-            status=ScheduledTaskRunStatus.RUNNING,
-            session_id=session_id,
-        )
-        db_session.commit()
+            # Wire the session id onto the run row so the UI can deep-link
+            # from the run history into the session view as soon as anything
+            # is persisted.
+            mark_run_status(
+                db_session=db_session,
+                run_id=run_id,
+                status=ScheduledTaskRunStatus.RUNNING,
+                session_id=session_id,
+            )
+            update_sandbox_heartbeat(db_session, sandbox_id)
+            db_session.commit()
 
         state = BuildStreamingState(turn_index=0)
         deadline = time.monotonic() + budget_seconds
@@ -373,19 +390,64 @@ def _drive_agent(
         # contends today, but acquire it anyway so any future change
         # that lets scheduled and interactive runs share a build_session
         # inherits the protection without needing to remember to add it.
-        sandbox_manager = session_manager._sandbox_manager
-
         approval_required = False
+        # persist_sandbox_event drops Error/PromptResponse, so a timed-out turn
+        # (terminal Error only) would otherwise be recorded SUCCEEDED (ENG-4234).
+        terminal_error: Error | None = None
+        got_prompt_response = False
+        cancelled = False
         final_event_count = 0
         # Acquire the per-build_session lock for the duration of the
         # agent loop. __enter__/__exit__ used directly (rather than a
         # `with`) to avoid reindenting the existing try/except block.
-        prompt_slot_cm = sandbox_manager.prompt_slot(sandbox_id, session_id)
-        prompt_slot_cm.__enter__()
+        prompt_slot_cm = session_manager.prompt_slot(sandbox_id, session_id)
+        slot = prompt_slot_cm.__enter__()
+        if not slot.acquired:
+            prompt_slot_cm.__exit__(None, None, None)
+            mark_run_status(
+                db_session=db_session,
+                run_id=run_id,
+                status=ScheduledTaskRunStatus.FAILED,
+                error_class=ScheduledTaskErrorClass.AGENT_EXCEPTION,
+                error_detail="Concurrent turn in flight for build session.",
+            )
+            _notify(
+                db_session=db_session,
+                user_id=task_user_id,
+                task_name=task_name,
+                task_id=task_id,
+                run_id=run_id,
+                notif_type=NotificationType.SCHEDULED_TASK_FAILED,
+            )
+            db_session.commit()
+            return False
         try:
-            for sandbox_event in session_manager._yield_sandbox_events(
-                sandbox_id, session_id, task_prompt
+            for sandbox_event in session_manager.yield_sandbox_events(
+                sandbox_id,
+                session_id,
+                task_prompt,
+                turn_timeout_seconds=float(budget_seconds),
             ):
+                slot.extend()
+                if slot.lost:
+                    session_manager.finalize_persist(session_id, state)
+                    mark_run_status(
+                        db_session=db_session,
+                        run_id=run_id,
+                        status=ScheduledTaskRunStatus.FAILED,
+                        error_class=ScheduledTaskErrorClass.AGENT_EXCEPTION,
+                        error_detail="Prompt slot lease lost mid-turn.",
+                    )
+                    _notify(
+                        db_session=db_session,
+                        user_id=task_user_id,
+                        task_name=task_name,
+                        task_id=task_id,
+                        run_id=run_id,
+                        notif_type=NotificationType.SCHEDULED_TASK_FAILED,
+                    )
+                    db_session.commit()
+                    return False
                 # Approval gate: mark awaiting_approval, return. Resume
                 # mechanics are owned by the approvals project; this is
                 # "terminal for display" until it ships.
@@ -393,10 +455,24 @@ def _drive_agent(
                     approval_required = True
                     break
 
+                if isinstance(sandbox_event, Error):
+                    terminal_error = sandbox_event
+                    break
+                # Break before the budget check: a deadline tripping exactly as
+                # the agent finishes must not mis-mark a success as timed-out.
+                if isinstance(sandbox_event, PromptResponse):
+                    # Scheduled runs have no interrupt mechanism, so a cancelled
+                    # terminal means opencode aborted the agent
+                    # (MessageAbortedError) — record it as a failure, not success.
+                    if getattr(sandbox_event, "stop_reason", None) == "cancelled":
+                        cancelled = True
+                    got_prompt_response = True
+                    break
+
                 # Budget check happens before persistence so a runaway
                 # agent can't keep growing the transcript.
                 if time.monotonic() > deadline:
-                    session_manager._finalize_persist(session_id, state)
+                    session_manager.finalize_persist(session_id, state)
                     mark_run_status(
                         db_session=db_session,
                         run_id=run_id,
@@ -415,7 +491,7 @@ def _drive_agent(
                     db_session.commit()
                     return False
 
-                session_manager._persist_sandbox_event(session_id, state, sandbox_event)
+                session_manager.persist_sandbox_event(session_id, state, sandbox_event)
                 db_session.commit()
                 final_event_count += 1
 
@@ -426,7 +502,7 @@ def _drive_agent(
                 summary_from_chunks = _summary_from_state(state)
                 # Flush any pending chunks so the transcript reflects
                 # what the agent has said before pausing.
-                session_manager._finalize_persist(session_id, state)
+                session_manager.finalize_persist(session_id, state)
                 db_session.commit()
                 summary = summary_from_chunks or _summary_from_session_messages(
                     session_id, db_session
@@ -448,9 +524,52 @@ def _drive_agent(
                 db_session.commit()
                 return True
 
+            if terminal_error is not None or cancelled or not got_prompt_response:
+                session_manager.finalize_persist(session_id, state)
+                db_session.commit()
+                if terminal_error is not None:
+                    error_class = (
+                        ScheduledTaskErrorClass.TIMEOUT
+                        if terminal_error.code == TURN_ERROR_CODE_TIMEOUT
+                        else ScheduledTaskErrorClass.AGENT_EXCEPTION
+                    )
+                    error_detail = (
+                        terminal_error.message or "agent turn ended with an error"
+                    )
+                elif cancelled:
+                    error_class = ScheduledTaskErrorClass.AGENT_EXCEPTION
+                    error_detail = "agent turn was aborted before completion"
+                else:
+                    error_class = ScheduledTaskErrorClass.AGENT_EXCEPTION
+                    error_detail = "agent stream ended without a completion response"
+                mark_run_status(
+                    db_session=db_session,
+                    run_id=run_id,
+                    status=ScheduledTaskRunStatus.FAILED,
+                    error_class=error_class,
+                    error_detail=error_detail[:1000],
+                )
+                _notify(
+                    db_session=db_session,
+                    user_id=task_user_id,
+                    task_name=task_name,
+                    task_id=task_id,
+                    run_id=run_id,
+                    notif_type=NotificationType.SCHEDULED_TASK_FAILED,
+                )
+                db_session.commit()
+                logger.warning(
+                    "Scheduled run %s failed (events=%d, error_class=%s): %s",
+                    run_id,
+                    final_event_count,
+                    error_class.value,
+                    error_detail,
+                )
+                return False
+
             # Clean completion path.
             summary_from_chunks = _summary_from_state(state)
-            session_manager._finalize_persist(session_id, state)
+            session_manager.finalize_persist(session_id, state)
             db_session.commit()
             summary = summary_from_chunks or _summary_from_session_messages(
                 session_id, db_session

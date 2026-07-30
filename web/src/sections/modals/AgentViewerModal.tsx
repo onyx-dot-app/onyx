@@ -4,8 +4,8 @@ import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { FullAgent } from "@/lib/agents/types";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
-import Modal from "@/refresh-components/Modal";
+import { useModal } from "@opal/components";
+import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -35,7 +35,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import { getDisplayName } from "@/lib/languageModels/utils";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { Interactive } from "@opal/core";
 
 /**

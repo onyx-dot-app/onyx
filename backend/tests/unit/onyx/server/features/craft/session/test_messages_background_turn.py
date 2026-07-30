@@ -1,0 +1,476 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import cast
+from unittest.mock import MagicMock
+from uuid import UUID, uuid4
+
+import pytest
+from pydantic import ValidationError
+from sqlalchemy.orm import Session
+
+from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.interactive_turns.state import get_turn
+from onyx.server.features.build.session import manager as manager_module
+from onyx.server.features.build.session import messages as messages_api
+from onyx.server.features.build.session.models import (
+    MessageAttachment,
+    MessageRequest,
+)
+from tests.unit.fakes import FakeCache
+
+
+@pytest.fixture(autouse=True)
+def _mock_sandbox_manager(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        manager_module,
+        "get_sandbox_manager",
+        MagicMock(return_value=MagicMock()),
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/attachments/reference.png",
+        "outputs/reference.png",
+        "attachments/../outputs/reference.png",
+    ],
+)
+def test_message_attachment_rejects_paths_outside_attachments(path: str) -> None:
+    with pytest.raises(ValidationError):
+        MessageAttachment(name="reference.png", path=path, mime_type="image/png")
+
+
+class _FakeQuery:
+    def __init__(self, count: int) -> None:
+        self._count = count
+
+    def filter(self, *args: object) -> "_FakeQuery":
+        _ = args
+        return self
+
+    def count(self) -> int:
+        return self._count
+
+
+class _FakeDbSession:
+    def __init__(self, user_message_count: int) -> None:
+        self.user_message_count = user_message_count
+        self.commits = 0
+        self.rollbacks = 0
+
+    def query(self, model: object) -> _FakeQuery:
+        _ = model
+        return _FakeQuery(self.user_message_count)
+
+    def commit(self) -> None:
+        self.commits += 1
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+
+
+def _create_message_noop(**_: object) -> None:
+    return None
+
+
+def _patch_skill_state(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    stale: bool = False,
+) -> None:
+    monkeypatch.setattr(messages_api, "get_sandbox_by_user_id", lambda *_: object())
+    monkeypatch.setattr(messages_api, "session_runtime_stale", lambda *_: stale)
+
+
+@pytest.mark.parametrize(
+    ("supports_image_input", "expected_prompt_attachment_paths"),
+    [
+        (True, ["attachments/reference.png"]),
+        (False, []),
+    ],
+)
+def test_send_message_starts_background_turn(
+    monkeypatch: pytest.MonkeyPatch,
+    supports_image_input: bool,
+    expected_prompt_attachment_paths: list[str],
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+    db_session = _FakeDbSession(user_message_count=2)
+    persisted: list[tuple[int, str, list[dict[str, str]]]] = []
+    start_runner = MagicMock()
+    session_manager = MagicMock()
+    session_manager.session_llm_config.return_value = SimpleNamespace(
+        model_name="17/gpt-5-mini",
+        models=[
+            SimpleNamespace(
+                id="17/gpt-5-mini",
+                capabilities=SimpleNamespace(
+                    input_modalities=(
+                        ("text", "image") if supports_image_input else ("text",)
+                    )
+                ),
+            )
+        ],
+    )
+
+    def get_session_stub(*_: object, **__: object) -> SimpleNamespace:
+        return session
+
+    def create_message_stub(
+        *,
+        turn_index: int,
+        message_metadata: dict[str, object],
+        **_: object,
+    ) -> None:
+        content = cast(dict[str, str], message_metadata["content"])
+        attachments = cast(list[dict[str, str]], message_metadata["attachments"])
+        persisted.append((turn_index, content["text"], attachments))
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
+    monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(messages_api, "SessionManager", lambda _: session_manager)
+    monkeypatch.setattr(
+        messages_api,
+        "create_message",
+        create_message_stub,
+    )
+    monkeypatch.setattr(
+        messages_api,
+        "start_interactive_turn_runner",
+        start_runner,
+    )
+
+    response = messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(
+            content="hello",
+            client_request_id="req-1",
+            provider_id=17,
+            model="gpt-5-mini",
+            attachments=[
+                MessageAttachment(
+                    name="reference.png",
+                    path="attachments/reference.png",
+                    mime_type="image/png",
+                ),
+                MessageAttachment(
+                    name="notes.txt",
+                    path="attachments/notes.txt",
+                    mime_type="text/plain",
+                ),
+            ],
+        ),
+        user=cast(User, SimpleNamespace(id=user_id)),
+        db_session=cast(Session, db_session),
+    )
+
+    assert response.session_id == str(session_id)
+    assert response.status == "QUEUED"
+    assert response.turn_index == 2
+    assert persisted == [
+        (
+            2,
+            "hello",
+            [
+                {
+                    "name": "reference.png",
+                    "path": "attachments/reference.png",
+                    "mime_type": "image/png",
+                },
+                {
+                    "name": "notes.txt",
+                    "path": "attachments/notes.txt",
+                    "mime_type": "text/plain",
+                },
+            ],
+        )
+    ]
+    assert session.agent_provider == "onyx"
+    assert session.agent_model == "17/gpt-5-mini"
+    assert db_session.commits == 1
+    turn = get_turn(cache, UUID(response.turn_id))
+    assert turn is not None
+    assert [
+        attachment.path for attachment in turn.attachments
+    ] == expected_prompt_attachment_paths
+    start_runner.assert_called_once()
+    assert str(start_runner.call_args.args[0]) == response.turn_id
+
+
+def test_send_message_preserves_legacy_provider_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+    db_session = _FakeDbSession(user_message_count=0)
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
+    monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
+    monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
+
+    messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(
+            content="hello",
+            client_request_id="req-legacy",
+            provider="anthropic",
+            model="claude-fable-5",
+        ),
+        user=cast(User, SimpleNamespace(id=user_id)),
+        db_session=cast(Session, db_session),
+    )
+
+    assert session.agent_provider == "anthropic"
+    assert session.agent_model == "claude-fable-5"
+
+
+def test_send_message_prefers_provider_id_over_legacy_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+    db_session = _FakeDbSession(user_message_count=0)
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
+    monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
+    monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
+
+    messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(
+            content="hello",
+            client_request_id="req-new",
+            provider="anthropic",
+            provider_id=17,
+            model="claude-fable-5",
+        ),
+        user=cast(User, SimpleNamespace(id=user_id)),
+        db_session=cast(Session, db_session),
+    )
+
+    assert session.agent_provider == "onyx"
+    assert session.agent_model == "17/claude-fable-5"
+
+
+def test_send_message_rejects_second_active_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+
+    def get_session_stub(*_: object, **__: object) -> SimpleNamespace:
+        return session
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
+    monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
+    monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
+
+    first = messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(content="hello", client_request_id="req-1"),
+        user=cast(User, SimpleNamespace(id=user_id)),
+        db_session=cast(Session, _FakeDbSession(user_message_count=0)),
+    )
+    assert first.status == "QUEUED"
+
+    with pytest.raises(OnyxError):
+        messages_api.send_message(
+            session_id=session_id,
+            request=MessageRequest(content="again", client_request_id="req-2"),
+            user=cast(User, SimpleNamespace(id=user_id)),
+            db_session=cast(Session, _FakeDbSession(user_message_count=1)),
+        )
+
+
+def test_send_message_reloads_stale_skills(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+    session_manager = MagicMock()
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch, stale=True)
+    monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
+    monkeypatch.setattr(messages_api, "SessionManager", lambda _: session_manager)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
+    monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
+    user = cast(User, SimpleNamespace(id=user_id))
+
+    messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(content="hello", client_request_id="req-1"),
+        user=user,
+        db_session=cast(Session, _FakeDbSession(user_message_count=0)),
+    )
+
+    session_manager.reload_session_skills.assert_called_once_with(session_id, user)
+
+
+def test_send_message_is_idempotent_for_same_client_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+    persisted: list[tuple[int, str]] = []
+    start_runner = MagicMock()
+    rate_limit_check = MagicMock()
+
+    def get_session_stub(*_: object, **__: object) -> SimpleNamespace:
+        return session
+
+    def create_message_stub(
+        *,
+        turn_index: int,
+        message_metadata: dict[str, object],
+        **_: object,
+    ) -> None:
+        content = cast(dict[str, str], message_metadata["content"])
+        persisted.append((turn_index, content["text"]))
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
+    monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", rate_limit_check)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(
+        messages_api,
+        "create_message",
+        create_message_stub,
+    )
+    monkeypatch.setattr(
+        messages_api,
+        "start_interactive_turn_runner",
+        start_runner,
+    )
+
+    first = messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(content="hello", client_request_id="req-1"),
+        user=cast(User, SimpleNamespace(id=user_id)),
+        db_session=cast(Session, _FakeDbSession(user_message_count=0)),
+    )
+    same = messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(content="hello", client_request_id="req-1"),
+        user=cast(User, SimpleNamespace(id=user_id)),
+        db_session=cast(Session, _FakeDbSession(user_message_count=1)),
+    )
+
+    assert same.turn_id == first.turn_id
+    assert persisted == [(0, "hello")]
+    start_runner.assert_called_once()
+    rate_limit_check.assert_called_once()
+
+
+def test_send_message_leaves_turn_active_if_runner_cannot_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+
+    def get_session_stub(*_: object, **__: object) -> SimpleNamespace:
+        return session
+
+    def start_runner_stub(_: object) -> None:
+        raise RuntimeError("capacity exhausted")
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
+    monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
+    monkeypatch.setattr(
+        messages_api,
+        "start_interactive_turn_runner",
+        start_runner_stub,
+    )
+
+    response = messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(content="hello", client_request_id="req-1"),
+        user=cast(User, SimpleNamespace(id=user_id)),
+        db_session=cast(Session, _FakeDbSession(user_message_count=0)),
+    )
+
+    active = messages_api.get_active_turn(
+        cache=cache,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    assert response.status == "QUEUED"
+    assert active is not None
+    assert active.turn_id == UUID(response.turn_id)
+
+
+def test_send_message_blocked_when_over_token_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A user over their token/cost budget can't start a Craft turn: the gate
+    raises a structured 429 before any turn is created or scheduled."""
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id)
+    start_runner = MagicMock()
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
+    monkeypatch.setattr(messages_api, "get_build_session", lambda *_, **__: session)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", lambda *_: None)
+    monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
+    monkeypatch.setattr(messages_api, "start_interactive_turn_runner", start_runner)
+
+    def _over_budget(_user: object) -> None:
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, "You've reached the usage budget.")
+
+    monkeypatch.setattr(messages_api, "check_token_rate_limits", _over_budget)
+
+    with pytest.raises(OnyxError) as ei:
+        messages_api.send_message(
+            session_id=session_id,
+            request=MessageRequest(content="hello", client_request_id="req-1"),
+            user=cast(User, SimpleNamespace(id=user_id)),
+            db_session=cast(Session, _FakeDbSession(user_message_count=0)),
+        )
+
+    assert ei.value.error_code is OnyxErrorCode.RATE_LIMITED
+    start_runner.assert_not_called()  # no turn scheduled when over budget

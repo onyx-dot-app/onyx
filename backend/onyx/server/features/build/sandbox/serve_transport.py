@@ -14,8 +14,7 @@ import queue
 import threading
 import time
 from abc import abstractmethod
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -23,22 +22,36 @@ from uuid import UUID
 import httpx
 
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheLock, CacheLockLostError
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.server.features.build.api.packet_logger import get_packet_logger
-from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
-from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
-from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import (
+    OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+    OPENCODE_SERVE_EVENT_READ_TIMEOUT,
+    OPENCODE_SERVER_USERNAME,
+    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
+    PROMPT_SLOT_LEASE_SECONDS,
+)
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
-from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
-from onyx.server.features.build.sandbox.opencode.serve_client import _TurnState
-from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentThoughtChunk,
+    PromptResponse,
+)
+from onyx.server.features.build.sandbox.models import PromptAttachment
+from onyx.server.features.build.sandbox.opencode.event_bus import (
+    BUS_CLOSED_SENTINEL,
+    PodEventBus,
+)
 from onyx.server.features.build.sandbox.opencode.serve_client import (
+    OpencodeServeClient,
+    _TurnState,
     translate_opencode_event,
 )
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.metrics.craft_sandbox import (
+    SandboxProvisionPhase,
+    time_provision_phase,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -53,7 +66,15 @@ OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 30
 OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.25
 
 # How long a new turn waits for the previous turn's slot before giving up.
-PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS = 10.0
+PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS = 10.0
+
+# Must exceed the lease so a reclaimed turn can wait out a dead holder's slot.
+PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS = PROMPT_SLOT_LEASE_SECONDS + 10.0
+
+# Live attach streams are UI-facing. Coalesce adjacent text deltas just long
+# enough to avoid one React update per tiny opencode token burst, while keeping
+# control packets and final/error packets effectively immediate.
+LIVE_TEXT_COALESCE_SECONDS = 0.04
 
 
 @dataclass(frozen=True)
@@ -69,6 +90,55 @@ class ServeConnectionInfo:
         if not self.password:
             return None
         return httpx.BasicAuth(OPENCODE_SERVER_USERNAME, self.password)
+
+
+class PromptSlot:
+    """Prompt-slot handle. While driving a turn, call ``extend`` at least once
+    per ``PROMPT_SLOT_LEASE_SECONDS`` or the lock expires mid-turn. ``lost``
+    goes sticky-True once the lease is confirmed gone (another turn may
+    already hold the slot) — callers must stop driving opencode."""
+
+    def __init__(self, acquired: bool, lock: CacheLock | None = None) -> None:
+        self.acquired = acquired
+        self.lost = False
+        self._lock = lock
+
+    def extend(self) -> None:
+        if self._lock is None or self.lost:
+            return
+        try:
+            self._lock.extend(PROMPT_SLOT_LEASE_SECONDS)
+        except CacheLockLostError:
+            self.lost = True
+            logger.error(
+                "[SANDBOX-SERVE] prompt_slot: lease lost mid-turn — mutual "
+                "exclusion is gone; caller must abort",
+                exc_info=True,
+            )
+        except CACHE_TRANSIENT_ERRORS:
+            logger.warning(
+                "[SANDBOX-SERVE] prompt_slot: lease extend failed — relying on expiry",
+                exc_info=True,
+            )
+
+    def keep_alive(self, stop: threading.Event, max_seconds: float) -> None:
+        """For holders whose progress is client-paced or opaque — SSE
+        backpressure must not expire a live turn's lease. The cap bounds a
+        leaked holder; hitting it marks the slot ``lost`` so the holder aborts
+        instead of driving opencode without mutual exclusion."""
+        deadline = time.monotonic() + max_seconds
+        while not stop.wait(PROMPT_SLOT_LEASE_SECONDS / 4):
+            if self.lost:
+                return
+            if time.monotonic() >= deadline:
+                self.lost = True
+                logger.error(
+                    "[SANDBOX-SERVE] prompt_slot: keep-alive window exhausted "
+                    "(%.0fs) — marking slot lost",
+                    max_seconds,
+                )
+                return
+            self.extend()
 
 
 class _ServeMixin:
@@ -154,33 +224,36 @@ class _ServeMixin:
         self,
         sandbox_id: UUID,
         build_session_id: UUID,
-    ) -> Generator[bool, None, None]:
+        acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+        *,
+        fail_open: bool = True,
+    ) -> Generator[PromptSlot, None, None]:
         """Serialize turns for a build session across replicas via the cache.
 
         opencode-serve's ``prompt_async`` isn't concurrent-safe, so a second
-        in-flight POST corrupts session state. Yields False if a turn is
-        already in flight (caller aborts without side effects); fails open if
-        the cache is down. Auto-expires after a turn's max length. Keyed on
-        ``build_session_id``, which (unlike the opencode id) is stable per turn.
+        in-flight POST corrupts session state. Yields ``acquired=False`` if a
+        turn is already in flight; fails open if the cache is down. The short
+        lease must be renewed via ``PromptSlot.extend``, so a dead holder
+        strands the slot for at most one lease. Keyed on ``build_session_id``,
+        which (unlike the opencode id) is stable per turn.
         """
         # Tenant isolation is handled by the cache backend's key-prefixing.
         try:
             lock = get_cache_backend().lock(
                 f"buildpromptslot_{sandbox_id}_{build_session_id}",
-                timeout=SANDBOX_TURN_TIMEOUT_SECONDS,
+                timeout=PROMPT_SLOT_LEASE_SECONDS,
             )
-            acquired = lock.acquire(
-                blocking=True, blocking_timeout=PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS
-            )
+            acquired = lock.acquire(blocking=True, blocking_timeout=acquire_timeout)
         except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
-                "[SANDBOX-SERVE] prompt_slot: cache unreachable (%s) — failing open "
+                "[SANDBOX-SERVE] prompt_slot: cache unreachable (%s) — failing %s "
                 "on sandbox=%s build_session=%s",
                 e,
+                "open" if fail_open else "closed",
                 sandbox_id,
                 build_session_id,
             )
-            yield True
+            yield PromptSlot(acquired=fail_open)
             return
 
         try:
@@ -191,7 +264,9 @@ class _ServeMixin:
                     sandbox_id,
                     build_session_id,
                 )
-            yield acquired
+                yield PromptSlot(acquired=False)
+            else:
+                yield PromptSlot(acquired=True, lock=lock)
         finally:
             if acquired:
                 try:
@@ -227,12 +302,29 @@ class _ServeMixin:
             session_path,
             opencode_session_id,
         )
-        with self._build_serve_client(sandbox_id, session_path) as client:
+        with self._build_serve_client(
+            sandbox_id,
+            session_path,
+            with_event_bus=False,
+        ) as client:
             return client.ensure_session(
                 opencode_session_id,
                 directory=session_path,
                 title=f"build-session-{str(session_id)[:8]}",
             )
+
+    def dispose_opencode_instance(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> None:
+        session_path = self._session_directory(session_id)
+        with self._build_serve_client(
+            sandbox_id,
+            session_path,
+            with_event_bus=False,
+        ) as client:
+            client.dispose_instance(directory=session_path)
 
     def list_subagents(
         self,
@@ -251,6 +343,7 @@ class _ServeMixin:
                 return children
         return []
 
+    @time_provision_phase(SandboxProvisionPhase.OPENCODE_SERVE_WAIT)
     def _wait_for_opencode_serve_ready(
         self,
         sandbox_id: UUID,
@@ -385,19 +478,47 @@ class _ServeMixin:
             return bus
 
     def _build_serve_client(
-        self, sandbox_id: UUID, directory: str
+        self,
+        sandbox_id: UUID,
+        directory: str,
+        *,
+        with_event_bus: bool = True,
     ) -> OpencodeServeClient:
         info = self._serve_connection_info(sandbox_id)
-        bus = self._get_or_create_event_bus(sandbox_id, directory)
+        bus = (
+            self._get_or_create_event_bus(sandbox_id, directory)
+            if with_event_bus
+            else None
+        )
         return OpencodeServeClient(
             base_url=info.base_url,
             password=info.password,
             event_bus=bus,
             # Self-heal a 401 on any unary call (peer pod rotated the password).
-            reload_password=lambda: self._reload_serve_connection_info(
-                sandbox_id
-            ).password,
+            reload_password=lambda: (
+                self._reload_serve_connection_info(sandbox_id).password
+            ),
         )
+
+    def answer_connect_app_permission(
+        self,
+        sandbox_id: UUID,
+        *,
+        opencode_session_id: str,
+        perm_id: str,
+        directory: str,
+        allow: bool,
+    ) -> bool:
+        """Answer a pending ``connect_app`` permission on ``sandbox_id`` — the
+        decision endpoint's path to opencode, on whatever worker handled the POST.
+        Returns whether opencode accepted it. One-shot, so no event bus."""
+        client = self._build_serve_client(sandbox_id, directory, with_event_bus=False)
+        try:
+            return client.answer_permission(
+                opencode_session_id, perm_id, allow=allow, directory=directory
+            )
+        finally:
+            client.close()
 
     def _close_session_buses(self, sandbox_id: UUID, session_id: UUID) -> None:
         """Release the per-(sandbox, session) bus. Call from
@@ -444,13 +565,15 @@ class _ServeMixin:
         agent_provider: str | None,
         agent_model: str | None,
         *,
+        attachments: list[PromptAttachment] | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
+        should_abort_on_teardown: Callable[[], bool] | None = None,
+        turn_timeout_seconds: float | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream sandbox events via the in-sandbox ``opencode serve``. Preflight
         ``opencode_session_id`` via :meth:`ensure_opencode_session` to avoid
         one orphan session per turn."""
-        packet_logger = get_packet_logger()
         session_path = self._session_directory(session_id)
         client = self._build_serve_client(sandbox_id, session_path)
         try:
@@ -485,7 +608,6 @@ class _ServeMixin:
                 resolved_session_id,
                 _API_SERVER_HOSTNAME,
             )
-            packet_logger.log_session_start(session_id, sandbox_id, message)
 
             events_count = 0
             got_prompt_response = False
@@ -496,6 +618,9 @@ class _ServeMixin:
                     directory=session_path,
                     model_provider=agent_provider,
                     model_id=agent_model,
+                    attachments=attachments,
+                    timeout=OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+                    absolute_timeout=turn_timeout_seconds,
                     should_interrupt=should_interrupt,
                 ):
                     events_count += 1
@@ -509,20 +634,19 @@ class _ServeMixin:
                     events_count,
                     got_prompt_response,
                 )
-                packet_logger.log_session_end(
-                    session_id, success=True, events_count=events_count
-                )
             except GeneratorExit:
-                self._abort_and_log_turn_failure(
-                    client=client,
-                    session_id=session_id,
-                    resolved_session_id=resolved_session_id,
-                    session_path=session_path,
-                    events_count=events_count,
-                    packet_logger=packet_logger,
-                    error="GeneratorExit",
-                    log_level=logging.WARNING,
-                )
+                # A runner that lost turn ownership must not abort — its
+                # successor is (or will be) driving this opencode session.
+                if should_abort_on_teardown is None or should_abort_on_teardown():
+                    self._abort_and_log_turn_failure(
+                        client=client,
+                        session_id=session_id,
+                        resolved_session_id=resolved_session_id,
+                        session_path=session_path,
+                        events_count=events_count,
+                        error="GeneratorExit",
+                        log_level=logging.WARNING,
+                    )
                 raise
             except Exception as e:
                 self._abort_and_log_turn_failure(
@@ -531,11 +655,55 @@ class _ServeMixin:
                     resolved_session_id=resolved_session_id,
                     session_path=session_path,
                     events_count=events_count,
-                    packet_logger=packet_logger,
                     error=f"Exception: {e}",
                     log_level=logging.ERROR,
                 )
                 raise
+        finally:
+            client.close()
+
+    def abort_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_session_id: str,
+    ) -> None:
+        """Best-effort abort of the in-flight opencode prompt. Lock-agnostic
+        by design: any API process may stop running work (abort is
+        idempotent); only *starting* work is serialized by the prompt slot."""
+        session_path = self._session_directory(session_id)
+        try:
+            client = self._build_serve_client(
+                sandbox_id,
+                session_path,
+                with_event_bus=False,
+            )
+            try:
+                client.abort(opencode_session_id, directory=session_path)
+            finally:
+                client.close()
+        except Exception:
+            logger.warning(
+                "[SANDBOX-SERVE] abort failed for sandbox=%s session=%s",
+                sandbox_id,
+                session_id,
+                exc_info=True,
+            )
+
+    def delete_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_session_id: str,
+    ) -> bool:
+        session_path = self._session_directory(session_id)
+        client = self._build_serve_client(
+            sandbox_id,
+            session_path,
+            with_event_bus=False,
+        )
+        try:
+            return client.delete_session(opencode_session_id, directory=session_path)
         finally:
             client.close()
 
@@ -547,7 +715,6 @@ class _ServeMixin:
         resolved_session_id: str,
         session_path: str,
         events_count: int,
-        packet_logger: Any,
         error: str,
         log_level: int,
     ) -> None:
@@ -566,12 +733,6 @@ class _ServeMixin:
             logger.warning(
                 "[SANDBOX-SERVE] abort failed during turn cleanup: %s", abort_err
             )
-        packet_logger.log_session_end(
-            session_id,
-            success=False,
-            error=error,
-            events_count=events_count,
-        )
 
     def send_subagent_message_via_serve(
         self,
@@ -593,7 +754,6 @@ class _ServeMixin:
         follow-up uses the same model as the parent (not the child session's
         own default).
         """
-        packet_logger = get_packet_logger()
         session_path = self._session_directory(parent_session_id)
         client = self._build_serve_client(sandbox_id, session_path)
         try:
@@ -604,7 +764,6 @@ class _ServeMixin:
                 subagent_opencode_session_id,
                 _API_SERVER_HOSTNAME,
             )
-            packet_logger.log_session_start(parent_session_id, sandbox_id, message)
 
             events_count = 0
             try:
@@ -614,12 +773,10 @@ class _ServeMixin:
                     directory=session_path,
                     model_provider=agent_provider,
                     model_id=agent_model,
+                    absolute_timeout=PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
                 ):
                     events_count += 1
                     yield event
-                packet_logger.log_session_end(
-                    parent_session_id, success=True, events_count=events_count
-                )
             except GeneratorExit:
                 self._abort_and_log_turn_failure(
                     client=client,
@@ -627,7 +784,6 @@ class _ServeMixin:
                     resolved_session_id=subagent_opencode_session_id,
                     session_path=session_path,
                     events_count=events_count,
-                    packet_logger=packet_logger,
                     error="GeneratorExit",
                     log_level=logging.WARNING,
                 )
@@ -639,7 +795,6 @@ class _ServeMixin:
                     resolved_session_id=subagent_opencode_session_id,
                     session_path=session_path,
                     events_count=events_count,
-                    packet_logger=packet_logger,
                     error=f"Exception: {e}",
                     log_level=logging.ERROR,
                 )
@@ -669,22 +824,71 @@ class _ServeMixin:
         sub = bus.subscribe(opencode_session_id)
         try:
             last_event = time.monotonic()
+            pending_text_event: SandboxEvent | None = None
+            pending_text_started_at = 0.0
             while True:
+                now = time.monotonic()
+                if (
+                    pending_text_event is not None
+                    and now - pending_text_started_at >= LIVE_TEXT_COALESCE_SECONDS
+                ):
+                    yield pending_text_event
+                    pending_text_event = None
+                    continue
+
+                queue_timeout = 1.0
+                if pending_text_event is not None:
+                    queue_timeout = max(
+                        0.0,
+                        LIVE_TEXT_COALESCE_SECONDS - (now - pending_text_started_at),
+                    )
                 try:
-                    raw = sub.queue.get(timeout=1.0)
+                    raw = sub.queue.get(timeout=queue_timeout)
                 except queue.Empty:
+                    if pending_text_event is not None:
+                        yield pending_text_event
+                        pending_text_event = None
+                        continue
                     if time.monotonic() - last_event >= keepalive_seconds:
                         yield SSEKeepalive()
                         last_event = time.monotonic()
                     continue
                 if raw is BUS_CLOSED_SENTINEL:
+                    if pending_text_event is not None:
+                        yield pending_text_event
                     return
                 last_event = time.monotonic()
                 if raw.get("type") == "server.connected":
                     continue
                 for sandbox_event in translate_opencode_event(
-                    raw, state, fetch_message=fetch_message
+                    raw,
+                    state,
+                    fetch_message=fetch_message,
+                    parent_resolver=bus.parent_of,
+                    children_resolver=bus.list_children,
+                    fetch_message_by_session=lambda session_id, message_id: (
+                        client.get_message(session_id, message_id, directory=directory)
+                    ),
                 ):
+                    if pending_text_event is not None:
+                        merged = _merge_text_chunk(pending_text_event, sandbox_event)
+                        if merged is not None:
+                            pending_text_event = merged
+                            continue
+
+                        yield pending_text_event
+                        pending_text_event = None
+
+                    if (
+                        isinstance(
+                            sandbox_event, (AgentMessageChunk, AgentThoughtChunk)
+                        )
+                        and getattr(sandbox_event.content, "type", None) == "text"
+                    ):
+                        pending_text_event = sandbox_event
+                        pending_text_started_at = time.monotonic()
+                        continue
+
                     yield sandbox_event
         finally:
             # Close client first so a flaky unsubscribe doesn't leak the pool.
@@ -700,3 +904,41 @@ class _ServeMixin:
                 logger.exception(
                     "[SANDBOX-SERVE] bus unsubscribe failed in subscribe teardown"
                 )
+
+
+def _merge_text_chunk(
+    pending: SandboxEvent,
+    incoming: SandboxEvent,
+) -> SandboxEvent | None:
+    if type(pending) is not type(incoming):
+        return None
+    if not isinstance(pending, (AgentMessageChunk, AgentThoughtChunk)):
+        return None
+
+    pending_content = pending.content
+    incoming_content = incoming.content
+    if (
+        getattr(pending_content, "type", None) != "text"
+        or getattr(incoming_content, "type", None) != "text"
+    ):
+        return None
+
+    pending_text = getattr(pending_content, "text", None)
+    incoming_text = getattr(incoming_content, "text", None)
+    if not isinstance(pending_text, str) or not isinstance(incoming_text, str):
+        return None
+
+    if getattr(pending_content, "field_meta", None) != getattr(
+        incoming_content, "field_meta", None
+    ) or getattr(pending_content, "annotations", None) != getattr(
+        incoming_content, "annotations", None
+    ):
+        return None
+
+    return pending.model_copy(
+        update={
+            "content": pending_content.model_copy(
+                update={"text": pending_text + incoming_text}
+            )
+        }
+    )

@@ -1,11 +1,9 @@
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from kubernetes import client
 
-from onyx.sandbox_proxy.identity_k8s import _identity_from_pod
-from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup
+from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup, _identity_from_pod
 
 
 def _make_pod(

@@ -3,47 +3,53 @@ from typing import cast
 
 import pytz
 import timeago
-from slack_sdk.models.blocks import ActionsBlock
-from slack_sdk.models.blocks import Block
-from slack_sdk.models.blocks import ButtonElement
-from slack_sdk.models.blocks import ContextBlock
-from slack_sdk.models.blocks import DividerBlock
-from slack_sdk.models.blocks import HeaderBlock
-from slack_sdk.models.blocks import Option
-from slack_sdk.models.blocks import RadioButtonsElement
-from slack_sdk.models.blocks import SectionBlock
+from slack_sdk.models.blocks import (
+    ActionsBlock,
+    Block,
+    ButtonElement,
+    ContextBlock,
+    DividerBlock,
+    HeaderBlock,
+    Option,
+    RadioButtonsElement,
+    SectionBlock,
+)
 from slack_sdk.models.blocks.basic_components import MarkdownTextObject
 from slack_sdk.models.blocks.block_elements import ImageElement
 
 from onyx.chat.models import ChatBasicResponse
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import SearchFeedbackType
+from onyx.configs.constants import DocumentSource, SearchFeedbackType
 from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_DOCS_TO_DISPLAY
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import get_chat_session_by_message_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChannelConfig
-from onyx.onyxbot.slack.constants import CONTINUE_IN_WEB_UI_ACTION_ID
-from onyx.onyxbot.slack.constants import DISLIKE_BLOCK_ACTION_ID
-from onyx.onyxbot.slack.constants import FEEDBACK_DOC_BUTTON_BLOCK_ACTION_ID
-from onyx.onyxbot.slack.constants import FOLLOWUP_BUTTON_ACTION_ID
-from onyx.onyxbot.slack.constants import FOLLOWUP_BUTTON_RESOLVED_ACTION_ID
-from onyx.onyxbot.slack.constants import IMMEDIATE_RESOLVED_BUTTON_ACTION_ID
-from onyx.onyxbot.slack.constants import KEEP_TO_YOURSELF_ACTION_ID
-from onyx.onyxbot.slack.constants import LIKE_BLOCK_ACTION_ID
-from onyx.onyxbot.slack.constants import SHOW_EVERYONE_ACTION_ID
+from onyx.onyxbot.slack.constants import (
+    CONTINUE_IN_WEB_UI_ACTION_ID,
+    DISLIKE_BLOCK_ACTION_ID,
+    FOLLOWUP_BUTTON_ACTION_ID,
+    FOLLOWUP_BUTTON_RESOLVED_ACTION_ID,
+    IMMEDIATE_RESOLVED_BUTTON_ACTION_ID,
+    KEEP_TO_YOURSELF_ACTION_ID,
+    LIKE_BLOCK_ACTION_ID,
+    SHOW_EVERYONE_ACTION_ID,
+)
 from onyx.onyxbot.slack.formatting import format_slack_message
 from onyx.onyxbot.slack.icons import source_to_github_img_link
-from onyx.onyxbot.slack.models import ActionValuesEphemeralMessage
-from onyx.onyxbot.slack.models import ActionValuesEphemeralMessageChannelConfig
-from onyx.onyxbot.slack.models import ActionValuesEphemeralMessageMessageInfo
-from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.onyxbot.slack.utils import build_continue_in_web_ui_id
-from onyx.onyxbot.slack.utils import build_feedback_id
-from onyx.onyxbot.slack.utils import build_publish_ephemeral_message_id
-from onyx.onyxbot.slack.utils import remove_slack_text_interactions
-from onyx.onyxbot.slack.utils import translate_vespa_highlight_to_slack
+from onyx.onyxbot.slack.models import (
+    ActionValuesEphemeralMessage,
+    ActionValuesEphemeralMessageChannelConfig,
+    ActionValuesEphemeralMessageMessageInfo,
+    SlackMessageInfo,
+)
+from onyx.onyxbot.slack.utils import (
+    build_continue_in_web_ui_id,
+    build_feedback_id,
+    build_publish_ephemeral_message_id,
+    remove_slack_text_interactions,
+)
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.text_processing import decode_escapes
 
 _MAX_BLURB_LEN = 45
@@ -54,12 +60,7 @@ def _format_doc_updated_at(updated_at: datetime | None) -> str | None:
     if updated_at is None:
         return None
 
-    if updated_at.tzinfo is None or updated_at.tzinfo.utcoffset(updated_at) is None:
-        aware_updated_at = updated_at.replace(tzinfo=pytz.utc)
-    else:
-        aware_updated_at = updated_at.astimezone(pytz.utc)
-
-    return timeago.format(aware_updated_at, datetime.now(pytz.utc))
+    return timeago.format(datetime_to_utc(updated_at), datetime.now(pytz.utc))
 
 
 def get_feedback_reminder_blocks(thread_link: str, include_followup: bool) -> Block:
@@ -222,19 +223,6 @@ def get_document_feedback_blocks() -> Block:
     )
 
 
-def _build_doc_feedback_block(
-    message_id: int,
-    document_id: str,
-    document_rank: int,
-) -> ButtonElement:
-    feedback_id = build_feedback_id(message_id, document_id, document_rank)
-    return ButtonElement(
-        action_id=FEEDBACK_DOC_BUTTON_BLOCK_ACTION_ID,
-        value=feedback_id,
-        text="Give Feedback",
-    )
-
-
 def get_restate_blocks(
     msg: str,
     is_slash_command: bool,
@@ -247,63 +235,6 @@ def get_restate_blocks(
         HeaderBlock(text="Responding to the Query"),
         SectionBlock(text=f"```{msg}```"),
     ]
-
-
-def _build_documents_blocks(
-    documents: list[SearchDoc],
-    message_id: int | None,
-    num_docs_to_display: int = ONYX_BOT_NUM_DOCS_TO_DISPLAY,
-) -> list[Block]:
-    header_text = "Reference Documents"
-    seen_docs_identifiers = set()
-    section_blocks: list[Block] = [HeaderBlock(text=header_text)]
-    included_docs = 0
-    for rank, d in enumerate(documents):
-        if d.document_id in seen_docs_identifiers:
-            continue
-        seen_docs_identifiers.add(d.document_id)
-
-        # Strip newlines from the semantic identifier for Slackbot formatting
-        doc_sem_id = d.semantic_identifier.replace("\n", " ")
-        if d.source_type == DocumentSource.SLACK.value:
-            doc_sem_id = "#" + doc_sem_id
-
-        used_chars = len(doc_sem_id) + 3
-        match_str = translate_vespa_highlight_to_slack(d.match_highlights, used_chars)
-
-        included_docs += 1
-
-        header_line = f"{doc_sem_id}\n"
-        if d.link:
-            header_line = f"<{d.link}|{doc_sem_id}>\n"
-
-        updated_at_line = ""
-        updated_at_str = _format_doc_updated_at(d.updated_at)
-        if updated_at_str:
-            updated_at_line = f"_Updated {updated_at_str}_\n"
-
-        body_text = f">{remove_slack_text_interactions(match_str)}"
-
-        block_text = header_line + updated_at_line + body_text
-
-        feedback: ButtonElement | dict = {}
-        if message_id is not None:
-            feedback = _build_doc_feedback_block(
-                message_id=message_id,
-                document_id=d.document_id,
-                document_rank=rank,
-            )
-
-        section_blocks.append(
-            SectionBlock(text=block_text, accessory=feedback),
-        )
-
-        section_blocks.append(DividerBlock())
-
-        if included_docs >= num_docs_to_display:
-            break
-
-    return section_blocks
 
 
 def _build_sources_blocks(
@@ -352,17 +283,11 @@ def _build_sources_blocks(
 
         section_blocks.append(
             ContextBlock(
-                elements=(
-                    [
-                        ImageElement(
-                            image_url=img_link,
-                            alt_text=f"{d.source_type.value} logo",
-                        )
-                    ]
-                    if img_link
-                    else []
-                )
-                + [
+                elements=[
+                    ImageElement(
+                        image_url=img_link,
+                        alt_text=f"{d.source_type.value} logo",
+                    ),
                     (
                         MarkdownTextObject(text=f"{document_title}")
                         if d.link == ""
@@ -378,22 +303,6 @@ def _build_sources_blocks(
             break
 
     return section_blocks
-
-
-def _priority_ordered_documents_blocks(
-    answer: ChatBasicResponse,
-) -> list[Block]:
-    top_docs = answer.top_documents if answer.top_documents else None
-    if not top_docs:
-        return []
-
-    document_blocks = _build_documents_blocks(
-        documents=top_docs,
-        message_id=answer.message_id,
-    )
-    if document_blocks:
-        document_blocks = [DividerBlock()] + document_blocks
-    return document_blocks
 
 
 def _build_citations_blocks(

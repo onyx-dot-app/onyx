@@ -15,22 +15,182 @@ jobs:
       id-token: write
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # ratchet:astral-sh/setup-uv@v8.1.0
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: false
-          version: "0.9.9"
+          version: "0.11.25"
+      # Build every platform wheel first, then publish once. Publishing per
+      # platform would leave a partial release on PyPI if a later platform
+      # failed; building all up front keeps the release atomic. Remove the
+      # cached Go binary before each build so the build hook recompiles for the
+      # target platform instead of reusing the previous platform's binary.
       - run: |
-          for goos in linux windows darwin; do
+          rm -f onyx-cli
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 uv build --wheel
+          rm -f onyx-cli
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+            ONYX_CLI_WHEEL_PLATFORM_TAG=musllinux_1_2_x86_64 \
+            uv build --wheel
+          rm -f onyx-cli
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 uv build --wheel
+          rm -f onyx-cli
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+            ONYX_CLI_WHEEL_PLATFORM_TAG=musllinux_1_2_aarch64 \
+            uv build --wheel
+
+          for goos in windows darwin; do
             for goarch in amd64 arm64; do
+              rm -f onyx-cli
               GOOS="$goos" GOARCH="$goarch" uv build --wheel
             done
           done
         working-directory: cli
+
       - run: uv publish
         working-directory: cli
+
+  github-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to create the GitHub release and upload archives
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # full history + tags for the previous-release changelog range
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: "1.26.4"
+          cache: false
+
+      # ldflags follow the contract of hatch_build.py: `main.version` carries
+      # the `v` prefix and `main.commit` the full SHA. Unlike the wheel builds
+      # (which keep the symbol table so govulncheck can scan them), these
+      # standalone binaries are fully stripped.
+      - name: Build release archives
+        env:
+          TAG: ${{ github.ref_name }}
+        working-directory: cli
+        run: |
+          version="${TAG#cli/}"
+          mkdir -p dist
+          for goos in linux darwin windows; do
+            for goarch in amd64 arm64; do
+              binary="onyx-cli"
+              if [ "$goos" = "windows" ]; then
+                binary="onyx-cli.exe"
+              fi
+              GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -trimpath \
+                -ldflags="-s -w -X main.version=${version} -X main.commit=${GITHUB_SHA}" \
+                -o "$binary"
+              archive="onyx-cli_${version#v}_${goos}_${goarch}"
+              if [ "$goos" = "windows" ]; then
+                zip -q "dist/${archive}.zip" "$binary" README.md
+              else
+                tar -czf "dist/${archive}.tar.gz" "$binary" README.md
+              fi
+              rm "$binary"
+            done
+          done
+          cd dist && sha256sum -- *.tar.gz *.zip > "onyx-cli_${version#v}_checksums.txt"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Nearest cli/v* tag in the ancestry, not the highest by version:
+          # version-sorting would pick a newer tag as "previous" when releasing
+          # a backport, corrupting the changelog range. Empty on the first release.
+          prev_tag="$(git describe --tags --abbrev=0 --match='cli/v*' "${TAG}^" 2>/dev/null || true)"
+          {
+            echo "## Changes"
+            if [ -n "$prev_tag" ]; then
+              git log --no-merges --pretty='format:* %s (%h)' "${prev_tag}..${TAG}" -- cli/
+            else
+              git log --no-merges --pretty='format:* %s (%h)' "${TAG}" -- cli/
+            fi
+            echo
+          } > "${RUNNER_TEMP}/release-notes.md"
+
+          release_args=(--latest=false)
+          if [[ ! "$TAG" =~ ^cli/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            release_args+=(--prerelease)
+          fi
+
+          # Create and upload separately so a rerun can heal a partial release:
+          # creation is skipped when the release already exists, and --clobber
+          # replaces any assets left behind by a failed upload.
+          #
+          # Existence must be checked via the list endpoint: a draft release
+          # (e.g. notes drafted in the UI ahead of the tag) doesn't create the
+          # git tag until published, so tag-based lookups like `gh release view`
+          # return 404 for it and a blind create would produce a duplicate
+          # release (see the same lookup in deployment.yml). If the tag only has
+          # a draft, publish it instead of creating over it.
+          release_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n 1)"
+          if [ -z "$release_id" ]; then
+            gh release create "$TAG" \
+              --verify-tag \
+              --title "onyx-cli ${TAG#cli/}" \
+              --notes-file "${RUNNER_TEMP}/release-notes.md" \
+              "${release_args[@]}"
+          elif [ "$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" --jq .draft)" = "true" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+              -F draft=false -f make_latest=false >/dev/null
+          fi
+          gh release upload "$TAG" --clobber \
+            cli/dist/*.tar.gz cli/dist/*.zip cli/dist/*_checksums.txt
+
+      # The install.sh/install.ps1 bootstrappers download the newest CLI from
+      # the fixed cli-latest release: the repo-global releases/latest alias
+      # can't be used (it resolves to app/desktop releases — CLI releases are
+      # created with --latest=false), and hitting api.github.com to discover
+      # the newest cli/v* tag would expose installs to rate limits. Assets are
+      # re-published under version-less names so the download URLs are static.
+      - name: Update the cli-latest rolling release
+        if: startsWith(github.ref_name, 'cli/v') && !contains(github.ref_name, '-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#cli/}"
+          mkdir -p latest-dist
+          for archive in cli/dist/onyx-cli_"${version#v}"_*; do
+            name="$(basename "$archive")"
+            cp "$archive" "latest-dist/${name/onyx-cli_${version#v}_/onyx-cli_}"
+          done
+          rm -f latest-dist/onyx-cli_checksums.txt
+          (cd latest-dist && sha256sum -- * > onyx-cli_checksums.txt)
+
+          # Move (or create) the cli-latest tag at this commit.
+          if gh api "repos/${GITHUB_REPOSITORY}/git/refs/tags/cli-latest" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/cli-latest" \
+              -f "sha=${GITHUB_SHA}" -F force=true >/dev/null
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f "ref=refs/tags/cli-latest" -f "sha=${GITHUB_SHA}" >/dev/null
+          fi
+
+          release_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq '.[] | select(.tag_name == "cli-latest") | .id' | head -n 1)"
+          notes="Rolling release tracking the newest onyx-cli (currently ${TAG#cli/}). Used by the install.sh/install.ps1 bootstrappers; see the cli/v* releases for changelogs."
+          if [ -z "$release_id" ]; then
+            gh release create cli-latest \
+              --latest=false \
+              --title "onyx-cli latest" \
+              --notes "$notes"
+          else
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+              -f "body=${notes}" -f make_latest=false >/dev/null
+          fi
+          gh release upload cli-latest --clobber latest-dist/*
 
   docker-amd64:
     runs-on:
@@ -47,21 +207,21 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-cli
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # ratchet:aws-actions/configure-aws-credentials@v6.1.0
+        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d # ratchet:aws-actions/configure-aws-credentials@v6.2.2
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802 # ratchet:aws-actions/aws-secretsmanager-get-secrets@v2.0.10
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53 # ratchet:aws-actions/aws-secretsmanager-get-secrets@v3.0.1
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -69,17 +229,17 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./cli
           file: ./cli/Dockerfile
@@ -103,21 +263,21 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-cli
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # ratchet:aws-actions/configure-aws-credentials@v6.1.0
+        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d # ratchet:aws-actions/configure-aws-credentials@v6.2.2
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802 # ratchet:aws-actions/aws-secretsmanager-get-secrets@v2.0.10
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53 # ratchet:aws-actions/aws-secretsmanager-get-secrets@v3.0.1
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -125,17 +285,17 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./cli
           file: ./cli/Dockerfile
@@ -159,16 +319,16 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-cli
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # ratchet:aws-actions/configure-aws-credentials@v6.1.0
+        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d # ratchet:aws-actions/configure-aws-credentials@v6.2.2
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802 # ratchet:aws-actions/aws-secretsmanager-get-secrets@v2.0.10
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53 # ratchet:aws-actions/aws-secretsmanager-get-secrets@v3.0.1
         with:
           secret-ids: |
             DOCKER_USERNAME, deploy/docker-username
@@ -176,10 +336,10 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -206,3 +366,114 @@ jobs:
               -t "${REGISTRY_IMAGE}:${SANITIZED_TAG}" \
               "${IMAGES[@]}"
           fi
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # needed to checkout the repo for SARIF source locations
+      security-events: write # needed for SARIF uploads
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: "1.26.4"
+          cache: false
+
+      - name: Install govulncheck
+        run: |
+          GOBIN="${RUNNER_TEMP}/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+
+      # Build unstripped binaries just for scanning, rather than trimming symbols
+      # from (and thereby bloating) the released production binaries. govulncheck
+      # only needs the symbol table, not the ldflags version/commit stamping the
+      # release build does, so a plain `go build` per platform is enough.
+      - name: Build binaries for scanning
+        working-directory: cli
+        run: |
+          set -euo pipefail
+          mkdir -p ../govulncheck-binaries
+
+          for goos in linux darwin windows; do
+            for goarch in amd64 arm64; do
+              out="../govulncheck-binaries/onyx-cli-${goos}-${goarch}"
+              if [ "$goos" = "linux" ]; then
+                GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -o "$out" .
+              else
+                GOOS="$goos" GOARCH="$goarch" go build -o "$out" .
+              fi
+            done
+          done
+
+      - name: Run govulncheck on freshly built binaries
+        run: |
+          set -euo pipefail
+          scan_exit=0
+          mkdir -p govulncheck-results/raw
+
+          for binary in govulncheck-binaries/*; do
+            binary_name="$(basename "$binary")"
+            sarif_file="govulncheck-results/raw/${binary_name}.sarif"
+
+            if ! govulncheck -mode=binary "$binary"; then
+              scan_exit=1
+            fi
+            govulncheck -mode=binary -format=sarif "$binary" > "$sarif_file"
+          done
+
+          python3 <<'PY'
+          import json
+          from pathlib import Path
+
+          raw_results_dir = Path("govulncheck-results/raw")
+          merged = {
+              "version": "2.1.0",
+              "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+              "runs": [],
+          }
+
+          sarif_paths = sorted(raw_results_dir.glob("*.sarif"))
+          if not sarif_paths:
+              raise SystemExit("No govulncheck SARIF files were generated")
+
+          for sarif_path in sarif_paths:
+              data = json.loads(sarif_path.read_text())
+              for run in data.get("runs", []):
+                  run["automationDetails"] = {
+                      "id": f"onyx-cli-govulncheck/{sarif_path.stem}",
+                  }
+                  results = []
+                  upload_levels = {"error", "warning"}
+                  for result in run.get("results", []):
+                      if result.get("level") not in upload_levels:
+                          continue
+                      if not result.get("locations"):
+                          result["locations"] = [
+                              {
+                                  "physicalLocation": {
+                                      "artifactLocation": {"uri": "cli/go.mod"},
+                                      "region": {"startLine": 1},
+                                  }
+                              }
+                          ]
+                      results.append(result)
+                  run["results"] = results
+                  merged["runs"].append(run)
+
+          if not merged["runs"]:
+              raise SystemExit("No govulncheck SARIF runs were generated")
+
+          Path("govulncheck-results.sarif").write_text(json.dumps(merged))
+          PY
+
+          exit "$scan_exit"
+
+      - name: Upload govulncheck scan results to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: govulncheck-results.sarif

@@ -4,8 +4,7 @@ from unittest.mock import patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
-from onyx.connectors.google_drive.models import DriveRetrievalStage
-from onyx.connectors.google_drive.models import RetrievedDriveFile
+from onyx.connectors.google_drive.models import DriveRetrievalStage, RetrievedDriveFile
 
 
 def _stub_run_functions(
@@ -98,7 +97,9 @@ def test_connector_skips_link_only_files_when_enabled() -> None:
 
     assert results == []
     convert_mock.assert_not_called()
-    get_new_ancestors_mock.assert_called_once()
+    # The only file is filtered out, so no sub-batch runs and there are no
+    # ancestors to resolve.
+    get_new_ancestors_mock.assert_not_called()
 
 
 def test_connector_processes_files_when_option_disabled() -> None:

@@ -10,6 +10,12 @@
 
 services:
   api_server:
+    # Building through this overlay produces the dev image variant (runtime + debugging
+    # tools such as vim/psql/curl), matching the published -dev tag suffix. CI is
+    # unaffected: it injects prebuilt images via ONYX_BACKEND_IMAGE and never builds
+    # through compose.
+    build:
+      target: dev
     ports:
       - "8080:8080"
     deploy:
@@ -17,6 +23,10 @@ services:
         limits:
           cpus: "${API_SERVER_CPU_LIMIT:-0}"
           memory: "${API_SERVER_MEM_LIMIT:-0}"
+
+  background:
+    build:
+      target: dev
 
   # Uncomment the block below to enable the MCP server for Onyx.
   # mcp_server:
@@ -46,6 +56,7 @@ services:
 
   minio:
     # Use different ports to avoid conflicts with model servers.
+    # TODO(security): prefix 127.0.0.1: to bind loopback, not 0.0.0.0 (LAN-exposed).
     ports:
       - "${MINIO_API_HOST_PORT:-9004}:9000"
       - "${MINIO_CONSOLE_HOST_PORT:-9005}:9001"

@@ -8,10 +8,30 @@
   "commentTypes": ["logic", "syntax", "style"],
   "instructions": "",
   "disabledLabels": [],
-  "excludeAuthors": ["dependabot[bot]", "renovate[bot]"],
+  "excludeAuthors": [
+    "dependabot[bot]",
+    "github-actions[bot]",
+    "onyx-cherry-pick[bot]"
+  ],
   "ignoreKeywords": "",
   "ignorePatterns": "",
-  "includeAuthors": [],
+  "includeAuthors": [
+    "duo-onyx",
+    "Bo-Onyx",
+    "nmgarza5",
+    "yuhongsun96",
+    "justin-tahara",
+    "raunakab",
+    "evan-onyx",
+    "Weves",
+    "wenxi-onyx",
+    "jmelahman",
+    "rohoswagger",
+    "Subash-Mohan",
+    "Danelegend",
+    "acaprau",
+    "joachim-danswer"
+  ],
   "summarySection": {
     "included": true,
     "collapsible": false,

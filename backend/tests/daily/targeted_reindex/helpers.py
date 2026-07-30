@@ -15,27 +15,21 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
-)
-from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptError
-from onyx.db.models import TargetedReindexJob
-from onyx.db.models import TargetedReindexJobTarget
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, IndexingStatus
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    IndexAttempt,
+    IndexAttemptError,
+    TargetedReindexJob,
+    TargetedReindexJobTarget,
+)
 from onyx.db.search_settings import get_current_search_settings
 
 _ADMIN_EMAIL = "admin@onyx-test.com"

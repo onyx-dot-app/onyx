@@ -33,6 +33,7 @@ def convert_inference_sections_to_llm_string(
     include_source_type: bool = True,
     include_link: bool = False,
     include_document_id: bool = False,
+    note: str | None = None,
 ) -> tuple[str, dict[int, str]]:
     """Convert InferenceSection objects to a JSON string for LLM.
 
@@ -113,7 +114,12 @@ def convert_inference_sections_to_llm_string(
             result["metadata"] = json.dumps(chunk.metadata, ensure_ascii=False)
         results.append(result)
 
+    payload: dict[str, object] = {}
+    payload["results"] = results
+    if note:
+        payload["note"] = note
+
     return (
-        json.dumps({"results": results}, indent=2, ensure_ascii=False),
+        json.dumps(payload, indent=2, ensure_ascii=False),
         citation_mapping,
     )

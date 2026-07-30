@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Grants the webview pages the plugin commands they invoke: shell open for target=_blank links (the shell plugin's injected click handler) and window dragging / double-click maximize for the injected titlebar drag region. The server URL is user-configurable (self-hosted deployments), so the remote grant must cover any origin the webview may load.",
+  "windows": ["*"],
+  "local": true,
+  "remote": {
+    "urls": ["http://*:*", "https://*:*"]
+  },
+  "permissions": [
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
+    "shell:default"
+  ]
+}

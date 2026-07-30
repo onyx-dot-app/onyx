@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
 const onyxLogo = `   ██████╗ ███╗   ██╗██╗   ██╗██╗  ██╗
   ██╔═══██╗████╗  ██║╚██╗ ██╔╝╚██╗██╔╝
@@ -30,4 +30,3 @@ func renderSplash(width, height int) string {
 
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, block)
 }
-

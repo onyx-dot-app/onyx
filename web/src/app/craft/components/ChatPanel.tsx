@@ -2,13 +2,14 @@
 
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import {
   useSession,
   useSessionId,
   useHasSession,
   useIsRunning,
   useIsInterrupting,
+  useWasInterrupted,
   useOutputPanelOpen,
   useToggleOutputPanel,
   useBuildSessionStore,
@@ -20,7 +21,11 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
-import { SessionErrorCode } from "@/app/craft/types/streamingTypes";
+import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
+import {
+  BuildMessageAttachment,
+  SessionErrorCode,
+} from "@/app/craft/types/streamingTypes";
 import {
   BuildFile,
   UploadFileStatus,
@@ -29,14 +34,20 @@ import {
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { isScheduledRunContextInFlight } from "@/app/craft/v1/tasks/utils";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import Dropzone from "react-dropzone";
 import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
-import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
+import {
+  BuildLlmSelection,
+  hasSupportedCraftProvider,
+  resolveSessionLlmSelection,
+} from "@/app/craft/onboarding/constants";
+import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
+import { useUser } from "@/providers/UserProvider";
 import ScheduledRunBanner, {
   useScheduledRunContext,
 } from "@/app/craft/components/ScheduledRunBanner";
@@ -46,9 +57,11 @@ import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsR
 import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
 import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
+import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
+import SkillsStaleNotice from "@/app/craft/components/SkillsStaleNotice";
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { SvgSidebar, SvgChevronDown } from "@opal/icons";
+import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
 import { Button as OpalButton, Tooltip } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -58,6 +71,20 @@ import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
   existingSessionId?: string | null;
+}
+
+function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
+  return files.flatMap((file) =>
+    file.status === UploadFileStatus.COMPLETED && file.path
+      ? [
+          {
+            name: file.name,
+            path: file.path,
+            mimeType: file.file_type,
+          },
+        ]
+      : []
+  );
 }
 
 /**
@@ -77,37 +104,72 @@ export default function BuildChatPanel({
   const session = useSession();
   const sessionId = useSessionId();
   const scheduledSessionId = sessionId ?? existingSessionId ?? null;
+  // Gate on origin so interactive sessions don't 404 on scheduled-run-context.
+  const scheduledRunSessionId =
+    session?.origin === "SCHEDULED" ? scheduledSessionId : null;
   const { data: scheduledRunContext, mutate: mutateScheduledRunContext } =
-    useScheduledRunContext(scheduledSessionId);
+    useScheduledRunContext(scheduledRunSessionId);
   const scheduledRunInFlight =
     isScheduledRunContextInFlight(scheduledRunContext);
   const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;
-  const { setLeftSidebarFolded, leftSidebarFolded } = useBuildContext();
+  const hasInterruptibleTurn = session?.status === "running";
+  const wasInterrupted = useWasInterrupted();
+  const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
+    useBuildContext();
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
+  const onWakeIntent = useWakeOnIntent();
 
   const { llmProviders } = useLLMProviders();
+  // Sessions can outlive the org's supported providers — gate sends until one
+  // exists (the model picker stays enabled so admins can connect from it).
+  const hasProvider = hasSupportedCraftProvider(llmProviders);
   // Picker shows the session's stored model unless the user picks another.
-  // The pick is keyed by session so it can't leak across sessions.
-  const sessionModel = useMemo<BuildLlmSelection | null>(() => {
-    if (!session?.agentProvider || !session?.agentModel) return null;
-    const match = llmProviders?.find(
-      (p) => p.provider === session.agentProvider
-    );
-    return {
-      provider: session.agentProvider,
-      providerName: match?.name ?? session.agentProvider,
-      modelName: session.agentModel,
-    };
-  }, [session?.agentProvider, session?.agentModel, llmProviders]);
+  // The pick is keyed by session so it can't leak across sessions; only when
+  // neither exists does the user's persisted preference (or the recommended
+  // default) apply.
+  const sessionModel = useMemo<BuildLlmSelection | null>(
+    () =>
+      resolveSessionLlmSelection(
+        session?.agentProvider,
+        session?.agentModel,
+        llmProviders
+      ),
+    [session?.agentProvider, session?.agentModel, llmProviders]
+  );
   const [modelBySession, setModelBySession] = useState<
     Record<string, BuildLlmSelection>
   >({});
-  const selectedModel =
-    (sessionId ? modelBySession[sessionId] : undefined) ?? sessionModel;
+  const { user } = useUser();
+  const selectedModel = useMemo(
+    () =>
+      (sessionId ? modelBySession[sessionId] : undefined) ??
+      sessionModel ??
+      getPreferredLlmSelection(user?.id, llmProviders),
+    [sessionId, modelBySession, sessionModel, user?.id, llmProviders]
+  );
+
+  const contextUsage = useMemo(() => {
+    const usage = session?.contextUsage;
+    if (!usage) return null;
+    let limit: number | null = null;
+    if (selectedModel) {
+      const provider = llmProviders?.find(
+        (candidate) => candidate.id === selectedModel.providerId
+      );
+      const config = provider?.model_configurations.find(
+        (m) => m.name === selectedModel.modelName
+      );
+      limit = config?.max_input_tokens ?? null;
+    }
+    return {
+      usedTokens: usage.usedTokens,
+      contextLimit: limit,
+    };
+  }, [session?.contextUsage, selectedModel, llmProviders]);
 
   // Main-column view mode: chat (main agent) vs a subagent transcript.
   const viewedSubagentSessionId = useViewedSubagentSessionId();
@@ -142,14 +204,26 @@ export default function BuildChatPanel({
   const nameBuildSession = useBuildSessionStore(
     (state) => state.nameBuildSession
   );
-  const { streamMessage, interruptStreaming, streamScheduledRunEvents } =
-    useBuildStreaming();
+  const {
+    streamMessage,
+    interruptStreaming,
+    streamScheduledRunEvents,
+    streamTurnEvents,
+  } = useBuildStreaming();
   const isInterrupting = useIsInterrupting();
   const queuedMessages = useQueuedMessages();
   const enqueueMessage = useBuildSessionStore((state) => state.enqueueMessage);
   const removeQueuedMessage = useBuildSessionStore(
     (state) => state.removeQueuedMessage
   );
+  const attachedTurnRef = useRef<{
+    turnId: string;
+    controller: AbortController;
+  } | null>(null);
+  const attachCleanupTimerRef = useRef<{
+    turnId: string;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
   const isPreProvisioning = useIsPreProvisioning();
   const isPreProvisioningFailed = useIsPreProvisioningFailed();
   const preProvisionedSessionId = usePreProvisionedSessionId();
@@ -210,8 +284,78 @@ export default function BuildChatPanel({
     mutateScheduledRunContext,
   ]);
 
+  const activeTurnId = session?.activeTurnId ?? null;
+  const activeTurnLocalOwner = session?.activeTurnLocalOwner ?? false;
   useEffect(() => {
-    if (!scheduledSessionId || !scheduledRunContext || scheduledRunInFlight) {
+    const pendingCleanup = attachCleanupTimerRef.current;
+    if (pendingCleanup?.turnId === activeTurnId) {
+      clearTimeout(pendingCleanup.timer);
+      attachCleanupTimerRef.current = null;
+    }
+
+    if (
+      !scheduledSessionId ||
+      !activeTurnId ||
+      activeTurnLocalOwner ||
+      scheduledRunInFlight
+    ) {
+      return;
+    }
+
+    const scheduleCleanup = (attachment: {
+      turnId: string;
+      controller: AbortController;
+    }) => {
+      attachCleanupTimerRef.current = {
+        turnId: attachment.turnId,
+        timer: setTimeout(() => {
+          attachment.controller.abort();
+          if (attachedTurnRef.current === attachment) {
+            attachedTurnRef.current = null;
+          }
+          if (attachCleanupTimerRef.current?.turnId === attachment.turnId) {
+            attachCleanupTimerRef.current = null;
+          }
+        }, 0),
+      };
+    };
+
+    const existingAttachment = attachedTurnRef.current;
+    if (existingAttachment?.turnId === activeTurnId) {
+      return () => scheduleCleanup(existingAttachment);
+    }
+
+    existingAttachment?.controller.abort();
+    const controller = new AbortController();
+    const attachment = { turnId: activeTurnId, controller };
+    attachedTurnRef.current = attachment;
+    void streamTurnEvents(
+      scheduledSessionId,
+      activeTurnId,
+      controller.signal,
+      () => {
+        if (attachedTurnRef.current === attachment) {
+          attachedTurnRef.current = null;
+        }
+      }
+    );
+
+    return () => scheduleCleanup(attachment);
+  }, [
+    scheduledSessionId,
+    activeTurnId,
+    activeTurnLocalOwner,
+    scheduledRunInFlight,
+    streamTurnEvents,
+  ]);
+
+  useEffect(() => {
+    if (
+      !scheduledSessionId ||
+      !scheduledRunContext ||
+      scheduledRunInFlight ||
+      activeTurnId
+    ) {
       return;
     }
     updateSessionData(scheduledSessionId, { status: "active" });
@@ -219,6 +363,7 @@ export default function BuildChatPanel({
     scheduledSessionId,
     scheduledRunContext,
     scheduledRunInFlight,
+    activeTurnId,
     updateSessionData,
   ]);
 
@@ -307,10 +452,10 @@ export default function BuildChatPanel({
     setShowScrollButton(false);
   }, [sessionId]);
 
-  const handleSubmit = useCallback(
+  const sendMessage = useCallback(
     async (
       message: string,
-      files: BuildFile[],
+      attachments: BuildMessageAttachment[],
       modelOverride?: BuildLlmSelection | null
     ) => {
       if (limits?.isLimited) {
@@ -326,9 +471,6 @@ export default function BuildChatPanel({
       track(AnalyticsEvent.SENT_CRAFT_MESSAGE);
 
       const chosen = modelOverride ?? selectedModel;
-      const model = chosen
-        ? { provider: chosen.provider, modelName: chosen.modelName }
-        : null;
 
       if (hasSession && sessionId) {
         // Existing session flow
@@ -344,9 +486,10 @@ export default function BuildChatPanel({
           type: "user",
           content: message,
           timestamp: new Date(),
+          attachments,
         });
         // Stream the response
-        await streamMessage(sessionId, message, model);
+        await streamMessage(sessionId, message, chosen, attachments);
         refreshLimits();
       } else {
         // New session flow - ALWAYS use pre-provisioned session
@@ -363,20 +506,6 @@ export default function BuildChatPanel({
         // The backend session already exists (created during pre-provisioning).
         // Files were already uploaded immediately when attached to the pre-provisioned session.
         // Here we initialize the LOCAL Zustand store entry with the right state.
-        const userMessage = {
-          id: `msg-${Date.now()}`,
-          type: "user" as const,
-          content: message,
-          timestamp: new Date(),
-        };
-        // Initialize local state (NOT an API call - backend session already exists)
-        // - status: "running" disables input immediately
-        // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
-        createSession(newSessionId, {
-          messages: [userMessage],
-          status: "running",
-        });
-
         // Handle files that weren't successfully uploaded yet
         // This handles edge cases where:
         // 1. File is still uploading when user sends message - wait for it
@@ -408,6 +537,20 @@ export default function BuildChatPanel({
         }
 
         // Note: PENDING files are auto-uploaded by the context when session becomes available
+        const userMessage = {
+          id: `msg-${Date.now()}`,
+          type: "user" as const,
+          content: message,
+          timestamp: new Date(),
+          attachments,
+        };
+        // Initialize local state (NOT an API call - backend session already exists)
+        // - status: "running" disables input immediately
+        // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
+        createSession(newSessionId, {
+          messages: [userMessage],
+          status: "running",
+        });
 
         // Navigate to URL - session controller will set currentSessionId
         router.push(
@@ -420,7 +563,7 @@ export default function BuildChatPanel({
         setTimeout(() => nameBuildSession(newSessionId), 1000);
 
         // Stream the response (uses session ID directly, not currentSessionId)
-        await streamMessage(newSessionId, message, model);
+        await streamMessage(newSessionId, message, chosen, attachments);
         refreshLimits();
       }
     },
@@ -442,13 +585,24 @@ export default function BuildChatPanel({
     ]
   );
 
+  const handleSubmit = useCallback(
+    (
+      message: string,
+      files: BuildFile[],
+      modelOverride?: BuildLlmSelection | null
+    ) => sendMessage(message, toMessageAttachments(files), modelOverride),
+    [sendMessage]
+  );
+
   const handleInterrupt = useCallback(() => {
     if (sessionId) void interruptStreaming(sessionId);
   }, [sessionId, interruptStreaming]);
 
   const handleQueueMessage = useCallback(
-    (text: string) => {
-      if (sessionId) enqueueMessage(sessionId, text);
+    (text: string, files: BuildFile[]) => {
+      if (sessionId) {
+        enqueueMessage(sessionId, text, toMessageAttachments(files));
+      }
     },
     [sessionId, enqueueMessage]
   );
@@ -487,7 +641,7 @@ export default function BuildChatPanel({
       const next = queuedMessages[0];
       if (next) {
         removeQueuedMessage(sessionId, 0);
-        void handleSubmit(next.text, []);
+        void sendMessage(next.text, next.attachments);
       }
     }
   }, [
@@ -497,7 +651,7 @@ export default function BuildChatPanel({
     sessionError,
     isLimited,
     queuedMessages,
-    handleSubmit,
+    sendMessage,
     removeQueuedMessage,
   ]);
 
@@ -548,6 +702,7 @@ export default function BuildChatPanel({
               changes grow leftward into empty space without shifting anything. */}
               <div className="flex flex-row items-center gap-2 shrink-0">
                 <SandboxStatusIndicator />
+                <SandboxAsleepNotice />
                 {/* Output panel toggle — same icon for open and close */}
                 {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <IconButton
@@ -567,7 +722,9 @@ export default function BuildChatPanel({
                 />
               </div>
               {/* Soft fade border at bottom */}
-              <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
+              {!videoBackgroundEnabled && (
+                <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
+              )}
             </div>
 
             {/* Main content area — cross-fades when switching between the main
@@ -596,15 +753,25 @@ export default function BuildChatPanel({
                     />
                   ) : (
                     <BuildMessageList
+                      sessionId={sessionId ?? existingSessionId ?? null}
+                      attachmentRefreshKey={session?.webappNeedsRefresh}
                       messages={session?.messages ?? []}
                       streamItems={session?.streamItems ?? []}
                       isStreaming={displayIsRunning}
                       autoScrollEnabled={isAtBottom}
                       scrollContainerRef={scrollContainerRef}
                       trailingAssistantSlot={
-                        <LiveApprovalsRegion
-                          sessionId={sessionId ?? existingSessionId ?? null}
-                        />
+                        <>
+                          {wasInterrupted && !displayIsRunning && (
+                            <div className="flex items-center gap-2 text-sm text-text-03">
+                              <SvgStopCircle className="size-4 shrink-0 stroke-text-03" />
+                              <span>Response stopped</span>
+                            </div>
+                          )}
+                          <LiveApprovalsRegion
+                            sessionId={sessionId ?? existingSessionId ?? null}
+                          />
+                        </>
                       }
                     />
                   )}
@@ -616,8 +783,14 @@ export default function BuildChatPanel({
             {(hasSession || existingSessionId) && (
               <div className="px-4 pb-8 pt-4 relative">
                 {/* Soft fade border at top */}
-                <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
-                <div className="max-w-[720px] mx-auto">
+                {!videoBackgroundEnabled && (
+                  <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
+                )}
+                <div
+                  className="max-w-[720px] mx-auto"
+                  onFocusCapture={onWakeIntent}
+                  onKeyDownCapture={onWakeIntent}
+                >
                   {/* Scroll to bottom button - shown when user has scrolled away */}
                   {showScrollButton && (
                     <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
@@ -628,7 +801,7 @@ export default function BuildChatPanel({
                             "flex items-center justify-center",
                             "w-8 h-8 rounded-full",
                             "bg-background-neutral-inverted-00 border border-border-01",
-                            "shadow-01 hover:shadow-02",
+                            "shadow-box-01 hover:shadow-box-02",
                             "transition-all duration-200",
                             "hover:bg-background-tint-inverted-01"
                           )}
@@ -644,7 +817,15 @@ export default function BuildChatPanel({
                   )}
                   {/* Model is locked once the session starts — show the picker
                   only before the first message. */}
-                  {session?.messages.length === 0 && (
+                  {sessionId && session?.skillsStale && (
+                    <div className="pb-2">
+                      <SkillsStaleNotice
+                        sessionId={sessionId}
+                        turnActive={isRunning}
+                      />
+                    </div>
+                  )}
+                  {session?.isLoaded && session.messages.length === 0 && (
                     <div className="flex justify-end pb-2">
                       <ModelPickerButton
                         selection={selectedModel}
@@ -668,9 +849,13 @@ export default function BuildChatPanel({
                     isRunning={displayIsRunning}
                     isInterrupting={isInterrupting}
                     onInterrupt={
-                      scheduledRunInFlight ? undefined : handleInterrupt
+                      hasInterruptibleTurn && !scheduledRunInFlight
+                        ? handleInterrupt
+                        : undefined
                     }
-                    disabled={isViewingSubagent || scheduledRunInFlight}
+                    disabled={
+                      isViewingSubagent || scheduledRunInFlight || !hasProvider
+                    }
                     placeholder={
                       isViewingSubagent
                         ? "Switch to the main agent to send a message"
@@ -681,6 +866,7 @@ export default function BuildChatPanel({
                     queuedMessages={queuedMessages}
                     onQueueMessage={handleQueueMessage}
                     onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                    contextUsage={contextUsage}
                   />
                 </div>
               </div>

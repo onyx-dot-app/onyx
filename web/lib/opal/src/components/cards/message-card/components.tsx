@@ -14,6 +14,7 @@ import {
   SvgAlertCircle,
   SvgAlertTriangle,
   SvgCheckCircle,
+  SvgClock,
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
@@ -34,6 +35,9 @@ interface MessageCardBaseProps {
 
   /** Optional description below the title. */
   description?: string | RichStr;
+
+  /** Clamp the title to N lines with ellipsis. Default: `1`. Pass `undefined` to wrap freely. */
+  titleMaxLines?: number;
 
   /** Padding preset. @default "sm" */
   padding?: Extract<PaddingVariants, "sm" | "xs">;
@@ -77,6 +81,7 @@ const VARIANT_CONFIG: Record<
   info: { icon: SvgAlertCircle, iconClass: "stroke-status-info-05" },
   success: { icon: SvgCheckCircle, iconClass: "stroke-status-success-05" },
   warning: { icon: SvgAlertTriangle, iconClass: "stroke-status-warning-05" },
+  pending: { icon: SvgClock, iconClass: "stroke-theme-amber-05" },
   error: { icon: SvgXOctagon, iconClass: "stroke-status-error-05" },
 };
 
@@ -124,6 +129,7 @@ function MessageCard({
   icon: iconOverride,
   title,
   description,
+  titleMaxLines,
   padding = "sm",
   headerPadding = "fit",
   bottomChildren,
@@ -160,6 +166,7 @@ function MessageCard({
           )}
           title={title}
           description={description}
+          titleMaxLines={titleMaxLines}
           sizePreset="main-ui"
           variant="section"
           padding="md"

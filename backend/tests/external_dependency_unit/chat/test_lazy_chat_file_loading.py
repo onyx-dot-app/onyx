@@ -18,18 +18,17 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_utils import load_all_chat_files
-from onyx.chat.chat_utils import load_chat_file
+from onyx.chat.chat_utils import load_all_chat_files, load_chat_file
 from onyx.chat.models import ChatLoadedFile
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MessageType
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import create_new_chat_message
-from onyx.db.chat import get_or_create_root_message
+from onyx.configs.constants import FileOrigin, MessageType
+from onyx.db.chat import (
+    create_chat_session,
+    create_new_chat_message,
+    get_or_create_root_message,
+)
 from onyx.file_store import file_store as file_store_module
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.tools.models import ChatFile
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -299,6 +298,52 @@ class TestLoadChatFileLazy:
         assert loaded.content == b"sentinel-bytes"
         assert read_counter.hits_for(file_id) == 1
 
+    def test_deleted_file_yields_empty_content(
+        self,
+        read_counter: _ReadCounter,  # noqa: ARG002 — keeps store fixtures live
+        db_session: Session,
+    ) -> None:
+        """A file referenced in chat history but deleted from the file store
+        (user-file deletion doesn't scrub chat-message ``files`` references)
+        must degrade to empty content on ``.content`` access — not raise and
+        kill the send-message flow."""
+        file_id = _write_file(b"doomed-bytes", file_type="image/png")
+
+        loaded = load_chat_file(
+            {"id": file_id, "type": ChatFileType.IMAGE, "name": "gone.png"},
+            db_session,
+        )
+
+        # Delete the underlying file after construction but before the lazy
+        # bytes read — simulates user-file deletion racing chat history use.
+        get_default_file_store().delete_file(file_id)
+
+        assert loaded.content == b""
+
+    def test_transient_read_error_yields_empty_content(
+        self,
+        read_counter: _ReadCounter,  # noqa: ARG002 — keeps store fixtures live
+        file_cleanup: list[str],
+        db_session: Session,
+    ) -> None:
+        """Non-not-found failures (e.g. transient object-store errors) must
+        also degrade to empty content rather than raise mid-LLM-flow — the
+        send-message request must never die on a history-file read."""
+        file_id = _write_file(b"unreachable-bytes", file_type="image/png")
+        file_cleanup.append(file_id)
+
+        loaded = load_chat_file(
+            {"id": file_id, "type": ChatFileType.IMAGE, "name": "flaky.png"},
+            db_session,
+        )
+
+        with patch.object(
+            file_store_module.S3BackedFileStore,
+            "read_file",
+            side_effect=ConnectionError("simulated transient store failure"),
+        ):
+            assert loaded.content == b""
+
 
 class TestLoadAllChatFilesLazy:
     def test_returns_lazy_files_for_history(
@@ -358,8 +403,7 @@ class TestLoadAllChatFilesLazy:
     def test_max_workers_capped_at_16(self) -> None:
         """Defense-in-depth: even with 200 files passed in, the thread pool
         is capped at 16 workers."""
-        from typing import Any
-        from typing import cast
+        from typing import Any, cast
 
         captured: dict[str, int] = {}
 

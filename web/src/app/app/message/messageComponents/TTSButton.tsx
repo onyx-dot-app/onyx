@@ -5,7 +5,7 @@ import { SvgPlayCircle, SvgStop, SvgSimpleLoader } from "@opal/icons";
 import { Button } from "@opal/components";
 import { useVoicePlayback } from "@/hooks/useVoicePlayback";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 
 interface TTSButtonProps {
   text: string;

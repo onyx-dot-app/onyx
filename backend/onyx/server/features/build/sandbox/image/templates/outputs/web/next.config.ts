@@ -1,10 +1,20 @@
 import type { NextConfig } from "next";
 
-// When set by the dev-server start script, emits pre-proxied /_next/ URLs.
-const assetPrefix = process.env.WEBAPP_ASSET_PREFIX || undefined;
+const webappBasePath = process.env.ONYX_WEBAPP_BASE_PATH || undefined;
+const allowedDevOrigins = (process.env.ONYX_WEBAPP_ALLOWED_DEV_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
-const nextConfig: NextConfig = {
-  ...(assetPrefix ? { assetPrefix } : {}),
-};
+const nextConfig: NextConfig = {};
+
+if (webappBasePath) {
+  nextConfig.basePath = webappBasePath;
+  nextConfig.assetPrefix = webappBasePath;
+}
+
+if (allowedDevOrigins.length > 0) {
+  nextConfig.allowedDevOrigins = allowedDevOrigins;
+}
 
 export default nextConfig;

@@ -25,7 +25,7 @@
 #     bench-sandbox-spinup.sh onyxdotapp/sandbox:dev
 #
 # Requires: docker, kind, kubectl, python3. Cluster context must be
-# kind-onyx-dev — see docs/dev/local-kubernetes.md for the local setup.
+# kind-onyx-dev — see docs/craft/dev/local-kubernetes.md for the local setup.
 # Full context + recorded numbers: docs/craft/sandbox/image-and-spinup.md.
 set -euo pipefail
 

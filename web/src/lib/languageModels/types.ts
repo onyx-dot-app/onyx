@@ -1,4 +1,16 @@
 import type { OnboardingActions } from "@/interfaces/onboarding";
+import type { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
+
+/**
+ * Per-session reasoning-effort override. Mirrors the backend ReasoningEffort
+ * enum minus "auto", since no override (null) already means auto.
+ */
+export type ReasoningEffortOverride =
+  | "off"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
 
 export interface ModelConfiguration {
   id?: number;
@@ -7,6 +19,11 @@ export interface ModelConfiguration {
   max_input_tokens: number | null;
   supports_image_input: boolean;
   supports_reasoning: boolean;
+  /** Display-only metadata surfaced in the model picker (Nebius TokenFactory). */
+  quantization?: string | null;
+  country_code?: string | null;
+  requests_per_minute?: number | null;
+  supported_features?: string[];
   /** True when this is the provider's recommended default model. */
   is_recommended_default?: boolean;
   display_name?: string;
@@ -16,6 +33,13 @@ export interface ModelConfiguration {
   vendor?: string;
   version?: string;
   region?: string;
+  /**
+   * Frontend-derived. Always populated by the SWR hooks before data reaches
+   * any consumer. Resolution order: custom_display_name → display_name → name.
+   * Use this field everywhere a model name is rendered — never read
+   * custom_display_name / display_name / name directly for display purposes.
+   */
+  effectiveDisplayName: string;
 }
 
 export enum LLMProviderName {
@@ -31,8 +55,12 @@ export enum LLMProviderName {
   LITELLM_PROXY = "litellm_proxy",
   BIFROST = "bifrost",
   OPENAI_COMPATIBLE = "openai_compatible",
+  NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
+  PORTKEY = "portkey",
   CUSTOM = "custom",
 }
+
+export type PortkeyApiMode = "chat_completions" | "responses" | "messages";
 
 export interface SimpleKnownModel {
   name: string;
@@ -117,6 +145,7 @@ export interface LLMProviderResponse<T> {
   providers: T[];
   default_text: DefaultModel | null;
   default_vision: DefaultModel | null;
+  default_chat_naming: DefaultModel | null;
 }
 
 export type LLMModalVariant = "onboarding" | "llm-configuration";
@@ -128,6 +157,8 @@ export interface LLMProviderFormProps {
   onOpenChange?: (open: boolean) => void;
   /** Called after successful provider creation/update. */
   onSuccess?: () => void | Promise<void>;
+  /** Overrides the analytics source derived from the variant. */
+  analyticsSource?: LLMProviderConfiguredSource;
 
   // Onboarding-specific (only when variant === "onboarding")
   onboardingActions?: OnboardingActions;
@@ -138,25 +169,25 @@ export interface BedrockFetchParams {
   aws_access_key_id?: string;
   aws_secret_access_key?: string;
   aws_bearer_token_bedrock?: string;
-  provider_name?: string;
+  provider_id?: number;
 }
 
 export interface OllamaFetchParams {
   api_base?: string;
-  provider_name?: string;
+  provider_id?: number;
   signal?: AbortSignal;
 }
 
 export interface OpenRouterFetchParams {
   api_base?: string;
   api_key?: string;
-  provider_name?: string;
+  provider_id?: number;
 }
 
 export interface LiteLLMProxyFetchParams {
   api_base?: string;
   api_key?: string;
-  provider_name?: string;
+  provider_id?: number;
   signal?: AbortSignal;
 }
 
@@ -172,7 +203,7 @@ export interface LiteLLMProxyModelResponse {
 export interface BifrostFetchParams {
   api_base?: string;
   api_key?: string;
-  provider_name?: string;
+  provider_id?: number;
   signal?: AbortSignal;
 }
 
@@ -187,11 +218,45 @@ export interface BifrostModelResponse {
 export interface OpenAICompatibleFetchParams {
   api_base?: string;
   api_key?: string;
-  provider_name?: string;
+  provider_id?: number;
   signal?: AbortSignal;
 }
 
 export interface OpenAICompatibleModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+}
+
+export interface NebiusTokenfactoryFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_id?: number;
+  signal?: AbortSignal;
+}
+
+export interface NebiusTokenfactoryModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+  quantization: string | null;
+  country_code: string | null;
+  requests_per_minute: number | null;
+  supported_features: string[];
+}
+
+export interface PortkeyFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_id?: number;
+  signal?: AbortSignal;
+}
+
+export interface PortkeyModelResponse {
   name: string;
   display_name: string;
   max_input_tokens: number | null;
@@ -207,7 +272,7 @@ export interface LMStudioFetchParams {
   api_base?: string;
   api_key?: string;
   api_key_changed?: boolean;
-  provider_name?: string;
+  provider_id?: number;
   signal?: AbortSignal;
 }
 

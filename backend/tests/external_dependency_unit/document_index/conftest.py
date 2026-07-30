@@ -12,17 +12,17 @@ from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.db.enums import EmbeddingPrecision
-from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces_new import IndexingMetadata, TenantState
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from onyx.indexing.models import ChunkEmbedding, DocMetadataAwareIndexChunk
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 EMBEDDING_DIM = 128
 
@@ -111,7 +111,7 @@ def make_indexing_metadata(
 @pytest.fixture(scope="module")
 def tenant_context() -> Generator[None, None, None]:
     """Sets up tenant context for testing."""
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
         yield
     finally:
@@ -133,7 +133,9 @@ def opensearch_index(
         pytest.fail("OpenSearch is not available.")
 
     opensearch_idx = OpenSearchDocumentIndex(
-        tenant_state=TenantState(tenant_id=TEST_TENANT_ID, multitenant=False),
+        tenant_state=TenantState(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, multitenant=False
+        ),
         index_name=test_index_name,
         embedding_dim=EMBEDDING_DIM,
         embedding_precision=EmbeddingPrecision.FLOAT,

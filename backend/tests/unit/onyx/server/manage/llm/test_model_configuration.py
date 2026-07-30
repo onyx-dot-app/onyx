@@ -7,13 +7,14 @@ These tests verify the flow plumbing:
   from the stored flow.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.db.enums import LLMModelFlowType
-from onyx.server.manage.llm.models import LLMProviderDescriptor
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationView
+from onyx.server.manage.llm.models import (
+    LLMProviderDescriptor,
+    ModelConfigurationUpsertRequest,
+    ModelConfigurationView,
+)
 
 # ModelConfigurationView.from_model — dynamic provider branch
 
@@ -79,6 +80,163 @@ class TestModelConfigurationViewFromModelDynamic:
         assert view.supports_reasoning is True
 
 
+# ModelConfigurationView.from_model — vision fallback (custom-config providers)
+
+
+class TestModelConfigurationViewVisionFallback:
+    """supports_image_input resolution in the dynamic/custom-config branch."""
+
+    # In DYNAMIC_LLM_PROVIDERS
+    STRICT_DYNAMIC_PROVIDER = "lm_studio"
+    # NOT in DYNAMIC_LLM_PROVIDERS — reached via use_stored_display_name
+    CUSTOM_CONFIG_PROVIDER = "litellm_proxy"
+
+    def _view(
+        self,
+        mc: MagicMock,
+        provider: str,
+        use_stored_display_name: bool,
+        litellm_vision: bool,
+    ) -> ModelConfigurationView:
+        with patch(
+            "onyx.server.manage.llm.models.litellm_thinks_model_supports_image_input",
+            return_value=litellm_vision,
+        ):
+            return ModelConfigurationView.from_model(
+                mc, provider, use_stored_display_name=use_stored_display_name
+            )
+
+    def test_stored_vision_flow_wins(self) -> None:
+        """Stored VISION flow → True without consulting the cost map."""
+        mc = _make_model_config(
+            name="gpt-4o",
+            display_name="GPT-4o",
+            flow_types=[LLMModelFlowType.CHAT, LLMModelFlowType.VISION],
+        )
+
+        view = self._view(mc, self.CUSTOM_CONFIG_PROVIDER, True, litellm_vision=False)
+
+        assert view.supports_image_input is True
+
+    def test_custom_config_falls_back_to_cost_map(self) -> None:
+        """No VISION flow but cost map knows the model → True (the fix)."""
+        mc = _make_model_config(
+            name="gpt-4o",
+            display_name="GPT-4o",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, self.CUSTOM_CONFIG_PROVIDER, True, litellm_vision=True)
+
+        assert view.supports_image_input is True
+
+    def test_strict_dynamic_provider_falls_back_to_cost_map(self) -> None:
+        """Dynamic/aggregator providers (e.g. Bifrost) also fall back to the cost
+        map when no VISION flow is stored — a model synced before the source
+        reported vision still resolves to True."""
+        mc = _make_model_config(
+            name="vertex/gemini-3-pro-image-preview",
+            display_name="Gemini 3 Pro Image Preview",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, self.STRICT_DYNAMIC_PROVIDER, False, litellm_vision=True)
+
+        assert view.supports_image_input is True
+
+    def test_strict_dynamic_provider_false_when_cost_map_unaware(self) -> None:
+        """Dynamic provider with no VISION flow and a cost map that doesn't know
+        the model → False (no spurious vision support)."""
+        mc = _make_model_config(
+            name="my-internal-model",
+            display_name="My Internal Model",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, self.STRICT_DYNAMIC_PROVIDER, False, litellm_vision=False)
+
+        assert view.supports_image_input is False
+
+    def test_custom_config_false_when_cost_map_unaware(self) -> None:
+        """No VISION flow and cost map doesn't know the model → False."""
+        mc = _make_model_config(
+            name="my-internal-model",
+            display_name="My Internal Model",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, self.CUSTOM_CONFIG_PROVIDER, True, litellm_vision=False)
+
+        assert view.supports_image_input is False
+
+
+# ModelConfigurationView.from_model — reasoning fallback (dynamic providers)
+
+
+class TestModelConfigurationViewReasoningFallback:
+    """supports_reasoning resolution in the dynamic/custom-config branch:
+    stored flow → LiteLLM cost map → name-substring heuristic."""
+
+    # In DYNAMIC_LLM_PROVIDERS
+    DYNAMIC_PROVIDER = "bifrost"
+
+    def _view(self, mc: MagicMock, litellm_reasoning: bool) -> ModelConfigurationView:
+        with patch(
+            "onyx.server.manage.llm.models.model_is_reasoning_model",
+            return_value=litellm_reasoning,
+        ):
+            return ModelConfigurationView.from_model(mc, self.DYNAMIC_PROVIDER)
+
+    def test_stored_reasoning_flow_wins(self) -> None:
+        """Stored REASONING flow → True without consulting the cost map."""
+        mc = _make_model_config(
+            name="friendly-chat-bot",
+            display_name="Friendly Chat Bot",
+            flow_types=[LLMModelFlowType.CHAT, LLMModelFlowType.REASONING],
+        )
+
+        view = self._view(mc, litellm_reasoning=False)
+
+        assert view.supports_reasoning is True
+
+    def test_falls_back_to_cost_map(self) -> None:
+        """No REASONING flow but the cost map knows the model → True (the fix);
+        vendor-prefixed IDs like this don't match the substring heuristic."""
+        mc = _make_model_config(
+            name="anthropic/claude-sonnet-4-5",
+            display_name="Claude Sonnet 4.5",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, litellm_reasoning=True)
+
+        assert view.supports_reasoning is True
+
+    def test_falls_back_to_name_heuristic_when_cost_map_unaware(self) -> None:
+        """No REASONING flow, cost map miss, but reasoning-named model → True."""
+        mc = _make_model_config(
+            name="DeepSeek-R1-Distill-Qwen-7B",
+            display_name="DeepSeek R1 Distill Qwen 7B",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, litellm_reasoning=False)
+
+        assert view.supports_reasoning is True
+
+    def test_false_when_no_flow_and_both_fallbacks_miss(self) -> None:
+        """No REASONING flow, cost map unaware, generic name → False."""
+        mc = _make_model_config(
+            name="openai/gpt-4o",
+            display_name="GPT-4o",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, litellm_reasoning=False)
+
+        assert view.supports_reasoning is False
+
+
 # ModelConfigurationView.from_model — static provider branch
 
 
@@ -87,6 +245,28 @@ class TestModelConfigurationViewFromModelStatic:
 
     # NOT in DYNAMIC_LLM_PROVIDERS
     STATIC_PROVIDER = "openai"
+
+    def test_distinguishes_persisted_limit_from_capability_enrichment(self) -> None:
+        persisted = self._patched_static_view(
+            _make_model_config(
+                name="gpt-4o",
+                display_name=None,
+                max_input_tokens=90_000,
+            )
+        )
+        inferred = self._patched_static_view(
+            _make_model_config(
+                name="gpt-4o",
+                display_name=None,
+                max_input_tokens=None,
+            )
+        )
+
+        assert persisted.max_input_tokens == 90_000
+        assert persisted.configured_max_input_tokens == 90_000
+        assert inferred.max_input_tokens == 128_000
+        assert inferred.configured_max_input_tokens is None
+        assert "configured_max_input_tokens" not in persisted.model_dump()
 
     def test_supports_reasoning_from_stored_flow(self) -> None:
         """Stored REASONING flow → True even when model_is_reasoning_model returns False."""

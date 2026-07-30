@@ -4,33 +4,35 @@ from datetime import datetime
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.utils import formatdate
-from email.utils import make_msgid
+from email.utils import formatdate, make_msgid
 
 import sendgrid
-from sendgrid.helpers.mail import Attachment
-from sendgrid.helpers.mail import Content
-from sendgrid.helpers.mail import ContentId
-from sendgrid.helpers.mail import Disposition
-from sendgrid.helpers.mail import Email
-from sendgrid.helpers.mail import FileContent
-from sendgrid.helpers.mail import FileName
-from sendgrid.helpers.mail import FileType
-from sendgrid.helpers.mail import Mail
-from sendgrid.helpers.mail import To
+from sendgrid.helpers.mail import (
+    Attachment,
+    Content,
+    ContentId,
+    Disposition,
+    Email,
+    FileContent,
+    FileName,
+    FileType,
+    Mail,
+    To,
+)
 
-from onyx.configs.app_configs import EMAIL_CONFIGURED
-from onyx.configs.app_configs import EMAIL_FROM
-from onyx.configs.app_configs import SENDGRID_API_KEY
-from onyx.configs.app_configs import SMTP_PASS
-from onyx.configs.app_configs import SMTP_PORT
-from onyx.configs.app_configs import SMTP_SERVER
-from onyx.configs.app_configs import SMTP_STARTTLS
-from onyx.configs.app_configs import SMTP_USER
-from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import AuthType
-from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
-from onyx.configs.constants import ONYX_DISCORD_URL
+from onyx.configs.app_configs import (
+    EMAIL_ARCHIVE_BCC_ADDRESSES,
+    EMAIL_CONFIGURED,
+    EMAIL_FROM,
+    SENDGRID_API_KEY,
+    SMTP_PASS,
+    SMTP_PORT,
+    SMTP_SERVER,
+    SMTP_STARTTLS,
+    SMTP_USER,
+    WEB_DOMAIN,
+)
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME, ONYX_DISCORD_URL
 from onyx.db.models import User
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
@@ -203,6 +205,21 @@ def send_email(
     )
 
 
+def _get_archive_bcc_addresses(user_email: str) -> tuple[str, ...]:
+    seen_addresses = {user_email.casefold()}
+    archive_bcc_addresses: list[str] = []
+
+    for bcc_address in EMAIL_ARCHIVE_BCC_ADDRESSES:
+        normalized_bcc_address = bcc_address.casefold()
+        if normalized_bcc_address in seen_addresses:
+            continue
+
+        seen_addresses.add(normalized_bcc_address)
+        archive_bcc_addresses.append(bcc_address)
+
+    return tuple(archive_bcc_addresses)
+
+
 def send_email_with_sendgrid(
     user_email: str,
     subject: str,
@@ -220,6 +237,9 @@ def send_email_with_sendgrid(
         subject=subject,
         plain_text_content=Content("text/plain", text_body),
     )
+
+    for bcc_address in _get_archive_bcc_addresses(user_email):
+        mail.add_bcc(bcc_address)
 
     # Add HTML content
     mail.add_content(Content("text/html", html_body))
@@ -259,6 +279,7 @@ def send_email_with_smtplib(
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["To"] = user_email
+    archive_bcc_addresses = _get_archive_bcc_addresses(user_email)
     if not mail_from:
         raise ValueError("EMAIL_FROM must be set when SMTP_USER is not provided")
     msg["From"] = mail_from
@@ -295,7 +316,7 @@ def send_email_with_smtplib(
             s.starttls()
         if SMTP_USER and SMTP_PASS:
             s.login(SMTP_USER, SMTP_PASS)
-        s.send_message(msg)
+        s.send_message(msg, to_addrs=[user_email, *archive_bcc_addresses])
 
 
 def send_subscription_cancellation_email(user_email: str) -> None:
@@ -344,25 +365,19 @@ def send_subscription_cancellation_email(user_email: str) -> None:
 
 
 def build_user_email_invite(
-    from_email: str, to_email: str, application_name: str, auth_type: AuthType
+    from_email: str, to_email: str, application_name: str
 ) -> tuple[str, str]:
     heading = "You've Been Invited!"
 
-    # the exact action taken by the user, and thus the message, depends on the auth type
     message = f"<p>You have been invited by {from_email} to join an organization on {application_name}.</p>"
-    if auth_type == AuthType.CLOUD:
+    # Cloud offers Google login alongside password signup.
+    if MULTI_TENANT:
         message += (
             "<p>To join the organization, please click the button below to set a password "
             "or login with Google and complete your registration.</p>"
         )
-    elif auth_type == AuthType.BASIC:
-        message += "<p>To join the organization, please click the button below to set a password and complete your registration.</p>"
-    elif auth_type == AuthType.GOOGLE_OAUTH:
-        message += "<p>To join the organization, please click the button below to login with Google and complete your registration.</p>"
-    elif auth_type == AuthType.OIDC or auth_type == AuthType.SAML:
-        message += "<p>To join the organization, please click the button below to complete your registration.</p>"
     else:
-        raise ValueError(f"Invalid auth type: {auth_type}")
+        message += "<p>To join the organization, please click the button below to set a password and complete your registration.</p>"
 
     cta_text = "Join Organization"
     cta_link = f"{WEB_DOMAIN}/auth/signup?email={to_email}"
@@ -375,22 +390,19 @@ def build_user_email_invite(
         cta_link,
     )
 
-    # text content is the fallback for clients that don't support HTML
-    # not as critical, so not having special cases for each auth type
+    # Plain-text fallback for clients that don't render HTML.
     text_content = (
         f"You have been invited by {from_email} to join an organization on {application_name}.\n"
         "To join the organization, please visit the following link:\n"
         f"{WEB_DOMAIN}/auth/signup?email={to_email}\n"
     )
-    if auth_type == AuthType.CLOUD:
+    if MULTI_TENANT:
         text_content += "You'll be asked to set a password or login with Google to complete your registration."
 
     return text_content, html_content
 
 
-def send_user_email_invite(
-    user_email: str, current_user: User, auth_type: AuthType
-) -> None:
+def send_user_email_invite(user_email: str, current_user: User) -> None:
     try:
         load_runtime_settings_fn = fetch_versioned_implementation(
             "onyx.server.enterprise_settings.store", "load_runtime_settings"
@@ -405,7 +417,7 @@ def send_user_email_invite(
     subject = f"Invitation to Join {application_name} Organization"
 
     text_content, html_content = build_user_email_invite(
-        current_user.email, user_email, application_name, auth_type
+        current_user.email, user_email, application_name
     )
 
     send_email(

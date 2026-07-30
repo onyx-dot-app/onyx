@@ -2,5 +2,11 @@ node_modules
 .next
 /tests/
 
+# Local build artifacts — opal/shared rebuild these via `prepare` on `bun install`.
+# Excluding them keeps a stale local dist out of hand-built images (CI clones clean,
+# so a stale dist only exists when building the image from a dirty working tree).
+lib/opal/dist
+lib/shared/dist
+
 # Explicitly include src/app/build (overrides .gitignore /build pattern)
 !src/app/build

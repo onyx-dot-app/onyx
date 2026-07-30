@@ -1,12 +1,12 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { TooltipProvider } from "@radix-ui/react-tooltip";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import type { BuildMessage } from "@/app/craft/types/streamingTypes";
 import type { StreamItem } from "@/app/craft/types/displayTypes";
 
-jest.mock("@/refresh-components/Logo", () => ({
-  __esModule: true,
-  default: () => <div data-testid="onyx-logo" />,
+jest.mock("@/lib/app/components", () => ({
+  Logo: () => <div data-testid="onyx-logo" />,
 }));
 
 jest.mock("@/components/chat/MinimalMarkdown", () => ({
@@ -51,13 +51,16 @@ function renderList(props: {
   isStreaming?: boolean;
 }) {
   return render(
-    <BuildMessageList
-      messages={props.messages ?? []}
-      streamItems={props.streamItems ?? []}
-      isStreaming={props.isStreaming}
-      autoScrollEnabled={false}
-      scrollContainerRef={scrollRef()}
-    />
+    <TooltipProvider>
+      <BuildMessageList
+        sessionId="session-1"
+        messages={props.messages ?? []}
+        streamItems={props.streamItems ?? []}
+        isStreaming={props.isStreaming}
+        autoScrollEnabled={false}
+        scrollContainerRef={scrollRef()}
+      />
+    </TooltipProvider>
   );
 }
 
@@ -85,6 +88,33 @@ const savedAssistantMessage: BuildMessage = {
 };
 
 describe("BuildMessageList thinking visibility", () => {
+  it("renders image attachments on user messages", () => {
+    renderList({
+      messages: [
+        {
+          id: "user-1",
+          type: "user",
+          content: "Use this image",
+          timestamp: new Date("2026-01-01T00:00:00Z"),
+          attachments: [
+            {
+              name: "reference image.png",
+              path: "attachments/reference image.png",
+              mimeType: "image/png",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      screen.getByRole("img", { name: "reference image.png" })
+    ).toHaveAttribute(
+      "src",
+      "/api/build/sessions/session-1/artifacts/attachments/reference%20image.png"
+    );
+  });
+
   it("shows restored thought packets as collapsed thinking rows", () => {
     renderList({ messages: [savedAssistantMessage] });
 
@@ -152,5 +182,21 @@ describe("BuildMessageList thinking visibility", () => {
     fireEvent.click(screen.getByRole("button", { name: /Thinking/ }));
 
     expect(screen.getByText("Checking the app structure.")).toBeInTheDocument();
+  });
+
+  it("shows stream error packets inline", () => {
+    renderList({
+      streamItems: [
+        {
+          type: "error",
+          id: "error-1",
+          content: "provider model not found",
+        },
+      ],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "provider model not found"
+    );
   });
 });

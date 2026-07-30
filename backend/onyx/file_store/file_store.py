@@ -1,15 +1,9 @@
 import hashlib
 import tempfile
 import uuid
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from io import BytesIO
-from typing import Any
-from typing import cast
-from typing import IO
-from typing import NotRequired
-from typing import TYPE_CHECKING
-from typing import TypedDict
+from typing import IO, TYPE_CHECKING, Any, NotRequired, TypedDict, cast
 
 import boto3
 import puremagic
@@ -17,22 +11,28 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import AWS_REGION_NAME
-from onyx.configs.app_configs import S3_AWS_ACCESS_KEY_ID
-from onyx.configs.app_configs import S3_AWS_SECRET_ACCESS_KEY
-from onyx.configs.app_configs import S3_ENDPOINT_URL
-from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
-from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
-from onyx.configs.app_configs import S3_GENERATE_LOCAL_CHECKSUM
-from onyx.configs.app_configs import S3_VERIFY_SSL
+from onyx.configs.app_configs import (
+    AWS_REGION_NAME,
+    S3_AWS_ACCESS_KEY_ID,
+    S3_AWS_SECRET_ACCESS_KEY,
+    S3_ENDPOINT_URL,
+    S3_FILE_STORE_BUCKET_NAME,
+    S3_FILE_STORE_PREFIX,
+    S3_GENERATE_LOCAL_CHECKSUM,
+    S3_VERIFY_SSL,
+)
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.file_record import delete_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id
-from onyx.db.file_record import get_filerecord_by_file_id_optional
-from onyx.db.file_record import get_filerecord_by_prefix
-from onyx.db.file_record import upsert_filerecord
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_current_tenant_if_none,
+)
+from onyx.db.file_record import (
+    delete_filerecord_by_file_id,
+    get_filerecord_by_file_id,
+    get_filerecord_by_file_id_optional,
+    get_filerecord_by_prefix,
+    upsert_filerecord,
+)
 from onyx.db.models import FileRecord
 from onyx.db.models import FileRecord as FileStoreModel
 from onyx.file_store.s3_key_utils import generate_s3_key
@@ -43,6 +43,7 @@ from shared_configs.contextvars import get_current_tenant_id
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
 
+    from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
     from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
 logger = setup_logger()
@@ -72,7 +73,11 @@ class FileStore(ABC):
         file_type: str,
     ) -> bool:
         """
-        Check if a file exists in the blob store
+        Check if a file record with the given origin and type exists.
+
+        Note: implementations check the metadata record in the database, not
+        the backing blob itself — content is assumed present when the record
+        exists.
 
         Parameters:
         - file_id: Unique ID of the file to check for
@@ -300,7 +305,7 @@ class S3BackedFileStore(FileStore):
             elif error_code == "403":
                 # Bucket exists but we don't have permission to access it
                 logger.warning(
-                    f"S3 bucket '{bucket_name}' exists but access is forbidden"
+                    "S3 bucket '%s' exists but access is forbidden", bucket_name
                 )
                 raise RuntimeError(
                     f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."
@@ -516,54 +521,36 @@ class S3BackedFileStore(FileStore):
     def change_file_id(
         self, old_file_id: str, new_file_id: str, db_session: Session | None = None
     ) -> None:
+        """Rename a file by repointing its DB record at the existing object.
+
+        The object is not moved — only file_id changes — and reads resolve via
+        the stored object_key, so they still find it. The object keeps its
+        original key, so a file_id must not be reused for a new save_file after
+        it has been renamed (the new write would overwrite the renamed object).
+        """
+        if old_file_id == new_file_id:
+            return
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                # Get the existing file record
                 old_file_record = get_filerecord_by_file_id(
                     file_id=old_file_id, db_session=db_session
                 )
-
-                # Generate new S3 key for the new file ID
-                new_s3_key = self._get_s3_key(new_file_id)
-
-                # Copy S3 object to new key
-                s3_client = self._get_s3_client()
-                bucket_name = self._get_bucket_name()
-
-                copy_source = (
-                    f"{old_file_record.bucket_name}/{old_file_record.object_key}"
-                )
-
-                s3_client.copy_object(
-                    CopySource=copy_source,
-                    Bucket=bucket_name,
-                    Key=new_s3_key,
-                    MetadataDirective="COPY",
-                )
-
-                # Create new file record with new file_id
-                # Cast file_metadata to the expected type
                 file_metadata = cast(
                     dict[Any, Any] | None, old_file_record.file_metadata
                 )
 
+                # Reuse the old record's bucket/object_key — the object stays put.
                 upsert_filerecord(
                     file_id=new_file_id,
                     display_name=old_file_record.display_name,
                     file_origin=old_file_record.file_origin,
                     file_type=old_file_record.file_type,
-                    bucket_name=bucket_name,
-                    object_key=new_s3_key,
+                    bucket_name=old_file_record.bucket_name,
+                    object_key=old_file_record.object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
                 )
 
-                # Delete old S3 object
-                s3_client.delete_object(
-                    Bucket=old_file_record.bucket_name, Key=old_file_record.object_key
-                )
-
-                # Delete old file record
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
 
                 db_session.commit()
@@ -626,11 +613,13 @@ def get_s3_file_store() -> S3BackedFileStore:
 
 def get_gcs_file_store() -> "GCSBackedFileStore":
     """Returns the GCS file store implementation."""
-    from onyx.configs.app_configs import GCS_FILE_STORE_BUCKET_NAME
-    from onyx.configs.app_configs import GCS_FILE_STORE_PREFIX
-    from onyx.configs.app_configs import GCS_PROJECT_ID
-    from onyx.configs.app_configs import GCS_SERVICE_ACCOUNT_KEY_JSON
-    from onyx.configs.app_configs import GCS_SERVICE_ACCOUNT_KEY_PATH
+    from onyx.configs.app_configs import (
+        GCS_FILE_STORE_BUCKET_NAME,
+        GCS_FILE_STORE_PREFIX,
+        GCS_PROJECT_ID,
+        GCS_SERVICE_ACCOUNT_KEY_JSON,
+        GCS_SERVICE_ACCOUNT_KEY_PATH,
+    )
     from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
     bucket_name = GCS_FILE_STORE_BUCKET_NAME
@@ -643,6 +632,34 @@ def get_gcs_file_store() -> "GCSBackedFileStore":
         project_id=GCS_PROJECT_ID,
         service_account_key_path=GCS_SERVICE_ACCOUNT_KEY_PATH,
         service_account_key_json=GCS_SERVICE_ACCOUNT_KEY_JSON,
+    )
+
+
+def get_azure_file_store() -> "AzureBlobBackedFileStore":
+    """Returns the Azure Blob Storage file store implementation."""
+    from onyx.configs.app_configs import (
+        AZURE_FILE_STORE_CONTAINER_NAME,
+        AZURE_FILE_STORE_PREFIX,
+        AZURE_STORAGE_ACCOUNT_KEY,
+        AZURE_STORAGE_ACCOUNT_NAME,
+        AZURE_STORAGE_ACCOUNT_URL,
+        AZURE_STORAGE_CONNECTION_STRING,
+    )
+    from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
+
+    container_name = AZURE_FILE_STORE_CONTAINER_NAME
+    if not container_name:
+        raise RuntimeError(
+            "AZURE_FILE_STORE_CONTAINER_NAME is required for Azure file store"
+        )
+
+    return AzureBlobBackedFileStore(
+        container_name=container_name,
+        azure_prefix=AZURE_FILE_STORE_PREFIX,
+        account_name=AZURE_STORAGE_ACCOUNT_NAME,
+        account_url=AZURE_STORAGE_ACCOUNT_URL,
+        connection_string=AZURE_STORAGE_CONNECTION_STRING,
+        account_key=AZURE_STORAGE_ACCOUNT_KEY,
     )
 
 
@@ -663,6 +680,13 @@ def get_default_file_store() -> FileStore:
     - Uses Google Cloud Storage with ADC/Workload Identity or service account keys.
     - Configuration via environment variables:
       - GCS_FILE_STORE_BUCKET_NAME, GCS_PROJECT_ID, GCS_SERVICE_ACCOUNT_KEY_PATH, etc.
+
+    When FILE_STORE_BACKEND=azure:
+    - Uses Azure Blob Storage with connection string, account key, or
+      DefaultAzureCredential (AKS Workload Identity / managed identity).
+    - Configuration via environment variables:
+      - AZURE_FILE_STORE_CONTAINER_NAME, AZURE_STORAGE_ACCOUNT_NAME,
+        AZURE_STORAGE_CONNECTION_STRING, AZURE_STORAGE_ACCOUNT_KEY, etc.
     """
     from onyx.configs.app_configs import FILE_STORE_BACKEND
     from onyx.configs.constants import FileStoreType
@@ -676,5 +700,8 @@ def get_default_file_store() -> FileStore:
 
     if backend == FileStoreType.GCS:
         return get_gcs_file_store()
+
+    if backend == FileStoreType.AZURE:
+        return get_azure_file_store()
 
     return get_s3_file_store()

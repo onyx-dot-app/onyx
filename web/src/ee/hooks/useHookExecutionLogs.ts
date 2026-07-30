@@ -1,6 +1,6 @@
 import useSWR from "swr";
-import { fetchExecutionLogs } from "@/ee/refresh-pages/admin/HooksPage/svc";
-import type { HookExecutionRecord } from "@/ee/refresh-pages/admin/HooksPage/interfaces";
+import { fetchExecutionLogs } from "@/ee/views/admin/HooksPage/svc";
+import type { HookExecutionRecord } from "@/ee/views/admin/HooksPage/interfaces";
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;

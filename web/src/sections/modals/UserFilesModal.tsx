@@ -3,14 +3,13 @@
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { InputTypeIn } from "@opal/components";
 import { ProjectFile } from "@/providers/ProjectsContext";
-import { formatRelativeTime } from "@/app/app/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
-import { UserFileStatus } from "@/app/app/projects/projectsService";
+import { UserFileStatus } from "@/lib/projects/types";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
-import Modal from "@/refresh-components/Modal";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { Modal } from "@opal/components";
+import { useModal } from "@opal/components";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import {
   SvgEye,
@@ -26,6 +25,7 @@ import { Section } from "@/layouts/general-layouts";
 import useFilter from "@/hooks/useFilter";
 import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
+import { timeAgo } from "@opal/time";
 
 function getIcon(
   file: ProjectFile,
@@ -70,7 +70,7 @@ function FileAttachment({
   const Icon = getIcon(file, isProcessing);
   const description = getDescription(file);
   const rightText = file.last_accessed_at
-    ? formatRelativeTime(file.last_accessed_at)
+    ? (timeAgo(file.last_accessed_at) ?? "")
     : "";
 
   return (

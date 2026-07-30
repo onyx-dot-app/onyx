@@ -6,7 +6,7 @@ import {
   PythonToolDelta,
   ToolCallArgumentDelta,
   SectionEnd,
-  CODE_INTERPRETER_TOOL_TYPES,
+  isCodeInterpreterToolType,
 } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
@@ -46,8 +46,9 @@ function constructCurrentPythonState(packets: PythonToolPacket[]) {
     .filter(
       (packet) =>
         packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
-        (packet.obj as ToolCallArgumentDelta).tool_type ===
-          CODE_INTERPRETER_TOOL_TYPES.PYTHON
+        isCodeInterpreterToolType(
+          (packet.obj as ToolCallArgumentDelta).tool_type
+        )
     )
     .map((packet) =>
       String((packet.obj as ToolCallArgumentDelta).argument_deltas.code ?? "")

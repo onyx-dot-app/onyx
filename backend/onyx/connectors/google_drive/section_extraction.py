@@ -1,8 +1,9 @@
+import json
 from typing import Any
 
+from google.auth.transport.requests import AuthorizedSession
 from pydantic import BaseModel
 
-from onyx.connectors.google_utils.resources import GoogleDocsService
 from onyx.connectors.models import TextSection
 
 HEADING_DELIMITER = "\n"
@@ -79,27 +80,36 @@ def _extract_text_from_table(table: dict[str, Any]) -> str:
     return "\n".join(row_strs)
 
 
+DOCS_API_DOCUMENT_URL = "https://docs.googleapis.com/v1/documents/{doc_id}"
+_DOCS_FETCH_TIMEOUT_SECONDS = 60
+_DOCS_FETCH_CHUNK_SIZE = 1024 * 1024
+
+
 def get_document_sections(
-    docs_service: GoogleDocsService,
+    authorized_session: AuthorizedSession,
     doc_id: str,
-) -> list[TextSection]:
-    """Extracts sections from a Google Doc, including their headings and content"""
-    # Fetch the document structure
-    http_request = docs_service.documents().get(  # ty: ignore[unresolved-attribute]
-        documentId=doc_id
-    )
+    max_response_bytes: int,
+) -> list[TextSection] | None:
+    """Extract heading-aware sections from a Google Doc.
 
-    # Google has poor support for tabs in the docs api, see
-    # https://cloud.google.com/python/docs/reference/cloudtasks/
-    # latest/google.cloud.tasks_v2.types.HttpRequest
-    # https://developers.google.com/workspace/docs/api/how-tos/tabs
-    # https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/get
-    # this is a hack to use the param mentioned in the rest api docs
-    # TODO: check if it can be specified i.e. in documents()
-    http_request.uri += "&includeTabsContent=true"
-    doc = http_request.execute()
+    Streams the Docs-API response; returns None if it exceeds `max_response_bytes`.
+    """
+    with authorized_session.get(
+        DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
+        params={"includeTabsContent": "true"},
+        stream=True,
+        timeout=_DOCS_FETCH_TIMEOUT_SECONDS,
+    ) as response:
+        response.raise_for_status()
+        buffer = bytearray()
+        for chunk in response.iter_content(chunk_size=_DOCS_FETCH_CHUNK_SIZE):
+            if not chunk:
+                continue
+            if len(buffer) + len(chunk) > max_response_bytes:
+                return None
+            buffer.extend(chunk)
 
-    # Get the content
+    doc = json.loads(buffer)
     tabs = doc.get("tabs", {})
     sections: list[TextSection] = []
     for tab in tabs:

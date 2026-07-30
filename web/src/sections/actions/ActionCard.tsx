@@ -112,7 +112,7 @@ export default function ActionCard({
           backgroundColor,
           "border border-border-01 rounded-16",
           "transition-shadow duration-200",
-          isHovered && "shadow-00",
+          isHovered && "shadow-box-00",
           className
         )}
         role="article"

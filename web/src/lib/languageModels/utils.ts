@@ -8,7 +8,7 @@ import { LlmDescriptor } from "@/lib/hooks";
 
 export function getFinalLLM(
   llmProviders: LLMProviderDescriptor[],
-  persona: MinimalAgent | null,
+  agent: MinimalAgent | null,
   currentLlm: LlmDescriptor | null,
   defaultText?: DefaultModel | null
 ): [string, string] {
@@ -24,12 +24,12 @@ export function getFinalLLM(
     defaultProvider?.model_configurations.find((m) => m.is_visible)?.name ||
     "";
 
-  if (persona) {
-    if (persona.default_model_configuration_id != null) {
+  if (agent) {
+    if (agent.default_model_configuration_id != null) {
       // Canonical path: resolve provider and model from the model config ID.
       for (const p of llmProviders) {
         const mc = p.model_configurations.find(
-          (m) => m.id === persona.default_model_configuration_id
+          (m) => m.id === agent.default_model_configuration_id
         );
         if (mc) {
           provider = p.provider;
@@ -48,7 +48,7 @@ export function getFinalLLM(
   return [provider, model];
 }
 
-export function getProviderOverrideForPersona(
+export function getProviderOverrideForAgent(
   liveAgent: MinimalAgent,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
@@ -146,7 +146,7 @@ export function getDisplayName(
     const mc = p.model_configurations.find(
       (m) => m.id === agent.default_model_configuration_id
     );
-    if (mc) return mc.display_name;
+    if (mc) return mc.effectiveDisplayName;
   }
   return undefined;
 }

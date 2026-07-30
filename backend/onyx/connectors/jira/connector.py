@@ -1,13 +1,8 @@
 import copy
 import json
 import os
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from collections.abc import Callable, Generator, Iterable, Iterator
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import requests
@@ -17,40 +12,51 @@ from jira.resources import Issue
 from more_itertools import chunked
 from typing_extensions import override
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
-from onyx.configs.app_configs import JIRA_CONNECTOR_MAX_TICKET_SIZE
-from onyx.configs.app_configs import JIRA_SLIM_PAGE_SIZE
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    JIRA_CONNECTOR_LABELS_TO_SKIP,
+    JIRA_CONNECTOR_MAX_TICKET_SIZE,
+    JIRA_SLIM_PAGE_SIZE,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     is_atlassian_date_error,
+    time_str_to_utc,
 )
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
 from onyx.connectors.jira.access import get_project_permissions
-from onyx.connectors.jira.utils import best_effort_basic_expert_info
-from onyx.connectors.jira.utils import best_effort_get_field_from_issue
-from onyx.connectors.jira.utils import build_jira_client
-from onyx.connectors.jira.utils import build_jira_url
-from onyx.connectors.jira.utils import extract_text_from_adf
-from onyx.connectors.jira.utils import get_comment_strs
-from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.jira.utils import (
+    JIRA_CLOUD_API_VERSION,
+    best_effort_basic_expert_info,
+    best_effort_get_field_from_issue,
+    build_jira_client,
+    build_jira_url,
+    extract_text_from_adf,
+    get_comment_strs,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -489,6 +495,8 @@ def process_jira_issue(
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=time_str_to_utc(issue.fields.created),
         primary_owners=list(people) or None,
         metadata=metadata_dict,
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
@@ -509,6 +517,7 @@ class JiraConnectorCheckpoint(ConnectorCheckpoint):
 
 class JiraConnector(
     CheckpointedConnectorWithPermSync[JiraConnectorCheckpoint],
+    SlimConnector,
     SlimConnectorWithPermSync,
 ):
     def __init__(
@@ -882,11 +891,35 @@ class JiraConnector(
             # if we didn't retrieve a full batch, we're done
             checkpoint.has_more = current_offset - starting_offset == page_size
 
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        # ID-only path (e.g. pruning): pruning diffs document IDs and never consumes
+        # permission data, so skip the admin-gated per-project permission resolution.
+        yield from self._retrieve_all_slim_docs(
+            start=start, end=end, callback=callback, include_permissions=False
+        )
+
     def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        yield from self._retrieve_all_slim_docs(
+            start=start, end=end, callback=callback, include_permissions=True
+        )
+
+    def _retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+        *,
+        include_permissions: bool,
     ) -> GenerateSlimDocumentOutput:
         one_day = timedelta(hours=24).total_seconds()
 
@@ -950,18 +983,24 @@ class JiraConnector(
                 issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
                 doc_id = build_jira_url(self.jira_base, issue_key)
 
+                created = best_effort_get_field_from_issue(issue, _FIELD_CREATED)
+
                 slim_doc_batch.append(
                     SlimDocument(
                         id=doc_id,
                         # Permission sync path - don't prefix, upsert_document_external_perms handles it
-                        external_access=self._get_project_permissions(
-                            project_key, add_prefix=False
+                        external_access=(
+                            self._get_project_permissions(project_key, add_prefix=False)
+                            if include_permissions
+                            else None
                         ),
                         parent_hierarchy_raw_node_id=(
                             self._get_parent_hierarchy_raw_node_id(issue, project_key)
                             if project_key
                             else None
                         ),
+                        # NOTE: doc_created_at population not yet verified against live data
+                        doc_created_at=time_str_to_utc(created) if created else None,
                     )
                 )
                 current_offset += 1

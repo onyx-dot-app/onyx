@@ -25,32 +25,28 @@ on the task class so no real broker is needed.
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from unittest.mock import PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.user_file_processing.tasks import _user_file_lock_key
 from onyx.background.celery.tasks.user_file_processing.tasks import (
+    _user_file_lock_key,
     _user_file_queued_key,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     check_user_file_processing,
-)
-from onyx.background.celery.tasks.user_file_processing.tasks import (
     process_single_user_file,
 )
-from onyx.configs.constants import CELERY_USER_FILE_PROCESSING_TASK_EXPIRES
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import USER_FILE_PROCESSING_MAX_QUEUE_DEPTH
+from onyx.configs.constants import (
+    CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
+    USER_FILE_PROCESSING_MAX_QUEUE_DEPTH,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
 from onyx.redis.redis_pool import get_redis_client
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -128,7 +124,9 @@ class TestQueueDepthBackpressure:
                 _PATCH_QUEUE_LEN, return_value=USER_FILE_PROCESSING_MAX_QUEUE_DEPTH + 1
             ),
         ):
-            check_user_file_processing.run(tenant_id=TEST_TENANT_ID)
+            check_user_file_processing.run(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            )
 
         mock_app.send_task.assert_not_called()
 
@@ -145,7 +143,9 @@ class TestPerFileGuardKey:
         user = create_test_user(db_session, "guard_user")
         uf = _create_processing_user_file(db_session, user.id)
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         guard_key = _user_file_queued_key(uf.id)
         redis_client.setex(guard_key, CELERY_USER_FILE_PROCESSING_TASK_EXPIRES, 1)
 
@@ -156,7 +156,9 @@ class TestPerFileGuardKey:
                 _patch_task_app(check_user_file_processing, mock_app),
                 patch(_PATCH_QUEUE_LEN, return_value=0),
             ):
-                check_user_file_processing.run(tenant_id=TEST_TENANT_ID)
+                check_user_file_processing.run(
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                )
 
             # send_task must not have been called with this specific file's ID
             for call in mock_app.send_task.call_args_list:
@@ -176,7 +178,9 @@ class TestPerFileGuardKey:
         user = create_test_user(db_session, "guard_set_user")
         uf = _create_processing_user_file(db_session, user.id)
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         guard_key = _user_file_queued_key(uf.id)
         redis_client.delete(guard_key)  # clean slate
 
@@ -187,7 +191,9 @@ class TestPerFileGuardKey:
                 _patch_task_app(check_user_file_processing, mock_app),
                 patch(_PATCH_QUEUE_LEN, return_value=0),
             ):
-                check_user_file_processing.run(tenant_id=TEST_TENANT_ID)
+                check_user_file_processing.run(
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                )
 
             assert redis_client.exists(guard_key), (
                 "Guard key should be set in Redis after enqueue"
@@ -212,7 +218,9 @@ class TestTaskExpiry:
         user = create_test_user(db_session, "expires_user")
         uf = _create_processing_user_file(db_session, user.id)
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         guard_key = _user_file_queued_key(uf.id)
         redis_client.delete(guard_key)
 
@@ -223,7 +231,9 @@ class TestTaskExpiry:
                 _patch_task_app(check_user_file_processing, mock_app),
                 patch(_PATCH_QUEUE_LEN, return_value=0),
             ):
-                check_user_file_processing.run(tenant_id=TEST_TENANT_ID)
+                check_user_file_processing.run(
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                )
 
             # At least one task should have been submitted (for our file)
             assert mock_app.send_task.call_count >= 1, (
@@ -258,7 +268,9 @@ class TestWorkerClearsGuardKey:
         """
         user_file_id = str(uuid4())
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         guard_key = _user_file_queued_key(user_file_id)
 
         # Simulate the guard key set when the beat enqueued the task
@@ -275,7 +287,7 @@ class TestWorkerClearsGuardKey:
         try:
             process_single_user_file.run(
                 user_file_id=user_file_id,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
         finally:
             if processing_lock.owned():

@@ -7,8 +7,7 @@ import sys
 import threading
 import uuid
 from collections.abc import Callable
-from http.server import BaseHTTPRequestHandler
-from http.server import HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
@@ -17,22 +16,26 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.sandbox_proxy.addons.gate import GateAddon
-from onyx.sandbox_proxy.backend import build_ca_store
-from onyx.sandbox_proxy.backend import build_ip_lookup
-from onyx.sandbox_proxy.ca import CABootstrap
-from onyx.sandbox_proxy.ca import MaterializedCA
-from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
-from onyx.sandbox_proxy.credential_injection import CredentialResolver
-from onyx.sandbox_proxy.identity import IdentityResolver
-from onyx.sandbox_proxy.identity import SandboxIPLookup
-from onyx.sandbox_proxy.request_evaluator import ExternalAppRequestEvaluator
+from onyx.sandbox_proxy.backend import build_ca_store, build_ip_lookup
+from onyx.sandbox_proxy.ca import CABootstrap, MaterializedCA
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialInjectionDispatcher,
+    CredentialResolver,
+)
+from onyx.sandbox_proxy.identity import IdentityResolver, SandboxIPLookup
+from onyx.sandbox_proxy.request_evaluator import (
+    CompositeRequestEvaluator,
+    ExternalAppRequestEvaluator,
+    McpRequestEvaluator,
+)
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
-from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver
+from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
-from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_HEALTHZ_PORT
-from onyx.server.features.build.configs import SANDBOX_PROXY_LISTEN_PORT
+from onyx.server.features.build.configs import (
+    SANDBOX_NAMESPACE,
+    SANDBOX_PROXY_HEALTHZ_PORT,
+    SANDBOX_PROXY_LISTEN_PORT,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
 
@@ -130,21 +133,6 @@ def _bootstrap_ca() -> MaterializedCA:
     ).ensure_ca()
 
 
-def _build_lookup() -> SandboxIPLookup:
-    lookup = build_ip_lookup()
-    lookup.start()
-    synced = lookup.wait_for_initial_sync(
-        timeout_seconds=_LOOKUP_INITIAL_SYNC_TIMEOUT_S
-    )
-    if not synced:
-        raise RuntimeError(
-            "Sandbox IP lookup did not complete initial sync within "
-            f"{_LOOKUP_INITIAL_SYNC_TIMEOUT_S:.1f}s; refusing to serve traffic with unbacked "
-            "identity."
-        )
-    return lookup
-
-
 def _build_cache_factory() -> Callable[[str], CacheBackend]:
     """
     tenant_id -> CacheBackend; Must match the API side's namespace to share
@@ -179,7 +167,11 @@ def build_resolvers() -> list[CredentialResolver]:
     canonical hosts). Order is a safety net against accidental overlap, not a
     designed-in priority.
     """
-    return [OnyxPatResolver(), LLMProviderKeyResolver(), ExternalAppResolver()]
+    return [
+        OnyxPatResolver(),
+        MCPServerResolver(),
+        ExternalAppResolver(),
+    ]
 
 
 def _install_signal_handlers(
@@ -228,27 +220,35 @@ def main() -> int:
     SqlEngine.set_app_name(_DB_APP_NAME)
     SqlEngine.init_engine(pool_size=_DB_POOL_SIZE, max_overflow=_DB_MAX_OVERFLOW)
 
-    materialized_ca = _bootstrap_ca()
-    readiness.ca_ready = True
-    logger.info("CA bootstrapped at %s", materialized_ca.pem_path)
-
-    lookup = _build_lookup()
+    # Bind healthz before the blocking CA bootstrap and informer sync below, so
+    # the probe endpoint answers from t=0 — reporting 503 (not connection-refused)
+    # until startup finishes. Otherwise a slow startup k8s call leaves the port
+    # unbound and the liveness probe SIGKILLs the pod mid-boot. ca_ready and
+    # is_synced() are false pre-startup, so /healthz stays not-ready until
+    # genuinely ready.
+    lookup = build_ip_lookup()
     healthz_server: HTTPServer | None = None
     try:
+        healthz_server = _start_healthz_server(readiness, lookup)
+
+        materialized_ca = _bootstrap_ca()
+        readiness.ca_ready = True
+        logger.info("CA bootstrapped at %s", materialized_ca.pem_path)
+
+        lookup.start()
+        if not lookup.wait_for_initial_sync(
+            timeout_seconds=_LOOKUP_INITIAL_SYNC_TIMEOUT_S
+        ):
+            raise RuntimeError(
+                "Sandbox IP lookup did not complete initial sync within "
+                f"{_LOOKUP_INITIAL_SYNC_TIMEOUT_S:.1f}s; refusing to serve traffic "
+                "with unbacked identity."
+            )
         readiness.lookup_ready = True
         logger.info("Informer initial sync complete.")
 
-        healthz_server = _start_healthz_server(readiness, lookup)
-
         identity = IdentityResolver(ip_lookup=lookup)
         proxy_instance_id = os.environ.get("HOSTNAME") or str(uuid.uuid4())
-        snapshot_policy = SnapshotEgressPolicy.from_env()
-        if snapshot_policy is not None:
-            logger.info(
-                "Snapshot egress streaming enabled bucket=%s endpoint_host=%s",
-                snapshot_policy.bucket,
-                snapshot_policy.endpoint_host,
-            )
         resolvers = build_resolvers()
         logger.info(
             "Credential resolvers registered: %s",
@@ -256,17 +256,18 @@ def main() -> int:
         )
         gate = GateAddon(
             identity=identity,
-            request_evaluator=ExternalAppRequestEvaluator(),
+            request_evaluator=CompositeRequestEvaluator(
+                [ExternalAppRequestEvaluator(), McpRequestEvaluator()]
+            ),
             cache_factory=_build_cache_factory(),
             proxy_instance_id=proxy_instance_id,
             credential_dispatcher=CredentialInjectionDispatcher(resolvers),
-            snapshot_policy=snapshot_policy,
         )
 
         # DumpMaster binds to the running event loop in its constructor.
         async def _async_main() -> None:
             options = _build_mitm_options()
-            master = DumpMaster(options=options, with_termlog=True, with_dumper=False)
+            master = DumpMaster(options=options, with_termlog=False, with_dumper=False)
             master.addons.add(gate)
             _install_signal_handlers(
                 asyncio.get_running_loop(),

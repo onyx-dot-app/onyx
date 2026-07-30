@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
@@ -87,6 +87,33 @@ export const BashCancelled: Story = {
       command: "rg --files | xargs wc -l",
       status: "cancelled",
       rawOutput: "...partial output before cancel...",
+    }),
+  },
+};
+
+export const SkillScriptInProgress: Story = {
+  args: {
+    toolCall: call({
+      kind: "execute",
+      toolName: "bash",
+      description: "Fetch Linear issue ENG-123",
+      command: "python .opencode/skills/linear/linear_api.py issue ENG-123",
+      skillName: "linear",
+      status: "in_progress",
+    }),
+  },
+};
+
+export const SkillScriptCompleted: Story = {
+  args: {
+    toolCall: call({
+      kind: "execute",
+      toolName: "bash",
+      description: "List all Linear projects",
+      command:
+        "python .opencode/skills/linear/linear_api.py projects --limit 100",
+      skillName: "linear",
+      rawOutput: '[{"id": "proj_1", "name": "Craft"}]',
     }),
   },
 };

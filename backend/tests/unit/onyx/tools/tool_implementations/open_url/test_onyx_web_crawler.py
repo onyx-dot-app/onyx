@@ -2,20 +2,19 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
 
 import onyx.tools.tool_implementations.open_url.onyx_web_crawler as crawler_module
+from onyx.server.security.models import SSRFProtectionLevel
+from onyx.server.security.store import _build_env_defaults
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_CONNECT_TIMEOUT_SECONDS,
-)
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_READ_TIMEOUT_SECONDS,
+    OnyxWebCrawler,
 )
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
 
 
 class FakeResponse(BaseModel):
@@ -384,3 +383,33 @@ class TestTupleTimeout:
 
         call_kwargs = mock_get.call_args
         assert call_kwargs.kwargs["timeout"] == (3, 30)
+
+
+def _pin_level(monkeypatch: pytest.MonkeyPatch, level: SSRFProtectionLevel) -> None:
+    settings = _build_env_defaults().model_copy(update={"ssrf_protection_level": level})
+    monkeypatch.setattr(crawler_module, "get_security_settings", lambda: settings)
+
+
+def test_should_validate_ssrf_resolves_per_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With no explicit override the crawler reads the admin level on each call,
+    so an admin change takes effect on an already-constructed crawler."""
+    crawler = OnyxWebCrawler()  # validate_ssrf=None
+
+    _pin_level(monkeypatch, SSRFProtectionLevel.VALIDATE_ALL)
+    assert crawler._should_validate_ssrf() is True
+
+    _pin_level(monkeypatch, SSRFProtectionLevel.DISABLED)
+    assert crawler._should_validate_ssrf() is False
+
+
+def test_should_validate_ssrf_override_pins(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An explicit validate_ssrf wins regardless of the admin level."""
+    crawler = OnyxWebCrawler(validate_ssrf=True)
+    _pin_level(monkeypatch, SSRFProtectionLevel.DISABLED)
+    assert crawler._should_validate_ssrf() is True
+
+    crawler = OnyxWebCrawler(validate_ssrf=False)
+    _pin_level(monkeypatch, SSRFProtectionLevel.VALIDATE_ALL)
+    assert crawler._should_validate_ssrf() is False

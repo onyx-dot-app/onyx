@@ -1,5 +1,6 @@
 import type React from "react";
 import type { IconProps } from "@opal/types";
+import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
 
 // Generic action status for UI components
 export enum ActionStatus {
@@ -33,12 +34,33 @@ export interface MCPServer {
   oauth_additional_auth_params?: Record<string, string>;
   is_authenticated: boolean;
   user_authenticated?: boolean;
-  auth_template?: any;
+  // Whether Craft will actually emit this server into the user's sessions, i.e.
+  // whether the sandbox proxy can authenticate them against it. Unlike the two
+  // flags above it asks whether stored credentials yield auth headers, not
+  // whether a config row exists. Only the Craft listing computes it.
+  craft_connected?: boolean;
+  auth_template?: MCPAuthTemplate | null;
   admin_credentials?: Record<string, string>;
   user_credentials?: Record<string, string>;
   status: MCPServerStatus;
+  is_public: boolean;
+  groups: number[];
+  users: string[];
+  available_in_craft?: boolean;
+  // Sparse per-tool Craft approval overrides (unlisted tools default to ASK).
+  // Present on owner/admin views only.
+  tool_policies?: Record<string, EndpointPolicy> | null;
   last_refreshed_at?: string;
   tool_count: number;
+}
+
+export interface MCPAuthTemplate {
+  headers: Record<string, string>;
+  required_fields: string[];
+}
+
+export interface AgentEditorMCPServer extends MCPServer {
+  can_attach: boolean;
 }
 
 export interface MCPServersResponse {
@@ -50,12 +72,22 @@ export interface MCPServerCreateRequest {
   name: string;
   description?: string;
   server_url: string;
+  is_public: boolean;
+  groups: number[];
+  users: string[];
 }
 
 export interface MCPServerUpdateRequest {
   name?: string;
   description?: string;
   server_url?: string;
+  // Omit to leave the server's existing access unchanged.
+  is_public?: boolean;
+  groups?: number[];
+  users?: string[];
+  available_in_craft?: boolean;
+  // Full replace of the stored per-tool overrides; omit to leave unchanged.
+  tool_policies?: Record<string, EndpointPolicy>;
 }
 
 export interface MCPTool {

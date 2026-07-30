@@ -83,7 +83,7 @@ export default function ChatDocumentDisplay({
       onClick={() => openDocument(document, setPresentingDocument)}
       className={cn(
         "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00 cursor-pointer",
-        isSelected && "bg-action-link-02"
+        isSelected && "bg-action-selection-02"
       )}
     >
       <div className="flex items-center gap-2">

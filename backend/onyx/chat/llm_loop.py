@@ -1,72 +1,82 @@
 import json
 import time
 from collections.abc import Callable
-from typing import Any
-from typing import Literal
+from typing import Any, Literal
 
 from onyx.chat.chat_state import ChatStateContainer
-from onyx.chat.chat_utils import build_python_chat_files_from_search_docs
-from onyx.chat.chat_utils import create_tool_call_failure_messages
-from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.citation_processor import CitationMode
-from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.chat_utils import (
+    build_python_chat_files_from_search_docs,
+    create_tool_call_failure_messages,
+)
+from onyx.chat.citation_processor import (
+    CitationMapping,
+    CitationMode,
+    DynamicCitationProcessor,
+)
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
-from onyx.chat.llm_step import _looks_like_xml_tool_call_payload
-from onyx.chat.llm_step import extract_tool_calls_from_response_text
-from onyx.chat.llm_step import run_llm_step
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import ContextFileMetadata
-from onyx.chat.models import ExtractedContextFiles
-from onyx.chat.models import FileToolMetadata
-from onyx.chat.models import LlmStepResult
-from onyx.chat.models import ToolCallSimple
-from onyx.chat.prompt_utils import build_reminder_message
-from onyx.chat.prompt_utils import build_system_prompt
-from onyx.chat.prompt_utils import get_default_base_system_prompt
+from onyx.chat.llm_step import (
+    _looks_like_xml_tool_call_payload,
+    extract_tool_calls_from_response_text,
+    run_llm_step,
+)
+from onyx.chat.models import (
+    ChatMessageSimple,
+    ContextFileMetadata,
+    ExtractedContextFiles,
+    FileToolMetadata,
+    LlmStepResult,
+    ToolCallSimple,
+)
+from onyx.chat.prompt_utils import (
+    build_reminder_message,
+    build_system_prompt,
+    get_default_base_system_prompt,
+    process_prompt_template,
+)
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
-from onyx.context.search.models import SearchDoc
-from onyx.context.search.models import SearchDocsResponse
+from onyx.configs.constants import DocumentSource, MessageType
+from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.memory import add_memory
-from onyx.db.memory import update_memory_at_index
-from onyx.db.memory import UserMemoryContext
+from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
 from onyx.db.models import Persona
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.utils import is_true_openai_model
-from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
-from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
+from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
+from onyx.llm.model_capabilities import is_true_openai_model
+from onyx.llm.models import ReasoningEffort
+from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
+from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import OverallStop
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ToolCallDebug
-from onyx.server.query_and_chat.streaming_models import TopLevelBranching
-from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
-from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
+from onyx.server.query_and_chat.streaming_models import (
+    OverallStop,
+    Packet,
+    ToolCallDebug,
+    TopLevelBranching,
+)
+from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES, STOPPING_TOOLS_NAMES
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatFile
-from onyx.tools.models import CustomToolCallSummary
-from onyx.tools.models import MemoryToolResponseSnapshot
-from onyx.tools.models import PythonToolRichResponse
-from onyx.tools.models import ToolCallInfo
-from onyx.tools.models import ToolCallKickoff
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import (
+    ChatFile,
+    CustomToolCallSummary,
+    MemoryToolResponseSnapshot,
+    PythonToolRichResponse,
+    ToolCallInfo,
+    ToolCallKickoff,
+    ToolResponse,
+)
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
-from onyx.tracing.framework.create import trace
+from onyx.tools.utils import compute_all_tool_tokens
+from onyx.tracing.framework.create import ChatTraceMetadata, trace
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -602,6 +612,34 @@ def _create_context_files_message(
     )
 
 
+def select_reminder_text(
+    *,
+    ran_image_gen: bool,
+    just_ran_web_search: bool,
+    has_open_url_tool: bool,
+    out_of_cycles: bool,
+    persona_task_prompt: str | None,
+    include_citation_reminder: bool,
+    include_file_reminder: bool,
+) -> str | None:
+    """Choose the reminder appended after a tool cycle.
+
+    The open_url nudge is gated on the tool actually being available; otherwise
+    the model is told to call a tool it doesn't have and leaks confusing
+    "open_url is not available" replies.
+    """
+    if ran_image_gen:
+        return IMAGE_GEN_REMINDER
+    if just_ran_web_search and has_open_url_tool and not out_of_cycles:
+        return OPEN_URL_REMINDER
+    return build_reminder_message(
+        reminder_text=persona_task_prompt,
+        include_citation_reminder=include_citation_reminder,
+        include_file_reminder=include_file_reminder,
+        is_last_cycle=out_of_cycles,
+    )
+
+
 def run_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -617,6 +655,7 @@ def run_llm_loop(
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
     chat_files: list[ChatFile] | None = None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
     include_citations: bool = True,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     inject_memories_in_prompt: bool = True,
@@ -624,11 +663,10 @@ def run_llm_loop(
     with trace(
         "run_llm_loop",
         group_id=chat_session_id,
-        metadata={
-            "tenant_id": get_current_tenant_id(),
-            "chat_session_id": chat_session_id,
-            "user_id": user_identity.user_id if user_identity else None,
-        },
+        metadata=ChatTraceMetadata(
+            chat_session_id=chat_session_id,
+            user_id=user_identity.user_id if user_identity else None,
+        ).model_dump(),
     ):
         # Fix some LiteLLM issues,
         from onyx.llm.litellm_singleton.config import (
@@ -669,8 +707,11 @@ def run_llm_loop(
             raw_answer=None,
         )
 
-        # Pass the total budget to construct_message_history, which will handle token allocation
-        available_tokens = llm.config.max_input_tokens
+        # Hold back a margin below max_input_tokens: our tiktoken estimate can
+        # undercount the provider's tokenizer and overflow the context window.
+        available_tokens = int(
+            llm.config.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)
+        )
         tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO
         # Initialize gathered_documents with project files if present
         gathered_documents: list[SearchDoc] | None = (
@@ -686,6 +727,7 @@ def run_llm_loop(
         should_cite_documents: bool = False
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
+        has_open_url_tool: bool = any(isinstance(tool, OpenURLTool) for tool in tools)
         has_called_search_tool: bool = False
         code_interpreter_file_generated: bool = False
         fallback_extraction_attempted: bool = False
@@ -699,6 +741,32 @@ def run_llm_loop(
             )
         system_prompt = None
         custom_agent_prompt_msg = None
+
+        # Resolve author-controlled `{{user.<key>}}` placeholders in the
+        # agent's prompts against the current user's directory profile (+
+        # basic identity) once, before the cycle loop — so every branch below
+        # and every token count sees the final text. Never mutate the shared
+        # `persona`.
+        placeholder_values = (
+            user_memory_context.user_info.placeholder_values
+            if user_memory_context
+            else {}
+        )
+        custom_agent_prompt = (
+            substitute_user_placeholders(custom_agent_prompt, placeholder_values)
+            if custom_agent_prompt
+            else custom_agent_prompt
+        )
+        persona_system_prompt = (
+            substitute_user_placeholders(persona.system_prompt, placeholder_values)
+            if persona and persona.system_prompt
+            else None
+        )
+        persona_task_prompt = (
+            substitute_user_placeholders(persona.task_prompt, placeholder_values)
+            if persona and persona.task_prompt
+            else None
+        )
 
         reasoning_cycles = 0
         for llm_cycle_count in range(MAX_LLM_CYCLES):
@@ -722,15 +790,27 @@ def run_llm_loop(
             # Handling the system prompt and custom agent prompt
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
+            persona_datetime_aware = persona.datetime_aware if persona else True
+            cite_documents = should_cite_documents or always_cite_documents
             if persona and persona.replace_base_system_prompt:
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
+                processed_system_prompt = (
+                    process_prompt_template(
+                        persona_system_prompt,
+                        datetime_aware=persona_datetime_aware,
+                        append_datetime_if_aware=True,
+                        should_cite_documents=cite_documents,
+                    )
+                    if persona_system_prompt
+                    else None
+                )
                 system_prompt = (
                     ChatMessageSimple(
-                        message=persona.system_prompt,
-                        token_count=token_counter(persona.system_prompt),
+                        message=processed_system_prompt,
+                        token_count=token_counter(processed_system_prompt),
                         message_type=MessageType.SYSTEM,
                     )
-                    if persona.system_prompt
+                    if processed_system_prompt
                     else None
                 )
                 custom_agent_prompt_msg = None
@@ -748,59 +828,78 @@ def run_llm_loop(
                     )
                     system_prompt_str = build_system_prompt(
                         base_system_prompt=default_base_system_prompt,
-                        datetime_aware=persona.datetime_aware if persona else True,
+                        datetime_aware=persona_datetime_aware,
                         user_memory_context=prompt_memory_context,
                         tools=tools,
-                        should_cite_documents=should_cite_documents
-                        or always_cite_documents,
+                        should_cite_documents=cite_documents,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,
                         token_count=token_counter(system_prompt_str),
                         message_type=MessageType.SYSTEM,
                     )
-                    custom_agent_prompt_msg = (
-                        ChatMessageSimple(
-                            message=custom_agent_prompt,
-                            token_count=token_counter(custom_agent_prompt),
-                            message_type=MessageType.USER,
+                    processed_custom_agent_prompt = (
+                        process_prompt_template(
+                            custom_agent_prompt,
+                            datetime_aware=persona_datetime_aware,
+                            append_datetime_if_aware=False,
+                            should_cite_documents=cite_documents,
                         )
                         if custom_agent_prompt
+                        else None
+                    )
+                    custom_agent_prompt_msg = (
+                        ChatMessageSimple(
+                            message=processed_custom_agent_prompt,
+                            token_count=token_counter(processed_custom_agent_prompt),
+                            message_type=MessageType.USER,
+                        )
+                        if processed_custom_agent_prompt
                         else None
                     )
                 else:
                     # If there is a custom agent prompt, it replaces the system prompt when the default system prompt is empty
-                    system_prompt = (
-                        ChatMessageSimple(
-                            message=custom_agent_prompt,
-                            token_count=token_counter(custom_agent_prompt),
-                            message_type=MessageType.SYSTEM,
+                    processed_custom_agent_prompt = (
+                        process_prompt_template(
+                            custom_agent_prompt,
+                            datetime_aware=persona_datetime_aware,
+                            append_datetime_if_aware=True,
+                            should_cite_documents=cite_documents,
                         )
                         if custom_agent_prompt
                         else None
                     )
+                    system_prompt = (
+                        ChatMessageSimple(
+                            message=processed_custom_agent_prompt,
+                            token_count=token_counter(processed_custom_agent_prompt),
+                            message_type=MessageType.SYSTEM,
+                        )
+                        if processed_custom_agent_prompt
+                        else None
+                    )
                     custom_agent_prompt_msg = None
 
-            reminder_message_text: str | None
-            if ran_image_gen:
-                # Some models are trained to give back images to the user for some similar tool
-                # This is to prevent it generating things like:
-                # [Cute Cat](attachment://a_cute_cat_sitting_playfully.png)
-                reminder_message_text = IMAGE_GEN_REMINDER
-            elif just_ran_web_search and not out_of_cycles:
-                reminder_message_text = OPEN_URL_REMINDER
-            else:
-                # This is the default case, the LLM at this point may answer so it is important
-                # to include the reminder. Potentially this should also mention citation
-                reminder_message_text = build_reminder_message(
-                    reminder_text=(
-                        persona.task_prompt if persona and persona.task_prompt else None
-                    ),
-                    include_citation_reminder=should_cite_documents
-                    or always_cite_documents,
-                    include_file_reminder=code_interpreter_file_generated,
-                    is_last_cycle=out_of_cycles,
+            processed_task_prompt = (
+                process_prompt_template(
+                    persona_task_prompt,
+                    datetime_aware=persona_datetime_aware,
+                    append_datetime_if_aware=False,
+                    should_cite_documents=cite_documents,
                 )
+                if persona_task_prompt
+                else None
+            )
+            reminder_message_text = select_reminder_text(
+                ran_image_gen=ran_image_gen,
+                just_ran_web_search=just_ran_web_search,
+                has_open_url_tool=has_open_url_tool,
+                out_of_cycles=out_of_cycles,
+                persona_task_prompt=processed_task_prompt,
+                include_citation_reminder=should_cite_documents
+                or always_cite_documents,
+                include_file_reminder=code_interpreter_file_generated,
+            )
 
             reminder_msg = (
                 ChatMessageSimple(
@@ -812,13 +911,14 @@ def run_llm_loop(
                 else None
             )
 
+            tool_token_budget = compute_all_tool_tokens(final_tools, token_counter)
             truncated_message_history = construct_message_history(
                 system_prompt=system_prompt,
                 custom_agent_prompt=custom_agent_prompt_msg,
                 simple_chat_history=simple_chat_history,
                 reminder_message=reminder_msg,
                 context_files=context_files,
-                available_tokens=available_tokens,
+                available_tokens=max(0, available_tokens - tool_token_budget),
                 token_counter=token_counter,
                 all_injected_file_metadata=all_injected_file_metadata,
             )
@@ -846,6 +946,7 @@ def run_llm_loop(
                 final_documents=gathered_documents,
                 user_identity=user_identity,
                 pre_answer_processing_time=pre_answer_processing_time,
+                reasoning_effort=reasoning_effort,
             )
             if has_reasoned:
                 reasoning_cycles += 1
@@ -950,7 +1051,6 @@ def run_llm_loop(
                     except (json.JSONDecodeError, AttributeError):
                         pass
 
-                # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}
 
                 # Add the results to the chat history. Even though tools may run in parallel,

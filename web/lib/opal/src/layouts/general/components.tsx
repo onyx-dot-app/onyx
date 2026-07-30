@@ -50,8 +50,6 @@ interface SectionProps extends WithoutStyles<
   padding?: number;
   wrap?: boolean;
 
-  dbg?: boolean;
-
   ref?: React.Ref<HTMLDivElement>;
 }
 
@@ -65,7 +63,6 @@ function Section({
   gap = 1,
   padding = 0,
   wrap,
-  dbg,
   ref,
   ...rest
 }: SectionProps) {
@@ -83,7 +80,6 @@ function Section({
         typeof height === "number" && "overflow-hidden",
 
         wrap && "flex-wrap",
-        dbg && "dbg-red",
         className
       )}
       style={{

@@ -142,3 +142,27 @@
 .opal-card-expandable-body[data-border="solid"] {
   @apply border border-t-0;
 }
+
+/* ============================================================================
+   Shadow variants — shared across plain and expandable cards
+============================================================================ */
+
+.opal-card[data-shadow="none"],
+.opal-card-expandable[data-shadow="none"] {
+  box-shadow: none;
+}
+
+.opal-card[data-shadow="sm"],
+.opal-card-expandable[data-shadow="sm"] {
+  box-shadow: var(--shadow-box-00);
+}
+
+.opal-card[data-shadow="md"],
+.opal-card-expandable[data-shadow="md"] {
+  box-shadow: var(--shadow-box-01);
+}
+
+.opal-card[data-shadow="lg"],
+.opal-card-expandable[data-shadow="lg"] {
+  box-shadow: var(--shadow-box-02);
+}

@@ -17,11 +17,13 @@ interface PerUserAuthConfigProps {
     field: keyof MCPAuthFormValues | string,
     value: unknown
   ) => void;
+  mode?: "per-user" | "shared";
 }
 
 export function PerUserAuthConfig({
   values,
   setFieldValue,
+  mode = "per-user",
 }: PerUserAuthConfigProps) {
   // Use draft state for KeyValue array (like in LLMConnectionFieldsCustom)
   const [headersDraft, setHeadersDraft] = useState<KeyValue[]>(
@@ -100,10 +102,21 @@ export function PerUserAuthConfig({
     : computeRequiredFieldsFromHeaders(values.auth_template?.headers || {});
   const userCredentials = values.user_credentials || {};
 
+  // Shared templates must render the org's single shared key, so at least one
+  // header value has to contain `{api_key}`. Surface this inline rather than
+  // relying on the backend validator's generic toast.
+  const hasApiKeyPlaceholder = Object.values(
+    values.auth_template?.headers || {}
+  ).some((value) => typeof value === "string" && value.includes("{api_key}"));
+  const missingSharedApiKey = mode === "shared" && !hasApiKeyPlaceholder;
+
   return (
     <div className="flex flex-col gap-4 -mx-2 px-2 py-2 bg-background-tint-00 rounded-12">
       {/* Authentication Headers */}
-      <FormField name="auth_template.headers" state="idle">
+      <FormField
+        name="auth_template.headers"
+        state={missingSharedApiKey ? "error" : "idle"}
+      >
         <FormField.Label>Authentication Headers</FormField.Label>
         <FormField.Control asChild>
           <InputKeyValue
@@ -117,22 +130,39 @@ export function PerUserAuthConfig({
           />
         </FormField.Control>
         <FormField.Description>
-          Format headers for each user to fill in their individual credentials.
+          {mode === "per-user"
+            ? "Format headers for each user to fill in their individual credentials."
+            : "Format the headers sent with your organization's shared credentials."}{" "}
           Use placeholders like{" "}
           <Text text03 secondaryMono className="inline">
             {"{api_key}"}
           </Text>{" "}
-          or{" "}
-          <Text text03 secondaryMono className="inline">
-            {"{user_email}"}
-          </Text>
-          . Users will be prompted to provide values for placeholders (except
-          user_email).
+          {mode === "per-user" ? (
+            <>
+              or{" "}
+              <Text text03 secondaryMono className="inline">
+                {"{user_email}"}
+              </Text>
+              . Users will be prompted to provide values for placeholders
+              (except user_email).
+            </>
+          ) : (
+            <>
+              in at least one header value; it is replaced with your
+              organization&apos;s shared key.
+            </>
+          )}
         </FormField.Description>
+        <FormField.Message
+          messages={{
+            error:
+              "At least one header value must include the {api_key} placeholder.",
+          }}
+        />
       </FormField>
 
       {/* Only show user credentials section if there are required fields */}
-      {requiredFields.length > 0 && (
+      {mode === "per-user" && requiredFields.length > 0 && (
         <>
           <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 

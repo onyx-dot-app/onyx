@@ -1,5 +1,4 @@
 @import "@onyx-ai/opal/root.css";
-@import "@onyx-ai/shared/tokens.css";
 @import "./css/attachment-button.css" layer(base);
 @import "./css/button.css" layer(base);
 @import "./css/content-editable.css" layer(base);
@@ -13,7 +12,9 @@
 @import "./css/line-item.css" layer(base);
 @import "./css/square-button.css" layer(base);
 @import "./css/z-index.css" layer(base);
-
+/* Imported unlayered (and gated on html.onyx-desktop) so it overrides the
+   frozen desktop-wrapper shim regardless of source order. */
+@import "./css/desktop-titlebar.css";
 @config '../../tailwind.config.js';
 
 /*
@@ -36,23 +37,6 @@
 
 @utility no-scrollbar {
   scrollbar-width: none;
-}
-
-@utility shadow-00 {
-  /* SHADOWS */
-  box-shadow: 0px 0px 2px 1px var(--shadow-01);
-}
-
-@utility shadow-01 {
-  box-shadow:
-    0px 2px 12px 0px var(--shadow-02),
-    0px 0px 4px 1px var(--shadow-02);
-}
-
-@utility shadow-02 {
-  box-shadow:
-    0px 2px 24px 0px var(--shadow-03),
-    0px 0px 12px 1px var(--shadow-03);
 }
 
 @utility radial-00 {
@@ -171,18 +155,41 @@
     scrollbar-width: none;
   }
 }
+
 @layer base {
   * {
     scrollbar-width: auto;
   }
 }
 
+/* DBG */
+
+@utility dbg-red {
+  /* DEBUGGING UTILITIES
+  If you ever want to highlight a component for debugging purposes, just type in `className="dbg-red ..."`, and a red box should appear around it.
+  This helps with placing things properly on the screen and seeing how they look during active development.
+  */
+  border: 1px solid red;
+}
+
+@utility dbg-blue {
+  border: 1px solid blue;
+}
+
+@utility dbg-green {
+  border: 1px solid green;
+}
+
 /* TEXTAREA */
 
-textarea {
-  resize: vertical;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+/* In `base` so utility classes (e.g. `resize-none`) can override; an
+   unlayered rule would beat every layered Tailwind utility. */
+@layer base {
+  textarea {
+    resize: vertical;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
 }
 
 .nextjs-portal {

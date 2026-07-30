@@ -1,0 +1,96 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   IconContainer (Figma Icon Container)
+
+   Fixed square keyed to the line-height scale, centering a fixed-size glyph
+   or avatar circle. Glyph color rides on the container's text color so
+   stroke-current icons inherit it.
+   --------------------------------------------------------------------------- */
+
+.opal-icon-container {
+  @apply flex shrink-0 items-center justify-center;
+}
+
+.opal-icon-container[data-size="secondary"] {
+  @apply text-text-02;
+  width: 16px;
+  height: 16px;
+}
+
+.opal-icon-container[data-size="main-ui"] {
+  @apply text-text-03;
+  width: 20px;
+  height: 20px;
+}
+
+.opal-icon-container[data-size="main-content"] {
+  @apply text-text-03;
+  width: 24px;
+  height: 24px;
+}
+
+.opal-icon-container[data-size="section"] {
+  @apply text-text-04;
+  width: 28px;
+  height: 28px;
+}
+
+.opal-icon-container[data-size="sub-headline"] {
+  @apply text-text-04;
+  width: 32px;
+  height: 32px;
+}
+
+.opal-icon-container[data-type="entity"] {
+  @apply text-text-04;
+}
+
+.opal-icon-container-glyph {
+  width: 16px;
+  height: 16px;
+}
+
+.opal-icon-container[data-size="secondary"] .opal-icon-container-glyph {
+  width: 12px;
+  height: 12px;
+}
+
+/* Bare glyph only (direct child): the avatar glyph stays at the base size. */
+.opal-icon-container[data-size="section"] > .opal-icon-container-glyph,
+.opal-icon-container[data-size="sub-headline"] > .opal-icon-container-glyph {
+  width: 24px;
+  height: 24px;
+}
+
+/* Entity bumps the bare main-ui glyph to 18px per the Figma spec. */
+.opal-icon-container[data-type="entity"][data-size="main-ui"]
+  > .opal-icon-container-glyph {
+  width: 18px;
+  height: 18px;
+}
+
+/* Avatar circle: fills the box up to 24px. */
+.opal-icon-container-avatar {
+  @apply flex shrink-0 items-center justify-center overflow-clip rounded-full;
+  width: 24px;
+  height: 24px;
+}
+
+.opal-icon-container[data-size="secondary"] .opal-icon-container-avatar {
+  width: 16px;
+  height: 16px;
+}
+
+.opal-icon-container[data-size="main-ui"] .opal-icon-container-avatar {
+  width: 20px;
+  height: 20px;
+}
+
+.opal-icon-container-avatar-user {
+  @apply bg-background-neutral-inverted-00;
+}
+
+.opal-icon-container-avatar-icon {
+  @apply bg-background-neutral-00;
+}

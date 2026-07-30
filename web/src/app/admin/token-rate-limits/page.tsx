@@ -1,7 +1,7 @@
 "use client";
 
 import SimpleTabs from "@/refresh-components/SimpleTabs";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { Button, Text } from "@opal/components";
 import { useState } from "react";
 import {
@@ -13,10 +13,9 @@ import { Scope, TokenRateLimit } from "./types";
 import { GenericTokenRateLimitTable } from "./TokenRateLimitTables";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { toast } from "@/hooks/useToast";
 import CreateRateLimitModal from "./CreateRateLimitModal";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { SvgGlobe, SvgPlusCircle, SvgUser, SvgUsers } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";

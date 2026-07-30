@@ -1,8 +1,7 @@
 import json
 import os
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -11,8 +10,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
 )
 from onyx.connectors.models import InputType
@@ -25,10 +22,12 @@ from tests.integration.common_utils.managers.document_search import (
 )
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestCCPair
-from tests.integration.common_utils.test_models import DATestConnector
-from tests.integration.common_utils.test_models import DATestCredential
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestCCPair,
+    DATestConnector,
+    DATestCredential,
+    DATestUser,
+)
 from tests.integration.common_utils.vespa import vespa_fixture
 from tests.integration.connector_job_tests.google.google_drive_api_utils import (
     GoogleDriveManager,

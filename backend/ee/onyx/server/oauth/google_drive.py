@@ -1,33 +1,31 @@
 import base64
 import json
 import uuid
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import requests
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.oauth.api_router import router
 from onyx.auth.permissions import require_permission
-from onyx.configs.app_configs import DEV_MODE
-from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_ID
-from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_SECRET
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.app_configs import (
+    DEV_MODE,
+    OAUTH_GOOGLE_DRIVE_CLIENT_ID,
+    OAUTH_GOOGLE_DRIVE_CLIENT_SECRET,
+    WEB_DOMAIN,
+)
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
-from onyx.connectors.google_utils.google_auth import sanitize_oauth_credentials
+from onyx.connectors.google_utils.google_auth import (
+    get_google_oauth_creds,
+    sanitize_oauth_credentials,
+)
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
-)
-from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
-from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
 from onyx.db.credentials import create_credential
@@ -54,7 +52,7 @@ class GoogleDriveOAuth:
 
     TOKEN_URL = "https://oauth2.googleapis.com/token"
 
-    # SCOPE is per https://docs.danswer.dev/connectors/google-drive
+    # SCOPE is per https://docs.onyx.app/admins/connectors/official/google_drive/overview
     # TODO: Merge with or use google_utils.GOOGLE_SCOPES
     SCOPE = (
         "https://www.googleapis.com/auth/drive.readonly%20"

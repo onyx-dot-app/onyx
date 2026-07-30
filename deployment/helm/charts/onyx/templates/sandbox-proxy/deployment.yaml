@@ -1,4 +1,6 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- $proxyPort := include "onyx.sandboxProxyPort" . }}
+{{- $healthzPort := "8081" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -22,6 +24,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/service-account: {{ toJson (.Values.sandboxProxy.serviceAccount | default dict) | sha256sum }}
         {{- with .Values.sandboxProxy.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -64,20 +67,29 @@ spec:
           command: ["python", "-m", "onyx.sandbox_proxy.server"]
           ports:
             - name: proxy
-              containerPort: {{ .Values.sandboxProxy.containerPorts.proxy }}
+              containerPort: {{ $proxyPort }}
               protocol: TCP
             - name: healthz
-              containerPort: {{ .Values.sandboxProxy.containerPorts.healthz }}
+              containerPort: {{ $healthzPort }}
               protocol: TCP
           env:
+            # Disable file logging for this pod: the root FS is read-only, so opening log
+            # files under /var/log/onyx would crash startup. Logs go to stdout (collected by
+            # the cluster); the per-pod files would be lost on restart anyway.
+            - name: LOG_TO_FILE
+              value: "false"
+            # Point Python's default temp dir at the confdir mount (the only writable mount)
+            # so any stray tempfile write doesn't crash on the read-only root.
+            - name: TMPDIR
+              value: /var/run/sandbox-proxy
             - name: SANDBOX_PROXY_NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: SANDBOX_PROXY_LISTEN_PORT
-              value: {{ .Values.sandboxProxy.containerPorts.proxy | quote }}
+              value: {{ $proxyPort | quote }}
             - name: SANDBOX_PROXY_HEALTHZ_PORT
-              value: {{ .Values.sandboxProxy.containerPorts.healthz | quote }}
+              value: {{ $healthzPort | quote }}
             {{- include "onyx.envSecrets" . | nindent 12}}
           envFrom:
             - configMapRef:
@@ -108,7 +120,7 @@ spec:
             failureThreshold: 8
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: {{ .Values.sandboxProxy.runAsUser }}
             seccompProfile:
@@ -117,6 +129,8 @@ spec:
               drop:
                 - ALL
           volumeMounts:
+            # CA material (mitmproxy confdir) and the proxy's TMPDIR both live here — the
+            # one writable mount on an otherwise read-only root.
             - name: confdir
               mountPath: /var/run/sandbox-proxy
       volumes:

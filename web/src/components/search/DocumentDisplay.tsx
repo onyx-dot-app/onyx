@@ -135,7 +135,7 @@ export function CompactDocumentCard({
     document.is_internet || document.source_type === ValidSources.Web;
 
   return (
-    <Card className="shadow-00 w-80">
+    <Card className="shadow-box-00 w-80">
       <button
         onClick={() => {
           openDocument(document, updatePresentingDocument);

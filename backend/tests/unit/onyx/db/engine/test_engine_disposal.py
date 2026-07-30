@@ -16,9 +16,7 @@ the cached engine references are released.
 from __future__ import annotations
 
 from contextlib import ExitStack
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -66,20 +64,38 @@ def test_reset_readonly_engine_is_a_noop_when_uninitialized() -> None:
 async def test_reset_async_engine_disposes_and_clears() -> None:
     fake_async = MagicMock()
     fake_async.dispose = AsyncMock()
-    async_sql_engine._ASYNC_ENGINE = fake_async
+    async_sql_engine._ASYNC_ENGINES = {"default": fake_async}
     try:
         await reset_sqlalchemy_async_engine()
         fake_async.dispose.assert_awaited_once_with()
-        assert async_sql_engine._ASYNC_ENGINE is None
+        assert async_sql_engine._ASYNC_ENGINES == {}
     finally:
-        async_sql_engine._ASYNC_ENGINE = None
+        async_sql_engine._ASYNC_ENGINES = {}
+
+
+@pytest.mark.asyncio
+async def test_reset_async_engine_disposes_every_shard() -> None:
+    """Engines are per-shard now, so shutdown must not leak the non-default ones."""
+    engines = {}
+    for name in ("default", "shard-b"):
+        fake = MagicMock()
+        fake.dispose = AsyncMock()
+        engines[name] = fake
+    async_sql_engine._ASYNC_ENGINES = dict(engines)
+    try:
+        await reset_sqlalchemy_async_engine()
+        for fake in engines.values():
+            fake.dispose.assert_awaited_once_with()
+        assert async_sql_engine._ASYNC_ENGINES == {}
+    finally:
+        async_sql_engine._ASYNC_ENGINES = {}
 
 
 @pytest.mark.asyncio
 async def test_reset_async_engine_is_a_noop_when_uninitialized() -> None:
-    async_sql_engine._ASYNC_ENGINE = None
+    async_sql_engine._ASYNC_ENGINES = {}
     await reset_sqlalchemy_async_engine()  # should not raise
-    assert async_sql_engine._ASYNC_ENGINE is None
+    assert async_sql_engine._ASYNC_ENGINES == {}
 
 
 @pytest.mark.asyncio
@@ -125,6 +141,7 @@ async def test_lifespan_shutdown_disposes_all_three_engines() -> None:
         stack.enter_context(patch.object(onyx_main, "validate_no_vector_db_settings"))
         stack.enter_context(patch.object(onyx_main, "validate_cache_backend_settings"))
         stack.enter_context(patch.object(onyx_main, "validate_registry"))
+        stack.enter_context(patch.object(onyx_main, "verify_user_auth_secret"))
         stack.enter_context(
             patch.object(
                 onyx_main,
@@ -142,9 +159,7 @@ async def test_lifespan_shutdown_disposes_all_three_engines() -> None:
         stack.enter_context(patch.object(onyx_main, "get_or_generate_uuid"))
         stack.enter_context(patch.object(onyx_main, "optional_telemetry"))
         stack.enter_context(patch.object(onyx_main, "MULTI_TENANT", False))
-        stack.enter_context(
-            patch.object(onyx_main, "AUTH_RATE_LIMITING_ENABLED", False)
-        )
+        stack.enter_context(patch.object(onyx_main, "RATE_LIMITING_ENABLED", False))
         stack.enter_context(patch.object(onyx_main, "DISABLE_VECTOR_DB", False))
         stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_ID", ""))
         stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_SECRET", ""))

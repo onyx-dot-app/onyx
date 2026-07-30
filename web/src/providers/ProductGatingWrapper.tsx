@@ -1,7 +1,7 @@
 "use client";
 
-import { ApplicationStatus } from "@/interfaces/settings";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { ApplicationStatus } from "@/lib/settings/types";
+import { useSettings } from "@/lib/settings/hooks";
 import GatedContentWrapper from "@/components/GatedContentWrapper";
 
 export default function ProductGatingWrapper({
@@ -9,10 +9,10 @@ export default function ProductGatingWrapper({
 }: {
   children: React.ReactNode;
 }) {
-  const { settings, settingsLoading } = useSettingsContext();
+  const settings = useSettings();
   const status = settings.application_status;
 
-  if (settingsLoading) return null;
+  if (settings.isLoading) return null;
 
   if (
     status === ApplicationStatus.GATED_ACCESS ||

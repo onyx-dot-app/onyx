@@ -20,6 +20,13 @@
   @apply flex shrink-0 items-stretch;
 }
 
+/* Form-input rows: the control grows to fill the row, capped at the input
+   column max. The child input keeps its own min-width floor. */
+.opal-content-action-right[data-fill] {
+  @apply flex-1 min-w-0;
+  max-width: var(--block-width-form-input-column-max);
+}
+
 .opal-content-action[data-centered="true"] .opal-content-action-right {
   @apply items-center;
 }

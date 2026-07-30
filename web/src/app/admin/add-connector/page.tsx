@@ -5,7 +5,6 @@ import { listSourceMetadata } from "@/lib/sources";
 import { Button } from "@opal/components";
 import {
   useCallback,
-  useContext,
   useDeferredValue,
   useEffect,
   useMemo,
@@ -23,7 +22,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { Credential } from "@/lib/connectors/credentials";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import SourceTile from "@/components/SourceTile";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -126,7 +125,7 @@ export default function Page() {
   const searchTerm = useDeferredValue(rawSearchTerm);
 
   const { data: federatedConnectors } = useFederatedConnectors();
-  const settings = useContext(SettingsContext);
+  const settings = useSettings();
 
   // Fetch Slack credentials to determine navigation behavior
   const { data: slackCredentials } = useSWR<Credential<any>[]>(
@@ -180,7 +179,7 @@ export default function Page() {
       {} as Record<SourceCategory, SourceMetadata[]>
     );
     // Filter out the "Other" category if show_extra_connectors is false
-    if (settings?.settings?.show_extra_connectors === false) {
+    if (settings?.show_extra_connectors === false) {
       const filteredCategories = Object.entries(categories).filter(
         ([category]) => category !== SourceCategory.Other
       );
@@ -190,12 +189,7 @@ export default function Page() {
       >;
     }
     return categories;
-  }, [
-    sources,
-    filterSources,
-    searchTerm,
-    settings?.settings?.show_extra_connectors,
-  ]);
+  }, [sources, filterSources, searchTerm, settings?.show_extra_connectors]);
 
   // When searching, dedupe Popular against whatever is already in results
   const resultIds = useMemo(() => {

@@ -1,18 +1,25 @@
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.db.api_key import ApiKeyDescriptor
-from onyx.db.api_key import fetch_api_keys
-from onyx.db.api_key import insert_api_key
-from onyx.db.api_key import regenerate_api_key
-from onyx.db.api_key import remove_api_key
-from onyx.db.api_key import update_api_key
+from onyx.db.api_key import (
+    ApiKeyDescriptor,
+    fetch_api_keys,
+    insert_api_key,
+    regenerate_api_key,
+    remove_api_key,
+    update_api_key,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.server.api_key.models import APIKeyArgs
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 
 router = APIRouter(prefix="/admin/api-key")
 
@@ -31,16 +38,32 @@ def create_api_key(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ApiKeyDescriptor:
-    return insert_api_key(db_session, api_key_args, user.id)
+    api_key = insert_api_key(db_session, api_key_args, user.id)
+    emit_audit_event(
+        AuditAction.API_KEY_CREATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="api_key",
+        resource_id=api_key.api_key_id,
+    )
+    return api_key
 
 
 @router.post("/{api_key_id}/regenerate")
 def regenerate_existing_api_key(
     api_key_id: int,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ApiKeyDescriptor:
-    return regenerate_api_key(db_session, api_key_id)
+    api_key = regenerate_api_key(db_session, api_key_id)
+    emit_audit_event(
+        AuditAction.API_KEY_REGENERATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="api_key",
+        resource_id=api_key_id,
+    )
+    return api_key
 
 
 @router.patch("/{api_key_id}")
@@ -56,7 +79,14 @@ def update_existing_api_key(
 @router.delete("/{api_key_id}")
 def delete_api_key(
     api_key_id: int,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     remove_api_key(db_session, api_key_id)
+    emit_audit_event(
+        AuditAction.API_KEY_DELETE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="api_key",
+        resource_id=api_key_id,
+    )

@@ -5,7 +5,7 @@ import {
   type ModelConfiguration,
 } from "@/lib/languageModels/types";
 import * as Yup from "yup";
-import { useWellKnownLLMProvider } from "@/hooks/useLanguageModels";
+import { useWellKnownLLMProvider } from "@/lib/languageModels/hooks";
 
 // ─── useInitialValues ─────────────────────────────────────────────────────
 

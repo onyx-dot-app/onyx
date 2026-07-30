@@ -7,24 +7,22 @@ All HTTP requests to external OAuth providers are mocked.
 """
 
 import time
-from unittest.mock import Mock
-from unittest.mock import patch
-from urllib.parse import parse_qs
-from urllib.parse import urlparse
+from unittest.mock import Mock, patch
+from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import pytest
-from requests import HTTPError
-from requests import Response
+from requests import HTTPError, Response
 from sqlalchemy.orm import Session
 
-from onyx.auth.oauth_token_manager import build_oauth_authorization_url
-from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
-from onyx.auth.oauth_token_manager import OAuthFlowParams
-from onyx.auth.oauth_token_manager import OAuthTokenManager
+from onyx.auth.oauth_token_manager import (
+    OAuthFlowParams,
+    OAuthTokenManager,
+    build_oauth_authorization_url,
+    exchange_oauth_code_for_token,
+)
 from onyx.db.models import OAuthConfig
-from onyx.db.oauth_config import create_oauth_config
-from onyx.db.oauth_config import upsert_user_oauth_token
+from onyx.db.oauth_config import create_oauth_config, upsert_user_oauth_token
 from onyx.utils.sensitive import SensitiveValue
 from tests.external_dependency_unit.conftest import create_test_user
 

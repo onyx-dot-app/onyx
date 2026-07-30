@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -12,20 +10,14 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
-from onyx.db.enums import PatType
-from onyx.db.enums import Permission
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import PersonalAccessToken
-from onyx.db.models import Sandbox
-from onyx.db.models import User
-from onyx.db.pat import create_pat
-from onyx.db.pat import list_user_pats
+from onyx.db.enums import PatType, Permission, SandboxStatus
+from onyx.db.models import PersonalAccessToken, Sandbox, User
+from onyx.db.pat import create_pat, list_user_pats
 from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import default_llm_config
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
 @pytest.fixture()
@@ -60,7 +52,7 @@ class TestEnsureSandboxPat:
         pat = db_session.query(PersonalAccessToken).filter_by(hashed_token=hashed).one()
         assert pat.pat_type == PatType.CRAFT
         assert pat.user_id == test_user.id
-        assert pat.scopes == [Permission.READ_SEARCH.value]
+        assert pat.scopes == [Permission.CRAFT_SANDBOX.value]
 
     def test_second_call_reuses_token(
         self,
@@ -134,20 +126,6 @@ class TestEnsureSandboxPat:
 
         all_pats = list_user_pats(db_session, test_user.id)
         assert any(p.pat_type == PatType.CRAFT for p in all_pats)
-
-    def test_pat_type_defaults_to_user(
-        self,
-        db_session: Session,
-        test_user: User,
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        pat, _token = create_pat(
-            db_session=db_session,
-            user_id=test_user.id,
-            name="default-type-test",
-            expiration_days=30,
-        )
-        assert pat.pat_type == PatType.USER
 
     def test_mismatched_hash_revokes_and_mints_new(
         self,
@@ -301,14 +279,11 @@ class TestEnsureSandboxPat:
             KubernetesSandboxManager, "_pod_exists_and_healthy", _no_pod
         )
 
-        llm_config = default_llm_config()
-
         with pytest.raises(ValueError, match="onyx_pat"):
             manager.provision(
                 sandbox_id=uuid4(),
                 user_id=uuid4(),
-                tenant_id=TEST_TENANT_ID,
-                llm_config=llm_config,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 onyx_pat="",
             )
 

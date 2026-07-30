@@ -1,12 +1,15 @@
 import contextvars
 import time
 
-from onyx.utils.threadpool_concurrency import FunctionCall
-from onyx.utils.threadpool_concurrency import run_functions_in_parallel
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from onyx.utils.threadpool_concurrency import run_in_background
-from onyx.utils.threadpool_concurrency import run_with_timeout
-from onyx.utils.threadpool_concurrency import wait_on_background
+from onyx.utils.threadpool_concurrency import (
+    FunctionCall,
+    run_functions_in_parallel,
+    run_functions_tuples_in_parallel,
+    run_in_background,
+    run_with_timeout,
+    start_thread_with_context,
+    wait_on_background,
+)
 
 # Create a test contextvar
 test_var = contextvars.ContextVar("test_var", default="default")
@@ -167,3 +170,37 @@ def test_run_in_background_preserves_contextvar() -> None:
     finally:
         # Clean up
         test_var.reset(token)
+
+
+def test_start_thread_with_context_preserves_contextvar() -> None:
+    """Test that start_thread_with_context propagates the caller's contextvars
+    into the spawned daemon thread."""
+    seen: list[str] = []
+
+    def capture() -> None:
+        time.sleep(0.1)  # ensure we're really on another thread
+        seen.append(test_var.get())
+
+    token = test_var.set("background_value")
+    try:
+        thread = start_thread_with_context(capture, name="ctx-test", daemon=True)
+        thread.join(timeout=2.0)
+    finally:
+        test_var.reset(token)
+
+    assert seen == ["background_value"]
+
+
+def test_start_thread_with_context_passes_args() -> None:
+    """Test that args/kwargs are forwarded to the target."""
+    seen: list[tuple[str, str]] = []
+
+    def capture(positional: str, *, keyword: str) -> None:
+        seen.append((positional, keyword))
+
+    thread = start_thread_with_context(
+        capture, args=("pos",), kwargs={"keyword": "kw"}, daemon=True
+    )
+    thread.join(timeout=2.0)
+
+    assert seen == [("pos", "kw")]

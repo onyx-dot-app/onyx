@@ -6,15 +6,12 @@ loaded for free with every auth query. Implied permissions are expanded
 at read time — only directly granted permissions are persisted.
 """
 
-from collections.abc import Callable
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from typing import Any
 
-from fastapi import Depends
-from fastapi import Request
+from fastapi import Depends, Request
 
-from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_user
+from onyx.auth.users import current_chat_accessible_user, current_user
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.permissions import parse_permission_values
@@ -52,8 +49,14 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
         Permission.READ_SEARCH.value,
         Permission.READ_CHAT.value,
         Permission.WRITE_CHAT.value,
+        Permission.GENERATE_IMAGE.value,
     },
     Permission.WRITE_CHAT.value: {Permission.READ_CHAT.value},
+    Permission.CRAFT_SANDBOX.value: {
+        Permission.READ_SEARCH.value,
+        Permission.GENERATE_IMAGE.value,
+        Permission.USE_LLM_GATEWAY.value,
+    },
 }
 
 # Permissions that cannot be toggled via the group-permission API.
@@ -64,6 +67,7 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
     {
         Permission.BASIC_ACCESS,
         Permission.FULL_ADMIN_PANEL_ACCESS,
+        Permission.CRAFT_SANDBOX,
     }
     | Permission.IMPLIED
 )
@@ -113,11 +117,13 @@ def require_permission(
         token_scopes: list[Permission] | None = getattr(
             request.state, "token_scopes", None
         )
-        permitted_by_user = required in get_effective_permissions(user)
-        permitted_by_token = token_scopes is None or required.value in (
+        token_implies = token_scopes is not None and required.value in (
             resolve_effective_permissions({s.value for s in token_scopes})
         )
-        if not (permitted_by_user and permitted_by_token):
+        permitted_by_user = required in get_effective_permissions(user)
+        permitted_by_token = token_scopes is None or token_implies
+        permitted = permitted_by_user and permitted_by_token
+        if not permitted:
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "You do not have the required permissions for this action.",
@@ -125,4 +131,6 @@ def require_permission(
         return user
 
     dependency._is_require_permission = True  # ty: ignore[unresolved-attribute]
+    # Lets tests pin a route's permission level without closure introspection.
+    dependency._required_permission = required  # ty: ignore[unresolved-attribute]
     return dependency

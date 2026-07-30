@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { useVisibilityGatedInterval } from "@/hooks/useVisibilityGatedInterval";
 
 // Any type that has an id property
 type PaginatedType = {
@@ -214,17 +215,11 @@ function usePaginatedFetch<T extends PaginatedType>({
     }
   }, [currentPage, cachedBatches, pagesPerBatch]);
 
-  // Implements periodic refresh
-  useEffect(() => {
-    if (!refreshIntervalInMs) return;
-
-    const interval = setInterval(() => {
-      const { batchNum } = batchAndPageIndices;
-      fetchBatchData(batchNum);
-    }, refreshIntervalInMs);
-
-    return () => clearInterval(interval);
-  }, [currentPage, pagesPerBatch, refreshIntervalInMs, fetchBatchData]);
+  // Periodic refresh; visibility-gated so backgrounded admin tabs stop polling
+  useVisibilityGatedInterval(() => {
+    const { batchNum } = batchAndPageIndices;
+    fetchBatchData(batchNum);
+  }, refreshIntervalInMs || null);
 
   // Manually refreshes the current batch
   const refresh = useCallback(async () => {

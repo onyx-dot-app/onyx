@@ -1,25 +1,28 @@
 import json
 from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import List
 
 import requests
-from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    TextSection,
+)
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -80,7 +83,7 @@ _STATUS_NUMBER_TYPE_MAP: dict[int, str] = {
 
 
 # TODO: unify this with other generic rate limited requests with retries (e.g. Axero, Notion?)
-@retry(tries=3, delay=1, backoff=2)
+@retry_builder(tries=3, delay=1, backoff=2)
 def _rate_limited_freshdesk_get(
     url: str, auth: tuple, params: dict
 ) -> requests.Response:
@@ -178,6 +181,8 @@ def _create_doc_from_ticket(ticket: dict, domain: str) -> Document:
         semantic_identifier=ticket["subject"],
         metadata=metadata,
         doc_updated_at=_parse_freshdesk_datetime(ticket.get("updated_at")),
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=_parse_freshdesk_datetime(ticket.get("created_at")),
     )
 
 

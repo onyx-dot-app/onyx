@@ -1,4 +1,10 @@
-import { R2Icon, S3Icon, GoogleStorageIcon } from "@/components/icons/icons";
+import {
+  R2Icon,
+  S3Icon,
+  GoogleStorageIcon,
+  BraintrustIcon,
+  BoxIcon,
+} from "@/components/icons/icons";
 import { ValidSources } from "@/lib/types";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { Agent } from "@/lib/agents/types";
@@ -11,6 +17,7 @@ import {
   SvgAxero,
   SvgBitbucket,
   SvgBookstack,
+  SvgCanvas,
   SvgClickup,
   SvgCoda,
   SvgConfluence,
@@ -35,6 +42,7 @@ import {
   SvgJira,
   SvgLinear,
   SvgLoopio,
+  SvgLumapps,
   SvgMediawiki,
   SvgNotion,
   SvgOracle,
@@ -98,6 +106,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/confluence`,
     oauthSupported: true,
     isPopular: true,
+  },
+  lumapps: {
+    icon: SvgLumapps,
+    displayName: "LumApps",
+    category: SourceCategory.Wiki,
   },
   sharepoint: {
     icon: SvgSharepoint,
@@ -184,6 +197,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/wikipedia`,
   },
+  canvas: {
+    icon: SvgCanvas,
+    displayName: "Canvas",
+    category: SourceCategory.Wiki,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/canvas`,
+  },
 
   // Cloud Storage
   google_drive: {
@@ -193,6 +212,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/google_drive/overview`,
     oauthSupported: true,
     isPopular: true,
+  },
+  box: {
+    icon: BoxIcon,
+    displayName: "Box",
+    category: SourceCategory.Storage,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/box`,
   },
   dropbox: {
     icon: SvgDropbox,
@@ -414,6 +439,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Other,
     docs: `${DOCS_BASE_URL}/overview/core_features/chat#projects`,
     isPopular: false, // Needs to be false to hide from the Add Connector page
+  },
+  braintrust: {
+    icon: BraintrustIcon,
+    displayName: "Braintrust",
+    category: SourceCategory.Other,
   },
 
   // Other

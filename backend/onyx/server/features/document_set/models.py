@@ -1,15 +1,16 @@
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.db.models import DocumentSet as DocumentSetDBModel
 from onyx.db.models import FederatedConnector__DocumentSet
-from onyx.server.documents.models import CCPairSummary
-from onyx.server.documents.models import ConnectorCredentialPairDescriptor
-from onyx.server.documents.models import ConnectorSnapshot
-from onyx.server.documents.models import CredentialSnapshot
+from onyx.server.documents.models import (
+    CCPairSummary,
+    ConnectorCredentialPairDescriptor,
+    ConnectorSnapshot,
+    CredentialSnapshot,
+)
 from onyx.server.federated.models import FederatedConnectorSummary
 
 
@@ -102,7 +103,12 @@ class DocumentSet(BaseModel):
     )
 
     @classmethod
-    def from_model(cls, document_set_model: DocumentSetDBModel) -> "DocumentSet":
+    def from_model(
+        cls,
+        document_set_model: DocumentSetDBModel,
+        *,
+        mask_credential_prefix: bool,
+    ) -> "DocumentSet":
         return cls(
             id=document_set_model.id,
             name=document_set_model.name,
@@ -116,7 +122,8 @@ class DocumentSet(BaseModel):
                         credential_ids=[cc_pair.credential_id],
                     ),
                     credential=CredentialSnapshot.from_credential_db_model(
-                        cc_pair.credential
+                        cc_pair.credential,
+                        mask_credential_prefix=mask_credential_prefix,
                     ),
                     access_type=cc_pair.access_type,
                 )

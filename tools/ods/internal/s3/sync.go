@@ -17,7 +17,9 @@ func SyncDown(s3url string, destDir string) error {
 
 	log.Infof("Downloading from %s to %s ...", s3url, destDir)
 	cmd := exec.Command("aws", "s3", "sync", s3url, destDir)
-	cmd.Stdout = os.Stdout
+	// Keep transfer progress off stdout so it can't corrupt a report a caller is
+	// capturing from our stdout (see fetch.go).
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
@@ -38,7 +40,9 @@ func SyncUp(srcDir string, s3url string, delete bool) error {
 
 	log.Infof("Uploading from %s to %s ...", srcDir, s3url)
 	cmd := exec.Command("aws", args...)
-	cmd.Stdout = os.Stdout
+	// Keep transfer progress off stdout so it can't corrupt a report a caller is
+	// capturing from our stdout (see fetch.go).
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {

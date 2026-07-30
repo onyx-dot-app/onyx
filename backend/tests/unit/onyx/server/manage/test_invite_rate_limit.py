@@ -10,8 +10,10 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.server.manage.invite_rate_limit import enforce_invite_rate_limit
-from onyx.server.manage.invite_rate_limit import enforce_remove_invited_rate_limit
+from onyx.server.manage.invite_rate_limit import (
+    enforce_invite_rate_limit,
+    enforce_remove_invited_rate_limit,
+)
 
 
 class _StubRedis:

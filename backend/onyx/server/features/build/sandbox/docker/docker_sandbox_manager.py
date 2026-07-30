@@ -16,7 +16,7 @@ Snapshots
 Docker V1 streams tar bytes through api_server-owned ``FileStore`` rather than
 handing storage credentials to the agent container. ``create_snapshot`` runs
 ``tar`` inside the sandbox via docker exec, pipes the bytes through
-``SnapshotManager.create_snapshot_from_stream``; ``restore_snapshot`` runs the
+``SnapshotManager.persist_snapshot_from_stream``; ``restore_snapshot`` runs the
 reverse path via ``stream_stdin_to_container``.
 
 Security model
@@ -29,26 +29,26 @@ Sandbox containers run with:
 - no Docker socket mount
 - no S3 / MinIO / Postgres / Redis / FileStore credentials in env
 - a fixed env allowlist (``ONYX_PAT``, ``ONYX_SERVER_URL``,
+  ``ONYX_API_PREFIX``,
   opencode auth/config only)
 - only the dedicated sandbox bridge network — never compose's default
-  network. As a result api_server / postgres / redis / minio /
-  model_server are NOT reachable by service name from inside the sandbox.
+  network. ``onyx-craft-api`` is the supported API endpoint on that bridge;
+  postgres, redis, minio, and model_server remain unreachable by service name.
 
 Threat model — Docker vs Kubernetes parity gap
 ----------------------------------------------
-The LLM provider ``api_key`` is passed into the container via
-``OPENCODE_CONFIG_CONTENT`` (a plaintext Docker env var visible to ``docker
-inspect``). K8s loads the same config from an RBAC-scoped ``Secret``. Treat host
-access to the Docker daemon as access to the key; see
-``docs/craft/docker-opencode-serve.md`` for the operator-facing note.
+``OPENCODE_CONFIG_CONTENT`` contains only the Onyx gateway placeholder. The
+egress proxy replaces it with the sandbox PAT; provider credentials never enter
+the sandbox container.
 
 Outbound communication is intentionally limited to:
 
 1. Public internet over HTTPS (the bridge has default internet egress; block at
    the host's ``DOCKER-USER`` chain if you need a stricter posture, e.g. for EC2
    IMDS).
-2. The Onyx API via ``ONYX_SERVER_URL`` — which must be the *public* HTTPS URL
-   the agent reaches just like any other onyx-cli client.
+2. The Onyx API via the complete ``ONYX_SERVER_URL`` API base. The Craft
+   overlay uses a private alias on the sandbox bridge by default; deployments
+   may instead provide a public HTTPS API URL.
 
 Most control-plane traffic from api_server → sandbox uses the Docker
 Engine API (``docker exec``). Prompt/event transport uses opencode-serve over
@@ -68,73 +68,80 @@ import shlex
 import tarfile
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from pathlib import Path
 from typing import TypedDict
 from uuid import UUID
 
 from docker import DockerClient
-from docker.errors import APIError
-from docker.errors import NotFound
+from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 
 from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import ATTACHMENTS_DIRECTORY
-from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
-from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
-from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
-from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
-from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
-from onyx.server.features.build.configs import SANDBOX_DOCKER_CPU_LIMIT
-from onyx.server.features.build.configs import SANDBOX_DOCKER_MEMORY_LIMIT
-from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
-from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
-from onyx.server.features.build.configs import SANDBOX_DOCKER_VOLUME_PREFIX
-from onyx.server.features.build.configs import SANDBOX_PROXY_CA_VOLUME_NAME
-from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
-from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
-from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
-from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
-from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
-from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.configs import (
+    ATTACHMENTS_DIRECTORY,
+    ONYX_SERVER_URL,
+    OPENCODE_DISABLED_TOOLS,
+    OPENCODE_SERVE_PORT,
+    OPENCODE_SERVER_PASSWORD,
+    SANDBOX_CONTAINER_IMAGE,
+    SANDBOX_DOCKER_CPU_LIMIT,
+    SANDBOX_DOCKER_MEMORY_LIMIT,
+    SANDBOX_DOCKER_NETWORK,
+    SANDBOX_DOCKER_SOCKET,
+    SANDBOX_DOCKER_VOLUME_PREFIX,
+    SANDBOX_PROXY_CA_VOLUME_NAME,
+    SANDBOX_PROXY_HOST,
+    SANDBOX_PROXY_INJECTED_PLACEHOLDER,
+    SANDBOX_PROXY_PORT,
+)
+from onyx.server.features.build.sandbox.base import (
+    BUN_CACHE_DIR,
+    BUN_IMAGE_CACHE_DIR,
+    SandboxManager,
+)
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     opencode_serve_port_bindings,
-)
-from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     published_opencode_serve_base_url,
 )
-from onyx.server.features.build.sandbox.docker.internal.exec_helpers import ExecError
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
+    ExecError,
+    ExecResult,
     run_in_container,
-)
-from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdin_to_container,
-)
-from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdout_from_container,
 )
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
-from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
-from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
-from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
-from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
-from onyx.server.features.build.sandbox.models import FileSet
-from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import SandboxInfo
-from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.labels import (
+    LABEL_K8S_MANAGED_BY,
+    LABEL_K8S_MANAGED_BY_ONYX,
+    LABEL_SANDBOX_ID,
+    LABEL_TENANT_ID,
+)
+from onyx.server.features.build.sandbox.models import (
+    CraftLLMProviderConfig,
+    CraftMCPServerConfig,
+    FileSet,
+    FilesystemEntry,
+    SandboxInfo,
+    SnapshotResult,
+)
+from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
+from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
-)
-from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
-from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_opencode_config,
+from onyx.server.features.build.sandbox.util.api_url_check import (
+    validate_sandbox_api_url,
 )
+from onyx.server.features.build.sandbox.util.opencode_config import (
+    build_opencode_base_config,
+    build_provider_opencode_config,
+)
+from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -147,8 +154,21 @@ LABEL_USER_ID = "onyx.app/user-id"
 # Path conventions inside the sandbox container — must match the K8s image.
 WORKSPACE_ROOT = "/workspace"
 SESSIONS_ROOT = f"{WORKSPACE_ROOT}/sessions"
+# Opencode's data home (its XDG_DATA_HOME); matches entrypoint.sh's default. It
+# lives in the container writable layer, not the per-sandbox volume, so it is
+# durable only via the FileStore history snapshot. Its basename must equal the
+# daemon archive's root dir, so put_archive at WORKSPACE_ROOT lands the restored
+# tree here (see _maybe_restore_opencode_history).
+OPENCODE_DATA_DIR = f"{WORKSPACE_ROOT}/.opencode-data"
 TEMPLATES_OUTPUTS_PATH = f"{WORKSPACE_ROOT}/templates/outputs"
 MANAGED_SKILLS_PATH = f"{WORKSPACE_ROOT}/managed/skills"
+MANAGED_USER_LIBRARY_PATH = f"{WORKSPACE_ROOT}/managed/user_library"
+SANDBOX_EXEC_USER = "1000:1000"
+# Docker exec bypasses firewall-init.sh's setpriv environment workaround, so
+# sandbox-user execs must carry the uid/gid and user HOME together.
+SANDBOX_EXEC_ENV = {"HOME": "/home/sandbox", "USER": "sandbox"}
+SANDBOX_TMP_PATH = "/tmp"  # noqa: S108 - sandbox-local scratch mount.
+SANDBOX_TMPFS_OPTIONS = "rw,nosuid,nodev,size=5g,mode=1777"
 
 # Mirror the K8s constants in ``kubernetes_sandbox_manager`` (POD_READY_*),
 # which are also module-level and not env-tunable.
@@ -170,35 +190,71 @@ _PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 # Registered in the opencode config only when the proxy is wired up; otherwise
 # it would no-op (no HTTP(S)_PROXY to re-tag).
 _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
+# Surfaces the no-op `connect_app` tool; always on. Its "ask" permission is what
+# the api-server intercepts to drive the connect-app OAuth flow.
+_OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
+_MUTABLE_SANDBOX_IMAGE_TAGS = {"latest", "beta", "edge"}
+
+# In-container opencode-history archive builder: reuses the sandbox_daemon
+# helper (sqlite-safe backup + symlink guards) and prints the temp archive path,
+# or nothing when there's no history. Exec it with OPENCODE_DATA_HOME set.
+_OPENCODE_HISTORY_CREATE_SCRIPT = (
+    "import sys; "
+    "from sandbox_daemon.opencode_history import create_opencode_history_archive_file; "
+    "p = create_opencode_history_archive_file(); "
+    "sys.stdout.write('' if p is None else str(p))"
+)
 
 
-def _build_nextjs_start_script(
-    session_path: str,
-    nextjs_port: int,
-    check_node_modules: bool = False,
-) -> str:
-    """Shell script to spawn Next.js in the background and record its PID."""
-    install_check = ""
-    if check_node_modules:
-        install_check = f"""
-if [ ! -d "node_modules" ]; then
-    echo "Installing dependencies with bun..."
-    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \
-        bun install --frozen-lockfile --backend=hardlink
-fi
-"""
+def _run_in_container_as_sandbox_user(
+    container: Container,
+    command: list[str] | str,
+    *,
+    workdir: str | None = None,
+    check: bool = True,
+) -> ExecResult:
+    return run_in_container(
+        container,
+        command,
+        user=SANDBOX_EXEC_USER,
+        workdir=workdir,
+        environment=SANDBOX_EXEC_ENV,
+        check=check,
+    )
 
-    return f"""
-set -e
-cd {session_path}/outputs/web
-{install_check}
-export WEBAPP_ASSET_PREFIX="/api/build/sessions/$(basename {session_path})/webapp"
-echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
-NEXTJS_PID=$!
-echo "Next.js server started with PID $NEXTJS_PID"
-echo $NEXTJS_PID > {session_path}/nextjs.pid
-"""
+
+def _stream_stdin_to_container_as_sandbox_user(
+    container: Container,
+    command: list[str],
+    payload: bytes,
+    *,
+    workdir: str | None = None,
+) -> ExecResult:
+    return stream_stdin_to_container(
+        container,
+        command,
+        payload,
+        user=SANDBOX_EXEC_USER,
+        workdir=workdir,
+        environment=SANDBOX_EXEC_ENV,
+    )
+
+
+def _stream_stdout_from_container_as_sandbox_user(
+    container: Container,
+    command: list[str],
+    *,
+    workdir: str | None = None,
+    chunk_size: int = 64 * 1024,
+) -> Generator[bytes, None, int]:
+    return stream_stdout_from_container(
+        container,
+        command,
+        user=SANDBOX_EXEC_USER,
+        workdir=workdir,
+        environment=SANDBOX_EXEC_ENV,
+        chunk_size=chunk_size,
+    )
 
 
 def _sandbox_container_name(sandbox_id: str | UUID) -> str:
@@ -248,9 +304,9 @@ _COMPOSE_INTERNAL_HOSTNAMES = {
 def _looks_like_internal_compose_host(url: str) -> bool:
     """Heuristic: Does ``url`` reference a compose-internal service hostname?
 
-    Used to warn deployers that pointed SANDBOX_API_SERVER_URL at the
-    api_server's compose DNS name. Sandboxes can't resolve that — they only join
-    the craft bridge network — so the URL must be the public Onyx URL.
+    Used to warn deployers that pointed ONYX_SERVER_URL at a service available
+    only on Compose's default network. Sandboxes can resolve the dedicated
+    ``onyx-craft-api`` alias, but not these unrelated service names.
     """
     if not url:
         return False
@@ -318,21 +374,21 @@ _NO_PROXY_LIST = "127.0.0.1,localhost"
 def _proxy_env_vars(
     *,
     sandbox_proxy_host: str,
-    sandbox_proxy_port: int,
 ) -> dict[str, str]:
     """Proxy-enabled env additions for the sandbox container.
 
-    Mirrors ``kubernetes_sandbox_manager._proxy_main_container_env_vars`` but
-    layered on the docker env dict instead of a list of V1EnvVars. Includes the
-    firewall-init.sh contract vars (``SANDBOX_PROXY_*``,
-    ``CA_BUNDLE_SRC``/``DST``) since the script runs as the container's
-    entrypoint wrapper and reads them from its own environment.
+    The Kubernetes lane injects the equivalent vars via the Helm pod template
+    (``onyx.sandboxProxyEnv``); here they're layered on the docker env dict.
+    Includes the firewall-init.sh contract vars since the script runs as the
+    container's entrypoint wrapper and reads them from its own environment.
+    Proxy ports come from build config and are injected as internal env, not
+    caller arguments.
     """
-    proxy_url = f"http://{sandbox_proxy_host}:{sandbox_proxy_port}"
+    proxy_url = f"http://{sandbox_proxy_host}:{SANDBOX_PROXY_PORT}"
     return {
         # firewall-init.sh contract.
         "SANDBOX_PROXY_HOST": sandbox_proxy_host,
-        "SANDBOX_PROXY_PORT": str(sandbox_proxy_port),
+        "SANDBOX_PROXY_PORT": str(SANDBOX_PROXY_PORT),
         "SANDBOX_PROXY_BOOTSTRAP_MODE": "entrypoint",
         "SANDBOX_PROXY_CA_BUNDLE_SRC": f"{_PROXY_CA_SOURCE_DIR}/ca.crt",
         "SANDBOX_PROXY_CA_BUNDLE_DST": _PROXY_CA_BUNDLE_FILE,
@@ -375,6 +431,7 @@ class _ContainerCreateKwargsRequired(TypedDict):
     ports: dict[str, tuple[str, int | None]]
     environment: dict[str, str]
     volumes: dict[str, dict[str, str]]
+    tmpfs: dict[str, str]
     mem_limit: str
     nano_cpus: int
     restart_policy: dict[str, str]
@@ -408,7 +465,6 @@ def build_container_create_kwargs(
     opencode_config_json: str,
     compose_project: str | None = None,
     sandbox_proxy_host: str | None = None,
-    sandbox_proxy_port: int | None = None,
     proxy_ca_volume_name: str | None = None,
 ) -> ContainerCreateKwargs:
     """Builds the kwargs dict for ``DockerClient.containers.create``.
@@ -417,8 +473,9 @@ def build_container_create_kwargs(
 
     Legacy (proxy disabled, default in tests/dev without proxy stack):
 
-    - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL, plus
-      ``OPENCODE_SERVER_PASSWORD`` and ``OPENCODE_CONFIG_CONTENT``.
+    - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL,
+      ONYX_API_PREFIX, ``OPENCODE_SERVER_PASSWORD``, and
+      ``OPENCODE_CONFIG_CONTENT``.
       No caller can inject anything else. No S3/MinIO/Postgres/Redis
       credentials. No compose service hostnames.
     - **No host mounts**: only the per-sandbox named volume mounted at
@@ -427,29 +484,30 @@ def build_container_create_kwargs(
       ``security_opt=no-new-privileges``, ``privileged=False``.
     - **Single network**: joins only the caller-supplied ``network`` (the
       dedicated ``onyx_craft_sandbox`` bridge). Does NOT join compose's default
-      network; api_server / postgres / redis / minio are unreachable by service
-      name.
+      network; the dedicated API alias is supported there, while postgres,
+      redis, and minio remain unreachable by service name.
 
     Proxy-enabled (``sandbox_proxy_host`` set; production self-host compose with
     ``--include-craft``):
 
     - Env layered with ``HTTPS_PROXY`` / SDK CA vars + the ``firewall-init.sh``
-      contract vars (``SANDBOX_PROXY_BOOTSTRAP_MODE= entrypoint``,
-      ``CA_BUNDLE_SRC``/``DST``). The legacy 4-key core is preserved; proxy keys
+      contract vars (``SANDBOX_PROXY_HOST``, ``SANDBOX_PROXY_PORT``,
+      ``SANDBOX_PROXY_BOOTSTRAP_MODE=entrypoint``, ``CA_BUNDLE_SRC``/``DST``).
+      The legacy 5-key core is preserved; proxy keys
       are layered on top.
-    - ``ONYX_PAT`` and the opencode ``api_key`` are replaced with
-      ``SANDBOX_PROXY_INJECTED_PLACEHOLDER``; the proxy reads the real values
-      from Postgres and injects them on the wire (OnyxPatResolver,
-      LLMProviderKeyResolver). The sandbox never sees the raw credentials.
+    - ``ONYX_PAT`` is replaced with ``SANDBOX_PROXY_INJECTED_PLACEHOLDER``;
+      the proxy reads the real value from Postgres and injects it on the wire.
     - ``entrypoint=["/workspace/firewall-init.sh"]`` overrides the image's baked
       ENTRYPOINT (which Docker would otherwise prepend to ``command``, silently
       bypassing the init); ``command=["/workspace/entrypoint.sh"]`` becomes the
       arg firewall-init.sh exec's after setpriv drops caps + switches to UID
       1000.
-    - ``cap_add=["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]`` (NET_ADMIN runs
-      iptables; SETPCAP authorises ``setpriv --bounding-set=-all``;
-      SETUID/SETGID gate setpriv's ``--reuid``/``--regid`` under
-      ``cap_drop=ALL``). All four leave the bounding set before the agent
+    - ``cap_add=["NET_ADMIN", "SETPCAP", "SETUID", "SETGID", "CHOWN"]``
+      (NET_ADMIN runs iptables; SETPCAP authorises
+      ``setpriv --bounding-set=-all``; SETUID/SETGID gate setpriv's
+      ``--reuid``/``--regid`` under ``cap_drop=ALL``; CHOWN repairs the
+      sessions volume mount-point owner). All five leave the bounding set
+      before the agent
       execve, so the running container ends up with no caps at all.
     - ``user="0:0"`` so the init starts as root for iptables. setpriv then drops
       to UID 1000. The root+NET_ADMIN window is bounded by ``firewall-init.sh``
@@ -458,32 +516,35 @@ def build_container_create_kwargs(
       starts. ``restart_policy: unless-stopped`` re-enters the same fail-fast
       init -- no cumulative exposure, no user code reachable during the window.
     - The named proxy-CA volume is mounted read-only at ``/sandbox-ca`` for
-      ``firewall-init.sh`` to read ``ca.crt``.
+      ``firewall-init.sh`` to read ``ca.crt``. That volume also contains
+      root-only ``ca.key``; the agent runs as UID 1000 after init.
 
-    ``ONYX_SERVER_URL`` must be the *public* Onyx URL (the one onyx-cli inside
-    the sandbox will hit over HTTPS) — not an internal compose DNS name. We emit
-    a warning if it looks like the latter, since reaching it would require the
-    sandbox to be on the compose default network.
+    ``ONYX_SERVER_URL`` is the complete API base used by onyx-cli inside the
+    sandbox. The default ``onyx-craft-api`` alias is attached to the sandbox
+    bridge; we warn about other Compose DNS names because they exist only on the
+    default network.
 
     ``opencode_password`` is generated per-provision by the manager and injected
     as the env var named by ``OPENCODE_SERVER_PASSWORD``. The api_server reads
     it back via ``docker inspect`` rather than persisting it on disk.
-    ``opencode_config_json`` is the full ``opencode.json`` content
-    (single-provider for Docker today), surfaced as ``OPENCODE_CONFIG_CONTENT``
-    for opencode-serve to load at startup.
+    ``opencode_config_json`` is the base ``opencode.json`` content surfaced as
+    ``OPENCODE_CONFIG_CONTENT`` for opencode-serve to load at startup; each
+    workspace provides its gateway catalog in a session-local config.
     """
     if _looks_like_internal_compose_host(api_server_url):
         logger.warning(
-            "SANDBOX_API_SERVER_URL=%s looks like an internal compose hostname. Sandboxes only "
-            "join the craft bridge network and reach the API server like any other public client, "
-            "so this URL must resolve publicly (e.g. https://onyx.your-org.com). Internal DNS will "
-            "fail and the agent will see 'connection refused'.",
+            "ONYX_SERVER_URL=%s looks like an internal compose hostname. Sandboxes only "
+            "join the craft bridge network, so default-network DNS will fail. Use the "
+            "http://onyx-craft-api:8080 bridge alias or a public API base such as "
+            "https://onyx.your-org.com/api.",
             api_server_url,
         )
-
     env: dict[str, str] = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
+        # The deployment URL is already the exact API base. Disable the CLI's
+        # compatibility prefix for direct services and prefixed ingress URLs.
+        "ONYX_API_PREFIX": "",
         OPENCODE_SERVER_PASSWORD: opencode_password,
         "OPENCODE_CONFIG_CONTENT": opencode_config_json,
     }
@@ -500,16 +561,15 @@ def build_container_create_kwargs(
     }
 
     if sandbox_proxy_host:
-        # All-or-nothing: port + ca volume must be supplied when host is.
-        if sandbox_proxy_port is None or not proxy_ca_volume_name:
+        # All-or-nothing: ca volume must be supplied when host is.
+        if not proxy_ca_volume_name:
             raise ValueError(
-                "sandbox_proxy_host is set but sandbox_proxy_port or proxy_ca_volume_name is "
-                "missing; Proxy posture requires all three."
+                "sandbox_proxy_host is set but proxy_ca_volume_name is missing; "
+                "Proxy posture requires both."
             )
         env.update(
             _proxy_env_vars(
                 sandbox_proxy_host=sandbox_proxy_host,
-                sandbox_proxy_port=sandbox_proxy_port,
             )
         )
         volumes[proxy_ca_volume_name] = {
@@ -525,9 +585,10 @@ def build_container_create_kwargs(
         # NET_ADMIN: iptables. SETPCAP: prctl(PR_CAPBSET_DROP) for `setpriv
         # --bounding-set=-all`. SETUID/SETGID: setpriv's --reuid/--regid call
         # setuid()/setgroups(), which are gated on these caps even for UID 0
-        # under cap_drop=ALL. All four leave the bounding set before the agent
-        # execve, so the running container ends up with no caps.
-        cap_add = ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]
+        # under cap_drop=ALL. CHOWN: repair /workspace/sessions mount-point
+        # ownership before dropping to UID 1000. All five leave the bounding set
+        # before the agent execve, so the running container ends up with no caps.
+        cap_add = ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID", "CHOWN"]
     else:
         entrypoint = None
         command = ["/workspace/entrypoint.sh"]
@@ -551,6 +612,7 @@ def build_container_create_kwargs(
         "ports": ports,
         "environment": env,
         "volumes": volumes,
+        "tmpfs": {SANDBOX_TMP_PATH: SANDBOX_TMPFS_OPTIONS},
         "mem_limit": memory_limit,
         "nano_cpus": int(cpu_limit * 1_000_000_000),
         "restart_policy": {"Name": "unless-stopped"},
@@ -571,6 +633,8 @@ class DockerSandboxManager(SandboxManager):
 
     _instance: "DockerSandboxManager | None" = None
     _lock = threading.Lock()
+
+    supports_opencode_history_persistence = True
 
     def __new__(cls) -> "DockerSandboxManager":
         if cls._instance is None:
@@ -597,6 +661,8 @@ class DockerSandboxManager(SandboxManager):
 
         self._docker = DockerClient(base_url=f"unix://{SANDBOX_DOCKER_SOCKET}")
         self._image = SANDBOX_CONTAINER_IMAGE
+        self._image_checked = False
+        self._image_check_lock = threading.Lock()
         self._network_name = SANDBOX_DOCKER_NETWORK
         self._memory_limit = SANDBOX_DOCKER_MEMORY_LIMIT
         self._cpu_limit = SANDBOX_DOCKER_CPU_LIMIT
@@ -619,6 +685,55 @@ class DockerSandboxManager(SandboxManager):
             self._network_name,
             self._compose_project,
         )
+
+    def _ensure_sandbox_image(self) -> None:
+        with self._image_check_lock:
+            if self._image_checked:
+                return
+
+            image_tag: str | None = None
+            # Digest refs use ``@sha256:...``; do not parse that colon as a tag.
+            if "@" not in self._image:
+                image_name = self._image.rsplit("/", 1)[-1]
+                image_tag = (
+                    image_name.rsplit(":", 1)[1] if ":" in image_name else "latest"
+                )
+            is_mutable_tag = image_tag in _MUTABLE_SANDBOX_IMAGE_TAGS
+            if not is_mutable_tag:
+                try:
+                    self._docker.images.get(self._image)
+                    self._image_checked = True
+                    return
+                except NotFound:
+                    pass
+
+            logger.info(
+                "%s sandbox image %s.",
+                "Refreshing" if is_mutable_tag else "Pulling missing",
+                self._image,
+            )
+            try:
+                self._docker.images.pull(self._image)
+            except APIError as e:
+                if not is_mutable_tag:
+                    raise RuntimeError(
+                        f"Failed to pull sandbox image {self._image}: {e}"
+                    ) from e
+
+                try:
+                    self._docker.images.get(self._image)
+                except NotFound:
+                    raise RuntimeError(
+                        f"Failed to pull sandbox image {self._image}: {e}"
+                    ) from e
+                logger.warning(
+                    "Failed to refresh mutable sandbox image %s; using cached "
+                    "local image: %s",
+                    self._image,
+                    e,
+                )
+
+            self._image_checked = True
 
     def _ensure_sandbox_network(self) -> None:
         try:
@@ -689,29 +804,15 @@ class DockerSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
-        *,
-        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning.")
-        if not SANDBOX_API_SERVER_URL:
+        if not ONYX_SERVER_URL:
             raise ValueError(
-                "SANDBOX_API_SERVER_URL must be set for Docker sandbox provisioning."
+                "ONYX_SERVER_URL must be set for Docker sandbox provisioning."
             )
-
-        if all_llm_configs is not None and len(all_llm_configs) > 1:
-            # Docker is single-provider today: per-prompt agent_provider
-            # overrides will fail at opencode-serve with "provider not
-            # registered". Warn now so operators see it before the first turn.
-            logger.warning(
-                "DockerSandboxManager.provision received %d LLM configs but only the primary "
-                "provider %r is bootstrapped; per-prompt provider overrides will fail until Docker "
-                "grows multi-provider support.",
-                len(all_llm_configs),
-                llm_config.provider,
-            )
+        validate_sandbox_api_url(ONYX_SERVER_URL)
 
         logger.info(
             "Provisioning Docker sandbox %s for user %s, tenant %s.",
@@ -727,43 +828,28 @@ class DockerSandboxManager(SandboxManager):
         self._invalidate_serve_connection_info(sandbox_id)
 
         container = self._reuse_existing_container(sandbox_id)
+        created_fresh = False
         if container is None:
             # opencode-serve reads provider config from env at startup; must be
             # in create_kwargs before the container ever runs.
             opencode_password = secrets.token_urlsafe(32)
-            # Only register the egress-tagging plugin when the proxy is wired
-            # up; otherwise it would no-op (no HTTP(S)_PROXY to re-tag). Mirrors
-            # the K8s manager's gating.
-            session_tag_plugins = (
-                [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
-            )
-            # Proxy posture: Real PAT + LLM api_key never enter the sandbox. The
-            # proxy reads `Sandbox.encrypted_pat` and the per-provider key from
-            # Postgres, swaps the placeholder for the real bearer on the wire
-            # (OnyxPatResolver, LLMProviderKeyResolver).
+            # connect_app is always loaded; the egress-tagging plugin only when
+            # the proxy is wired up (else it no-ops — no HTTP(S)_PROXY to re-tag).
+            plugins = [_OPENCODE_CONNECT_APP_PLUGIN_PATH]
+            if SANDBOX_PROXY_HOST:
+                plugins.append(_OPENCODE_SESSION_TAG_PLUGIN_PATH)
             container_onyx_pat = (
                 SANDBOX_PROXY_INJECTED_PLACEHOLDER if SANDBOX_PROXY_HOST else onyx_pat
             )
-            # api_key=None (e.g. Ollama) -> skip; The resolver has nothing to
-            # swap and the placeholder would reach the LLM verbatim.
-            container_llm_api_key = (
-                SANDBOX_PROXY_INJECTED_PLACEHOLDER
-                if SANDBOX_PROXY_HOST and llm_config.api_key
-                else llm_config.api_key
+            opencode_config = build_opencode_base_config(
+                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                plugins=plugins,
             )
-            opencode_config_json = json.dumps(
-                build_opencode_config(
-                    provider=llm_config.provider,
-                    model_name=llm_config.model_name,
-                    api_key=container_llm_api_key,
-                    api_base=llm_config.api_base,
-                    disabled_tools=OPENCODE_DISABLED_TOOLS,
-                    plugins=session_tag_plugins,
-                )
-            )
+            opencode_config_json = json.dumps(opencode_config)
+            self._ensure_sandbox_image()
             self._ensure_sandbox_network()
             volume_name = self._ensure_sandbox_volume(sandbox_id, tenant_id)
-            container = self._create_sandbox_container(
+            container, created_fresh = self._create_sandbox_container(
                 sandbox_id=sandbox_id,
                 user_id=user_id,
                 tenant_id=tenant_id,
@@ -772,6 +858,20 @@ class DockerSandboxManager(SandboxManager):
                 opencode_password=opencode_password,
                 opencode_config_json=opencode_config_json,
             )
+
+        if created_fresh:
+            # Restore history into the empty writable layer before starting, so
+            # opencode-serve opens the restored DB instead of creating an empty
+            # one. On failure, remove the container so a retry re-creates
+            # cleanly.
+            try:
+                self._maybe_restore_opencode_history(container, sandbox_id, tenant_id)
+                container.start()
+            except Exception as e:
+                self._remove_incomplete_container(container)
+                raise RuntimeError(
+                    f"Failed to provision sandbox container {container.name}: {e}"
+                ) from e
 
         if not self._wait_for_container_running(container):
             raise RuntimeError(
@@ -794,7 +894,13 @@ class DockerSandboxManager(SandboxManager):
         )
 
     def _reuse_existing_container(self, sandbox_id: UUID) -> Container | None:
-        """Returns a running/restarted container if one exists, else None."""
+        """Returns a reusable running/exited container, else None.
+
+        A ``created`` container means a prior provision died before start;
+        starting it would skip the opencode-history restore, so remove it and
+        let the caller re-create. The per-sandbox volume survives, so session
+        workspaces are kept.
+        """
         existing = self._get_container(sandbox_id)
         if existing is None:
             return None
@@ -803,11 +909,31 @@ class DockerSandboxManager(SandboxManager):
         if status == "running":
             logger.info("Reusing existing running sandbox %s.", sandbox_id)
             return existing
-        if status in ("exited", "created"):
+        if status == "exited":
             logger.info("Starting existing stopped sandbox %s.", existing.name)
             existing.start()
             return existing
+        if status == "created":
+            logger.warning(
+                "Sandbox %s container is in 'created' state (incomplete prior "
+                "provision); removing so it can be re-created and restored.",
+                sandbox_id,
+            )
+            self._remove_incomplete_container(existing)
+            return None
         return None
+
+    @staticmethod
+    def _remove_incomplete_container(container: Container) -> None:
+        """Best-effort force-remove of a container we failed to fully provision."""
+        try:
+            container.remove(force=True)
+        except (APIError, NotFound) as e:
+            logger.warning(
+                "Failed to remove incomplete sandbox container %s: %s",
+                container.name,
+                e,
+            )
 
     def _create_sandbox_container(
         self,
@@ -819,9 +945,14 @@ class DockerSandboxManager(SandboxManager):
         volume_name: str,
         opencode_password: str,
         opencode_config_json: str,
-    ) -> Container:
+    ) -> tuple[Container, bool]:
         """
-        Runs docker create + start with our security/network/labels invariants.
+        Creates (not starts) the container; returns ``(container,
+        created_fresh)``.
+
+        ``created_fresh`` is False only when a concurrent provision already
+        created it (409 conflict); the caller then skips restore/start and lets
+        that provisioner finish.
         """
         # Proxy posture is gated on SANDBOX_PROXY_HOST; threaded through
         # build_container_create_kwargs to layer on the legacy posture without
@@ -833,7 +964,7 @@ class DockerSandboxManager(SandboxManager):
             tenant_id=tenant_id,
             image=self._image,
             onyx_pat=onyx_pat,
-            api_server_url=SANDBOX_API_SERVER_URL,
+            api_server_url=ONYX_SERVER_URL,
             network=self._network_name,
             volume_name=volume_name,
             memory_limit=self._memory_limit,
@@ -842,17 +973,18 @@ class DockerSandboxManager(SandboxManager):
             opencode_config_json=opencode_config_json,
             compose_project=self._compose_project,
             sandbox_proxy_host=proxy_host,
-            sandbox_proxy_port=SANDBOX_PROXY_PORT if proxy_host else None,
             proxy_ca_volume_name=(SANDBOX_PROXY_CA_VOLUME_NAME if proxy_host else None),
         )
+        # create (not run) so the caller can put_archive history before start.
+        # detach is run-only.
+        run_kwargs = dict(create_kwargs)
+        run_kwargs.pop("detach", None)
         try:
-            # Types pinned by ContainerCreateKwargs; ty can't match run's
-            # overloads.
-            return self._docker.containers.run(**create_kwargs)  # ty: ignore[no-matching-overload]
+            return self._docker.containers.create(**run_kwargs), True
         except APIError as e:
             if "Conflict" in str(e) or getattr(e, "status_code", None) == 409:
                 logger.info("Sandbox container %s already exists, reusing.", sandbox_id)
-                return self._require_container(sandbox_id)
+                return self._require_container(sandbox_id), False
             raise RuntimeError(f"Failed to create sandbox container: {e}") from e
 
     def terminate(self, sandbox_id: UUID) -> None:
@@ -896,20 +1028,22 @@ class DockerSandboxManager(SandboxManager):
     def _render_agents_md(
         self,
         *,
-        llm_config: LLMProviderConfig,
+        agent_provider: str | None,
+        agent_model: str | None,
         nextjs_port: int | None,
-        skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> str:
         """Shell-escaped AGENTS.md for ``printf '%s' '...'``."""
         agent_instructions = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
-            skills_section=skills_section,
-            provider=llm_config.provider,
-            model_name=llm_config.model_name,
+            connectable_apps_section=connectable_apps_section,
+            provider=agent_provider,
+            model_name=agent_model,
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
+            organization_instructions=load_settings().craft_instructions,
         )
         return agent_instructions.replace("'", "'\\''")
 
@@ -917,31 +1051,36 @@ class DockerSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        llm_config: LLMProviderConfig,
+        llm_config: CraftLLMProviderConfig,
         nextjs_port: int | None,
-        skills_section: str,
-        snapshot_path: str | None = None,
+        connectable_apps_section: str,
         user_name: str | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
-        if snapshot_path:
-            logger.warning(
-                "setup_session_workspace called with snapshot_path=%s; use restore_snapshot "
-                "for snapshot restores. Session %s will be set up with the fresh template instead.",
-                snapshot_path,
-                session_id,
-            )
-
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         agents_md = self._render_agents_md(
-            llm_config=llm_config,
+            agent_provider=llm_config.provider,
+            agent_model=llm_config.model_name,
             nextjs_port=nextjs_port,
-            skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             user_name=user_name,
+        )
+        session_opencode_config = json.dumps(
+            build_provider_opencode_config(
+                llm_config,
+                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                mcp_servers=mcp_servers,
+                session_id=str(session_id),
+            )
+        )
+        session_opencode_config_setup = (
+            f"printf '%s' {shlex.quote(session_opencode_config)} > "
+            f"{session_path}/opencode.json"
         )
 
         nextjs_start = (
-            _build_nextjs_start_script(session_path, nextjs_port)
+            build_nextjs_start_script(session_path, nextjs_port)
             if nextjs_port is not None
             else ""
         )
@@ -971,7 +1110,9 @@ else
     mkdir -p {session_path}/outputs/web
 fi
 ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
+ln -sf {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
+{session_opencode_config_setup}
 {nextjs_start}
 echo "Session workspace setup complete"
 """
@@ -985,8 +1126,8 @@ echo "Session workspace setup complete"
             # CAP_DAC_OVERRIDE (cap_drop=ALL), root cannot write to
             # /workspace/sessions which is owned by sandbox=1000. Exec as
             # sandbox so the script's mkdir/cp on the session workspace succeed.
-            run_in_container(
-                container, ["/bin/sh", "-c", setup_script], user="1000:1000"
+            _run_in_container_as_sandbox_user(
+                container, ["/bin/sh", "-c", setup_script]
             )
         except ExecError as e:
             raise RuntimeError(
@@ -997,7 +1138,6 @@ echo "Session workspace setup complete"
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,  # noqa: ARG002
     ) -> None:
         self._close_session_buses(sandbox_id, session_id)
 
@@ -1020,13 +1160,14 @@ rm -rf {session_path}
 echo "Session cleanup complete"
 """
         try:
-            run_in_container(container, ["/bin/sh", "-c", cleanup_script])
-        except ExecError as e:
-            logger.warning(
-                "cleanup_session_workspace exec failed for session %s: %s",
-                session_id,
-                e,
+            _run_in_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", cleanup_script],
             )
+        except ExecError as e:
+            raise RuntimeError(
+                f"Failed to clean up session workspace {session_id}"
+            ) from e
 
     def session_workspace_exists(
         self,
@@ -1038,7 +1179,7 @@ echo "Session cleanup complete"
             return False
         target = f"{SESSIONS_ROOT}/{session_id}/outputs"
         try:
-            result = run_in_container(
+            result = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
@@ -1061,7 +1202,7 @@ echo "Session cleanup complete"
         if container is None:
             return []
         try:
-            result = run_in_container(
+            result = _run_in_container_as_sandbox_user(
                 container,
                 ["/bin/sh", "-c", f"ls -1 {SESSIONS_ROOT}/ 2>/dev/null || true"],
                 check=False,
@@ -1098,7 +1239,7 @@ echo "Session cleanup complete"
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         # Bail out if there's nothing worth snapshotting.
         try:
-            probe = run_in_container(
+            probe = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
@@ -1119,19 +1260,18 @@ echo "Session cleanup complete"
             (
                 f"cd {session_path} && tar -czf - "
                 f"$([ -d outputs ] && echo outputs) "
-                f"$([ -d attachments ] && echo attachments) "
-                f"$([ -d .opencode-data ] && echo .opencode-data)"
+                f"$([ -d attachments ] && echo attachments)"
             ),
         ]
 
-        stream = stream_stdout_from_container(container, tar_cmd)
+        stream = _stream_stdout_from_container_as_sandbox_user(container, tar_cmd)
         adapter = _GeneratorReader(stream)
         try:
             # ``_GeneratorReader`` satisfies the structural ``read(n)`` API that
             # ``SnapshotManager``/``FileStore`` actually use, but does not
             # subclass ``typing.IO[bytes]`` formally.
             _, storage_path, size_bytes = (
-                self._snapshot_manager.create_snapshot_from_stream(
+                self._snapshot_manager.persist_snapshot_from_stream(
                     stream=adapter,  # ty: ignore[invalid-argument-type]
                     sandbox_id=str(sandbox_id),
                     tenant_id=tenant_id,
@@ -1148,22 +1288,142 @@ echo "Session cleanup complete"
         )
         return SnapshotResult(storage_path=storage_path, size_bytes=size_bytes)
 
+    def create_opencode_history_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = 300.0,  # noqa: ARG002 - exec uses the docker client timeout
+    ) -> bool:
+        """Captures sandbox-global opencode history to the FileStore.
+
+        Returns False when opencode has written no data yet, leaving any
+        existing durable archive untouched.
+        """
+        container = self._get_container(sandbox_id)
+        if container is None:
+            logger.info(
+                "create_opencode_history_snapshot: sandbox %s has no container.",
+                sandbox_id,
+            )
+            return False
+
+        # Point the daemon helper at the Docker data home (unset in the container).
+        history_env = {**SANDBOX_EXEC_ENV, "OPENCODE_DATA_HOME": OPENCODE_DATA_DIR}
+        try:
+            built = run_in_container(
+                container,
+                ["python3", "-c", _OPENCODE_HISTORY_CREATE_SCRIPT],
+                user=SANDBOX_EXEC_USER,
+                environment=history_env,
+            )
+        except ExecError as e:
+            raise RuntimeError(f"Failed to build opencode history archive: {e}") from e
+
+        archive_path = built.stdout_text.strip()
+        if not archive_path:
+            logger.info("No opencode history to snapshot for sandbox %s.", sandbox_id)
+            return False
+
+        try:
+            stream = _stream_stdout_from_container_as_sandbox_user(
+                container, ["cat", archive_path]
+            )
+            # _GeneratorReader gives the read(n) API persist_* needs (not a typing.IO).
+            adapter = _GeneratorReader(stream)
+            storage_path, size_bytes = (
+                self._snapshot_manager.persist_opencode_snapshot_from_stream(
+                    stream=adapter,  # ty: ignore[invalid-argument-type]
+                    sandbox_id=str(sandbox_id),
+                    tenant_id=tenant_id,
+                )
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to persist opencode history snapshot: {e}"
+            ) from e
+        finally:
+            # Drop the in-container temp archive regardless of outcome.
+            try:
+                run_in_container(
+                    container,
+                    ["rm", "-f", archive_path],
+                    user=SANDBOX_EXEC_USER,
+                    check=False,
+                )
+            except ExecError:
+                pass
+
+        logger.info(
+            "Created opencode history snapshot for sandbox %s (path=%s size=%s bytes).",
+            sandbox_id,
+            storage_path,
+            size_bytes,
+        )
+        return True
+
+    def _maybe_restore_opencode_history(
+        self,
+        container: Container,
+        sandbox_id: UUID,
+        tenant_id: str,
+    ) -> None:
+        """
+        Restores durable opencode history into a freshly-created,
+        not-yet-started container, before opencode-serve opens its DB. No-op
+        when no snapshot exists.
+
+        Writing the stopped container's writable layer avoids racing a live
+        opencode process over the DB file.
+        """
+        if not self._snapshot_manager.has_opencode_history_snapshot(
+            tenant_id, str(sandbox_id)
+        ):
+            return
+
+        storage_path = SnapshotManager.opencode_history_storage_path(
+            tenant_id, str(sandbox_id)
+        )
+        buf = io.BytesIO()
+        self._snapshot_manager.restore_snapshot_to_stream(storage_path, buf)
+        archive_bytes = buf.getvalue()
+        if not archive_bytes:
+            logger.warning(
+                "Opencode history snapshot for sandbox %s was empty; skipping restore.",
+                sandbox_id,
+            )
+            return
+
+        try:
+            # put_archive untars (gzip ok) into the stopped container's writable layer.
+            if not container.put_archive(WORKSPACE_ROOT, archive_bytes):
+                raise RuntimeError("docker put_archive reported failure")
+        except (APIError, NotFound) as e:
+            raise RuntimeError(
+                f"Failed to restore opencode history into sandbox {sandbox_id}: {e}"
+            ) from e
+
+        logger.info(
+            "Restored opencode history into sandbox %s (%s bytes).",
+            sandbox_id,
+            len(archive_bytes),
+        )
+
     def restore_snapshot(
         self,
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,  # noqa: ARG002
         nextjs_port: int | None,
-        llm_config: LLMProviderConfig,
-        skills_section: str,
+        llm_config: CraftLLMProviderConfig,
+        connectable_apps_section: str,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
 
         # Make sure the session directory exists before we extract into it.
         try:
-            run_in_container(
+            _run_in_container_as_sandbox_user(
                 container,
                 ["/bin/sh", "-c", f"mkdir -p {session_path}"],
             )
@@ -1178,7 +1438,7 @@ echo "Session cleanup complete"
         payload = buf.getvalue()
 
         try:
-            stream_stdin_to_container(
+            _stream_stdin_to_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
@@ -1210,54 +1470,97 @@ if [ -f "$web_dir/bun.lock" ]; then
 fi
 """
         try:
-            run_in_container(container, ["/bin/sh", "-c", install_script])
+            _run_in_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", install_script],
+            )
         except ExecError as e:
             raise RuntimeError(f"Failed to reinstall deps after restore: {e}") from e
 
-        self._regenerate_session_config(
-            container=container,
-            session_path=session_path,
-            llm_config=llm_config,
+        self.regenerate_session_config(
+            sandbox_id=sandbox_id,
+            session_id=session_id,
+            agent_provider=llm_config.provider,
+            agent_model=llm_config.model_name,
             nextjs_port=nextjs_port,
-            skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
+            llm_config=llm_config,
+            mcp_servers=mcp_servers,
         )
 
         if nextjs_port is not None:
-            start_script = _build_nextjs_start_script(
+            start_script = build_nextjs_start_script(
                 session_path, nextjs_port, check_node_modules=True
             )
             try:
-                run_in_container(container, ["/bin/sh", "-c", start_script])
+                _run_in_container_as_sandbox_user(
+                    container,
+                    ["/bin/sh", "-c", start_script],
+                )
             except ExecError as e:
                 raise RuntimeError(f"Failed to start Next.js after restore: {e}") from e
 
-    def _regenerate_session_config(
+    def regenerate_session_config(
         self,
         *,
-        container: Container,
-        session_path: str,
-        llm_config: LLMProviderConfig,
+        sandbox_id: UUID,
+        session_id: UUID,
+        agent_provider: str | None,
+        agent_model: str | None,
         nextjs_port: int | None,
-        skills_section: str,
+        connectable_apps_section: str,
+        user_name: str | None = None,
+        llm_config: CraftLLMProviderConfig | None = None,
+        mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
-        """
-        Rewrite AGENTS.md and the skills symlink post-restore. opencode.json is
-        not written — config lives at container scope via
-        OPENCODE_CONFIG_CONTENT.
-        """
+        """Rewrite generated session configuration and managed symlinks."""
+        container = self._require_container(sandbox_id)
+        session_path = f"{SESSIONS_ROOT}/{session_id}"
         agents_md = self._render_agents_md(
-            llm_config=llm_config,
+            agent_provider=agent_provider,
+            agent_model=agent_model,
             nextjs_port=nextjs_port,
-            skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
+            user_name=user_name,
         )
+        session_opencode_config = (
+            json.dumps(
+                build_provider_opencode_config(
+                    llm_config,
+                    disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    mcp_servers=mcp_servers,
+                    session_id=str(session_id),
+                )
+            )
+            if llm_config is not None
+            else None
+        )
+        session_opencode_config_setup = (
+            f"printf '%s' {shlex.quote(session_opencode_config)} > "
+            f"{session_path}/opencode.json"
+            if session_opencode_config is not None
+            else ""
+        )
+        attachments_content_b64 = base64.b64encode(
+            ATTACHMENTS_SECTION_CONTENT.encode()
+        ).decode()
         script = f"""
 set -e
 mkdir -p {session_path}/.opencode
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
+ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
+{session_opencode_config_setup}
+if [ -n "$(find {session_path}/attachments -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+    printf '\n\n' >> {session_path}/AGENTS.md
+    echo '{attachments_content_b64}' | base64 -d >> {session_path}/AGENTS.md
+fi
 """
         try:
-            run_in_container(container, ["/bin/sh", "-c", script])
+            _run_in_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", script],
+            )
         except ExecError as e:
             raise RuntimeError(f"Failed to regenerate session config: {e}") from e
 
@@ -1305,12 +1608,12 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
         quoted = shlex.quote(target_path)
 
         try:
-            result = run_in_container(
+            result = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
                     "-c",
-                    f"ls -laL --time-style=+%s {quoted} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
+                    f"ls -la --time-style=+%s {quoted}/ 2>/dev/null || echo 'ERROR_NOT_FOUND'",
                 ],
                 check=False,
             )
@@ -1333,20 +1636,22 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
             if len(parts) < 7:
                 continue
             is_symlink = line.startswith("l")
+            link_target: str | None = None
             if is_symlink and " -> " in line:
                 name_and_target = " ".join(parts[6:])
-                name = (
-                    name_and_target.split(" -> ")[0]
-                    if " -> " in name_and_target
-                    else parts[-1]
-                )
+                if " -> " in name_and_target:
+                    name, link_target = name_and_target.split(" -> ", 1)
+                else:
+                    name = parts[-1]
             else:
                 name = " ".join(parts[6:])
 
             if name in (".", ".."):
                 continue
 
-            is_directory = line.startswith("d")
+            is_directory = line.startswith("d") or (
+                is_symlink and link_target == MANAGED_USER_LIBRARY_PATH
+            )
             size_str = parts[4]
             try:
                 size = int(size_str) if not is_directory else None
@@ -1372,7 +1677,7 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
         quoted = shlex.quote(target_path)
 
         try:
-            result = run_in_container(
+            result = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
@@ -1436,8 +1741,10 @@ chmod 644 "$target_dir/$base"
 echo "$base"
 """
         try:
-            result = stream_stdin_to_container(
-                container, ["/bin/sh", "-c", script], tar_data
+            result = _stream_stdin_to_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", script],
+                tar_data,
             )
         except ExecError as e:
             raise RuntimeError(f"Failed to upload file: {e}") from e
@@ -1466,12 +1773,12 @@ echo "$base"
         script = f"""
 if [ -f "{agents_md_path}" ]; then
     if ! grep -q "## Attachments (PRIORITY)" "{agents_md_path}" 2>/dev/null; then
-        if grep -q "## Skills" "{agents_md_path}" 2>/dev/null; then
+        if grep -q "## Connectable apps" "{agents_md_path}" 2>/dev/null; then
             awk -v content="$(echo "{attachments_b64}" | base64 -d)" '
-                /^## Skills/ {{ print content; print ""; }}
+                /^## Connectable apps/ {{ print content; print ""; }}
                 {{ print }}
             ' "{agents_md_path}" > "{agents_md_path}.tmp" && mv "{agents_md_path}.tmp" "{agents_md_path}"
-            echo "ADDED_BEFORE_SKILLS"
+            echo "ADDED_BEFORE_CONNECTABLE_APPS"
         else
             echo "" >> "{agents_md_path}"
             echo "" >> "{agents_md_path}"
@@ -1486,7 +1793,11 @@ else
 fi
 """
         try:
-            run_in_container(container, ["/bin/sh", "-c", script], check=False)
+            _run_in_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", script],
+                check=False,
+            )
         except ExecError as e:
             logger.warning("AGENTS.md attachments section update failed: %s", e)
 
@@ -1501,7 +1812,7 @@ fi
         clean_path = path.lstrip("/")
         target = f"{SESSIONS_ROOT}/{session_id}/{clean_path}"
         try:
-            result = run_in_container(
+            result = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
@@ -1538,7 +1849,10 @@ mkdir -p {safe_dir}
 printf '%s' '{escaped}' > {safe_path}
 echo WRITE_OK"""
         try:
-            result = run_in_container(container, ["/bin/sh", "-c", script])
+            result = _run_in_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", script],
+            )
         except ExecError as e:
             raise RuntimeError(f"Failed to write sandbox file {path}: {e}") from e
         if "WRITE_OK" not in result.stdout_text:
@@ -1565,7 +1879,11 @@ echo WRITE_OK"""
             f"fi"
         )
         try:
-            result = run_in_container(container, ["/bin/sh", "-c", cmd], check=False)
+            result = _run_in_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", cmd],
+                check=False,
+            )
         except ExecError as e:
             logger.warning("get_upload_stats failed: %s", e)
             return 0, 0
@@ -1632,7 +1950,11 @@ echo WRITE_OK"""
             f"trap - EXIT\n"
         )
         try:
-            stream_stdin_to_container(container, ["/bin/sh", "-c", script], tar_bytes)
+            _stream_stdin_to_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", script],
+                tar_bytes,
+            )
         except ExecError as e:
             raise RuntimeError(f"write_files_to_sandbox failed: {e}") from e
 
@@ -1664,7 +1986,7 @@ echo WRITE_OK"""
         cache_abs = f"{session_root}/{clean_cache}"
 
         try:
-            result = run_in_container(
+            result = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "python",
@@ -1703,7 +2025,7 @@ echo WRITE_OK"""
 class _GeneratorReader:
     """Adapts a ``Generator[bytes, ...]`` into a ``read(n)``-based reader.
 
-    ``SnapshotManager.create_snapshot_from_stream`` (and ``shutil.copyfileobj``
+    ``SnapshotManager.persist_snapshot_from_stream`` (and ``shutil.copyfileobj``
     under it) only need ``read(n)``. We buffer leftover bytes so the producer's
     chunk size doesn't constrain the consumer's.
     """

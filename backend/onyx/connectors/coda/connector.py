@@ -1,32 +1,34 @@
 import os
 from collections.abc import Generator
 from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Any, Dict, List, Optional, cast
 
 from pydantic import BaseModel
-from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    ImageSection,
+    TextSection,
+)
 from onyx.utils.batching import batch_generator
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 _CODA_CALL_TIMEOUT = 30
 _CODA_BASE_URL = "https://coda.io/apis/v1"
@@ -142,7 +144,7 @@ class CodaConnector(LoadConnector, PollConnector):
             raise ConnectorMissingCredentialError("Coda")
         return self._coda_client
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _get_doc(self, doc_id: str) -> CodaDoc:
         """Fetch a specific Coda document by its ID."""
         logger.debug("Fetching Coda doc with ID: %s", doc_id)
@@ -166,7 +168,7 @@ class CodaConnector(LoadConnector, PollConnector):
             folder_name=response["folder"]["name"] if response.get("folder") else None,
         )
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _get_page(self, doc_id: str, page_id: str) -> CodaPage:
         """Fetch a specific page from a Coda document."""
         logger.debug("Fetching Coda page with ID: %s", page_id)
@@ -190,7 +192,7 @@ class CodaConnector(LoadConnector, PollConnector):
             updated_at=response["updatedAt"],
         )
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _get_table(self, doc_id: str, table_id: str) -> CodaTable:
         """Fetch a specific table from a Coda document."""
         logger.debug("Fetching Coda table with ID: %s", table_id)
@@ -213,7 +215,7 @@ class CodaConnector(LoadConnector, PollConnector):
             doc_id=doc_id,
         )
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _get_row(self, doc_id: str, table_id: str, row_id: str) -> CodaRow:
         """Fetch a specific row from a Coda table."""
         logger.debug("Fetching Coda row with ID: %s", row_id)
@@ -245,7 +247,7 @@ class CodaConnector(LoadConnector, PollConnector):
             doc_id=doc_id,
         )
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _list_all_docs(
         self, endpoint: str = "docs", params: Optional[Dict[str, str]] = None
     ) -> List[CodaDoc]:
@@ -294,7 +296,7 @@ class CodaConnector(LoadConnector, PollConnector):
         logger.debug("Found %s docs", len(all_docs))
         return all_docs
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _list_pages_in_doc(self, doc_id: str) -> List[CodaPage]:
         """List all pages in a Coda document."""
         logger.debug("Listing pages in Coda doc with ID: %s", doc_id)
@@ -343,7 +345,7 @@ class CodaConnector(LoadConnector, PollConnector):
         logger.debug("Found %s pages in doc %s", len(pages), doc_id)
         return pages
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_page_content(self, doc_id: str, page_id: str) -> str:
         """Fetch the content of a Coda page."""
         logger.debug("Fetching content for page %s in doc %s", page_id, doc_id)
@@ -381,7 +383,7 @@ class CodaConnector(LoadConnector, PollConnector):
 
         return "\n\n".join(content_parts)
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _list_tables(self, doc_id: str) -> List[CodaTable]:
         """List all tables in a Coda document."""
         logger.debug("Listing tables in Coda doc with ID: %s", doc_id)
@@ -425,7 +427,7 @@ class CodaConnector(LoadConnector, PollConnector):
         logger.debug("Found %s tables in doc %s", len(tables), doc_id)
         return tables
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _list_rows_and_values(self, doc_id: str, table_id: str) -> List[CodaRow]:
         """List all rows and their values in a table."""
         logger.debug("Listing rows in Coda table: %s in Coda doc: %s", table_id, doc_id)
@@ -478,7 +480,8 @@ class CodaConnector(LoadConnector, PollConnector):
 
     def _convert_page_to_document(self, page: CodaPage, content: str = "") -> Document:
         """Convert a page into a Document."""
-        page_updated = datetime.fromisoformat(page.updated_at).astimezone(timezone.utc)
+        page_updated = datetime_to_utc(datetime.fromisoformat(page.updated_at))
+        page_created = datetime_to_utc(datetime.fromisoformat(page.created_at))
 
         text_parts = [page.name, page.browser_link]
         if content:
@@ -492,6 +495,8 @@ class CodaConnector(LoadConnector, PollConnector):
             source=DocumentSource.CODA,
             semantic_identifier=page.name or f"Page {page.id}",
             doc_updated_at=page_updated,
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=page_created,
             metadata={
                 "browser_link": page.browser_link,
                 "doc_id": page.doc_id,
@@ -503,9 +508,8 @@ class CodaConnector(LoadConnector, PollConnector):
         self, table: CodaTable, rows: List[CodaRow]
     ) -> Document:
         """Convert a table and its rows into a single Document with multiple sections (one per row)."""
-        table_updated = datetime.fromisoformat(table.updated_at).astimezone(
-            timezone.utc
-        )
+        table_updated = datetime_to_utc(datetime.fromisoformat(table.updated_at))
+        table_created = datetime_to_utc(datetime.fromisoformat(table.created_at))
 
         sections: List[TextSection] = []
         for row in rows:
@@ -531,6 +535,8 @@ class CodaConnector(LoadConnector, PollConnector):
             source=DocumentSource.CODA,
             semantic_identifier=table.name or f"Table {table.id}",
             doc_updated_at=table_updated,
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=table_created,
             metadata={
                 "browser_link": table.browser_link,
                 "doc_id": table.doc_id,
@@ -615,11 +621,9 @@ class CodaConnector(LoadConnector, PollConnector):
                 try:
                     pages = self._list_pages_in_doc(doc.id)
                     for page in pages:
-                        page_timestamp = (
+                        page_timestamp = datetime_to_utc(
                             datetime.fromisoformat(page.updated_at)
-                            .astimezone(timezone.utc)
-                            .timestamp()
-                        )
+                        ).timestamp()
                         if start < page_timestamp <= end:
                             content = ""
                             if self.index_page_content:
@@ -638,11 +642,9 @@ class CodaConnector(LoadConnector, PollConnector):
                 try:
                     tables = self._list_tables(doc.id)
                     for table in tables:
-                        table_timestamp = (
+                        table_timestamp = datetime_to_utc(
                             datetime.fromisoformat(table.updated_at)
-                            .astimezone(timezone.utc)
-                            .timestamp()
-                        )
+                        ).timestamp()
 
                         try:
                             rows = self._list_rows_and_values(doc.id, table.id)
@@ -650,11 +652,9 @@ class CodaConnector(LoadConnector, PollConnector):
                             table_or_rows_updated = start < table_timestamp <= end
                             if not table_or_rows_updated:
                                 for row in rows:
-                                    row_timestamp = (
+                                    row_timestamp = datetime_to_utc(
                                         datetime.fromisoformat(row.updated_at)
-                                        .astimezone(timezone.utc)
-                                        .timestamp()
-                                    )
+                                    ).timestamp()
                                     if start < row_timestamp <= end:
                                         table_or_rows_updated = True
                                         break

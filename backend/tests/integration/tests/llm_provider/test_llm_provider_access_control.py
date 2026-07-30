@@ -5,22 +5,28 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.llm import can_user_access_llm_provider
-from onyx.db.llm import fetch_user_group_ids
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import (
+    can_user_access_llm_provider,
+    fetch_user_group_ids,
+    update_default_provider,
+    upsert_llm_provider,
+)
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import LLMProvider__Persona
-from onyx.db.models import LLMProvider__UserGroup
-from onyx.db.models import ModelConfiguration
-from onyx.db.models import Persona
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
+from onyx.db.models import (
+    LLMProvider__Persona,
+    LLMProvider__UserGroup,
+    ModelConfiguration,
+    Persona,
+    User,
+    User__UserGroup,
+    UserGroup,
+)
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_llm_for_persona
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager

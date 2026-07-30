@@ -1,8 +1,5 @@
 function conditionallyAddPlural(noun: string, cnt: number): string {
-  if (cnt > 1) {
-    return `${noun}s`;
-  }
-  return noun;
+  return cnt === 1 ? noun : `${noun}s`;
 }
 
 /**

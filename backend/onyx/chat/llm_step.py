@@ -2,62 +2,64 @@ import json
 import re
 import time
 import uuid
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Mapping
-from collections.abc import Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from html import unescape
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import LlmStepResult
+from onyx.chat.models import ChatMessageSimple, LlmStepResult
 from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
-from onyx.configs.app_configs import ENABLE_AZURE_IMAGE_CAP
-from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
-from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
+from onyx.configs.app_configs import (
+    ENABLE_AZURE_IMAGE_CAP,
+    LOG_ONYX_MODEL_INTERACTIONS,
+    PROMPT_CACHE_CHAT_HISTORY,
+)
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.interfaces import (
+    LLM,
+    LanguageModelInput,
+    LLMConfig,
+    LLMUserIdentity,
+    ToolChoiceOptions,
+)
 from onyx.llm.model_response import Delta
-from onyx.llm.models import AssistantMessage
-from onyx.llm.models import ChatCompletionMessage
-from onyx.llm.models import FunctionCall
-from onyx.llm.models import ImageContentPart
-from onyx.llm.models import ImageUrlDetail
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import SystemMessage
-from onyx.llm.models import TextContentPart
-from onyx.llm.models import ToolCall
-from onyx.llm.models import ToolMessage
-from onyx.llm.models import UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    ChatCompletionMessage,
+    FunctionCall,
+    ImageContentPart,
+    ImageUrlDetail,
+    ReasoningEffort,
+    SystemMessage,
+    TextContentPart,
+    ToolCall,
+    ToolMessage,
+    UserMessage,
+)
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.utils import model_needs_formatting_reenabled
-from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
-from onyx.prompts.chat_prompts import IMAGE_DROP_REMINDER
-from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE
-from onyx.prompts.constants import SYSTEM_REMINDER_TAG_OPEN
+from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN, IMAGE_DROP_REMINDER
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ReasoningDelta
-from onyx.server.query_and_chat.streaming_models import ReasoningDone
-from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
+    CitationInfo,
+    Packet,
+    ReasoningDelta,
+    ReasoningDone,
+    ReasoningStart,
+)
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span
+from onyx.tracing.llm_utils import build_llm_model_config
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
@@ -376,6 +378,7 @@ def _extract_tool_call_kickoffs(
     turn_index: int,
     tab_index: int | None = None,
     sub_turn_index: int | None = None,
+    tab_index_start: int = 0,
 ) -> list[ToolCallKickoff]:
     """Extract ToolCallKickoff objects from the tool call map.
 
@@ -387,9 +390,10 @@ def _extract_tool_call_kickoffs(
         turn_index: The turn index for this set of tool calls
         tab_index: If provided, use this tab_index for all tool calls (otherwise auto-increment)
         sub_turn_index: The sub-turn index for nested tool calls
+        tab_index_start: First auto-assigned tab_index (default 0).
     """
     tool_calls: list[ToolCallKickoff] = []
-    tab_index_calculated = 0
+    tab_index_calculated = tab_index_start
     for tool_call_data in id_to_tool_call_map.values():
         if tool_call_data.get("id") and tool_call_data.get("name"):
             tool_args = _parse_tool_args_to_dict(tool_call_data.get("arguments"))
@@ -1013,7 +1017,7 @@ def translate_history_to_llm_format(
             suffix=messages[last_cacheable_msg_idx + 1 :],
             continuation=False,
         )
-        assert isinstance(processed_messages, list)  # for mypy
+        assert isinstance(processed_messages, list)  # for type-checking
         messages = processed_messages
 
     return messages
@@ -1145,14 +1149,16 @@ def run_llm_step_pkt_generator(
 
     with generation_span(
         model=llm.config.model_name,
-        model_config={
-            "base_url": str(llm.config.api_base or ""),
+        model_config=build_llm_model_config(llm, LLMFlow.CHAT_RESPONSE)
+        | {
             "model_impl": "litellm",
-            "flow": LLMFlow.CHAT_RESPONSE.value,
         },
     ) as span_generation:
         span_generation.span_data.input = cast(
             Sequence[Mapping[str, Any]], llm_msg_history
+        )
+        span_generation.span_data.tools = cast(
+            Sequence[Mapping[str, Any]], tool_definitions
         )
         stream_start_time = time.monotonic()
         first_action_recorded = False
@@ -1381,11 +1387,16 @@ def run_llm_step_pkt_generator(
                 for tool_call_delta in flush_delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
 
+        # Narration emitted before these tool calls occupies the base tab; start
+        # tool calls at the next tab so they render as their own group instead of
+        # merging with the narration (which would hide them in the chat area).
+        tab_index_start = 1 if (answer_start and not use_existing_tab_index) else 0
         tool_calls = _extract_tool_call_kickoffs(
             id_to_tool_call_map=id_to_tool_call_map,
             turn_index=turn_index,
             tab_index=tab_index if use_existing_tab_index else None,
             sub_turn_index=sub_turn_index,
+            tab_index_start=tab_index_start,
         )
         # Run the flush + recovery below while the span is still open, so the
         # span output recorded afterward reflects the answer the user received.

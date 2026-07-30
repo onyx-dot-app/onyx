@@ -1,4 +1,8 @@
-import { AgentUpsertParameters, AgentUpsertRequest } from "@/lib/agents/types";
+import {
+  AgentUpsertParameters,
+  AgentUpsertRequest,
+  PersonaSharePermission,
+} from "@/lib/agents/types";
 
 /**
  * Maps client-facing AgentUpsertParameters to the wire shape expected by the
@@ -37,10 +41,10 @@ function buildAgentUpsertRequest(
 }
 
 /** Extracts `detail` from a non-OK JSON response body, falling back to `fallback`. */
-async function parseErrorDetail(res: Response, fallback: string) {
+export async function parseErrorDetail(res: Response, fallback: string) {
   try {
     const body = await res.json();
-    return (body?.detail as string) ?? fallback;
+    return typeof body?.detail === "string" ? body.detail : fallback;
   } catch {
     return fallback;
   }
@@ -123,12 +127,8 @@ export async function updateAgentSharedStatus(
   isPaidEnterpriseFeaturesEnabled: boolean,
   labelIds?: number[]
 ): Promise<string | null> {
-  if (!isPaidEnterpriseFeaturesEnabled && groupIds.length > 0) {
-    console.error(
-      "updateAgentSharedStatus: groupIds provided but enterprise features are disabled. " +
-        "Group sharing is an EE-only feature. Discarding groupIds."
-    );
-  }
+  const groupSharesDiscarded =
+    !isPaidEnterpriseFeaturesEnabled && groupIds.length > 0;
 
   try {
     const res = await fetch(`/api/persona/${agentId}/share`, {
@@ -141,10 +141,106 @@ export async function updateAgentSharedStatus(
         label_ids: labelIds,
       }),
     });
-    if (res.ok) return null;
+    if (res.ok) {
+      return groupSharesDiscarded
+        ? "Group sharing is an enterprise-only feature; groups were not added."
+        : null;
+    }
     return (
       ((await res.json()) as { detail?: string }).detail ?? "Unknown error"
     );
+  } catch {
+    return "Network error. Please check your connection and try again.";
+  }
+}
+
+export interface AgentShareUpdatePayload {
+  user_shares?: {
+    user_id: string;
+    permission: PersonaSharePermission;
+  }[];
+  group_shares?: {
+    group_id: number;
+    permission: PersonaSharePermission;
+  }[];
+  is_public?: boolean;
+  public_permission?: PersonaSharePermission;
+  label_ids?: number[];
+}
+
+export async function updateAgentShares(
+  agentId: number,
+  payload: AgentShareUpdatePayload,
+  isPaidEnterpriseFeaturesEnabled: boolean
+): Promise<string | null> {
+  const groupSharesDiscarded =
+    !isPaidEnterpriseFeaturesEnabled &&
+    !!payload.group_shares &&
+    payload.group_shares.length > 0;
+
+  try {
+    const res = await fetch(`/api/persona/${agentId}/share`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...payload,
+        group_shares: isPaidEnterpriseFeaturesEnabled
+          ? payload.group_shares
+          : undefined,
+      }),
+      credentials: "include",
+    });
+
+    if (res.ok) {
+      return groupSharesDiscarded
+        ? "Group sharing is an enterprise-only feature; group shares were not applied."
+        : null;
+    }
+
+    return await parseErrorDetail(res, "Failed to update agent shares");
+  } catch {
+    return "Network error. Please check your connection and try again.";
+  }
+}
+
+export async function transferAgentOwnership(
+  agentId: number,
+  payload:
+    | { new_owner_user_id: string; new_owner_group_id?: never }
+    | { new_owner_group_id: number; new_owner_user_id?: never }
+): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/persona/${agentId}/transfer-ownership`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      credentials: "include",
+    });
+
+    if (res.ok) {
+      return null;
+    }
+
+    return await parseErrorDetail(res, "Failed to transfer ownership");
+  } catch {
+    return "Network error. Please check your connection and try again.";
+  }
+}
+
+export async function removeSelfFromAgentShares(
+  agentId: number
+): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/persona/${agentId}/share/me`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+
+    if (res.ok) {
+      return null;
+    }
+
+    return await parseErrorDetail(res, "Failed to remove access");
   } catch {
     return "Network error. Please check your connection and try again.";
   }
@@ -241,7 +337,6 @@ export async function pinAgents(pinnedAgentIds: number[]): Promise<void> {
   const res = await fetch(`/api/user/pinned-assistants`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    // TODO(ENG-3766): rename to agent
     body: JSON.stringify({ ordered_assistant_ids: pinnedAgentIds }),
   });
   if (!res.ok) {

@@ -3,20 +3,20 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
-import { toast } from "@/hooks/useToast";
-import { AuthType } from "@/lib/constants";
+import { toast } from "@opal/layouts";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
-import { useSendMessageToParent, getPanelOrigin } from "@/lib/extension/utils";
+import { getPanelOrigin } from "@/lib/extension/utils";
+import { sendSetDefaultNewTabMessage } from "@/lib/extension/svc";
+import { useSendMessageToParent } from "@/lib/extension/hooks";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import SidePanelHeader from "@/app/nrf/side-panel/SidePanelHeader";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
-import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { useAgents } from "@/lib/agents/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
@@ -46,7 +46,7 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
-import ModelSelector from "@/refresh-components/popovers/ModelSelector";
+import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
 import { Section } from "@/layouts/general-layouts";
 
 const SearchUI = paidTierGated(EESearchUI);
@@ -109,15 +109,25 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Sync single-model selection to llmManager so the submission path
   // uses the correct provider/version (mirrors AppPage behaviour).
+  // Skip when unchanged — otherwise the initial [] -> [currentLlmModel]
+  // sync would flag a manual override before the agent's default loads.
   useEffect(() => {
     if (multiModel.selectedModels.length === 1) {
       const model = multiModel.selectedModels[0]!;
-      llmManager.updateCurrentLlm({
-        name: model.name,
-        provider: model.provider,
-        modelName: model.modelName,
-      });
+      const current = llmManager.currentLlm;
+      if (
+        model.provider !== current.provider ||
+        model.modelName !== current.modelName ||
+        model.name !== current.name
+      ) {
+        llmManager.updateCurrentLlm({
+          name: model.name,
+          provider: model.provider,
+          modelName: model.modelName,
+        });
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiModel.selectedModels]);
 
   // Deep research toggle
@@ -500,13 +510,14 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   className="max-w-(--app-page-main-content-width)"
                 >
                   <WelcomeMessage isDefaultAgent />
-                  {liveAgent && !llmManager.isLoadingProviders && (
-                    <ModelSelector
-                      llmManager={llmManager}
+                  {liveAgent && (
+                    <MultiModelSelector
                       selectedModels={multiModel.selectedModels}
                       onAdd={multiModel.addModel}
                       onRemove={multiModel.removeModel}
                       onReplace={multiModel.replaceModel}
+                      temperatureManager={llmManager}
+                      reasoningManager={llmManager}
                     />
                   )}
                 </Section>
@@ -522,14 +533,15 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 !isSidePanel && "max-w-(--app-page-main-content-width)"
               )}
             >
-              {hasMessages && liveAgent && !llmManager.isLoadingProviders && (
+              {hasMessages && liveAgent && (
                 <div className="pb-1">
-                  <ModelSelector
-                    llmManager={llmManager}
+                  <MultiModelSelector
                     selectedModels={multiModel.selectedModels}
                     onAdd={multiModel.addModel}
                     onRemove={multiModel.removeModel}
                     onReplace={multiModel.replaceModel}
+                    temperatureManager={llmManager}
+                    reasoningManager={llmManager}
                   />
                 </div>
               )}
@@ -635,10 +647,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <Modal.Content width="sm" height="sm">
             <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
             <Modal.Body>
-              {authTypeMetadata.authType === AuthType.BASIC ? (
+              {authTypeMetadata?.multiTenant === false ? (
                 <LoginPage
                   authUrl={null}
-                  authTypeMetadata={authTypeMetadata}
+                  authTypeMetadata={authTypeMetadata ?? null}
                   nextUrl="/nrf"
                 />
               ) : (

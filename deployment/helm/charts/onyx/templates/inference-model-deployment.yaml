@@ -57,6 +57,9 @@ spec:
             name: {{ .Values.config.envConfigMapName }}
         env:
           {{- include "onyx.envSecrets" . | nindent 12}}
+          {{- with include "onyx.customCACerts.modelServerEnv" . }}
+          {{- . | nindent 12 }}
+          {{- end }}
           {{- with .Values.inferenceCapability.extraEnv }}
           {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -80,4 +83,10 @@ spec:
         livenessProbe:
           {{- toYaml . | nindent 10 }}
         {{- end }}
+        {{- with include "onyx.modelServer.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.inferenceCapability.volumeMounts) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.inferenceCapability.volumes) }}
+      {{- . | nindent 6 }}
+      {{- end }}
 {{- end }}

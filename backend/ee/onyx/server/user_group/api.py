@@ -1,43 +1,44 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.persona import update_persona_access
-from ee.onyx.db.user_group import add_users_to_user_group
+from ee.onyx.db.user_group import (
+    add_users_to_user_group,
+    fetch_user_group,
+    fetch_user_groups,
+    fetch_user_groups_for_user,
+    insert_user_group,
+    prepare_user_group_for_deletion,
+    rename_user_group,
+    set_group_permission__no_commit,
+    update_user_curator_relationship,
+    update_user_group,
+)
 from ee.onyx.db.user_group import delete_user_group as db_delete_user_group
-from ee.onyx.db.user_group import fetch_user_group
-from ee.onyx.db.user_group import fetch_user_groups
-from ee.onyx.db.user_group import fetch_user_groups_for_user
-from ee.onyx.db.user_group import insert_user_group
-from ee.onyx.db.user_group import prepare_user_group_for_deletion
-from ee.onyx.db.user_group import rename_user_group
-from ee.onyx.db.user_group import set_group_permission__no_commit
-from ee.onyx.db.user_group import update_user_curator_relationship
-from ee.onyx.db.user_group import update_user_group
-from ee.onyx.server.user_group.models import AddUsersToUserGroupRequest
-from ee.onyx.server.user_group.models import MinimalUserGroupSnapshot
-from ee.onyx.server.user_group.models import SetCuratorRequest
-from ee.onyx.server.user_group.models import SetPermissionRequest
-from ee.onyx.server.user_group.models import SetPermissionResponse
-from ee.onyx.server.user_group.models import UpdateGroupAgentsRequest
-from ee.onyx.server.user_group.models import UserGroup
-from ee.onyx.server.user_group.models import UserGroupCreate
-from ee.onyx.server.user_group.models import UserGroupRename
-from ee.onyx.server.user_group.models import UserGroupUpdate
-from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
-from onyx.auth.permissions import require_permission
+from ee.onyx.server.user_group.models import (
+    AddUsersToUserGroupRequest,
+    MinimalUserGroupSnapshot,
+    SetCuratorRequest,
+    SetPermissionRequest,
+    SetPermissionResponse,
+    UpdateGroupAgentsRequest,
+    UserGroup,
+    UserGroupCreate,
+    UserGroupRename,
+    UserGroupUpdate,
+)
+from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS, require_permission
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import User
-from onyx.db.models import UserRole
+from onyx.db.models import User, UserRole
 from onyx.db.persona import get_persona_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -66,7 +67,11 @@ def list_user_groups(
             eager_load_for_snapshot=True,
             include_default=include_default,
         )
-    return [UserGroup.from_model(user_group) for user_group in user_groups]
+    mask_credential_prefix = get_security_settings().mask_credential_prefix
+    return [
+        UserGroup.from_model(user_group, mask_credential_prefix=mask_credential_prefix)
+        for user_group in user_groups
+    ]
 
 
 @router.get("/user-groups/minimal")
@@ -149,7 +154,10 @@ def create_user_group(
             f"User group with name '{user_group.name}' already exists. Please "
             + "choose a different name.",
         )
-    return UserGroup.from_model(db_user_group)
+    return UserGroup.from_model(
+        db_user_group,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+    )
 
 
 @router.patch("/admin/user-group/rename")
@@ -167,7 +175,8 @@ def rename_user_group_endpoint(
                 db_session=db_session,
                 user_group_id=rename_request.id,
                 new_name=rename_request.name,
-            )
+            ),
+            mask_credential_prefix=get_security_settings().mask_credential_prefix,
         )
     except IntegrityError:
         raise OnyxError(
@@ -195,7 +204,8 @@ def patch_user_group(
                 user=user,
                 user_group_id=user_group_id,
                 user_group_update=user_group_update,
-            )
+            ),
+            mask_credential_prefix=get_security_settings().mask_credential_prefix,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -215,7 +225,8 @@ def add_users(
                 user=user,
                 user_group_id=user_group_id,
                 user_ids=add_users_request.user_ids,
-            )
+            ),
+            mask_credential_prefix=get_security_settings().mask_credential_prefix,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

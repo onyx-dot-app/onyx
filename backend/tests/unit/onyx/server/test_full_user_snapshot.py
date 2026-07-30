@@ -4,8 +4,7 @@ from uuid import uuid4
 
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
-from onyx.server.models import FullUserSnapshot
-from onyx.server.models import UserGroupInfo
+from onyx.server.models import FullUserSnapshot, UserGroupInfo
 
 
 def _mock_user(

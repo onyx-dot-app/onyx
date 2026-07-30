@@ -22,21 +22,15 @@ Auth levels by endpoint:
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import Header
-from fastapi import HTTPException
-from pydantic import BaseModel
-from pydantic import ValidationError
+from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel, ValidationError
 from redis.exceptions import RedisError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
-from ee.onyx.server.billing.models import SeatUpdateRequest
-from ee.onyx.server.billing.models import SeatUpdateResponse
+from ee.onyx.server.billing.models import SeatUpdateRequest, SeatUpdateResponse
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.tenants.access import generate_data_plane_token
-from ee.onyx.utils.license import is_license_valid
-from ee.onyx.utils.license import verify_license_signature
+from ee.onyx.utils.license import is_license_valid, verify_license_signature
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient

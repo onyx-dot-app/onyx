@@ -21,7 +21,7 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import React, { useState } from "react";
 import { UsageReport } from "./types";
-import { ThreeDotsLoader } from "@/components/Loading";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 import Link from "next/link";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@opal/time";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -285,7 +285,7 @@ function UsageReportsTable({
       <Title className="mb-2 mt-6 mx-auto"> Previous Reports </Title>
       {usageReportsIsLoading && !isWaitingForReport ? (
         <div className="flex justify-center w-full">
-          <ThreeDotsLoader />
+          <SvgSimpleLoader className="h-6 w-6" />
         </div>
       ) : usageReportsError ? (
         <ErrorCallout

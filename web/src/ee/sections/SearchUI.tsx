@@ -9,7 +9,7 @@ import {
 import SearchCard from "@/ee/sections/SearchCard";
 import { Divider, Pagination } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
+import { IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { getSourceMetadata } from "@/lib/sources";
 import { Tag, ValidSources } from "@/lib/types";
@@ -26,7 +26,6 @@ import useFilter from "@/hooks/useFilter";
 import { LineItemButton } from "@opal/components";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { cn } from "@opal/utils";
-import { toast } from "@/hooks/useToast";
 
 // ============================================================================
 // Types
@@ -99,7 +98,9 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
     const tags = overrides.tags !== undefined ? overrides.tags : selectedTags;
     const cutoff = time ? getTimeFilterDate(time) : null;
     return {
-      time_cutoff: cutoff?.toISOString() ?? null,
+      updated_at_range: cutoff
+        ? { start: cutoff.toISOString(), end: null }
+        : null,
       tags:
         tags.length > 0
           ? tags.map((t) => ({ tag_key: t.tag_key, tag_value: t.tag_value }))

@@ -17,6 +17,7 @@ export class AdminMcpServersPage {
   readonly descriptionInput: Locator;
   readonly serverUrlInput: Locator;
   readonly submitButton: Locator;
+  readonly accessControlSelector: Locator;
 
   // Auth modal
   readonly authMethodSelect: Locator;
@@ -37,6 +38,10 @@ export class AdminMcpServersPage {
     this.descriptionInput = page.locator("textarea#description");
     this.serverUrlInput = page.locator("input#server_url");
     this.submitButton = page.getByRole("button", { name: "Add Server" });
+    // BooleanFormField aria-label from "Make this MCP server Public?"
+    this.accessControlSelector = page.getByRole("checkbox", {
+      name: /make-this mcp server public/i,
+    });
 
     this.authMethodSelect = page.getByTestId("mcp-auth-method-select");
     this.apiTokenInput = page.locator('input[name="api_token"]');
@@ -67,6 +72,10 @@ export class AdminMcpServersPage {
   async openAddServerModal(): Promise<void> {
     await this.addServerButton.click();
     await expect(this.nameInput).toBeVisible();
+  }
+
+  async expectAccessControlVisible(): Promise<void> {
+    await expect(this.accessControlSelector).toBeVisible();
   }
 
   async fillServerDetails(details: {

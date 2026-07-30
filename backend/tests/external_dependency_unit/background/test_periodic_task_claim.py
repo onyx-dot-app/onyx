@@ -10,25 +10,23 @@ the task runs, so long-running tasks don't hold connections.
 
 import time
 from collections.abc import Generator
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
-from onyx.background.periodic_poller import _PeriodicTaskDef
-from onyx.background.periodic_poller import _try_claim_task
-from onyx.background.periodic_poller import _try_run_periodic_task
-from onyx.background.periodic_poller import PERIODIC_TASK_KV_PREFIX
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
+from onyx.background.periodic_poller import (
+    PERIODIC_TASK_KV_PREFIX,
+    _PeriodicTaskDef,
+    _try_claim_task,
+    _try_run_periodic_task,
+)
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.models import KVStore
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 _TEST_LOCK_BASE = 90_000
 
@@ -182,7 +180,7 @@ class TestClaimConcurrency:
         lock_id = _TEST_LOCK_BASE + 20
 
         def claim() -> bool:
-            CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+            CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
             return _try_claim_task(
                 _PeriodicTaskDef(
                     name=task_name,
@@ -209,7 +207,7 @@ class TestClaimConcurrency:
         counter = MagicMock()
 
         def run() -> None:
-            CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+            CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
             _try_run_periodic_task(
                 _PeriodicTaskDef(
                     name=task_name,
@@ -236,7 +234,7 @@ class TestClaimConcurrency:
         errors: list[Exception] = []
 
         def claim() -> bool:
-            CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+            CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
             return _try_claim_task(
                 _PeriodicTaskDef(
                     name=task_name,

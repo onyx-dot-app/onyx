@@ -12,10 +12,8 @@ import json
 
 import pytest
 
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.external_apps.matching.request import MatchContext
-from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
 from onyx.external_apps.providers.github import GitHubAction
 from onyx.external_apps.providers.registry import get_endpoint_catalog

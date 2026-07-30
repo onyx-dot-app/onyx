@@ -1,0 +1,17 @@
+cryptography
+defusedxml
+fastapi
+lxml
+matplotlib
+matplotlib-inline
+numpy
+onyx-cli
+openpyxl
+pandas
+pdfplumber
+pillow
+pydantic
+python-docx
+python-pptx
+requests
+uvicorn[standard]

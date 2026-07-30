@@ -16,6 +16,9 @@ python scripts/tenant_cleanup/analyze_current_tenants.py
 ```
 
 This will create a `.csv` called something like `gated_tenants_no_query_3mo_20251012_161102.csv` in the `backend` dir.
+Despite the legacy filename, tenants are eligible only when both their latest chat query and latest
+Craft session activity are at least three months old. Cached tenant data from before Craft activity
+was collected is ignored automatically.
 
 
 ### Delete all documents within these tenants

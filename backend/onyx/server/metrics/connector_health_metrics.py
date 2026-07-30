@@ -15,8 +15,7 @@ of connectors (one series per connector), not by the number of task
 executions.
 """
 
-from prometheus_client import Counter
-from prometheus_client import Gauge
+from prometheus_client import Counter, Gauge
 
 from onyx.utils.logger import setup_logger
 

@@ -5,11 +5,8 @@ from sqlalchemy.orm import Session
 from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.models import Connector, ConnectorCredentialPair, Credential
 from shared_configs.contextvars import get_current_tenant_id
 from tests.daily.connectors.confluence.models import ExternalUserGroupSet
 

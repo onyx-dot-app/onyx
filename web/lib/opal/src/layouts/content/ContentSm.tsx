@@ -35,6 +35,12 @@ interface ContentSmProps {
   /** Layout orientation. Default: `"inline"`. */
   orientation?: ContentSmOrientation;
 
+  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
+  titleMaxLines?: number;
+
+  /** ARIA role forwarded to the title text element. */
+  role?: string;
+
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -70,6 +76,8 @@ function ContentSm({
   title,
   sizePreset = "main-ui",
   orientation = "inline",
+  titleMaxLines,
+  role,
   ref,
 }: ContentSmProps) {
   const config = CONTENT_SM_PRESETS[sizePreset];
@@ -96,8 +104,9 @@ function ContentSm({
       <Text
         font={config.titleFont}
         color="inherit"
-        maxLines={1}
+        maxLines={titleMaxLines}
         title={toPlainString(title)}
+        role={role}
       >
         {title}
       </Text>

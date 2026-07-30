@@ -6,6 +6,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
+from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.models import PublicBase
 
@@ -77,6 +78,7 @@ async def run_async_migrations() -> None:
     connectable = create_async_engine(
         build_connection_string(),
         poolclass=pool.NullPool,
+        connect_args={"ssl": create_pg_ssl_context()},
     )
 
     async with connectable.connect() as connection:

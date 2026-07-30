@@ -13,32 +13,32 @@ import {
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import { parseLlmDescriptor } from "@/lib/languageModels/utils";
+import {
+  getProviderOverrideForAgent,
+  parseLlmDescriptor,
+} from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
   DefaultModel,
   LLMProviderDescriptor,
+  ReasoningEffortOverride,
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
-import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
+import { DEFAULT_AGENT_ID, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
-import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import {
+  updateReasoningEffortForChatSession,
+  updateTemperatureOverrideForChatSession,
+} from "@/app/app/services/lib";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const usePublicCredentials = () => {
@@ -406,6 +406,17 @@ export interface LlmManager {
   updateCurrentLlm: (newOverride: LlmDescriptor) => void;
   temperature: number;
   updateTemperature: (temperature: number) => void;
+  /** True once updateTemperature was called for the current session, marking
+   * an explicit choice vs the 0/0.5 heuristic default. */
+  temperatureExplicitlySet: boolean;
+  reasoningEffort: ReasoningEffortOverride | null;
+  updateReasoningEffort: (effort: ReasoningEffortOverride | null) => void;
+  /** True when updates persist to a session row at selection time. */
+  hasBoundSession: boolean;
+  /** Ensure the session row reflects the local override selections. No-op
+   * when the session is bound and every selection is confirmed persisted.
+   * Throws when a write fails, leaving the overrides unconfirmed for retry. */
+  persistOverrides: (sessionId: string) => Promise<void>;
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
@@ -490,7 +501,8 @@ export function getDefaultLlmDescriptor(
 
 export function getValidLlmDescriptorForProviders(
   modelName: string | null | undefined,
-  llmProviders: LLMProviderDescriptor[] | undefined | null
+  llmProviders: LLMProviderDescriptor[] | undefined | null,
+  defaultText?: DefaultModel | null
 ): LlmDescriptor {
   // Return early if providers haven't loaded yet (undefined/null)
   // Empty arrays are valid (user has no provider access for this assistant)
@@ -556,9 +568,12 @@ export function getValidLlmDescriptorForProviders(
     }
   }
 
-  // Model not found in available providers - fall back to default model
+  // Model not found in available providers - fall back to the admin-configured
+  // global default before resorting to the first provider with visible models.
+  // Without this, a stale personal default (e.g. its provider was deleted)
+  // would silently land on an arbitrary provider instead of the global default.
   return (
-    getDefaultLlmDescriptor(llmProviders) ?? {
+    getDefaultLlmDescriptor(llmProviders, defaultText) ?? {
       name: "",
       provider: "",
       modelName: "",
@@ -641,7 +656,11 @@ export function useLlmManager(
   function getValidLlmDescriptor(
     modelName: string | null | undefined
   ): LlmDescriptor {
-    return getValidLlmDescriptorForProviders(modelName, llmProviders);
+    return getValidLlmDescriptorForProviders(
+      modelName,
+      llmProviders,
+      defaultText
+    );
   }
 
   // Compute the resolved LLM synchronously so it's never one render behind.
@@ -666,12 +685,26 @@ export function useLlmManager(
     } else if (currentChatSession?.current_alternate_model) {
       resolved = getValidLlmDescriptorForProviders(
         currentChatSession.current_alternate_model,
+        llmProviders,
+        defaultText
+      );
+    } else if (liveAgent && liveAgent.id !== DEFAULT_AGENT_ID) {
+      // Custom agent — its configured default takes precedence. When the agent
+      // has no explicit default, fall to the global system default. The user's
+      // personal preference is irrelevant in an agent-scoped chat.
+      const agentOverride = getProviderOverrideForAgent(
+        liveAgent,
         llmProviders
       );
+      resolved =
+        agentOverride ??
+        getDefaultLlmDescriptor(llmProviders, defaultText) ??
+        manualLlm;
     } else if (user?.preferences?.default_model) {
       resolved = getValidLlmDescriptorForProviders(
         user.preferences.default_model,
-        llmProviders
+        llmProviders,
+        defaultText
       );
     } else {
       resolved =
@@ -694,6 +727,7 @@ export function useLlmManager(
     currentChatSession,
     userHasManuallyOverriddenLLM,
     manualLlm,
+    liveAgent?.default_model_configuration_id,
     user?.preferences?.default_model,
   ]);
 
@@ -746,6 +780,48 @@ export function useLlmManager(
     return 0.5;
   });
 
+  const [reasoningEffort, setReasoningEffort] =
+    useState<ReasoningEffortOverride | null>(
+      currentChatSession?.current_reasoning_effort_override ?? null
+    );
+  const [temperatureExplicitlySet, setTemperatureExplicitlySet] =
+    useState(false);
+
+  // A selection bumps selectionGen alongside its value, and a confirmed
+  // persist records the generation whose values it wrote. Overrides are
+  // unconfirmed while persistedGen trails, so a selection made mid-persist
+  // can never be marked clean by an older persist completing.
+  const [selectionGen, setSelectionGen] = useState(0);
+  const persistedGenRef = useRef(0);
+
+  // Serializes every override PUT so an older selection can never land on
+  // the server after a newer one. persistOverrides joins the same chain.
+  const overrideWriteChainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueueOverrideWrite = (
+    write: () => Promise<Response>
+  ): Promise<Response> => {
+    const next = overrideWriteChainRef.current.then(write, write);
+    overrideWriteChainRef.current = next.catch(() => undefined);
+    return next;
+  };
+
+  // Adopt the stored reasoning override (and reset the explicit-temperature
+  // flag) only when session identity changes. Keying on identity, not the
+  // object, keeps new-chat dep churn from wiping a pre-first-message choice.
+  const prevSessionIdRef = useRef<string | null>(
+    currentChatSession?.id ?? null
+  );
+  useEffect(() => {
+    const sessionId = currentChatSession?.id ?? null;
+    if (prevSessionIdRef.current === sessionId) return;
+    prevSessionIdRef.current = sessionId;
+    setTemperatureExplicitlySet(false);
+    persistedGenRef.current = selectionGen;
+    setReasoningEffort(
+      currentChatSession?.current_reasoning_effort_override ?? null
+    );
+  }, [currentChatSession]);
+
   const maxTemperature = useMemo(() => {
     // Check currentLlm first, fall back to chat session model if currentLlm isn't populated
     if (currentLlm.provider) {
@@ -766,18 +842,26 @@ export function useLlmManager(
     if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
       const newTemperature = Math.min(temperature, 1.0);
       setTemperature(newTemperature);
-      if (chatSession?.id) {
-        updateTemperatureOverrideForChatSession(chatSession.id, newTemperature);
+      const sessionId = chatSession?.id;
+      if (sessionId) {
+        void enqueueOverrideWrite(() =>
+          updateTemperatureOverrideForChatSession(sessionId, newTemperature)
+        );
       }
     }
   }, [currentLlm]);
 
   useEffect(() => {
     if (!chatSession && currentChatSession) {
+      const sessionId = currentChatSession.id;
       if (temperature) {
-        updateTemperatureOverrideForChatSession(
-          currentChatSession.id,
-          temperature
+        void enqueueOverrideWrite(() =>
+          updateTemperatureOverrideForChatSession(sessionId, temperature)
+        );
+      }
+      if (reasoningEffort) {
+        void enqueueOverrideWrite(() =>
+          updateReasoningEffortForChatSession(sessionId, reasoningEffort)
         );
       }
       return;
@@ -804,9 +888,57 @@ export function useLlmManager(
       ? Math.min(temperature, 1.0)
       : temperature;
     setTemperature(clampedTemp);
-    if (chatSession) {
-      updateTemperatureOverrideForChatSession(chatSession.id, clampedTemp);
+    setTemperatureExplicitlySet(true);
+    setSelectionGen((generation) => generation + 1);
+    const sessionId = chatSession?.id;
+    if (sessionId) {
+      void enqueueOverrideWrite(() =>
+        updateTemperatureOverrideForChatSession(sessionId, clampedTemp)
+      );
     }
+  };
+
+  const updateReasoningEffort = (effort: ReasoningEffortOverride | null) => {
+    setReasoningEffort(effort);
+    setSelectionGen((generation) => generation + 1);
+    const sessionId = chatSession?.id;
+    if (sessionId) {
+      void enqueueOverrideWrite(() =>
+        updateReasoningEffortForChatSession(sessionId, effort)
+      );
+    }
+  };
+
+  const persistOverrides = async (sessionId: string): Promise<void> => {
+    // selectionGen is render-captured with the values below, so this persist
+    // confirms exactly the generation whose values it writes.
+    if (chatSession != null && persistedGenRef.current >= selectionGen) {
+      return;
+    }
+    const writes: Promise<Response>[] = [];
+    if (reasoningEffort) {
+      writes.push(
+        enqueueOverrideWrite(() =>
+          updateReasoningEffortForChatSession(sessionId, reasoningEffort)
+        )
+      );
+    }
+    if (temperatureExplicitlySet) {
+      writes.push(
+        enqueueOverrideWrite(() =>
+          updateTemperatureOverrideForChatSession(sessionId, temperature)
+        )
+      );
+    }
+    if (writes.length === 0) return;
+    const responses = await Promise.all(writes);
+    const failed = responses.find((response) => !response.ok);
+    if (failed) {
+      throw new Error(
+        `Failed to persist chat session overrides: ${failed.status}`
+      );
+    }
+    persistedGenRef.current = Math.max(persistedGenRef.current, selectionGen);
   };
 
   // Track if any provider exists for the current persona context.
@@ -820,6 +952,11 @@ export function useLlmManager(
     updateCurrentLlm,
     temperature,
     updateTemperature,
+    temperatureExplicitlySet,
+    reasoningEffort,
+    updateReasoningEffort,
+    hasBoundSession: chatSession != null,
+    persistOverrides,
     imageFilesPresent,
     updateImageFilesPresent,
     liveAgent: liveAgent ?? null,
@@ -832,23 +969,6 @@ export function useLlmManager(
   };
 }
 
-export function useAuthType(): AuthType | null {
-  const { data, error } = useSWR<{ auth_type: AuthType }>(
-    SWR_KEYS.authType,
-    errorHandlingFetcher
-  );
-
-  if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    return AuthType.CLOUD;
-  }
-
-  if (error || !data) {
-    return null;
-  }
-
-  return data.auth_type;
-}
-
 /*
 EE Only APIs
 */
@@ -859,12 +979,10 @@ export const useUserGroups = (): {
   error: string;
   refreshUserGroups: () => void;
 } => {
-  const combinedSettings = useContext(SettingsContext);
-  const isLoading = combinedSettings?.settingsLoading ?? false;
+  const settings = useSettings();
+  const isLoading = settings.isLoading;
   const isPaidEnterpriseFeaturesEnabled =
-    !isLoading &&
-    combinedSettings &&
-    combinedSettings.enterpriseSettings !== null;
+    !isLoading && settings.enterprise !== null;
 
   const swrResponse = useSWR<UserGroup[]>(
     isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,

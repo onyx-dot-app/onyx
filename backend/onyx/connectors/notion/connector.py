@@ -1,39 +1,48 @@
 import re
 from collections.abc import Generator
 from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import Optional
-from urllib.parse import parse_qs
-from urllib.parse import urlparse
+from typing import Any, Optional, cast
+from urllib.parse import parse_qs, urlparse
 
 import requests
 from pydantic import BaseModel
-from retry import retry
 from typing_extensions import override
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import NormalizationResult
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    LoadConnector,
+    NormalizationResult,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    ImageSection,
+    SlimDocument,
+    TextSection,
+)
 from onyx.db.enums import HierarchyNodeType
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.batching import batch_generator
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -92,9 +101,34 @@ class BlockReadOutput(BaseModel):
     blocks: list[NotionBlock]
     child_page_ids: list[str]
     hierarchy_nodes: list[HierarchyNode]
+    # Whether any text was found. In slim mode `blocks` is not retained, so this
+    # carries the "would the page produce content" signal for the emit predicate.
+    has_content: bool = False
 
 
-class NotionConnector(LoadConnector, PollConnector):
+class _ProcessBlock(BaseModel):
+    """Work item: expand one child block during iterative `_read_blocks`."""
+
+    result: dict[str, Any]
+    parent_block_id: str
+
+
+class _FinalizeBlock(BaseModel):
+    """Work item: emit a block's own database content and text after its subtree.
+
+    `close_id` is the block id to drop from the in-progress ancestor set, or
+    None for blocks that were not expanded.
+    """
+
+    result: dict[str, Any]
+    text: list[str]
+    close_id: str | None = None
+
+
+_BlockWorkItem = _ProcessBlock | _FinalizeBlock
+
+
+class NotionConnector(LoadConnector, PollConnector, SlimConnector):
     """Notion Page connector that reads all Notion pages
     this integration has been granted access to.
 
@@ -135,6 +169,11 @@ class NotionConnector(LoadConnector, PollConnector):
         # Maps data_source_id -> database_id (populated in _read_pages_from_database).
         # Used to resolve data_source_id parent types back to the database.
         self._data_source_to_database_map: dict[str, str] = {}
+        # Page IDs that are parents of standalone databases (discovered via the search
+        # API in _yield_database_hierarchy_nodes). These pages must emit a hierarchy
+        # node in _read_pages even if they have no block-detected children, so that the
+        # STUB created for them during database upsert gets promoted.
+        self._database_parent_page_ids: set[str] = set()
 
     @classmethod
     @override
@@ -181,7 +220,7 @@ class NotionConnector(LoadConnector, PollConnector):
 
         return NormalizationResult(normalized_url=None, use_default=False)
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_child_blocks(
         self, block_id: str, cursor: str | None = None
     ) -> dict[str, Any] | None:
@@ -220,7 +259,24 @@ class NotionConnector(LoadConnector, PollConnector):
             return None
         return res.json()
 
-    @retry(tries=3, delay=1, backoff=2)
+    def _fetch_all_child_blocks(self, block_id: str) -> list[dict[str, Any]]:
+        """Fetch all child blocks of `block_id` across pagination, in order.
+
+        A `None` response (block not shared with the integration) ends collection.
+        """
+        results: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            data = self._fetch_child_blocks(block_id, cursor)
+            if data is None:
+                break
+            results.extend(data["results"])
+            if data["next_cursor"] is None:
+                break
+            cursor = data["next_cursor"]
+        return results
+
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_page(self, page_id: str) -> NotionPage:
         """Fetch a page from its ID via the Notion API, retry with database if page fetch fails."""
         logger.debug("Fetching page for ID '%s'", page_id)
@@ -243,7 +299,7 @@ class NotionConnector(LoadConnector, PollConnector):
             return self._fetch_database_as_page(page_id)
         return NotionPage(**res.json())
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_database_as_page(self, database_id: str) -> NotionPage:
         """Attempt to fetch a database as a page.
 
@@ -272,7 +328,7 @@ class NotionConnector(LoadConnector, PollConnector):
 
         return NotionPage(**db_data, database_name=database_name)
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_data_sources_for_database(
         self, database_id: str
     ) -> list[NotionDataSource]:
@@ -306,7 +362,7 @@ class NotionConnector(LoadConnector, PollConnector):
             if ds.get("id")
         ]
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_data_source(
         self, data_source_id: str, cursor: str | None = None
     ) -> dict[str, Any]:
@@ -336,7 +392,7 @@ class NotionConnector(LoadConnector, PollConnector):
             raise e
         return res.json()
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_workspace_info(self) -> tuple[str, str]:
         """Fetch workspace ID and name from the bot user endpoint."""
         res = rl_requests.get(
@@ -536,6 +592,7 @@ class NotionConnector(LoadConnector, PollConnector):
         database_id: str,
         database_parent_raw_id: str | None = None,
         database_name: str | None = None,
+        is_slim: bool = False,
     ) -> BlockReadOutput:
         """Returns blocks, page IDs, and hierarchy nodes from a database.
 
@@ -543,10 +600,13 @@ class NotionConnector(LoadConnector, PollConnector):
             database_id: The ID of the database
             database_parent_raw_id: The raw ID of the database's parent (containing page or workspace)
             database_name: The name of the database (from child_database block title)
+            is_slim: When True (pruning enumeration), row text is not retained —
+                only IDs, hierarchy nodes, and the has_content signal
         """
         result_blocks: list[NotionBlock] = []
         result_pages: list[str] = []
         hierarchy_nodes: list[HierarchyNode] = []
+        has_content = False
 
         # Create hierarchy node for this database if not already yielded.
         # Notion URLs omit dashes from UUIDs: https://notion.so/17ab3186873d418fb899c3f6a43f68de
@@ -580,9 +640,11 @@ class NotionConnector(LoadConnector, PollConnector):
                     obj_type = result["object"]
                     text = self._properties_to_str(result.get("properties", {}))
                     if text:
-                        result_blocks.append(
-                            NotionBlock(id=obj_id, text=text, prefix="\n")
-                        )
+                        has_content = True
+                        if not is_slim:
+                            result_blocks.append(
+                                NotionBlock(id=obj_id, text=text, prefix="\n")
+                            )
 
                     if not self.recursive_index_enabled:
                         continue
@@ -610,9 +672,12 @@ class NotionConnector(LoadConnector, PollConnector):
                             obj_id,
                             database_parent_raw_id=database_id,
                             database_name=nested_db_name,
+                            is_slim=is_slim,
                         )
                         result_pages.extend(nested_output.child_page_ids)
                         hierarchy_nodes.extend(nested_output.hierarchy_nodes)
+                        # NOTE: nested blocks/text are intentionally dropped,
+                        # matching the full path — so no has_content from nested
 
                 if data["next_cursor"] is None:
                     break
@@ -623,113 +688,56 @@ class NotionConnector(LoadConnector, PollConnector):
             blocks=result_blocks,
             child_page_ids=result_pages,
             hierarchy_nodes=hierarchy_nodes,
+            has_content=has_content,
         )
 
     def _read_blocks(
-        self, base_block_id: str, containing_page_id: str | None = None
+        self,
+        base_block_id: str,
+        containing_page_id: str | None = None,
+        is_slim: bool = False,
     ) -> BlockReadOutput:
         """Reads all child blocks for the specified block.
+
+        Iterative to avoid overflowing the recursion limit on deeply nested
+        trees. `open_block_ids` breaks reference cycles (e.g. synced blocks).
 
         Args:
             base_block_id: The block ID to read children from
             containing_page_id: The ID of the page that contains this block tree.
                 Used to correctly map child pages/databases to their parent page
                 rather than intermediate block IDs.
+            is_slim: When True (pruning enumeration), traverses identically but
+                skips all text collection — only IDs and hierarchy nodes.
         """
-        # If no containing_page_id provided, assume base_block_id is the page itself
+        # Constant for the whole traversal; recursion passed it down unchanged.
         page_id = containing_page_id or base_block_id
         result_blocks: list[NotionBlock] = []
         child_pages: list[str] = []
         hierarchy_nodes: list[HierarchyNode] = []
-        cursor = None
-        while True:
-            data = self._fetch_child_blocks(base_block_id, cursor)
+        has_content = False
 
-            # this happens when a block is not shared with the integration
-            if data is None:
-                return BlockReadOutput(
-                    blocks=result_blocks,
-                    child_page_ids=child_pages,
-                    hierarchy_nodes=hierarchy_nodes,
-                )
+        # Ancestors currently being expanded.
+        open_block_ids: set[str] = {base_block_id}
 
-            for result in data["results"]:
-                logger.debug(
-                    "Found child block for block with ID '%s': %s",
-                    base_block_id,
-                    result,
-                )
+        # A block's "finalize" (its own db content + text) is pushed before its
+        # children so descendants emit first, matching the recursive order.
+        stack: list[_BlockWorkItem] = [
+            _ProcessBlock(result=result, parent_block_id=base_block_id)
+            for result in reversed(self._fetch_all_child_blocks(base_block_id))
+        ]
+
+        while stack:
+            item = stack.pop()
+
+            if isinstance(item, _FinalizeBlock):
+                result = item.result
+                if item.close_id is not None:
+                    open_block_ids.discard(item.close_id)
+                    logger.debug("Finished sub-block: %s", item.close_id)
                 result_block_id = result["id"]
                 result_type = result["type"]
                 result_obj = result[result_type]
-
-                if result_type == "ai_block":
-                    logger.warning(
-                        "Skipping 'ai_block' ('%s') for base block '%s': "
-                        "Notion API does not currently support reading AI blocks (as of 24/02/09) "
-                        "(discussion: https://github.com/onyx-dot-app/onyx/issues/1053)",
-                        result_block_id,
-                        base_block_id,
-                    )
-                    continue
-
-                if result_type == "unsupported":
-                    logger.warning(
-                        "Skipping unsupported block type '%s' "
-                        "('%s') for base block '%s': "
-                        "(discussion: https://github.com/onyx-dot-app/onyx/issues/1230)",
-                        result_type,
-                        result_block_id,
-                        base_block_id,
-                    )
-                    continue
-
-                if result_type == "external_object_instance_page":
-                    logger.warning(
-                        "Skipping 'external_object_instance_page' ('%s') for base block '%s': "
-                        "Notion API does not currently support reading external blocks (as of 24/07/03) "
-                        "(discussion: https://github.com/onyx-dot-app/onyx/issues/1761)",
-                        result_block_id,
-                        base_block_id,
-                    )
-                    continue
-
-                cur_result_text_arr = []
-                if "rich_text" in result_obj:
-                    for rich_text in result_obj["rich_text"]:
-                        # skip if doesn't have text object
-                        if "text" in rich_text:
-                            text = rich_text["text"]["content"]
-                            cur_result_text_arr.append(text)
-
-                # table_row blocks store content in "cells" (list of lists
-                # of rich text objects) rather than "rich_text"
-                if "cells" in result_obj:
-                    row_cells: list[str] = []
-                    for cell in result_obj["cells"]:
-                        cell_texts = [
-                            rt.get("plain_text", "")
-                            for rt in cell
-                            if isinstance(rt, dict)
-                        ]
-                        row_cells.append(" ".join(cell_texts))
-                    cur_result_text_arr.append("\t".join(row_cells))
-
-                if result["has_children"]:
-                    if result_type == "child_page":
-                        # Child pages will not be included at this top level, it will be a separate document.
-                        # Track parent page so we can resolve block_id parents later.
-                        # Use page_id (not base_block_id) to ensure we map to the containing page,
-                        # not an intermediate block like a toggle or callout.
-                        child_pages.append(result_block_id)
-                        self._child_page_parent_map[result_block_id] = page_id
-                    else:
-                        logger.debug("Entering sub-block: %s", result_block_id)
-                        sub_output = self._read_blocks(result_block_id, page_id)
-                        logger.debug("Finished sub-block: %s", result_block_id)
-                        result_blocks.extend(sub_output.blocks)
-                        child_pages.extend(sub_output.child_page_ids)
-                        hierarchy_nodes.extend(sub_output.hierarchy_nodes)
 
                 if result_type == "child_database":
                     # Extract database name from the child_database block
@@ -738,32 +746,132 @@ class NotionConnector(LoadConnector, PollConnector):
                         result_block_id,
                         database_parent_raw_id=page_id,  # Parent is the containing page
                         database_name=db_title or None,
+                        is_slim=is_slim,
                     )
                     # A database on a page often looks like a table, we need to include it for the contents
                     # of the page but the children (cells) should be processed as other Documents
                     result_blocks.extend(db_output.blocks)
                     hierarchy_nodes.extend(db_output.hierarchy_nodes)
+                    has_content = has_content or db_output.has_content
 
                     if self.recursive_index_enabled:
                         child_pages.extend(db_output.child_page_ids)
 
-                if cur_result_text_arr:
-                    new_block = NotionBlock(
-                        id=result_block_id,
-                        text="\n".join(cur_result_text_arr),
-                        prefix="\n",
+                if item.text:
+                    result_blocks.append(
+                        NotionBlock(
+                            id=result_block_id,
+                            text="\n".join(item.text),
+                            prefix="\n",
+                        )
                     )
-                    result_blocks.append(new_block)
+                continue
 
-            if data["next_cursor"] is None:
-                break
+            result = item.result
+            parent_block_id = item.parent_block_id
+            logger.debug(
+                "Found child block for block with ID '%s': %s",
+                parent_block_id,
+                result,
+            )
+            result_block_id = result["id"]
+            result_type = result["type"]
+            result_obj = result[result_type]
 
-            cursor = data["next_cursor"]
+            if result_type == "ai_block":
+                logger.warning(
+                    "Skipping 'ai_block' ('%s') for base block '%s': "
+                    "Notion API does not currently support reading AI blocks (as of 24/02/09) "
+                    "(discussion: https://github.com/onyx-dot-app/onyx/issues/1053)",
+                    result_block_id,
+                    parent_block_id,
+                )
+                continue
+
+            if result_type == "unsupported":
+                logger.warning(
+                    "Skipping unsupported block type '%s' "
+                    "('%s') for base block '%s': "
+                    "(discussion: https://github.com/onyx-dot-app/onyx/issues/1230)",
+                    result_type,
+                    result_block_id,
+                    parent_block_id,
+                )
+                continue
+
+            if result_type == "external_object_instance_page":
+                logger.warning(
+                    "Skipping 'external_object_instance_page' ('%s') for base block '%s': "
+                    "Notion API does not currently support reading external blocks (as of 24/07/03) "
+                    "(discussion: https://github.com/onyx-dot-app/onyx/issues/1761)",
+                    result_block_id,
+                    parent_block_id,
+                )
+                continue
+
+            text_parts = [
+                rich_text["text"]["content"]
+                for rich_text in result_obj.get("rich_text", [])
+                if "text" in rich_text
+            ]
+
+            # table_row blocks store content in "cells" (list of lists of rich
+            # text objects), tab-joined per row, rather than "rich_text"
+            if "cells" in result_obj:
+                text_parts.append(
+                    "\t".join(
+                        " ".join(
+                            rt.get("plain_text", "")
+                            for rt in cell
+                            if isinstance(rt, dict)
+                        )
+                        for cell in result_obj["cells"]
+                    )
+                )
+
+            # Slim: record that text exists but don't carry it through the stack
+            if is_slim and text_parts:
+                has_content = True
+                text_parts = []
+
+            will_recurse = False
+            if result["has_children"]:
+                if result_type == "child_page":
+                    # Child pages will not be included at this top level, it will be a separate document.
+                    # Track parent page so we can resolve block_id parents later.
+                    # Use page_id (not parent_block_id) to ensure we map to the containing page,
+                    # not an intermediate block like a toggle or callout.
+                    child_pages.append(result_block_id)
+                    self._child_page_parent_map[result_block_id] = page_id
+                elif result_block_id in open_block_ids:
+                    logger.warning(
+                        "Cycle detected in Notion block tree at block '%s' "
+                        "(already an ancestor in this page); skipping nested traversal.",
+                        result_block_id,
+                    )
+                else:
+                    will_recurse = True
+
+            if will_recurse:
+                logger.debug("Entering sub-block: %s", result_block_id)
+                open_block_ids.add(result_block_id)
+                stack.append(
+                    _FinalizeBlock(
+                        result=result, text=text_parts, close_id=result_block_id
+                    )
+                )
+                stack.extend(
+                    _ProcessBlock(result=child, parent_block_id=result_block_id)
+                    for child in reversed(self._fetch_all_child_blocks(result_block_id))
+                )
+            else:
+                stack.append(_FinalizeBlock(result=result, text=text_parts))
 
         return BlockReadOutput(
             blocks=result_blocks,
             child_page_ids=child_pages,
             hierarchy_nodes=hierarchy_nodes,
+            has_content=bool(result_blocks) or has_content,
         )
 
     def _read_page_title(self, page: NotionPage) -> str | None:
@@ -781,6 +889,7 @@ class NotionConnector(LoadConnector, PollConnector):
     def _read_pages(
         self,
         pages: list[NotionPage],
+        is_slim: bool = False,
     ) -> Generator[Document | HierarchyNode, None, None]:
         """Reads pages for rich text content and generates Documents and HierarchyNodes
 
@@ -793,107 +902,152 @@ class NotionConnector(LoadConnector, PollConnector):
         This is not clearly outlined in the Notion API docs but it is observable empirically.
         https://developers.notion.com/docs/working-with-page-content
         """
-        all_child_page_ids: list[str] = []
-        for page in pages:
-            if page.id in self.indexed_pages:
-                logger.debug("Already indexed page with ID '%s'. Skipping.", page.id)
-                continue
-
-            logger.info("Reading page with ID '%s', with url %s", page.id, page.url)
-            block_output = self._read_blocks(page.id)
-            all_child_page_ids.extend(block_output.child_page_ids)
-
-            # okay to mark here since there's no way for this to not succeed
-            # without a critical failure
-            self.indexed_pages.add(page.id)
-
-            raw_page_title = self._read_page_title(page)
-            page_title = raw_page_title or f"Untitled Page with ID {page.id}"
-            parent_raw_id = self._get_parent_raw_id(page.parent, page_id=page.id)
-
-            # If this page has children (pages or databases), yield it as a hierarchy node FIRST
-            # This ensures parent nodes are created before child documents reference them
-            if block_output.child_page_ids or block_output.hierarchy_nodes:
-                hierarchy_node = self._maybe_yield_hierarchy_node(
-                    raw_node_id=page.id,
-                    raw_parent_id=parent_raw_id,
-                    display_name=page_title,
-                    link=page.url,
-                    node_type=HierarchyNodeType.PAGE,
-                )
-                if hierarchy_node:
-                    yield hierarchy_node
-
-            # Yield database hierarchy nodes discovered in this page's blocks
-            for db_node in block_output.hierarchy_nodes:
-                yield db_node
-
-            if not block_output.blocks:
-                if not raw_page_title:
-                    logger.warning(
-                        "No blocks OR title found for page with ID '%s'. Skipping.",
-                        page.id,
+        # Iterative (was recursive `yield from`) to avoid overflowing on deep
+        # child-page chains. Child batches pushed in reverse to keep their order.
+        # Discovered children are stored as ID batches and only fetched when
+        # popped, so the stack never holds full page objects for the whole
+        # workspace (a prior source of OOMs on large workspaces).
+        stack: list[list[NotionPage] | list[str]] = [pages]
+        while stack:
+            batch = stack.pop()
+            current_pages = [
+                self._fetch_page(item) if isinstance(item, str) else item
+                for item in batch
+                if not (isinstance(item, str) and item in self.indexed_pages)
+            ]
+            all_child_page_ids: list[str] = []
+            for page in current_pages:
+                if page.id in self.indexed_pages:
+                    logger.debug(
+                        "Already indexed page with ID '%s'. Skipping.", page.id
                     )
                     continue
 
-                logger.debug("No blocks found for page with ID '%s'", page.id)
-                """
-                Something like:
+                logger.info("Reading page with ID '%s', with url %s", page.id, page.url)
+                block_output = self._read_blocks(page.id, is_slim=is_slim)
+                all_child_page_ids.extend(block_output.child_page_ids)
 
-                TITLE
+                # okay to mark here since there's no way for this to not succeed
+                # without a critical failure
+                self.indexed_pages.add(page.id)
 
-                PROP1: PROP1_VALUE
-                PROP2: PROP2_VALUE
-                """
-                text = page_title
-                if page.properties:
-                    text += "\n\n" + "\n".join(
-                        [f"{key}: {value}" for key, value in page.properties.items()]
-                    )
-                sections = [
-                    TextSection(
-                        link=f"{page.url}",
-                        text=text,
-                    )
-                ]
-            else:
-                sections = [
-                    TextSection(
-                        link=f"{page.url}#{block.id.replace('-', '')}",
-                        text=block.prefix + block.text,
-                    )
-                    for block in block_output.blocks
-                ]
+                raw_page_title = self._read_page_title(page)
+                page_title = raw_page_title or f"Untitled Page with ID {page.id}"
+                parent_raw_id = self._get_parent_raw_id(page.parent, page_id=page.id)
 
-            yield (
-                Document(
-                    id=page.id,
-                    sections=cast(list[TextSection | ImageSection], sections),
-                    source=DocumentSource.NOTION,
-                    semantic_identifier=page_title,
-                    doc_updated_at=datetime.fromisoformat(
-                        page.last_edited_time
-                    ).astimezone(timezone.utc),
-                    metadata={},
-                    parent_hierarchy_raw_node_id=parent_raw_id,
+                # Yield as a hierarchy node if this page has block-detected children,
+                # OR if it was discovered as the parent of a standalone database (in
+                # which case a STUB exists for it and needs to be promoted here).
+                if (
+                    block_output.child_page_ids
+                    or block_output.hierarchy_nodes
+                    or page.id in self._database_parent_page_ids
+                ):
+                    hierarchy_node = self._maybe_yield_hierarchy_node(
+                        raw_node_id=page.id,
+                        raw_parent_id=parent_raw_id,
+                        display_name=page_title,
+                        link=page.url,
+                        node_type=HierarchyNodeType.PAGE,
+                    )
+                    if hierarchy_node:
+                        yield hierarchy_node
+
+                # Yield database hierarchy nodes discovered in this page's blocks
+                for db_node in block_output.hierarchy_nodes:
+                    yield db_node
+
+                if is_slim:
+                    # Same emit/skip predicate as the full build below; yields a
+                    # content-less Document that retrieve_all_slim_docs converts
+                    if block_output.has_content or raw_page_title:
+                        yield Document(
+                            id=page.id,
+                            sections=[],
+                            source=DocumentSource.NOTION,
+                            semantic_identifier=page_title,
+                            doc_created_at=datetime_to_utc(
+                                datetime.fromisoformat(page.created_time)
+                            ),
+                            metadata={},
+                            parent_hierarchy_raw_node_id=parent_raw_id,
+                        )
+                    continue
+
+                if not block_output.blocks:
+                    if not raw_page_title:
+                        logger.warning(
+                            "No blocks OR title found for page with ID '%s'. Skipping.",
+                            page.id,
+                        )
+                        continue
+
+                    logger.debug("No blocks found for page with ID '%s'", page.id)
+                    """
+                    Something like:
+
+                    TITLE
+
+                    PROP1: PROP1_VALUE
+                    PROP2: PROP2_VALUE
+                    """
+                    text = page_title
+                    if page.properties:
+                        text += "\n\n" + "\n".join(
+                            [
+                                f"{key}: {value}"
+                                for key, value in page.properties.items()
+                            ]
+                        )
+                    sections = [
+                        TextSection(
+                            link=f"{page.url}",
+                            text=text,
+                        )
+                    ]
+                else:
+                    sections = [
+                        TextSection(
+                            link=f"{page.url}#{block.id.replace('-', '')}",
+                            text=block.prefix + block.text,
+                        )
+                        for block in block_output.blocks
+                    ]
+
+                yield (
+                    Document(
+                        id=page.id,
+                        sections=cast(list[TextSection | ImageSection], sections),
+                        source=DocumentSource.NOTION,
+                        semantic_identifier=page_title,
+                        doc_updated_at=datetime_to_utc(
+                            datetime.fromisoformat(page.last_edited_time)
+                        ),
+                        doc_created_at=datetime_to_utc(
+                            datetime.fromisoformat(page.created_time)
+                        ),
+                        metadata={},
+                        parent_hierarchy_raw_node_id=parent_raw_id,
+                    )
                 )
-            )
-            self.indexed_pages.add(page.id)
 
-        if self.recursive_index_enabled and all_child_page_ids:
-            # NOTE: checking if page_id is in self.indexed_pages to prevent extra
-            # calls to `_fetch_page` for pages we've already indexed
-            for child_page_batch_ids in batch_generator(
-                all_child_page_ids, batch_size=INDEX_BATCH_SIZE
-            ):
-                child_page_batch = [
-                    self._fetch_page(page_id)
-                    for page_id in child_page_batch_ids
-                    if page_id not in self.indexed_pages
+            if self.recursive_index_enabled and all_child_page_ids:
+                # NOTE: checking if page_id is in self.indexed_pages to prevent extra
+                # calls to `_fetch_page` for pages we've already indexed
+                child_batches = [
+                    [
+                        page_id
+                        for page_id in child_page_batch_ids
+                        if page_id not in self.indexed_pages
+                    ]
+                    for child_page_batch_ids in batch_generator(
+                        all_child_page_ids, batch_size=INDEX_BATCH_SIZE
+                    )
                 ]
-                yield from self._read_pages(child_page_batch)
+                # Reversed so the first batch (and its subtree) is processed first.
+                stack.extend(reversed(child_batches))
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _search_notion(self, query_dict: dict[str, Any]) -> NotionSearchResponse:
         """Search for pages from a Notion database. Includes some small number of
         retries to handle misc, flakey failures."""
@@ -907,7 +1061,7 @@ class NotionConnector(LoadConnector, PollConnector):
         res.raise_for_status()
         return NotionSearchResponse(**res.json())
 
-    # The | Document is needed for mypy type checking
+    # The | Document is needed for type-checking
     def _yield_database_hierarchy_nodes(
         self,
     ) -> Generator[HierarchyNode | Document, None, None]:
@@ -949,6 +1103,15 @@ class NotionConnector(LoadConnector, PollConnector):
                     db_url = (
                         db_page.url or f"https://notion.so/{db_id.replace('-', '')}"
                     )
+                    # Track page parents so _read_pages can emit their hierarchy nodes
+                    # even when those pages have no block-detected children.
+                    db_parent = db_page.parent
+                    if (
+                        db_parent
+                        and db_parent.get("type") == "page_id"
+                        and parent_raw_id
+                    ):
+                        self._database_parent_page_ids.add(parent_raw_id)
                 except requests.exceptions.RequestException as e:
                     logger.warning(
                         "Could not fetch database '%s', "
@@ -1003,7 +1166,7 @@ class NotionConnector(LoadConnector, PollConnector):
                 filtered_pages += [NotionPage(**page)]
         return filtered_pages
 
-    def _recursive_load(self) -> GenerateDocumentsOutput:
+    def _recursive_load(self, is_slim: bool = False) -> GenerateDocumentsOutput:
         if self.root_page_id is None or not self.recursive_index_enabled:
             raise RuntimeError(
                 "Recursive page lookup is not enabled, but we are trying to recursively load pages. This should never happen."
@@ -1019,7 +1182,9 @@ class NotionConnector(LoadConnector, PollConnector):
             self.root_page_id,
         )
         pages = [self._fetch_page(page_id=self.root_page_id)]
-        yield from batch_generator(self._read_pages(pages), self.batch_size)
+        yield from batch_generator(
+            self._read_pages(pages, is_slim=is_slim), self.batch_size
+        )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Applies integration token to headers"""
@@ -1028,15 +1193,16 @@ class NotionConnector(LoadConnector, PollConnector):
         )
         return None
 
-    def load_from_state(self) -> GenerateDocumentsOutput:
-        """Loads all page data from a Notion workspace.
+    def _load_all_pages(self, is_slim: bool) -> GenerateDocumentsOutput:
+        """Shared enumeration behind load_from_state and retrieve_all_slim_docs.
 
-        Returns:
-            list[Document]: list of documents.
+        In slim mode the identical traversal runs, but no content is retained
+        and content-less Documents are yielded (converted to SlimDocuments by
+        retrieve_all_slim_docs).
         """
         # TODO: remove once Notion search issue is discovered
         if self.recursive_index_enabled and self.root_page_id:
-            yield from self._recursive_load()
+            yield from self._recursive_load(is_slim=is_slim)
             return
 
         # Yield workspace hierarchy node FIRST before any pages
@@ -1056,11 +1222,43 @@ class NotionConnector(LoadConnector, PollConnector):
         while True:
             db_res = self._search_notion(query_dict)
             pages = [NotionPage(**page) for page in db_res.results]
-            yield from batch_generator(self._read_pages(pages), self.batch_size)
+            yield from batch_generator(
+                self._read_pages(pages, is_slim=is_slim), self.batch_size
+            )
             if db_res.has_more:
                 query_dict["start_cursor"] = db_res.next_cursor
             else:
                 break
+
+    def load_from_state(self) -> GenerateDocumentsOutput:
+        """Loads all page data from a Notion workspace.
+
+        Returns:
+            list[Document]: list of documents.
+        """
+        return self._load_all_pages(is_slim=False)
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+    ) -> GenerateSlimDocumentOutput:
+        """Used by pruning to enumerate all live page IDs without retaining page
+        content in memory. start/end are ignored: pruning needs the full
+        universe — time-filtering would prune everything outside the window.
+        """
+        for batch in self._load_all_pages(is_slim=True):
+            yield [
+                item
+                if isinstance(item, HierarchyNode)
+                else SlimDocument(
+                    id=item.id,
+                    parent_hierarchy_raw_node_id=item.parent_hierarchy_raw_node_id,
+                    doc_created_at=item.doc_created_at,
+                )
+                for item in batch
+            ]
 
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch

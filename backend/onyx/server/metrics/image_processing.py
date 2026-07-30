@@ -5,11 +5,9 @@ import io
 import logging
 import time
 from collections.abc import Callable
-from typing import ParamSpec
-from typing import TypeVar
+from typing import ParamSpec, TypeVar
 
-from prometheus_client import Counter
-from prometheus_client import Histogram
+from prometheus_client import Counter, Histogram
 
 logger = logging.getLogger(__name__)
 

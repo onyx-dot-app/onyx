@@ -8,8 +8,7 @@ Verifies that PythonTool reports itself as unavailable when either:
 Also verifies that the health check result is cached with a TTL.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import Session
@@ -90,7 +89,7 @@ def test_python_tool_available_when_health_check_passes(
     )
 
     mock_client = MagicMock()
-    mock_client.health.return_value = HealthResponse(healthy=True, version="1.0.0")
+    mock_client.health.return_value = HealthResponse(connected=True, version="1.0.0")
     mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
     mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -117,7 +116,7 @@ def test_python_tool_unavailable_when_health_check_fails(
     )
 
     mock_client = MagicMock()
-    mock_client.health.return_value = HealthResponse(healthy=False)
+    mock_client.health.return_value = HealthResponse(connected=False)
     mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
     mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -174,8 +173,6 @@ def test_health_check_cached_on_second_call() -> None:
 def test_health_check_refreshed_after_ttl_expires(mock_time: MagicMock) -> None:
     from onyx.tools.tool_implementations.python.code_interpreter_client import (
         _HEALTH_CACHE_TTL_SECONDS,
-    )
-    from onyx.tools.tool_implementations.python.code_interpreter_client import (
         CodeInterpreterClient,
     )
 

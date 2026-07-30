@@ -2,54 +2,48 @@ import mimetypes
 import os
 import time
 from collections.abc import Mapping
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from io import BytesIO
 from numbers import Integral
-from typing import Any
-from typing import Optional
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import quote
 
 import boto3
 from botocore.client import Config
 from botocore.credentials import RefreshableCredentials
-from botocore.exceptions import ClientError
-from botocore.exceptions import NoCredentialsError
-from botocore.exceptions import PartialCredentialsError
+from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 from botocore.session import get_session
 
-from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.constants import BlobType
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
+from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD, INDEX_BATCH_SIZE
+from onyx.configs.constants import BlobType, DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
 )
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
+    is_tabular_file,
 )
-from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    tabular_file_to_sections,
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
 )
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import extract_text_and_images
-from onyx.file_processing.extract_file_text import get_file_ext
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    ImageSection,
+    TabularSection,
+    TextSection,
+)
+from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
@@ -506,19 +500,20 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                             tabular_sections = result.sections
                             staged_file_id = result.staged_file_id
                         else:
-                            tabular_sections = tabular_file_to_sections(
-                                BytesIO(downloaded_file),
-                                file_name=file_name,
-                                link=link,
+                            logger.warning(
+                                "Skipping tabular file %s because raw_file_callback is not set",
+                                file_name,
                             )
+                            continue
+                        if not tabular_sections:
+                            logger.warning(
+                                "No content extracted from tabular file %s", file_name
+                            )
+                            continue
                         batch.append(
                             Document(
                                 id=f"{self.bucket_type}:{self.bucket_name}:{key}",
-                                sections=(
-                                    tabular_sections
-                                    if tabular_sections
-                                    else [TabularSection(link=link, text="")]
-                                ),
+                                sections=tabular_sections,
                                 source=DocumentSource(self.bucket_type.value),
                                 semantic_identifier=file_name,
                                 doc_updated_at=last_modified,

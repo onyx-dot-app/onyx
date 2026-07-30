@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SWRConfig } from "swr";
 import { UserProvider } from "@/providers/UserProvider";
 import { BuildOnboardingProvider } from "@/app/craft/onboarding/BuildOnboardingProvider";
@@ -31,6 +31,7 @@ const llmProviders: LLMProviderDescriptor[] = [
         max_input_tokens: null,
         supports_image_input: true,
         supports_reasoning: true,
+        effectiveDisplayName: "Claude Opus 4.8",
       },
       {
         name: "claude-sonnet-4-6",
@@ -39,6 +40,7 @@ const llmProviders: LLMProviderDescriptor[] = [
         max_input_tokens: null,
         supports_image_input: true,
         supports_reasoning: true,
+        effectiveDisplayName: "Claude Sonnet 4.6",
       },
     ],
   },
@@ -48,6 +50,7 @@ const llmResponse: LLMProviderResponse<LLMProviderDescriptor> = {
   providers: llmProviders,
   default_text: null,
   default_vision: null,
+  default_chat_naming: null,
 };
 
 const fallback = { [SWR_KEYS.llmProviders]: llmResponse };
@@ -84,6 +87,7 @@ export const Default: Story = {
 export const Selected: Story = {
   args: {
     selection: {
+      providerId: 1,
       provider: "anthropic",
       providerName: "Anthropic",
       modelName: "claude-sonnet-4-6",
@@ -95,6 +99,7 @@ export const Selected: Story = {
 export const Disabled: Story = {
   args: {
     selection: {
+      providerId: 1,
       provider: "anthropic",
       providerName: "Anthropic",
       modelName: "claude-opus-4-8",

@@ -1,12 +1,14 @@
-"""Tests for the token-limit lookup helpers in `onyx.llm.utils`:
+"""Tests for the token-limit lookup helpers in `onyx.llm.model_capabilities`:
 `llm_max_input_tokens`, `get_llm_max_output_tokens`, and `get_max_input_tokens`."""
 
 from unittest.mock import patch
 
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-from onyx.llm.utils import get_llm_max_output_tokens
-from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import llm_max_input_tokens
+from onyx.llm.model_capabilities import (
+    get_llm_max_output_tokens,
+    get_max_input_tokens,
+    llm_max_input_tokens,
+)
 
 
 class TestLlmMaxInputTokens:
@@ -89,7 +91,7 @@ class TestLlmMaxInputTokens:
 
     def test_override_env_var_wins(self) -> None:
         model_map = {"openai/gpt-4o": {"max_input_tokens": 128000}}
-        with patch("onyx.llm.utils.GEN_AI_MAX_TOKENS", 5000):
+        with patch("onyx.llm.model_capabilities.GEN_AI_MAX_TOKENS", 5000):
             assert (
                 llm_max_input_tokens(
                     model_map=model_map,
@@ -136,6 +138,17 @@ class TestGetLlmMaxOutputTokens:
             == 4096
         )
 
+    def test_lookup_strips_proxy_provider_prefix(self) -> None:
+        model_map = {"azure/gpt-5": {"max_output_tokens": 128000}}
+        assert (
+            get_llm_max_output_tokens(
+                model_map=model_map,
+                model_name="openai/gpt-5",
+                model_provider="azure",
+            )
+            == 128000
+        )
+
     def test_model_not_found_returns_fallback(self) -> None:
         assert get_llm_max_output_tokens(
             model_map={},
@@ -174,7 +187,7 @@ class TestGetLlmMaxOutputTokens:
 class TestGetMaxInputTokens:
     def test_subtracts_reserved_output_tokens(self) -> None:
         model_map = {"openai/gpt-4o": {"max_input_tokens": 128000}}
-        with patch("onyx.llm.utils.get_model_map", return_value=model_map):
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value=model_map):
             assert (
                 get_max_input_tokens(
                     model_name="gpt-4o",
@@ -186,7 +199,7 @@ class TestGetMaxInputTokens:
 
     def test_non_positive_budget_falls_back(self) -> None:
         model_map = {"tiny/model": {"max_input_tokens": 100}}
-        with patch("onyx.llm.utils.get_model_map", return_value=model_map):
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value=model_map):
             assert (
                 get_max_input_tokens(
                     model_name="model",
@@ -205,7 +218,7 @@ class TestGetMaxInputTokens:
                 "max_tokens": None,
             }
         }
-        with patch("onyx.llm.utils.get_model_map", return_value=model_map):
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value=model_map):
             result = get_max_input_tokens(
                 model_name="gpt-oss:20b-cloud",
                 model_provider="ollama_chat",

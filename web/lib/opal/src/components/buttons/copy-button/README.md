@@ -36,7 +36,7 @@ import { CopyButton } from "@opal/components";
 | `getCopyText` | `() => string` | — | **Required.** Returns the text written to the clipboard. |
 | `getHtmlContent` | `() => string` | `undefined` | Optional HTML content for rich copy. Falls back to `getCopyText` when the Clipboard API is unavailable. |
 | `children` | `string` | `undefined` | Optional label. When provided the button renders with text; when omitted it is icon-only. |
-| `tooltip` | `string` | `"Copy"` | Tooltip text shown in the idle state. Overridden by `"Copied!"` / `"Failed to copy"` on state change. |
+| `tooltip` | `string` | `"Copy"` (icon-only) / none (labeled) | Tooltip text shown on hover. Icon-only buttons default to `"Copy"`; labeled buttons show no tooltip unless one is passed explicitly. |
 | `prominence` | `ButtonProminence` | `"tertiary"` | Visual prominence level. |
 | `size` | `ContainerSizeVariants` | `"lg"` | Size preset. |
 

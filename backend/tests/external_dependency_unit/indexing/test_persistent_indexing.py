@@ -26,27 +26,28 @@ from sqlalchemy.orm import Session
 from onyx.background.indexing.run_docfetching import run_docfetching_entrypoint
 from onyx.configs.constants import DocumentSource
 from onyx.connectors import factory as connector_factory
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import InputType
-from onyx.connectors.models import TextSection
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import get_index_attempt_errors
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptError
-from onyx.db.models import SearchSettings
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    InputType,
+    TextSection,
+)
+from onyx.db.enums import EmbeddingPrecision, IndexingStatus, IndexModelStatus
+from onyx.db.index_attempt import get_index_attempt, get_index_attempt_errors
+from onyx.db.models import IndexAttempt, IndexAttemptError, SearchSettings
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+)
 
 # ---------------------------------------------------------------------------
 # Mock checkpointed connector with configurable failure behavior
@@ -247,7 +248,7 @@ def test_unhandled_exception_default_marks_attempt_failed(
             run_docfetching_entrypoint(
                 app=mock_app,
                 index_attempt_id=attempt_id,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 connector_credential_pair_id=cc_pair_id,
             )
 
@@ -291,7 +292,7 @@ def test_unhandled_exception_persistent_mode_still_marks_failed(
             run_docfetching_entrypoint(
                 app=mock_app,
                 index_attempt_id=attempt_id,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 connector_credential_pair_id=cc_pair_id,
             )
 
@@ -335,7 +336,7 @@ def test_threshold_disabled_in_persistent_mode(
         run_docfetching_entrypoint(
             app=mock_app,
             index_attempt_id=attempt_id,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             connector_credential_pair_id=cc_pair_id,
         )
 
@@ -375,7 +376,7 @@ def test_threshold_default_aborts_attempt(
             run_docfetching_entrypoint(
                 app=mock_app,
                 index_attempt_id=attempt_id,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 connector_credential_pair_id=cc_pair_id,
             )
 

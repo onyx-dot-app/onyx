@@ -17,7 +17,7 @@ async function discoverAdminPages(page: Page): Promise<string[]> {
   await page.waitForLoadState("networkidle");
 
   return page.evaluate(() => {
-    const sidebar = document.querySelector('[class*="group/SidebarWrapper"]');
+    const sidebar = document.querySelector(".opal-sidebar-root__column");
     if (!sidebar) return [];
 
     const hrefs = new Set<string>();

@@ -1,21 +1,23 @@
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.models import (
+    ActionPolicyView,
+    BuiltInExternalAppDescriptor,
+    EndpointDescriptor,
+    OrgCredentialFieldDescriptor,
+)
 from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.base import ExternalAppProvider
-from onyx.external_apps.providers.base import OnyxManagedExtApp
+from onyx.external_apps.providers.base import ExternalAppProvider, OnyxManagedExtApp
 from onyx.external_apps.providers.github import GitHubProvider
 from onyx.external_apps.providers.gmail import GmailProvider
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
 from onyx.external_apps.providers.google_drive import GoogleDriveProvider
+from onyx.external_apps.providers.hubspot import HubspotProvider
 from onyx.external_apps.providers.linear import LinearProvider
+from onyx.external_apps.providers.notion import NotionProvider
 from onyx.external_apps.providers.slack import SlackProvider
-from onyx.server.features.build.api.models import ActionPolicyView
-from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
-from onyx.server.features.build.api.models import EndpointDescriptor
-from onyx.server.features.build.api.models import OrgCredentialFieldDescriptor
 
 _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     SlackProvider,
@@ -24,6 +26,8 @@ _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     GmailProvider,
     LinearProvider,
     GitHubProvider,
+    HubspotProvider,
+    NotionProvider,
 ]
 
 
@@ -62,8 +66,7 @@ def get_provider_or_raise(app: ExternalApp) -> ExternalAppProvider:
     if provider is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"No provider configured for app '{app.skill.name}' "
-            f"(app_type={app.app_type}).",
+            f"No provider configured for app '{app.name}' (app_type={app.app_type}).",
         )
     return provider
 
@@ -76,7 +79,6 @@ def _descriptor_for(
     return BuiltInExternalAppDescriptor(
         app_type=spec.app_type,
         name=spec.app_name,
-        description=descriptor.description,
         upstream_url_patterns=list(descriptor.upstream_url_patterns),
         auth_template=dict(descriptor.auth_template),
         required_org_credential_fields=[
@@ -198,13 +200,3 @@ def fetch_onyx_managed_built_in_apps() -> list[BuiltInExternalAppDescriptor]:
         for cls in _PROVIDER_CLASSES
         if issubclass(cls, OnyxManagedExtApp)
     ]
-
-
-def fetch_built_in_app(app_type: ExternalAppType) -> BuiltInExternalAppDescriptor:
-    for cls in _PROVIDER_CLASSES:
-        if cls.spec.app_type == app_type:
-            return _descriptor_for(cls)
-    raise OnyxError(
-        OnyxErrorCode.NOT_FOUND,
-        f"No built-in app for app_type={app_type}.",
-    )

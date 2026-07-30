@@ -1,33 +1,31 @@
 import copy
 import re
-from collections.abc import Callable
-from collections.abc import Iterable
-from functools import lru_cache
-from typing import Any
-from typing import cast
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterable
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
-from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
-from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
-from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
-from onyx.configs.app_configs import USE_CHUNK_SUMMARY
-from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
-from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
-from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
+from onyx.configs.app_configs import (
+    LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    MAX_TOKENS_FOR_FULL_INCLUSION,
+    SEND_USER_METADATA_TO_LLM_PROVIDER,
+    USE_CHUNK_SUMMARY,
+    USE_DOCUMENT_SUMMARY,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
-from onyx.db.models import LLMProvider
-from onyx.db.models import ModelConfiguration
-from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMUserIdentity
+from onyx.db.models import LLMProvider, ModelConfiguration
+from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.model_capabilities import (
+    get_max_input_tokens,
+    litellm_thinks_model_supports_image_input,
+)
 from onyx.llm.model_response import ModelResponse
-from onyx.llm.models import UserMessage
-from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
-from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
+from onyx.llm.models import LLMErrorInfo, UserMessage
+from onyx.prompts.contextual_retrieval import (
+    CONTEXTUAL_RAG_TOKEN_ESTIMATE,
+    DOCUMENT_SUMMARY_TOKEN_ESTIMATE,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
@@ -41,23 +39,6 @@ MAX_CONTEXT_TOKENS = 100
 ONE_MILLION = 1_000_000
 CHUNKS_PER_DOC_ESTIMATE = 5
 MAX_LITELLM_USER_ID_LENGTH = 64
-_TWELVE_LABS_PEGASUS_MODEL_NAMES = [
-    "us.twelvelabs.pegasus-1-2-v1:0",
-    "us.twelvelabs.pegasus-1-2-v1",
-    "twelvelabs/us.twelvelabs.pegasus-1-2-v1:0",
-    "twelvelabs/us.twelvelabs.pegasus-1-2-v1",
-]
-_TWELVE_LABS_PEGASUS_OUTPUT_TOKENS = max(512, GEN_AI_MODEL_FALLBACK_MAX_TOKENS // 4)
-CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
-    model_name: {
-        "max_input_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
-        "max_output_tokens": _TWELVE_LABS_PEGASUS_OUTPUT_TOKENS,
-        "max_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
-        "supports_reasoning": False,
-        "supports_vision": False,
-    }
-    for model_name in _TWELVE_LABS_PEGASUS_MODEL_NAMES
-}
 
 
 def truncate_litellm_user_id(user_id: str) -> str:
@@ -133,7 +114,7 @@ def _unwrap_nested_exception(error: Exception) -> Exception:
 
 def litellm_exception_to_error_msg(
     e: Exception,
-    llm: LLM,
+    llm: LLM | None,
     fallback_to_error_msg: bool = False,
     custom_error_msg_mappings: (
         dict[str, str] | None
@@ -147,19 +128,21 @@ def litellm_exception_to_error_msg(
             - error_code: Categorized error code for frontend display
             - is_retryable: Whether the user should try again
     """
-    from litellm.exceptions import APIConnectionError
-    from litellm.exceptions import APIError
-    from litellm.exceptions import AuthenticationError
-    from litellm.exceptions import BadRequestError
-    from litellm.exceptions import BudgetExceededError
-    from litellm.exceptions import ContentPolicyViolationError
-    from litellm.exceptions import ContextWindowExceededError
-    from litellm.exceptions import NotFoundError
-    from litellm.exceptions import PermissionDeniedError
-    from litellm.exceptions import RateLimitError
-    from litellm.exceptions import ServiceUnavailableError
-    from litellm.exceptions import Timeout
-    from litellm.exceptions import UnprocessableEntityError
+    from litellm.exceptions import (
+        APIConnectionError,
+        APIError,
+        AuthenticationError,
+        BadRequestError,
+        BudgetExceededError,
+        ContentPolicyViolationError,
+        ContextWindowExceededError,
+        NotFoundError,
+        PermissionDeniedError,
+        RateLimitError,
+        ServiceUnavailableError,
+        Timeout,
+        UnprocessableEntityError,
+    )
 
     core_exception = _unwrap_nested_exception(e)
     error_msg = str(core_exception)
@@ -171,8 +154,31 @@ def litellm_exception_to_error_msg(
             if error_msg_pattern in error_msg:
                 return custom_error_msg, "CUSTOM_ERROR", True
 
-    if isinstance(core_exception, BadRequestError):
-        error_msg = "Bad request: The server couldn't process your request. Please check your input."
+    # Both subclass BadRequestError, so they must precede the BadRequestError
+    # branch or they'd be misclassified as BAD_REQUEST.
+    if isinstance(core_exception, ContextWindowExceededError):
+        error_msg = (
+            "Context window exceeded: Your input is too long for the model to process."
+        )
+        if llm is not None:
+            try:
+                max_context = get_max_input_tokens(
+                    model_name=llm.config.model_name,
+                    model_provider=llm.config.model_provider,
+                )
+                error_msg += f" Your invoked model ({llm.config.model_name}) has a maximum context size of {max_context}."
+            except Exception:
+                logger.warning(
+                    "Unable to get maximum input token for LiteLLM exception handling"
+                )
+        error_code = "CONTEXT_TOO_LONG"
+        is_retryable = False
+    elif isinstance(core_exception, ContentPolicyViolationError):
+        error_msg = "Content policy violation: Your request violates the content policy. Please revise your input."
+        error_code = "CONTENT_POLICY"
+        is_retryable = False
+    elif isinstance(core_exception, BadRequestError):
+        error_msg = f"Bad request: {str(core_exception)}"
         error_code = "BAD_REQUEST"
         is_retryable = True
     elif isinstance(core_exception, AuthenticationError):
@@ -181,13 +187,13 @@ def litellm_exception_to_error_msg(
         is_retryable = False
     elif isinstance(core_exception, PermissionDeniedError):
         error_msg = (
-            "Permission denied: You don't have the necessary permissions for this operation. "
+            f"Permission denied: {str(core_exception)}"
             "Ensure you have access to this model."
         )
         error_code = "PERMISSION_DENIED"
         is_retryable = False
     elif isinstance(core_exception, NotFoundError):
-        error_msg = "Resource not found: The requested resource doesn't exist."
+        error_msg = f"Resource not found: {str(core_exception)}"
         error_code = "NOT_FOUND"
         is_retryable = False
     elif isinstance(core_exception, UnprocessableEntityError):
@@ -258,27 +264,6 @@ def litellm_exception_to_error_msg(
             error_msg = f"{provider_name} service error: {str(core_exception)}"
         error_code = "SERVICE_UNAVAILABLE"
         is_retryable = True
-    elif isinstance(core_exception, ContextWindowExceededError):
-        error_msg = (
-            "Context window exceeded: Your input is too long for the model to process."
-        )
-        if llm is not None:
-            try:
-                max_context = get_max_input_tokens(
-                    model_name=llm.config.model_name,
-                    model_provider=llm.config.model_provider,
-                )
-                error_msg += f" Your invoked model ({llm.config.model_name}) has a maximum context size of {max_context}."
-            except Exception:
-                logger.warning(
-                    "Unable to get maximum input token for LiteLLM exception handling"
-                )
-        error_code = "CONTEXT_TOO_LONG"
-        is_retryable = False
-    elif isinstance(core_exception, ContentPolicyViolationError):
-        error_msg = "Content policy violation: Your request violates the content policy. Please revise your input."
-        error_code = "CONTENT_POLICY"
-        is_retryable = False
     elif isinstance(core_exception, APIConnectionError):
         error_msg = "API connection error: Failed to connect to the API. Please check your internet connection."
         error_code = "CONNECTION_ERROR"
@@ -293,6 +278,19 @@ def litellm_exception_to_error_msg(
         error_msg = "Request timed out: The operation took too long to complete. Please try again."
         error_code = "CONNECTION_ERROR"
         is_retryable = True
+    elif str(getattr(core_exception, "status_code", "")) == "413" or (
+        "413" in error_msg and "request entity too large" in error_msg.lower()
+    ):
+        # Upstream proxy/gateway (e.g. nginx) rejected the request body as too large.
+        error_msg = (
+            "Request too large: The LLM endpoint rejected the request because it "
+            "exceeded the maximum allowed size (HTTP 413). This commonly happens "
+            "when sending images to a model behind a proxy/gateway. Increase the "
+            "maximum request body size on the gateway in front of your LLM "
+            "endpoint (e.g. nginx `client_max_body_size`)."
+        )
+        error_code = "REQUEST_TOO_LARGE"
+        is_retryable = False
     elif isinstance(core_exception, APIError):
         error_msg = f"API error: An error occurred while communicating with the API. Details: {str(core_exception)}"
         error_code = "API_ERROR"
@@ -365,9 +363,8 @@ def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
     already maps known LiteLLM exception types to friendly messages and
     swallows unknown ones, but a few branches (`RateLimitError`, `APIError`,
     `ServiceUnavailableError`) still embed `str(core_exception)`. This pass
-    strips any credential we already know about (typically the values pulled
-    off `llm.config` via `collect_llm_credential_values`) before the message
-    is surfaced to a client.
+    strips any credential we already know about before the message is surfaced
+    to a client.
 
     Short / empty secrets are ignored so we don't accidentally eat common
     substrings.
@@ -377,28 +374,52 @@ def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
 
     scrubbed = message
     for secret in secrets:
-        if not secret or len(secret) < 4:
+        if not secret or len(secret) < 3:
             continue
         scrubbed = scrubbed.replace(secret, _SCRUB_PLACEHOLDER)
 
     return scrubbed
 
 
-def collect_llm_credential_values(llm: LLM | None) -> list[str]:
-    """Pull every credential-looking value out of an LLM's config.
+def collect_credential_values(
+    api_key: str | None, custom_config: dict[str, str] | None
+) -> list[str]:
+    """Collect credential-bearing values from a provider configuration."""
+    credential_values = [api_key] if api_key else []
+    for key, value in (custom_config or {}).items():
+        if value and is_sensitive_custom_config_key(key):
+            credential_values.append(value)
+    return credential_values
 
-    Used to build the `secrets` argument for `scrub_sensitive_values`.
-    """
-    if llm is None:
-        return []
-    config_secrets: list[str] = []
-    if llm.config.api_key:
-        config_secrets.append(llm.config.api_key)
-    custom_config = llm.config.custom_config or {}
-    for key, value in custom_config.items():
-        if isinstance(value, str) and value and is_sensitive_custom_config_key(key):
-            config_secrets.append(value)
-    return config_secrets
+
+def litellm_exception_to_safe_error(
+    e: Exception,
+    llm: LLM | None = None,
+    *,
+    fallback_to_error_msg: bool = False,
+    custom_error_msg_mappings: (
+        dict[str, str] | None
+    ) = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    secrets: Iterable[str | None] = (),
+) -> LLMErrorInfo:
+    """Classify a LiteLLM exception and redact secrets from its message."""
+    message, error_code, is_retryable = litellm_exception_to_error_msg(
+        e,
+        llm,
+        fallback_to_error_msg=fallback_to_error_msg,
+        custom_error_msg_mappings=custom_error_msg_mappings,
+    )
+    llm_secrets = (
+        collect_credential_values(llm.config.api_key, llm.config.custom_config)
+        if llm is not None
+        else []
+    )
+    safe_message = scrub_sensitive_values(message, [*llm_secrets, *secrets])
+    return LLMErrorInfo(
+        message=safe_message,
+        error_code=error_code,
+        is_retryable=is_retryable,
+    )
 
 
 def test_llm(llm: LLM) -> str | None:
@@ -413,7 +434,6 @@ def test_llm(llm: LLM) -> str | None:
 
     The full raw error is still logged at WARNING for ops debugging.
     """
-    secrets = collect_llm_credential_values(llm)
     error_msg: str | None = None
     # try for up to 2 timeouts (e.g. 10 seconds in total)
     for _ in range(2):
@@ -422,103 +442,9 @@ def test_llm(llm: LLM) -> str | None:
             return None
         except Exception as e:
             logger.warning("Failed to call LLM with the following error: %s", e)
-            safe_msg, _, _ = litellm_exception_to_error_msg(
-                e, llm, fallback_to_error_msg=False
-            )
-            error_msg = scrub_sensitive_values(safe_msg, secrets)
+            error_msg = litellm_exception_to_safe_error(e, llm).message
 
     return error_msg
-
-
-@lru_cache(maxsize=1)  # the copy.deepcopy is expensive, so we cache the result
-def get_model_map() -> dict:
-    import litellm
-
-    DIVIDER = "/"
-
-    original_map = cast(dict[str, dict], litellm.model_cost)
-    starting_map = copy.deepcopy(original_map)
-    for key in original_map:
-        if DIVIDER in key:
-            truncated_key = key.split(DIVIDER)[-1]
-            # make sure not to overwrite an original key
-            if truncated_key in original_map:
-                continue
-
-            # if there are multiple possible matches, choose the most "detailed"
-            # one as a heuristic. "detailed" = the description of the model
-            # has the most filled out fields.
-            existing_truncated_value = starting_map.get(truncated_key)
-            potential_truncated_value = original_map[key]
-            if not existing_truncated_value or len(potential_truncated_value) > len(
-                existing_truncated_value
-            ):
-                starting_map[truncated_key] = potential_truncated_value
-
-    for model_name, model_metadata in CUSTOM_LITELLM_MODEL_OVERRIDES.items():
-        if model_name in starting_map:
-            continue
-        starting_map[model_name] = copy.deepcopy(model_metadata)
-
-    # NOTE: outside of the explicit CUSTOM_LITELLM_MODEL_OVERRIDES,
-    # we avoid hard-coding additional models here. Ollama, for example,
-    # allows the user to specify their desired max context window, and it's
-    # unlikely to be standard across users even for the same model
-    # (it heavily depends on their hardware). For those cases, we rely on
-    # GEN_AI_MODEL_FALLBACK_MAX_TOKENS to cover this.
-    # for model_name in [
-    #     "llama3.2",
-    #     "llama3.2:1b",
-    #     "llama3.2:3b",
-    #     "llama3.2:11b",
-    #     "llama3.2:90b",
-    # ]:
-    #     starting_map[f"ollama/{model_name}"] = {
-    #         "max_tokens": 128000,
-    #         "max_input_tokens": 128000,
-    #         "max_output_tokens": 128000,
-    #     }
-
-    return starting_map
-
-
-def _strip_extra_provider_from_model_name(model_name: str) -> str:
-    return model_name.split("/")[1] if "/" in model_name else model_name
-
-
-def _strip_colon_from_model_name(model_name: str) -> str:
-    return ":".join(model_name.split(":")[:-1]) if ":" in model_name else model_name
-
-
-def find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | None:
-    stripped_model_name = _strip_extra_provider_from_model_name(model_name)
-
-    model_names = [
-        model_name,
-        _strip_extra_provider_from_model_name(model_name),
-        # Remove leading extra provider. Usually for cases where user has a
-        # customer model proxy which appends another prefix
-        # remove :XXXX from the end, if present. Needed for ollama.
-        _strip_colon_from_model_name(model_name),
-        _strip_colon_from_model_name(stripped_model_name),
-    ]
-
-    # Filter out None values and deduplicate model names
-    filtered_model_names = [name for name in model_names if name]
-
-    # First try all model names with provider prefix
-    for model_name in filtered_model_names:
-        model_obj = model_map.get(f"{provider}/{model_name}")
-        if model_obj:
-            return model_obj
-
-    # Then try all model names without provider prefix
-    for model_name in filtered_model_names:
-        model_obj = model_map.get(model_name)
-        if model_obj:
-            return model_obj
-
-    return None
 
 
 def get_llm_contextual_cost(
@@ -537,8 +463,6 @@ def get_llm_contextual_cost(
     this does not account for the cost of documents that fit within a single chunk
     which do not get contextualized.
     """
-
-    import litellm
 
     # calculate input costs
     num_tokens = ONE_MILLION
@@ -581,10 +505,13 @@ def get_llm_contextual_cost(
     num_output_tokens += num_docs * MAX_CONTEXT_TOKENS
 
     try:
-        usd_per_prompt, usd_per_completion = litellm.cost_per_token(
-            model=llm.config.model_name,
-            prompt_tokens=num_input_tokens,
-            completion_tokens=num_output_tokens,
+        from onyx.llm.cost import compute_cost_cents
+
+        input_cents, output_cents = compute_cost_cents(
+            llm.config.model_name,
+            llm.config.model_provider,
+            num_input_tokens,
+            num_output_tokens,
         )
     except Exception:
         logger.exception(
@@ -593,113 +520,8 @@ def get_llm_contextual_cost(
         )
         return 0
 
-    # Costs are in USD dollars per million tokens
-    return usd_per_prompt + usd_per_completion
-
-
-def llm_max_input_tokens(
-    model_map: dict,
-    model_name: str,
-    model_provider: str,
-) -> int:
-    """Best effort attempt to get the max input tokens for the LLM."""
-    if GEN_AI_MAX_TOKENS:
-        # This is an override, so always return this
-        logger.info("Using override GEN_AI_MAX_TOKENS: %s", GEN_AI_MAX_TOKENS)
-        return GEN_AI_MAX_TOKENS
-
-    model_obj = find_model_obj(
-        model_map,
-        model_provider,
-        model_name,
-    )
-    if not model_obj:
-        logger.warning(
-            "Model '%s' not found in LiteLLM. Falling back to %s tokens.",
-            model_name,
-            GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
-        )
-        return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-
-    max_input_tokens = model_obj.get("max_input_tokens")
-    if max_input_tokens is not None:
-        return max_input_tokens
-
-    max_tokens = model_obj.get("max_tokens")
-    if max_tokens is not None:
-        return max_tokens
-
-    logger.warning(
-        "No max tokens found for '%s'. Falling back to %s tokens.",
-        model_name,
-        GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
-    )
-    return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-
-
-def get_llm_max_output_tokens(
-    model_map: dict,
-    model_name: str,
-    model_provider: str,
-) -> int:
-    """Best effort attempt to get the max output tokens for the LLM."""
-    default_output_tokens = int(GEN_AI_MODEL_FALLBACK_MAX_TOKENS)
-
-    model_obj = model_map.get(f"{model_provider}/{model_name}")
-    if not model_obj:
-        model_obj = model_map.get(model_name)
-
-    if not model_obj:
-        logger.warning(
-            "Model '%s' not found in LiteLLM. Falling back to %s output tokens.",
-            model_name,
-            default_output_tokens,
-        )
-        return default_output_tokens
-
-    max_output_tokens = model_obj.get("max_output_tokens")
-    if max_output_tokens is not None:
-        return max_output_tokens
-
-    # Fallback to a fraction of max_tokens if max_output_tokens is not specified
-    max_tokens = model_obj.get("max_tokens")
-    if max_tokens is not None:
-        return int(max_tokens * 0.1)
-
-    logger.warning(
-        "No max output tokens found for '%s'. Falling back to %s output tokens.",
-        model_name,
-        default_output_tokens,
-    )
-    return default_output_tokens
-
-
-def get_max_input_tokens(
-    model_name: str,
-    model_provider: str,
-    output_tokens: int = GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
-) -> int:
-    # NOTE: we previously used `litellm.get_max_tokens()`, but despite the name, this actually
-    # returns the max OUTPUT tokens. Under the hood, this uses the `litellm.model_cost` dict,
-    # and there is no other interface to get what we want. This should be okay though, since the
-    # `model_cost` dict is a named public interface:
-    # https://litellm.vercel.app/docs/completion/token_usage#7-model_cost
-    # model_map is  litellm.model_cost
-    litellm_model_map = get_model_map()
-
-    input_toks = (
-        llm_max_input_tokens(
-            model_name=model_name,
-            model_provider=model_provider,
-            model_map=litellm_model_map,
-        )
-        - output_tokens
-    )
-
-    if input_toks <= 0:
-        return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-
-    return input_toks
+    # compute_cost_cents returns cents; contextual cost UI expects USD.
+    return (input_cents + output_cents) / 100.0
 
 
 def get_max_input_tokens_from_llm_provider(
@@ -733,56 +555,6 @@ def get_max_input_tokens_from_llm_provider(
     )
 
 
-def get_bedrock_token_limit(model_id: str) -> int:
-    """Look up token limit for a Bedrock model.
-
-    AWS Bedrock API doesn't expose token limits directly. This function
-    attempts to determine the limit from multiple sources.
-
-    Lookup order:
-    1. Parse from model ID suffix (e.g., ":200k" → 200000)
-    2. Check LiteLLM's model_cost dictionary
-    3. Fall back to our hardcoded BEDROCK_MODEL_TOKEN_LIMITS mapping
-    4. Default to 32000 if not found anywhere
-    """
-    from onyx.llm.constants import BEDROCK_MODEL_TOKEN_LIMITS
-
-    model_id_lower = model_id.lower()
-
-    # 1. Try to parse context length from model ID suffix
-    # Format: "model-name:version:NNNk" where NNN is the context length in thousands
-    # Examples: ":200k", ":128k", ":1000k", ":8k", ":4k"
-    context_match = re.search(r":(\d+)k\b", model_id_lower)
-    if context_match:
-        return int(context_match.group(1)) * 1000
-
-    # 2. Check LiteLLM's model_cost dictionary
-    try:
-        model_map = get_model_map()
-        # Try with bedrock/ prefix first, then without
-        for key in [f"bedrock/{model_id}", model_id]:
-            if key in model_map:
-                model_info = model_map[key]
-                max_input_tokens = model_info.get("max_input_tokens")
-                if max_input_tokens is not None:
-                    return max_input_tokens
-                max_tokens = model_info.get("max_tokens")
-                if max_tokens is not None:
-                    return max_tokens
-    except Exception:
-        pass  # Fall through to mapping
-
-    # 3. Try our hardcoded mapping (longest match first)
-    for pattern, limit in sorted(
-        BEDROCK_MODEL_TOKEN_LIMITS.items(), key=lambda x: -len(x[0])
-    ):
-        if pattern in model_id_lower:
-            return limit
-
-    # 4. Default fallback
-    return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-
-
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
     # First, try to read an explicit configuration from the model_configuration table
     try:
@@ -813,124 +585,6 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
 
     # Fallback to looking up the model in the litellm model_cost dict
     return litellm_thinks_model_supports_image_input(model_name, model_provider)
-
-
-def litellm_thinks_model_supports_image_input(
-    model_name: str, model_provider: str
-) -> bool:
-    """Generally should call `model_supports_image_input` unless you already know that
-    `model_supports_image_input` from the DB is not set OR you need to avoid the performance
-    hit of querying the DB."""
-    try:
-        model_obj = find_model_obj(get_model_map(), model_provider, model_name)
-        if not model_obj:
-            logger.warning(
-                "No litellm entry found for %s/%s, this model may or may not support image input.",
-                model_provider,
-                model_name,
-            )
-            return False
-        # The or False here is because sometimes the dict contains the key but the value is None
-        return model_obj.get("supports_vision", False) or False
-    except Exception:
-        logger.exception(
-            "Failed to get model object for %s/%s", model_provider, model_name
-        )
-        return False
-
-
-def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
-    import litellm
-
-    model_map = get_model_map()
-    try:
-        model_obj = find_model_obj(
-            model_map,
-            model_provider,
-            model_name,
-        )
-        if model_obj and "supports_reasoning" in model_obj:
-            reasoning = model_obj["supports_reasoning"]
-            if reasoning is not None:
-                return reasoning
-            logger.error(
-                "Cannot find reasoning for name=%s and provider=%s",
-                model_name,
-                model_provider,
-            )
-
-        # Fallback: try using litellm.supports_reasoning() for newer models
-        try:
-            # logger.debug("Falling back to `litellm.supports_reasoning`")
-            full_model_name = (
-                f"{model_provider}/{model_name}"
-                if model_provider not in model_name
-                else model_name
-            )
-            return litellm.supports_reasoning(model=full_model_name)
-        except Exception:
-            logger.exception(
-                "Failed to check if %s/%s supports reasoning",
-                model_provider,
-                model_name,
-            )
-            return False
-
-    except Exception:
-        logger.exception(
-            "Failed to get model object for %s/%s", model_provider, model_name
-        )
-        return False
-
-
-def is_true_openai_model(model_provider: str, model_name: str) -> bool:
-    """
-    Determines if a model is a true OpenAI model or just using OpenAI-compatible API.
-
-    LiteLLM uses the "openai" provider for any OpenAI-compatible server (e.g. vLLM, LiteLLM proxy),
-    but this function checks if the model is actually from OpenAI's model registry.
-
-    This function is used primarily to determine if we should use the responses API.
-    OpenAI models from OpenAI and Azure should use responses.
-    """
-
-    if model_provider not in {
-        LlmProviderNames.OPENAI,
-        LlmProviderNames.LITELLM_PROXY,
-        LlmProviderNames.AZURE,
-    }:
-        return False
-
-    model_map = get_model_map()
-
-    def _check_if_model_name_is_openai_provider(model_name: str) -> bool:
-        if model_name not in model_map:
-            return False
-        return model_map[model_name].get("litellm_provider") == LlmProviderNames.OPENAI
-
-    try:
-        # Check if any model exists in litellm's registry with openai prefix
-        # If it's registered as "openai/model-name", it's a real OpenAI model
-        if f"{LlmProviderNames.OPENAI}/{model_name}" in model_map:
-            return True
-
-        if _check_if_model_name_is_openai_provider(model_name):
-            return True
-
-        if model_name.startswith(f"{LlmProviderNames.AZURE}/"):
-            model_name_with_azure_removed = "/".join(model_name.split("/")[1:])
-            if _check_if_model_name_is_openai_provider(model_name_with_azure_removed):
-                return True
-
-        return False
-
-    except Exception:
-        logger.exception(
-            "Failed to determine if %s/%s is a true OpenAI model",
-            model_provider,
-            model_name,
-        )
-        return False
 
 
 def model_needs_formatting_reenabled(model_name: str) -> bool:

@@ -1,4 +1,4 @@
-import { ThreeDotsLoader } from "@/components/Loading";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { X, Search } from "lucide-react";
 import {
   getDatesList,
@@ -139,8 +139,8 @@ export function PersonaMessagesChart({
   let content;
   if (isLoading) {
     content = (
-      <div className="h-80 flex flex-col">
-        <ThreeDotsLoader />
+      <div className="h-80 flex flex-col items-center justify-center">
+        <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
   } else if (!availablePersonas || hasError) {

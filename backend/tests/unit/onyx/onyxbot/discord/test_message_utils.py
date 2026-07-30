@@ -9,8 +9,7 @@ from unittest.mock import MagicMock
 
 from onyx.chat.models import ChatFullResponse
 from onyx.onyxbot.discord.constants import MAX_MESSAGE_LENGTH
-from onyx.onyxbot.discord.handle_message import _append_citations
-from onyx.onyxbot.discord.handle_message import _split_message
+from onyx.onyxbot.discord.handle_message import _append_citations, _split_message
 
 
 class TestSplitMessage:

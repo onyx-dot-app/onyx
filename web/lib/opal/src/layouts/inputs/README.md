@@ -41,6 +41,9 @@ Places title/description on the left, input control on the right.
 | `withLabel` | `boolean \| string` | `false` | Same as Vertical |
 | `disabled` | `boolean` | `false` | Passes through to the label wrapper |
 | `center` | `boolean` | `false` | Vertically center the input with the label |
+| `icon` | `IconFunctionComponent` | — | Optional icon rendered beside the title |
+| `responsive` | `boolean` | `false` | Stack the control between title and description on narrow viewports (floats back to the right at `sm`). Best for text inputs; avoid for compact controls like toggles. |
+| `fillInput` | `boolean` | `false` | Grow the control to fill the row (capped at the form input-column max, 240px) instead of hugging its content. Use for full-width inputs like selects/text fields; avoid for compact controls like toggles/switches. Forwarded to `ContentAction` as `fillRight`. |
 | `title` | `string \| RichStr` | — | Section title |
 | `tag` | `TagProps` | — | Tag rendered beside the title |
 | `description` | `string \| RichStr` | — | Section description |
@@ -81,5 +84,15 @@ import { InputVertical, InputHorizontal } from "@opal/layouts";
 // No label (default) — for non-form children like buttons
 <InputHorizontal title="Delete" description="Remove this item">
   <Button variant="danger">Delete</Button>
+</InputHorizontal>
+
+// Full-width input — the select grows to fill the row (capped at 240px)
+<InputHorizontal
+  withLabel="visibility"
+  title="Query History Visibility"
+  description="Control what is shown in query history"
+  fillInput
+>
+  <InputSelect ... />
 </InputHorizontal>
 ```

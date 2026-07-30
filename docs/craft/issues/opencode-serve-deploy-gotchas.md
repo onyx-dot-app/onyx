@@ -64,30 +64,23 @@ on secrets at all.
 is the source of truth for which k8s resources the api server touches —
 grep for `_core_api.` method calls if you need to re-derive the verb set.
 
-### 1.2 Mutable `:latest` tag + cached node images
+### 1.2 Mutable tags + cached node images
 
-**Symptom:** after pushing a new sandbox image with the `:latest` tag,
+**Symptom:** after pushing a new sandbox image with a mutable tag
+(`latest`, `beta`, or `edge`),
 freshly-provisioned sandbox pods kept running the **old** image.
 opencode-serve was not listening on `:4096`; the container appeared to
 be running the prior placeholder behavior.
 
 **Root cause:** sandbox pods are created with
-`imagePullPolicy: IfNotPresent` (hard-coded in
-`KubernetesSandboxManager._create_sandbox_pod`, not overridable via helm
-values). When the configured image reference is the mutable `:latest`,
-the kubelet sees an image with that tag already cached on the node and
-skips the pull. Chart-level `pullPolicy: Always` does **not** apply —
-sandbox pods are created imperatively by the api server, not by the
-chart.
+`imagePullPolicy: IfNotPresent` by default. When the configured image
+reference is mutable, the kubelet sees an image with that tag already
+cached on the node and skips the pull.
 
-**Workaround:** point the api server's `SANDBOX_CONTAINER_IMAGE` env at
-a specific, immutable tag (e.g. `onyxdotapp/sandbox:v0.1.45`) for any
-given deploy. A new tag forces the kubelet to pull, even under
-`IfNotPresent`.
-
-**Source-level fix (deferred):** change the pod spec to
-`imagePullPolicy: Always` in `_create_sandbox_pod`. Eliminates the
-per-deploy tag-bump dance.
+**Fix:** for Kubernetes, use app-aligned immutable tags, or set
+`SANDBOX_IMAGE_PULL_POLICY=Always` when deliberately running a moving tag.
+For Docker compose, the Docker sandbox manager refreshes moving sandbox tags
+once per API process because sandbox containers are created outside compose.
 
 ### 1.3 `OPENCODE_CONFIG_CONTENT` env doesn't refresh on Secret update
 
@@ -254,7 +247,7 @@ advance.
 | `[Errno 111] Connection refused` on POST `/session` | opencode-serve not bound to `:4096`. Cold pod, crashloop, or process death |
 | `ProviderModelNotFoundError` w/ bundled-model suggestions | Provider not registered in opencode (silent drop from env config), or config not loaded |
 | `Sandbox … has status provisioning and is being created by another request` | Intentional guard. Two concurrent requests on the same user's mid-provision sandbox |
-| Sandbox pod shows old behavior despite new image push | Cached `:latest` digest on the node + `IfNotPresent` policy (§1.2) |
+| Sandbox pod shows old behavior despite new image push | Cached mutable-tag digest on the node + `IfNotPresent` policy (§1.2) |
 | `opencode /event stream did not become ready` | Bus reader failed to subscribe before the per-turn deadline. Causes: opencode-serve not bound yet (cold), or auth mismatch between bus's cached password and current Secret (bus will self-close and rebuild on next prompt — see §1.6) |
 | opencode-serve restarts in tight loop, exit 143 | SIGTERM propagated from the entrypoint trap. Almost always operator-induced |
 
@@ -316,9 +309,9 @@ stern -n onyx-sandboxes sandbox -c sandbox
    ```
 2. Compare with the digest of the image you just pushed.
 3. If they differ, the node has a cached older image and the pod is
-   running that. Point `SANDBOX_CONTAINER_IMAGE` (api server env) at a
-   specific, immutable version tag and re-roll the api server +
-   delete the affected sandbox pod.
+   running that. For Kubernetes, deploy a matching immutable app/sandbox tag or
+   set `SANDBOX_IMAGE_PULL_POLICY=Always` for a moving-tag environment, then
+   recreate the affected sandbox pod.
 
 ### Symptoms cluster C: "RBAC 403 on a sandbox-namespace resource"
 
@@ -334,7 +327,7 @@ actually needs.
 
 | Item | Why it matters | Where to land it |
 |---|---|---|
-| `imagePullPolicy: Always` on sandbox pods | Eliminates the `:latest` cache trap so deploys don't need a per-version tag bump | `kubernetes_sandbox_manager._create_sandbox_pod` |
+| App-aligned sandbox tags | Avoids app/sandbox version skew; Kubernetes immutable tags avoid mutable-tag cache traps without adding a registry check to every sandbox pod start | release workflow + sandbox PodTemplate defaults |
 | Recreate pod on Secret content change | Fixes §1.3 — env doesn't refresh on Secret update | `_provision_opencode_secret` or the provisioning caller |
 | `secrets` verbs in the chart-managed sandbox-namespace Role | Stops the §1.1 403 from recurring on every fresh deploy | Onyx helm chart's sandbox-rbac template |
 | Pre-seed `build-mode-*` providers in admin onboarding | Avoid the silent-skip filter trap in §1.4 | Onyx admin / setup wizard |

@@ -1,6 +1,6 @@
 import { unstable_noStore as noStore } from "next/cache";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
-import { getCurrentUserSS } from "@/lib/userSS";
+import { getCurrentUserSS } from "@/lib/users/svcSS";
 
 export interface LayoutProps {
   children: React.ReactNode;

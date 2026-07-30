@@ -14,14 +14,12 @@ so unlicensed instances don't trip "0 seats remaining" alerts.
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import REGISTRY
 
-from ee.onyx.db.license import get_license_metadata
-from ee.onyx.db.license import get_used_seats
+from ee.onyx.db.license import get_license_metadata, get_used_seats
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.server.metrics.indexing_pipeline import _CachedCollector
 from onyx.server.settings.models import ApplicationStatus
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
 

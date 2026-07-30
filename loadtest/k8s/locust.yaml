@@ -1,0 +1,159 @@
+# Locust master + workers for the Onyx chat load tests, using the harness
+# image built from ../Dockerfile (locustfile + scenarios baked in).
+#
+# Prereqs in the target namespace:
+#   kubectl create secret generic onyx-loadtest --from-literal=ONYX_API_KEY=<key>
+#
+# Apply:   kubectl apply -n <onyx-namespace> -f locust.yaml
+# Drive:   kubectl port-forward svc/onyx-loadtest-master 8089:8089
+#          then start runs from the web UI (host, user count, scenarios), or
+#          edit the master args to run headless (-u/-r/-t/--host).
+#
+# LOCUST_HOST must be a URL that serves the browser-equivalent path, i.e.
+# routes /api/* to the api server — in practice the deployment's user-facing
+# URL (ingress/load balancer). The web server service only proxies /api/* in
+# dev-mode builds, and the in-cluster nginx routes by Host header, so neither
+# bare service name works against production images. Going through the
+# ingress also exercises LB idle timeouts — a classic killer of long streams.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onyx-loadtest-master
+  labels:
+    app: onyx-loadtest
+    role: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: onyx-loadtest
+      role: master
+  template:
+    metadata:
+      labels:
+        app: onyx-loadtest
+        role: master
+      # Scrape Locust milestone metrics (Phase 4 correlation). Drop these if
+      # your Prometheus uses ServiceMonitor/PodMonitor CRDs instead.
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9646"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: locust-master
+          # Pinned tag: in distributed mode every pod must run the same build
+          # or results are silently corrupted.
+          image: <your-registry>/onyx-loadtest:v0.1.0
+          imagePullPolicy: IfNotPresent
+          args: ["--master"]
+          ports:
+            - containerPort: 8089 # web UI
+            - containerPort: 5557 # worker communication
+            - containerPort: 9646 # Prometheus /metrics
+          # No ONYX_API_KEY here: the master only coordinates — user
+          # greenlets (and API calls) run on the workers.
+          env:
+            - name: LOCUST_HOST
+              value: "https://<your-onyx-url>"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onyx-loadtest-master
+  labels:
+    app: onyx-loadtest
+spec:
+  type: ClusterIP
+  selector:
+    app: onyx-loadtest
+    role: master
+  ports:
+    - name: web
+      port: 8089
+      targetPort: 8089
+    - name: comm
+      port: 5557
+      targetPort: 5557
+    - name: metrics
+      port: 9646
+      targetPort: 9646
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onyx-loadtest-worker
+  labels:
+    app: onyx-loadtest
+    role: worker
+spec:
+  # One worker handles hundreds of concurrent streams; scale for bigger runs.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: onyx-loadtest
+      role: worker
+  template:
+    metadata:
+      labels:
+        app: onyx-loadtest
+        role: worker
+    spec:
+      # If the cluster has a dedicated load-generator nodegroup, pin workers
+      # to it so the generator never competes with the system under test:
+      # nodeSelector: { workload: loadtest }
+      # tolerations: [{ key: loadtest, operator: Exists, effect: NoSchedule }]
+      containers:
+        - name: locust-worker
+          image: <your-registry>/onyx-loadtest:v0.1.0
+          imagePullPolicy: IfNotPresent
+          args: ["--worker", "--master-host", "onyx-loadtest-master"]
+          env:
+            - name: ONYX_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: onyx-loadtest
+                  key: ONYX_API_KEY
+            # Optional scenario tuning (see ../README.md):
+            # ONYX_LLM_PROVIDER, ONYX_SEARCH_MODEL, ONYX_DR_MODEL,
+            # ONYX_WAIT_SECONDS, ONYX_STREAM_READ_TIMEOUT, ...
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+# Metrics discovery:
+#   - Annotation-based Prometheus scrapes the master pod via the
+#     prometheus.io/* annotations above (no extra object needed).
+#   - Prometheus Operator (kube-prometheus-stack) ignores those annotations —
+#     it needs a ServiceMonitor. Uncomment below and set the `release` label to
+#     whatever your Prometheus's serviceMonitorSelector matches. Requires the
+#     monitoring.coreos.com CRDs, so it's left commented to keep this manifest
+#     applyable on clusters without the operator.
+#
+# ---
+# apiVersion: monitoring.coreos.com/v1
+# kind: ServiceMonitor
+# metadata:
+#   name: onyx-loadtest
+#   labels:
+#     release: <your-prometheus-release>
+# spec:
+#   namespaceSelector:
+#     matchNames: [<onyx-namespace>]
+#   selector:
+#     matchLabels:
+#       app: onyx-loadtest
+#   endpoints:
+#     - port: metrics
+#       path: /metrics
+#       interval: 15s

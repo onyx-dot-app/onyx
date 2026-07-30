@@ -15,7 +15,7 @@
 }
 
 .attachment-button[data-state="selected"] {
-  background-color: var(--action-link-01);
+  background-color: var(--action-selection-01);
 }
 
 .attachment-button__content {

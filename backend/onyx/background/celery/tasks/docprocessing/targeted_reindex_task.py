@@ -10,19 +10,22 @@ connector invocation + indexing pipeline plumbing live in
 import datetime
 import logging
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.indexing.run_targeted_reindex import group_targets_by_cc_pair
-from onyx.background.indexing.run_targeted_reindex import process_targets_for_cc_pair
+from onyx.background.indexing.run_targeted_reindex import (
+    group_targets_by_cc_pair,
+    process_targets_for_cc_pair,
+)
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
-from onyx.db.targeted_reindex import get_index_attempts_for_targeted_reindex_job
-from onyx.db.targeted_reindex import get_targeted_reindex_job
-from onyx.db.targeted_reindex import get_targets_for_job
-from onyx.db.targeted_reindex import resolve_failure_derived_targets
+from onyx.db.targeted_reindex import (
+    get_index_attempts_for_targeted_reindex_job,
+    get_targeted_reindex_job,
+    get_targets_for_job,
+    resolve_failure_derived_targets,
+)
 from shared_configs.contextvars import get_current_tenant_id
 
 _TARGETED_REINDEX_SOFT_TIME_LIMIT = 60 * 30  # 30 minutes

@@ -4,42 +4,57 @@ import time
 import traceback
 from time import sleep
 
-import sentry_sdk
-from celery import Celery
-from celery import shared_task
-from celery import Task
+import psutil
+from celery import Celery, Task, shared_task
 
-from onyx import __version__
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.memory_monitoring import emit_process_memory
-from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
-from onyx.background.celery.tasks.docprocessing.heartbeat import stop_heartbeat
+from onyx.background.celery.memory_monitoring import (
+    emit_process_memory,
+    start_memory_observer,
+    stop_memory_observer,
+)
+from onyx.background.celery.tasks.docfetching.worker_shutdown import (
+    is_worker_shutting_down,
+)
+from onyx.background.celery.tasks.docprocessing.heartbeat import (
+    start_heartbeat,
+    stop_heartbeat,
+)
 from onyx.background.celery.tasks.docprocessing.tasks import ConnectorIndexingLogBuilder
 from onyx.background.celery.tasks.docprocessing.utils import IndexingCallback
-from onyx.background.celery.tasks.models import DocProcessingContext
-from onyx.background.celery.tasks.models import IndexingWatchdogTerminalStatus
-from onyx.background.celery.tasks.models import SimpleJobResult
-from onyx.background.indexing.job_client import SimpleJob
-from onyx.background.indexing.job_client import SimpleJobClient
-from onyx.background.indexing.job_client import SimpleJobException
+from onyx.background.celery.tasks.models import (
+    DocProcessingContext,
+    IndexingWatchdogTerminalStatus,
+    SimpleJobResult,
+)
+from onyx.background.indexing.job_client import (
+    SimpleJob,
+    SimpleJobClient,
+    SimpleJobException,
+)
 from onyx.background.indexing.run_docfetching import run_docfetching_entrypoint
-from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
-from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.app_configs import INDEXING_WORKER_MEMORY_LIMIT_MB
+from onyx.configs.constants import (
+    CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT,
+    CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS,
+    OnyxCeleryTask,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
-from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import mark_attempt_canceled
-from onyx.db.index_attempt import mark_attempt_failed
+from onyx.db.index_attempt import (
+    get_index_attempt,
+    mark_attempt_canceled,
+    mark_attempt_failed,
+    mark_attempt_interrupted,
+)
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector import RedisConnector
 from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
-from shared_configs.configs import SENTRY_CELERY_TRACES_SAMPLE_RATE
-from shared_configs.configs import SENTRY_DSN
+from shared_configs.configs import SENTRY_CELERY_TRACES_SAMPLE_RATE, SENTRY_DSN
 
 logger = setup_logger()
 
@@ -119,11 +134,14 @@ def docfetching_task(
 
     # Start heartbeat for this indexing attempt
     heartbeat_thread, stop_event = start_heartbeat(index_attempt_id)
+    # One-shot allocation-site report if memory nears the watchdog limit
+    memory_observer = start_memory_observer(index_attempt_id)
     try:
         _docfetching_task(
             app, index_attempt_id, cc_pair_id, search_settings_id, is_ee, tenant_id
         )
     finally:
+        stop_memory_observer(memory_observer)
         stop_heartbeat(heartbeat_thread, stop_event)  # Stop heartbeat before exiting
 
 
@@ -138,15 +156,9 @@ def _docfetching_task(
     # Since connector_indexing_proxy_task spawns a new process using this function as
     # the entrypoint, we init Sentry here.
     if SENTRY_DSN:
-        from onyx.configs.sentry import _add_instance_tags
+        from onyx.configs.sentry import init_sentry
 
-        sentry_sdk.init(
-            dsn=SENTRY_DSN,
-            traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE,
-            release=__version__,
-            before_send=_add_instance_tags,
-        )
-        logger.info("Sentry initialized")
+        init_sentry(traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE)
     else:
         logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 
@@ -410,7 +422,7 @@ def docfetching_proxy_task(
         task_logger.error("self.request.id is None!")
 
     client = SimpleJobClient()
-    task_logger.info(f"submitting docfetching_task with tenant_id={tenant_id}")
+    task_logger.info("submitting docfetching_task with tenant_id=%s", tenant_id)
 
     job = client.submit(
         docfetching_task,
@@ -464,6 +476,9 @@ def docfetching_proxy_task(
     # Track the last time memory info was emitted
     last_memory_emit_time = 0.0
 
+    # Set when the memory limit trips; reused for the post-loop re-mark
+    memory_limit_failure_reason: str | None = None
+
     try:
         with get_session_with_current_tenant() as db_session:
             index_attempt = get_index_attempt(
@@ -491,6 +506,46 @@ def docfetching_proxy_task(
             sleep(5)
 
             time.monotonic()
+
+            # Worker shutting down (SIGTERM). Mark the attempt INTERRUPTED before
+            # terminating so the subprocess can't write a competing status, then
+            # stop it. A fresh attempt resumes from checkpoint on the next beat.
+            if is_worker_shutting_down():
+                result.status = (
+                    IndexingWatchdogTerminalStatus.TERMINATED_BY_WORKER_SHUTDOWN
+                )
+                try:
+                    with get_session_with_current_tenant() as db_session:
+                        attempt = get_index_attempt(db_session, index_attempt_id)
+                        if attempt and not attempt.status.is_terminal():
+                            mark_attempt_interrupted(
+                                index_attempt_id,
+                                db_session,
+                                "Indexing worker shutting down (deploy or "
+                                "autoscaling). The attempt resumes automatically "
+                                "from the last checkpoint.",
+                            )
+                except Exception:
+                    task_logger.exception(
+                        log_builder.build(
+                            "Indexing watchdog - transient exception marking index "
+                            "attempt as interrupted on worker shutdown"
+                        )
+                    )
+                try:
+                    job.terminate_and_wait(
+                        CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS
+                    )
+                except Exception:
+                    task_logger.exception(
+                        log_builder.build(
+                            "Indexing watchdog - exception while terminating "
+                            "subprocess on worker shutdown"
+                        )
+                    )
+                if job.process is not None:
+                    result.exit_code = job.process.exitcode
+                break
 
             # if the job is done, clean up and break
             if job.done():
@@ -524,6 +579,72 @@ def docfetching_proxy_task(
                         },
                     )
                     last_memory_emit_time = current_time
+
+                # Terminate the worker before it can trip the kernel OOM killer —
+                # a kernel kill takes down the whole pod (the attempt heartbeat and
+                # other tenants' tasks included) and surfaces as an opaque
+                # "No heartbeat received" failure. Checked every loop iteration
+                # since RSS can grow by GBs within the 60s emit cadence.
+                if INDEXING_WORKER_MEMORY_LIMIT_MB > 0:
+                    rss_mb: int | None = None
+                    try:
+                        rss_mb = psutil.Process(pid).memory_info().rss // (1024 * 1024)
+                    except psutil.Error:
+                        # process likely exited; job.done() handles it next loop
+                        pass
+
+                    if rss_mb is not None and rss_mb > INDEXING_WORKER_MEMORY_LIMIT_MB:
+                        task_logger.warning(
+                            log_builder.build(
+                                "Indexing watchdog - memory limit exceeded; "
+                                "terminating subprocess",
+                                rss_mb=str(rss_mb),
+                                limit_mb=str(INDEXING_WORKER_MEMORY_LIMIT_MB),
+                                pid=str(pid),
+                            )
+                        )
+                        result.status = (
+                            IndexingWatchdogTerminalStatus.TERMINATED_BY_MEMORY_LIMIT
+                        )
+                        memory_limit_failure_reason = (
+                            "Indexing worker exceeded the memory limit while "
+                            f"fetching documents: rss_mb={rss_mb} "
+                            f"limit_mb={INDEXING_WORKER_MEMORY_LIMIT_MB}. "
+                            "This usually means the connector encountered "
+                            "very large documents."
+                        )
+
+                        # mark failed before terminating so the subprocess's own
+                        # termination handling can't write a competing status
+                        try:
+                            with get_session_with_current_tenant() as db_session:
+                                mark_attempt_failed(
+                                    index_attempt_id,
+                                    db_session,
+                                    memory_limit_failure_reason,
+                                )
+                        except Exception:
+                            task_logger.exception(
+                                log_builder.build(
+                                    "Indexing watchdog - transient exception marking "
+                                    "index attempt as failed after memory limit"
+                                )
+                            )
+
+                        try:
+                            job.terminate_and_wait(
+                                CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS
+                            )
+                        except Exception:
+                            task_logger.exception(
+                                log_builder.build(
+                                    "Indexing watchdog - exception while terminating "
+                                    "subprocess after memory limit exceeded"
+                                )
+                            )
+                        if job.process is not None:
+                            result.exit_code = job.process.exitcode
+                        break
 
             # if the IndexAttempt row has been marked terminal (failed/canceled/
             # succeeded) by anyone else, the spawned subprocess is no longer doing
@@ -674,6 +795,32 @@ def docfetching_proxy_task(
         # subprocess has been killed in the watchdog loop above; no further DB
         # writes are needed here.
         pass
+    elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_WORKER_SHUTDOWN:
+        # already marked INTERRUPTED in the loop (best-effort). The heartbeat
+        # watchdog is the fallback if that write failed, so nothing to do here.
+        pass
+    elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_MEMORY_LIMIT:
+        # subprocess already terminated in the watchdog loop. Re-mark in case the
+        # in-loop mark_attempt_failed hit a transient DB error — otherwise the
+        # attempt lingers in_progress until the heartbeat watchdog fails it with
+        # the opaque "No heartbeat received" message this status exists to replace.
+        try:
+            with get_session_with_current_tenant() as db_session:
+                attempt = get_index_attempt(db_session, index_attempt_id)
+                if attempt and not attempt.status.is_terminal():
+                    mark_attempt_failed(
+                        index_attempt_id,
+                        db_session,
+                        memory_limit_failure_reason
+                        or "Indexing worker exceeded the memory limit",
+                    )
+        except Exception:
+            task_logger.exception(
+                log_builder.build(
+                    "Indexing watchdog - transient exception marking index attempt "
+                    "as failed after memory limit"
+                )
+            )
     else:
         pass
 

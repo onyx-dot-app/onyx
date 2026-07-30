@@ -1,22 +1,20 @@
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Generator
-from collections.abc import Sequence
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Generator, Sequence
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
 
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import TextSection
-from onyx.connectors.sharepoint.connector import DriveItemData
-from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP
-from onyx.connectors.sharepoint.connector import SharepointConnector
-from onyx.connectors.sharepoint.connector import SharepointConnectorCheckpoint
-from onyx.connectors.sharepoint.connector import SiteDescriptor
+from onyx.connectors.models import Document, DocumentSource, TextSection
+from onyx.connectors.sharepoint.connector import (
+    SHARED_DOCUMENTS_MAP,
+    DriveItemData,
+    SharepointConnector,
+    SharepointConnectorCheckpoint,
+    SiteDescriptor,
+)
 
 
 class _FakeQuery:
@@ -28,8 +26,9 @@ class _FakeQuery:
 
 
 class _FakeDrive:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, drive_type: str | None = None) -> None:
         self.name = name
+        self.drive_type = drive_type
         self.id = f"fake-drive-id-{name}"
         self.web_url = f"https://example.sharepoint.com/sites/sample/{name}"
 
@@ -279,6 +278,67 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
     assert len(documents) == 1
     assert captured_drive_names == [SHARED_DOCUMENTS_MAP["Documents"]]
     assert len(hierarchy_nodes) >= 1
+
+
+_PERSONAL_SITE_URL = "https://example-my.sharepoint.com/personal/user_example_com"
+
+
+def _resolve_personal(drives: list[_FakeDrive]) -> tuple[str, str | None] | None:
+    connector = _build_connector(drives)
+    site_descriptor = SiteDescriptor(
+        url=_PERSONAL_SITE_URL,
+        drive_name="Documents",
+        folder_path=None,
+    )
+    return connector._resolve_drive(site_descriptor, "Documents")
+
+
+def test_resolve_drive_personal_picks_by_drive_type_not_position() -> None:
+    """The user's OneDrive must be selected by driveType regardless of order."""
+    extra_library = _FakeDrive("Extra Library", drive_type="documentLibrary")
+    onedrive = _FakeDrive("OneDrive", drive_type="business")
+
+    # OneDrive is second in the (unordered) response; positional selection would
+    # have picked the wrong library.
+    result = _resolve_personal([extra_library, onedrive])
+
+    assert result is not None
+    drive_id, _ = result
+    assert drive_id == onedrive.id
+
+
+def test_resolve_drive_personal_falls_back_to_name_when_type_missing() -> None:
+    extra_library = _FakeDrive("Extra Library", drive_type="documentLibrary")
+    onedrive = _FakeDrive("OneDrive", drive_type=None)
+
+    result = _resolve_personal([extra_library, onedrive])
+
+    assert result is not None
+    drive_id, _ = result
+    assert drive_id == onedrive.id
+
+
+def test_resolve_drive_personal_prefers_type_over_name_collision() -> None:
+    """A uniquely-typed primary drive wins even if another library reuses a name."""
+    # Localized primary drive name so resolution must rely on driveType.
+    primary = _FakeDrive("Mon lecteur OneDrive", drive_type="business")
+    # An extra library that happens to carry a fallback OneDrive name but is not
+    # the user's primary drive.
+    extra_library = _FakeDrive("OneDrive", drive_type="documentLibrary")
+
+    result = _resolve_personal([extra_library, primary])
+
+    assert result is not None
+    drive_id, _ = result
+    assert drive_id == primary.id
+
+
+def test_resolve_drive_personal_ambiguous_returns_none() -> None:
+    """Refuse to guess when multiple primary-OneDrive candidates exist."""
+    first = _FakeDrive("OneDrive", drive_type="business")
+    second = _FakeDrive("Second OneDrive", drive_type="personal")
+
+    assert _resolve_personal([first, second]) is None
 
 
 def test_get_drive_items_uses_delta_when_no_folder_path(

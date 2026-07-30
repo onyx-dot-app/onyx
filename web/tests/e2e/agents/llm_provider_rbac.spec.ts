@@ -14,24 +14,23 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
  */
 
 const getDefaultModelSelector = (page: Page) =>
-  page
-    .locator(
-      'button:has-text("User Default"), button:has-text("System Default")'
-    )
-    .first();
+  page.locator('[data-testid="llm-popover-trigger"]').first();
 
 const getLLMProviderOptions = async (page: Page) => {
+  const dialog = page.locator('[role="dialog"]').first();
+
   // Click the selector to open the dropdown
   await getDefaultModelSelector(page).click();
 
-  // Wait for the dropdown to be visible
-  await page.waitForSelector('[role="option"]', { state: "visible" });
+  // Wait for the popover to open
+  await dialog.waitFor({ state: "visible", timeout: 10000 });
 
-  // Get all visible options
-  const options = await page.locator('[role="option"]').allTextContents();
+  // Get all visible button texts (model names + any group headers)
+  const options = await dialog.getByRole("button").allTextContents();
 
-  // Close the dropdown by clicking elsewhere
+  // Close the dropdown
   await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "hidden", timeout: 5000 });
 
   return options;
 };
@@ -133,14 +132,16 @@ test("Default Model selector shows available models", async ({ page }) => {
   await defaultModelSection.scrollIntoViewIfNeeded();
 
   // Open the model selector
+  const dialog = page.locator('[role="dialog"]').first();
   await getDefaultModelSelector(page).click();
-  await page.waitForSelector('[role="option"]', { state: "visible" });
+  await dialog.waitFor({ state: "visible", timeout: 10000 });
 
   // Get all options
-  const options = await page.locator('[role="option"]').allTextContents();
+  const options = await dialog.getByRole("button").allTextContents();
 
   // Close dropdown
   await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "hidden", timeout: 5000 });
 
   // Verify we have at least the default option
   expect(options.length).toBeGreaterThan(0);

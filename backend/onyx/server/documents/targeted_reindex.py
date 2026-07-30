@@ -14,25 +14,24 @@ task with the pre-allocated task UUID.
 import datetime
 from typing import Any
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import User
-from onyx.db.targeted_reindex import count_targets_for_job
-from onyx.db.targeted_reindex import create_targeted_reindex_job
-from onyx.db.targeted_reindex import get_targeted_reindex_job
-from onyx.db.targeted_reindex import MAX_TARGETS_PER_REQUEST
-from onyx.db.targeted_reindex import resolve_error_ids_to_targets
-from onyx.db.targeted_reindex import TargetSpec
+from onyx.db.targeted_reindex import (
+    MAX_TARGETS_PER_REQUEST,
+    TargetSpec,
+    count_targets_for_job,
+    create_targeted_reindex_job,
+    get_targeted_reindex_job,
+    resolve_error_ids_to_targets,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger

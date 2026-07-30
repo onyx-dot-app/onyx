@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
 var (
 	// Colors
@@ -13,7 +13,7 @@ var (
 
 	// Styles
 	userPrefixStyle = lipgloss.NewStyle().Foreground(dimColor)
-	agentDot    = lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("◉")
+	agentDot        = lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("◉")
 	infoStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#b0b0cc"))
 	dimInfoStyle    = lipgloss.NewStyle().Foreground(dimColor)
 	statusMsgStyle  = dimInfoStyle // used for slash menu descriptions, file badges
@@ -23,7 +23,7 @@ var (
 	statusBarStyle  = lipgloss.NewStyle().Foreground(dimColor)
 	inputPrompt     = lipgloss.NewStyle().Foreground(accentColor).Render("❯ ")
 
-	splashStyle = lipgloss.NewStyle().Foreground(splashColor).Bold(true)
+	splashStyle  = lipgloss.NewStyle().Foreground(splashColor).Bold(true)
 	taglineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#A0A0A0"))
 	hintStyle    = lipgloss.NewStyle().Foreground(dimColor)
 )

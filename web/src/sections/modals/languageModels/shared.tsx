@@ -7,7 +7,7 @@ import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
 import type {
@@ -22,7 +22,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { Switch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { Button, LineItemButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
@@ -32,6 +32,7 @@ import {
   InputHorizontal,
   InputPadder,
   InputVertical,
+  toast,
 } from "@opal/layouts";
 import {
   SvgArrowExchange,
@@ -51,9 +52,8 @@ import { Card, EmptyMessageCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
-import { toast } from "@/hooks/useToast";
 import { UserRole } from "@/lib/types";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { getProvider } from "@/lib/languageModels";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
@@ -130,11 +130,14 @@ export interface APIBaseFieldProps {
   optional?: boolean;
   subDescription?: string | RichStr;
   placeholder?: string;
+  /** Rendered inside the input on the right (e.g. a restore-default control). */
+  rightChildren?: React.ReactNode;
 }
 export function APIBaseField({
   optional = false,
   subDescription,
   placeholder = "https://",
+  rightChildren,
 }: APIBaseFieldProps) {
   return (
     <InputPadder>
@@ -144,7 +147,11 @@ export function APIBaseField({
         subDescription={subDescription}
         suffix={optional ? "optional" : undefined}
       >
-        <InputTypeInField name="api_base" placeholder={placeholder} />
+        <InputTypeInField
+          name="api_base"
+          placeholder={placeholder}
+          rightChildren={rightChildren}
+        />
       </InputVertical>
     </InputPadder>
   );
@@ -428,16 +435,156 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
 
 const FOLD_THRESHOLD = 3;
 
+// ─── Model metadata helpers (Nebius TokenFactory picker) ────────────────────
+
+function formatContextSize(tokens: number | null | undefined): string {
+  if (!tokens || tokens <= 0) return "";
+  if (tokens >= 1_000_000) {
+    const m = tokens / 1_000_000;
+    return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
+  }
+  if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
+  return String(tokens);
+}
+
+// Common non-ISO-3166 codes the provider may report → the ISO alpha-2 code
+// whose regional-indicator sequence actually has a flag glyph.
+const COUNTRY_CODE_ALIASES: Record<string, string> = {
+  UK: "GB", // United Kingdom is "GB" in ISO 3166-1; "UK" has no flag glyph
+};
+
+function countryCodeToFlag(code: string | null | undefined): string {
+  if (!code || code.length !== 2) return "";
+  const upper = code.toUpperCase();
+  const normalized = COUNTRY_CODE_ALIASES[upper] ?? upper;
+  const first = 0x1f1e6 + normalized.charCodeAt(0) - 65;
+  const second = 0x1f1e6 + normalized.charCodeAt(1) - 65;
+  return String.fromCodePoint(first, second);
+}
+
+/** Models that ship extra picker metadata (e.g. Nebius TokenFactory); most
+ *  providers don't, in which case the row renders without a metadata line. */
+function hasModelMetadata(model: ModelConfiguration): boolean {
+  return (
+    model.quantization != null ||
+    model.country_code != null ||
+    (model.supported_features?.length ?? 0) > 0
+  );
+}
+
+/** Compact "128K · 🇫🇮 · fp8 · tools, reasoning" metadata line. */
+function buildModelDescription(model: ModelConfiguration): string | undefined {
+  if (!hasModelMetadata(model)) return undefined;
+  const parts: string[] = [];
+  const context = formatContextSize(model.max_input_tokens);
+  if (context) parts.push(context);
+  const flag = countryCodeToFlag(model.country_code);
+  if (flag) parts.push(flag);
+  if (model.quantization) parts.push(model.quantization);
+  if (model.supported_features?.length) {
+    parts.push(model.supported_features.join(", "));
+  }
+  return parts.length > 0 ? parts.join("  ·  ") : undefined;
+}
+
+/** Eye marker for vision models, shown on the right of the picker row. */
+function modelRightChildren(model: ModelConfiguration): React.ReactNode {
+  if (!hasModelMetadata(model) || !model.supports_image_input) return undefined;
+  return (
+    <Text secondaryBody text03 title="Vision">
+      👁
+    </Text>
+  );
+}
+
+interface ModelRowProps {
+  model: ModelConfiguration;
+  isAutoMode: boolean;
+  onToggleVisibility: (visible: boolean) => void;
+  onRename: (value: string | undefined) => void;
+}
+
+/**
+ * A single selectable model row.
+ *
+ * The row is a clickable `<div role="button">` rather than a real `<button>`,
+ * because the `editable` title renders its own nested edit `<button>` — and a
+ * `<button>` inside a `<button>` is invalid HTML that triggers a React
+ * hydration error. Rendering the row as a div keeps the inline rename pencil a
+ * real, keyboard-accessible button while preserving the original look and feel.
+ *
+ * This mirrors `LineItemButton`'s internals (Stateful → Container →
+ * ContentAction) but with a typeless `Interactive.Container`, which renders a
+ * `<div>` instead of a `<button>`.
+ */
+function ModelRow({
+  model,
+  isAutoMode,
+  onToggleVisibility,
+  onRename,
+}: ModelRowProps) {
+  const displayName =
+    model.custom_display_name || model.display_name || model.name;
+  // In auto mode every model is shown, so the row is always "selected" and the
+  // visibility toggle is disabled.
+  const isSelected = isAutoMode || model.is_visible;
+  const toggleVisibility = isAutoMode
+    ? undefined
+    : () => onToggleVisibility(!model.is_visible);
+
+  return (
+    <div data-model-name={model.name}>
+      <Interactive.Stateful
+        variant="select-heavy"
+        state={isSelected ? "selected" : "empty"}
+        onClick={toggleVisibility}
+        role={toggleVisibility ? "button" : undefined}
+        tabIndex={toggleVisibility ? 0 : undefined}
+        onKeyDown={
+          toggleVisibility
+            ? (e: React.KeyboardEvent) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleVisibility();
+                }
+              }
+            : undefined
+        }
+      >
+        <Interactive.Container width="full" size="fit" rounding="md">
+          <div className="w-full p-2">
+            <ContentAction
+              color="interactive"
+              variant="section"
+              sizePreset="main-ui"
+              icon={() => <Checkbox checked={isSelected} />}
+              title={displayName}
+              description={buildModelDescription(model)}
+              rightChildren={modelRightChildren(model)}
+              editable
+              onTitleChange={(newTitle) => onRename(newTitle || undefined)}
+              padding="fit"
+            />
+          </div>
+        </Interactive.Container>
+      </Interactive.Stateful>
+    </div>
+  );
+}
+
 export interface ModelSelectionFieldProps {
   shouldShowAutoUpdateToggle: boolean;
   onRefetch?: (signal: AbortSignal) => Promise<void> | void;
   /** Called when the user adds a custom model by name. Enables the "Add Model" input. */
   onAddModel?: (modelName: string) => void;
+  /** Overrides the empty-state copy shown when no models are loaded. */
+  emptyMessage?: string;
 }
 export function ModelSelectionField({
   shouldShowAutoUpdateToggle,
   onRefetch,
   onAddModel,
+  emptyMessage,
 }: ModelSelectionFieldProps) {
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const [newModelName, setNewModelName] = useState("");
@@ -527,11 +674,20 @@ export function ModelSelectionField({
         </InputHorizontal>
 
         {models.length === 0 ? (
-          <EmptyMessageCard title="No models available." padding="sm" />
+          <EmptyMessageCard
+            title={emptyMessage ?? "No models available."}
+            padding="sm"
+          />
         ) : (
           <Section gap={0.25} alignItems="stretch">
             {(() => {
-              const displayModels = isAutoMode ? visibleModels : models;
+              const baseModels = isAutoMode ? visibleModels : models;
+              // Sort alphabetically by id for providers that ship rich model
+              // metadata (Nebius TokenFactory) so the order is stable across
+              // refetches; otherwise keep the given order.
+              const displayModels = baseModels.some((m) => hasModelMetadata(m))
+                ? [...baseModels].sort((a, b) => a.name.localeCompare(b.name))
+                : baseModels;
               const isFoldable = displayModels.length > FOLD_THRESHOLD;
               const shownModels =
                 isFoldable && !isExpanded
@@ -540,56 +696,19 @@ export function ModelSelectionField({
 
               return (
                 <>
-                  {shownModels.map((model) =>
-                    isAutoMode ? (
-                      <div key={model.name} data-model-name={model.name}>
-                        <LineItemButton
-                          variant="section"
-                          sizePreset="main-ui"
-                          selectVariant="select-heavy"
-                          state="selected"
-                          icon={() => <Checkbox checked />}
-                          title={
-                            model.custom_display_name ||
-                            model.display_name ||
-                            model.name
-                          }
-                          editable
-                          onTitleChange={(newTitle) =>
-                            setCustomDisplayName(
-                              model.name,
-                              newTitle || undefined
-                            )
-                          }
-                        />
-                      </div>
-                    ) : (
-                      <div key={model.name} data-model-name={model.name}>
-                        <LineItemButton
-                          variant="section"
-                          sizePreset="main-ui"
-                          selectVariant="select-heavy"
-                          state={model.is_visible ? "selected" : "empty"}
-                          icon={() => <Checkbox checked={model.is_visible} />}
-                          title={
-                            model.custom_display_name ||
-                            model.display_name ||
-                            model.name
-                          }
-                          onClick={() =>
-                            setVisibility(model.name, !model.is_visible)
-                          }
-                          editable
-                          onTitleChange={(newTitle) =>
-                            setCustomDisplayName(
-                              model.name,
-                              newTitle || undefined
-                            )
-                          }
-                        />
-                      </div>
-                    )
-                  )}
+                  {shownModels.map((model) => (
+                    <ModelRow
+                      key={model.name}
+                      model={model}
+                      isAutoMode={isAutoMode}
+                      onToggleVisibility={(visible) =>
+                        setVisibility(model.name, visible)
+                      }
+                      onRename={(value) =>
+                        setCustomDisplayName(model.name, value)
+                      }
+                    />
+                  ))}
                   {isFoldable && (
                     <Interactive.Stateless
                       prominence="tertiary"

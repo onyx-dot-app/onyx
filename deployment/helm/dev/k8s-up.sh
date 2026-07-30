@@ -2,7 +2,7 @@
 #
 # k8s-up.sh — bring up an Onyx dev cluster on the local machine.
 #
-# Idempotent. See docs/dev/local-kubernetes.md for the full workflow.
+# Idempotent. See docs/craft/dev/local-kubernetes.md for the full workflow.
 #
 # Usage:
 #   deployment/helm/dev/k8s-up.sh
@@ -23,6 +23,7 @@ NAMESPACE="onyx"
 OPENSEARCH_PASSWORD=""
 SKIP_CLUSTER_CREATE=0
 SKIP_HELM=0
+KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.33.1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "$SCRIPT_DIR/../charts/onyx" && pwd)"
@@ -32,7 +33,7 @@ require() {
   local bin="$1"
   if ! command -v "$bin" >/dev/null 2>&1; then
     echo "error: '$bin' is required but not on PATH" >&2
-    echo "see docs/dev/local-kubernetes.md for installation" >&2
+    echo "see docs/craft/dev/local-kubernetes.md for installation" >&2
     exit 1
   fi
 }
@@ -65,8 +66,8 @@ if [[ "$SKIP_CLUSTER_CREATE" -eq 0 ]]; then
   if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
     echo "kind cluster '$CLUSTER_NAME' already exists; skipping create"
   else
-    echo "creating kind cluster '$CLUSTER_NAME' ..."
-    kind create cluster --name "$CLUSTER_NAME"
+    echo "creating kind cluster '$CLUSTER_NAME' with node image '$KIND_NODE_IMAGE' ..."
+    kind create cluster --name "$CLUSTER_NAME" --image "$KIND_NODE_IMAGE"
   fi
 fi
 
@@ -93,17 +94,14 @@ fi
 kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 \
   || kubectl create namespace "$NAMESPACE"
 # The chart also templates the onyx-sandboxes namespace (see
-# templates/sandbox-namespace.yaml). We pre-create it here so the
-# sandbox-file-sync ServiceAccount can be created before helm install runs,
-# but we must stamp Helm ownership metadata or `helm install` refuses to
-# adopt the namespace.
+# templates/sandbox-namespace.yaml). We pre-create it here so local setup can
+# label nodes before helm install runs, but we must stamp Helm ownership
+# metadata or `helm install` refuses to adopt the namespace.
 kubectl get namespace onyx-sandboxes >/dev/null 2>&1 \
   || kubectl create namespace onyx-sandboxes
 kubectl label   namespace onyx-sandboxes app.kubernetes.io/managed-by=Helm --overwrite >/dev/null
 kubectl annotate namespace onyx-sandboxes meta.helm.sh/release-name=onyx --overwrite >/dev/null
 kubectl annotate namespace onyx-sandboxes meta.helm.sh/release-namespace="$NAMESPACE" --overwrite >/dev/null
-kubectl -n onyx-sandboxes get serviceaccount sandbox-file-sync >/dev/null 2>&1 \
-  || kubectl -n onyx-sandboxes create serviceaccount sandbox-file-sync
 kubectl label node --all onyx.app/workload=sandbox --overwrite >/dev/null 2>&1
 
 # Use an isolated helm repo config: helm matches chart deps by repo NAME, so a

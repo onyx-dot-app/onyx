@@ -7,7 +7,7 @@ import { createSlackBot, updateSlackBot } from "./new/lib";
 import { Button, Divider } from "@opal/components";
 import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 
 export const SlackTokensForm = ({
   isUpdate,

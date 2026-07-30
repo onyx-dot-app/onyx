@@ -1,0 +1,9 @@
+@reference "#reference.css";
+
+/**
+ * Centered label flanked by two horizontal divider lines.
+ */
+.opal-end-of-list {
+  @apply flex flex-row items-center w-full;
+  gap: 0.5rem;
+}

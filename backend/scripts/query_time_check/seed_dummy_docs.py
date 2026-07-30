@@ -18,15 +18,11 @@ from onyx.connectors.models import Document
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.document_index_utils import get_multipass_config
-from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces_new import IndexingMetadata, TenantState
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import IndexChunk
+from onyx.indexing.models import ChunkEmbedding, DocMetadataAwareIndexChunk, IndexChunk
 from onyx.utils.timing import log_function_time
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.model_server_models import Embedding
 
 TOTAL_DOC_SETS = 8

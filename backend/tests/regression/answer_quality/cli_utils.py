@@ -9,7 +9,8 @@ from threading import Thread
 from typing import IO
 
 import yaml
-from retry import retry
+
+from onyx.utils.retry_wrapper import retry_builder
 
 
 def _run_command(command: str, stream_output: bool = False) -> tuple[str, str]:
@@ -236,7 +237,7 @@ def cleanup_docker(env_name: str) -> None:
         )
 
 
-@retry(tries=5, delay=5, backoff=2)
+@retry_builder(tries=5, delay=5, backoff=2)
 def get_api_server_host_port(env_name: str) -> str:
     """
     This pulls all containers with the provided env_name

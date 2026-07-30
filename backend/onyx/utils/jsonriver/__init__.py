@@ -9,9 +9,8 @@ Copyright (c) 2024 jsonriver-python contributors (Python port)
 SPDX-License-Identifier: BSD-3-Clause
 """
 
+from .parse import JsonObject, JsonValue
 from .parse import _Parser as Parser
-from .parse import JsonObject
-from .parse import JsonValue
 
 __all__ = ["Parser", "JsonValue", "JsonObject"]
 __version__ = "0.0.1"

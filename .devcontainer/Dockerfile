@@ -13,6 +13,7 @@ FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:cc925e589b7543b910fea57a
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
   ca-certificates \
+  cargo \
   cmake \
   curl \
   default-jre \
@@ -21,11 +22,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   fd-find \
   fzf \
   git \
+  gobject-introspection \
   iproute2 \
   ipset \
   iptables \
   jq \
   less \
+  libayatana-appindicator3-dev \
+  libgirepository1.0-dev \
+  libglib2.0-dev \
+  libgtk-3-dev \
+  libjavascriptcoregtk-4.1-dev \
+  libwebkit2gtk-4.1-dev \
   libxmlsec1-dev \
   make \
   neovim \
@@ -33,10 +41,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   pkg-config \
   postgresql-client \
   ripgrep \
+  rust-clippy \
+  rustfmt \
   socat \
   sudo \
   unzip \
   wget \
+  xdg-utils \
   zsh \
   && install -m 0755 -d /etc/apt/keyrings \
   && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
@@ -54,7 +65,7 @@ RUN ln -sf "$(which fdfind)" /usr/local/bin/fd
 # daily dev uses their own .venv. The apt block above includes the
 # system libraries `uv sync` needs to compile native extensions
 # (cmake, libxmlsec1-dev, pkg-config, postgresql-client).
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9 /uv /uvx /usr/local/bin/
 
 # Install prek (https://github.com/j178/prek) — a fast Rust reimplementation of
 # pre-commit and a drop-in replacement for it. Symlinked to `pre-commit` so the
@@ -123,6 +134,36 @@ RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
   && ln -s python3.13 /usr/local/bin/python3 \
   && ln -s python3.13 /usr/local/bin/python \
   && python --version
+
+# Install the Go toolchain. `tools/ods` and `cli` both pin `go 1.26.4` in their go.mod,
+# and the golangci-lint pre-commit hook builds against the same version — keep this in
+# sync with them and with GO_VERSION in .github/workflows/pr-golang-tests.yml.
+#
+# Fetched from go.dev with a pinned per-arch checksum (same shape as the prek install
+# above) rather than copied out of the official golang image: base images here route
+# through the ECR pull-through cache, which only populates on tag-based pulls, so a
+# `golang:...@sha256:...` stage fails to resolve until something has already pulled that
+# exact digest by tag. The sha256 pin is what defeats a compromised mirror or MITM, so
+# nothing is given up by not going through a registry.
+#
+# Module and build caches are not baked in; they live in the dev user's home
+# (see .devcontainer/zshrc).
+ARG GO_VERSION=1.26.4
+RUN set -eux; \
+  case "$(dpkg --print-architecture)" in \
+    amd64) GO_ARCH=amd64; \
+           GO_SHA256=1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733ad7f ;; \
+    arm64) GO_ARCH=arm64; \
+           GO_SHA256=ef758ae7c6cf9267c9c0ef080b8965f453d89ab2d25d9eb22de4405925238768 ;; \
+    *) echo "unsupported arch for go: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+  esac; \
+  curl -fsSL -o /tmp/go.tar.gz \
+    "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"; \
+  echo "${GO_SHA256}  /tmp/go.tar.gz" | sha256sum -c -; \
+  tar -C /usr/local -xzf /tmp/go.tar.gz; \
+  rm -f /tmp/go.tar.gz
+ENV PATH=/usr/local/go/bin:$PATH
+RUN go version
 
 # Create non-root dev user with passwordless sudo
 RUN useradd -m -s /bin/zsh dev && \

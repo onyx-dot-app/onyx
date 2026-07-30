@@ -1,0 +1,122 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   Calendar (Figma Date Picker)
+
+   232px-per-month grid. Day chips are 28px (h3-section) mono-numeral buttons
+   with rounded-08. Selection uses the inverted tint chip, ranges paint a
+   tint-02 band across the week, and today is underlined. react-day-picker
+   owns interaction and marks state through the modifier classes.
+   --------------------------------------------------------------------------- */
+
+.opal-calendar {
+  @apply w-fit p-1;
+}
+
+.opal-calendar-months {
+  @apply relative flex flex-row gap-4;
+}
+
+.opal-calendar-month {
+  @apply flex flex-col gap-1;
+  width: 14.5rem;
+}
+
+.opal-calendar-nav {
+  @apply absolute right-0 top-0 flex items-center gap-2.5 p-0.5;
+}
+
+.opal-calendar-caption {
+  @apply flex h-7 items-center p-1 pr-20;
+}
+
+.opal-calendar-caption-label {
+  @apply font-main-ui-action text-text-04;
+}
+
+.opal-calendar-grid {
+  @apply w-full border-collapse;
+}
+
+.opal-calendar-weekdays,
+.opal-calendar-week {
+  @apply flex w-full items-center justify-between;
+}
+
+.opal-calendar-weeks {
+  @apply flex w-full flex-col gap-1;
+}
+
+.opal-calendar-weekday {
+  @apply flex items-center justify-center font-secondary-body text-text-03;
+  width: var(--height-line-h3-section);
+  height: var(--height-line-h3-section);
+}
+
+/* Fixed cell width keeps week spacing even when an outside or nav-boundary
+   day renders as an empty cell (react-day-picker hides its button). */
+.opal-calendar-cell {
+  @apply relative flex items-center justify-center p-0;
+  width: var(--height-line-h3-section);
+  height: var(--height-line-h3-section);
+}
+
+.opal-calendar-day {
+  @apply relative z-1 flex cursor-pointer items-center justify-center rounded-08 border border-transparent p-0.5 font-main-ui-mono text-text-04 outline-hidden;
+  width: var(--height-line-h3-section);
+  height: var(--height-line-h3-section);
+}
+
+.opal-calendar-day:hover {
+  @apply border-border-02 bg-background-tint-02;
+}
+
+.opal-calendar-cell--focused .opal-calendar-day {
+  @apply border-border-05;
+}
+
+.opal-calendar-cell--today .opal-calendar-day {
+  @apply underline underline-offset-2;
+}
+
+/* All selected days share the inverted chip except range middles, which keep
+   the plain numeral on the band. */
+.opal-calendar-cell--selected:not(.opal-calendar-cell--range-middle)
+  .opal-calendar-day {
+  @apply border-transparent text-text-inverted-05;
+  background-color: var(--background-tint-inverted-03);
+}
+
+/* The band bridges the 6px justify-between gaps with 3px overhangs on each
+   neighbor-facing side. Week edges stay flush and rounded. */
+.opal-calendar-cell--range-start::before,
+.opal-calendar-cell--range-middle::before,
+.opal-calendar-cell--range-end::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+  background-color: var(--background-tint-02);
+}
+
+.opal-calendar-cell--range-start::before,
+.opal-calendar-cell--range-middle:first-child::before,
+.opal-calendar-cell--range-end:first-child::before {
+  left: 0;
+  border-top-left-radius: var(--radius-08);
+  border-bottom-left-radius: var(--radius-08);
+}
+
+.opal-calendar-cell--range-end::before,
+.opal-calendar-cell--range-middle:last-child::before,
+.opal-calendar-cell--range-start:last-child::before {
+  right: 0;
+  border-top-right-radius: var(--radius-08);
+  border-bottom-right-radius: var(--radius-08);
+}
+
+.opal-calendar-cell--disabled .opal-calendar-day {
+  @apply pointer-events-none cursor-default border-transparent bg-transparent text-text-01;
+}

@@ -4,13 +4,10 @@ import os
 import sys
 import time
 from collections import defaultdict
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from threading import Event
-from threading import Lock
-from threading import Semaphore
+from threading import Event, Lock, Semaphore
 from typing import cast
 
 import matplotlib.pyplot as plt
@@ -19,7 +16,8 @@ from dotenv import load_dotenv
 from matplotlib.patches import Patch
 from pydantic import ValidationError
 from requests.exceptions import RequestException
-from retry import retry
+
+from onyx.utils.retry_wrapper import retry_builder
 
 # add onyx/backend to path (since this isn't done automatically when running as a script)
 current_dir = Path(__file__).parent
@@ -37,28 +35,33 @@ load_dotenv(env_path)
 # pylint: disable=E402
 # flake8: noqa: E402
 
-from ee.onyx.server.query_and_chat.models import SearchFullResponse
-from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import SavedSearchDoc
-from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.engine.sql_engine import SqlEngine
+from ee.onyx.server.query_and_chat.models import (
+    SearchFullResponse,
+    SendSearchQueryRequest,
+)
+from onyx.configs.app_configs import (
+    POSTGRES_API_SERVER_POOL_OVERFLOW,
+    POSTGRES_API_SERVER_POOL_SIZE,
+)
+from onyx.context.search.models import BaseFilters, SavedSearchDoc
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.regression.search_quality.models import AnalysisSummary
-from tests.regression.search_quality.models import CombinedMetrics
-from tests.regression.search_quality.models import EvalConfig
-from tests.regression.search_quality.models import OneshotQAResult
-from tests.regression.search_quality.models import TestQuery
-from tests.regression.search_quality.utils import compute_overall_scores
-from tests.regression.search_quality.utils import find_document_id
-from tests.regression.search_quality.utils import get_federated_sources
-from tests.regression.search_quality.utils import LazyJsonWriter
-from tests.regression.search_quality.utils import ragas_evaluate
-from tests.regression.search_quality.utils import search_docs_to_doc_contexts
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.regression.search_quality.models import (
+    AnalysisSummary,
+    CombinedMetrics,
+    EvalConfig,
+    OneshotQAResult,
+    TestQuery,
+)
+from tests.regression.search_quality.utils import (
+    LazyJsonWriter,
+    compute_overall_scores,
+    find_document_id,
+    get_federated_sources,
+    ragas_evaluate,
+    search_docs_to_doc_contexts,
+)
 
 logger = setup_logger(__name__)
 
@@ -415,7 +418,7 @@ class SearchAnswerAnalyzer:
 
         return dataset
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _perform_search(self, query: str) -> OneshotQAResult:
         """Perform a document search query against the Onyx API and time it."""
         # create the search request

@@ -1,9 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
-from pydantic import model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SlackEntities(BaseModel):

@@ -16,11 +16,11 @@ aren't worth automating.
    `/craft/v1/tasks/new` if the list is in its empty state) and fill the
    create form: a unique name, the prompt `say hi`, and an interval
    schedule of every 5 minutes.
-4. Save. Wait for the URL to settle on the detail page
-   (`/craft/v1/tasks/<id>`) and assert the active-status chip
+4. Click `save-and-run-now` — creates the task with an immediate run
+   enqueued and redirects to the tasks list. Open the new task's row to
+   reach the detail page and assert the active-status chip
    (`task-status-active`) is visible — that's "task created."
-5. Click `run-now-button` to trigger an immediate run.
-6. Wait up to 60 s for a row with `data-run-status="succeeded"` or
+5. Wait up to 60 s for a row with `data-run-status="succeeded"` or
    `="failed"` to appear in the run history. Either is fine — we're
    proving the dispatcher → executor → run-history wiring is reachable
    end-to-end. A timeout means the wiring is broken (or the
@@ -28,8 +28,8 @@ aren't worth automating.
 
 Selectors locked in by the spec — any rename in the frontend should
 update them in lockstep: `new-task-button`, `task-name-input`,
-`task-prompt-input`, `interval-every`, `save-task`, `task-status-active`,
-`run-now-button`, plus the `data-run-status` attribute on run rows.
+`task-prompt-input`, `interval-every`, `save-and-run-now`,
+`task-status-active`, plus the `data-run-status` attribute on run rows.
 
 ## Running
 

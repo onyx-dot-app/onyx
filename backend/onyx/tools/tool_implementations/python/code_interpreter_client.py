@@ -3,16 +3,9 @@ from __future__ import annotations
 import json
 import re
 import time
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from functools import wraps
-from typing import Any
-from typing import Concatenate
-from typing import Literal
-from typing import ParamSpec
-from typing import TypedDict
-from typing import TypeVar
-from typing import Union
+from typing import Any, Concatenate, Literal, ParamSpec, TypedDict, TypeVar, Union
 
 import requests
 from pydantic import BaseModel
@@ -112,10 +105,21 @@ def _min_version_for(method: Callable[..., object]) -> str:
 
 
 class HealthResponse(BaseModel):
-    """Result of a Code Interpreter health check"""
+    """Result of a Code Interpreter health check.
 
-    healthy: bool
+    ``connected`` reflects whether the service was reachable at all; a
+    reachable-but-erroring service is ``connected=True`` with a non-empty
+    ``error``. ``error`` is empty when the service is healthy.
+    """
+
+    connected: bool
+    error: str = ""
     version: str = _DEFAULT_SERVER_VERSION
+
+    @property
+    def healthy(self) -> bool:
+        """True only when the service is reachable and reporting no error."""
+        return self.connected and not self.error
 
 
 class FileInput(TypedDict):
@@ -237,10 +241,16 @@ class CodeInterpreterClient:
     def health(self, use_cache: bool = False) -> HealthResponse:
         """Check if the Code Interpreter service is healthy
 
-        Returns a ``HealthResponse`` containing both the health status and the
-        server version (defaults to ``"0.0.0"`` when the server is unhealthy
-        or the response does not include a version field — e.g. older
-        code-interpreter releases that pre-date version reporting).
+        Returns a ``HealthResponse`` describing connectivity, any error
+        message, and the server version (defaults to ``"0.0.0"`` when the
+        response omits a version field — e.g. older code-interpreter releases
+        that pre-date version reporting).
+
+        An HTTP error status (4xx/5xx) means the service was reachable but
+        unhealthy, so it is reported as ``connected=True`` with an ``error``.
+        A network-level failure is reported as ``connected=False``. Error
+        strings are sanitized so raw exception text (which may embed the
+        request URL) is never surfaced to callers.
 
         Args:
             use_cache: When True, return a cached result if available and
@@ -261,10 +271,28 @@ class CodeInterpreterClient:
             body = response.json()
             healthy = body.get("status") == "ok"
             version = body.get("version") or _DEFAULT_SERVER_VERSION
-            result = HealthResponse(healthy=healthy, version=version)
+            result = HealthResponse(
+                connected=True,
+                error="" if healthy else (body.get("message") or "Unknown error"),
+                version=version,
+            )
+        except requests.HTTPError as e:
+            status_code = (
+                e.response.status_code if e.response is not None else "unknown"
+            )
+            logger.warning(
+                "Code Interpreter health check returned HTTP %s", status_code
+            )
+            result = HealthResponse(
+                connected=True,
+                error=f"Code Interpreter service returned HTTP {status_code}",
+            )
         except Exception as e:
             logger.warning("Exception caught when checking health, e=%s", e)
-            result = HealthResponse(healthy=False, version=_DEFAULT_SERVER_VERSION)
+            result = HealthResponse(
+                connected=False,
+                error="Unable to reach the Code Interpreter service",
+            )
 
         _health_cache[self.base_url] = (time.monotonic(), result)
         return result

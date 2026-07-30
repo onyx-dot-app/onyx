@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import CharacterCount from "./CharacterCount";
 
 const meta: Meta<typeof CharacterCount> = {

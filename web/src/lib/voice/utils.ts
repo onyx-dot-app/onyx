@@ -5,6 +5,25 @@ import type { IconProps } from "@opal/types";
 /** Whether the provider is being configured for speech-to-text or text-to-speech. */
 export type ProviderMode = "stt" | "tts";
 
+/**
+ * Strip markdown formatting so TTS engines don't read syntax (e.g. "#", "*")
+ * aloud literally. Shared by voice-mode auto-playback and the manual "Read
+ * aloud" button so both paths sound identical.
+ */
+export function stripMarkdownForTTS(text: string): string {
+  return text
+    .replace(/\*\*/g, "") // Remove bold markers
+    .replace(/\*/g, "") // Remove italic markers
+    .replace(/__/g, "") // Remove underscore-bold markers
+    .replace(/_/g, "") // Remove underscore-italic markers
+    .replace(/`{1,3}/g, "") // Remove code markers
+    .replace(/^#{1,6}\s*/gm, "") // Remove headers (line-start only)
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // Convert links to just text
+    .replace(/\n+/g, " ") // Replace newlines with spaces
+    .replace(/\s+/g, " ") // Normalize whitespace
+    .trim();
+}
+
 /** All static display and configuration data for a single voice provider. */
 export interface VoiceProviderDetail {
   label: string;

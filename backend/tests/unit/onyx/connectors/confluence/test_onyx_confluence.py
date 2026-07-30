@@ -7,17 +7,17 @@ import requests
 from requests import HTTPError
 
 from onyx.connectors.confluence import onyx_confluence as onyx_confluence_module
-from onyx.connectors.confluence.onyx_confluence import _DEFAULT_PAGINATION_LIMIT
-from onyx.connectors.confluence.onyx_confluence import _MINIMUM_PAGINATION_LIMIT
 from onyx.connectors.confluence.onyx_confluence import (
+    _DEFAULT_PAGINATION_LIMIT,
+    _MINIMUM_PAGINATION_LIMIT,
     ConfluenceRestSpacePermissionsNotAvailableError,
-)
-from onyx.connectors.confluence.onyx_confluence import (
+    OnyxConfluence,
     get_user_email_from_userkey__server,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.interfaces import CredentialsProviderInterface
 
 
@@ -1440,7 +1440,7 @@ def test_get_user_email_from_userkey_caches_lookups(
     cache.
     """
     user_key = "test_userkey_unique_to_this_case"
-    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.pop(user_key, None)
+    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.clear()
 
     user_details_mock = mock.Mock(
         return_value={
@@ -1474,7 +1474,7 @@ def test_get_user_email_from_userkey_caches_negative_result(
     HTTP load and keeps the warning log from spamming.
     """
     user_key = "missing_userkey_unique_to_this_case"
-    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.pop(user_key, None)
+    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.clear()
 
     user_details_mock = mock.Mock(
         side_effect=HTTPError(response=_create_mock_response(404, {}, "x"))

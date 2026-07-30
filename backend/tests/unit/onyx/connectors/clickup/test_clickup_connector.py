@@ -1,9 +1,7 @@
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.connectors.clickup.connector import CLICKUP_API_BASE_URL
-from onyx.connectors.clickup.connector import ClickupConnector
+from onyx.connectors.clickup.connector import CLICKUP_API_BASE_URL, ClickupConnector
 
 
 def _mock_response(json_response: dict[str, Any]) -> MagicMock:

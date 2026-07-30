@@ -1,14 +1,9 @@
 import time
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import cast
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 from uuid import uuid4
 
-from celery import Celery
-from celery import shared_task
-from celery import Task
+from celery import Celery, Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import ValidationError
 from redis import Redis
@@ -16,71 +11,87 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_redis import celery_find_task
-from onyx.background.celery.celery_redis import celery_get_broker_client
-from onyx.background.celery.celery_redis import celery_get_queue_length
-from onyx.background.celery.celery_redis import celery_get_queued_task_ids
-from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.celery_redis import (
+    celery_find_task,
+    celery_get_broker_client,
+    celery_get_queue_length,
+    celery_get_queued_task_ids,
+    celery_get_unacked_task_ids,
+)
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docprocessing.utils import IndexingCallbackBase
-from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING
-from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_PRUNING_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
-from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisConstants
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import OnyxRedisSignals
+from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING, JOB_TIMEOUT
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_PRUNING_LOCK_TIMEOUT,
+    CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
+    DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
+    DocumentSource,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisConstants,
+    OnyxRedisLocks,
+    OnyxRedisSignals,
+)
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
 from onyx.db.connector import mark_ccpair_as_pruned
-from onyx.db.connector_credential_pair import get_connector_credential_pair
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import get_connector_credential_pairs
-from onyx.db.document import get_documents_for_connector_credential_pair
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair,
+    get_connector_credential_pair_from_id,
+    get_connector_credential_pairs,
+)
+from onyx.db.document import (
+    backfill_docs_created_at__no_commit,
+    get_documents_for_connector_credential_pair,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import SyncStatus
-from onyx.db.enums import SyncType
-from onyx.db.hierarchy import delete_orphaned_hierarchy_nodes
-from onyx.db.hierarchy import remove_stale_hierarchy_node_cc_pair_entries
-from onyx.db.hierarchy import reparent_orphaned_hierarchy_nodes
-from onyx.db.hierarchy import update_document_parent_hierarchy_nodes
-from onyx.db.hierarchy import upsert_hierarchy_node_cc_pair_entries
-from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    SyncStatus,
+    SyncType,
+)
+from onyx.db.hierarchy import (
+    delete_orphaned_hierarchy_nodes,
+    remove_stale_hierarchy_node_cc_pair_entries,
+    reparent_orphaned_hierarchy_nodes,
+    update_document_parent_hierarchy_nodes,
+    upsert_hierarchy_node_cc_pair_entries,
+    upsert_hierarchy_nodes_batch,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
-from onyx.db.sync_record import insert_sync_record
-from onyx.db.sync_record import update_sync_record_status
-from onyx.db.tag import delete_orphan_tags__no_commit
+from onyx.db.sync_record import insert_sync_record, update_sync_record_status
+from onyx.db.tag import delete_orphan_tags_batched
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_connector_prune import RedisConnectorPrune
-from onyx.redis.redis_connector_prune import RedisConnectorPrunePayload
-from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
-from onyx.redis.redis_hierarchy import ensure_source_node_exists
-from onyx.redis.redis_hierarchy import evict_hierarchy_nodes_from_cache
-from onyx.redis.redis_hierarchy import get_node_id_from_raw_id
-from onyx.redis.redis_hierarchy import get_source_node_id_from_cache
-from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_connector_prune import (
+    RedisConnectorPrune,
+    RedisConnectorPrunePayload,
+)
+from onyx.redis.redis_hierarchy import (
+    HierarchyNodeCacheEntry,
+    cache_hierarchy_nodes_batch,
+    ensure_source_node_exists,
+    evict_hierarchy_nodes_from_cache,
+    get_node_id_from_raw_id,
+    get_source_node_id_from_cache,
+)
+from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
-from onyx.utils.logger import format_error_for_logging
-from onyx.utils.logger import LoggerContextVars
-from onyx.utils.logger import pruning_ctx
-from onyx.utils.logger import setup_logger
+from onyx.utils.logger import (
+    LoggerContextVars,
+    format_error_for_logging,
+    pruning_ctx,
+    setup_logger,
+)
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -244,6 +255,14 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
 
                     if not _is_pruning_due(cc_pair):
                         logger.info("CC pair not due for pruning: %s", cc_pair_id)
+                        continue
+
+                    # Skip auto-scheduling during a prune failure backoff; a manual
+                    # prune (API) bypasses this path and can still force a run.
+                    if RedisConnector(tenant_id, cc_pair_id).prune.in_failure_backoff:
+                        logger.info(
+                            "CC pair in pruning failure backoff: %s", cc_pair_id
+                        )
                         continue
 
                     payload_id = try_creating_prune_generator_task(
@@ -660,6 +679,13 @@ def connector_pruning_generator_task(
                 raw_id_to_parent=all_connector_doc_ids,
             )
 
+            # Backfill source creation time collected during enumeration.
+            backfill_docs_created_at__no_commit(
+                ids_to_created_at=extraction_result.id_to_created_at,
+                db_session=db_session,
+            )
+            db_session.commit()
+
             diff_start = time.monotonic()
             try:
                 # a list of docs in our local index
@@ -744,7 +770,19 @@ def connector_pruning_generator_task(
             f"Pruning exceptioned: cc_pair={cc_pair_id} connector={connector_id} payload_id={payload_id}"
         )
 
-        redis_connector.prune.reset()
+        # Back off so a failing prune isn't re-dispatched on the next beat.
+        redis_connector.prune.set_failure_backoff()
+
+        # Only reset (clears the fence + taskset) if cleanup tasks were never
+        # fanned out. If they were, reset would orphan them (it doesn't revoke
+        # them) and the next beat would re-enumerate and re-queue the whole set;
+        # keeping the fence lets the monitor finalize the in-flight taskset, and
+        # generator_failed makes it record a FAILED prune instead of a false success.
+        if redis_connector.prune.generator_complete is None:
+            redis_connector.prune.reset()
+        else:
+            redis_connector.prune.set_generator_failed()
+
         raise e
     finally:
         if lock.owned():
@@ -792,24 +830,38 @@ def monitor_ccpair_pruning_taskset(
         )
         return
 
-    mark_ccpair_as_pruned(int(cc_pair_id), db_session)
-    task_logger.info(
-        f"Connector pruning finished: cc_pair={cc_pair_id} num_pruned={initial}"
-    )
+    # A generator that threw after fan-out still drains its tasks; record FAILED
+    # so the prune retries after the backoff instead of advancing last_pruned.
+    failed = redis_connector.prune.generator_failed
+    if failed:
+        task_logger.warning(
+            f"Connector pruning failed after fan-out: cc_pair={cc_pair_id} num_pruned={initial}"
+        )
+    else:
+        mark_ccpair_as_pruned(int(cc_pair_id), db_session)
+        redis_connector.prune.clear_failure_backoff()
+        task_logger.info(
+            f"Connector pruning finished: cc_pair={cc_pair_id} num_pruned={initial}"
+        )
 
     update_sync_record_status(
         db_session=db_session,
         entity_id=cc_pair_id,
         sync_type=SyncType.PRUNING,
-        sync_status=SyncStatus.SUCCESS,
+        sync_status=SyncStatus.FAILED if failed else SyncStatus.SUCCESS,
         num_docs_synced=initial,
     )
-
-    delete_orphan_tags__no_commit(db_session)
 
     redis_connector.prune.taskset_clear()
     redis_connector.prune.generator_clear()
     redis_connector.prune.set_fence(None)
+
+    # Orphan tags can only appear when the prune actually removed documents.
+    # All prior DB writes in this session are already committed
+    # (mark_ccpair_as_pruned / update_sync_record_status commit internally),
+    # so the per-batch commits of the drain are safe here.
+    if initial > 0:
+        delete_orphan_tags_batched(db_session)
 
 
 def validate_pruning_fences(

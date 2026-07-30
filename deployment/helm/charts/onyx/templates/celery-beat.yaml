@@ -1,4 +1,17 @@
 {{- if and .Values.vectorDB.enabled (gt (int .Values.celery_beat.replicaCount) 0) }}
+{{- /* beat must be able to write /tmp (schedule file + probe files) even under
+readOnlyRootFilesystem, so default an emptyDir there unless the user mounts
+their own /tmp volume. */}}
+{{- $beatMounts := .Values.celery_beat.volumeMounts | default list }}
+{{- $beatVolumes := .Values.celery_beat.volumes | default list }}
+{{- $hasTmpMount := false }}
+{{- range $beatMounts }}
+{{- if eq .mountPath "/tmp" }}{{- $hasTmpMount = true }}{{- end }}
+{{- end }}
+{{- if not $hasTmpMount }}
+{{- $beatMounts = append $beatMounts (dict "name" "beat-tmp" "mountPath" "/tmp") }}
+{{- $beatVolumes = append $beatVolumes (dict "name" "beat-tmp" "emptyDir" dict) }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -59,12 +72,21 @@ spec:
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
             [
+              {{- with include "onyx.customCACerts.commandPrefix" . }}
+              {{- . | nindent 14 }}
+              {{- end }}
               "celery",
               "-A",
               "onyx.background.celery.versioned_apps.beat",
               "beat",
               {{- with .Values.celery_beat.logLevel }}
               {{ printf "--loglevel=%s" . | quote }},
+              {{- end }}
+              {{- with .Values.celery_beat.schedulePath }}
+              {{ printf "--schedule=%s" . | quote }},
+              {{- end }}
+              {{- range .Values.celery_beat.extraArgs }}
+              {{ . | quote }},
               {{- end }}
             ]
           resources:
@@ -78,12 +100,14 @@ spec:
             {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- with include "onyx.customCACerts.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
             {{- with .Values.celery_beat.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- with .Values.celery_beat.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
+          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" $beatMounts) }}
+          {{- . | nindent 10 }}
           {{- end }}
           startupProbe:
             {{ .Values.celery_shared.startupProbe | toYaml | nindent 12}}
@@ -107,8 +131,7 @@ spec:
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
                     --filename /tmp/onyx_k8s_beat_liveness.txt
-      {{- with .Values.celery_beat.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" $beatVolumes) }}
+      {{- . | nindent 6 }}
       {{- end }}
 {{- end }}

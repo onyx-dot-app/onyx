@@ -1,34 +1,32 @@
 import json
 import os
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any
-from typing import IO
+from typing import IO, Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
 )
-from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    is_tabular_file,
     tabular_file_to_sections,
 )
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import extract_text_and_images
-from onyx.file_processing.extract_file_text import get_file_ext
+from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
+from onyx.connectors.models import (
+    Document,
+    HierarchyNode,
+    ImageSection,
+    TabularSection,
+    TextSection,
+)
+from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -84,6 +82,7 @@ def _process_file(
     metadata: dict[str, Any] | None,
     pdf_pass: str | None,
     file_type: str | None,
+    stage: RawFileCallback | None,
 ) -> list[Document]:
     """
     Process a file and return a list of Documents.
@@ -201,6 +200,12 @@ def _process_file(
     doc_file_id = None
     if is_tabular_file(file_name):
         doc_file_id = file_id
+        if stage is None:
+            logger.warning(
+                "Skipping tabular file %s because raw_file_callback is not set",
+                file_name,
+            )
+            return []
 
         # Produce TabularSections
         lowered_name = file_name.lower()
@@ -216,6 +221,7 @@ def _process_file(
                 tabular_file_to_sections(
                     file=tabular_source,
                     file_name=file_name,
+                    stage=stage,
                     link=link or "",
                 )
             )
@@ -354,6 +360,7 @@ class LocalFileConnector(LoadConnector):
                 metadata=metadata,
                 pdf_pass=self.pdf_pass,
                 file_type=file_record.file_type,
+                stage=self.raw_file_callback,
             )
             documents.extend(new_docs)
 

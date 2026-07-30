@@ -10,8 +10,7 @@ import os
 import pytest
 
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
 
 # Skip the entire module when vector DB is enabled. The env var is the
 # source of truth because pytestmark is evaluated at module import time

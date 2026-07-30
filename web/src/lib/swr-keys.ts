@@ -19,6 +19,8 @@ export const SWR_KEYS = {
   enterpriseSettings: "/api/enterprise-settings",
   customAnalyticsScript: "/api/enterprise-settings/custom-analytics-script",
   authType: "/api/auth/type",
+  adminSecuritySettings: "/api/admin/security",
+  adminSsoProviders: "/api/admin/sso/provider",
 
   // ── Agents / Personas ─────────────────────────────────────────────────────
   personas: "/api/persona",
@@ -57,10 +59,6 @@ export const SWR_KEYS = {
   federatedConnectors: "/api/federated",
 
   // ── Google Connectors ─────────────────────────────────────────────────────
-  googleConnectorAppCredential: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/app-credential`,
-  googleConnectorServiceAccountKey: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/service-account-key`,
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>
     `/api/manage/admin/connector/${service}/credentials`,
   googleConnectorPublicCredential: (service: "gmail" | "google-drive") =>
@@ -72,10 +70,13 @@ export const SWR_KEYS = {
   // ── Search Settings ───────────────────────────────────────────────────────
   currentSearchSettings: "/api/search-settings/get-current-search-settings",
   secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
+  reindexProgress: "/api/search-settings/reindex-progress",
+  reindexErrors: "/api/search-settings/reindex-errors",
   embeddingProviders: "/api/admin/embedding/embedding-provider",
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
   chatSessions: "/api/chat/get-user-chat-sessions",
+  chatSearch: "/api/chat/search",
 
   // ── Projects & Files ──────────────────────────────────────────────────────
   userProjects: "/api/user/projects",
@@ -87,6 +88,13 @@ export const SWR_KEYS = {
   notificationsPage: (pageNum: number, pageSize: number) => {
     const params = new URLSearchParams({
       page_num: pageNum.toString(),
+      page_size: pageSize.toString(),
+    });
+    return `/api/notifications?${params.toString()}`;
+  },
+  notificationsByType: (notifType: string, pageSize: number) => {
+    const params = new URLSearchParams({
+      notif_type: notifType,
       page_size: pageSize.toString(),
     });
     return `/api/notifications?${params.toString()}`;
@@ -113,16 +121,23 @@ export const SWR_KEYS = {
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
   adminMcpServers: "/api/admin/mcp/servers",
+  adminMcpServerToolSnapshots: (serverId: number) =>
+    `/api/admin/mcp/server/${serverId}/tools/snapshots?source=db`,
   mcpServers: "/api/mcp/servers",
+  mcpServersCraft: "/api/mcp/servers/craft",
+  personaMcpServers: (personaId: number) =>
+    `/api/mcp/servers/persona/${personaId}`,
 
   // ── Skills ────────────────────────────────────────────────────────────────
-  adminSkills: "/api/admin/skills",
   userSkills: "/api/skills",
+  userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
   openApiTools: "/api/tool/openapi",
   oauthTokenStatus: "/api/user-oauth-token/status",
+  adminOAuthTestClaims: "/api/admin/oauth-test/claims",
 
   // ── Voice ─────────────────────────────────────────────────────────────────
   voiceProviders: "/api/admin/voice/providers",
@@ -145,6 +160,7 @@ export const SWR_KEYS = {
   buildExternalApps: "/api/build/apps",
   buildExternalAppsAdmin: "/api/build/admin/apps",
   buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
+  buildBaseInstructions: "/api/build/admin/base-instructions",
   buildSessionLiveApprovals: (sessionId: string) =>
     `/api/build/approvals/sessions/${sessionId}/live`,
 
@@ -162,8 +178,14 @@ export const SWR_KEYS = {
   webSearchContentProviders: "/api/admin/web-search/content-providers",
   webSearchSearchProviders: "/api/admin/web-search/search-providers",
 
+  // ── Tracing ───────────────────────────────────────────────────────────────
+  tracingProviders: "/api/admin/tracing/providers",
+
   // ── Prompt shortcuts ──────────────────────────────────────────────────────
   promptShortcuts: "/api/input_prompt",
+
+  // ── Admin Banner ──────────────────────────────────────────────────────────
+  adminBanner: "/api/admin/banner",
 
   // ── License & Billing ─────────────────────────────────────────────────────
   license: "/api/license",

@@ -62,7 +62,7 @@ spec:
             {{- toYaml .Values.discordbot.securityContext | nindent 12 }}
           image: "{{ .Values.discordbot.image.repository }}:{{ .Values.discordbot.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
-          command: ["python", "onyx/onyxbot/discord/client.py"]
+          command: [{{ include "onyx.customCACerts.commandPrefix" . }}"python", "onyx/onyxbot/discord/client.py"]
           resources:
             {{- toYaml .Values.discordbot.resources | nindent 12 }}
           envFrom:
@@ -74,6 +74,9 @@ spec:
             {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- with include "onyx.customCACerts.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
             {{- with .Values.discordbot.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -94,12 +97,10 @@ spec:
             - name: DISCORD_BOT_INVOKE_CHAR
               value: {{ .Values.discordbot.invokeChar | quote }}
             {{- end }}
-          {{- with .Values.discordbot.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
+          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.discordbot.volumeMounts) }}
+          {{- . | nindent 10 }}
           {{- end }}
-      {{- with .Values.discordbot.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.discordbot.volumes) }}
+      {{- . | nindent 6 }}
       {{- end }}
 {{- end }}
