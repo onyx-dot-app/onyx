@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import Select, case, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, lazyload, selectinload
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
 from sqlalchemy.sql.expression import or_
@@ -337,12 +337,20 @@ def get_user_by_email(email: str, db_session: Session) -> User | None:
     return user
 
 
-def fetch_user_by_id(db_session: Session, user_id: UUID) -> User | None:
-    return (
-        db_session.query(User)
-        .filter(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .first()
+def fetch_user_by_id(
+    db_session: Session, user_id: UUID, for_update: bool = False
+) -> User | None:
+    """``for_update`` adds ``SELECT ... FOR UPDATE``, serializing concurrent
+    transactions that use the user row as a reservation boundary (e.g. Craft
+    sandbox/session reservation). Hold only for a short transaction."""
+    query = db_session.query(User).filter(
+        User.id == user_id  # ty: ignore[invalid-argument-type]
     )
+    if for_update:
+        # oauth_accounts is lazy="joined"; Postgres forbids FOR UPDATE on the
+        # nullable side of an outer join, so defer it when locking.
+        query = query.options(lazyload(User.oauth_accounts)).with_for_update()
+    return query.first()
 
 
 def _generate_password_hash() -> str:
