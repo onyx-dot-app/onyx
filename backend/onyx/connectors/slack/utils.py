@@ -19,8 +19,13 @@ basic_retry_wrapper = retry_builder(tries=7)
 # number of messages we request per page when fetching paginated slack messages
 _SLACK_LIMIT = 900
 
-# An @ that starts a token, i.e. a mention rather than part of an email or URL
-_MENTION_AT_PATTERN = re.compile(r"(?<!\w)@")
+_NON_INTERACTIVE_SLACK_TEXT_PATTERN = re.compile(
+    r"<(?P<url>(?:https?://|mailto:)[^|>]+)(?:\|(?P<label>[^>]*))?>"
+    r"|(?P<code>```[\s\S]*?```|`[^`\n]*`)"
+)
+_SUBTEAM_MENTION_PATTERN = re.compile(
+    r"<!subteam\^(?P<id>[^>|]+)(?:\|(?P<label>[^>]*))?>"
+)
 
 # used to serialize access to the retry TTL
 ONYX_SLACK_LOCK_TTL = 1800  # how long the lock is allowed to idle before it expires
@@ -312,6 +317,9 @@ class SlackTextCleaner:
         message = message.replace("<!channel>", "@channel")
         message = message.replace("<!here>", "@here")
         message = message.replace("<!everyone>", "@everyone")
+        message = _SUBTEAM_MENTION_PATTERN.sub(
+            lambda match: match.group("label") or f"@{match.group('id')}", message
+        )
         return message
 
     @staticmethod
@@ -325,9 +333,23 @@ class SlackTextCleaner:
 
     @staticmethod
     def add_zero_width_whitespace_after_tag(message: str) -> str:
-        """Defang mention-shaped text by inserting a zero-width space after the @.
+        """Defang plain-text mentions without changing link destinations or code."""
 
-        An @ preceded by a word character belongs to an email or URL userinfo,
-        where the zero-width space would split the address and break the link.
-        """
-        return _MENTION_AT_PATTERN.sub("@\u200b", message)
+        def defang(text: str) -> str:
+            return text.replace("@", "@\u200b")
+
+        result: list[str] = []
+        cursor = 0
+        for match in _NON_INTERACTIVE_SLACK_TEXT_PATTERN.finditer(message):
+            result.append(defang(message[cursor : match.start()]))
+            url = match.group("url")
+            label = match.group("label")
+            if url is None or label is None:
+                result.append(match.group(0))
+            elif url.startswith("mailto:") and label == url.removeprefix("mailto:"):
+                result.append(match.group(0))
+            else:
+                result.append(f"<{url}|{defang(label)}>")
+            cursor = match.end()
+        result.append(defang(message[cursor:]))
+        return "".join(result)

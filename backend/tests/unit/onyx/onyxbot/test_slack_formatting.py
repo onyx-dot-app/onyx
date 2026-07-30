@@ -213,8 +213,43 @@ def test_bare_email_is_not_split_by_zero_width_space() -> None:
 def test_mentions_are_still_defanged() -> None:
     rendered = _render("Ping <@U123> and @channel please")
 
-    assert "@​U123" in rendered
-    assert "@​channel" in rendered
+    assert "@\u200bU123" in rendered
+    assert "@\u200bchannel" in rendered
+
+
+def test_all_slack_notification_shapes_are_defanged() -> None:
+    message = (
+        "<@U123> <@W123> <@B123> <!here> <!channel> <!everyone> "
+        "<!subteam^S123> <!subteam^S456|@ops> @group"
+    )
+
+    cleaned = remove_slack_text_interactions(message)
+
+    for mention in (
+        "U123",
+        "W123",
+        "B123",
+        "here",
+        "channel",
+        "everyone",
+        "S123",
+        "ops",
+        "group",
+    ):
+        assert f"@\u200b{mention}" in cleaned
+    assert "<!" not in cleaned
+
+
+def test_email_specials_and_url_userinfo_survive_mention_defanging() -> None:
+    email = "support!@onyx.app"
+    url = "https://support!@onyx.app/docs"
+
+    rendered = _render(f"{email} {url} `{email}`")
+
+    assert f"<mailto:{email}|{email}>" in rendered
+    assert f"<{url}>" in rendered
+    assert f"`{email}`" in rendered
+    assert "\u200b" not in rendered
 
 
 def test_slack_style_mailto_link_survives_formatting() -> None:
