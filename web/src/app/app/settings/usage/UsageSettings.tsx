@@ -125,17 +125,28 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
 
 interface ModelPriceSectionProps {
   prices: ModelPrice[];
-  defaultModel: string | null;
+  defaultPrice: ModelPrice | null;
 }
 
 function formatMtok(value: number | null): string {
   return value !== null ? `$${value.toFixed(2)}` : "—";
 }
 
+function isSameModelPrice(
+  price: ModelPrice,
+  other: ModelPrice | null
+): boolean {
+  return (
+    other !== null &&
+    price.model === other.model &&
+    price.provider === other.provider
+  );
+}
+
 // Every available model's price (USD/1M, input · output · cache), grouped into a
 // collapsible menu per provider — click a provider to expand its models. Mirrors
 // the chat model selector so users can compare costs, not just the default.
-function ModelPriceSection({ prices, defaultModel }: ModelPriceSectionProps) {
+function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
   const groups = useMemo(() => {
     const byProvider = new Map<string, ModelPrice[]>();
     for (const price of prices) {
@@ -152,10 +163,10 @@ function ModelPriceSection({ prices, defaultModel }: ModelPriceSectionProps) {
   // Expand the provider that holds the default model (else the first).
   const defaultProvider = useMemo(
     () =>
-      prices.find((p) => p.model === defaultModel)?.provider ??
+      prices.find((price) => isSameModelPrice(price, defaultPrice))?.provider ??
       groups[0]?.provider ??
       null,
-    [prices, defaultModel, groups]
+    [prices, defaultPrice, groups]
   );
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -220,7 +231,7 @@ function ModelPriceSection({ prices, defaultModel }: ModelPriceSectionProps) {
                           className="flex flex-row items-center justify-between gap-2 py-1 pl-3"
                         >
                           <Text font="secondary-body" color="text-03" nowrap>
-                            {price.model === defaultModel
+                            {isSameModelPrice(price, defaultPrice)
                               ? `${price.model} · default`
                               : price.model}
                           </Text>
@@ -392,7 +403,7 @@ export default function UsageSettings() {
             />
             <ModelPriceSection
               prices={data.available_model_prices ?? []}
-              defaultModel={data.selected_model_price?.model ?? null}
+              defaultPrice={data.selected_model_price}
             />
           </Section>
         )}
