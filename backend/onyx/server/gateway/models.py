@@ -226,3 +226,120 @@ class ModelListResponse(_WireModel):
             object="list",
             data=[ModelListEntry.from_descriptor(d) for d in catalog],
         )
+
+
+class ResponsesRequest(BaseModel):
+    """Codex sends ``store: false`` and no ``previous_response_id``, so
+    conversation persistence is intentionally not implemented."""
+
+    model_config = ConfigDict(extra="allow")
+
+    model: str
+    input: str | list[dict[str, Any]] = Field(default_factory=list)
+    instructions: str | None = None
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: Any = None
+    stream: bool = False
+    max_output_tokens: int | None = None
+    temperature: float | None = None
+    reasoning: dict[str, Any] | None = None
+
+
+class ResponsesOutputTextPart(_WireModel):
+    type: Literal["output_text"] = "output_text"
+    text: str
+    annotations: list[Any] = Field(default_factory=list)
+
+    @classmethod
+    def create(cls, text: str) -> "ResponsesOutputTextPart":
+        return cls(type="output_text", text=text, annotations=[])
+
+
+class ResponsesMessageItem(_WireModel):
+    type: Literal["message"] = "message"
+    id: str
+    status: str
+    role: Literal["assistant"] = "assistant"
+    content: list[ResponsesOutputTextPart]
+
+    @classmethod
+    def create(
+        cls, *, id: str, status: str, content: list[ResponsesOutputTextPart]
+    ) -> "ResponsesMessageItem":
+        return cls(
+            type="message", id=id, status=status, role="assistant", content=content
+        )
+
+
+class ResponsesFunctionCallItem(_WireModel):
+    type: Literal["function_call"] = "function_call"
+    id: str
+    call_id: str
+    name: str
+    arguments: str
+    status: str = "completed"
+
+    @classmethod
+    def create(
+        cls, *, id: str, call_id: str, name: str, arguments: str
+    ) -> "ResponsesFunctionCallItem":
+        return cls(
+            type="function_call",
+            id=id,
+            call_id=call_id,
+            name=name,
+            arguments=arguments,
+            status="completed",
+        )
+
+
+ResponsesOutputItem: TypeAlias = ResponsesMessageItem | ResponsesFunctionCallItem
+
+
+class ResponsesUsagePayload(_WireModel):
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+
+    @classmethod
+    def from_usage(cls, usage: Usage) -> "ResponsesUsagePayload":
+        return cls(
+            input_tokens=usage.prompt_tokens,
+            output_tokens=usage.completion_tokens,
+            total_tokens=usage.total_tokens,
+        )
+
+
+class ResponsesObjectPayload(_WireModel):
+    id: str
+    object: Literal["response"] = "response"
+    created_at: int
+    status: str
+    model: str
+    output: list[ResponsesOutputItem]
+    usage: ResponsesUsagePayload | None = None
+    error: dict[str, Any] | None = None
+
+    @classmethod
+    def from_parts(
+        cls,
+        *,
+        response_id: str,
+        created_at: int,
+        model: str,
+        status: str,
+        output: list[ResponsesOutputItem],
+        usage: Usage | None = None,
+    ) -> "ResponsesObjectPayload":
+        kwargs: dict[str, Any] = {}
+        if usage is not None:
+            kwargs["usage"] = ResponsesUsagePayload.from_usage(usage)
+        return cls(
+            id=response_id,
+            object="response",
+            created_at=created_at,
+            status=status,
+            model=model,
+            output=output,
+            **kwargs,
+        )
