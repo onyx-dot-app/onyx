@@ -231,7 +231,7 @@ def test_stale_provisioning_attempt_is_taken_over(
     session_manager_with_stub: SessionManager,
 ) -> None:
     """A committed PROVISIONING row whose attempt is dead (no live timestamp —
-    e.g. the provisioning process crashed) is resumed under a new generation
+    e.g. the provisioning process crashed) is resumed under a new attempt_number
     instead of being waited on or rejected."""
     existing = sandbox(user=test_user, status=SandboxStatus.PROVISIONING)
     assert existing.provisioning_started_at is None  # crashed-attempt shape

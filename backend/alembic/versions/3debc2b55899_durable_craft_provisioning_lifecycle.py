@@ -29,7 +29,7 @@ def upgrade() -> None:
     op.add_column(
         "sandbox",
         sa.Column(
-            "provisioning_generation",
+            "provisioning_attempt_number",
             sa.Integer(),
             nullable=False,
             server_default="0",
@@ -72,7 +72,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("uq_build_session_nextjs_port", table_name="build_session")
     op.drop_column("sandbox", "provisioning_started_at")
-    op.drop_column("sandbox", "provisioning_generation")
+    op.drop_column("sandbox", "provisioning_attempt_number")
     # Fold the statuses this revision introduced back into the old set before
     # shrinking the column (non-native enums persist member NAMES).
     op.execute(

@@ -84,7 +84,12 @@ def _make_replica(
     def _provision_opencode_secret(sandbox_id: str, config_json: str) -> None:  # noqa: ARG001
         return None
 
-    def _create_sandbox_pod(*, sandbox_id: str, tenant_id: str) -> str:  # noqa: ARG001
+    def _create_sandbox_pod(
+        *,
+        sandbox_id: str,
+        tenant_id: str,  # noqa: ARG001
+        provisioning_attempt_number: int,  # noqa: ARG001
+    ) -> str:
         return m._get_pod_name(sandbox_id)
 
     def _wait_for_pod_ip(pod_name: str, deadline: float) -> bool:  # noqa: ARG001
@@ -155,7 +160,7 @@ def _provision(
         user_id=uuid4(),
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         onyx_pat="test-pat",
-        provisioning_generation=1,
+        provisioning_attempt_number=1,
     )
 
 

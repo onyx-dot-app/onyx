@@ -120,7 +120,7 @@ class SandboxManager(_ServeMixin, ABC):
         user_id: UUID,
         tenant_id: str,
         onyx_pat: str | None,
-        provisioning_generation: int,
+        provisioning_attempt_number: int,
     ) -> SandboxInfo:
         """Provision a new sandbox for a user. Returns only once the sandbox
         is RUNNING; every failure raises.
@@ -141,10 +141,11 @@ class SandboxManager(_ServeMixin, ABC):
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the sandbox
-            provisioning_generation: Committed fencing generation of the
-                attempt; stamped onto backend resources at creation for
-                operator-facing orphan attribution (never read
-                programmatically — the DB compare-and-set is the fence).
+            provisioning_attempt_number: This attempt's number; stamped onto
+                backend resources at creation so operators can attribute
+                orphans (never read programmatically — the attempt-number
+                condition on DB status writes is what blocks stale
+                attempts).
 
         Returns:
             SandboxInfo with the provisioned sandbox details

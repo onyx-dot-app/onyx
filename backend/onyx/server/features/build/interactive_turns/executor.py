@@ -224,7 +224,7 @@ def _drive_interactive_turn(
             return
 
         try:
-            # Re-fence after the (possibly long) slot wait: a reclaim acquire
+            # Re-check ownership after the (possibly long) slot wait: a reclaim acquire
             # can block past RUNNER_STALE_AFTER_SECONDS, letting another
             # runner steal the turn — it must not reach the prompt POST.
             if not touch_turn(cache=cache, turn_id=turn_id, runner_id=runner_id):

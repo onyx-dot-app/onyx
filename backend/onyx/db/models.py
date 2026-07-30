@@ -783,8 +783,8 @@ class Persona__Tool(Base):
     """An entry in this table represents a tool that is **available** to a persona.
     It does NOT necessarily mean that the tool is actually usable to the persona.
 
-    For example, a persona may have the image generation tool attached to it, even though
-    the image generation tool is not set up / enabled. In this case, the tool should not
+    For example, a persona may have the image attempt_number tool attached to it, even though
+    the image attempt_number tool is not set up / enabled. In this case, the tool should not
     show up in the UI for the persona + it should not be usable by the persona in chat.
     """
 
@@ -3311,7 +3311,7 @@ class ToolCall(Base):
     # Only the top level tools (the ones with a parent_chat_message_id) have token counts that are counted
     # towards the session total.
     tool_call_tokens: Mapped[int] = mapped_column(Integer())
-    # For image generation tool - stores GeneratedImage objects for replay
+    # For image attempt_number tool - stores GeneratedImage objects for replay
     generated_images: Mapped[list[dict] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
@@ -4031,7 +4031,7 @@ class Persona(Base):
     description: Mapped[str] = mapped_column(String)
 
     # Canonical FK encoding both provider and model for the persona's LLM override.
-    # NOTE: only applied on actual response generation — not used for auto-detected
+    # NOTE: only applied on actual response attempt_number — not used for auto-detected
     # time filters, relevance filters, etc.
     default_model_configuration_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -6119,17 +6119,18 @@ class Sandbox(Base):
         EncryptedString(), nullable=True
     )
 
-    # Fencing token for external reconciliation: advanced (under the per-user
-    # reservation lock) each time a new provisioning attempt is authorized.
-    # Finalization is a compare-and-set on this value, so a stale attempt can
-    # never mark a newer generation RUNNING/FAILED or clean its resources.
-    provisioning_generation: Mapped[int] = mapped_column(
+    # Attempt number: incremented (under the per-user reservation lock) each
+    # time a new provisioning attempt is authorized. Every status write names
+    # the attempt it belongs to and only applies while the row still holds
+    # that number, so an old attempt can never overwrite a newer attempt's
+    # outcome or clean its resources.
+    provisioning_attempt_number: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
     # When the current attempt was authorized; a committed PROVISIONING row
     # whose attempt is older than the managers' bounded waits is dead and may
     # be taken over. Failure diagnostics live in logs (keyed by sandbox ID +
-    # generation), not here.
+    # attempt_number), not here.
     provisioning_started_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

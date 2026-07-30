@@ -3,13 +3,13 @@
 Pins the transaction-ordering contract with real PostgreSQL and a controlled
 sandbox-manager double:
 
-* the sandbox identity, owner, PAT, and generation are committed — and
+* the sandbox identity, owner, PAT, and attempt_number are committed — and
   visible to an independent database connection — before the first external
   provisioning call, with no transaction left open on the flow's session;
 * a simulated process death mid-provision leaves resumable committed state
-  that a retry converges on (same sandbox ID, advanced generation);
+  that a retry converges on (same sandbox ID, advanced attempt_number);
 * a death mid-session-initialization is repaired under the same session ID;
-* a stale generation cannot finalize a newer one;
+* a stale attempt_number cannot finalize a newer one;
 * session initialization failure marks only the session FAILED while the
   sandbox stays RUNNING;
 * concurrent creators converge on one sandbox and one empty session.
@@ -71,7 +71,7 @@ class _ReservationProbe:
     sandbox_visible: bool = False
     owner_user_id: UUID | None = None
     status: SandboxStatus | None = None
-    generation: int | None = None
+    attempt_number: int | None = None
     pat_present: bool = False
     pat_row_valid: bool = False
 
@@ -91,7 +91,7 @@ class _ProbingStub(StubSandboxManager):
         user_id: UUID,
         tenant_id: str,
         onyx_pat: str | None,
-        provisioning_generation: int,
+        provisioning_attempt_number: int,
     ) -> SandboxInfo:
         probe = _ReservationProbe(
             flow_session_in_transaction=self._flow_db_session.in_transaction(),
@@ -106,7 +106,7 @@ class _ProbingStub(StubSandboxManager):
             if row is not None:
                 probe.owner_user_id = row.user_id
                 probe.status = row.status
-                probe.generation = row.provisioning_generation
+                probe.attempt_number = row.provisioning_attempt_number
                 raw_pat = (
                     row.encrypted_pat.get_value(apply_mask=False)
                     if row.encrypted_pat
@@ -130,7 +130,7 @@ class _ProbingStub(StubSandboxManager):
             user_id,
             tenant_id,
             onyx_pat=onyx_pat,
-            provisioning_generation=provisioning_generation,
+            provisioning_attempt_number=provisioning_attempt_number,
         )
 
 
@@ -157,7 +157,7 @@ def test_reservation_committed_and_visible_before_first_external_call(
     assert stub.probe.sandbox_visible is True
     assert stub.probe.owner_user_id == test_user.id
     assert stub.probe.status == SandboxStatus.PROVISIONING
-    assert stub.probe.generation == 1
+    assert stub.probe.attempt_number == 1
     assert stub.probe.pat_present is True
     assert stub.probe.pat_row_valid is True
     assert stub.probe.flow_session_in_transaction is False
@@ -183,14 +183,14 @@ def test_interrupted_provision_resumes_same_sandbox_identity(
         interrupted_id = interrupted.id
         # Process death leaves the committed reservation, not FAILED.
         assert interrupted.status == SandboxStatus.PROVISIONING
-        assert interrupted.provisioning_generation == 1
+        assert interrupted.provisioning_attempt_number == 1
 
         # A live attempt is not taken over.
         with pytest.raises(SandboxProvisioningInProgressError):
             session_manager_with_stub.get_or_create_empty_session(user_id=test_user.id)
 
     # Once the attempt is stale, a retry resumes the same identity under a
-    # new generation.
+    # new attempt_number.
     db_session.rollback()
     interrupted.provisioning_started_at = datetime.now(timezone.utc) - timedelta(
         minutes=10
@@ -212,7 +212,7 @@ def test_interrupted_provision_resumes_same_sandbox_identity(
     assert len(rows) == 1
     assert rows[0].id == interrupted_id
     assert rows[0].status == SandboxStatus.RUNNING
-    assert rows[0].provisioning_generation == 2
+    assert rows[0].provisioning_attempt_number == 2
     db_session.refresh(result)
     assert result.status == BuildSessionStatus.ACTIVE
 
@@ -304,26 +304,26 @@ def test_stale_generation_cannot_finalize_newer_generation(
     sandbox: Callable[..., Sandbox],
 ) -> None:
     row = sandbox(user=test_user, status=SandboxStatus.SLEEPING)
-    stale_generation = begin_provisioning_attempt__no_commit(db_session, row)
+    stale_attempt_number = begin_provisioning_attempt__no_commit(db_session, row)
     db_session.commit()
 
     # A newer reservation takes over (e.g. the first attempt went stale).
-    newer_generation = begin_provisioning_attempt__no_commit(db_session, row)
+    newer_attempt_number = begin_provisioning_attempt__no_commit(db_session, row)
     db_session.commit()
-    assert newer_generation == stale_generation + 1
+    assert newer_attempt_number == stale_attempt_number + 1
 
     # The stale attempt's finalize must be a no-op.
     assert not finalize_provisioning_attempt__no_commit(
-        db_session, row.id, stale_generation, SandboxStatus.RUNNING
+        db_session, row.id, stale_attempt_number, SandboxStatus.RUNNING
     )
     db_session.commit()
     db_session.refresh(row)
     assert row.status == SandboxStatus.PROVISIONING
-    assert row.provisioning_generation == newer_generation
+    assert row.provisioning_attempt_number == newer_attempt_number
 
     # The current attempt finalizes normally.
     assert finalize_provisioning_attempt__no_commit(
-        db_session, row.id, newer_generation, SandboxStatus.RUNNING
+        db_session, row.id, newer_attempt_number, SandboxStatus.RUNNING
     )
     db_session.commit()
     db_session.refresh(row)
@@ -405,8 +405,8 @@ def test_concurrent_creators_converge_on_one_sandbox_and_session(
         thread.join(timeout=60)
 
     # Convergence: at least one creator succeeded; a loser may only fail
-    # with a retryable fencing signal (a live concurrent attempt, or its
-    # finalize losing the compare-and-set to the winner).
+    # retryably (a live concurrent attempt, or its finalize rejected because
+    # the winner's attempt superseded it).
     assert results, f"no creator succeeded; errors: {errors}"
     for error in errors:
         assert isinstance(

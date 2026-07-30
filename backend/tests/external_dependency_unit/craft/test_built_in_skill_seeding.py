@@ -109,7 +109,7 @@ class TestAvailabilityGate:
             )
             if s.built_in_skill_id is not None
         }
-        # Some built-ins gate on environment availability (e.g. image-generation
+        # Some built-ins gate on environment availability (e.g. image-attempt_number
         # needs a configured provider); only those available here must be visible.
         available_built_ins = {
             built_in_skill_id

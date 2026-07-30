@@ -6,7 +6,7 @@ from uuid import uuid4
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     build_sandbox_labels,
 )
-from onyx.server.features.build.sandbox.labels import LABEL_PROVISIONING_GENERATION
+from onyx.server.features.build.sandbox.labels import LABEL_PROVISIONING_ATTEMPT
 from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
 from onyx.server.features.build.sandbox.session_workspace import (
     SETUP_IN_PROGRESS_MARKER,
@@ -84,10 +84,10 @@ class TestNextjsStartReplaySafety:
 class TestDockerSandboxLabels:
     def test_generation_label_stamped_when_provided(self) -> None:
         labels = build_sandbox_labels(
-            uuid4(), "tenant", None, provisioning_generation=7
+            uuid4(), "tenant", None, provisioning_attempt_number=7
         )
-        assert labels[LABEL_PROVISIONING_GENERATION] == "7"
+        assert labels[LABEL_PROVISIONING_ATTEMPT] == "7"
 
     def test_generation_label_omitted_for_generation_free_resources(self) -> None:
         labels = build_sandbox_labels(uuid4(), "tenant", None)
-        assert LABEL_PROVISIONING_GENERATION not in labels
+        assert LABEL_PROVISIONING_ATTEMPT not in labels

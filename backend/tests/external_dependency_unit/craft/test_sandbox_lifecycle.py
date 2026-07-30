@@ -1,7 +1,7 @@
 """Sandbox lifecycle (status state machine), DB-only half.
 
 DB-bound tests that pin the reserve → reconcile → finalize state machine:
-PROVISIONING → RUNNING, durable failure state with generation advancement on
+PROVISIONING → RUNNING, durable failure state with attempt_number advancement on
 retry, idempotent provisioning, the health-check failure -> re-provision
 recovery path, and the idle-selection query shape.
 
@@ -75,12 +75,13 @@ class TestProvisionTransitions:
 
         db_session.refresh(sandbox)
         # Observable outcome: the DB row reflects the new state, with the
-        # first attempt's fencing generation.
+        # first attempt's number.
         assert sandbox.status == SandboxStatus.RUNNING
-        assert sandbox.provisioning_generation == 1
+        assert sandbox.provisioning_attempt_number == 1
         assert stub_sandbox_manager.last_provision_payload is not None
         assert (
-            stub_sandbox_manager.last_provision_payload["provisioning_generation"] == 1
+            stub_sandbox_manager.last_provision_payload["provisioning_attempt_number"]
+            == 1
         )
 
 
@@ -93,7 +94,7 @@ class TestDurableProvisionFailure:
     ) -> None:
         # No provision_returns => stub raises NotImplementedError on
         # provision(). The failure must be recorded durably — a FAILED row
-        # under the attempt's generation — never rolled back to nothing.
+        # under the attempt's attempt_number — never rolled back to nothing.
         with pytest.raises(SandboxProvisioningError):
             ensure_sandbox_ready(
                 db_session,
@@ -110,7 +111,7 @@ class TestDurableProvisionFailure:
         )
         assert row is not None
         assert row.status == SandboxStatus.FAILED
-        assert row.provisioning_generation == 1
+        assert row.provisioning_attempt_number == 1
 
     def test_retry_after_failure_reuses_sandbox_and_advances_generation(
         self,
@@ -148,11 +149,11 @@ class TestDurableProvisionFailure:
             policy=ProvisioningPolicy.FAIL,
         )
 
-        # Retry converges on the same committed identity under a new fenced
+        # Retry converges on the same committed identity under a new numbered
         # attempt.
         assert sandbox.id == failed_id
         assert sandbox.status == SandboxStatus.RUNNING
-        assert sandbox.provisioning_generation == 2
+        assert sandbox.provisioning_attempt_number == 2
 
 
 class TestIdempotentProvision:

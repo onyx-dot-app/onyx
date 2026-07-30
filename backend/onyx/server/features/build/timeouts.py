@@ -9,10 +9,11 @@ Every Craft time constant is one of four things:
    taxonomy (connect / RPC / bulk transfer / mutex lease), or
 4. a **cadence** — poll and retry intervals.
 
-Correctness never depends on any of these: sandbox ownership is fenced by the
-provisioning-generation compare-and-set, turn ownership by the ``runner_id``
-compare under the turn mutex. Timeouts here only detect failure, bound
-budgets, or pace polling.
+Correctness never depends on any of these: a sandbox status write only
+applies while the row still holds the writer's attempt number
+(``provisioning_attempt_number``), and a turn write only applies for the owning
+``runner_id``. Timeouts here only detect failure, bound budgets, or pace
+polling.
 
 Residence rule: a constant lives here only if it is used by multiple files,
 is a derivation (or feeds one), or belongs to the shared client-I/O taxonomy.
@@ -76,8 +77,8 @@ ATTEMPT_OVERHEAD_SECONDS = RECOVERY_HISTORY_SNAPSHOT_SECONDS + RUNTIME_TEARDOWN_
 # which reserve_sandbox declares a committed PROVISIONING row dead and takes
 # it over, so a crashed attempt blocks its sandbox for at most this long. The
 # check runs between external phases, so an in-flight phase can overrun it —
-# takeover safety comes from the provisioning lock and the generation
-# compare-and-set, never from this number.
+# takeover safety comes from the provisioning lock and the attempt-number
+# condition on status writes, never from this number.
 ATTEMPT_DEADLINE_SECONDS = PROVISION_DEADLINE_SECONDS + ATTEMPT_OVERHEAD_SECONDS
 
 # How long POLL-policy callers wait out a concurrent live attempt before
@@ -140,7 +141,8 @@ QUEUE_RESIDENCY_SECONDS = 15 * 60
 
 # Session create/restore flow lock: held across one full session-flow
 # operation (sandbox attempt + workspace materialization), so the lease is
-# the sum of those deadlines. Deletable once the flows are fenced end-to-end.
+# the sum of those deadlines. Deletable once the flows are crash-safe
+# end-to-end without it.
 SESSION_FLOW_LOCK_LEASE_SECONDS = (
     ATTEMPT_DEADLINE_SECONDS + WORKSPACE_SETUP_DEADLINE_SECONDS
 )

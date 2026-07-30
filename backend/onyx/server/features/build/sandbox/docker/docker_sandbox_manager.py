@@ -116,7 +116,7 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
 from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
-    LABEL_PROVISIONING_GENERATION,
+    LABEL_PROVISIONING_ATTEMPT,
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
 )
@@ -348,7 +348,7 @@ def build_sandbox_labels(
     tenant_id: str,
     user_id: UUID | None,
     compose_project: str | None = None,
-    provisioning_generation: int | None = None,
+    provisioning_attempt_number: int | None = None,
 ) -> dict[str, str]:
     """Standard label set for sandbox-owned docker resources.
 
@@ -357,7 +357,7 @@ def build_sandbox_labels(
     api_server/postgres/redis/etc. Auto-detected by ``DockerSandboxManager``
     from its own container's labels.
 
-    ``provisioning_generation`` is stamped on containers (not the per-sandbox
+    ``provisioning_attempt_number`` is stamped on containers (not the per-sandbox
     volume, which persists across generations) for attribution.
     """
     labels: dict[str, str] = {
@@ -370,8 +370,8 @@ def build_sandbox_labels(
         labels[LABEL_USER_ID] = str(user_id)
     if compose_project:
         labels["com.docker.compose.project"] = compose_project
-    if provisioning_generation is not None:
-        labels[LABEL_PROVISIONING_GENERATION] = str(provisioning_generation)
+    if provisioning_attempt_number is not None:
+        labels[LABEL_PROVISIONING_ATTEMPT] = str(provisioning_attempt_number)
     return labels
 
 
@@ -472,7 +472,7 @@ def build_container_create_kwargs(
     cpu_limit: float,
     opencode_password: str,
     opencode_config_json: str,
-    provisioning_generation: int,
+    provisioning_attempt_number: int,
     compose_project: str | None = None,
     sandbox_proxy_host: str | None = None,
     proxy_ca_volume_name: str | None = None,
@@ -615,7 +615,7 @@ def build_container_create_kwargs(
             tenant_id,
             user_id,
             compose_project=compose_project,
-            provisioning_generation=provisioning_generation,
+            provisioning_attempt_number=provisioning_attempt_number,
         ),
         "user": user,
         "cap_drop": ["ALL"],
@@ -820,7 +820,7 @@ class DockerSandboxManager(SandboxManager):
         user_id: UUID,
         tenant_id: str,
         onyx_pat: str | None,
-        provisioning_generation: int,
+        provisioning_attempt_number: int,
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning.")
@@ -873,7 +873,7 @@ class DockerSandboxManager(SandboxManager):
                 volume_name=volume_name,
                 opencode_password=opencode_password,
                 opencode_config_json=opencode_config_json,
-                provisioning_generation=provisioning_generation,
+                provisioning_attempt_number=provisioning_attempt_number,
             )
 
         if created_fresh:
@@ -969,7 +969,7 @@ class DockerSandboxManager(SandboxManager):
         volume_name: str,
         opencode_password: str,
         opencode_config_json: str,
-        provisioning_generation: int,
+        provisioning_attempt_number: int,
     ) -> tuple[Container, bool]:
         """
         Creates (not starts) the container; returns ``(container,
@@ -999,7 +999,7 @@ class DockerSandboxManager(SandboxManager):
             compose_project=self._compose_project,
             sandbox_proxy_host=proxy_host,
             proxy_ca_volume_name=(SANDBOX_PROXY_CA_VOLUME_NAME if proxy_host else None),
-            provisioning_generation=provisioning_generation,
+            provisioning_attempt_number=provisioning_attempt_number,
         )
         # create (not run) so the caller can put_archive history before start.
         # detach is run-only.

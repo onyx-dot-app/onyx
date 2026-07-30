@@ -286,7 +286,7 @@ class StubSandboxManager(SandboxManager):
         user_id: UUID,
         tenant_id: str,
         onyx_pat: str | None,
-        provisioning_generation: int,
+        provisioning_attempt_number: int,
     ) -> SandboxInfo:
         self.provision_count += 1
         self.last_provision_payload = {
@@ -294,7 +294,7 @@ class StubSandboxManager(SandboxManager):
             "user_id": user_id,
             "tenant_id": tenant_id,
             "onyx_pat": onyx_pat,
-            "provisioning_generation": provisioning_generation,
+            "provisioning_attempt_number": provisioning_attempt_number,
         }
         if self.provision_returns is None:
             raise _not_configured("provision")

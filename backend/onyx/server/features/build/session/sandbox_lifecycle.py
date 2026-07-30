@@ -1,21 +1,24 @@
 """Sandbox readiness state machine: durable reservation, external
-reconciliation, and generation-fenced finalization. Shared between the
-interactive create/restore flows and headless callers
+reconciliation, and finalization that only the newest attempt can perform.
+Shared between the interactive create/restore flows and headless callers
 (``ensure_sandbox_running``).
+
+Every provisioning attempt gets a fresh number (``provisioning_attempt_number``),
+and every status write is conditional on the row still holding that number —
+so a superseded attempt's writes are no-ops, no matter when they land.
 
 The lifecycle is split into three parts so no database transaction ever spans
 external I/O:
 
 1. **Reserve** (short transaction): lock the user row, commit the sandbox
-   identity in ``PROVISIONING`` with an advanced fencing generation, and
-   commit the Craft PAT. Once committed, the proxy can resolve the pod's
-   owner and credentials from any connection — a bootstrapping pod's egress
-   works before the sandbox is ``RUNNING``.
+   identity in ``PROVISIONING`` under a new attempt number, and commit the
+   Craft PAT. Once committed, the proxy can resolve the pod's owner and
+   credentials from any connection — a bootstrapping pod's egress works
+   before the sandbox is ``RUNNING``.
 2. **Reconcile** (no transaction): create/reuse the pod and its resources
    idempotently, push sandbox-level managed content.
-3. **Finalize** (short transaction): generation-guarded compare-and-set to
-   ``RUNNING`` or ``FAILED``. A stale attempt cannot overwrite a newer
-   decision.
+3. **Finalize** (short transaction): record ``RUNNING`` or ``FAILED``, but
+   only if this is still the newest attempt.
 """
 
 import time
@@ -125,9 +128,9 @@ class SandboxReservation:
 
     sandbox_id: UUID
     tenant_id: str
-    generation: int
+    attempt_number: int
     # Set only when this reservation authorized external provisioning (the
-    # row is committed PROVISIONING at `generation`); None when the sandbox
+    # row is committed PROVISIONING at `attempt_number`); None when the sandbox
     # was already RUNNING and only needs a health check.
     onyx_pat: str | None
     requires_provisioning: bool
@@ -334,8 +337,8 @@ def _provisioning_attempt_is_stale(sandbox: Sandbox) -> bool:
     self-aborts at ``ATTEMPT_DEADLINE_SECONDS``, so past that age the attempt
     is dead or in its final in-flight phase. Rows without a start timestamp
     predate the attempt tracking and are always stale. Correctness never
-    depends on this — finalization is fenced by the generation
-    compare-and-set."""
+    depends on this — a dead attempt's writes are already no-ops (they carry
+    an old attempt number)."""
     if sandbox.provisioning_started_at is None:
         return True
     age = datetime.now(timezone.utc) - sandbox.provisioning_started_at
@@ -358,8 +361,8 @@ def reserve_sandbox__no_commit(
     db_session: DBSession,
     user: User,
 ) -> SandboxReservation:
-    """Reserve the user's sandbox for use, advancing the provisioning
-    generation when external reconciliation is required.
+    """Reserve the user's sandbox for use, starting a new numbered attempt
+    when external reconciliation is required.
 
     Must be called with the user's row locked (``fetch_user_by_id(for_update=True)``)
     in the current transaction so concurrent reservers serialize. ``flush``
@@ -378,16 +381,16 @@ def reserve_sandbox__no_commit(
     if sandbox is None:
         _enforce_tenant_concurrency_limit(db_session)
         sandbox = create_sandbox__no_commit(db_session=db_session, user_id=user.id)
-        generation = begin_provisioning_attempt__no_commit(db_session, sandbox)
+        attempt_number = begin_provisioning_attempt__no_commit(db_session, sandbox)
         requires_provisioning = True
         logger.info(
-            "Created sandbox %s for user %s (generation %s)",
+            "Created sandbox %s for user %s (attempt %s)",
             sandbox.id,
             user.id,
-            generation,
+            attempt_number,
         )
     elif sandbox.status == SandboxStatus.RUNNING:
-        generation = sandbox.provisioning_generation
+        attempt_number = sandbox.provisioning_attempt_number
         requires_provisioning = False
     elif sandbox.status in _REPROVISIONABLE_STATUSES:
         _enforce_tenant_concurrency_limit(db_session)
@@ -395,30 +398,30 @@ def reserve_sandbox__no_commit(
         # Only FAILED may have a leftover pod; SLEEPING/TERMINATED were
         # terminated on entry.
         terminate_before_provision = previous_status == SandboxStatus.FAILED
-        generation = begin_provisioning_attempt__no_commit(db_session, sandbox)
+        attempt_number = begin_provisioning_attempt__no_commit(db_session, sandbox)
         requires_provisioning = True
         logger.info(
-            "Reviving sandbox %s (was %s) for user %s (generation %s)",
+            "Reviving sandbox %s (was %s) for user %s (attempt %s)",
             sandbox.id,
             previous_status.value,
             user.id,
-            generation,
+            attempt_number,
         )
     elif sandbox.status == SandboxStatus.PROVISIONING:
         if not _provisioning_attempt_is_stale(sandbox):
             raise SandboxProvisioningInProgressError(
                 f"Sandbox {sandbox.id} is being provisioned by a live attempt "
-                f"(generation {sandbox.provisioning_generation})"
+                f"(attempt {sandbox.provisioning_attempt_number})"
             )
         _enforce_tenant_concurrency_limit(db_session)
         terminate_before_provision = True
-        generation = begin_provisioning_attempt__no_commit(db_session, sandbox)
+        attempt_number = begin_provisioning_attempt__no_commit(db_session, sandbox)
         requires_provisioning = True
         logger.warning(
-            "Taking over stale PROVISIONING sandbox %s for user %s (generation %s)",
+            "Taking over stale PROVISIONING sandbox %s for user %s (attempt %s)",
             sandbox.id,
             user.id,
-            generation,
+            attempt_number,
         )
     else:
         raise RuntimeError(
@@ -435,7 +438,7 @@ def reserve_sandbox__no_commit(
     return SandboxReservation(
         sandbox_id=sandbox.id,
         tenant_id=tenant_id,
-        generation=generation,
+        attempt_number=attempt_number,
         onyx_pat=onyx_pat,
         requires_provisioning=requires_provisioning,
         sandbox_preexisted=sandbox_preexisted,
@@ -446,33 +449,33 @@ def reserve_sandbox__no_commit(
 def _record_provisioning_failure(
     db_session: DBSession,
     sandbox_id: UUID,
-    generation: int,
+    attempt_number: int,
     error: BaseException,
 ) -> None:
-    """Durably mark a failed attempt FAILED (compare-and-set; a stale attempt
-    leaves newer state alone). The diagnostic detail lives in this log line,
-    keyed by sandbox ID + generation — not in the database. Never raises."""
+    """Durably mark a failed attempt FAILED; a no-op if a newer attempt
+    already owns the row. The diagnostic detail lives in this log line, keyed
+    by sandbox ID + attempt number — not in the database. Never raises."""
     try:
         if finalize_provisioning_attempt__no_commit(
             db_session,
             sandbox_id,
-            generation,
+            attempt_number,
             SandboxStatus.FAILED,
         ):
             db_session.commit()
             logger.error(
-                "Sandbox %s provisioning failed (generation %s): %s",
+                "Sandbox %s provisioning failed (attempt %s): %s",
                 sandbox_id,
-                generation,
+                attempt_number,
                 error,
             )
         else:
             db_session.rollback()
             logger.warning(
-                "Sandbox %s provisioning failed but generation %s is "
+                "Sandbox %s provisioning failed but attempt %s is "
                 "stale; leaving newer state untouched",
                 sandbox_id,
-                generation,
+                attempt_number,
             )
     except Exception:
         db_session.rollback()
@@ -494,17 +497,17 @@ def _get_sandbox_committed(db_session: DBSession, sandbox_id: UUID) -> Sandbox:
 
 
 def _check_attempt_deadline(
-    attempt_deadline: float, sandbox_id: UUID, generation: int
+    attempt_deadline: float, sandbox_id: UUID, attempt_number: int
 ) -> None:
     """Self-enforcement of the attempt deadline between external phases: the
     attempt aborts itself (finalizing FAILED via the caller's error handling)
     at the same age observers use to declare it stale. An in-flight phase can
     overrun the check; takeover safety comes from the provisioning lock and
-    the generation compare-and-set, not from this deadline."""
+    the attempt-number condition on status writes, not from this deadline."""
     if time.monotonic() >= attempt_deadline:
         raise TimeoutError(
-            f"Provisioning attempt for sandbox {sandbox_id} (generation "
-            f"{generation}) exceeded its {ATTEMPT_DEADLINE_SECONDS:.0f}s deadline"
+            f"Provisioning attempt for sandbox {sandbox_id} (attempt "
+            f"{attempt_number}) exceeded its {ATTEMPT_DEADLINE_SECONDS:.0f}s deadline"
         )
 
 
@@ -522,7 +525,7 @@ def reconcile_sandbox(
 
     Raises:
         SandboxProvisioningError: provisioning failed (recorded durably).
-        StaleProvisioningAttemptError: a newer generation superseded this
+        StaleProvisioningAttemptError: a newer attempt_number superseded this
             attempt before it could finalize.
         SandboxProvisioningInProgressError: lost a race to a concurrent
             lifecycle decision while recovering, or the provisioning lock is
@@ -530,7 +533,7 @@ def reconcile_sandbox(
     """
     sandbox_id = reservation.sandbox_id
     tenant_id = reservation.tenant_id
-    generation = reservation.generation
+    attempt_number = reservation.attempt_number
     onyx_pat = reservation.onyx_pat
     attempt_deadline = time.monotonic() + ATTEMPT_DEADLINE_SECONDS
     outcome = (
@@ -556,21 +559,21 @@ def reconcile_sandbox(
             "Sandbox %s marked RUNNING but pod is unhealthy/missing; recovering.",
             sandbox_id,
         )
-        # Claim the recovery generation BEFORE any destructive external work:
-        # a racing recoverer that loses this compare-and-set must never
-        # terminate a runtime the winner is already rebuilding.
-        new_generation = begin_recovery_attempt__no_commit(
-            db_session, sandbox_id, generation
+        # Claim a new attempt number BEFORE any destructive external work:
+        # a racing recoverer that loses this claim must never terminate a
+        # runtime the winner is already rebuilding.
+        new_attempt_number = begin_recovery_attempt__no_commit(
+            db_session, sandbox_id, attempt_number
         )
         db_session.commit()
-        if new_generation is None:
+        if new_attempt_number is None:
             # A concurrent lifecycle decision (reaper, another request) moved
             # the row mid-recovery; let the caller retry through a fresh
             # reservation, which handles every status.
             raise SandboxProvisioningInProgressError(
                 f"Sandbox {sandbox_id} state changed during recovery; retry"
             )
-        generation = new_generation
+        attempt_number = new_attempt_number
         outcome = SandboxReadyOutcome.RECOVERED
 
         try:
@@ -589,7 +592,7 @@ def reconcile_sandbox(
             sandbox_manager.terminate(sandbox_id)
         except Exception as e:
             db_session.rollback()
-            _record_provisioning_failure(db_session, sandbox_id, generation, e)
+            _record_provisioning_failure(db_session, sandbox_id, attempt_number, e)
             raise SandboxProvisioningError(
                 f"Sandbox {sandbox_id} recovery failed: {e}"
             ) from e
@@ -608,25 +611,25 @@ def reconcile_sandbox(
     # External provisioning against the committed identity. provision()
     # returns only once the sandbox is RUNNING; anything else raises.
     try:
-        _check_attempt_deadline(attempt_deadline, sandbox_id, generation)
+        _check_attempt_deadline(attempt_deadline, sandbox_id, attempt_number)
         with track_sandbox_provision_in_progress():
             sandbox_manager.provision(
                 sandbox_id=sandbox_id,
                 user_id=user.id,
                 tenant_id=tenant_id,
                 onyx_pat=onyx_pat,
-                provisioning_generation=generation,
+                provisioning_attempt_number=attempt_number,
             )
     except SandboxProvisionContentionError as e:
         # A superseded attempt's tail still holds the backend lock. Record
         # this attempt FAILED (so the row never idles as PROVISIONING) and
         # surface the retryable error; the caller re-reserves.
-        _record_provisioning_failure(db_session, sandbox_id, generation, e)
+        _record_provisioning_failure(db_session, sandbox_id, attempt_number, e)
         raise SandboxProvisioningInProgressError(
             f"Sandbox {sandbox_id} provisioning lock is contended; retry"
         ) from e
     except Exception as e:
-        _record_provisioning_failure(db_session, sandbox_id, generation, e)
+        _record_provisioning_failure(db_session, sandbox_id, attempt_number, e)
         raise SandboxProvisioningError(
             f"Sandbox {sandbox_id} provisioning failed: {e}"
         ) from e
@@ -636,18 +639,18 @@ def reconcile_sandbox(
     # finalize the attempt as FAILED — the row cannot be left PROVISIONING
     # until the stale-attempt threshold.
     try:
-        _check_attempt_deadline(attempt_deadline, sandbox_id, generation)
+        _check_attempt_deadline(attempt_deadline, sandbox_id, attempt_number)
         payload = build_managed_content_payload(user, db_session)
         db_session.commit()
         skills_hydrated = push_managed_content(sandbox_manager, sandbox_id, payload)
 
         finalized = finalize_provisioning_attempt__no_commit(
-            db_session, sandbox_id, generation, SandboxStatus.RUNNING
+            db_session, sandbox_id, attempt_number, SandboxStatus.RUNNING
         )
         if not finalized:
             db_session.rollback()
             raise StaleProvisioningAttemptError(
-                f"Sandbox {sandbox_id} generation {generation} was superseded "
+                f"Sandbox {sandbox_id} attempt {attempt_number} was superseded "
                 f"before finalization"
             )
         record_managed_content_hashes__no_commit(
@@ -658,7 +661,7 @@ def reconcile_sandbox(
         raise
     except Exception as e:
         db_session.rollback()
-        _record_provisioning_failure(db_session, sandbox_id, generation, e)
+        _record_provisioning_failure(db_session, sandbox_id, attempt_number, e)
         raise SandboxProvisioningError(
             f"Sandbox {sandbox_id} provisioning failed: {e}"
         ) from e
@@ -723,8 +726,8 @@ def ensure_sandbox_ready(
     - No sandbox row: reserve + provision.
     - ``RUNNING`` + pod healthy: return as-is (hot path).
     - ``RUNNING`` + pod missing/unhealthy: recover (terminate, new
-      generation, re-provision).
-    - ``SLEEPING`` / ``TERMINATED`` / ``FAILED``: new generation +
+      attempt_number, re-provision).
+    - ``SLEEPING`` / ``TERMINATED`` / ``FAILED``: new attempt_number +
       re-provision.
     - ``PROVISIONING`` (live attempt): ``POLL`` waits up to
       ``provisioning_wait_seconds`` then re-enters; ``FAIL`` raises
@@ -960,27 +963,27 @@ def sleep_sandbox(
                 return
 
         # Snapshotting above can take minutes; re-check idleness right before
-        # the kill and capture the generation the sleep is fenced against.
+        # the kill and capture the attempt number the sleep must still match.
         db_session.refresh(sandbox)
         if sandbox.status != SandboxStatus.RUNNING or not is_sandbox_idle(
             sandbox, datetime.now(timezone.utc)
         ):
             logger.info("Sandbox %s went active mid-sweep; skipping reap", sandbox_id)
             return
-        sleep_generation = sandbox.provisioning_generation
+        sleep_attempt_number = sandbox.provisioning_attempt_number
 
         # Terminate the pod (but keep the sandbox record).
         sandbox_manager.terminate(sandbox_id)
 
-        # A recovery/create that advanced the generation mid-terminate owns
-        # the sandbox now; only claim ports/sessions if this compare-and-set
-        # wins.
+        # A recovery/create that started a newer attempt mid-terminate owns
+        # the sandbox now; only claim ports/sessions if the sleep write
+        # applies.
         if not sleep_running_sandbox__no_commit(
-            db_session, sandbox_id, sleep_generation
+            db_session, sandbox_id, sleep_attempt_number
         ):
             db_session.rollback()
             logger.warning(
-                "Sandbox %s changed generation during reap; aborting sleep",
+                "Sandbox %s changed attempt_number during reap; aborting sleep",
                 sandbox_id,
             )
             return

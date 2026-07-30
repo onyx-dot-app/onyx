@@ -18,8 +18,8 @@ from onyx.server.features.build.timeouts import (
 from onyx.utils.datetime import datetime_to_utc
 
 # Turn-state mutex: guards a handful of Redis round-trips per mutation; the
-# lease only needs to exceed the longest critical section. Ownership is fenced
-# by the runner_id compare, never by this lease.
+# lease only needs to exceed the longest critical section. Ownership is
+# decided by the runner_id compare, never by this lease.
 TURN_LOCK_LEASE_SECONDS = 60.0
 TURN_LOCK_WAIT_SECONDS = 10.0
 

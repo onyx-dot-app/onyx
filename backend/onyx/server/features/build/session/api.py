@@ -133,8 +133,8 @@ def create_session(
     the same IDs) rather than rolling back to nothing.
 
     The Redis lock only reduces duplicate provisioning work for concurrent
-    requests; correctness comes from the committed reservation and
-    generation fencing.
+    requests; correctness comes from the committed reservation and the
+    attempt-number condition on status writes.
     """
     try:
         with session_creation_lock(user.id):

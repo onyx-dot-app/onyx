@@ -416,7 +416,7 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
         user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
         tenant_id="tenant-abc",
         onyx_pat="pat-redacted",
-        provisioning_generation=1,
+        provisioning_attempt_number=1,
     )
 
     assert info.status.value == "running"
@@ -560,7 +560,7 @@ def test_provision_removes_container_when_history_restore_fails(
             user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             tenant_id="tenant-abc",
             onyx_pat="pat-redacted",
-            provisioning_generation=1,
+            provisioning_attempt_number=1,
         )
 
     # Half-provisioned container is force-removed; opencode never started.

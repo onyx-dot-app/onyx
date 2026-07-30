@@ -285,7 +285,7 @@ class TestEnsureSandboxPat:
                 user_id=uuid4(),
                 tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 onyx_pat="",
-                provisioning_generation=1,
+                provisioning_attempt_number=1,
             )
 
     @pytest.mark.xfail(

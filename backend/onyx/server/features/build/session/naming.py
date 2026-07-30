@@ -1,4 +1,4 @@
-"""Auto-generation of human-readable build-session names.
+"""Auto-attempt_number of human-readable build-session names.
 
 Given a session, pull its first user message and ask the default LLM to
 condense it into a short label. Falls back to a deterministic

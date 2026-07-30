@@ -101,7 +101,7 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_COMPONENT_SANDBOX,
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
-    LABEL_PROVISIONING_GENERATION,
+    LABEL_PROVISIONING_ATTEMPT,
     LABEL_SANDBOX_ID,
     LABEL_TENANT_ID,
 )
@@ -185,9 +185,10 @@ def _provisioning_lock_key(sandbox_id: UUID) -> str:
 @contextmanager
 def _provisioning_lock(sandbox_id: UUID, tenant_id: str) -> Iterator[None]:
     """Serialize pod creation + startup restore for one sandbox across
-    api-server replicas. Acquisition is non-blocking: generation fencing
-    already guarantees one live attempt per sandbox, so a held lock means a
-    superseded attempt's tail — the caller retries rather than waiting it out.
+    api-server replicas. Acquisition is non-blocking: the numbered-attempt
+    reservation already guarantees at most one live attempt per sandbox, so a
+    held lock means a superseded attempt's tail — the caller retries rather
+    than waiting it out.
     TTL equals the provision deadline (the lock never outlives the work it
     guards); expiry falls open to provision()'s 409/pod-exists fallbacks.
     Fails open on cache outages."""
@@ -465,7 +466,7 @@ class KubernetesSandboxManager(SandboxManager):
         self,
         sandbox_id: str,
         tenant_id: str,
-        provisioning_generation: int,
+        provisioning_attempt_number: int,
     ) -> client.V1Pod:
         """Build the sandbox Pod from the Helm PodTemplate, overlaying the
         dynamic fields the template can't carry."""
@@ -500,7 +501,7 @@ class KubernetesSandboxManager(SandboxManager):
                     LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
                     LABEL_SANDBOX_ID: sandbox_id,
                     LABEL_TENANT_ID: tenant_id,
-                    LABEL_PROVISIONING_GENERATION: str(provisioning_generation),
+                    LABEL_PROVISIONING_ATTEMPT: str(provisioning_attempt_number),
                 },
             ),
             spec=spec,
@@ -994,7 +995,7 @@ class KubernetesSandboxManager(SandboxManager):
         user_id: UUID,
         tenant_id: str,
         onyx_pat: str | None,
-        provisioning_generation: int,
+        provisioning_attempt_number: int,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -1052,8 +1053,8 @@ class KubernetesSandboxManager(SandboxManager):
             pod_name = self._get_pod_name(str(sandbox_id))
 
             # Idempotency check; also the pod-exists path a lock-expiry racer
-            # lands on. The generation label keeps its creating attempt's
-            # value — it is attribution metadata, never a correctness fence.
+            # lands on. The attempt-number label keeps its creating attempt's
+            # value — attribution metadata only, never used for correctness.
             if self._pod_exists_and_healthy(pod_name):
                 logger.info(
                     "Pod %s already exists and is healthy, reusing existing pod",
@@ -1120,7 +1121,7 @@ class KubernetesSandboxManager(SandboxManager):
                 pod = self._create_sandbox_pod(
                     sandbox_id=str(sandbox_id),
                     tenant_id=tenant_id,
-                    provisioning_generation=provisioning_generation,
+                    provisioning_attempt_number=provisioning_attempt_number,
                 )
                 try:
                     with time_provision_phase(SandboxProvisionPhase.POD_CREATE):

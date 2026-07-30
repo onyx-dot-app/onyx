@@ -240,7 +240,7 @@ class SessionManager:
         """Mint and persist the OpenCode session before the first prompt.
 
         The caller owns the surrounding transaction. This keeps the empty Craft
-        session's runtime ID and acknowledged skills generation aligned.
+        session's runtime ID and acknowledged skills attempt_number aligned.
         """
         opencode_session_id = self._sandbox_manager.ensure_opencode_session(
             sandbox_id=sandbox.id,
@@ -445,7 +445,7 @@ class SessionManager:
         - No sandbox row: creates one and provisions it.
         - ``RUNNING`` + pod healthy: returns as-is.
         - ``RUNNING`` + pod missing/unhealthy: terminates and re-provisions
-          under a new generation.
+          under a new attempt_number.
         - ``SLEEPING`` / ``TERMINATED`` / ``FAILED``: re-provisions in place.
         - ``PROVISIONING``: a stale attempt is taken over; a live one is
           polled up to ``provisioning_wait_seconds`` (default 30s). Raises
@@ -661,7 +661,8 @@ class SessionManager:
         llm_config: CraftLLMProviderConfig,
     ) -> None:
         """Build the workspace and OpenCode session for a committed
-        ``INITIALIZING`` session, then compare-and-set it to ``ACTIVE``.
+        ``INITIALIZING`` session, then mark it ``ACTIVE`` (a no-op if the
+        session already moved on).
 
         All database reads happen up front; the workspace setup and OpenCode
         prewarm run with no open transaction. On failure the session is

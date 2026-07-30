@@ -94,58 +94,59 @@ def begin_provisioning_attempt__no_commit(
     db_session: Session,
     sandbox: Sandbox,
 ) -> int:
-    """Authorize a new external provisioning attempt: advance the fencing
-    generation and mark the sandbox ``PROVISIONING``. Must run inside the
+    """Authorize a new external provisioning attempt: assign the next attempt
+    number and mark the sandbox ``PROVISIONING``. Must run inside the
     per-user reservation transaction (user row locked) so concurrent
-    reservers serialize on generation assignment.
+    reservers get distinct numbers.
 
-    Returns the new generation, which the attempt must present to the
-    compare-and-set transitions below.
+    Returns the new attempt number, which the attempt must present to the
+    conditional transitions below.
     """
     sandbox.status = SandboxStatus.PROVISIONING
-    sandbox.provisioning_generation += 1
+    sandbox.provisioning_attempt_number += 1
     sandbox.provisioning_started_at = datetime.datetime.now(datetime.timezone.utc)
     db_session.flush()
-    return sandbox.provisioning_generation
+    return sandbox.provisioning_attempt_number
 
 
 def begin_recovery_attempt__no_commit(
     db_session: Session,
     sandbox_id: UUID,
-    expected_generation: int,
+    expected_attempt_number: int,
 ) -> int | None:
-    """Compare-and-set takeover of an unhealthy ``RUNNING`` sandbox for a new
-    provisioning attempt (recovery happens outside the reservation lock).
-    Returns the new generation, or None when the row already moved on."""
+    """Take over an unhealthy ``RUNNING`` sandbox for a new provisioning
+    attempt — applied only if the row is still RUNNING under
+    ``expected_attempt_number`` (recovery happens outside the reservation lock).
+    Returns the new attempt number, or None when the row already moved on."""
     result = db_session.execute(
         update(Sandbox)
         .where(
             Sandbox.id == sandbox_id,
-            Sandbox.provisioning_generation == expected_generation,
+            Sandbox.provisioning_attempt_number == expected_attempt_number,
             Sandbox.status == SandboxStatus.RUNNING,
         )
         .values(
             status=SandboxStatus.PROVISIONING,
-            provisioning_generation=expected_generation + 1,
+            provisioning_attempt_number=expected_attempt_number + 1,
             provisioning_started_at=datetime.datetime.now(datetime.timezone.utc),
         )
     )
     if result.rowcount != 1:  # ty: ignore[unresolved-attribute]
         return None
-    return expected_generation + 1
+    return expected_attempt_number + 1
 
 
 def finalize_provisioning_attempt__no_commit(
     db_session: Session,
     sandbox_id: UUID,
-    generation: int,
+    attempt_number: int,
     to_status: Literal[SandboxStatus.RUNNING, SandboxStatus.FAILED],
 ) -> bool:
-    """Generation-guarded compare-and-set ``PROVISIONING`` → outcome.
-    Returns False when the attempt is stale (the row moved on or a newer
-    generation exists) — the caller's external work must not be recorded as
-    the current runtime. ``RUNNING`` also stamps the heartbeat so the fresh
-    pod gets a proper idle-timeout baseline."""
+    """Record the attempt's outcome — applied only if the row is still
+    ``PROVISIONING`` under this attempt's number. Returns False when a newer
+    attempt has taken over: the caller's external work must not be recorded
+    as the current runtime. ``RUNNING`` also stamps the heartbeat so the
+    fresh pod gets a proper idle-timeout baseline."""
     values: dict[str, object] = {"status": to_status}
     if to_status == SandboxStatus.RUNNING:
         values["last_heartbeat"] = datetime.datetime.now(datetime.timezone.utc)
@@ -153,7 +154,7 @@ def finalize_provisioning_attempt__no_commit(
         update(Sandbox)
         .where(
             Sandbox.id == sandbox_id,
-            Sandbox.provisioning_generation == generation,
+            Sandbox.provisioning_attempt_number == attempt_number,
             Sandbox.status == SandboxStatus.PROVISIONING,
         )
         .values(**values)
@@ -164,17 +165,17 @@ def finalize_provisioning_attempt__no_commit(
 def sleep_running_sandbox__no_commit(
     db_session: Session,
     sandbox_id: UUID,
-    generation: int,
+    attempt_number: int,
 ) -> bool:
-    """Generation-guarded compare-and-set ``RUNNING`` → ``SLEEPING`` for the
-    idle reaper. Returns False when the row moved on (a concurrent recovery or
-    create advanced the generation / left RUNNING), so the reaper must not
-    clobber that decision with an unconditional sleep."""
+    """``RUNNING`` → ``SLEEPING`` for the idle reaper — applied only if the
+    sandbox still belongs to attempt ``attempt_number``. Returns False when the
+    row moved on (a concurrent recovery or create started a newer attempt /
+    left RUNNING), so the reaper must not clobber that decision."""
     result = db_session.execute(
         update(Sandbox)
         .where(
             Sandbox.id == sandbox_id,
-            Sandbox.provisioning_generation == generation,
+            Sandbox.provisioning_attempt_number == attempt_number,
             Sandbox.status == SandboxStatus.RUNNING,
         )
         .values(status=SandboxStatus.SLEEPING)

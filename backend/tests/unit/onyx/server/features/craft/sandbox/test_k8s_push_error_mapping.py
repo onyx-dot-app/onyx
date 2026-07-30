@@ -793,7 +793,7 @@ def test_provision_cleans_up_pod_when_opencode_history_restore_fails(
             user_id=_sandbox_id(),
             tenant_id="tenant-test",
             onyx_pat="pat",
-            provisioning_generation=1,
+            provisioning_attempt_number=1,
         )
 
     cleanup_resources_mock.assert_called_once_with(str(sandbox_id))
@@ -825,7 +825,7 @@ def test_provision_existing_healthy_pod_does_not_restore_opencode_history(
         user_id=_sandbox_id(),
         tenant_id="tenant-test",
         onyx_pat="pat",
-        provisioning_generation=1,
+        provisioning_attempt_number=1,
     )
 
     assert info.sandbox_id == sandbox_id
@@ -869,7 +869,7 @@ def test_provision_conflicting_healthy_pod_skips_startup_restore(
         user_id=_sandbox_id(),
         tenant_id="tenant-test",
         onyx_pat="pat",
-        provisioning_generation=1,
+        provisioning_attempt_number=1,
     )
 
     assert info.sandbox_id == sandbox_id
@@ -931,7 +931,7 @@ def test_provision_conflicting_not_ready_pod_runs_startup_restore(
         user_id=_sandbox_id(),
         tenant_id="tenant-test",
         onyx_pat="pat",
-        provisioning_generation=1,
+        provisioning_attempt_number=1,
     )
 
     assert info.sandbox_id == sandbox_id
@@ -974,7 +974,7 @@ def test_provision_conflicting_not_ready_pod_restore_failure_does_not_cleanup(
             user_id=_sandbox_id(),
             tenant_id="tenant-test",
             onyx_pat="pat",
-            provisioning_generation=1,
+            provisioning_attempt_number=1,
         )
 
     cleanup_resources_mock.assert_not_called()
