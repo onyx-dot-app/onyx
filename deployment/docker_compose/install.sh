@@ -267,6 +267,22 @@ chmod +x "${TMP_DIR}/onyx-cli"
 mv -f "${TMP_DIR}/onyx-cli" "$BIN_PATH"
 print_success "onyx-cli installed to ${BIN_PATH}"
 
+# Appends `line` to `profile` unless it is already there. Returns non-zero
+# when the file cannot be written so the caller can fall back to printing
+# manual instructions.
+append_line_to_profile() {
+    local profile="$1"
+    local line="$2"
+    if [[ -f "$profile" ]] && grep -Fq "$line" "$profile" 2>/dev/null; then
+        return 0
+    fi
+    mkdir -p "$(dirname "$profile")" 2>/dev/null || return 1
+    # 2>/dev/null must precede >>: redirections apply left to right, and a
+    # failing append would otherwise print the shell's error before stderr
+    # is silenced.
+    printf '\n# Added by the Onyx installer\n%s\n' "$line" 2>/dev/null >> "$profile"
+}
+
 case ":${PATH}:" in
     *":${BIN_DIR}:"*)
         # An onyx-cli earlier in PATH (e.g. a pip install) would shadow the one
@@ -278,8 +294,39 @@ case ":${PATH}:" in
         fi
         ;;
     *)
-        print_warning "${BIN_DIR} is not in your PATH — add it to run onyx-cli directly:"
-        echo -e "   ${BOLD}export PATH=\"${BIN_DIR}:\$PATH\"${NC}"
+        # Persist BIN_DIR into the login shell's profile so onyx-cli still
+        # resolves in new shells once this installer hands over to the CLI.
+        # The script itself runs under bash even when the user's shell is zsh
+        # or fish, hence the $SHELL sniffing.
+        PATH_LINE="export PATH=\"${BIN_DIR}:\$PATH\""
+        PROFILE_FILE=""
+        case "${SHELL##*/}" in
+            zsh)
+                PROFILE_FILE="${ZDOTDIR:-$HOME}/.zshrc"
+                ;;
+            bash)
+                # macOS terminals start login shells, which skip ~/.bashrc.
+                if [[ "$OS" == "darwin" ]]; then
+                    PROFILE_FILE="${HOME}/.bash_profile"
+                else
+                    PROFILE_FILE="${HOME}/.bashrc"
+                fi
+                ;;
+            fish)
+                PROFILE_FILE="${HOME}/.config/fish/config.fish"
+                PATH_LINE="fish_add_path \"${BIN_DIR}\""
+                ;;
+        esac
+
+        if [[ -n "$PROFILE_FILE" ]] && append_line_to_profile "$PROFILE_FILE" "$PATH_LINE"; then
+            print_success "Added ${BIN_DIR} to PATH in ${PROFILE_FILE}"
+            print_info "Restart your shell (or run the line below) to pick it up:"
+        else
+            print_warning "${BIN_DIR} is not in your PATH — add it to run onyx-cli directly:"
+        fi
+        echo -e "   ${BOLD}${PATH_LINE}${NC}"
+        # Fix up this process too so anything the CLI spawns can find it.
+        export PATH="${BIN_DIR}:${PATH}"
         ;;
 esac
 
