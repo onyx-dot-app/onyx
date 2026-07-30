@@ -1,6 +1,16 @@
+"""Membership routing for the shared `public.user_tenant_mapping` catalog.
+
+"Subject" throughout this module means the OAuth subject: the provider-issued
+identifier for an account, which survives the user renaming their email address
+at that provider. It is the `(oauth_name, account_id)` pair.
+"""
+
+from collections.abc import Sequence
+
 from fastapi_users import exceptions
-from sqlalchemy import select
+from sqlalchemy import or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.invited_users import (
     get_invited_users,
@@ -13,6 +23,8 @@ from onyx.db.engine.sql_engine import (
     get_session_with_tenant,
 )
 from onyx.db.models import UserTenantMapping, UserTenantMappingOAuthAccount
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.models import TenantSnapshot
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
@@ -21,43 +33,129 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 logger = setup_logger()
 
 
+def _oauth_identity_matches_mapping(
+    oauth_name: str, account_id: str
+) -> ColumnElement[bool]:
+    return (
+        select(UserTenantMappingOAuthAccount.oauth_name)
+        .where(
+            UserTenantMappingOAuthAccount.oauth_name == oauth_name,
+            UserTenantMappingOAuthAccount.account_id == account_id,
+            UserTenantMappingOAuthAccount.email == UserTenantMapping.email,
+            UserTenantMappingOAuthAccount.tenant_id == UserTenantMapping.tenant_id,
+        )
+        .exists()
+    )
+
+
 def get_tenant_id_for_email(email: str) -> str:
     if not MULTI_TENANT:
         return POSTGRES_DEFAULT_SCHEMA
-    # Implement logic to get tenant_id from the mapping table
-    try:
-        with get_catalog_session() as db_session:
-            # First try to get an active tenant
-            result = db_session.execute(
-                select(UserTenantMapping).where(
-                    UserTenantMapping.email == email,
-                    UserTenantMapping.active == True,  # noqa: E712
-                )
-            )
-            mapping = result.scalar_one_or_none()
-            tenant_id = mapping.tenant_id if mapping else None
 
-            # If no active tenant found, try to get the first inactive one
-            if tenant_id is None:
-                result = db_session.execute(
-                    select(UserTenantMapping).where(
+    email = email.lower()
+    with get_catalog_session() as db_session:
+        result = db_session.execute(
+            select(UserTenantMapping.tenant_id).where(
+                UserTenantMapping.email == email,
+                UserTenantMapping.active == True,  # noqa: E712
+            )
+        )
+        tenant_id = result.scalar_one_or_none()
+
+        # Only auto-join a single pending invitation. Choosing among several
+        # would enroll the user in a workspace they never accepted.
+        if tenant_id is None:
+            inactive_tenant_ids = (
+                db_session.execute(
+                    select(UserTenantMapping.tenant_id).where(
                         UserTenantMapping.email == email,
                         UserTenantMapping.active == False,  # noqa: E712
                     )
                 )
-                mapping = result.scalar_one_or_none()
-                if mapping:
-                    # Mark this mapping as active
-                    mapping.active = True
-                    db_session.commit()
-                    tenant_id = mapping.tenant_id
-    except Exception as e:
-        logger.exception("Error getting tenant id for email %s: %s", email, e)
-        raise exceptions.UserNotExists()
+                .scalars()
+                .all()
+            )
+            if len(inactive_tenant_ids) == 1:
+                tenant_id = inactive_tenant_ids[0]
+                db_session.query(UserTenantMapping).filter(
+                    UserTenantMapping.email == email,
+                    UserTenantMapping.tenant_id == tenant_id,
+                ).update({"active": True}, synchronize_session=False)
+                db_session.commit()
+            elif inactive_tenant_ids:
+                logger.warning(
+                    "Multiple pending invitations for one address require selection"
+                )
+                raise OnyxError(
+                    OnyxErrorCode.CONFLICT,
+                    "Multiple pending workspace invitations require an explicit "
+                    "selection.",
+                )
 
     if tenant_id is None:
         raise exceptions.UserNotExists()
     return tenant_id
+
+
+def resolve_tenant_id(
+    email: str, oauth_name: str | None = None, account_id: str | None = None
+) -> str | None:
+    """Tenant this login belongs to, or None when it maps nowhere.
+
+    An active subject membership wins because only the subject survives an
+    address change. A superseded one is the last resort, since an active email
+    membership names a workspace the user was deliberately moved into.
+    """
+    if oauth_name and account_id:
+        tenant_id = get_tenant_id_for_oauth_account(oauth_name, account_id)
+        if tenant_id:
+            return tenant_id
+
+    try:
+        return get_tenant_id_for_email(email)
+    except exceptions.UserNotExists:
+        if not (oauth_name and account_id):
+            return None
+        return get_superseded_tenant_id_for_oauth_account(oauth_name, account_id)
+
+
+def _oauth_account_tenant_id(
+    oauth_name: str, account_id: str, *, active: bool
+) -> str | None:
+    # A subject links to at most one mapping row, so this cannot be ambiguous.
+    with get_catalog_session() as db_session:
+        return db_session.scalar(
+            select(UserTenantMapping.tenant_id).where(
+                _oauth_identity_matches_mapping(oauth_name, account_id),
+                UserTenantMapping.active.is_(active),
+            )
+        )
+
+
+def get_tenant_id_for_oauth_account(oauth_name: str, account_id: str) -> str | None:
+    """Active workspace of an IdP subject, or None when it maps nowhere.
+
+    Returns the default schema outside multi-tenant.
+    """
+    if not MULTI_TENANT:
+        return POSTGRES_DEFAULT_SCHEMA
+
+    return _oauth_account_tenant_id(oauth_name, account_id, active=True)
+
+
+def get_superseded_tenant_id_for_oauth_account(
+    oauth_name: str, account_id: str
+) -> str | None:
+    """Workspace of a membership that yielded the email address it was filed under.
+
+    Leaving a workspace deletes the mapping, so an inactive linked row is still a
+    real membership. It yields when its owner joins another workspace under the
+    same address, or when a different person takes that address over.
+    """
+    if not MULTI_TENANT:
+        return None
+
+    return _oauth_account_tenant_id(oauth_name, account_id, active=False)
 
 
 def user_owns_a_tenant(email: str) -> bool:
@@ -127,6 +225,23 @@ def record_oauth_identity(
                 )
                 return
         db_session.commit()
+
+
+def _association_ownership_filter(
+    identities: Sequence[tuple[str, str]],
+) -> ColumnElement[bool]:
+    association_mapping_keys = select(
+        UserTenantMappingOAuthAccount.email,
+        UserTenantMappingOAuthAccount.tenant_id,
+    ).where(
+        tuple_(
+            UserTenantMappingOAuthAccount.oauth_name,
+            UserTenantMappingOAuthAccount.account_id,
+        ).in_(identities)
+    )
+    return tuple_(UserTenantMapping.email, UserTenantMapping.tenant_id).in_(
+        association_mapping_keys
+    )
 
 
 def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
@@ -249,17 +364,44 @@ def remove_all_users_from_tenant(tenant_id: str) -> None:
 def approve_user_invite(email: str, tenant_id: str) -> None:
     """
     Approve a user invite to a tenant.
-    This will delete all existing records for this email and create a new mapping entry for the user in this tenant.
+    This makes the user active in this tenant and inactive everywhere else.
     """
+    email = email.lower()
     with get_catalog_session() as db_session:
-        # Delete all existing records for this email
-        db_session.query(UserTenantMapping).filter(
-            UserTenantMapping.email == email
-        ).delete()
+        existing_mappings = (
+            db_session.query(UserTenantMapping)
+            .filter(UserTenantMapping.email == email)
+            .with_for_update()
+            .all()
+        )
+        destination = next(
+            (
+                candidate
+                for candidate in existing_mappings
+                if candidate.tenant_id == tenant_id
+            ),
+            None,
+        )
+        # Approving by email address proves nothing about identity, since that
+        # address may have been reassigned. Rival rows are deactivated rather than
+        # deleted so their owner's subject links are not cascaded away.
+        for mapping in existing_mappings:
+            if mapping is not destination:
+                mapping.active = False
 
-        # Create a new mapping entry for the user in this tenant
-        new_mapping = UserTenantMapping(email=email, tenant_id=tenant_id, active=True)
-        db_session.add(new_mapping)
+        # uq_user_active_email_idx is immediate, so free the email address
+        # before this tenant's row becomes active.
+        db_session.flush()
+        if destination is None:
+            # A fresh mapping starts unlinked: subjects attach on the next login.
+            destination = UserTenantMapping(
+                email=email,
+                tenant_id=tenant_id,
+                active=True,
+            )
+            db_session.add(destination)
+        else:
+            destination.active = True
         db_session.commit()
 
     # Also remove the user from pending users list
@@ -276,53 +418,123 @@ def approve_user_invite(email: str, tenant_id: str) -> None:
         write_invited_users(invited_users)
 
 
-def accept_user_invite(email: str, tenant_id: str) -> None:
+def accept_user_invite(
+    email: str,
+    tenant_id: str,
+    oauth_identities: Sequence[tuple[str, str]] = (),
+) -> None:
+    """Activate this user's invitation and retire their other memberships.
+
+    ``oauth_identities`` are the ``(oauth_name, account_id)`` subjects the caller
+    authenticated as. Only rows those already link to are provably this
+    identity's, since an address may have been reassigned.
     """
-    Accept an invitation to join a tenant.
-    This activates the user's mapping to the tenant.
-    """
+    email = email.lower()
+    identities = list(dict.fromkeys(oauth_identities))
+    ownership_filter = UserTenantMapping.email == email
+    if identities:
+        ownership_filter = or_(
+            ownership_filter,
+            _association_ownership_filter(identities),
+        )
+
     with get_catalog_session() as db_session:
         try:
-            # Lock the user's mappings first to prevent race conditions.
-            # This ensures no concurrent request can modify this user's mappings.
-            active_mapping = (
+            mappings = (
                 db_session.query(UserTenantMapping)
-                .filter(
-                    UserTenantMapping.email == email,
-                    UserTenantMapping.active == True,  # noqa: E712
-                )
+                .filter(ownership_filter)
                 .with_for_update()
-                .first()
+                .all()
             )
-
-            # If an active mapping exists, delete it
-            if active_mapping:
-                db_session.delete(active_mapping)
-                logger.info(
-                    "Deleted existing active mapping for user %s in tenant %s",
-                    email,
-                    tenant_id,
-                )
-
-            # Find the inactive mapping for this user and tenant
-            mapping = (
-                db_session.query(UserTenantMapping)
-                .filter(
-                    UserTenantMapping.email == email,
-                    UserTenantMapping.tenant_id == tenant_id,
-                    UserTenantMapping.active == False,  # noqa: E712
-                )
-                .first()
+            mapping = next(
+                (
+                    candidate
+                    for candidate in mappings
+                    if candidate.email == email
+                    and candidate.tenant_id == tenant_id
+                    and not candidate.active
+                ),
+                None,
             )
 
             if mapping:
-                # Set all other mappings for this user to inactive
-                db_session.query(UserTenantMapping).filter(
-                    UserTenantMapping.email == email,
-                    UserTenantMapping.active == True,  # noqa: E712
-                ).update({"active": False})
+                presented_links = (
+                    db_session.execute(
+                        select(
+                            UserTenantMappingOAuthAccount.oauth_name,
+                            UserTenantMappingOAuthAccount.account_id,
+                            UserTenantMappingOAuthAccount.email,
+                            UserTenantMappingOAuthAccount.tenant_id,
+                        ).where(
+                            tuple_(
+                                UserTenantMappingOAuthAccount.oauth_name,
+                                UserTenantMappingOAuthAccount.account_id,
+                            ).in_(identities)
+                        )
+                    ).all()
+                    if identities
+                    else []
+                )
+                linked_identities = {
+                    (oauth_name, account_id)
+                    for oauth_name, account_id, _, _ in presented_links
+                }
+                # Rows this login's OAuth subjects are already linked to. Matching
+                # on the email address alone would also catch rows belonging to
+                # whoever held that address before this user.
+                owned_mapping_keys = {
+                    (owner_email, owner_tenant_id)
+                    for _, _, owner_email, owner_tenant_id in presented_links
+                } - {(mapping.email, mapping.tenant_id)}
+                # The owned row is deleted below, so all of its links move
+                # first or ON DELETE CASCADE takes the providers not presented.
+                association_accounts = (
+                    db_session.query(UserTenantMappingOAuthAccount)
+                    .filter(
+                        tuple_(
+                            UserTenantMappingOAuthAccount.email,
+                            UserTenantMappingOAuthAccount.tenant_id,
+                        ).in_(list(owned_mapping_keys))
+                    )
+                    .with_for_update()
+                    .all()
+                    if owned_mapping_keys
+                    else []
+                )
+                for account in association_accounts:
+                    account.email = mapping.email
+                    account.tenant_id = mapping.tenant_id
 
-                # Activate this mapping
+                db_session.add_all(
+                    [
+                        UserTenantMappingOAuthAccount(
+                            oauth_name=oauth_name,
+                            account_id=account_id,
+                            email=mapping.email,
+                            tenant_id=mapping.tenant_id,
+                        )
+                        for oauth_name, account_id in identities
+                        if (oauth_name, account_id) not in linked_identities
+                    ]
+                )
+                # Every subject presented today that was not already linked now
+                # links to the destination row.
+                db_session.flush()
+
+                for candidate in mappings:
+                    if candidate is mapping or not candidate.active:
+                        continue
+                    # One active row per email address, so a rival yields. A row
+                    # this user does not own is only deactivated, because its
+                    # OAuth subject links belong to that address's previous holder.
+                    if (candidate.email, candidate.tenant_id) in owned_mapping_keys:
+                        db_session.delete(candidate)
+                    else:
+                        candidate.active = False
+
+                # uq_user_active_email_idx is immediate, so free the email
+                # address before the destination becomes active.
+                db_session.flush()
                 mapping.active = True
                 db_session.commit()
                 logger.info(

@@ -337,6 +337,27 @@ def get_user_by_email(email: str, db_session: Session) -> User | None:
     return user
 
 
+def get_user_by_oauth_account(
+    oauth_name: str, account_id: str, db_session: Session
+) -> User | None:
+    """Find a user by the IdP subject their account is linked to.
+
+    Unlike the email lookup, this keeps working after an IdP rename.
+    """
+    return (
+        db_session.query(User)
+        .join(
+            OAuthAccount,
+            OAuthAccount.user_id == User.id,  # ty: ignore[invalid-argument-type]
+        )
+        .filter(
+            OAuthAccount.oauth_name == oauth_name,  # ty: ignore[invalid-argument-type]
+            OAuthAccount.account_id == account_id,  # ty: ignore[invalid-argument-type]
+        )
+        .first()
+    )
+
+
 def fetch_user_by_id(
     db_session: Session, user_id: UUID, for_update: bool = False
 ) -> User | None:

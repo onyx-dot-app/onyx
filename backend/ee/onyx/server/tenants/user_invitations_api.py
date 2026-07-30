@@ -80,7 +80,14 @@ async def accept_invite(
     Accept an invitation to join a tenant.
     """
     try:
-        accept_user_invite(user.email, invite_request.tenant_id)
+        accept_user_invite(
+            user.email,
+            invite_request.tenant_id,
+            [
+                (account.oauth_name, account.account_id)
+                for account in user.oauth_accounts
+            ],
+        )
     except Exception as e:
         logger.exception("Failed to accept invite: %s", str(e))
         raise HTTPException(status_code=500, detail="Failed to accept invitation")

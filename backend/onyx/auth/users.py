@@ -138,6 +138,7 @@ from onyx.db.pat import resolve_pat
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
     get_user_by_email,
+    get_user_by_oauth_account,
     is_limited_user,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -336,9 +337,18 @@ def verify_email_is_invited(email: str) -> None:
     )
 
 
-def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
+def verify_email_in_whitelist(
+    email: str,
+    tenant_id: str,
+    oauth_name: str | None = None,
+    account_id: str | None = None,
+) -> None:
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         user = get_user_by_email(email, db_session)
+        if user is None and oauth_name and account_id:
+            # A linked subject proves this is an existing member even when the
+            # provider has renamed their address since the previous login.
+            user = get_user_by_oauth_account(oauth_name, account_id, db_session)
         # A permission-sync placeholder is not a member: appearing in a
         # connector's ACLs must not satisfy invite-only, so the invite check
         # applies until the person actually joins.
@@ -904,6 +914,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             email=account_email,
             referral_source=referral_source,
             request=request,
+            oauth_name=oauth_name,
+            account_id=account_id,
         )
 
         if not tenant_id:
@@ -914,7 +926,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         async with get_async_session_context_manager(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-            verify_email_in_whitelist(account_email, tenant_id)
+            verify_email_in_whitelist(account_email, tenant_id, oauth_name, account_id)
             oauth_security_settings = get_security_settings()
             effective_valid_email_domains = (
                 allowed_email_domains_override
@@ -1351,12 +1363,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         tenant_id: str | None = None
         try:
             tenant_id = fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.provisioning",
+                "onyx.db.user_tenant_mapping",
                 "get_tenant_id_for_email",
                 POSTGRES_DEFAULT_SCHEMA,
             )(
                 email=email,
             )
+        except OnyxError:
+            # Ambiguous membership is actionable, so it has to reach the caller
+            # rather than be flattened into a generic credential failure.
+            raise
         except Exception as e:
             logger.warning(
                 "User attempted to login with invalid credentials: %s", str(e)
@@ -2465,19 +2481,20 @@ async def complete_login_flow(
             ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
         )
 
-    # Snapshot the raw IdP claims for directory-profile enrichment and the
-    # admin "OAuth Test" page. Best-effort — never raises, no-op unless
-    # IDP_PROFILE_ENRICHMENT_ENABLED.
-    await capture_oauth_login_claims(oauth_client, account_email, token)
-
     next_url = sanitize_next_url(state_data.get("next_url"))
     referral_source = state_data.get("referral_source", None)
-    try:
-        tenant_id = fetch_ee_implementation_or_noop(
-            "onyx.db.user_tenant_mapping", "get_tenant_id_for_email", None
-        )(account_email)
-    except exceptions.UserNotExists:
-        tenant_id = None
+    # Drives the new_team redirect below. Resolving differently from the login
+    # itself would greet a returning user as a brand new signup.
+    tenant_id = fetch_ee_implementation_or_noop(
+        "onyx.db.user_tenant_mapping", "resolve_tenant_id", None
+    )(account_email, oauth_client.name, account_id)
+
+    # Snapshot the raw IdP claims for directory-profile enrichment and the admin
+    # "OAuth Test" page. The subject-resolved tenant keeps capture working after
+    # an IdP rename. Never raises, no-op unless IDP_PROFILE_ENRICHMENT_ENABLED.
+    await capture_oauth_login_claims(
+        oauth_client, account_email, token, tenant_id=tenant_id
+    )
 
     request.state.referral_source = referral_source
 
