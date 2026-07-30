@@ -18,10 +18,14 @@ import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 // ---------------------------------------------------------------------------
 
 export interface TokenLimit {
+  tokenId: number | null;
+  enabled: boolean;
   tokenBudget: number | null;
   periodDays: number | null;
   costBudgetDollars: number | null;
 }
+
+type TokenLimitValueField = "tokenBudget" | "periodDays" | "costBudgetDollars";
 
 interface TokenLimitSectionProps {
   limits: TokenLimit[];
@@ -65,7 +69,13 @@ function TokenLimitSection({
     keysRef.current = [...keysRef.current, key];
     onLimitsChange([
       ...limits,
-      { tokenBudget: null, periodDays: null, costBudgetDollars: null },
+      {
+        tokenId: null,
+        enabled: true,
+        tokenBudget: null,
+        periodDays: null,
+        costBudgetDollars: null,
+      },
     ]);
   }
 
@@ -76,7 +86,7 @@ function TokenLimitSection({
 
   function updateLimit(
     index: number,
-    field: keyof TokenLimit,
+    field: TokenLimitValueField,
     value: number | null
   ) {
     onLimitsChange(
@@ -141,7 +151,7 @@ function TokenLimitSection({
                     <InputNumber
                       value={limit.tokenBudget}
                       onChange={(v) => updateLimit(i, "tokenBudget", v)}
-                      min={0}
+                      min={1}
                       placeholder="Token limit (thousands)"
                     />
                   </div>

@@ -5,7 +5,13 @@ import type { TokenLimit } from "@/views/admin/GroupsPage/TokenLimitSection";
 
 function TokenLimitSectionHarness() {
   const [limits, setLimits] = useState<TokenLimit[]>([
-    { tokenBudget: null, periodDays: null, costBudgetDollars: null },
+    {
+      tokenId: null,
+      enabled: true,
+      tokenBudget: null,
+      periodDays: null,
+      costBudgetDollars: null,
+    },
   ]);
 
   return <TokenLimitSection limits={limits} onLimitsChange={setLimits} />;
@@ -31,4 +37,14 @@ test("enforces a positive cost limit", async () => {
   await user.type(costLimit, "0");
 
   expect(costLimit).toHaveValue("0.01");
+});
+
+test("enforces a positive token limit", async () => {
+  const user = setupUser();
+  render(<TokenLimitSectionHarness />);
+
+  const tokenLimit = screen.getByPlaceholderText("Token limit (thousands)");
+  await user.type(tokenLimit, "0");
+
+  expect(tokenLimit).toHaveValue("1");
 });

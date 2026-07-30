@@ -43,4 +43,61 @@ describe("group token-limit persistence", () => {
       });
     }
   );
+
+  test("preserves limit identity when a middle row is removed", async () => {
+    fetchMock.mockResolvedValue({ ok: true } as Response);
+    const existing = [
+      {
+        token_id: 10,
+        enabled: true,
+        token_budget: 100,
+        period_hours: 24,
+        cost_budget_cents: null,
+      },
+      {
+        token_id: 20,
+        enabled: false,
+        token_budget: 200,
+        period_hours: 24,
+        cost_budget_cents: null,
+      },
+      {
+        token_id: 30,
+        enabled: true,
+        token_budget: 300,
+        period_hours: 24,
+        cost_budget_cents: null,
+      },
+    ];
+
+    await saveTokenLimits(
+      7,
+      [
+        {
+          tokenId: 10,
+          enabled: true,
+          tokenBudget: 100,
+          periodDays: 1,
+          costBudgetDollars: null,
+        },
+        {
+          tokenId: 30,
+          enabled: true,
+          tokenBudget: 300,
+          periodDays: 1,
+          costBudgetDollars: null,
+        },
+      ],
+      existing
+    );
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/admin/token-rate-limits/rate-limit/10",
+      "/api/admin/token-rate-limits/rate-limit/30",
+      "/api/admin/token-rate-limits/rate-limit/20",
+    ]);
+    expect(
+      fetchMock.mock.calls.map(([, options]) => (options as RequestInit).method)
+    ).toEqual(["PUT", "PUT", "DELETE"]);
+  });
 });
