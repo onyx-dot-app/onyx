@@ -4,6 +4,9 @@ from collections.abc import Mapping
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
+from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.langfuse_tracing_processor import LangfuseTracingProcessor
 
 
@@ -69,3 +72,18 @@ def test_on_trace_start_coerces_non_string_user_id() -> None:
 
     kwargs = observation.update_trace.call_args.kwargs
     assert kwargs["user_id"] == "7"
+
+
+def test_calculate_cost_prices_cache_creation_at_write_rate() -> None:
+    processor = LangfuseTracingProcessor(client=MagicMock())
+    data = GenerationSpanData(
+        model="claude-sonnet-4-5",
+        model_config={"model_provider": "anthropic"},
+        usage={
+            "input_tokens": 3000,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 2000,
+        },
+    )
+
+    assert processor._calculate_cost(data) == pytest.approx(0.0105)

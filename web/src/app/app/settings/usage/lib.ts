@@ -12,6 +12,7 @@ export interface UsagePerDayByModel {
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
+  cache_creation_tokens: number;
   cost_cents: number;
 }
 

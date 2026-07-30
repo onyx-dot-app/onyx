@@ -48,6 +48,7 @@ class UsageExportRecord(BaseModel):
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_creation_tokens: int
     cost_cents: float
 
 
@@ -55,6 +56,7 @@ class UsageExportTotals(BaseModel):
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_creation_tokens: int
     cost_cents: float
 
 

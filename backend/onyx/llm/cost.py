@@ -104,15 +104,20 @@ def _override_cost_cents(
     input_tokens: int,
     output_tokens: int,
     cache_read_tokens: int,
+    cache_creation_tokens: int = 0,
 ) -> tuple[float, float]:
     """Apply admin per-Mtok rates. Cache reads bill at the admin cache rate when
-    set, otherwise at the input rate. Cache cost is folded into the input half."""
+    set, otherwise at the input rate. Cache cost is folded into the input half.
+
+    There is no admin cache-write rate, so cache creation bills at the input
+    rate. It still has to be counted here: callers pass uncached input only, so
+    omitting it would bill those tokens at zero."""
     input_per_mtok = rates.input_cost_per_mtok
     output_per_mtok = rates.output_cost_per_mtok
     cache_per_mtok = rates.cache_read_cost_per_mtok
     cache_rate = cache_per_mtok if cache_per_mtok is not None else input_per_mtok
     input_cents = (
-        input_tokens / 1_000_000 * input_per_mtok * 100
+        (input_tokens + cache_creation_tokens) / 1_000_000 * input_per_mtok * 100
         + cache_read_tokens / 1_000_000 * cache_rate * 100
     )
     output_cents = output_tokens / 1_000_000 * output_per_mtok * 100
@@ -128,6 +133,8 @@ def compute_cost_cents(
     flow: LLMFlow | str | None = None,
     image_count: int = 1,
     db_session: Session | None = None,
+    *,
+    cache_creation_tokens: int = 0,
 ) -> tuple[float, float]:
     """Return (input_cost_cents, output_cost_cents) for an LLM call.
 
@@ -144,7 +151,11 @@ def compute_cost_cents(
             rates = None
         if rates is not None:
             return _override_cost_cents(
-                rates, input_tokens, output_tokens, cache_read_tokens
+                rates,
+                input_tokens,
+                output_tokens,
+                cache_read_tokens,
+                cache_creation_tokens,
             )
 
     try:
@@ -153,14 +164,16 @@ def compute_cost_cents(
         # custom_llm_provider is required for non-self-identifying model names
         # (bedrock/vertex/anthropic-plain) — without it litellm raises and we'd
         # record $0 for entire provider classes.
-        # input_tokens are non-cached; cache reads are additional prompt tokens
-        # billed at the model's (discounted) cache-read rate, never as output.
+        # input_tokens are non-cached; cache reads and cache writes are
+        # additional prompt tokens that litellm re-prices at the model's own
+        # cache rates (reads discounted, writes at a premium), never as output.
         prompt_cost_usd, completion_cost_usd = litellm.cost_per_token(
             model=model,
             custom_llm_provider=provider,
-            prompt_tokens=input_tokens + cache_read_tokens,
+            prompt_tokens=input_tokens + cache_read_tokens + cache_creation_tokens,
             completion_tokens=output_tokens,
             cache_read_input_tokens=cache_read_tokens,
+            cache_creation_input_tokens=cache_creation_tokens,
         )
         return prompt_cost_usd * 100, completion_cost_usd * 100
     except Exception:
@@ -172,7 +185,7 @@ def compute_cost_cents(
             provider,
             exc_info=True,
         )
-        billed_input = input_tokens + cache_read_tokens
+        billed_input = input_tokens + cache_read_tokens + cache_creation_tokens
         input_cents = billed_input / 1_000_000 * DEFAULT_LLM_INPUT_COST_PER_MTOK * 100
         output_cents = (
             output_tokens / 1_000_000 * DEFAULT_LLM_OUTPUT_COST_PER_MTOK * 100
@@ -184,3 +197,32 @@ def compute_cost_cents(
                 provider,
             )
         return input_cents, output_cents
+
+
+def compute_cost_cents_from_usage(
+    model: str,
+    provider: str | None,
+    prompt_tokens: int,
+    completion_tokens: int,
+    cache_read_tokens: int = 0,
+    cache_creation_tokens: int = 0,
+    flow: LLMFlow | str | None = None,
+    image_count: int = 1,
+    db_session: Session | None = None,
+) -> tuple[float, float]:
+    """Price cache-inclusive usage reported by an LLM provider."""
+    non_cached_input = max(
+        prompt_tokens - cache_read_tokens - cache_creation_tokens,
+        0,
+    )
+    return compute_cost_cents(
+        model=model,
+        provider=provider,
+        input_tokens=non_cached_input,
+        output_tokens=completion_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_creation_tokens=cache_creation_tokens,
+        flow=flow,
+        image_count=image_count,
+        db_session=db_session,
+    )

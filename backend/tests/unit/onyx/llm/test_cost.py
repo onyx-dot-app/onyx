@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from onyx.db.models import ModelCostOverride
 from onyx.llm import cost as cost_mod
 from onyx.llm import cost_overrides
-from onyx.llm.cost import compute_cost_cents
+from onyx.llm.cost import compute_cost_cents, compute_cost_cents_from_usage
 from onyx.tracing.flows import LLMFlow
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -101,6 +101,60 @@ class TestComputeCostCents:
         assert cache_in == pytest.approx(0.5)
         # Output (500 tok @ $10/Mtok) is unaffected by cache reads.
         assert cache_out == pytest.approx(0.5)
+
+    def test_cache_creation_tokens_priced_at_the_write_premium(self) -> None:
+        # claude-sonnet-4-5: $3/Mtok input, $3.75/Mtok cache-write (1.25x).
+        # 1000 uncached + 2000 written = 1000*3e-6 + 2000*3.75e-6 = $0.0105.
+        # Pinned exactly: billing writes at the plain input rate yields 0.9c,
+        # which is the bug this guards.
+        cents_in, _ = compute_cost_cents(
+            "claude-sonnet-4-5",
+            "anthropic",
+            input_tokens=1000,
+            output_tokens=0,
+            cache_creation_tokens=2000,
+        )
+        assert cents_in == pytest.approx(1.05)
+
+    def test_cache_write_costs_more_than_an_equivalent_read(self) -> None:
+        """Direction check that survives a price-table refresh: on Anthropic a
+        written token costs strictly more than a read one."""
+        write_cents, _ = compute_cost_cents(
+            "claude-sonnet-4-5", "anthropic", 0, 0, cache_creation_tokens=1000
+        )
+        read_cents, _ = compute_cost_cents(
+            "claude-sonnet-4-5", "anthropic", 0, 0, cache_read_tokens=1000
+        )
+        plain_cents, _ = compute_cost_cents("claude-sonnet-4-5", "anthropic", 1000, 0)
+        assert write_cents > plain_cents > read_cents > 0
+
+    def test_usage_pricing_normalizes_both_cache_segments(self) -> None:
+        input_cents, output_cents = compute_cost_cents_from_usage(
+            model="claude-sonnet-4-5",
+            provider="anthropic",
+            prompt_tokens=4000,
+            completion_tokens=0,
+            cache_read_tokens=1000,
+            cache_creation_tokens=2000,
+        )
+
+        assert input_cents == pytest.approx(1.08)
+        assert output_cents == 0
+
+    def test_existing_optional_arguments_keep_their_positional_order(self) -> None:
+        input_cents, output_cents = compute_cost_cents(
+            "dall-e-3",
+            "openai",
+            0,
+            0,
+            0,
+            LLMFlow.IMAGE_GENERATION,
+            2,
+            None,
+        )
+
+        assert input_cents == 0
+        assert output_cents == pytest.approx(8.0)
 
     def test_bedrock_model_priced_via_provider(self) -> None:
         # Bedrock names aren't self-identifying — without custom_llm_provider

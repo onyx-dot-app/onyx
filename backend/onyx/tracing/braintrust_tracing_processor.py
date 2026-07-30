@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 import braintrust
 from braintrust import NOOP_SPAN
 
-from onyx.llm.cost import compute_cost_cents
+from onyx.llm.cost import compute_cost_cents_from_usage
 from onyx.tracing.flows import IMAGE_FLOWS
 from onyx.tracing.incognito import suppresses_external_traces
 
@@ -186,15 +186,16 @@ class BraintrustTracingProcessor(TracingProcessor):
             or flow in IMAGE_FLOWS
         ):
             cache_read = int(usage.get("cache_read_input_tokens") or 0)
+            cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
             input_tokens = int(prompt_tokens or 0)
             output_tokens = int(completion_tokens or 0)
-            non_cached_input = max(input_tokens - cache_read, 0)
-            input_cents, output_cents = compute_cost_cents(
-                model_name,
-                provider,
-                non_cached_input,
-                output_tokens,
+            input_cents, output_cents = compute_cost_cents_from_usage(
+                model=model_name,
+                provider=provider,
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
                 cache_read_tokens=cache_read,
+                cache_creation_tokens=cache_creation,
                 flow=flow,
                 image_count=span.span_data.image_count or 1,
             )

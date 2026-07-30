@@ -120,6 +120,7 @@ class UserUsageByDay(BaseModel):
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_creation_tokens: int
     cost_cents: float
 
 
@@ -133,6 +134,7 @@ class UsageExportRow(BaseModel):
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_creation_tokens: int
     cost_cents: float
 
 
@@ -148,6 +150,8 @@ def record_user_usage(
     cost_cents: float,
     window_start: datetime,
     incognito: bool = False,
+    *,
+    cache_creation_tokens: int = 0,
 ) -> None:
     """Atomically accumulate into the ledger (Postgres upsert). Caller commits."""
     # Store "" rather than NULL for a missing provider so the dedup unique index
@@ -163,6 +167,7 @@ def record_user_usage(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cache_read_tokens=cache_read_tokens,
+        cache_creation_tokens=cache_creation_tokens,
         cost_cents=cost_cents,
     )
     stmt = stmt.on_conflict_do_update(
@@ -172,6 +177,8 @@ def record_user_usage(
             "output_tokens": UserUsage.output_tokens + stmt.excluded.output_tokens,
             "cache_read_tokens": UserUsage.cache_read_tokens
             + stmt.excluded.cache_read_tokens,
+            "cache_creation_tokens": UserUsage.cache_creation_tokens
+            + stmt.excluded.cache_creation_tokens,
             "cost_cents": UserUsage.cost_cents + stmt.excluded.cost_cents,
         },
     )
@@ -194,6 +201,7 @@ def get_user_usage_by_day_and_model(
             func.sum(UserUsage.input_tokens),
             func.sum(UserUsage.output_tokens),
             func.sum(UserUsage.cache_read_tokens),
+            func.sum(UserUsage.cache_creation_tokens),
             func.sum(UserUsage.cost_cents),
         )
         .where(
@@ -211,10 +219,19 @@ def get_user_usage_by_day_and_model(
             model=model,
             input_tokens=int(in_tok or 0),
             output_tokens=int(out_tok or 0),
-            cache_read_tokens=int(cache_tok or 0),
+            cache_read_tokens=int(cache_read_tok or 0),
+            cache_creation_tokens=int(cache_creation_tok or 0),
             cost_cents=float(cost or 0.0),
         )
-        for day, model, in_tok, out_tok, cache_tok, cost in rows
+        for (
+            day,
+            model,
+            in_tok,
+            out_tok,
+            cache_read_tok,
+            cache_creation_tok,
+            cost,
+        ) in rows
     ]
 
 
@@ -239,6 +256,7 @@ def _get_usage_export_query(
             func.sum(UserUsage.input_tokens),
             func.sum(UserUsage.output_tokens),
             func.sum(UserUsage.cache_read_tokens),
+            func.sum(UserUsage.cache_creation_tokens),
             func.sum(UserUsage.cost_cents),
         )
         # UserUsage.user_id on the left: User.id comes from the fastapi-users
@@ -291,7 +309,8 @@ def iter_usage_export(
         day,
         in_tok,
         out_tok,
-        cache_tok,
+        cache_read_tok,
+        cache_creation_tok,
         cost,
     ) in result:
         yield UsageExportRow(
@@ -303,7 +322,8 @@ def iter_usage_export(
             day=str(day),
             input_tokens=int(in_tok or 0),
             output_tokens=int(out_tok or 0),
-            cache_read_tokens=int(cache_tok or 0),
+            cache_read_tokens=int(cache_read_tok or 0),
+            cache_creation_tokens=int(cache_creation_tok or 0),
             cost_cents=float(cost or 0.0),
         )
 
