@@ -274,9 +274,11 @@ def _build_sources_blocks(
 
         owner_str = f"By {d.primary_owners[0]}" if d.primary_owners else None
         days_ago_str = _format_doc_updated_at(d.updated_at)
-        final_metadata_str = " | ".join(
-            ([owner_str] if owner_str else [])
-            + ([days_ago_str] if days_ago_str else [])
+        final_metadata_str = _clean_markdown_link_text(
+            " | ".join(
+                ([owner_str] if owner_str else [])
+                + ([days_ago_str] if days_ago_str else [])
+            )
         )
 
         document_title = _clean_markdown_link_text(doc_sem_id)
