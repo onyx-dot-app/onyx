@@ -447,14 +447,10 @@ class SessionManager:
         - ``RUNNING`` + pod missing/unhealthy: terminates and re-provisions
           under a new attempt number.
         - ``SLEEPING`` / ``TERMINATED`` / ``FAILED``: re-provisions in place.
-        - ``PROVISIONING``: a stale attempt is taken over; a live one is
-          polled up to ``provisioning_wait_seconds`` (default 30s). Raises
+        - ``PROVISIONING``: a dead attempt is taken over; a live one is
+          polled up to ``provisioning_wait_seconds``. Raises
           ``SandboxProvisioningError`` only if the timeout elapses without
           a transition.
-
-        Honors ``SANDBOX_MAX_CONCURRENT_PER_ORG`` when ``MULTI_TENANT`` for
-        any path that newly counts toward the running limit (creating a new
-        sandbox or waking a SLEEPING / TERMINATED / FAILED one).
 
         Commits its own short transactions; the database session must be at a
         clean transaction boundary.
@@ -462,7 +458,7 @@ class SessionManager:
         Raises:
             SandboxProvisioningError: Provisioning failed, or the sandbox was
                 still PROVISIONING after the wait timeout elapsed.
-            ValueError: Max concurrent sandboxes reached, or user missing.
+            ValueError: user missing.
         """
         sandbox, _outcome = ensure_sandbox_ready(
             self._db_session,
@@ -513,7 +509,7 @@ class SessionManager:
                 executor) and SLACK (Slack bot) sessions are excluded.
 
         Raises:
-            ValueError: If max concurrent sandboxes reached or user missing
+            ValueError: If the user is missing
             OnyxError: If no LLM provider is accessible
             SandboxProvisioningError: If sandbox provisioning fails
             RuntimeError: If session initialization fails
@@ -572,7 +568,7 @@ class SessionManager:
         deleted and replaced).
 
         Raises:
-            ValueError: If max concurrent sandboxes reached or user missing
+            ValueError: If the user is missing
             OnyxError: If no LLM provider is accessible
             SandboxProvisioningError: If sandbox provisioning fails
             RuntimeError: If session initialization fails

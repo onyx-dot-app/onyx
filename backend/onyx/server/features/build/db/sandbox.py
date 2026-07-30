@@ -281,22 +281,6 @@ def user_has_stale_active_session(
     return db_session.execute(stmt).first() is not None
 
 
-def get_occupying_sandbox_count(
-    db_session: Session,
-) -> int:
-    """Count sandboxes that hold (or are about to hold) a runtime — RUNNING
-    plus PROVISIONING — for concurrency-limit enforcement. Counting only
-    RUNNING would let concurrent first-time creates all pass the check.
-
-    Per-tenant by virtue of schema-scoped sessions on multi-tenant.
-    """
-    stmt = select(func.count(Sandbox.id)).where(
-        Sandbox.status.in_((SandboxStatus.RUNNING, SandboxStatus.PROVISIONING))
-    )
-    result = db_session.execute(stmt).scalar()
-    return result or 0
-
-
 def create_snapshot__no_commit(
     db_session: Session,
     session_id: UUID,

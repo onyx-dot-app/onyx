@@ -202,8 +202,6 @@ SANDBOX_DOCKER_CPU_LIMIT=1.0                    # Default: 1.0
 # Idle timeout before cleanup (seconds)
 SANDBOX_IDLE_TIMEOUT_SECONDS=900          # Default: 900 (15 minutes)
 
-# Max concurrent sandboxes per organization
-SANDBOX_MAX_CONCURRENT_PER_ORG=10         # Default: 10
 ```
 
 ## Testing

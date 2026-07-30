@@ -34,10 +34,7 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox, User
 from onyx.db.users import fetch_user_by_id
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import (
-    SANDBOX_IDLE_TIMEOUT_SECONDS,
-    SANDBOX_MAX_CONCURRENT_PER_ORG,
-)
+from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.db.build_session import (
     clear_nextjs_ports_for_user,
     get_orphan_build_session_ids,
@@ -51,7 +48,6 @@ from onyx.server.features.build.db.sandbox import (
     delete_snapshot__no_commit,
     ensure_sandbox_pat,
     finalize_provisioning_attempt__no_commit,
-    get_occupying_sandbox_count,
     get_sandbox_by_id,
     get_sandbox_by_user_id,
     get_sandbox_user_map,
@@ -99,7 +95,6 @@ from onyx.skills.push import (
     compute_skill_runtime_hash,
 )
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -347,18 +342,6 @@ def _provisioning_attempt_is_stale(sandbox: Sandbox) -> bool:
     return age.total_seconds() >= ATTEMPT_DEADLINE_SECONDS
 
 
-def _enforce_tenant_concurrency_limit(db_session: DBSession) -> None:
-    """No-op on self-hosted. On multi-tenant: raise if creating/waking a
-    sandbox would exceed the per-tenant cap."""
-    if not MULTI_TENANT:
-        return
-    occupying_count = get_occupying_sandbox_count(db_session)
-    if occupying_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
-        raise ValueError(
-            f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) reached"
-        )
-
-
 def reserve_sandbox__no_commit(
     db_session: DBSession,
     user: User,
@@ -372,7 +355,6 @@ def reserve_sandbox__no_commit(
 
     Raises:
         SandboxProvisioningInProgressError: a live attempt owns the sandbox.
-        ValueError: tenant concurrency cap reached.
     """
     tenant_id = get_current_tenant_id()
     sandbox = get_sandbox_by_user_id(db_session, user.id)
@@ -381,7 +363,6 @@ def reserve_sandbox__no_commit(
     terminate_before_provision = False
 
     if sandbox is None:
-        _enforce_tenant_concurrency_limit(db_session)
         sandbox = create_sandbox__no_commit(db_session=db_session, user_id=user.id)
         attempt_number = begin_provisioning_attempt__no_commit(db_session, sandbox)
         requires_provisioning = True
@@ -395,7 +376,6 @@ def reserve_sandbox__no_commit(
         attempt_number = sandbox.provisioning_attempt_number
         requires_provisioning = False
     elif sandbox.status in _REPROVISIONABLE_STATUSES:
-        _enforce_tenant_concurrency_limit(db_session)
         previous_status = sandbox.status
         # Only FAILED may have a leftover pod; SLEEPING/TERMINATED were
         # terminated on entry.
@@ -415,7 +395,6 @@ def reserve_sandbox__no_commit(
                 f"Sandbox {sandbox.id} is being provisioned by a live attempt "
                 f"(attempt {sandbox.provisioning_attempt_number})"
             )
-        _enforce_tenant_concurrency_limit(db_session)
         terminate_before_provision = True
         attempt_number = begin_provisioning_attempt__no_commit(db_session, sandbox)
         requires_provisioning = True
@@ -739,7 +718,7 @@ def ensure_sandbox_ready(
         SandboxProvisioningInProgressError: live concurrent attempt (FAIL
             policy, or still contended after waiting).
         SandboxProvisioningError: provisioning failed or wait timed out.
-        ValueError: concurrency cap reached, or user not found.
+        ValueError: user not found.
     """
     started_at = time.monotonic()
     outcome = SandboxReadyOutcome.FAILED
