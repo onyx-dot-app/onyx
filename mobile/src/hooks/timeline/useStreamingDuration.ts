@@ -13,9 +13,17 @@ export function useStreamingDuration(
   backendDuration?: number,
 ): number {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [trackedStart, setTrackedStart] = useState(startTime);
 
   // A backend duration freezes the timer, so don't run it once one is present.
   const shouldRunTimer = isStreaming && backendDuration === undefined;
+
+  // A new startTime is a new stream: reset now (adjust-state-during-render) so we never carry the
+  // previous stream's elapsed — including when the timer isn't running and the effect won't reconcile.
+  if (startTime !== trackedStart) {
+    setTrackedStart(startTime);
+    setElapsedSeconds(0);
+  }
 
   useEffect(() => {
     if (!shouldRunTimer || !startTime) {
@@ -35,8 +43,7 @@ export function useStreamingDuration(
   if (backendDuration !== undefined) {
     return backendDuration;
   }
-  // No start time resets to 0; a paused timer (startTime still set) keeps its last value. Derived
-  // here rather than reset in the effect (react-hooks/set-state-in-effect).
+  // No start time → 0; a paused timer (startTime unchanged) keeps its last value.
   if (!startTime) {
     return 0;
   }

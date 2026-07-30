@@ -72,4 +72,20 @@ describe("useStreamingDuration", () => {
     act(() => jest.advanceTimersByTime(3000));
     expect(result.current).toBe(0);
   });
+
+  it("does not carry the prior stream's duration to a new startTime", () => {
+    const start = Date.now();
+    const { result, rerender } = renderHook(
+      ({ s, streaming }: { s: number; streaming: boolean }) =>
+        useStreamingDuration(streaming, s),
+      { initialProps: { s: start, streaming: true } },
+    );
+    act(() => jest.advanceTimersByTime(3000));
+    expect(result.current).toBe(3);
+
+    // New stream while the timer is off: the effect won't reconcile, so the render-phase reset is
+    // what prevents the old 3s from leaking into the new stream.
+    rerender({ s: Date.now() + 500, streaming: false });
+    expect(result.current).toBe(0);
+  });
 });
