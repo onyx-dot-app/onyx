@@ -1,10 +1,6 @@
-// Pure, incremental packet -> state processor for one assistant message. A faithful mobile port of
-// web's `packetProcessor` (web/.../timeline/hooks/packetProcessor.ts): it advances a cursor
-// (`nextPacketIndex`), processes only NEW packets each call, and mutates its state in place. It both
-// (a) keeps the 9a citation/document/completion tracking and (b) groups packets into timeline steps
-// by `${turn_index}-${tab_index}`, synthesizing SECTION_END (on a new turn, or on stop) so a step
-// reads as "complete". The owning hook holds the state instance stable and feeds the growing packet
-// array; see `hooks/timeline/usePacketProcessor`.
+// Pure incremental packet -> state reducer for one assistant message (faithful port of web's
+// packetProcessor). Advances a cursor, groups packets into timeline steps by turn/tab, synthesizes
+// SECTION_END so a step reads complete, and keeps the 9a citations/documents/completion tracking.
 
 import {
   CitationMap,
@@ -36,34 +32,28 @@ export interface ProcessedMessageState {
   nodeId: number;
   nextPacketIndex: number; // cursor — process only packets past this index
 
-  // Citations (9a)
   citationMap: CitationMap;
-  citations: StreamingCitation[]; // deduped, first-cite order
-  seenCitationDocIds: Set<string>; // dedups `citations`
+  citations: StreamingCitation[];
+  seenCitationDocIds: Set<string>;
 
-  // Documents (9a)
   documentMap: Map<string, SearchDoc>;
 
-  // Packet grouping (9b)
   groupedPacketsMap: Map<string, Packet[]>;
   seenGroupKeys: Set<string>;
   groupKeysWithSectionEnd: Set<string>;
   expectedBranches: Map<number, number>;
-  toolGroupKeys: Set<string>; // populated during processing
+  toolGroupKeys: Set<string>;
   displayGroupKeys: Set<string>;
 
-  // Image generation status (9b)
   isGeneratingImage: boolean;
   generatedImageCount: number;
 
-  // Streaming status (9b)
   finalAnswerComing: boolean;
   stopPacketSeen: boolean;
-  isComplete: boolean; // saw MESSAGE_END or STOP (9a; drives CitedSources)
+  isComplete: boolean; // saw MESSAGE_END or STOP; drives CitedSources
   stopReason: StopReason | undefined;
-  toolProcessingDuration: number | undefined; // from MESSAGE_START.pre_answer_processing_seconds
+  toolProcessingDuration: number | undefined;
 
-  // Result arrays (rebuilt at the end of processPackets)
   toolGroups: GroupedPacket[];
   potentialDisplayGroups: GroupedPacket[];
 }
@@ -100,16 +90,14 @@ export function createInitialState(nodeId: number): ProcessedMessageState {
   };
 }
 
-// Grouping helpers
 function getGroupKey(packet: Packet): string {
   const turnIndex = packet.placement.turn_index;
   const tabIndex = packet.placement.tab_index ?? 0;
   return `${turnIndex}-${tabIndex}`;
 }
 
-// Push a synthetic SECTION_END into a group so its renderer reads as complete. Idempotent. The
-// synthetic packet omits sub_turn_index (=> parent-level), which is what research/coding completion
-// checks expect.
+// Synthetic SECTION_END so the group's renderer reads complete. Idempotent; omits sub_turn_index
+// (parent-level), which research/coding completion checks require.
 function injectSectionEnd(
   state: ProcessedMessageState,
   groupKey: string,
@@ -131,7 +119,6 @@ function injectSectionEnd(
   state.groupKeysWithSectionEnd.add(groupKey);
 }
 
-// Packet types that mean a group has meaningful content to display.
 const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.MESSAGE_START,
   PacketType.SEARCH_TOOL_START,
@@ -162,7 +149,6 @@ function hasContentPackets(packets: Packet[]): boolean {
   });
 }
 
-// Packet types that indicate final answer content is coming.
 const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.MESSAGE_START,
   PacketType.MESSAGE_DELTA,
@@ -170,7 +156,6 @@ const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.IMAGE_GENERATION_TOOL_DELTA,
 ]);
 
-// Packet handlers
 function handleTopLevelBranching(
   state: ProcessedMessageState,
   packet: Packet,
@@ -182,8 +167,7 @@ function handleTopLevelBranching(
   );
 }
 
-// The first packet of a brand-new turn_index closes every prior group that hasn't ended (a new
-// tab_index within a seen turn does NOT trigger this).
+// A new turn_index closes every prior open group (a new tab_index within a seen turn does not).
 function handleTurnTransition(
   state: ProcessedMessageState,
   packet: Packet,
@@ -246,7 +230,6 @@ function handleDocumentPacket(
   } else if (packet.obj.type === PacketType.FETCH_TOOL_DOCUMENTS) {
     upsertDocuments(state, (packet.obj as FetchToolDocuments).documents);
   } else if (packet.obj.type === PacketType.MESSAGE_START) {
-    // Authoritative cited-doc set for the turn (9a).
     upsertDocuments(state, (packet.obj as MessageStart).final_documents);
   }
 }
@@ -276,8 +259,8 @@ function handleStopPacket(state: ProcessedMessageState, packet: Packet): void {
   state.isComplete = true;
   state.stopReason = (packet.obj as Stop).stop_reason;
 
-  // Close every still-open group (this is why the final answer group gets its SECTION_END even
-  // though the backend never sends one).
+  // Close every still-open group — this is why the final-answer group gets its SECTION_END (the
+  // backend never sends one).
   state.seenGroupKeys.forEach((groupKey) => {
     if (!state.groupKeysWithSectionEnd.has(groupKey)) {
       injectSectionEnd(state, groupKey);
@@ -285,8 +268,8 @@ function handleStopPacket(state: ProcessedMessageState, packet: Packet): void {
   });
 }
 
-// Claude can emit a message then start a real (non-reasoning) tool — the answer isn't actually
-// coming yet, so un-set finalAnswerComing. Reasoning packets are excluded (just thinking).
+// Claude may emit a message then start a real tool — the answer isn't actually coming yet.
+// Reasoning is excluded (just thinking, not a real tool call).
 function handleToolAfterMessagePacket(
   state: ProcessedMessageState,
   packet: Packet,
@@ -313,11 +296,9 @@ function addPacketToGroup(
   }
 }
 
-// Main processing
 function processPacket(state: ProcessedMessageState, packet: Packet): void {
   if (!packet) return;
 
-  // TopLevelBranching is pure metadata — record expected branches, don't add to any group.
   if (packet.obj.type === PacketType.TOP_LEVEL_BRANCHING) {
     handleTopLevelBranching(state, packet);
     return;
@@ -328,7 +309,6 @@ function processPacket(state: ProcessedMessageState, packet: Packet): void {
   const groupKey = getGroupKey(packet);
   state.seenGroupKeys.add(groupKey);
 
-  // A real SECTION_END or ERROR marks the group complete.
   if (
     packet.obj.type === PacketType.SECTION_END ||
     packet.obj.type === PacketType.ERROR
@@ -371,8 +351,7 @@ export function processPackets(
   state: ProcessedMessageState,
   rawPackets: Packet[],
 ): ProcessedMessageState {
-  // Array replaced by a shorter list (regenerate / history reload) -> rebuild from scratch so we
-  // never double-count a re-streamed turn.
+  // Array shrank (regenerate / history reload) -> rebuild so we never double-count a re-streamed turn.
   if (state.nextPacketIndex > rawPackets.length) {
     state = createInitialState(state.nodeId);
   }
@@ -388,8 +367,7 @@ export function processPackets(
 
   state.nextPacketIndex = rawPackets.length;
 
-  // Only rebuild result arrays when new packets arrived — preserves array identity so memoized
-  // consumers can bail out.
+  // Rebuild only when new packets arrived, to preserve array identity for memoized consumers.
   if (prevProcessedIndex !== rawPackets.length) {
     state.toolGroups = buildGroupsFromKeys(state, state.toolGroupKeys);
     state.potentialDisplayGroups = buildGroupsFromKeys(
@@ -401,8 +379,8 @@ export function processPackets(
   return state;
 }
 
-// Map group keys -> GroupedPacket (spread packets to force a new array reference for change
-// detection), filter to groups with meaningful content, sort by turn then tab.
+// Spread packets to force a new array ref (change detection); keep only content groups; sort by
+// turn then tab.
 function buildGroupsFromKeys(
   state: ProcessedMessageState,
   keys: Set<string>,

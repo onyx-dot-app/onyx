@@ -1,9 +1,5 @@
-// Core streaming-packet contracts (NDJSON wire shapes). Mobile-native mirror of web's
-// `web/src/app/app/services/streamingModels.ts` — the full `PacketType` enum + every packet obj
-// interface, so the ported grouping engine + timeline helpers compile once and each future tool
-// renderer phase adds only its renderer (no enum/interface churn). Document arrays carry mobile's
-// `SearchDoc` (not web's `OnyxDocument`); the root, non-`Packet`-wrapped stream members
-// (`MessageResponseIDInfo`, `StreamingError`) are mobile-specific and kept.
+// Streaming-packet contracts (NDJSON wire shapes). Mirror of web's streamingModels, with mobile's
+// SearchDoc for document arrays and the mobile-only root types at the bottom.
 
 import type { SearchDoc } from "@/chat/contracts/documents";
 
@@ -21,7 +17,6 @@ export enum PacketType {
   TOP_LEVEL_BRANCHING = "top_level_branching",
   ERROR = "error",
 
-  // Specific tool packets
   SEARCH_TOOL_START = "search_tool_start",
   SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta",
   SEARCH_TOOL_FILTER_DELTA = "search_tool_filter_delta",
@@ -30,40 +25,33 @@ export enum PacketType {
   IMAGE_GENERATION_TOOL_DELTA = "image_generation_final",
   PYTHON_TOOL_START = "python_tool_start",
   PYTHON_TOOL_DELTA = "python_tool_delta",
-  // Open-URL / fetch tool (web names these FETCH_TOOL_*; the wire values are open_url_*).
+  // web names these FETCH_TOOL_*; the wire values are open_url_*
   FETCH_TOOL_START = "open_url_start",
   FETCH_TOOL_URLS = "open_url_urls",
   FETCH_TOOL_DOCUMENTS = "open_url_documents",
 
-  // Streams tool args before the tool executes.
   TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta",
 
-  // Custom tool packets
   CUSTOM_TOOL_START = "custom_tool_start",
   CUSTOM_TOOL_ARGS = "custom_tool_args",
   CUSTOM_TOOL_DELTA = "custom_tool_delta",
 
-  // File reader tool packets
   FILE_READER_START = "file_reader_start",
   FILE_READER_RESULT = "file_reader_result",
 
-  // Memory tool packets
   MEMORY_TOOL_START = "memory_tool_start",
   MEMORY_TOOL_DELTA = "memory_tool_delta",
   MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access",
 
-  // Reasoning packets
   REASONING_START = "reasoning_start",
   REASONING_DELTA = "reasoning_delta",
   REASONING_DONE = "reasoning_done",
 
-  // Citation packets. Only `citation_info` is emitted by the backend (citation_start/end are
-  // declared for parity but never sent).
+  // Only citation_info is emitted; citation_start/end are declared for parity but never sent.
   CITATION_START = "citation_start",
   CITATION_END = "citation_end",
   CITATION_INFO = "citation_info",
 
-  // Deep Research packets
   DEEP_RESEARCH_PLAN_START = "deep_research_plan_start",
   DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta",
   RESEARCH_AGENT_START = "research_agent_start",
@@ -71,12 +59,10 @@ export enum PacketType {
   INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta",
   INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
 
-  // Coding Agent packets
   CODING_AGENT_START = "coding_agent_start",
   CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta",
   CODING_AGENT_FINAL = "coding_agent_final",
 
-  // Bash Tool packets
   BASH_TOOL_START = "bash_tool_start",
   BASH_TOOL_DELTA = "bash_tool_delta",
 }
@@ -85,13 +71,11 @@ export const CODE_INTERPRETER_TOOL_TYPES = {
   PYTHON: "python",
 } as const;
 
-// Basic message packets
 export interface MessageStart extends BaseObj {
   id: string;
   type: "message_start";
   content: string;
   pre_answer_processing_seconds?: number;
-  // Authoritative cited-doc set for the turn (present once the answer starts).
   final_documents?: SearchDoc[] | null;
 }
 
@@ -104,7 +88,6 @@ export interface MessageEnd extends BaseObj {
   type: "message_end";
 }
 
-// Control packets
 export enum StopReason {
   FINISHED = "finished",
   USER_CANCELLED = "user_cancelled",
@@ -129,12 +112,10 @@ export interface PacketError extends BaseObj {
   message?: string;
 }
 
-// Filtered by the consumer, not the parser. Connection keepalive during silent stretches.
 export interface ChatHeartbeat extends BaseObj {
   type: "chat_heartbeat";
 }
 
-// Search tool
 export interface SearchToolStart extends BaseObj {
   type: "search_tool_start";
   is_internet_search?: boolean;
@@ -147,7 +128,6 @@ export interface SearchToolQueriesDelta extends BaseObj {
 
 export interface SearchToolFilterDelta extends BaseObj {
   type: "search_tool_filter_delta";
-  // Connector/source values this search is scoped to (empty == all).
   sources: string[];
 }
 
@@ -156,7 +136,6 @@ export interface SearchToolDocumentsDelta extends BaseObj {
   documents: SearchDoc[];
 }
 
-// Image generation
 export type ImageShape = "square" | "landscape" | "portrait";
 
 export interface GeneratedImage {
@@ -175,7 +154,6 @@ export interface ImageGenerationToolDelta extends BaseObj {
   images: GeneratedImage[];
 }
 
-// Python / code interpreter
 export interface PythonToolStart extends BaseObj {
   type: "python_tool_start";
   code: string;
@@ -195,7 +173,6 @@ export interface ToolCallArgumentDelta extends BaseObj {
   argument_deltas: Record<string, unknown>;
 }
 
-// Open-URL / fetch tool
 export interface FetchToolStart extends BaseObj {
   type: "open_url_start";
 }
@@ -210,7 +187,6 @@ export interface FetchToolDocuments extends BaseObj {
   documents: SearchDoc[];
 }
 
-// Custom tool
 export interface CustomToolErrorInfo {
   is_auth_error: boolean;
   status_code: number;
@@ -239,7 +215,6 @@ export interface CustomToolDelta extends BaseObj {
   error?: CustomToolErrorInfo | null;
 }
 
-// File reader
 export interface FileReaderStart extends BaseObj {
   type: "file_reader_start";
 }
@@ -255,7 +230,6 @@ export interface FileReaderResult extends BaseObj {
   preview_end: string;
 }
 
-// Memory tool
 export interface MemoryToolStart extends BaseObj {
   type: "memory_tool_start";
 }
@@ -272,7 +246,6 @@ export interface MemoryToolNoAccess extends BaseObj {
   type: "memory_tool_no_access";
 }
 
-// Reasoning
 export interface ReasoningStart extends BaseObj {
   type: "reasoning_start";
 }
@@ -286,8 +259,6 @@ export interface ReasoningDone extends BaseObj {
   type: "reasoning_done";
 }
 
-// Citations
-// The deduped, first-cite-ordered citation read-model (distinct from the wire `CitationInfo`).
 export interface StreamingCitation {
   citation_num: number;
   document_id: string;
@@ -303,7 +274,6 @@ export interface CitationInfo extends BaseObj {
   document_id: string;
 }
 
-// Deep research
 export interface DeepResearchPlanStart extends BaseObj {
   type: "deep_research_plan_start";
 }
@@ -332,7 +302,6 @@ export interface IntermediateReportCitedDocs extends BaseObj {
   cited_docs: SearchDoc[] | null;
 }
 
-// Coding agent + bash
 export interface CodingAgentStart extends BaseObj {
   type: "coding_agent_start";
   query: string;
@@ -362,7 +331,6 @@ export interface BashToolDelta extends BaseObj {
   timed_out: boolean;
 }
 
-// Unions
 export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type SearchToolObj =
@@ -456,7 +424,6 @@ export type CodingAgentObj =
   | SectionEnd
   | PacketError;
 
-// Union type for all possible streaming objects.
 export type ObjTypes =
   | ChatObj
   | NewToolObj
@@ -473,10 +440,8 @@ export type ObjTypes =
 
 export interface Placement {
   turn_index: number;
-  // Parallel tool calls: same turn_index, different tab_index run in parallel.
   tab_index?: number;
   sub_turn_index?: number | null;
-  // Multi-model answer generation: which model produced this packet.
   model_index?: number | null;
 }
 
@@ -485,16 +450,15 @@ export interface Packet {
   obj: ObjTypes;
 }
 
-// Root object (not wrapped in Packet.obj); wire omits `type`, so discriminate by
-// field presence (`"user_message_id" in obj`), never `obj.type`.
+// Root object (not wrapped in Packet.obj); discriminate by field presence, never obj.type.
 export interface MessageResponseIDInfo {
   type?: "message_id_info";
   user_message_id: number | null;
   reserved_assistant_message_id: number;
 }
 
-// Root-level error (backend `StreamingError`), not wrapped in Packet.obj — discriminate
-// by top-level `error`, not `obj.type`. Dropping it silently leaves the turn stuck on "…".
+// Root-level error; discriminate by top-level `error`, not obj.type. Dropping it leaves the turn
+// stuck on "…".
 export interface StreamingError {
   error: string;
   stack_trace?: string | null;

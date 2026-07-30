@@ -1,10 +1,9 @@
-// GroupedPacket → step → turn-group transforms + parallel detection. Faithful port of web's
-// `web/.../timeline/transformers.ts` (mobile imports only).
+// GroupedPacket → step → turn-group transforms + parallel detection. Port of web's transformers.
 
 import { GroupedPacket } from "@/chat/messageProcessor";
 
 export interface TransformedStep {
-  key: string; // `${turn_index}-${tab_index}`
+  key: string;
   turnIndex: number;
   tabIndex: number;
   packets: GroupedPacket["packets"];
@@ -13,7 +12,6 @@ export interface TransformedStep {
 export interface TurnGroup {
   turnIndex: number;
   steps: TransformedStep[];
-  // True when >1 step shares a turn_index (parallel execution).
   isParallel: boolean;
 }
 
@@ -32,7 +30,6 @@ export function transformPacketGroups(
   return groups.map(transformPacketGroup);
 }
 
-// Group transformed steps by turn_index to detect parallel tools.
 export function groupStepsByTurn(steps: TransformedStep[]): TurnGroup[] {
   const turnMap = new Map<number, TransformedStep[]>();
 

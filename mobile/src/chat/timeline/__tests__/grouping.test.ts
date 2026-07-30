@@ -10,7 +10,6 @@ import { PacketType, type Packet } from "@/chat/streamingModels";
 
 import { makePlacedPacket } from "../../__tests__/fixtures";
 
-// Convenience builders for the packet families this PR groups.
 const reasoningStart = (turn: number, tab = 0): Packet =>
   makePlacedPacket(
     { type: "reasoning_start" },
@@ -78,10 +77,8 @@ describe("grouping engine", () => {
       reasoningDelta("hi", 0),
       reasoningStart(1),
     ]);
-    // The new turn 1 closes turn 0's group.
     expect(state.groupKeysWithSectionEnd.has("0-0")).toBe(true);
     expect(hasSectionEnd(state, "0-0")).toBe(true);
-    // Turn 1 is still open (no newer turn, no stop).
     expect(state.groupKeysWithSectionEnd.has("1-0")).toBe(false);
   });
 
@@ -89,7 +86,6 @@ describe("grouping engine", () => {
     const state = run([searchStart(0, 0), searchStart(0, 1)]);
     expect(state.groupKeysWithSectionEnd.has("0-0")).toBe(false);
     expect(state.groupKeysWithSectionEnd.has("0-1")).toBe(false);
-    // Both are parallel tabs of the same turn.
     expect(state.toolGroups.map(keyOf).sort()).toEqual(["0-0", "0-1"]);
   });
 
@@ -102,8 +98,7 @@ describe("grouping engine", () => {
   });
 
   it("stop closes an open group in the SAME turn (only the stop loop can close it)", () => {
-    // message_start@turn0 then stop@turn0: there's no later turn, so the turn-transition path
-    // never fires — ONLY handleStopPacket's injection loop closes the final-answer group.
+    // No later turn fires the turn-transition path, so only the stop loop can close this group.
     const state = run([messageStart(0), stopAt(0)]);
     expect(state.groupKeysWithSectionEnd.has("0-0")).toBe(true);
     expect(hasSectionEnd(state, "0-0")).toBe(true);
@@ -119,7 +114,7 @@ describe("grouping engine", () => {
     const ends = (state.groupedPacketsMap.get("0-0") ?? []).filter(
       (p) => p.obj.type === PacketType.SECTION_END,
     );
-    expect(ends).toHaveLength(1); // the real one, not synthesized twice
+    expect(ends).toHaveLength(1);
   });
 
   it("keeps TOP_LEVEL_BRANCHING as metadata (not in any group)", () => {
@@ -133,7 +128,6 @@ describe("grouping engine", () => {
     ]);
     expect(state.expectedBranches.get(0)).toBe(2);
     expect(state.groupedPacketsMap.has("0-0")).toBe(true);
-    // Only the two search groups have content; the branching packet is not grouped.
     expect(state.toolGroups.map(keyOf).sort()).toEqual(["0-0", "0-1"]);
   });
 
@@ -161,12 +155,11 @@ describe("grouping engine", () => {
   });
 
   it("filters out a categorized tool group that has no content packet", () => {
-    // "0-0" is a real tool group (queries_delta is a tool packet, so it enters toolGroupKeys) but
-    // has no *_START/content packet, so hasContentPackets drops it — while the sibling with a real
-    // SEARCH_TOOL_START is kept. This exercises the content filter, not key categorization.
+    // "0-0" enters toolGroupKeys (queries_delta is a tool packet) but has no *_START content, so
+    // hasContentPackets drops it — this exercises the content filter, not key categorization.
     const state = run([searchQueriesDelta(0), searchStart(1)]);
-    expect(state.toolGroupKeys.has("0-0")).toBe(true); // categorized as a tool group…
-    expect(state.toolGroups.map(keyOf)).toEqual(["1-0"]); // …but filtered out for lack of content
+    expect(state.toolGroupKeys.has("0-0")).toBe(true);
+    expect(state.toolGroups.map(keyOf)).toEqual(["1-0"]);
   });
 
   it("tolerates a non-zero model_index (groups by turn/tab only)", () => {
@@ -202,13 +195,12 @@ describe("grouping engine", () => {
     let state = createInitialState(1);
     state = processPackets(state, [reasoningStart(0)]);
     expect(state.toolGroups.map(keyOf)).toEqual(["0-0"]);
-    expect(state.groupKeysWithSectionEnd.has("0-0")).toBe(false); // still open
+    expect(state.groupKeysWithSectionEnd.has("0-0")).toBe(false);
 
-    // Flush 2: same prior packet + a new turn's message_start (growing array).
     state = processPackets(state, [reasoningStart(0), messageStart(1)]);
-    expect(state.nextPacketIndex).toBe(2); // cursor advanced; turn-0 packet not re-processed
-    expect(state.toolGroups.map(keyOf)).toEqual(["0-0"]); // turn-0 group survived
-    expect(state.groupKeysWithSectionEnd.has("0-0")).toBe(true); // closed by the turn-1 transition
-    expect(state.potentialDisplayGroups.map(keyOf)).toEqual(["1-0"]); // new display group merged in
+    expect(state.nextPacketIndex).toBe(2);
+    expect(state.toolGroups.map(keyOf)).toEqual(["0-0"]);
+    expect(state.groupKeysWithSectionEnd.has("0-0")).toBe(true);
+    expect(state.potentialDisplayGroups.map(keyOf)).toEqual(["1-0"]);
   });
 });

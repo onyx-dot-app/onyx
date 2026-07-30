@@ -1,17 +1,14 @@
-// Pure tool key/name/completion helpers. Port of the non-JSX functions from web's
-// `web/.../messageComponents/toolDisplayHelpers.tsx`. The icon factory (`getToolIcon`) is a mobile
-// concern and lives in `components/chat/timeline/toolIcons.ts` (added with the header UI).
+// Pure tool key/name/completion helpers. Port of web's toolDisplayHelpers (its JSX icon factory is
+// deferred to toolIcons.ts).
 
 import { Packet, PacketType, SearchToolStart } from "@/chat/streamingModels";
 
-// A group contains an ERROR packet (tool failed).
 export function hasToolError(packets: Packet[]): boolean {
   return packets.some((p) => p.obj.type === PacketType.ERROR);
 }
 
-// Whether a tool group is complete. Research agents complete only on a PARENT-level SECTION_END
-// (sub_turn_index null/undefined) — nested tool SECTION_ENDs (sub_turn_index set) don't count;
-// coding agents complete on CodingAgentFinal (or error); all others on any SECTION_END/ERROR.
+// Research agents complete only on a parent-level SECTION_END (sub_turn_index null) — nested tool
+// SECTION_ENDs don't count; coding agents on CodingAgentFinal/error; others on any SECTION_END/ERROR.
 export function isToolComplete(packets: Packet[]): boolean {
   const firstPacket = packets[0];
   if (!firstPacket) return false;
@@ -61,8 +58,8 @@ export function getToolName(packets: Packet[]): string {
 
   switch (firstPacket.obj.type) {
     case PacketType.SEARCH_TOOL_START: {
-      // The full search-state reducer (`constructCurrentSearchState`) lands with the search
-      // renderer phase; the internet-vs-internal flag comes straight off the start packet.
+      // internet-vs-internal comes off the start packet; the full search-state reducer lands with
+      // the search phase.
       const isInternetSearch =
         (firstPacket.obj as SearchToolStart).is_internet_search ?? false;
       return isInternetSearch ? "Web Search" : "Internal Search";

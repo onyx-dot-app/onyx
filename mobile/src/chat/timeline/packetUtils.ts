@@ -1,5 +1,4 @@
-// Pure packet categorizers + turn/tab grouping helpers. Faithful port of web's
-// `web/src/app/app/services/packetUtils.ts` (mobile imports only).
+// Pure packet categorizers + grouping helpers. Port of web's packetUtils.
 
 import {
   MessageDelta,
@@ -53,8 +52,7 @@ export function isToolPacket(
   return toolPacketTypes.includes(packet.obj.type as PacketType);
 }
 
-// An actual tool call (not reasoning/thinking). Used to decide whether to reset
-// `finalAnswerComing` when a tool packet arrives after message packets (Claude workaround).
+// A real tool call (not reasoning) — resets finalAnswerComing when a tool follows the message.
 export function isActualToolCallPacket(packet: Packet): boolean {
   return (
     isToolPacket(packet, false) &&
@@ -110,8 +108,6 @@ export function isFinalAnswerComplete(packets: Packet[]): boolean {
   );
 }
 
-// Group packets by (turn_index, tab_index), ordered lowest→highest turn then tab. Supports
-// parallel tool calls (same turn_index, different tab_index).
 export function groupPacketsByTurnIndex(
   packets: Packet[],
 ): { turn_index: number; tab_index: number; packets: Packet[] }[] {
