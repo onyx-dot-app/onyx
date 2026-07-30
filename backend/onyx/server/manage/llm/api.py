@@ -41,6 +41,7 @@ from onyx.db.models import Persona, User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.api_surfaces import SURFACE_SELECTION_CONFIG_KEYS
 from onyx.llm.constants import (
     PROVIDER_DISPLAY_NAMES,
     WELL_KNOWN_PROVIDER_NAMES,
@@ -320,10 +321,21 @@ def _validate_llm_provider_change(
     normalized_existing_api_base = existing_api_base or None
     normalized_new_api_base = new_api_base or None
 
+    # API-surface mode keys (e.g. bifrost_api_mode) only pick a path on the
+    # same api_base — they cannot redirect the stored key to another host, so
+    # changing them must not force key re-entry.
+    def _without_surface_keys(config: dict[str, str] | None) -> dict[str, str]:
+        return {
+            k: v
+            for k, v in (config or {}).items()
+            if k not in SURFACE_SELECTION_CONFIG_KEYS
+        }
+
     api_base_changed = normalized_new_api_base != normalized_existing_api_base
-    custom_config_changed = (
-        new_custom_config and new_custom_config != existing_custom_config
-    )
+    new_comparable_config = _without_surface_keys(new_custom_config)
+    custom_config_changed = bool(
+        new_comparable_config
+    ) and new_comparable_config != _without_surface_keys(existing_custom_config)
 
     if api_base_changed or custom_config_changed:
         raise OnyxError(

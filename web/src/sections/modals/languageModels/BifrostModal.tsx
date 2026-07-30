@@ -98,6 +98,7 @@ function BifrostModalInternals({
         value={mode}
         onValueChange={(next) =>
           setFieldValue("custom_config", {
+            ...values.custom_config,
             [BIFROST_API_MODE_KEY]: next as BifrostApiMode,
           })
         }
@@ -173,12 +174,15 @@ export default function BifrostModal({
   ) as BifrostModalValues;
 
   // useInitialValues drops custom_config, so seed it for submitProvider's
-  // custom_config_changed diff (mirrors PortkeyModal).
+  // custom_config_changed diff, preserving any other stored entries.
   const initialMode =
     (existingLlmProvider?.custom_config?.[BIFROST_API_MODE_KEY] as
       | BifrostApiMode
       | undefined) ?? DEFAULT_API_MODE;
-  initialValues.custom_config = { [BIFROST_API_MODE_KEY]: initialMode };
+  initialValues.custom_config = {
+    ...existingLlmProvider?.custom_config,
+    [BIFROST_API_MODE_KEY]: initialMode,
+  };
 
   const validationSchema = buildValidationSchema(isOnboarding, {
     apiBase: true,
