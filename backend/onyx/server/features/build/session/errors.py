@@ -34,9 +34,9 @@ class SandboxProvisioningError(RuntimeError):
 
 class SandboxProvisioningInProgressError(SandboxProvisioningError):
     """A live provisioning attempt (recent committed ``PROVISIONING``
-    attempt_number) already owns the sandbox; the caller should retry shortly."""
+    attempt) already owns the sandbox; the caller should retry shortly."""
 
 
 class StaleProvisioningAttemptError(SandboxProvisioningError):
-    """This attempt's attempt_number was superseded before it could finalize;
+    """This attempt was superseded before it could finalize;
     its external work must not be recorded as the current runtime."""

@@ -41,9 +41,11 @@ def upgrade() -> None:
     )
 
     # Port allocation previously had no uniqueness guarantee, so concurrent
-    # creates could have reserved the same port. Keep the oldest reservation
-    # per port (within a shared pod its dev server won the bind; later
-    # duplicates never served). A cleared session gets a fresh port on its
+    # creates could have reserved the same port. Ports only need to be unique
+    # within one user's sandbox (each user has their own pod/container), so
+    # scope the constraint per user. Keep the oldest reservation per
+    # (user, port) — within a shared pod its dev server won the bind; later
+    # duplicates never served. A cleared session gets a fresh port on its
     # next sleep/restore cycle.
     op.execute(
         """
@@ -51,7 +53,7 @@ def upgrade() -> None:
         WHERE id IN (
             SELECT id FROM (
                 SELECT id, ROW_NUMBER() OVER (
-                    PARTITION BY nextjs_port ORDER BY created_at ASC
+                    PARTITION BY user_id, nextjs_port ORDER BY created_at ASC
                 ) AS rn
                 FROM build_session
                 WHERE nextjs_port IS NOT NULL
@@ -63,7 +65,7 @@ def upgrade() -> None:
     op.create_index(
         "uq_build_session_nextjs_port",
         "build_session",
-        ["nextjs_port"],
+        ["user_id", "nextjs_port"],
         unique=True,
         postgresql_where=sa.text("nextjs_port IS NOT NULL"),
     )

@@ -3,13 +3,13 @@
 Pins the transaction-ordering contract with real PostgreSQL and a controlled
 sandbox-manager double:
 
-* the sandbox identity, owner, PAT, and attempt_number are committed — and
+* the sandbox identity, owner, PAT, and attempt number are committed — and
   visible to an independent database connection — before the first external
   provisioning call, with no transaction left open on the flow's session;
 * a simulated process death mid-provision leaves resumable committed state
-  that a retry converges on (same sandbox ID, advanced attempt_number);
+  that a retry converges on (same sandbox ID, new attempt number);
 * a death mid-session-initialization is repaired under the same session ID;
-* a stale attempt_number cannot finalize a newer one;
+* a superseded attempt cannot finalize over a newer one;
 * session initialization failure marks only the session FAILED while the
   sandbox stays RUNNING;
 * concurrent creators converge on one sandbox and one empty session.
@@ -190,7 +190,7 @@ def test_interrupted_provision_resumes_same_sandbox_identity(
             session_manager_with_stub.get_or_create_empty_session(user_id=test_user.id)
 
     # Once the attempt is stale, a retry resumes the same identity under a
-    # new attempt_number.
+    # new attempt number.
     db_session.rollback()
     interrupted.provisioning_started_at = datetime.now(timezone.utc) - timedelta(
         minutes=10

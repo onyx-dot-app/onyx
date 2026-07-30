@@ -136,24 +136,6 @@ RUNNER_STALE_AFTER_SECONDS = 6 * SSE_KEEPALIVE_INTERVAL
 QUEUE_RESIDENCY_SECONDS = 15 * 60
 
 # =============================================================================
-# Fixed kit — mutexes (critical-section leases, never budget-derived)
-# =============================================================================
-
-# Session create/restore flow lock: held across one full session-flow
-# operation (sandbox attempt + workspace materialization), so the lease is
-# the sum of those deadlines. Deletable once the flows are crash-safe
-# end-to-end without it.
-SESSION_FLOW_LOCK_LEASE_SECONDS = (
-    ATTEMPT_DEADLINE_SECONDS + WORKSPACE_SETUP_DEADLINE_SECONDS
-)
-
-# Prompt-slot acquire policy: a second turn racing a live one bounces fast
-# ("concurrent turn in flight") instead of queueing; a reclaimed turn must
-# instead wait out a dead holder's full lease before taking the slot.
-PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS = 10.0
-PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS = PROMPT_SLOT_LEASE_SECONDS + 10.0
-
-# =============================================================================
 # Fixed kit — client I/O taxonomy
 # =============================================================================
 
@@ -170,6 +152,27 @@ RPC_TIMEOUT_SECONDS = 30.0
 # failure, so shrinking this converts slow-but-working snapshots into
 # never-sleeping sandboxes.
 BULK_TRANSFER_TIMEOUT_SECONDS = 300.0
+
+# =============================================================================
+# Fixed kit — mutexes (critical-section leases, never budget-derived)
+# =============================================================================
+
+# Session create/restore flow lock (one per-user lock shared by create,
+# restore, and the reaper): held across one full session-flow operation —
+# sandbox attempt + snapshot restore + workspace materialization — so the
+# lease is the sum of those bounds. Deletable once the flows are crash-safe
+# end-to-end without it.
+SESSION_FLOW_LOCK_LEASE_SECONDS = (
+    ATTEMPT_DEADLINE_SECONDS
+    + BULK_TRANSFER_TIMEOUT_SECONDS
+    + WORKSPACE_SETUP_DEADLINE_SECONDS
+)
+
+# Prompt-slot acquire policy: a second turn racing a live one bounces fast
+# ("concurrent turn in flight") instead of queueing; a reclaimed turn must
+# instead wait out a dead holder's full lease before taking the slot.
+PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS = 10.0
+PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS = PROMPT_SLOT_LEASE_SECONDS + 10.0
 
 # =============================================================================
 # Cadences

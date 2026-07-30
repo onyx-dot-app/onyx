@@ -579,11 +579,12 @@ def reserve_nextjs_port__no_commit(
 ) -> int:
     """Reserve an available port on the session row.
 
-    Uniqueness is enforced by the partial unique index on ``nextjs_port``: each
-    candidate is flushed inside a savepoint, and a collision with a concurrent
-    reservation rolls back just that attempt and moves to the next port. The
-    OS bind probe additionally filters ports in use outside the database
-    (relevant for the local/Docker backend).
+    Ports only need to be unique within one user's sandbox, so both the scan
+    and the partial unique index on ``(user_id, nextjs_port)`` are per-user:
+    each candidate is flushed inside a savepoint, and a collision with a
+    concurrent reservation rolls back just that attempt and moves to the next
+    port. The OS bind probe additionally filters ports in use outside the
+    database (relevant for the local/Docker backend).
 
     Raises:
         OnyxError: If no ports are available in the configured range
@@ -591,7 +592,10 @@ def reserve_nextjs_port__no_commit(
     allocated_ports = {
         port
         for (port,) in db_session.query(BuildSession.nextjs_port)
-        .filter(BuildSession.nextjs_port.isnot(None))
+        .filter(
+            BuildSession.user_id == build_session.user_id,
+            BuildSession.nextjs_port.isnot(None),
+        )
         .all()
         if port is not None
     }

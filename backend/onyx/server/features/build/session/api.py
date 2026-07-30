@@ -53,6 +53,7 @@ from onyx.server.features.build.session.errors import (
 )
 from onyx.server.features.build.session.locks import (
     SessionCreationLockAcquisitionError,
+    get_session_creation_lock,
     session_creation_lock,
 )
 from onyx.server.features.build.session.manager import SessionManager
@@ -81,10 +82,7 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
     sync_managed_content,
 )
 from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
-from onyx.server.features.build.timeouts import (
-    POLL_INTERVAL_SECONDS,
-    SESSION_FLOW_LOCK_LEASE_SECONDS,
-)
+from onyx.server.features.build.timeouts import POLL_INTERVAL_SECONDS
 from onyx.server.features.build.utils import sanitize_filename, validate_file
 from onyx.server.metrics.craft_sandbox import SandboxReadyOutcome
 from onyx.utils.logger import setup_logger
@@ -375,8 +373,8 @@ def restore_session(
     db_session: Session = Depends(get_session),
 ) -> DetailedSessionResponse:
     """Restore the sandbox (re-provisioning if asleep) and load the session
-    workspace. Serialized per-sandbox via a Redis lock; returns 409 if another
-    restore holds it."""
+    workspace. Serialized against create and reap via the per-user
+    session-flow lock; returns 409 if another flow holds it."""
     session = get_build_session(session_id, user.id, db_session)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -389,8 +387,7 @@ def restore_session(
     tenant_id = get_current_tenant_id()
 
     redis_client = get_redis_client(tenant_id=tenant_id)
-    lock_key = f"sandbox_restore:{sandbox.id}"
-    lock = redis_client.lock(lock_key, timeout=SESSION_FLOW_LOCK_LEASE_SECONDS)
+    lock = get_session_creation_lock(redis_client, user.id)
 
     # 409 instead of blocking — the frontend retries.
     acquired = lock.acquire(blocking=False)

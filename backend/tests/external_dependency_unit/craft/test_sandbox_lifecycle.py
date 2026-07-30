@@ -1,7 +1,7 @@
 """Sandbox lifecycle (status state machine), DB-only half.
 
 DB-bound tests that pin the reserve → reconcile → finalize state machine:
-PROVISIONING → RUNNING, durable failure state with attempt_number advancement on
+PROVISIONING → RUNNING, durable failure state with attempt-number advancement on
 retry, idempotent provisioning, the health-check failure -> re-provision
 recovery path, and the idle-selection query shape.
 
@@ -94,7 +94,7 @@ class TestDurableProvisionFailure:
     ) -> None:
         # No provision_returns => stub raises NotImplementedError on
         # provision(). The failure must be recorded durably — a FAILED row
-        # under the attempt's attempt_number — never rolled back to nothing.
+        # under the attempt's number — never rolled back to nothing.
         with pytest.raises(SandboxProvisioningError):
             ensure_sandbox_ready(
                 db_session,

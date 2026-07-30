@@ -142,10 +142,10 @@ class SandboxManager(_ServeMixin, ABC):
             tenant_id: Tenant identifier for multi-tenant isolation
             onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the sandbox
             provisioning_attempt_number: This attempt's number; stamped onto
-                backend resources at creation so operators can attribute
-                orphans (never read programmatically — the attempt-number
-                condition on DB status writes is what blocks stale
-                attempts).
+                the runtime at creation (and restamped on reuse) so guarded
+                deletes never destroy a newer attempt's runtime, and so
+                operators can attribute orphans. DB status writes remain the
+                primary fence.
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -156,13 +156,24 @@ class SandboxManager(_ServeMixin, ABC):
         ...
 
     @abstractmethod
-    def terminate(self, sandbox_id: UUID) -> None:
+    def terminate(
+        self, sandbox_id: UUID, max_attempt_number: int | None = None
+    ) -> None:
         """Terminate a sandbox and clean up all resources. Destroys every
         session workspace; for one session use ``cleanup_session_workspace``.
+
+        When ``max_attempt_number`` is given, the runtime is destroyed only if
+        its provisioning-attempt label is at most that number — a superseded
+        caller can never delete a newer attempt's runtime. ``None`` destroys
+        unconditionally (session-delete flows, tests).
 
         Implementations MUST call ``self._close_all_sandbox_buses(sandbox_id)``
         before destroying the backend so late subscribes can't race a fresh
         bus in.
+
+        Raises:
+            SandboxProvisionContentionError: another provisioner currently
+                owns this sandbox's runtime (Kubernetes backend only).
         """
         ...
 

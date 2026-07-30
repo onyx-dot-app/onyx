@@ -51,7 +51,7 @@ from onyx.server.features.build.db.sandbox import (
     delete_snapshot__no_commit,
     ensure_sandbox_pat,
     finalize_provisioning_attempt__no_commit,
-    get_running_sandbox_count,
+    get_occupying_sandbox_count,
     get_sandbox_by_id,
     get_sandbox_by_user_id,
     get_sandbox_user_map,
@@ -130,7 +130,7 @@ class SandboxReservation:
     tenant_id: str
     attempt_number: int
     # Set only when this reservation authorized external provisioning (the
-    # row is committed PROVISIONING at `attempt_number`); None when the sandbox
+    # row is committed PROVISIONING at this attempt number); None when the sandbox
     # was already RUNNING and only needs a health check.
     onyx_pat: str | None
     requires_provisioning: bool
@@ -244,12 +244,14 @@ def push_managed_content(
     payload: ManagedContentPayload,
 ) -> bool:
     """Push managed skills + user library into a sandbox. External I/O only —
-    no database access. Push failures are logged, never raised.
+    no database access.
 
-    Must complete before the sandbox is reported RUNNING: turns dispatch as
-    soon as RUNNING is visible, and opencode scans the skills directory once
-    per instance, so a turn started mid-push permanently misses managed
-    skills.
+    Runs (not necessarily succeeds) before the sandbox is reported RUNNING:
+    turns dispatch as soon as RUNNING is visible, and opencode scans the
+    skills directory once per instance, so a turn started mid-push would
+    permanently miss managed skills. Push failures are logged, never raised —
+    the sandbox still becomes RUNNING, and because ``skills_hash`` is only
+    recorded on success the next session create/reload retries the push.
 
     Returns whether the skills push fully succeeded (gates recording
     ``skills_hash``).
@@ -350,8 +352,8 @@ def _enforce_tenant_concurrency_limit(db_session: DBSession) -> None:
     sandbox would exceed the per-tenant cap."""
     if not MULTI_TENANT:
         return
-    running_count = get_running_sandbox_count(db_session)
-    if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
+    occupying_count = get_occupying_sandbox_count(db_session)
+    if occupying_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
         raise ValueError(
             f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) reached"
         )
@@ -525,7 +527,7 @@ def reconcile_sandbox(
 
     Raises:
         SandboxProvisioningError: provisioning failed (recorded durably).
-        StaleProvisioningAttemptError: a newer attempt_number superseded this
+        StaleProvisioningAttemptError: a newer attempt superseded this
             attempt before it could finalize.
         SandboxProvisioningInProgressError: lost a race to a concurrent
             lifecycle decision while recovering, or the provisioning lock is
@@ -589,7 +591,14 @@ def reconcile_sandbox(
             snapshot_opencode_history_before_recovery(
                 sandbox_manager, sandbox_id, tenant_id
             )
-            sandbox_manager.terminate(sandbox_id)
+            sandbox_manager.terminate(sandbox_id, max_attempt_number=attempt_number)
+        except SandboxProvisionContentionError as e:
+            db_session.rollback()
+            _record_provisioning_failure(db_session, sandbox_id, attempt_number, e)
+            raise SandboxProvisioningInProgressError(
+                f"Sandbox {sandbox_id} runtime is owned by a concurrent "
+                f"provisioner; retry"
+            ) from e
         except Exception as e:
             db_session.rollback()
             _record_provisioning_failure(db_session, sandbox_id, attempt_number, e)
@@ -599,7 +608,7 @@ def reconcile_sandbox(
 
     if reservation.terminate_before_provision:
         try:
-            sandbox_manager.terminate(sandbox_id)
+            sandbox_manager.terminate(sandbox_id, max_attempt_number=attempt_number)
         except Exception:
             logger.warning(
                 "Best-effort terminate of stale runtime for sandbox %s before "
@@ -972,18 +981,16 @@ def sleep_sandbox(
             return
         sleep_attempt_number = sandbox.provisioning_attempt_number
 
-        # Terminate the pod (but keep the sandbox record).
-        sandbox_manager.terminate(sandbox_id)
-
-        # A recovery/create that started a newer attempt mid-terminate owns
-        # the sandbox now; only claim ports/sessions if the sleep write
-        # applies.
+        # Claim SLEEPING durably BEFORE destroying anything: once this commits,
+        # no other flow believes the runtime is theirs, so the kill below can
+        # never race a claim. The reverse order could destroy a runtime a
+        # concurrent recovery had just claimed.
         if not sleep_running_sandbox__no_commit(
             db_session, sandbox_id, sleep_attempt_number
         ):
             db_session.rollback()
             logger.warning(
-                "Sandbox %s changed attempt_number during reap; aborting sleep",
+                "Sandbox %s started a newer attempt during reap; aborting sleep",
                 sandbox_id,
             )
             return
@@ -998,6 +1005,30 @@ def sleep_sandbox(
         logger.debug("Marked %s sessions as IDLE for user %s", idled, sandbox.user_id)
 
         db_session.commit()
+
+        # Destroy the runtime (the sandbox record stays, as SLEEPING). The
+        # attempt bound plus the provisioning lock inside terminate() mean a
+        # wake that starts right after the commit either reuses the live pod
+        # first (terminate then skips) or provisions fresh after the deletion.
+        # A failed kill leaves an orphan runtime the next wake reuses or
+        # replaces — a leak is recoverable, a killed live runtime is not.
+        try:
+            sandbox_manager.terminate(
+                sandbox_id, max_attempt_number=sleep_attempt_number
+            )
+        except SandboxProvisionContentionError:
+            logger.info(
+                "Sandbox %s runtime is being provisioned by a concurrent flow; "
+                "leaving it to that owner",
+                sandbox_id,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to terminate runtime of sleeping sandbox %s; the next "
+                "wake reuses or replaces it",
+                sandbox_id,
+                exc_info=True,
+            )
         logger.info("Sandbox %s is now sleeping", sandbox_id)
     finally:
         if session_creation_lock.owned():

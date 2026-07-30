@@ -240,7 +240,7 @@ class SessionManager:
         """Mint and persist the OpenCode session before the first prompt.
 
         The caller owns the surrounding transaction. This keeps the empty Craft
-        session's runtime ID and acknowledged skills attempt_number aligned.
+        session's runtime ID and acknowledged skills generation aligned.
         """
         opencode_session_id = self._sandbox_manager.ensure_opencode_session(
             sandbox_id=sandbox.id,
@@ -445,7 +445,7 @@ class SessionManager:
         - No sandbox row: creates one and provisions it.
         - ``RUNNING`` + pod healthy: returns as-is.
         - ``RUNNING`` + pod missing/unhealthy: terminates and re-provisions
-          under a new attempt_number.
+          under a new attempt number.
         - ``SLEEPING`` / ``TERMINATED`` / ``FAILED``: re-provisions in place.
         - ``PROVISIONING``: a stale attempt is taken over; a live one is
           polled up to ``provisioning_wait_seconds`` (default 30s). Raises
@@ -715,7 +715,18 @@ class SessionManager:
                 mcp_config_hash=sandbox_mcp_config_hash,
             )
             if not finalized:
+                # Another initializer got there first. If it converged on
+                # ACTIVE the session is healthy — this attempt's work was
+                # redundant, not wrong.
                 self._db_session.rollback()
+                self._db_session.refresh(session)
+                if session.status == BuildSessionStatus.ACTIVE:
+                    logger.info(
+                        "Session %s was finalized ACTIVE by a concurrent "
+                        "initializer; converged",
+                        session_id,
+                    )
+                    return
                 raise StaleProvisioningAttemptError(
                     f"Session {session_id} left INITIALIZING before this "
                     f"attempt finalized"

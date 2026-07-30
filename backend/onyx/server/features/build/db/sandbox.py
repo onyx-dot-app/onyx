@@ -236,34 +236,6 @@ def lock_sandbox_skills_hashes(
     return {sandbox_id: skills_hash for sandbox_id, skills_hash in rows}
 
 
-def update_sandbox_status__no_commit(
-    db_session: Session,
-    sandbox_id: UUID,
-    status: SandboxStatus,
-) -> Sandbox:
-    """Update sandbox status.
-
-    When transitioning to RUNNING, also sets last_heartbeat to now. This ensures
-    newly provisioned sandboxes have a proper idle timeout baseline (rather than
-    being immediately considered idle due to NULL heartbeat).
-
-    NOTE: This function uses flush() instead of commit(). The caller is
-    responsible for committing the transaction when ready.
-    """
-    sandbox = get_sandbox_by_id(db_session, sandbox_id)
-    if not sandbox:
-        raise ValueError(f"Sandbox {sandbox_id} not found")
-
-    sandbox.status = status
-
-    # Set heartbeat when sandbox becomes active to establish idle timeout baseline
-    if status == SandboxStatus.RUNNING:
-        sandbox.last_heartbeat = datetime.datetime.now(datetime.timezone.utc)
-
-    db_session.flush()
-    return sandbox
-
-
 def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
     """Update the heartbeat without committing the caller's transaction."""
     sandbox = get_sandbox_by_id(db_session, sandbox_id)
@@ -309,14 +281,18 @@ def user_has_stale_active_session(
     return db_session.execute(stmt).first() is not None
 
 
-def get_running_sandbox_count(
+def get_occupying_sandbox_count(
     db_session: Session,
 ) -> int:
-    """Get count of all running sandboxes (for limit enforcement).
+    """Count sandboxes that hold (or are about to hold) a runtime — RUNNING
+    plus PROVISIONING — for concurrency-limit enforcement. Counting only
+    RUNNING would let concurrent first-time creates all pass the check.
 
     Per-tenant by virtue of schema-scoped sessions on multi-tenant.
     """
-    stmt = select(func.count(Sandbox.id)).where(Sandbox.status == SandboxStatus.RUNNING)
+    stmt = select(func.count(Sandbox.id)).where(
+        Sandbox.status.in_((SandboxStatus.RUNNING, SandboxStatus.PROVISIONING))
+    )
     result = db_session.execute(stmt).scalar()
     return result or 0
 

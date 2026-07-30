@@ -183,7 +183,7 @@ def _provisioning_lock_key(sandbox_id: UUID) -> str:
 
 
 @contextmanager
-def _provisioning_lock(sandbox_id: UUID, tenant_id: str) -> Iterator[None]:
+def _provisioning_lock(sandbox_id: UUID, tenant_id: str | None) -> Iterator[None]:
     """Serialize pod creation + startup restore for one sandbox across
     api-server replicas. Acquisition is non-blocking: the numbered-attempt
     reservation already guarantees at most one live attempt per sandbox, so a
@@ -1053,8 +1053,7 @@ class KubernetesSandboxManager(SandboxManager):
             pod_name = self._get_pod_name(str(sandbox_id))
 
             # Idempotency check; also the pod-exists path a lock-expiry racer
-            # lands on. The attempt-number label keeps its creating attempt's
-            # value — attribution metadata only, never used for correctness.
+            # lands on.
             if self._pod_exists_and_healthy(pod_name):
                 logger.info(
                     "Pod %s already exists and is healthy, reusing existing pod",
@@ -1082,6 +1081,10 @@ class KubernetesSandboxManager(SandboxManager):
                     raise RuntimeError(
                         f"opencode-serve never became ready in existing sandbox pod {pod_name}"
                     )
+
+                # The reusing attempt owns the runtime now; the guarded
+                # deletes key off this label.
+                self._stamp_pod_attempt_number(pod_name, provisioning_attempt_number)
 
                 logger.info(
                     "Reusing existing Kubernetes sandbox %s, pod: %s",
@@ -1187,6 +1190,12 @@ class KubernetesSandboxManager(SandboxManager):
                         f"opencode-serve never became ready in sandbox pod {pod_name}"
                     )
 
+                if not created_pod:
+                    # 409 fallback adopted a pod another attempt created.
+                    self._stamp_pod_attempt_number(
+                        pod_name, provisioning_attempt_number
+                    )
+
                 logger.info(
                     "Provisioned Kubernetes sandbox %s, pod: %s (no sessions yet)",
                     sandbox_id,
@@ -1217,7 +1226,12 @@ class KubernetesSandboxManager(SandboxManager):
                         exc_info=True,
                     )
                     if created_pod:
-                        self._cleanup_kubernetes_resources(str(sandbox_id))
+                        # Bounded to this attempt: the pod at this name may
+                        # already belong to a newer attempt.
+                        self._cleanup_kubernetes_resources(
+                            str(sandbox_id),
+                            max_attempt_number=provisioning_attempt_number,
+                        )
                     else:
                         logger.warning(
                             "Not cleaning up sandbox %s after provisioning failure "
@@ -1288,10 +1302,48 @@ class KubernetesSandboxManager(SandboxManager):
         )
         return False
 
+    def _stamp_pod_attempt_number(self, pod_name: str, attempt_number: int) -> None:
+        """Mark the pod as owned by ``attempt_number`` when an attempt reuses
+        a pod it didn't create. Best-effort: on failure the label is stale and
+        a guarded delete may destroy the reused pod — recoverable via the
+        normal unhealthy-RUNNING recovery."""
+        try:
+            self._core_api.patch_namespaced_pod(
+                name=pod_name,
+                namespace=self._namespace,
+                body={
+                    "metadata": {
+                        "labels": {LABEL_PROVISIONING_ATTEMPT: str(attempt_number)}
+                    }
+                },
+            )
+        except ApiException:
+            logger.warning(
+                "Failed to restamp attempt label on pod %s", pod_name, exc_info=True
+            )
+
+    def _pod_attempt_number(self, pod_name: str) -> int | None:
+        """The provisioning-attempt label of the live pod, or None when the
+        pod is gone or predates the label."""
+        try:
+            pod = self._core_api.read_namespaced_pod(
+                name=pod_name, namespace=self._namespace
+            )
+        except ApiException as e:
+            if e.status == 404:
+                return None
+            raise
+        raw = (pod.metadata.labels or {}).get(LABEL_PROVISIONING_ATTEMPT)
+        try:
+            return int(raw) if raw is not None else None
+        except ValueError:
+            return None
+
     def _cleanup_kubernetes_resources(
         self,
         sandbox_id: str,
         wait_for_deletion: bool = True,
+        max_attempt_number: int | None = None,
     ) -> None:
         """Clean up Kubernetes resources for a sandbox.
 
@@ -1300,12 +1352,28 @@ class KubernetesSandboxManager(SandboxManager):
             wait_for_deletion: If True, wait for resources to be fully deleted
                 before returning. This prevents 409 conflicts when immediately
                 re-provisioning with the same sandbox ID.
+            max_attempt_number: When set, skip ALL deletion if the live pod's
+                attempt label is newer — resources share one name per sandbox,
+                so without this a superseded attempt's cleanup could destroy
+                the runtime a newer attempt just created.
         """
         # Convert UUID objects to strings if needed (Kubernetes client requires strings)
         sandbox_id = str(sandbox_id)
 
         pod_name = self._get_pod_name(sandbox_id)
         service_name = self._get_pod_name(sandbox_id)
+
+        if max_attempt_number is not None:
+            pod_attempt = self._pod_attempt_number(pod_name)
+            if pod_attempt is not None and pod_attempt > max_attempt_number:
+                logger.warning(
+                    "Skipping cleanup of sandbox %s: pod belongs to attempt %s, "
+                    "newer than caller's attempt %s",
+                    sandbox_id,
+                    pod_attempt,
+                    max_attempt_number,
+                )
+                return
 
         # Delete in reverse order of creation
         service_deleted = False
@@ -1357,10 +1425,22 @@ class KubernetesSandboxManager(SandboxManager):
                     "pod", pod_name, RUNTIME_TEARDOWN_SECONDS
                 )
 
-    def terminate(self, sandbox_id: UUID) -> None:
-        """Tear down event buses, then delete Service + Pod."""
+    def terminate(
+        self, sandbox_id: UUID, max_attempt_number: int | None = None
+    ) -> None:
+        """Tear down event buses, then delete Service + Pod.
+
+        Holds the per-sandbox provisioning lock so destruction serializes
+        against a concurrent provision() on any replica — a wake that just
+        started reusing this pod either finishes first or provisions fresh
+        after the deletion. Raises SandboxProvisionContentionError if a
+        provisioner currently holds the lock.
+        """
         self._close_all_sandbox_buses(sandbox_id)
-        self._cleanup_kubernetes_resources(str(sandbox_id))
+        with _provisioning_lock(sandbox_id, tenant_id=None):
+            self._cleanup_kubernetes_resources(
+                str(sandbox_id), max_attempt_number=max_attempt_number
+            )
         logger.info("Terminated Kubernetes sandbox %s", sandbox_id)
 
     def setup_session_workspace(

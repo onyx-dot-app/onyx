@@ -56,7 +56,7 @@ def test_provisioning_derivations() -> None:
     assert WORKSPACE_SETUP_DEADLINE_SECONDS == 180.0
     # The identity is the spec: workspace setup shares the provision budget.
     assert WORKSPACE_SETUP_DEADLINE_SECONDS == PROVISION_DEADLINE_SECONDS
-    assert SESSION_FLOW_LOCK_LEASE_SECONDS == 420
+    assert SESSION_FLOW_LOCK_LEASE_SECONDS == 720
     assert PROVISION_WAIT_SECONDS == 120.0
 
 

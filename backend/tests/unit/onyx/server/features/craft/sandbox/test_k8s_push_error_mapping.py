@@ -796,7 +796,9 @@ def test_provision_cleans_up_pod_when_opencode_history_restore_fails(
             provisioning_attempt_number=1,
         )
 
-    cleanup_resources_mock.assert_called_once_with(str(sandbox_id))
+    cleanup_resources_mock.assert_called_once_with(
+        str(sandbox_id), max_attempt_number=1
+    )
 
 
 def test_provision_existing_healthy_pod_does_not_restore_opencode_history(

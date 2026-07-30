@@ -14,10 +14,18 @@ from typing import Any, Callable
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Query, Session
 
+from onyx.auth.schemas import UserRole
 from onyx.configs.constants import FileOrigin, MessageType
-from onyx.db.enums import ArtifactType, BuildSessionStatus, SandboxStatus, SessionOrigin
+from onyx.db.enums import (
+    AccountType,
+    ArtifactType,
+    BuildSessionStatus,
+    SandboxStatus,
+    SessionOrigin,
+)
 from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox, Snapshot, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -1070,6 +1078,56 @@ class TestPortAllocator:
         with pytest.raises(OnyxError) as exc_info:
             reserve_nextjs_port__no_commit(db_session, target)
         assert exc_info.value.error_code == OnyxErrorCode.SERVICE_UNAVAILABLE
+
+    def test_nextjs_port_uniqueness_is_scoped_per_user(
+        self,
+        db_session: Session,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # Ports only collide within one user's sandbox: another user holding
+        # the sole port in the range must not block this user's allocation.
+        monkeypatch.setattr(
+            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_START",
+            50250,
+        )
+        monkeypatch.setattr(
+            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_END",
+            50251,
+        )
+
+        password_helper = PasswordHelper()
+        other_user = User(
+            id=uuid4(),
+            email=f"build_test_{uuid4().hex[:8]}@example.com",
+            hashed_password=password_helper.hash(password_helper.generate()),
+            is_active=True,
+            is_verified=True,
+            role=UserRole.EXT_PERM_USER,
+            account_type=AccountType.EXT_PERM_USER,
+        )
+        db_session.add(other_user)
+        db_session.add(
+            BuildSession(
+                id=uuid4(),
+                user_id=other_user.id,
+                name="other-user-occupies-50250",
+                status=BuildSessionStatus.ACTIVE,
+                nextjs_port=50250,
+            )
+        )
+        target = BuildSession(
+            id=uuid4(),
+            user_id=test_user.id,
+            name="same-port-different-user",
+            status=BuildSessionStatus.INITIALIZING,
+        )
+        db_session.add(target)
+        db_session.commit()
+
+        allocated = reserve_nextjs_port__no_commit(db_session, target)
+        db_session.commit()
+        assert allocated == 50250
 
     def test_nextjs_port_reservation_retries_on_unique_collision(
         self,

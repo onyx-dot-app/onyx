@@ -8,14 +8,13 @@ and forces a conscious decision: route the transition through
 
 from tests.common.paths import find_ancestor_containing
 
-# The status-mutation surface: the attempt-number-checked transition helpers
-# and the raw setter. Any of these constitutes a sandbox-status write.
+# The status-mutation surface: the attempt-number-checked transition helpers.
+# Any of these constitutes a sandbox-status write.
 STATUS_MUTATION_HELPERS: tuple[str, ...] = (
     "begin_provisioning_attempt__no_commit",
     "begin_recovery_attempt__no_commit",
     "finalize_provisioning_attempt__no_commit",
     "sleep_running_sandbox__no_commit",
-    "update_sandbox_status__no_commit",
 )
 
 # Modules that MUST reference the status mutation (the spec).

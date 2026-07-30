@@ -106,6 +106,7 @@ def test_reuse_existing_pod_clears_stale_tombstone() -> None:
         mock.patch.object(mgr, "_ensure_service_exists"),
         mock.patch.object(mgr, "_wait_for_pod_ready", return_value=True),
         mock.patch.object(mgr, "_wait_for_opencode_serve_ready", return_value=True),
+        mock.patch.object(mgr, "_stamp_pod_attempt_number"),
     ):
         info = mgr.provision(
             sandbox_id=sandbox_id,

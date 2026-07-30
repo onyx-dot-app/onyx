@@ -159,7 +159,11 @@ def test_terminate_closes_every_per_directory_bus_for_sandbox(
     bus_other = mgr._get_or_create_event_bus(other_sandbox, _DIR_A)
 
     # Stub out the K8s teardown — we only care about the bus-close path.
-    monkeypatch.setattr(mgr, "_cleanup_kubernetes_resources", lambda _sandbox_str: None)
+    monkeypatch.setattr(
+        mgr,
+        "_cleanup_kubernetes_resources",
+        lambda _sandbox_str, max_attempt_number=None: None,  # noqa: ARG005
+    )
 
     mgr.terminate(sandbox_id)
 
