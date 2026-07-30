@@ -122,10 +122,12 @@ so the prod image still has it but dev/CI images can opt out.
 
 ## Cold pulls vs. image warming — decision and roadmap
 
-**Current state: we pre-pull the sandbox image onto the sandbox node
-pool with a DaemonSet.** Chart: `sandboxImagePrepull` in `values.yaml`,
-template `sandbox-image-prepuller.yaml`. On by default when
-`ENABLE_CRAFT` is set.
+**Current state: we pre-pull the sandbox image on both backends.**
+Kubernetes uses a DaemonSet over the sandbox node pool
+(`sandboxImagePrepull` in `values.yaml`, template
+`sandbox-image-prepuller.yaml`); Docker declares the image in
+`docker-compose.craft.yml` so `docker compose pull` fetches it — see
+"Docker" below. Both on by default when `ENABLE_CRAFT` is set.
 
 This section previously recorded the opposite decision — that we accept
 cold pulls — on an estimate of ~3–6 s per pull from AZ-local bandwidth.
@@ -262,6 +264,77 @@ Note also that **no CI lane would have caught this**: `ct install` only
 does a fresh install into an empty kind cluster, never an upgrade from
 the previously released chart, so the patch path where immutable-field
 violations live is untested. `ct install --upgrade` would cover it.
+
+### Docker
+
+Same problem, materially easier shape. The Docker backend pulls lazily in
+`DockerSandboxManager._ensure_sandbox_image()`, called from
+`provision()` — so on a host without the image, whoever asks for the
+first sandbox pays the ~1 GB download inside their own request.
+
+Two differences from Kubernetes drive a different fix:
+
+- **One image store, not one per node.** A compose deployment is a single
+  Docker daemon, so a single pull serves `api_server`, `background`, and
+  every sandbox container. There is no per-node fan-out to arrange, and
+  no `maxUnavailable` to tune.
+- **Docker never garbage-collects images.** kubelet reclaims them at
+  `imageGCHighThresholdPercent`, which is why the Kubernetes fix needs a
+  *running* pod to pin the layers. Docker only removes images on an
+  explicit `docker image prune`. Pinning is therefore a bonus here, not
+  the point.
+
+So the fix is a `sandbox-image-prepull` entry in
+`docker-compose.craft.yml` carrying `deploy.replicas: 0`. The sandbox
+image is not otherwise a compose service — `api_server` creates sandbox
+containers from it directly — so `docker compose pull` has nothing to
+tell it about. Declaring it puts the image on the normal pull/upgrade
+lifecycle; `replicas: 0` means no container is ever created.
+
+That combination is load-bearing and was verified rather than assumed:
+
+| shape | `compose pull` fetches it | `up --wait` |
+|---|---|---|
+| `profiles: [...]` | **no** — skipped | n/a |
+| one-shot that exits 0 | yes | **exits 1** |
+| long-lived idler | yes | ok, but a pointless container forever |
+| `deploy.replicas: 0` | yes | ok, no container at all |
+
+So profiles can't be used (a plain `pull` skips them, which defeats the
+point for anyone not using the installer), and a one-shot breaks the
+`up --wait` that `install.sh` passes by default.
+
+**One mechanism, and it covers every path.** `install.sh --include-craft`
+already runs `docker compose pull` with the craft overlay layered in, so
+the installer needs no special case. Anyone who brings the stack up by
+hand — a supported path, see `deployment/docker_compose/README.md` option
+2 — gets it from the same plain `docker compose pull`, with nothing extra
+to remember.
+
+**One fallback.** If the image is missing later (pruned, or an operator
+who never pulls), `provision()` pulls it on demand as it always has. The
+cost lands on one request and the error surfaces against the request that
+caused it.
+
+Earlier revisions added a long-lived compose service to hold the image
+*and* a background warm at api_server startup. Both were removed. They
+were mutually redundant — each was justified by gaps the other covered —
+and neither survives the question "if the other exists, why do I?". The
+long-lived service also left a container idling forever for no reason
+beyond satisfying `docker compose up --wait` — which `replicas: 0` sidesteps
+entirely, since there is nothing for the wait to observe.
+
+Do not warm at api_server startup. Blocking there would put all of Onyx's
+readiness behind the registry, and not just on first install: `:latest`
+is the default and is in `_MUTABLE_SANDBOX_IMAGE_TAGS`, for which
+`_ensure_sandbox_image` skips the local-presence check and always pulls.
+Every restart would contact the registry. Making it non-blocking instead
+just converts a broken deployment into a slow one that fails later, at a
+user's first sandbox.
+
+The `background` worker also provisions (waking `SLEEPING` sandboxes via
+`scheduled_tasks/executor.py`) and needs nothing of its own: it shares
+the host's image store, so whichever pull happened first covers it.
 
 ### Private registries
 

@@ -127,6 +127,28 @@ services:
         max-size: "50m"
         max-file: "6"
 
+  # Declared solely so `docker compose pull` fetches the sandbox image. Without
+  # it the first sandbox pays the ~1 GB download inside its provisioning
+  # request, because api_server creates sandbox containers from this image
+  # directly rather than compose managing them.
+  #
+  # replicas: 0 means no container is ever created -- `up` skips it, so nothing
+  # idles and `up --wait` stays green. It is not a workload; it is an image
+  # reference that the normal pull/upgrade lifecycle can see.
+  sandbox-image-prepull:
+    # Must match api_server/background's SANDBOX_CONTAINER_IMAGE below, or this
+    # warms an image nobody runs while every sandbox still cold-pulls.
+    image: ${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:${IMAGE_TAG:-latest}}
+    deploy:
+      replicas: 0
+    # Defence in depth. `replicas: 0` is honoured by Compose v2 (even when the
+    # service is named explicitly), but the legacy standalone docker-compose
+    # ignores `deploy` outside swarm, and install.sh accepts a standalone binary
+    # with no minimum version. Unoverridden, the image's own ENTRYPOINT starts
+    # `opencode serve` on 0.0.0.0:4096 with no password -- and stays running, so
+    # nothing looks wrong. Anything that does start here must be inert.
+    entrypoint: ["/bin/true"]
+
 networks:
   # Pre-created by install.sh --include-craft.
   onyx_craft_sandbox:
