@@ -1,14 +1,12 @@
-from collections.abc import Callable
-from typing import Any
-from onyx.db.engine.iam_auth import get_iam_auth_token
+from onyx.db.engine.iam_auth import make_provide_iam_token_async
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USER
-from onyx.configs.app_configs import AWS_REGION_NAME
 from onyx.db.engine.shard_registry import ALEMBIC_TARGET_URL_ATTRIBUTE
 from onyx.db.engine.shard_registry import get_shard_spec
+from onyx.db.engine.shard_registry import validate_shard_name
 from onyx.db.engine.shard_registry import is_sharded
 from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.tenant_utils import get_tenant_ids_by_shard
@@ -18,7 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.engine.base import Connection
 import os
-import ssl
+from itertools import chain
 import asyncio
 import logging
 from logging.config import fileConfig
@@ -86,11 +84,10 @@ def connection_url(shard_name: str | None = None) -> str:
     )
 
 
-ssl_context: ssl.SSLContext | None = None
-if USE_IAM_AUTH:
-    if not os.path.exists(SSL_CERT_FILE):
-        raise FileNotFoundError(f"Expected {SSL_CERT_FILE} when USE_IAM_AUTH is true.")
-    ssl_context = ssl.create_default_context(cafile=SSL_CERT_FILE)
+# Fail at import rather than on the first connection. The context itself is built by
+# `create_pg_ssl_context`, which both the engine and the IAM listener use.
+if USE_IAM_AUTH and not os.path.exists(SSL_CERT_FILE):
+    raise FileNotFoundError(f"Expected {SSL_CERT_FILE} when USE_IAM_AUTH is true.")
 
 
 def filter_tenants_by_range(
@@ -233,7 +230,7 @@ def get_schema_options() -> tuple[
     shard = x_args.get("shard") or None
     if shard is not None:
         # Fails here rather than after connecting to the wrong database.
-        get_shard_spec(shard)
+        validate_shard_name(shard)
 
     return (
         create_schema,
@@ -275,44 +272,28 @@ def do_run_migrations(
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
-def make_provide_iam_token_for_alembic(
-    target_url: str,
-) -> Callable[[Any, Any, Any, Any], None]:
-    """Build a `do_connect` listener bound to one database's coordinates.
+def create_migration_engine(target_url: str) -> AsyncEngine:
+    """Async engine for one database, with IAM bound to that database.
 
     An RDS IAM token is only valid for the host/port/user it was minted for, so the
-    listener has to close over the URL its engine actually connects to rather than
-    re-deriving it from process-wide settings.
+    listener is built from the URL this engine connects to rather than from the
+    process-wide POSTGRES_* settings.
     """
-    url = make_url(target_url)
-    host = url.host or POSTGRES_HOST
-    port = str(url.port) if url.port else POSTGRES_PORT
-    user = url.username or POSTGRES_USER
-
-    def provide_iam_token_for_alembic(
-        dialect: Any,  # noqa: ARG001
-        conn_rec: Any,  # noqa: ARG001
-        cargs: Any,  # noqa: ARG001
-        cparams: Any,
-    ) -> None:
-        cparams["password"] = get_iam_auth_token(host, port, user, AWS_REGION_NAME)
-        cparams["ssl"] = ssl_context
-
-    return provide_iam_token_for_alembic
-
-
-def create_migration_engine(target_url: str) -> AsyncEngine:
-    """Async engine for one database, with IAM bound to that database."""
     engine = create_async_engine(
         target_url,
         poolclass=pool.NullPool,
         connect_args={"ssl": create_pg_ssl_context()},
     )
     if USE_IAM_AUTH:
+        url = make_url(target_url)
         event.listen(
             engine.sync_engine,
             "do_connect",
-            make_provide_iam_token_for_alembic(target_url),
+            make_provide_iam_token_async(
+                url.host or POSTGRES_HOST,
+                str(url.port) if url.port else POSTGRES_PORT,
+                url.username or POSTGRES_USER,
+            ),
         )
     return engine
 
@@ -366,7 +347,7 @@ def _tenants_to_migrate(
 
     # The range is positional over *all* tenants, so it has to be applied before
     # partitioning — filtering per shard would select the range N times over.
-    all_tenants = sorted({t for ts in tenants_by_shard.values() for t in ts})
+    all_tenants = sorted(set(chain.from_iterable(tenants_by_shard.values())))
     selected = set(
         filter_tenants_by_range(all_tenants, tenant_range_start, tenant_range_end)
     )

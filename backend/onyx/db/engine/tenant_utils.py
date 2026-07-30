@@ -1,4 +1,5 @@
 import re
+from itertools import chain
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -168,10 +169,4 @@ def get_all_tenant_ids() -> list[str]:
         return [POSTGRES_DEFAULT_SCHEMA]
 
     # Deduped: a tenant mid-copy exists on two shards but is still one tenant.
-    return sorted(
-        {
-            tenant_id
-            for tenant_ids in get_tenant_ids_by_shard().values()
-            for tenant_id in tenant_ids
-        }
-    )
+    return sorted(set(chain.from_iterable(get_tenant_ids_by_shard().values())))

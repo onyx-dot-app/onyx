@@ -268,10 +268,13 @@ def main() -> int:
         print("Could not determine head revision.", file=sys.stderr)
         return 1
 
+    schemas_by_shard: dict[str, list[str]] = {}
     with SqlEngine.scoped_engine(pool_size=5, max_overflow=2):
+        # The prefix filter drops `public`, which enumeration reports as the sole
+        # "tenant" outside multi-tenant mode. That is what makes the hint below fire.
         tenants_by_shard = {
-            shard_name: [tid for tid in tenant_ids if tid.startswith(TENANT_ID_PREFIX)]
-            for shard_name, tenant_ids in get_tenant_ids_by_shard().items()
+            shard_name: [t for t in tenants if t.startswith(TENANT_ID_PREFIX)]
+            for shard_name, tenants in get_tenant_ids_by_shard().items()
         }
         total_tenants = sum(len(s) for s in tenants_by_shard.values())
 
@@ -284,12 +287,12 @@ def main() -> int:
 
         # Per shard: alembic_version lives in the schema, so each shard has to be
         # asked about its own tenants.
-        schemas_by_shard = {
-            shard_name: get_schemas_needing_migration(schemas, head_rev, shard_name)
-            for shard_name, schemas in tenants_by_shard.items()
-            if schemas
-        }
-        schemas_by_shard = {k: v for k, v in schemas_by_shard.items() if v}
+        for shard_name, tenants in tenants_by_shard.items():
+            if not tenants:
+                continue
+            needing = get_schemas_needing_migration(tenants, head_rev, shard_name)
+            if needing:
+                schemas_by_shard[shard_name] = needing
 
     total_to_migrate = sum(len(s) for s in schemas_by_shard.values())
     if not total_to_migrate:
