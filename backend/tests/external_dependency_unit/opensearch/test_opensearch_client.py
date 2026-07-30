@@ -3225,8 +3225,7 @@ class TestIndexReclaimPrimitive:
 
         outcome = reclaim_index_data(
             test_client._index_name,
-            is_multi_tenant=False,
-            tenant_id="ignored",
+            TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False),
         )
 
         assert outcome == ReclaimOutcome.COMPLETE
@@ -3242,11 +3241,7 @@ class TestIndexReclaimPrimitive:
         self._index_docs(test_client, tenant_b, "b", 2)
         test_client.refresh_index()
 
-        outcome = reclaim_index_data(
-            test_client._index_name,
-            is_multi_tenant=True,
-            tenant_id=tenant_a.tenant_id,
-        )
+        outcome = reclaim_index_data(test_client._index_name, tenant_a)
         test_client.refresh_index()
 
         assert outcome == ReclaimOutcome.COMPLETE
@@ -3266,9 +3261,7 @@ class TestIndexReclaimPrimitive:
         test_client.refresh_index()
 
         monkeypatch.setattr(OpenSearchIndexClient, "count_by_query", lambda *_: 3)
-        outcome = reclaim_index_data(
-            test_client._index_name, is_multi_tenant=True, tenant_id=ts.tenant_id
-        )
+        outcome = reclaim_index_data(test_client._index_name, ts)
         assert outcome == ReclaimOutcome.INCOMPLETE
 
     def test_reclaim_missing_index_is_complete(
@@ -3277,11 +3270,15 @@ class TestIndexReclaimPrimitive:
     ) -> None:
         missing = f"test_missing_{uuid.uuid4().hex[:8]}"
         assert (
-            reclaim_index_data(missing, is_multi_tenant=True, tenant_id="tenant_x")
+            reclaim_index_data(
+                missing, TenantState(tenant_id="tenant_x", multitenant=True)
+            )
             == ReclaimOutcome.COMPLETE
         )
         assert (
-            reclaim_index_data(missing, is_multi_tenant=False, tenant_id="tenant_x")
+            reclaim_index_data(
+                missing, TenantState(tenant_id="tenant_x", multitenant=False)
+            )
             == ReclaimOutcome.COMPLETE
         )
 
@@ -3333,16 +3330,7 @@ class TestIndexReclaimPrimitive:
 
         name = test_client._index_name
         # 5 docs, batch 2: 3 left, then 1 left, then 0.
-        assert (
-            reclaim_index_data(name, is_multi_tenant=True, tenant_id=ts.tenant_id)
-            == ReclaimOutcome.INCOMPLETE
-        )
-        assert (
-            reclaim_index_data(name, is_multi_tenant=True, tenant_id=ts.tenant_id)
-            == ReclaimOutcome.INCOMPLETE
-        )
-        assert (
-            reclaim_index_data(name, is_multi_tenant=True, tenant_id=ts.tenant_id)
-            == ReclaimOutcome.COMPLETE
-        )
+        assert reclaim_index_data(name, ts) == ReclaimOutcome.INCOMPLETE
+        assert reclaim_index_data(name, ts) == ReclaimOutcome.INCOMPLETE
+        assert reclaim_index_data(name, ts) == ReclaimOutcome.COMPLETE
         assert test_client.count_by_query(self._tenant_term(ts.tenant_id)) == 0

@@ -6,6 +6,7 @@ COMPLETE. Driven by the reclaim beat task (background/celery/tasks/index_reclaim
 from enum import Enum
 
 from onyx.configs.app_configs import OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.schema import TENANT_ID_FIELD_NAME
 from onyx.utils.logger import setup_logger
@@ -20,9 +21,7 @@ class ReclaimOutcome(str, Enum):
     INCOMPLETE = "incomplete"
 
 
-def reclaim_index_data(
-    index_name: str, is_multi_tenant: bool, tenant_id: str
-) -> ReclaimOutcome:
+def reclaim_index_data(index_name: str, tenant_state: TenantState) -> ReclaimOutcome:
     """Delete an old index's data. Idempotent — safe to call repeatedly.
 
     Single-tenant: the physical index belongs to this deployment, so drop it whole in
@@ -32,13 +31,12 @@ def reclaim_index_data(
     client timeout. Verify by count: COMPLETE only once zero of the tenant's docs
     remain, else INCOMPLETE so the caller re-runs.
     """
-    client = OpenSearchIndexClient(index_name=index_name)
-    try:
+    with OpenSearchIndexClient(index_name=index_name) as client:
         if not client.index_exists():
             logger.info("Old index %s already gone; nothing to reclaim.", index_name)
             return ReclaimOutcome.COMPLETE
 
-        if not is_multi_tenant:
+        if not tenant_state.multitenant:
             existed = client.delete_index()
             logger.info(
                 "Reclaimed old index %s (physical drop, existed=%s).",
@@ -47,7 +45,9 @@ def reclaim_index_data(
             )
             return ReclaimOutcome.COMPLETE
 
-        tenant_query = {"query": {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_id}}}}
+        tenant_query = {
+            "query": {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
+        }
         # Bounded per call (max_docs) so a whale tenant can't run past the client HTTP
         # timeout; the caller re-runs on INCOMPLETE. refresh=True so the count below
         # sees the deletions (else it reads stale and falsely reports INCOMPLETE).
@@ -57,11 +57,9 @@ def reclaim_index_data(
         remaining = client.count_by_query(tenant_query)
         logger.info(
             "Reclaimed tenant %s from shared index %s: deleted=%s remaining=%s.",
-            tenant_id,
+            tenant_state.tenant_id,
             index_name,
             deleted,
             remaining,
         )
         return ReclaimOutcome.COMPLETE if remaining == 0 else ReclaimOutcome.INCOMPLETE
-    finally:
-        client.close()
