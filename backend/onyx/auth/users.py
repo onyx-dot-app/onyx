@@ -132,7 +132,7 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
     get_session_with_tenant,
 )
-from onyx.db.enums import AccountType, Permission
+from onyx.db.enums import AccountType, PatType, Permission
 from onyx.db.models import AccessToken, OAuthAccount, Persona, User
 from onyx.db.pat import resolve_pat
 from onyx.db.users import (
@@ -2035,8 +2035,11 @@ async def _resolve_optional_user(
                 # Expose the token's scopes so require_permission can cap the
                 # request to them.
                 request.state.token_scopes = pat.scopes
+                # Craft sandbox tokens are agent-driven and carry the owning
+                # human's user_id, so they need their own credential type to
+                # stay separable from interactive PAT usage.
                 request.state.usage_credential = UsageCredentialIdentity(
-                    "pat",
+                    "craft_pat" if pat.pat_type == PatType.CRAFT else "pat",
                     str(pat.pat_id),
                     pat.pat_name,
                     pat.pat_display,

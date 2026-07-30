@@ -4,7 +4,9 @@ import pytest
 from fastapi import Request
 
 from onyx.auth import users
+from onyx.db.enums import PatType
 from onyx.db.models import User
+from onyx.db.pat import PatAuthResult
 from shared_configs.contextvars import UsageCredentialIdentity
 
 
@@ -46,6 +48,39 @@ async def test_unauthenticated_request_has_no_credential() -> None:
 
     assert await _resolve(request, None) is None
     assert getattr(request.state, "usage_credential", None) is None
+
+
+@pytest.mark.parametrize(
+    "pat_type, expected_credential_type",
+    [(PatType.USER, "pat"), (PatType.CRAFT, "craft_pat")],
+)
+@pytest.mark.asyncio
+async def test_pat_type_selects_credential_type(
+    monkeypatch: pytest.MonkeyPatch,
+    pat_type: PatType,
+    expected_credential_type: str,
+) -> None:
+    pat_user = cast(User, object())
+    pat = PatAuthResult(
+        user=pat_user,
+        scopes=None,
+        pat_id=7,
+        pat_name="my-token",
+        pat_display="onyx_pat_...abcd",
+        pat_type=pat_type,
+    )
+
+    async def fake_resolve_pat(*_: Any, **__: Any) -> PatAuthResult:
+        return pat
+
+    monkeypatch.setattr(users, "get_hashed_pat_from_request", lambda _: "hashed")
+    monkeypatch.setattr(users, "resolve_pat", fake_resolve_pat)
+    request = _bare_request()
+
+    assert await _resolve(request, None) is pat_user
+    assert request.state.usage_credential == UsageCredentialIdentity(
+        expected_credential_type, "7", "my-token", "onyx_pat_...abcd"
+    )
 
 
 @pytest.mark.asyncio

@@ -33,6 +33,7 @@ class PatAuthResult(NamedTuple):
     pat_id: int
     pat_name: str
     pat_display: str
+    pat_type: PatType
 
 
 async def resolve_pat(
@@ -79,6 +80,7 @@ async def resolve_pat(
         pat_id=pat.id,
         pat_name=pat.name,
         pat_display=pat.token_display,
+        pat_type=pat.pat_type,
     )
 
 
