@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 from onyx.chat.llm_loop import (
+    _REFUSAL_FINISH_REASONS,
     EmptyLLMResponseError,
     _build_empty_llm_response_error,
     _try_fallback_tool_extraction,
@@ -1329,11 +1330,11 @@ class TestEmptyLlmResponseClassification:
         # Anthropic-specific fallback suggestion from the issue.
         assert "Claude Opus 4.8" in err.client_error_msg
 
-    def test_raw_refusal_finish_reason_takes_precedence_over_budget_heuristic(
-        self, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize("finish_reason", sorted(_REFUSAL_FINISH_REASONS))
+    def test_refusal_finish_reasons_take_precedence_over_budget_heuristic(
+        self, monkeypatch: pytest.MonkeyPatch, finish_reason: str
     ) -> None:
-        """Gateways may forward the raw "refusal" value; it must be recognized
-        and must win over the OpenAI empty-stream quota heuristic."""
+        """Native provider refusal reasons may pass through gateways unchanged."""
         monkeypatch.setattr("onyx.chat.llm_loop.is_true_openai_model", lambda *_: True)
 
         err = _build_empty_llm_response_error(
@@ -1343,13 +1344,14 @@ class TestEmptyLlmResponseClassification:
                 answer=None,
                 tool_calls=None,
                 raw_answer=None,
-                finish_reason="refusal",
+                finish_reason=finish_reason,
             ),
             tool_choice=ToolChoiceOptions.AUTO,
         )
 
         assert err.error_code == "MODEL_REFUSAL"
         assert err.is_retryable is False
+        assert err.finish_reason == finish_reason
         assert "Claude Opus 4.8" not in err.client_error_msg
 
 
