@@ -100,7 +100,7 @@ export default function TableHead({
         <div
           className={cn(
             "table-head-sort",
-            "opacity-0 group-hover:opacity-100 transition-opacity"
+            "opacity-0 group-hover:opacity-100 no-hover:opacity-100 transition-opacity"
           )}
         >
           {onSort && (
@@ -122,7 +122,7 @@ export default function TableHead({
           className={cn(
             "absolute right-0 top-0 flex h-full items-center",
             "text-border-02",
-            "opacity-0 group-hover:opacity-100",
+            "opacity-0 group-hover:opacity-100 no-hover:opacity-100",
             "cursor-col-resize",
             "select-none touch-none"
           )}
