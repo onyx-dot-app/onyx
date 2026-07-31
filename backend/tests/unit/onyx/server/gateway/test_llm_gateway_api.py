@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Awaitable, Callable
-from contextlib import nullcontext
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager, nullcontext
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
@@ -54,7 +54,7 @@ from onyx.server.gateway.models import (
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.spans import NoOpSpan
+from onyx.tracing.framework.create import get_current_trace
 
 
 def _pat_request(token_scopes: list[Permission] | None) -> Request:
@@ -617,14 +617,37 @@ def test_stream_records_accumulated_reasoning_on_span() -> None:
     assert record.call_args.kwargs["output"] == "done"
 
 
-def test_stream_worker_opens_trace_so_generation_span_is_real() -> None:
-    with patch.object(gateway_api, "record_llm_span_output") as record:
+@contextmanager
+def _capture_trace_at_generation_span(captured: list[Any]) -> Iterator[None]:
+    real_span = gateway_api.llm_generation_span
+
+    @contextmanager
+    def _recording_span(*args: Any, **kwargs: Any) -> Iterator[Any]:
+        captured.append(get_current_trace())
+        with real_span(*args, **kwargs) as span:
+            yield span
+
+    with patch.object(gateway_api, "llm_generation_span", _recording_span):
+        yield
+
+
+def _assert_gateway_trace(active: Any) -> None:
+    assert active is not None, "no trace was active when the generation span opened"
+    assert active.name == "llm_gateway"
+    assert active.metadata == {
+        "flow": LLMFlow.CRAFT_LLM_GENERATION.value,
+        "model": "test",
+    }
+
+
+def test_stream_worker_opens_trace_before_generation_span() -> None:
+    traces: list[Any] = []
+    with _capture_trace_at_generation_span(traces):
         frames = list(_gateway_stream(_ReasoningStreamLLM()))
 
     assert frames[-1] == "data: [DONE]\n\n"
-    record.assert_called_once()
-    span = record.call_args.args[0]
-    assert not isinstance(span, NoOpSpan)
+    (active,) = traces
+    _assert_gateway_trace(active)
 
 
 class _RaisingInvokeLLM(_ConfigOnlyLLM):
@@ -704,7 +727,7 @@ def test_handle_chat_completion_happy_path_serializes_response() -> None:
     assert payload["usage"]["total_tokens"] == 150
 
 
-def test_non_streaming_opens_trace_so_generation_span_is_real() -> None:
+def test_non_streaming_opens_trace_before_generation_span() -> None:
     request = ChatCompletionRequest(
         model="1/test",
         messages=[{"role": "user", "content": "hi"}],
@@ -719,19 +742,19 @@ def test_non_streaming_opens_trace_so_generation_span_is_real() -> None:
         usage=_wire_usage(),
     )
 
+    traces: list[Any] = []
     with (
         patch.object(
             gateway_api,
             "llm_from_provider",
             return_value=_InvokeLLM(response),
         ),
-        patch.object(gateway_api, "record_llm_response") as record,
+        _capture_trace_at_generation_span(traces),
     ):
         _handle_completion_call(request)
 
-    record.assert_called_once()
-    span = record.call_args.args[0]
-    assert not isinstance(span, NoOpSpan)
+    (active,) = traces
+    _assert_gateway_trace(active)
 
 
 @pytest.mark.parametrize(
