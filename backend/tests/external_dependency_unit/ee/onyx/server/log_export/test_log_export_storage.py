@@ -5,6 +5,7 @@ tmp directories.
 """
 
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
@@ -45,15 +46,17 @@ def test_collect_uploads_piece_and_receipt(tmp_path: Path) -> None:
     # Postcondition.
     assert receipt.status is LogExportReceiptStatus.UPLOADED
     assert receipt.file_count == 1
-    assert receipt.size_bytes > 0
     file_store = get_default_file_store()
-    piece = file_store.read_file(
-        piece_file_id(export_id, receipt.hostname), use_tempfile=True
-    )
-    with ZipFile(piece) as zip_file:
-        assert any(name.endswith("onyx_debug.log") for name in zip_file.namelist()), (
-            "The piece zip must contain the planted log file."
-        )
+    piece_bytes = file_store.read_file(
+        piece_file_id(export_id, receipt.hostname)
+    ).read()
+    assert receipt.size_bytes == len(piece_bytes)
+    with ZipFile(BytesIO(piece_bytes)) as zip_file:
+        log_entries = [
+            name for name in zip_file.namelist() if name.endswith("onyx_debug.log")
+        ]
+        assert len(log_entries) == 1, "The piece zip must contain the planted log file."
+        assert zip_file.read(log_entries[0]) == b"debug line\n"
     receipt_bytes = file_store.read_file(receipt_file_id(export_id, "primary")).read()
     assert LogExportReceipt.model_validate_json(receipt_bytes) == receipt
 
@@ -157,8 +160,8 @@ def test_cleanup_deletes_only_expired_exports(
     # Under test.
     deleted_count = delete_expired_log_exports()
 
-    # Postcondition: the aged export is gone, the fresh one is intact.
-    # Leftovers from earlier test runs may also be deleted, hence ``>=``.
+    # Postcondition: the aged export is gone, the fresh one is intact. Leftovers
+    # from earlier test runs may also be deleted, hence ``>=``.
     assert deleted_count >= 2
     file_store = get_default_file_store()
     assert file_store.list_files_by_prefix(export_file_id_prefix(old_export_id)) == []
