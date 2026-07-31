@@ -152,6 +152,19 @@ def handle_regular_answer(
 
     messages = message_info.thread_messages
 
+    # If any message in the thread has file attachments, append a note to the
+    # last user message so the user knows their attachment was not read.
+    # Slack delivers attachments in files[] but Onyx does not yet support reading them.
+
+    if any(m.has_attachments for m in messages):
+        for m in reversed(messages):
+            if m.role == MessageType.USER:
+                m.message += (
+                    "\n\n_Note: your message included one or more attachments "
+                    "(e.g. images) that I am not able to read at this time._"
+                )
+                break
+
     message_ts_to_respond_to = message_info.msg_to_respond
     is_slash_command = message_info.is_slash_command
 

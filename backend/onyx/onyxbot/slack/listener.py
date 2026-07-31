@@ -999,9 +999,16 @@ def build_request_details(
                     )
                 if sender_display_name is None:
                     sender_display_name = expert_info.email
+
+            # Check if the incoming event has file attachments
+            files = event.get("files", [])
+            has_attachments = bool(files)
             thread_messages = [
                 ThreadMessage(
-                    message=msg, sender=sender_display_name, role=MessageType.USER
+                    message=msg, 
+                    sender=sender_display_name, 
+                    role=MessageType.USER,
+                    has_attachments=has_attachments
                 )
             ]
 

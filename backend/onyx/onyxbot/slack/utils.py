@@ -623,8 +623,11 @@ def read_slack_thread(
                 continue
 
         message = remove_onyx_bot_tag(tenant_id, slack_bot_id, message, client=client)
+        # Check if this message has file attachments (images, etc.)
+        files = reply.get("files", [])
+        has_attachments = bool(files)
         thread_messages.append(
-            ThreadMessage(message=message, sender=user_sem_id, role=message_type)
+            ThreadMessage(message=message, sender=user_sem_id, role=message_type, has_attachments=has_attachments)
         )
 
     return thread_messages
