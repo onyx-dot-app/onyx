@@ -117,7 +117,7 @@ def _run_scheduled_eval() -> None:
 
 
 _CACHE_CLEANUP_INTERVAL_SECONDS = 300
-# Matches the reclaim-license beat entry, which never fires here.
+# The lead-up reclaim rate. No beat runs here, so this thread sets the cadence.
 _LICENSE_RECLAIM_INTERVAL_SECONDS = 6 * 3600
 
 

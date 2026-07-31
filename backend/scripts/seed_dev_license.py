@@ -28,10 +28,15 @@ _PEM_END = "-----END ONYX LICENSE-----"
 
 
 def _strip_pem_delimiters(content: str) -> str:
+    """Reduce a .lic file to the bare base64 blob.
+
+    Collapses all whitespace, not just the delimiter lines: the stored blob is
+    later sent as a Bearer token and requests rejects a value with newlines.
+    """
     content = content.strip()
     if content.startswith(_PEM_BEGIN) and content.endswith(_PEM_END):
-        return "\n".join(content.split("\n")[1:-1]).strip()
-    return content
+        content = content[len(_PEM_BEGIN) : -len(_PEM_END)]
+    return "".join(content.split())
 
 
 def main() -> None:

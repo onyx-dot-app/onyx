@@ -172,9 +172,8 @@ def _is_stale_replacement(stored_data: str, incoming: LicensePayload) -> bool:
 def publish_license_cache(db_session: Session) -> None:
     """Publish metadata for the committed license row. Never raises.
 
-    Namespaces off the ambient tenant, which is what readers resolve. Publishing
-    under the license's own tenant_id strands the fresh entry where nothing
-    looks. On failure the entry is dropped rather than left to serve its TTL.
+    Namespaces off the ambient tenant, which is what readers resolve. On
+    failure the entry is dropped rather than left to serve its TTL.
     """
     # Deferred import: ee.onyx.db.license imports this module.
     from ee.onyx.db.license import invalidate_license_cache, publish_license_metadata

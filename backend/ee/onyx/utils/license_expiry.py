@@ -23,7 +23,7 @@ LICENSE_GRACE_PERIOD_DAYS = 14
 LICENSE_RECLAIM_WINDOW = timedelta(days=7)
 
 # A renewal replaces the license at the period end, so only the approach to it
-# is worth watching closely. The rest of the window keeps its long-standing rate.
+# is worth watching closely. The rest of the window polls at the lead-up rate.
 LICENSE_RECLAIM_URGENT_WINDOW = timedelta(hours=1)
 LICENSE_RECLAIM_LEAD_UP_INTERVAL = timedelta(hours=6)
 

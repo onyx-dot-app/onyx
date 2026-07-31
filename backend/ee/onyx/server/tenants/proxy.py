@@ -489,7 +489,8 @@ async def proxy_license_fetch(
             detail="Control plane returned incomplete license data",
         )
 
-    # A re-claim means the subscription moved, so this snapshot is stale.
+    # This proxy never sees the Stripe webhook, so a fetch that may carry a new
+    # plan invalidates rather than leaving a snapshot beside it.
     _drop_billing_snapshot(tenant_id)
 
     # Return license to caller - self-hosted instance stores it via /api/license/claim

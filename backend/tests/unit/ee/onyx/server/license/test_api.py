@@ -98,9 +98,8 @@ eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ==
 
 
 class TestClaimLicenseBustsBillingCache:
-    """The UI renders the cached billing seat count in preference to the
-    license's, so a claim that leaves it cached shows a stale number for the
-    rest of its TTL."""
+    """The cached snapshot feeds the plan, period end and status the page
+    renders, so a claim that leaves it cached shows the pre-change plan."""
 
     @pytest.mark.asyncio
     @patch("ee.onyx.server.license.api.invalidate_billing_info_cache")

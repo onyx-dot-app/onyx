@@ -53,10 +53,8 @@ _PEM_END = "-----END ONYX LICENSE-----"
 def _normalize_license_file(content: str) -> str:
     """Reduce a .lic file to the bare base64 blob.
 
-    The blob is later sent as a Bearer token, so an embedded newline from the
-    wrapped file would be rejected as an invalid header value. The stored blob is later
-    sent as a Bearer token, and a header value carrying the wrapped file's
-    newlines is rejected before the request leaves the process.
+    The blob is later sent as a Bearer token, and requests rejects a header
+    value containing newlines.
     """
     content = content.strip()
     if content.startswith(_PEM_BEGIN) and content.endswith(_PEM_END):
@@ -149,8 +147,8 @@ async def claim_license(
                     "No license found. Provide session_id after checkout.",
                 )
 
-        # A subscription changed outside the product reaches the instance only
-        # here, so this is where the plan snapshot cached beside it goes stale.
+        # A Stripe-side change lands with this license, so the plan snapshot
+        # cached beside it is now stale.
         invalidate_billing_info_cache()
 
         logger.info(
@@ -262,9 +260,8 @@ async def delete_license(
             "License deletion is only available for self-hosted deployments",
         )
 
-    # db_delete_license invalidates after the commit and under the cache lock,
-    # which is the ordering a concurrent reader needs. Doing it here as well
-    # would only clear an entry that read can immediately repopulate.
+    # db_delete_license invalidates after its commit and under the cache lock,
+    # which is the ordering a concurrent reader needs.
     deleted = db_delete_license(db_session)
 
     return {"deleted": deleted}

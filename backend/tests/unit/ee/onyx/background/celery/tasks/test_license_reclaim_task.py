@@ -250,9 +250,6 @@ class TestReclaimCadence:
             else:
                 mock_redis.return_value.set.return_value = slot_free
                 mock_redis.return_value.get.return_value = str(idle_rounds).encode()
-                # A held slot is re-checked against the current interval, so it
-                # needs a remaining TTL no wider than the tier being claimed.
-                mock_redis.return_value.ttl.return_value = 1
             reclaim_license_task(tenant_id="tenant_123")
         return mock_reclaim, mock_redis
 
@@ -351,8 +348,7 @@ class TestThrottleKeysAreTierScoped:
             return free, mock_redis.return_value.set
 
     def test_the_two_tiers_use_different_keys(self) -> None:
-        """Sharing one key is what let a six-hour lead-up slot span the
-        approach to expiry."""
+        """Each tier claims its own key, so the two never share a slot."""
         _, lead_up_set = self._claim(timedelta(days=3))
         _, urgent_set = self._claim(timedelta(minutes=30))
 

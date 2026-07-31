@@ -26,9 +26,8 @@ logger = setup_logger()
 LICENSE_METADATA_KEY = "license:metadata"
 LICENSE_CACHE_TTL_SECONDS = 86400  # 24 hours
 
-# Serializes the row-read-compare-write in publish_license_metadata, and
-# bounds acquisition: a contended lock publishes unserialized rather than
-# stalling. The lease must comfortably outlive one SELECT plus two cache ops.
+# Serializes the row-read-compare-write in publish_license_metadata. The lease
+# must outlive two SELECTs (license row, seat count) and up to four cache ops.
 _LICENSE_CACHE_LOCK_KEY = "license:metadata:write"
 _LICENSE_CACHE_LOCK_TIMEOUT_SEC = 30
 
