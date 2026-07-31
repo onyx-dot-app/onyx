@@ -62,6 +62,8 @@ export enum LLMProviderName {
 
 export type PortkeyApiMode = "chat_completions" | "responses" | "messages";
 
+export type BifrostApiMode = "chat_completions" | "responses";
+
 export interface SimpleKnownModel {
   name: string;
   display_name: string | null;
