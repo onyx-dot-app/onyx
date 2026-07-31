@@ -860,7 +860,7 @@ def _kickoff_indexing_tasks(
     return result
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_INDEXING,
     soft_time_limit=300,
     bind=True,
@@ -1233,7 +1233,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
 
 # primary
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
     soft_time_limit=300,
     bind=True,
@@ -1282,7 +1282,7 @@ def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
 
 
 # light worker
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLEANUP_CHECKPOINT,
     bind=True,
 )
@@ -1308,7 +1308,7 @@ def cleanup_checkpoint_task(
 
 
 # primary
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_INDEX_ATTEMPT_CLEANUP,
     soft_time_limit=300,
     bind=True,
@@ -1371,7 +1371,7 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
 
 
 # light worker
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLEANUP_INDEX_ATTEMPT,
     bind=True,
 )
@@ -1484,7 +1484,7 @@ def _resolve_indexing_document_errors(
         db_session_temp.commit()
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.DOCPROCESSING_TASK,
     bind=True,
 )

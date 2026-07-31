@@ -40,7 +40,7 @@ def middleware_harness() -> MiddlewareHarness:
         response.status_code = 200
         return response
 
-    return captured, call_next  # ty: ignore[invalid-return-type]
+    return captured, call_next
 
 
 def _make_request(path: str) -> MagicMock:

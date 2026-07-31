@@ -178,7 +178,9 @@ def test_defers_documents_until_ancestor_available() -> None:
         if not called:
             called = True
             return []
-        seen_hierarchy_node_raw_ids = kwargs["seen_hierarchy_node_raw_ids"]
+        seen_hierarchy_node_raw_ids = cast(
+            ThreadSafeSet[str], kwargs["seen_hierarchy_node_raw_ids"]
+        )
         assert isinstance(seen_hierarchy_node_raw_ids, ThreadSafeSet)
         seen_hierarchy_node_raw_ids.add(parent_id)
         return [MagicMock(spec=HierarchyNode, raw_node_id=parent_id)]

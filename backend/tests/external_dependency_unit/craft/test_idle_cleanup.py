@@ -166,7 +166,7 @@ def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
     )
     stubbed_cleanup.terminate_silent = True
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -208,7 +208,7 @@ def test_orphan_workspace_cleanup_failure_does_not_block_sleep(
 
     with caplog.at_level(logging.WARNING):
         cleanup_idle_sandboxes_task.run(
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
         )
 
     db_session.expire_all()
@@ -251,7 +251,7 @@ def test_session_creation_lock_prevents_idle_reap(
     assert session_creation_lock.acquire(blocking=False)
     try:
         cleanup_idle_sandboxes_task.run(
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
         )
     finally:
         session_creation_lock.release()
@@ -326,7 +326,7 @@ def test_session_created_during_snapshot_prevents_idle_reap(
         create_snapshot_during_session_creation,
     )
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -353,7 +353,7 @@ def test_active_sandbox_within_threshold_not_touched(
     # workspace listing makes it a no-op so we can assert "not touched".
     stubbed_cleanup.list_session_workspaces_returns = []
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -382,7 +382,7 @@ def test_null_heartbeat_sandbox_past_created_at_included(
     stubbed_cleanup.list_session_workspaces_returns = []
     stubbed_cleanup.terminate_silent = True
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -429,7 +429,7 @@ def test_snapshot_failure_on_healthy_pod_aborts_sleep(
 
     with caplog.at_level(logging.WARNING):
         cleanup_idle_sandboxes_task.run(
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
         )
 
     db_session.expire_all()
@@ -479,7 +479,7 @@ def test_opencode_history_snapshot_failure_on_healthy_pod_aborts_sleep(
 
     with caplog.at_level(logging.ERROR):
         cleanup_idle_sandboxes_task.run(
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
         )
 
     db_session.expire_all()
@@ -532,7 +532,7 @@ def test_opencode_history_snapshot_failure_on_unreachable_pod_still_terminates(
 
     monkeypatch.setattr(stubbed_cleanup, "create_opencode_history_snapshot", _boom)
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -582,7 +582,7 @@ def test_snapshot_failure_on_unreachable_pod_still_terminates(
     stubbed_cleanup.health_check_returns = False  # pod unreachable
     stubbed_cleanup.terminate_silent = True
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -626,7 +626,7 @@ def test_sessions_marked_idle_and_nextjs_ports_cleared(
     stubbed_cleanup.list_session_workspaces_returns = []
     stubbed_cleanup.terminate_silent = True
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     refreshed_a = db_session.get(BuildSession, session_a.id)
@@ -728,7 +728,7 @@ def test_idle_reaped_before_non_idle_background_snapshot(
     monkeypatch.setattr(stubbed_cleanup, "create_snapshot", _recording_create_snapshot)
     monkeypatch.setattr(stubbed_cleanup, "terminate", _recording_terminate)
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     assert ("create_snapshot", idle_sandbox.id) in call_log, "idle never snapshotted"
     assert ("terminate", idle_sandbox.id) in call_log, "idle never terminated"
@@ -801,7 +801,7 @@ def test_heartbeat_refresh_mid_sweep_aborts_reap(
 
     monkeypatch.setattr(stubbed_cleanup, "create_snapshot", _resume_then_snapshot)
 
-    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)  # ty: ignore[invalid-argument-type]
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -841,7 +841,7 @@ def test_task_holds_redis_lock_for_duration(
 
         try:
             cleanup_idle_sandboxes_task.run(
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
             )
 
             # Task must have bailed without doing any work.

@@ -1519,7 +1519,7 @@ class GoogleDriveConnector(
                 start,
             )
             yield from _yield_from_folder_crawl(
-                folder_id,  # ty: ignore[possibly-unresolved-reference]
+                folder_id,
                 resume_start,
             )
 

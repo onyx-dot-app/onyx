@@ -827,7 +827,7 @@ async def _connect_oauth(
     )
 
     # If we got an auth URL first, return it
-    if auth_task in done:
+    if auth_task is not None and auth_task in done:
         oauth_url = await auth_task
         # If no URL was retrieved within the timeout, treat as error
         if not oauth_url:

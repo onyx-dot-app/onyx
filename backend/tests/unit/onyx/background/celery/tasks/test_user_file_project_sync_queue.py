@@ -41,7 +41,7 @@ def test_check_for_user_file_project_sync_applies_queue_backpressure(
 
     task_app = MagicMock()
     with patch.object(check_for_user_file_project_sync, "app", task_app):
-        check_for_user_file_project_sync.run(tenant_id="test-tenant")
+        check_for_user_file_project_sync.run(tenant_id="test-tenant")  # ty: ignore[invalid-argument-type]
 
     task_app.send_task.assert_not_called()
     lock.release.assert_called_once()
@@ -80,7 +80,7 @@ def test_check_for_user_file_project_sync_skips_duplicates(
 
     task_app = MagicMock()
     with patch.object(check_for_user_file_project_sync, "app", task_app):
-        check_for_user_file_project_sync.run(tenant_id="test-tenant")
+        check_for_user_file_project_sync.run(tenant_id="test-tenant")  # ty: ignore[invalid-argument-type]
 
     assert mock_enqueue.call_count == 2
     lock.release.assert_called_once()
@@ -150,8 +150,8 @@ def test_process_single_user_file_project_sync_clears_queued_guard_on_pickup(
 
     user_file_id = str(uuid4())
     process_single_user_file_project_sync.run(
-        user_file_id=user_file_id,
-        tenant_id="test-tenant",
+        user_file_id=user_file_id,  # ty: ignore[invalid-argument-type]
+        tenant_id="test-tenant",  # ty: ignore[invalid-argument-type]
     )
 
     redis_client.delete.assert_called_once_with(

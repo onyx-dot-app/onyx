@@ -83,7 +83,7 @@ STUCK_RUNNING_OLDER_THAN = timedelta(
 # --- Dispatch ----------------------------------------------------------------
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.SCHEDULED_TASKS_DISPATCH_DUE,
     ignore_result=True,
     bind=True,
@@ -209,7 +209,7 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
 # --- Run executor wrapper ----------------------------------------------------
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.SCHEDULED_TASKS_RUN,
     ignore_result=True,
     # acks_late=False so a worker crash doesn't cause Celery to retry the
@@ -244,7 +244,7 @@ def run_scheduled_task(self: Task, *, run_id: str, tenant_id: str) -> None:
 # --- Stuck-run sweeper -------------------------------------------------------
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.SCHEDULED_TASKS_CLEANUP_STUCK,
     ignore_result=True,
     bind=True,

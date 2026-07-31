@@ -70,7 +70,7 @@ import threading
 import time
 from collections.abc import Generator, Sequence
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 from uuid import UUID
 
 from docker import DockerClient
@@ -986,8 +986,11 @@ class DockerSandboxManager(SandboxManager):
             provisioning_attempt_number=provisioning_attempt_number,
         )
         # create (not run) so the caller can put_archive history before start.
-        # detach is run-only.
-        run_kwargs = dict(create_kwargs)
+        # detach is run-only. Widening to a plain kwargs dict is deliberate:
+        # `detach` is required on ContainerCreateKwargs, so it cannot be popped
+        # while keeping the TypedDict type. The strict typing still applies where
+        # it matters, at the build_container_create_kwargs return.
+        run_kwargs: dict[str, Any] = dict(create_kwargs)
         run_kwargs.pop("detach", None)
         try:
             return self._docker.containers.create(**run_kwargs), True

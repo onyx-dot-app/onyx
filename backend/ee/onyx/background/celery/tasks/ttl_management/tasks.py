@@ -51,7 +51,7 @@ def _release_chain_if_owned(redis_client: TenantRedisClient, chain_token: str) -
     )
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.PERFORM_TTL_MANAGEMENT_TASK,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
@@ -144,7 +144,7 @@ def perform_ttl_management_task(
         _release_chain_if_owned(redis_client, chain_token)
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_TTL_MANAGEMENT_TASK,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,

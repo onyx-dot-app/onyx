@@ -161,7 +161,7 @@ class TestCheckSweepIncludesPersonaSync:
 
         with _patch_task_app(check_for_user_file_project_sync, mock_app):
             check_for_user_file_project_sync.run(
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
             )
 
         enqueued_ids = {
@@ -183,7 +183,7 @@ class TestCheckSweepIncludesPersonaSync:
 
         with _patch_task_app(check_for_user_file_project_sync, mock_app):
             check_for_user_file_project_sync.run(
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
             )
 
         enqueued_ids = {
@@ -207,7 +207,7 @@ class TestCheckSweepIncludesPersonaSync:
 
         with _patch_task_app(check_for_user_file_project_sync, mock_app):
             check_for_user_file_project_sync.run(
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
             )
 
         matching_calls = [
@@ -233,7 +233,7 @@ class TestCheckSweepIncludesPersonaSync:
 
         with _patch_task_app(check_for_user_file_project_sync, mock_app):
             check_for_user_file_project_sync.run(
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
             )
 
         enqueued_ids = {
@@ -317,8 +317,8 @@ class TestSyncTaskWritesPersonaIds:
             patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
         ):
             process_single_user_file_project_sync.run(
-                user_file_id=str(uf.id),
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                user_file_id=str(uf.id),  # ty: ignore[invalid-argument-type]
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,  # ty: ignore[invalid-argument-type]
             )
 
         mock_doc_index.update.assert_called_once()
@@ -347,8 +347,8 @@ class TestSyncTaskWritesPersonaIds:
 
         with patch(_PATCH_DISABLE_VDB, True):
             process_single_user_file_project_sync.run(
-                user_file_id=str(uf.id),
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                user_file_id=str(uf.id),  # ty: ignore[invalid-argument-type]
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,  # ty: ignore[invalid-argument-type]
             )
 
         db_session.refresh(uf)
@@ -397,8 +397,8 @@ class TestSyncTaskWritesPersonaIds:
             patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
         ):
             process_single_user_file_project_sync.run(
-                user_file_id=str(uf.id),
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                user_file_id=str(uf.id),  # ty: ignore[invalid-argument-type]
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,  # ty: ignore[invalid-argument-type]
             )
 
         update_requests: list[MetadataUpdateRequest] = (
@@ -449,8 +449,8 @@ class TestSyncTaskWritesPersonaIds:
             patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
         ):
             process_single_user_file_project_sync.run(
-                user_file_id=str(uf.id),
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                user_file_id=str(uf.id),  # ty: ignore[invalid-argument-type]
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,  # ty: ignore[invalid-argument-type]
             )
 
         update_requests: list[MetadataUpdateRequest] = (
@@ -622,8 +622,8 @@ def _run_sync(
         for p in patches:
             stack.enter_context(p)
         process_single_user_file_project_sync.run(
-            user_file_id=uf_id,
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            user_file_id=uf_id,  # ty: ignore[invalid-argument-type]
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,  # ty: ignore[invalid-argument-type]
         )
 
 

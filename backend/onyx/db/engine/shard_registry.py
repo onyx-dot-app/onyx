@@ -135,7 +135,7 @@ def _parse_shard_specs() -> dict[str, ShardSpec]:
         unknown = set(overrides) - {"host", "port", "db", "user", "password"}
         if unknown:
             raise ShardConfigurationError(
-                f"ONYX_DB_SHARDS['{name}'] has unknown keys: {sorted(unknown)}"
+                f"ONYX_DB_SHARDS['{name}'] has unknown keys: {sorted(map(str, unknown))}"
             )
         # POSTGRES_PASSWORD is already percent-encoded at config load; an explicit
         # override is raw, so encode it here to match. Without this a password

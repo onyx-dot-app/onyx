@@ -9,7 +9,7 @@ from onyx.llm.well_known_providers.auto_update_service import (
 )
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_AUTO_LLM_UPDATE,
     ignore_result=True,
     soft_time_limit=300,  # 5 minute timeout

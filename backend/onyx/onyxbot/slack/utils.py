@@ -380,7 +380,7 @@ def decompose_action_id(feedback_id: str) -> tuple[int, str | None, int | None]:
         raise ValueError("Received invalid Feedback Identifier")
 
 
-def get_view_values(state_values: dict[str, Any]) -> dict[str, str]:
+def get_view_values(state_values: dict[str, Any]) -> dict[str, Any]:
     """Extract view values
 
     Args:

@@ -85,7 +85,7 @@ logger = setup_logger()
 # which bloats the result metadata considerably. trail=False prevents this.
 # TODO(andrei): Rename all these kinds of functions from *vespa* to a more
 # generic *document_index*.
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
@@ -463,7 +463,7 @@ def monitor_document_set_taskset(
     rds.reset()
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.DOCUMENT_INDEX_METADATA_SYNC_TASK,
     bind=True,
     soft_time_limit=LIGHT_SOFT_TIME_LIMIT,

@@ -543,9 +543,7 @@ def align_basic_advanced(
     for adv_ind in range(1, len(adv_sections)):
         heading = adv_sections[adv_ind].text.split(HEADING_DELIMITER)[0]
         # retrieve the longest part of the heading that is not a smart chip
-        heading_key = max(  # ty: ignore[unresolved-attribute]
-            heading.split(SMART_CHIP_CHAR), key=len
-        ).strip()
+        heading_key = max(heading.split(SMART_CHIP_CHAR), key=len).strip()
         if heading_key == "":
             logger.warning(
                 "Cannot match heading: %s, its link will come from the following section",
