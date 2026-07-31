@@ -49,6 +49,8 @@ from onyx.llm.well_known_providers.constants import (
     AWS_REGION_NAME_KWARG_ENV_VAR_FORMAT,
     AWS_SECRET_ACCESS_KEY_KWARG,
     AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
+    BIFROST_API_MODE_CONFIG_KEY,
+    BIFROST_API_MODE_RESPONSES,
     LM_STUDIO_API_KEY_CONFIG_KEY,
     OLLAMA_API_KEY_CONFIG_KEY,
     VERTEX_AUTH_METHOD_KWARG,
@@ -657,6 +659,13 @@ class LitellmLLM(LLM):
             # We use custom_llm_provider="openai" so LiteLLM doesn't try
             # to route based on the provider prefix.
             model = self.config.deployment_name or self.config.model_name
+            if (
+                self._model_provider == LlmProviderNames.BIFROST
+                and (self._custom_config or {}).get(BIFROST_API_MODE_CONFIG_KEY)
+                == BIFROST_API_MODE_RESPONSES
+            ):
+                # Drives LiteLLM's completions -> responses bridge.
+                model = f"responses/{model}"
         else:
             model = f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
 

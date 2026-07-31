@@ -62,6 +62,7 @@ from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
 )
 from onyx.llm.well_known_providers.constants import (
+    BIFROST_API_MODE_CONFIG_KEY,
     LM_STUDIO_API_KEY_CONFIG_KEY,
     VERTEX_AUTH_METHOD_KWARG,
     VERTEX_AUTH_METHOD_SERVICE_ACCOUNT,
@@ -316,9 +317,19 @@ def _validate_llm_provider_change(
     normalized_new_api_base = new_api_base or None
 
     api_base_changed = normalized_new_api_base != normalized_existing_api_base
-    custom_config_changed = (
-        new_custom_config and new_custom_config != existing_custom_config
-    )
+
+    # Surface-mode keys only pick a path on the same api_base and cannot
+    # redirect the stored key, so they must not force key re-entry.
+    def _without_surface_keys(config: dict[str, str] | None) -> dict[str, str]:
+        return {
+            k: v for k, v in (config or {}).items() if k != BIFROST_API_MODE_CONFIG_KEY
+        }
+
+    # Gate on the raw config (empty submissions are never persisted); compare
+    # stripped dicts so dropping stored non-surface entries is still rejected.
+    custom_config_changed = bool(new_custom_config) and _without_surface_keys(
+        new_custom_config
+    ) != _without_surface_keys(existing_custom_config)
 
     if api_base_changed or custom_config_changed:
         raise OnyxError(
