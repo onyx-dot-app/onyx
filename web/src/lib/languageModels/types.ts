@@ -48,6 +48,8 @@ export enum LLMProviderName {
   CUSTOM = "custom",
 }
 
+export type BifrostApiMode = "chat_completions" | "responses";
+
 export interface SimpleKnownModel {
   name: string;
   display_name: string | null;
